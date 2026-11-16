@@ -37,7 +37,7 @@ func failure(err error) error {
 	}
 	return err
 }
-func StewardTools(db *sql.DB, logger *slog.Logger) []tool.Definition {
+func StewardTools(db *sql.DB, logger *slog.Logger, revoked ...func(string)) []tool.Definition {
 	definitions := []tool.Definition{{Name: "list_members", Description: "列出成员的 ID、用户名、角色、停用状态和创建时间，不含凭据与会话。", MinRole: tool.RoleAdmin, Scope: tool.ScopeRead, Untrusted: true,
 		Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{}}`), Output: json.RawMessage(`{"type":"object"}`), Handler: func(ctx context.Context, _ tool.Caller, _ json.RawMessage) (json.RawMessage, error) {
 			items, err := identity.ListUsers(ctx, db)
@@ -93,10 +93,10 @@ func StewardTools(db *sql.DB, logger *slog.Logger) []tool.Definition {
 				}
 				out := map[string]any{"member_id": p.MemberID}
 				if name == "set_member_disabled" {
-					err = identity.SetUserDisabled(ctx, db, p.MemberID, p.Disabled)
+					err = identity.SetUserDisabled(ctx, db, p.MemberID, p.Disabled, revoked...)
 					out["disabled"] = p.Disabled
 				} else {
-					err = identity.RevokeUserSessions(ctx, db, p.MemberID)
+					err = identity.RevokeUserSessions(ctx, db, p.MemberID, revoked...)
 					out["revoked"] = true
 				}
 				if err != nil {

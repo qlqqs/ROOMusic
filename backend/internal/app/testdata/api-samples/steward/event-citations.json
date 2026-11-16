@@ -6,6 +6,7 @@
         "url": "https://example.org/music"
       }
     ],
+    "seq": 1,
     "step": 1,
     "type": "citations"
   },

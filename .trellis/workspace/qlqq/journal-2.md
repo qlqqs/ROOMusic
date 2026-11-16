@@ -313,3 +313,25 @@ steward 模式下由独立模型调用逐项审查修改方案；审查不可用
 ### Status
 
 [OK] **Completed**
+
+
+## Session 65: 管家 C10：记忆、历史摘要与后台运行
+<!-- trellis-session: v=2 fp=f39bd3336301c64c -->
+
+**Date**: 2026-11-16
+**Task**: 管家 C10：记忆、历史摘要与后台运行
+**Branch**: `steward-c10-memory`
+
+### Summary
+
+运行与请求解耦、接回接口、未读标记、每用户记忆、历史摘要；审查修复 F1–F13 并收窄复测；-race 未执行
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e525bcdf` | feat(steward): 记忆、历史摘要与后台运行（C10） |
+
+### Status
+
+[OK] **Completed**

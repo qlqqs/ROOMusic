@@ -15,6 +15,7 @@ const tools = [
   "correct_release", "change_release_group", "set_default_release", "review_release_issue", "preview_release_claim", "claim_release",
   "merge_artists", "preview_artist_split", "split_artist", "rename_artist", "ignore_artist_candidate", "revert_operation",
   "web_search", "fetch_page", "search_music_metadata", "get_music_metadata", NATIVE_SEARCH,
+  "remember", "forget", "list_memories",
 ];
 
 describe("工具的中文名称", () => {
@@ -242,5 +243,19 @@ describe("联网（C8）", () => {
     expect(toolFailureOf("searxng_json_disabled")).toBe("SearXNG 没有开启 JSON 输出");
     expect(toolFailureOf("rate_limited")).toBe("请求太频繁");
     expect(toolFailureOf("source_unavailable")).toBe("资料来源暂时不可用");
+  });
+});
+
+describe("记忆的工具（C10）", () => {
+  it("记住：主要参数是记下的内容；新记一条与改写一条的结果不同；记住与删除之后刷新记忆", () => {
+    expect(toolArgumentOf("remember", { content: "回答都用繁体" }, {})).toBe("回答都用繁体");
+    expect(toolResultOf("remember", { content: "回答都用繁体" }, {})).toBe("已记下");
+    expect(toolResultOf("remember", { content: "x", id: "00000000-0000-4000-8000-000000000001" }, {})).toBe("已改写");
+    expect(toolResultOf("forget", { id: "00000000-0000-4000-8000-000000000001" }, {})).toBe("已删除");
+    expect(toolDataScopeOf("remember")).toBe("memories");
+    expect(toolDataScopeOf("forget")).toBe("memories");
+    expect(toolDataScopeOf("list_memories")).toBeNull();
+    expect(toolWritesOf("remember")).toBe(true);
+    expect(toolCountOf("list_memories", {}, { items: [{}, {}], limit: 50, max_length: 500 })).toBe("2 条");
   });
 });

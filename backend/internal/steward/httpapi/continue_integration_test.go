@@ -189,7 +189,7 @@ func TestPostgreSQLStewardHTTPContinueNothingReleasesConversation(t *testing.T) 
 			for i := 0; i < 2; i++ {
 				assertContinueProblem(t, f.request("admin", "POST", path+"/continue", nil), 409, "nothing_to_continue")
 				after, err := f.store.GetConversation(context.Background(), f.users["admin"], id)
-				if err != nil || after.Conversation.Status != "idle" || after.Conversation.Title != before.Conversation.Title || !reflect.DeepEqual(after.Messages, before.Messages) {
+				if err != nil || after.Conversation.Status != "idle" || after.Conversation.Title != before.Conversation.Title || after.Conversation.Unread != before.Conversation.Unread || !reflect.DeepEqual(after.Conversation.LastRunFinishedAt, before.Conversation.LastRunFinishedAt) || !reflect.DeepEqual(after.Messages, before.Messages) {
 					t.Fatalf("拒绝继续后会话=%+v 错误=%v", after, err)
 				}
 			}

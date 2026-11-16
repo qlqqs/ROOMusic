@@ -13,6 +13,10 @@ import (
 )
 
 type conversationResponse struct {
+	Unread            bool       `json:"unread"`
+	RunStatus         string     `json:"run_status"`
+	LastReadAt        *time.Time `json:"last_read_at"`
+	LastRunFinishedAt *time.Time `json:"last_run_finished_at"`
 	// ID 是资源标识。
 	ID string `json:"id"`
 	// Title 是会话标题。
@@ -30,7 +34,12 @@ type conversationResponse struct {
 }
 
 func conversationView(c runtime.Conversation) conversationResponse {
-	return conversationResponse{c.ID, c.Title, c.Mode, c.Model, c.Status, c.CreatedAt, c.UpdatedAt}
+	state := c.Status
+	if state != "running" && c.PendingItemCount > 0 {
+		state = "awaiting_confirmation"
+	}
+	return conversationResponse{Unread: c.Unread, RunStatus: state, LastReadAt: c.LastReadAt, LastRunFinishedAt: c.LastRunFinishedAt,
+		ID: c.ID, Title: c.Title, Mode: c.Mode, Model: c.Model, Status: c.Status, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
 }
 
 func (h *Handlers) listConversations(w http.ResponseWriter, r *http.Request, user identity.User) {
@@ -209,10 +218,11 @@ func (h *Handlers) getConversation(w http.ResponseWriter, r *http.Request, user 
 	httpserver.WriteJSON(w, 200, struct {
 		conversationResponse
 		// Messages 按会话内序号排列消息。
-		Messages    []messageResponse `json:"messages"`
-		Plans       []runtime.Plan    `json:"plans"`
-		PendingPlan *runtime.Plan     `json:"pending_plan"`
-	}{conversationView(detail.Conversation), messages, detail.Plans, pending})
+		SummaryThroughMessageID *string           `json:"summary_through_message_id"`
+		Messages                []messageResponse `json:"messages"`
+		Plans                   []runtime.Plan    `json:"plans"`
+		PendingPlan             *runtime.Plan     `json:"pending_plan"`
+	}{conversationView(detail.Conversation), detail.Summary.ThroughMessageID, messages, detail.Plans, pending})
 }
 
 func (h *Handlers) renameConversation(w http.ResponseWriter, r *http.Request, user identity.User) {
@@ -273,11 +283,18 @@ func (h *Handlers) cancelConversation(w http.ResponseWriter, r *http.Request, us
 		h.writeStoreError(w, r, err)
 		return
 	}
-	h.mu.Lock()
-	cancel, running := h.running[runKey{user.ID, id}]
-	if running {
-		cancel()
-	}
-	h.mu.Unlock()
+	running := h.supervisor.Cancel(id)
 	httpserver.WriteJSON(w, 200, map[string]bool{"cancelled": running})
+}
+
+func (h *Handlers) readConversation(w http.ResponseWriter, r *http.Request, user identity.User) {
+	id, ok := conversationID(w, r)
+	if !ok {
+		return
+	}
+	if err := h.store.MarkConversationRead(r.Context(), user.ID, id); err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	httpserver.WriteJSON(w, 200, map[string]bool{"read": true})
 }

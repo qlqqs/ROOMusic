@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "steward_shutting_down",
+      "message": "管家正在关闭"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 503
+}

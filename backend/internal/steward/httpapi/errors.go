@@ -8,6 +8,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/steward/egress"
+	"github.com/qlqq/roomusic/backend/internal/steward/memory"
 	"github.com/qlqq/roomusic/backend/internal/steward/provider"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 )
@@ -32,6 +33,18 @@ func writeProblem(w http.ResponseWriter, r *http.Request, p problem) {
 
 func storeProblem(err error) problem {
 	switch {
+	case errors.Is(err, memory.ErrInvalidInput):
+		return problem{400, "invalid_input", "记忆内容须为 1 至 500 字，标识须为 UUID"}
+	case errors.Is(err, memory.ErrLimitReached):
+		return problem{409, "memory_limit_reached", "最多保存 50 条记忆"}
+	case errors.Is(err, memory.ErrNotFound):
+		return problem{404, "not_found", "记忆不存在"}
+	case errors.Is(err, runtime.ErrRunLimit):
+		return problem{409, "steward_run_limit", "最多同时运行 3 个会话，请等待或停止一个回答"}
+	case errors.Is(err, runtime.ErrRunInvalidated):
+		return problem{409, "steward_run_invalidated", "运行凭据已变化，请重新发起"}
+	case errors.Is(err, runtime.ErrSupervisorClosed):
+		return problem{503, "steward_shutting_down", "管家正在关闭"}
 	case errors.Is(err, runtime.ErrReviewNotApplicable):
 		return problem{409, "review_not_applicable", "当前会话模式不适用独立审查"}
 	case errors.Is(err, runtime.ErrPlanNotFound):

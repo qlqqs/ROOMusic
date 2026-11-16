@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 
@@ -8,8 +9,9 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
-// Runner 执行一次请求内的多步对话，可并发用于不同会话。
+// Runner 执行一次多步对话，可并发用于不同会话。
 type Runner struct {
+	memories MemoryReader
 	store    RunStore
 	registry *tool.Registry
 	logger   *slog.Logger
@@ -23,6 +25,10 @@ func NewRunner(store RunStore, registry *tool.Registry, logger *slog.Logger) *Ru
 
 // RunParams 是入口已取得的调用者身份、会话及模型配置，不包含端点密钥。
 type RunParams struct {
+	// Check 在运行开始及后台凭据复查时执行。
+	Check func(context.Context) error
+	// Finished 释放运行独占的出站资源。
+	Finished     func()
 	Protocol     provider.Protocol
 	Endpoint     string
 	NativeSearch bool
@@ -53,11 +59,13 @@ type RunParams struct {
 type EventType string
 
 const (
-	EventReviewStarted  EventType = "review_started"
-	EventReviewFinished EventType = "review_finished"
-	EventPlan           EventType = "plan"
-	EventSearch         EventType = "search"
-	EventCitations      EventType = "citations"
+	EventHistoryCompacted EventType = "history_compacted"
+	EventHistoryGap       EventType = "history_gap"
+	EventReviewStarted    EventType = "review_started"
+	EventReviewFinished   EventType = "review_finished"
+	EventPlan             EventType = "plan"
+	EventSearch           EventType = "search"
+	EventCitations        EventType = "citations"
 	// EventText 表示助手文本增量。
 	EventText EventType = "text"
 	// EventToolStarted 表示开始执行工具。
@@ -130,6 +138,9 @@ type ToolFinished struct {
 
 // Event 由 Type 选择载荷；不向接收方暴露助手的不透明块。
 type Event struct {
+	ThroughMessageID string `json:"through_message_id,omitempty"`
+	Seq              uint64 `json:"seq,omitempty"`
+	Failure          error  `json:"-"`
 	*provider.Search
 	Citations []provider.Citation `json:"citations,omitempty"`
 	PlanID    string              `json:"plan_id,omitempty"`
@@ -153,5 +164,5 @@ type Event struct {
 }
 
 // EventSink 同步、按序接收事件，不得阻塞等待运行结束或修改事件载荷。
-// 传输失败时由接收方取消 Run 的上下文；接收方仍会收到最终 done 事件。
+// Supervisor 接收事件后独立保存和分发；传输失败只影响订阅。
 type EventSink func(Event)

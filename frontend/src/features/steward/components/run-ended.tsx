@@ -44,7 +44,8 @@ function noteOf(ended: Ended, hasSteps: boolean): Note | null {
     case "incomplete":
       return { tone: "warning", title: "这次回答没有完成", action: "continue" };
     case "disconnected":
-      return { tone: "warning", title: "连接断了，这次回答没有完成", detail: saved || undefined, action: "continue" };
+      // 运行不随连接停止（C10）：重新接回也没接上时，回答可能还在后台继续。
+      return { tone: "warning", title: "连接断了，没能接上这次回答", detail: `${saved}回答可能还在后台继续，可以刷新页面查看最新的结果。`, action: "continue" };
     case "request_failed":
       return { tone: "warning", title: "没有发出去", detail: describeFailure(ended.failure, { context: "write", messages: requestMessages }).message };
     case "done": {
@@ -88,6 +89,8 @@ const requestMessages: Readonly<Record<string, string>> = {
   nothing_to_continue: "上一次回答已经完成，没有需要继续的内容。",
   steward_disabled: "管理员暂时关闭了成员使用管家。",
   not_found: "这个对话不存在或已经删除。",
+  // 503 的原因不显示服务端的说明，这里写明；同时运行的会话超过上限（steward_run_limit）等 409 显示服务端给的原因。
+  steward_shutting_down: "服务正在关闭，请稍后再试。",
 };
 
 /**

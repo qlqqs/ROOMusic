@@ -40,7 +40,7 @@ export function PrimaryNav({ role }: { role: UserRole }) {
               item.playlists === true ? (
                 <PlaylistsNavItem key={item.to} item={item} nowPlaying={nowPlaying} />
               ) : item.steward === true ? (
-                <StewardNavItem key={item.to} item={item} name={steward.name} />
+                <StewardNavItem key={item.to} item={item} name={steward.name} unread={steward.unread} />
               ) : (
                 <NavLinkItem
                   key={item.to}
@@ -105,26 +105,51 @@ function NavLinkItem({ item, count, marker }: { item: NavItem; count: number | n
   );
 }
 
+/** 入口提示点的说明（读屏经 aria-describedby 读到；提示点本身是装饰）。 */
+export function stewardUnreadText(count: number): string {
+  return `${formatCount(count)} 个对话有新回答`;
+}
+
 /**
  * 管家入口：名字取自设置。在别的页面上点它是在当前页面打开或收起右侧面板（按钮，aria-expanded 表达开合）；
- * 在整页对话里它是当前项（链接）。
+ * 在整页对话里它是当前项（链接）。有运行结束后还没打开看过的会话（C10）时名字右侧有提示点，数量经 aria-describedby 说明。
  */
-function StewardNavItem({ item, name }: { item: NavItem; name: string }) {
+function StewardNavItem({ item, name, unread }: { item: NavItem; name: string; unread: number }) {
   const onPage = useRouterState({ select: (state) => state.location.pathname === "/steward" || state.location.pathname.startsWith("/steward/") });
   const dock = useDockState();
+  const descriptionId = useId();
+  const described = unread > 0 ? descriptionId : undefined;
+  const content = (
+    <>
+      <item.icon size={18} aria-hidden="true" />
+      <span className={styles.label}>{name}</span>
+      {unread > 0 ? <span className={styles.dot} aria-hidden="true" /> : null}
+    </>
+  );
   return (
     <li>
       {onPage ? (
-        <Link to="/steward" className={styles.link} aria-current="page">
-          <item.icon size={18} aria-hidden="true" />
-          <span className={styles.label}>{name}</span>
+        <Link to="/steward" className={styles.link} aria-current="page" aria-describedby={described}>
+          {content}
         </Link>
       ) : (
-        <button type="button" id={STEWARD_ENTRY_ID} className={styles.link} aria-expanded={dock.open} aria-controls={dock.open ? STEWARD_DOCK_ID : undefined} onClick={toggleDock}>
-          <item.icon size={18} aria-hidden="true" />
-          <span className={styles.label}>{name}</span>
+        <button
+          type="button"
+          id={STEWARD_ENTRY_ID}
+          className={styles.link}
+          aria-expanded={dock.open}
+          aria-controls={dock.open ? STEWARD_DOCK_ID : undefined}
+          aria-describedby={described}
+          onClick={toggleDock}
+        >
+          {content}
         </button>
       )}
+      {unread > 0 ? (
+        <span id={descriptionId} hidden>
+          {stewardUnreadText(unread)}
+        </span>
+      ) : null}
     </li>
   );
 }

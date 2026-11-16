@@ -58,27 +58,27 @@ func TestPostgreSQLStewardC5Migration53RoundTrip(t *testing.T) {
 	user := uuid.New()
 	_, err = db.Exec(`INSERT INTO users(id,username,password_hash) VALUES($1,'c5-migration','synthetic')`, user)
 	mustStore(t, err)
-	s := NewStore(db)
-	c, err := s.CreateConversation(ctx, user, "合成", "model")
+	// 0053 的往返只使用当时的列，当前 Store 需要后续迁移字段。
+	conversationID, messageID := uuid.New(), uuid.New()
+	_, err = db.Exec(`INSERT INTO steward_conversations(id,user_id,title,model) VALUES($1,$2,'合成','model')`, conversationID, user)
 	mustStore(t, err)
-	raw := json.RawMessage(`{"page":{"kind":"other","title":"合成"}}`)
-	msg, err := s.AppendMessage(ctx, user, c.ID, MessageInput{Role: "user", Content: json.RawMessage(`{"role":"user","content":[{"type":"text","text":"旧消息"}]}`), Context: raw})
+	_, err = db.Exec(`INSERT INTO steward_messages(id,conversation_id,sequence,role,content,context) VALUES($1,$2,1,'user','{"role":"user","content":[{"type":"text","text":"旧消息"}]}','{"page":{"kind":"other","title":"合成"}}')`, messageID, conversationID)
 	mustStore(t, err)
 	var saved string
-	mustStore(t, db.QueryRow(`SELECT context::text FROM steward_messages WHERE id=$1`, msg.ID).Scan(&saved))
+	mustStore(t, db.QueryRow(`SELECT context::text FROM steward_messages WHERE id=$1`, messageID).Scan(&saved))
 	if !strings.Contains(saved, "合成") {
 		t.Fatal(saved)
 	}
 	// 回退只移除上下文列，保留原始正文；再次升级后旧消息得到 SQL NULL。
 	execute(down)
 	var content string
-	mustStore(t, db.QueryRow(`SELECT content::text FROM steward_messages WHERE id=$1`, msg.ID).Scan(&content))
+	mustStore(t, db.QueryRow(`SELECT content::text FROM steward_messages WHERE id=$1`, messageID).Scan(&content))
 	if !strings.Contains(content, "旧消息") {
 		t.Fatal(content)
 	}
 	execute(up)
 	var empty sql.NullString
-	mustStore(t, db.QueryRow(`SELECT context::text FROM steward_messages WHERE id=$1`, msg.ID).Scan(&empty))
+	mustStore(t, db.QueryRow(`SELECT context::text FROM steward_messages WHERE id=$1`, messageID).Scan(&empty))
 	if empty.Valid {
 		t.Fatalf("再次升级的旧消息上下文应为空：%v", empty)
 	}

@@ -57,6 +57,9 @@ func (h *Handlers) putInstanceSettings(w http.ResponseWriter, r *http.Request, _
 		h.writeStoreError(w, r, err)
 		return
 	}
+	if !*input.MembersEnabled {
+		h.supervisor.CancelMembers()
+	}
 	httpserver.WriteJSON(w, 200, map[string]bool{"members_enabled": *input.MembersEnabled})
 }
 

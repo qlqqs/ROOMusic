@@ -20,6 +20,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/steward/memory"
 	"github.com/qlqq/roomusic/backend/internal/steward/provider"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
@@ -56,7 +57,7 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mux := http.NewServeMux()
-	registerSteward(ctx, mux, db, identity.NewGuard(db, false, ""), dir, logger, library.NewService(ctx, db, dir, logger), nil, nil, nil, nil)
+	supervisor := registerSteward(ctx, mux, db, identity.NewGuard(db, false, ""), dir, logger, library.NewService(ctx, db, dir, logger), nil, nil, nil, nil)
 	var mode atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/search") {
@@ -112,6 +113,23 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	record := func(name string, w *httptest.ResponseRecorder, status int) {
 		t.Helper() // 随机本地监听端口不属于接口合同，样本固定成合成地址。
 		body := strings.ReplaceAll(w.Body.String(), server.URL, "http://127.0.0.1:12345")
+		if strings.HasPrefix(name, "event-") {
+			var event map[string]any
+			if err := json.Unmarshal([]byte(body), &event); err != nil {
+				t.Fatal(err)
+			}
+			seq, ok := event["seq"].(float64)
+			if !ok || seq <= 0 || seq > 1<<53-1 || seq != float64(uint64(seq)) {
+				t.Fatal("事件游标不是安全正整数", event["seq"])
+			}
+			// 单事件样本只展示载荷形状；启动时间游标归一为 1，真实顺序另由回放测试核对。
+			event["seq"] = 1
+			raw, err := json.Marshal(event)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body = string(raw)
+		}
 		w.Body.Reset()
 		_, _ = w.Body.WriteString(body)
 		samples.record("steward/"+name, w, status)
@@ -256,7 +274,146 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	record("settings-cleared-key", call("admin", "PUT", "me/steward/settings", map[string]any{"key": nil}), 200)
 	mode.Store(3)
 	record("probe-keyless-unconfirmed", call("admin", "POST", "me/steward/settings/probe", map[string]any{"key": nil}), 200)
-	if len(samples.samples) != 44 {
+	// C10：只生成管家目录内变化的响应，使用合成记忆与历史。
+	memoryPath := "me/steward/memories"
+	record("memories-empty", call("admin", "GET", memoryPath, nil), 200)
+	createdMemory := call("admin", "POST", memoryPath, map[string]string{"content": "回答使用繁体中文"})
+	record("memory-created", createdMemory, 201)
+	var remembered struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(createdMemory.Body.Bytes(), &remembered); err != nil {
+		t.Fatal(err)
+	}
+	record("memory-updated", call("admin", "PATCH", memoryPath+"/"+remembered.ID, map[string]string{"content": "不喜欢现场录音版本"}), 200)
+	record("memories", call("admin", "GET", memoryPath, nil), 200)
+	record("memory-invalid-input", call("admin", "POST", memoryPath, map[string]string{"content": ""}), 400)
+	record("memory-not-found", call("admin", "PATCH", memoryPath+"/"+uuid.New(), map[string]string{"content": "合成偏好"}), 404)
+	memories := memory.NewStore(db)
+	for i := 1; i < 50; i++ {
+		if _, err := memories.Remember(ctx, users["admin"], nil, "合成偏好"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record("memory-limit-reached", call("admin", "POST", memoryPath, map[string]string{"content": "超过上限"}), 409)
+	record("memory-deleted", call("admin", "DELETE", memoryPath+"/"+remembered.ID, nil), 204)
+	record("memories-cleared", call("admin", "DELETE", memoryPath, nil), 204)
+	memberMemory, err := memories.Remember(ctx, users["user"], nil, "合成成员偏好")
+	if err != nil {
+		t.Fatal(err)
+	}
+	record("memories-disabled-list", call("user", "GET", memoryPath, nil), 200)
+	record("memory-disabled-create", call("user", "POST", memoryPath, map[string]string{"content": "合成"}), 403)
+	record("memory-disabled-update", call("user", "PATCH", memoryPath+"/"+memberMemory.ID, map[string]string{"content": "合成"}), 403)
+	record("memory-disabled-delete", call("user", "DELETE", memoryPath+"/"+memberMemory.ID, nil), 204)
+	compactConversation, err := store.CreateConversation(ctx, users["admin"], "合成摘要会话", "synthetic-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	compactPath := "me/steward/conversations/" + compactConversation.ID
+	record("events-unavailable", call("admin", "GET", compactPath+"/events", nil), 204)
+	record("events-invalid-cursor", call("admin", "GET", compactPath+"/events?after=-1", nil), 400)
+	if w := call("admin", "PUT", "admin/steward/settings", map[string]bool{"members_enabled": true}); w.Code != 200 {
+		t.Fatal(w.Body)
+	}
+	record("events-other-owner", call("user", "GET", compactPath+"/events", nil), 404)
+	if w := call("admin", "PUT", "me/steward/settings", map[string]any{"protocol": "openai", "endpoint": server.URL, "key": "synthetic-sample-model-key", "model": "synthetic-model"}); w.Code != 200 {
+		t.Fatal(w.Body)
+	}
+	for i := 0; i < 8; i++ {
+		for _, role := range []string{"user", "assistant"} {
+			raw, _ := json.Marshal(provider.Message{Role: provider.Role(role), Content: []provider.ContentBlock{{Type: provider.BlockText, Text: "合成历史"}}})
+			input := runtime.MessageInput{Role: role, Content: raw}
+			if role == "assistant" {
+				n := int64(120001)
+				input.InputTokens = &n
+			}
+			if _, err := store.AppendMessage(ctx, users["admin"], compactConversation.ID, input); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	compactedStream := call("admin", "POST", compactPath+"/messages", map[string]string{"text": "继续合成对话"})
+	if compactedStream.Code != 200 {
+		t.Fatal(compactedStream.Body)
+	}
+	foundCompacted := false
+	for _, line := range strings.Split(compactedStream.Body.String(), "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		var event map[string]any
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event); err != nil {
+			t.Fatal(err)
+		}
+		if event["type"] != "history_compacted" {
+			continue
+		}
+		response := httptest.NewRecorder()
+		response.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(response).Encode(event)
+		record("event-history-compacted", response, 200)
+		foundCompacted = true
+	}
+	if !foundCompacted {
+		t.Fatal("摘要事件未生成", compactedStream.Body)
+	}
+	record("conversation-compacted", call("admin", "GET", compactPath, nil), 200)
+	record("settings-unread", call("admin", "GET", "me/steward/settings", nil), 200)
+	record("conversation-read", call("admin", "POST", compactPath+"/read", nil), 200)
+	record("conversation-read-state", call("admin", "GET", compactPath, nil), 200)
+
+	gapConversation, err := store.CreateConversation(ctx, users["admin"], "合成日志省略", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gapRun, err := supervisor.Start(ctx, runtime.RunParams{Caller: tool.Caller{User: identity.User{ID: users["admin"], Role: "admin"}, Source: tool.SourceChat}, ConversationID: gapConversation.ID, Text: "合成超长回答", Provider: c10SampleModel{}, Model: "synthetic-model"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gapSubscription := gapRun.Subscribe(0)
+	for range gapSubscription.Events {
+	}
+	gapSubscription.Close()
+	gapStream := call("admin", "GET", "me/steward/conversations/"+gapConversation.ID+"/events", nil)
+	foundGap := false
+	for _, line := range strings.Split(gapStream.Body.String(), "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		var event map[string]any
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event); err != nil {
+			t.Fatal(err)
+		}
+		if event["type"] != "history_gap" {
+			continue
+		}
+		response := httptest.NewRecorder()
+		response.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(response).Encode(event)
+		record("event-history-gap", response, 200)
+		foundGap = true
+	}
+	if !foundGap {
+		t.Fatal("日志省略事件未生成")
+	}
+	for i := 0; i < 3; i++ {
+		conversation, err := store.CreateConversation(ctx, users["admin"], "合成占用", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		started := make(chan struct{})
+		if _, err := supervisor.Start(ctx, runtime.RunParams{Caller: tool.Caller{User: identity.User{ID: users["admin"], Role: "admin"}, Source: tool.SourceChat}, ConversationID: conversation.ID, Text: "等待", Provider: c10BlockingModel{started}, Model: "synthetic-model"}); err != nil {
+			t.Fatal(err)
+		}
+		<-started
+	}
+	record("run-limit", call("admin", "POST", compactPath+"/messages", map[string]string{"text": "第四个运行"}), 409)
+	if err := supervisor.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	record("shutting-down", call("admin", "POST", compactPath+"/messages", map[string]string{"text": "停止接收"}), 503)
+	if len(samples.samples) != 68 {
 		t.Fatalf("管家样本覆盖清单发生变化：%d", len(samples.samples))
 	}
 	samples.finish()
@@ -269,3 +426,22 @@ func TestStewardAPISampleOwnership(t *testing.T) {
 		}
 	}
 }
+
+// 合成超长输出经过实际 Runner 和接回接口，验证日志省略事件样本。
+type c10SampleModel struct{}
+
+func (c10SampleModel) Stream(context.Context, provider.Request) (provider.Stream, error) {
+	return &c10SampleStream{events: []provider.Event{{Type: provider.EventText, Text: strings.Repeat("字", runtime.EventLogLimit/3+1)}, {Type: provider.EventDone, Finish: &provider.Finish{Reason: provider.FinishNormal}}}}, nil
+}
+
+type c10SampleStream struct{ events []provider.Event }
+
+func (s *c10SampleStream) Next() (provider.Event, error) {
+	if len(s.events) == 0 {
+		return provider.Event{}, io.EOF
+	}
+	e := s.events[0]
+	s.events = s.events[1:]
+	return e, nil
+}
+func (*c10SampleStream) Close() error { return nil }

@@ -20,6 +20,7 @@
 }
 
 .tab {
+  position: relative;
   display: grid;
   justify-items: center;
   align-content: center;
@@ -38,6 +39,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 管家的提示点（C10）：在图标右上角。 */
+.dot {
+  position: absolute;
+  top: 9px;
+  left: calc(50% + 7px);
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--color-bg);
+  border-radius: 50%;
+  background: var(--color-accent-700);
+  box-sizing: content-box;
 }
 
 .tab:active {

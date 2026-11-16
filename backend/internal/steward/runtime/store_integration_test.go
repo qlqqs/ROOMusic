@@ -293,11 +293,10 @@ func TestPostgreSQLStewardMigration51UpgradeRollbackRoundTrip(t *testing.T) {
 			t.Errorf("missing %s", table)
 		}
 	}
-	s := NewStore(db)
 	user := uuid.New()
 	_, err = db.Exec(`INSERT INTO users(id,username,password_hash) VALUES($1,'migration-synthetic','test-only')`, user)
 	mustStore(t, err)
-	_, err = s.SaveUserSettings(ctx, user, UserSettingsInput{DisplayName: "合成"})
+	_, err = db.Exec(`INSERT INTO steward_user_settings(user_id,display_name) VALUES($1,'合成')`, user)
 	mustStore(t, err)
 	// 此处只升级到 0051，按当时结构造数据，避免当前 Store 依赖后续方案列。
 	conversationID, messageID := uuid.New(), uuid.New()

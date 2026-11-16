@@ -36,12 +36,14 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
 	playbackapi "github.com/qlqq/roomusic/backend/internal/playback/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
+	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 	zonesapi "github.com/qlqq/roomusic/backend/internal/zones/httpapi"
 )
 
 // App 是装配完成的应用：请求 handler 加上需要在停机时等待的后台工作。
 type App struct {
+	steward           *runtime.Supervisor
 	mux               *http.ServeMux
 	handler           http.Handler
 	library           *library.Service
@@ -142,7 +144,6 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	operationKinds := []operations.Kind{governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}}
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
-	identityapi.New(database, guard, assembly.loginThrottle, logger).Register(mux)
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
 	catalogapi.New(database, guard, settings.DataDirectory, logger, catalogapi.WithAnalysisVersion(analysis.Version)).Register(mux)
 	catalogapi.NewArtistGovernance(database, guard, logger, artistResolutionAdapter{}).Register(mux)
@@ -160,7 +161,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		close(analysisDone)
 	}
 	progress := playback.NewAnalysisProgressProvider(database, analysis.Version, analysisWorker)
-	registerSteward(lifecycle, mux, database, guard, settings.DataDirectory, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
+	supervisor := registerSteward(lifecycle, mux, database, guard, settings.DataDirectory, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		AnalysisProgress: progress,
 	}).Register(mux)
@@ -184,7 +185,12 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	} else {
 		close(catalogDone)
 	}
-	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, scanSchedulerDone: scanSchedulerDone, zonesDone: zonesDone}
+	identityapi.New(database, guard, assembly.loginThrottle, logger).WithSessionRevoked(func(userID string) {
+		if supervisor != nil {
+			supervisor.CancelUser(userID)
+		}
+	}).Register(mux)
+	return &App{steward: supervisor, mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, scanSchedulerDone: scanSchedulerDone, zonesDone: zonesDone}
 }
 
 // InitializeCatalog 在允许扫描与治理写入前短事务登记目标版本，不发现对象或等待回填。
@@ -258,4 +264,12 @@ type artistResolutionAdapter struct{}
 
 func (artistResolutionAdapter) RefreshArtistResolution(ctx context.Context, tx *sql.Tx, mapping map[string]string) error {
 	return personal.RefreshArtistResolution(ctx, tx, mapping)
+}
+
+// ShutdownSteward 在数据库关闭前取消运行并等待内容落库。
+func (app *App) ShutdownSteward(ctx context.Context) error {
+	if app.steward == nil {
+		return nil
+	}
+	return app.steward.Shutdown(ctx)
 }

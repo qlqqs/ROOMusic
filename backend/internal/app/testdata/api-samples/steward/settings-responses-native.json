@@ -19,6 +19,7 @@
     "search_key_saved": true,
     "search_source": "native",
     "searxng_url": "http://127.0.0.1:12345",
+    "unread_conversation_count": 0,
     "updated_at": "2026-01-01T00:00:00Z"
   },
   "status": 200

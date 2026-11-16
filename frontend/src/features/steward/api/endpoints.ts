@@ -12,6 +12,9 @@ import {
   decodeCreatedToken,
   decodeDeleted,
   decodeInstanceSettings,
+  decodeMarkedRead,
+  decodeMemory,
+  decodeMemoryList,
   decodeReverted,
   decodeSearchTest,
   decodeSettings,
@@ -23,6 +26,8 @@ import {
   type ConversationPatchDTO,
   type CreatedTokenDTO,
   type InstanceSettingsDTO,
+  type MemoryDTO,
+  type MemoryListDTO,
   type NativeSearchSupport,
   type Protocol,
   type SearchSource,
@@ -102,9 +107,23 @@ export function deleteConversation(id: string): Promise<ApiResponse<{ deleted: t
   return apiRequest({ method: "DELETE", path: `${conversationsPath}/${id}` }, decodeDeleted);
 }
 
-/** 取消本进程里这个会话正在进行的运行；没有运行时 cancelled 为 false。 */
+/** 取消这个会话正在进行的运行（任何标签页发起的都可以，C10）；没有运行时 cancelled 为 false。 */
 export function cancelConversation(id: string): Promise<ApiResponse<{ cancelled: boolean }>> {
   return apiRequest({ method: "POST", path: `${conversationsPath}/${id}/cancel` }, decodeCancelled);
+}
+
+/**
+ * 接回这个会话正在进行（或刚结束、事件还留着）的运行（C10）：先回放 after 之后的事件，再实时推送。after 是收到的最后一个事件序号，
+ * 0 表示从头回放；大于 0 时作为 Last-Event-ID 头发出。没有这次运行的事件时是 204（改读会话详情）；会话不是本人的或不存在是 404。
+ * 运行不随连接断开而停止：断开只是不再收到事件。
+ */
+export function openEvents(id: string, after: number, signal: AbortSignal): Promise<Response> {
+  return apiStream({ path: `${conversationsPath}/${id}/events`, signal, ...(after > 0 ? { lastEventId: String(after) } : {}) });
+}
+
+/** 打开会话后标记已读（C10）：会话列表的未读与入口的提示点据此消失。 */
+export function markConversationRead(id: string): Promise<ApiResponse<{ read: true }>> {
+  return apiRequest({ method: "POST", path: `${conversationsPath}/${id}/read` }, decodeMarkedRead);
 }
 
 /**
@@ -140,6 +159,35 @@ export function openReview(id: string, planId: string, signal: AbortSignal): Pro
 /** 撤销一条操作（受治理操作的撤销接口，管理员）：方案里已执行的可撤销项用它。 */
 export function revertOperation(operationId: string, idempotencyKey: string): Promise<ApiResponse<{ operation_id: string }>> {
   return apiRequest({ method: "POST", path: `/api/v1/operations/${operationId}/revert`, idempotencyKey }, decodeReverted);
+}
+
+// ---- 记忆（C10）----
+
+const memoriesPath = `${base}/memories`;
+
+/** 自己的记忆（按更新时间倒序）与条数、字数的上限。成员开关关闭时成员仍能查看。 */
+export function fetchMemories(signal?: AbortSignal): Promise<ApiResponse<MemoryListDTO>> {
+  return apiRequest({ method: "GET", path: memoriesPath, signal }, decodeMemoryList);
+}
+
+/** 手动添加一条（201）：空或超长 400 invalid_input，到了条数上限 409 memory_limit_reached；成员开关关闭时 403。没有幂等键，不自动重试。 */
+export function createMemory(content: string): Promise<ApiResponse<MemoryDTO>> {
+  return apiRequest({ method: "POST", path: memoriesPath, body: { content } }, decodeMemory);
+}
+
+/** 改一条的内容；不存在 404 not_found，其余同新增。 */
+export function updateMemory(id: string, content: string): Promise<ApiResponse<MemoryDTO>> {
+  return apiRequest({ method: "PATCH", path: `${memoriesPath}/${id}`, body: { content } }, decodeMemory);
+}
+
+/** 删除一条（204）；不存在 404 not_found。成员开关关闭时也可以删除。 */
+export function deleteMemory(id: string): Promise<ApiResponse<null>> {
+  return apiRequest({ method: "DELETE", path: `${memoriesPath}/${id}` }, () => null);
+}
+
+/** 全部清除（204）。 */
+export function clearMemories(): Promise<ApiResponse<null>> {
+  return apiRequest({ method: "DELETE", path: memoriesPath }, () => null);
 }
 
 // ---- 管理员 ----

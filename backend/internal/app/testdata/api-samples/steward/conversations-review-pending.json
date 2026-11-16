@@ -4,21 +4,29 @@
       {
         "created_at": "2026-01-01T00:00:02Z",
         "id": "00000000-0000-4000-8000-000000000001",
+        "last_read_at": null,
+        "last_run_finished_at": null,
         "mode": "assistant",
         "model": "synthetic-model",
         "pending_item_count": 1,
+        "run_status": "awaiting_confirmation",
         "status": "idle",
         "title": "合成审查方案",
+        "unread": false,
         "updated_at": "2026-01-01T00:00:03Z"
       },
       {
         "created_at": "2026-01-01T00:00:00Z",
         "id": "00000000-0000-4000-8000-000000000002",
+        "last_read_at": null,
+        "last_run_finished_at": null,
         "mode": "assistant",
         "model": "synthetic-model",
         "pending_item_count": 0,
+        "run_status": "idle",
         "status": "idle",
         "title": "合成对话",
+        "unread": false,
         "updated_at": "2026-01-01T00:00:01Z"
       }
     ],

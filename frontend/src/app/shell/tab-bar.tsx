@@ -1,9 +1,9 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Disc3, Heart, LayoutDashboard, MicVocal, type LucideIcon } from "lucide-react";
-import type { RefObject } from "react";
+import { useId, type RefObject } from "react";
 import { preferBlankConversation, useStewardEntry } from "../../features/steward";
 import { StewardIcon } from "./nav-items";
-import { useArtistsAvailable } from "./primary-nav";
+import { stewardUnreadText, useArtistsAvailable } from "./primary-nav";
 import styles from "./tab-bar.module.css";
 
 type Tab = { id: "overview" | "albums" | "artists" | "steward" | "me"; to: "/" | "/albums" | "/artists" | "/steward" | "/me"; label: string; icon: LucideIcon };
@@ -40,6 +40,8 @@ export function TabBar({ ref }: { ref: RefObject<HTMLElement | null> }) {
   const artists = useArtistsAvailable();
   const steward = useStewardEntry();
   const current = useRouterState({ select: (state) => tabAt(state.location.pathname) });
+  const unreadId = useId();
+  const unread = steward.unread > 0;
   return (
     <nav ref={ref} className={styles.bar} aria-label="主导航">
       <ul className={styles.list}>
@@ -54,10 +56,18 @@ export function TabBar({ ref }: { ref: RefObject<HTMLElement | null> }) {
                 activeOptions={{ exact: true }}
                 aria-current={current === tab.id ? "page" : undefined}
                 onClick={tab.id === "steward" ? preferBlankConversation : undefined}
+                aria-describedby={tab.id === "steward" && unread ? unreadId : undefined}
               >
                 <tab.icon size={20} aria-hidden="true" fill={tab.id === "me" && current === "me" ? "currentColor" : "none"} />
                 <span className={styles.label}>{tab.id === "steward" ? steward.name : tab.label}</span>
+                {/* 有运行结束后还没打开看过的会话（C10）：图标右上角的提示点，数量经 aria-describedby 说明。 */}
+                {tab.id === "steward" && unread ? <span className={styles.dot} aria-hidden="true" /> : null}
               </Link>
+              {tab.id === "steward" && unread ? (
+                <span id={unreadId} hidden>
+                  {stewardUnreadText(steward.unread)}
+                </span>
+              ) : null}
             </li>
           ))}
       </ul>

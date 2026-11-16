@@ -95,6 +95,16 @@ button.link {
   font-variant-numeric: tabular-nums;
 }
 
+/* 管家入口的提示点（C10）：有运行结束后还没打开看过的会话时，名字右侧一个强调色圆点。 */
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--color-accent-700);
+}
+
 /* 正在播放的来源：三根强调色音柱，真的在播放时跳动。 */
 .bars {
   display: inline-flex;

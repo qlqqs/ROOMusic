@@ -8,6 +8,7 @@
       }
     ],
     "search_id": "sample-search",
+    "seq": 1,
     "status": "completed",
     "step": 1,
     "type": "search"

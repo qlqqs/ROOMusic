@@ -48,11 +48,12 @@ type settingsInput struct {
 }
 
 type settingsResponse struct {
-	SearchSource          string `json:"search_source"`
-	SearXNGURL            string `json:"searxng_url"`
-	SearchKeySaved        bool   `json:"search_key_saved"`
-	SearchKeyLastFour     string `json:"search_key_last_four"`
-	SearchKeyNeedsReentry bool   `json:"search_key_needs_reentry"`
+	UnreadConversationCount int64  `json:"unread_conversation_count"`
+	SearchSource            string `json:"search_source"`
+	SearXNGURL              string `json:"searxng_url"`
+	SearchKeySaved          bool   `json:"search_key_saved"`
+	SearchKeyLastFour       string `json:"search_key_last_four"`
+	SearchKeyNeedsReentry   bool   `json:"search_key_needs_reentry"`
 	// Endpoint 是用户填写的 HTTP(S) 基础地址。
 	Endpoint string `json:"endpoint"`
 	// KeyLastFour 是已保存密钥的末四位。
@@ -109,7 +110,7 @@ func (h *Handlers) getSettings(w http.ResponseWriter, r *http.Request, user iden
 		h.writeStoreError(w, r, err)
 		return
 	}
-	httpserver.WriteJSON(w, 200, h.settingsView(user.ID, settings))
+	h.writeSettings(w, r, user.ID, settings)
 }
 
 func (h *Handlers) putSettings(w http.ResponseWriter, r *http.Request, user identity.User) {
@@ -121,11 +122,13 @@ func (h *Handlers) putSettings(w http.ResponseWriter, r *http.Request, user iden
 		invalidInput(w, r)
 		return
 	}
+	cancelRuns := false
 	saved, err := h.store.UpdateUserSettings(r.Context(), user.ID, func(current runtime.UserSettings) (runtime.UserSettingsInput, error) {
 		update, err := h.mergeSettings(user.ID, current, input)
 		if err != nil {
 			return update, err
 		}
+		cancelRuns = modelSettingsChanged(current, update)
 		if input.SearchSource != nil && *input.SearchSource == "native" && effectiveNativeSearch(current, update) != provider.NativeSearchSupported {
 			return update, runtime.ErrInvalidInput
 		}
@@ -152,7 +155,10 @@ func (h *Handlers) putSettings(w http.ResponseWriter, r *http.Request, user iden
 		h.writeSettingsError(w, r, err)
 		return
 	}
-	httpserver.WriteJSON(w, 200, h.settingsView(user.ID, saved))
+	if cancelRuns {
+		h.supervisor.CancelUser(user.ID)
+	}
+	h.writeSettings(w, r, user.ID, saved)
 }
 
 func validSettingsInput(input *settingsInput) bool {
@@ -462,6 +468,9 @@ func (h *Handlers) mergeKey(userID, purpose string, current *runtime.EncryptedKe
 		old, err := h.secrets.Open(userID, purpose, current.Ciphertext)
 		changed = err != nil || string(old) != *key
 	}
+	if !changed {
+		return nil, false, false, nil
+	}
 	encrypted, err := h.encryptKey(userID, purpose, *key)
 	if err != nil {
 		return nil, false, false, &settingsSecretError{err}
@@ -501,4 +510,19 @@ func effectiveNativeSearch(current runtime.UserSettings, update runtime.UserSett
 		support = *overrides.NativeSearch
 	}
 	return support
+}
+
+func (h *Handlers) writeSettings(w http.ResponseWriter, r *http.Request, userID string, settings runtime.UserSettings) {
+	count, err := h.store.CountUnreadConversations(r.Context(), userID)
+	if err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	response := h.settingsView(userID, settings)
+	response.UnreadConversationCount = count
+	httpserver.WriteJSON(w, 200, response)
+}
+
+func modelSettingsChanged(current runtime.UserSettings, update runtime.UserSettingsInput) bool {
+	return current.Endpoint != update.Endpoint || update.Key != nil || (update.ClearKey && current.Key != nil)
 }

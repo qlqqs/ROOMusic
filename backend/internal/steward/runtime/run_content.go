@@ -84,7 +84,15 @@ func replayMessages(messages []Message) ([]provider.Message, error) {
 }
 
 func (s *runState) replayMessages(messages []Message) ([]provider.Message, error) {
-	return replayMessagesFor(messages, providerOrigin{Protocol: s.params.Protocol, Endpoint: s.params.Endpoint, Model: s.params.Model})
+	var prefix []provider.Message
+	if !s.summaryFailed && s.summary.Text != "" && s.summary.ThroughMessageID != nil {
+		if start := summaryStart(messages, s.summary.ThroughMessageID); start > 0 {
+			messages = messages[start:]
+			prefix = []provider.Message{textMessage(provider.RoleUser, summaryReplayHeader+escapeSource(s.summary.Text)+sourceEnd).Message}
+		}
+	}
+	replay, err := replayMessagesFor(messages, providerOrigin{Protocol: s.params.Protocol, Endpoint: s.params.Endpoint, Model: s.params.Model})
+	return append(prefix, replay...), err
 }
 
 func replayMessagesFor(messages []Message, origin providerOrigin) ([]provider.Message, error) {

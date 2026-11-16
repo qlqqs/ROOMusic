@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 )
 
@@ -50,7 +51,7 @@ func ListUsers(ctx context.Context, db *sql.DB) ([]UserSummary, error) {
 
 // SetUserDisabled 在同一事务内保护最后一个管理员、更新状态并按需撤销会话。
 // 调用入口负责管理员鉴权及用户 ID 格式校验。
-func SetUserDisabled(ctx context.Context, db *sql.DB, id string, disabled bool) error {
+func SetUserDisabled(ctx context.Context, db *sql.DB, id string, disabled bool, revoked ...func(string)) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return &UserManagementError{Code: "database_unavailable", Message: "服务暂不可用", Err: err}
@@ -119,12 +120,15 @@ func SetUserDisabled(ctx context.Context, db *sql.DB, id string, disabled bool) 
 	if err = tx.Commit(); err != nil {
 		return &UserManagementError{Code: "database_unavailable", Message: "无法更新用户", Err: err}
 	}
+	if disabled {
+		notifyRevoked(id, revoked)
+	}
 	return nil
 }
 
 // RevokeUserSessions 检查用户存在后撤销其全部未撤销会话。
 // 调用入口负责管理员鉴权及用户 ID 格式校验。
-func RevokeUserSessions(ctx context.Context, db *sql.DB, id string) error {
+func RevokeUserSessions(ctx context.Context, db *sql.DB, id string, revoked ...func(string)) error {
 	// 没有删除用户的接口，存在性检查与撤销之间用户不会消失，所以不需要把两步放进同一个事务。
 	var exists bool
 	if err := db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM users WHERE id=$1::uuid)", id).Scan(&exists); err != nil {
@@ -137,5 +141,15 @@ func RevokeUserSessions(ctx context.Context, db *sql.DB, id string) error {
 	if err != nil {
 		return &UserManagementError{Code: "database_unavailable", Message: "无法撤销会话", Err: err}
 	}
+	notifyRevoked(id, revoked)
 	return nil
+}
+
+// 回调只在身份变更成功提交后通知应用，不依赖管家包。
+func notifyRevoked(id string, callbacks []func(string)) {
+	for _, callback := range callbacks {
+		if callback != nil {
+			callback(strings.ToLower(id))
+		}
+	}
 }

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_input",
+      "message": "记忆内容须为 1 至 500 字，标识须为 UUID"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

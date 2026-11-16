@@ -62,7 +62,7 @@ func newC7API(t *testing.T, protocol, role string) (*c7API, string) {
 		}
 	}
 	f.registry = registry
-	f.api.runner = runtime.NewRunner(f.store, registry, f.api.logger).WithReviewEvidence(func(ctx context.Context, caller tool.Caller, item runtime.PlanItem) (runtime.ReviewEvidenceFacts, error) {
+	f.replaceRunner(runtime.NewRunner(f.store, registry, f.api.logger).WithReviewEvidence(func(ctx context.Context, caller tool.Caller, item runtime.PlanItem) (runtime.ReviewEvidenceFacts, error) {
 		targets, err := catalogtools.ReadReviewTargets(ctx, catalog.NewStore(f.db), governance.NewStore(f.db), item.Input)
 		if err != nil {
 			return runtime.ReviewEvidenceFacts{}, err
@@ -77,7 +77,7 @@ func newC7API(t *testing.T, protocol, role string) (*c7API, string) {
 			return runtime.ReviewEvidenceFacts{}, err
 		}
 		return runtime.ReviewEvidenceFacts{Targets: raw, RecentOperationCount: len(page.Items)}, marshalErr
-	})
+	}))
 	f.calls = f.calls[:1]
 	f.calls[0].input["basis"] = map[string]string{"source": "external", "note": c7Basis}
 	c6SQL(t, base, `UPDATE tracks SET lyrics='C7_PRIVATE_LYRICS',lyrics_source='id3_uslt',relative_path='C7_PRIVATE_PATH.wav'`)
@@ -602,6 +602,9 @@ func TestPostgreSQLStewardHTTPC7RetryAndManualFallback(t *testing.T) {
 				c6SQL(t, f.c6API, `UPDATE steward_conversations SET status='running' WHERE id=$1`, id)
 				status, code = 409, "conversation_busy"
 			}
+			if name == "other_conversation" || name == "foreign_plan" {
+				apiStatus(t, f.request(role, "PATCH", c6Path(conversation), map[string]string{"mode": "steward"}), 200, "")
+			}
 			f.failure = ""
 			w := f.request(role, "POST", c6Path(conversation)+"/plans/"+planID+"/review", nil)
 			if name == "success" {
@@ -699,7 +702,7 @@ func TestPostgreSQLStewardHTTPC7SnapshotBinding(t *testing.T) {
 				return runtime.ReviewEvidenceFacts{Targets: raw}, err
 			}
 			original = runtime.NewRunner(f.store, f.registry, f.api.logger).WithReviewEvidence(reader)
-			f.api.runner = runtime.NewRunner(store, f.registry, f.api.logger).WithReviewEvidence(reader)
+			f.replaceRunner(runtime.NewRunner(store, f.registry, f.api.logger).WithReviewEvidence(reader))
 			store.afterSave = func(review runtime.Review) error {
 				var err error
 				switch name {
@@ -754,7 +757,7 @@ func TestPostgreSQLStewardHTTPC7SnapshotBinding(t *testing.T) {
 			}
 			f.assertReviewWire(t, 1, "synthetic-model")
 			if name == "evidence" || name == "review_expired" || afterFirst {
-				f.api.runner = original
+				f.replaceRunner(original)
 				w = f.request("admin", "POST", c6Path(id)+"/plans/"+p.ID+"/review", nil)
 				assertDone(t, w, runtime.EndCompleted)
 				if f.count(t) != len(p.Items) {

@@ -47,6 +47,22 @@
   white-space: pre-wrap;
 }
 
+/* 摘要分界（C10）：两侧是细线的一行小字。 */
+.compacted {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+.compacted::before,
+.compacted::after {
+  flex: 1;
+  border-top: 1px solid var(--color-divider);
+  content: "";
+}
+
 .thinking {
   color: var(--text-secondary);
   font-size: var(--fs-13);

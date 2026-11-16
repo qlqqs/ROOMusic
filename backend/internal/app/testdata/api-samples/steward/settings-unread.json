@@ -1,0 +1,23 @@
+{
+  "body": {
+    "display_name": "合成管家",
+    "endpoint": "http://127.0.0.1:12345",
+    "key_last_four": "-key",
+    "key_needs_reentry": false,
+    "key_saved": true,
+    "model": "synthetic-model",
+    "overrides": {},
+    "probe_result": null,
+    "probed_at": null,
+    "protocol": "openai",
+    "review_model": "synthetic-review-model",
+    "search_key_last_four": "",
+    "search_key_needs_reentry": false,
+    "search_key_saved": false,
+    "search_source": "none",
+    "searxng_url": "http://127.0.0.1:12345",
+    "unread_conversation_count": 2,
+    "updated_at": "2026-01-01T00:00:00Z"
+  },
+  "status": 200
+}

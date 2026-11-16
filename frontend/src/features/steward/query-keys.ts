@@ -7,4 +7,5 @@ export const stewardKeys = {
   conversation: (generation: number, id: string) => viewerQueryKey(generation, "steward", "conversation", id),
   instance: (generation: number) => viewerQueryKey(generation, "steward", "instance"),
   allowlist: (generation: number) => viewerQueryKey(generation, "steward", "allowlist"),
+  memories: (generation: number) => viewerQueryKey(generation, "steward", "memories"),
 };

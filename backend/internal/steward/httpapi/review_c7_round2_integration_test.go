@@ -112,7 +112,7 @@ func TestPostgreSQLStewardHTTPC7Round2MixedEvidence(t *testing.T) {
 				_, err := f.db.Exec(`UPDATE releases SET artist='第二轮外部修改' WHERE id=$1`, f.releases[index])
 				return err
 			}}
-			f.api.runner = runtime.NewRunner(store, f.registry, f.api.logger).WithReviewEvidence(c7Round2Evidence(f))
+			f.replaceRunner(runtime.NewRunner(store, f.registry, f.api.logger).WithReviewEvidence(c7Round2Evidence(f)))
 			w := f.send("admin", id)
 			want, count, decision := runtime.EndAwaitingConfirmation, 1, "accepted"
 			if changed == "approved_target" {
@@ -137,7 +137,7 @@ func TestPostgreSQLStewardHTTPC7Round2ReconcileBeforeDecline(t *testing.T) {
 	for _, next := range []string{"rejected_by_review", "declined_by_user"} {
 		t.Run(next, func(t *testing.T) {
 			f, id := newC7API(t, "openai", "admin")
-			f.api.runner = runtime.NewRunner(&c6FailPlanResultOnce{Store: f.store, fail: true}, f.registry, f.api.logger).WithReviewEvidence(c7Round2Evidence(f))
+			f.replaceRunner(runtime.NewRunner(&c6FailPlanResultOnce{Store: f.store, fail: true}, f.registry, f.api.logger).WithReviewEvidence(c7Round2Evidence(f)))
 			w := f.send("admin", id)
 			if end := assertDone(t, w, ""); end.ErrorCode != "database_unavailable" {
 				t.Fatalf("没有制造提交后断开：%s", w.Body)
@@ -170,7 +170,7 @@ func TestPostgreSQLStewardHTTPC7Round2ReconcileBeforeDecline(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			f.api.runner = runtime.NewRunner(f.store, registry, f.api.logger).WithReviewEvidence(c7Round2Evidence(f))
+			f.replaceRunner(runtime.NewRunner(f.store, registry, f.api.logger).WithReviewEvidence(c7Round2Evidence(f)))
 			if next == "rejected_by_review" {
 				f.decisions = []string{"rejected"}
 				w = f.request("admin", "POST", c6Path(id)+"/plans/"+p.ID+"/review", nil)
@@ -268,7 +268,7 @@ func (s *c7Round2FailReviewStore) SaveReview(context.Context, string, string, ru
 
 func TestPostgreSQLStewardHTTPC7Round2ReviewSaveFailure(t *testing.T) {
 	f, id := newC7API(t, "openai", "admin")
-	f.api.runner = runtime.NewRunner(&c7Round2FailReviewStore{f.store}, f.registry, f.api.logger).WithReviewEvidence(c7Round2Evidence(f))
+	f.replaceRunner(runtime.NewRunner(&c7Round2FailReviewStore{f.store}, f.registry, f.api.logger).WithReviewEvidence(c7Round2Evidence(f)))
 	w := f.send("admin", id)
 	if end := assertDone(t, w, ""); end.ErrorCode != "database_unavailable" || end.Message == "" || end.ErrorKind != "" {
 		t.Fatalf("保存失败未统一映射：%s", w.Body)

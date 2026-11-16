@@ -76,6 +76,36 @@ test.describe("管家对话", () => {
     await expect(page.getByRole("textbox", { name: "问问小蓝" })).toBeVisible();
   });
 
+  test("运行中刷新页面：重新接回，回答接着显示，与之前的内容衔接、不重复（C10）", async ({ page, backend }) => {
+    await backend.start({ signedInAs: "curator" });
+    const mock = await installStewardMock(page, { background: true });
+    await page.goto("/steward");
+    const conversation = page.getByRole("region", { name: "对话" });
+    const input = conversation.getByRole("textbox", { name: "问问小蓝" });
+    await input.fill("贝九有几版？");
+    await input.press("Enter");
+    await expect(page).toHaveURL(/\/steward\/[0-9a-f-]{36}$/);
+    await expect(conversation.getByText("我查一下。", { exact: true })).toBeVisible();
+    await expect(conversation.getByRole("button", { name: "停止回答" })).toBeVisible();
+    // 发消息的流没有 done 就断了：带着收到的最后一个序号马上重新接回（这里一直挂着，运行还没结束）。
+    await expect.poll(() => mock.heldEvents.length).toBe(1);
+    expect(mock.heldEvents[0]?.request().headers()["last-event-id"]).toBe("14");
+
+    await page.reload();
+    // 刷新后从头接回：回放整次运行（第一步的文字已合并）并结束；已落库的第一步不再显示一遍。
+    await expect(conversation.getByRole("table").getByRole("cell", { name: "拜罗伊特" })).toBeVisible();
+    await expect(conversation.getByText("查了 1 处资料，用时 1 秒")).toBeVisible();
+    await expect(conversation.getByText("贝九有几版？", { exact: true })).toHaveCount(1);
+    await expect(conversation.getByText("我查一下。", { exact: true })).toHaveCount(1);
+    await expect(conversation.getByRole("table")).toHaveCount(1);
+    await expect(conversation.getByRole("button", { name: "发送" })).toBeVisible();
+    const attaches = mock.requests.filter((request) => request.method === "GET" && request.path.endsWith("/events"));
+    expect(attaches).toHaveLength(2);
+    expect(mock.requests.some((request) => request.method === "POST" && request.path.endsWith("/read"))).toBe(true);
+    await expectNoHorizontalOverflow(page, "接回后的整页对话");
+    for (const route of mock.heldEvents) await route.abort().catch(() => undefined);
+  });
+
   test("旧地址 /settings/tokens 转到 /settings/agent", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
     await installStewardMock(page);

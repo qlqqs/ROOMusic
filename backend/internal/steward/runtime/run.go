@@ -23,6 +23,9 @@ const (
 )
 
 type runState struct {
+	memoryBlock   string
+	summary       ConversationSummary
+	summaryFailed bool
 	*Runner
 	params        RunParams
 	sink          EventSink
@@ -57,6 +60,14 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 	} else if err := r.store.AcquireConversation(ctx, userID, params.ConversationID); err != nil {
 		return err
 	}
+	runStarted := false
+	notifyStarted := params.Started
+	params.Started = func() {
+		runStarted = true
+		if notifyStarted != nil {
+			notifyStarted()
+		}
+	}
 	started := time.Now()
 	state := runState{Runner: r, params: params, sink: sink,
 		logger:      r.logger.With("module", "steward", "conversation_id", params.ConversationID),
@@ -67,8 +78,17 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 			end = RunEnd{Reason: EndInternalError, Message: "管家运行发生内部错误"}
 			state.logger.ErrorContext(context.WithoutCancel(ctx), "管家运行异常", "event", "steward.run.panicked", "stack", string(debug.Stack()))
 		}
+		// 前置读取或步骤间查库也可能被主动取消，不把它映射为数据库故障。
+		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+			err = nil
+			end = RunEnd{Reason: EndCancelled}
+		}
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeTimeout)
-		releaseErr := r.store.ReleaseConversation(cleanup, userID, params.ConversationID)
+		release := r.store.ReleaseConversation
+		if completion, ok := r.store.(RunCompletionStore); ok && runStarted {
+			release = completion.FinishConversation
+		}
+		releaseErr := release(cleanup, userID, params.ConversationID)
 		err = errors.Join(err, releaseErr)
 		cancel()
 		if errors.Is(err, ErrNothingToContinue) && releaseErr == nil {
@@ -96,6 +116,15 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 		return err
 	}
 	state.conversation = detail.Conversation
+	state.summary = detail.Summary
+	if r.memories != nil {
+		remembered, readErr := r.memories.List(ctx, userID)
+		if readErr != nil {
+			state.logger.WarnContext(ctx, "管家记忆暂不可用", "event", "steward.memory.unavailable", "message", "管家记忆暂不可用")
+		} else {
+			state.memoryBlock = memoryPrompt(remembered.Items)
+		}
+	}
 	if state.conversation.Mode == "" {
 		state.conversation.Mode = "assistant"
 	}
@@ -206,7 +235,7 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 
 func (s *runState) prepare(ctx context.Context) ([]provider.Message, error) {
 	if s.params.Continue {
-		return s.replayMessages(s.history)
+		return s.prepareHistory(ctx, s.history)
 	}
 	input, err := messageInput(textMessage(provider.RoleUser, s.params.Text), provider.Usage{}, nil)
 	if err != nil {
@@ -232,7 +261,7 @@ func (s *runState) prepare(ctx context.Context) ([]provider.Message, error) {
 			return nil, err
 		}
 	}
-	return s.replayMessages(detail.Messages)
+	return s.prepareHistory(ctx, detail.Messages)
 }
 
 func (s *runState) run(ctx context.Context) (RunEnd, error) {
@@ -252,14 +281,38 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 		}
 	}
 	for s.step < maxSteps {
+		if s.inputTokens+s.outputTokens >= maxRunTokens {
+			return RunEnd{Reason: EndTokenLimit}, nil
+		}
 		if ctx.Err() != nil {
 			return RunEnd{Reason: EndCancelled}, nil
 		}
 		s.step++
-		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: systemPromptWithMode(s.params.DisplayName, s.conversation.Mode),
+		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: systemPromptWithMode(s.params.DisplayName, s.conversation.Mode) + s.memoryBlock,
 			Messages: messages, Tools: definitions, MaxOutputTokens: maxOutputTokens, NativeSearch: s.params.NativeSearch})
 		s.recordUsage(ctx, step.usage)
 		if err != nil {
+			// 中断时只保存已生成的文本，不留下没有结果的半截工具请求。
+			var blocks []provider.ContentBlock
+			for _, block := range step.content.Content {
+				if block.Type == provider.BlockText {
+					blocks = append(blocks, block)
+				}
+			}
+			if ctx.Err() != nil && len(blocks) > 0 {
+				step.content.Content = blocks
+				step.content.FinishReason = provider.FinishPause
+				input, encodeErr := messageInput(step.content, step.usage, nil)
+				if encodeErr != nil {
+					return RunEnd{}, encodeErr
+				}
+				cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeTimeout)
+				_, saveErr := s.store.AppendMessage(cleanup, s.params.Caller.User.ID, s.params.ConversationID, input)
+				cancel()
+				if saveErr != nil {
+					return RunEnd{}, saveErr
+				}
+			}
 			return modelFailure(ctx, err), nil
 		}
 		inputCalls := make([]ToolCallInput, 0, len(step.calls))
@@ -286,12 +339,12 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 		if err != nil {
 			return RunEnd{Reason: stop}, err
 		}
-		if s.conversation.Mode == "steward" && stop == "" {
+		if stop == "" && s.step < maxSteps && (len(step.calls) > 0 || step.finish.Reason == provider.FinishPause) && (s.conversation.Mode == "steward" || (!s.summaryFailed && step.usage.InputTokens != nil && *step.usage.InputTokens > summaryInputThreshold)) {
 			detail, readErr := s.store.GetConversation(ctx, s.params.Caller.User.ID, s.params.ConversationID)
 			if readErr != nil {
 				return RunEnd{}, readErr
 			}
-			messages, err = s.replayMessages(detail.Messages)
+			messages, err = s.prepareHistory(ctx, detail.Messages)
 			if err != nil {
 				return RunEnd{}, err
 			}
