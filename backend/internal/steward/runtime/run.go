@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -183,9 +184,15 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 		if len(detail.Messages) == 0 {
 			return ErrNothingToContinue
 		}
-		lastRole := detail.Messages[len(detail.Messages)-1].Role
-		if lastRole != string(provider.RoleUser) && lastRole != string(provider.RoleTool) {
-			return ErrNothingToContinue
+		last := detail.Messages[len(detail.Messages)-1]
+		if last.Role != string(provider.RoleUser) && last.Role != string(provider.RoleTool) {
+			var content messageContent
+			if err := json.Unmarshal(last.Content, &content); err != nil {
+				return err
+			}
+			if content.FinishReason != provider.FinishPause {
+				return ErrNothingToContinue
+			}
 		}
 		state.history = detail.Messages
 	}
@@ -199,7 +206,7 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 
 func (s *runState) prepare(ctx context.Context) ([]provider.Message, error) {
 	if s.params.Continue {
-		return replayMessages(s.history)
+		return s.replayMessages(s.history)
 	}
 	input, err := messageInput(textMessage(provider.RoleUser, s.params.Text), provider.Usage{}, nil)
 	if err != nil {
@@ -225,7 +232,7 @@ func (s *runState) prepare(ctx context.Context) ([]provider.Message, error) {
 			return nil, err
 		}
 	}
-	return replayMessages(detail.Messages)
+	return s.replayMessages(detail.Messages)
 }
 
 func (s *runState) run(ctx context.Context) (RunEnd, error) {
@@ -237,7 +244,7 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 		return RunEnd{}, err
 	}
 	var definitions []provider.ToolDefinition
-	for _, definition := range s.registry.List(s.params.Caller) {
+	for _, definition := range s.registry.ListContext(ctx, s.params.Caller) {
 		s.definitions[definition.Name] = definition
 		if definition.Scope == tool.ScopeRead || definition.Scope == tool.ScopePersonal || definition.Scope == tool.ScopeShared {
 			definitions = append(definitions, provider.ToolDefinition{Name: definition.Name,
@@ -250,7 +257,7 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 		}
 		s.step++
 		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: systemPromptWithMode(s.params.DisplayName, s.conversation.Mode),
-			Messages: messages, Tools: definitions, MaxOutputTokens: maxOutputTokens})
+			Messages: messages, Tools: definitions, MaxOutputTokens: maxOutputTokens, NativeSearch: s.params.NativeSearch})
 		s.recordUsage(ctx, step.usage)
 		if err != nil {
 			return modelFailure(ctx, err), nil
@@ -284,7 +291,7 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 			if readErr != nil {
 				return RunEnd{}, readErr
 			}
-			messages, err = replayMessages(detail.Messages)
+			messages, err = s.replayMessages(detail.Messages)
 			if err != nil {
 				return RunEnd{}, err
 			}
@@ -297,7 +304,7 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 		if stop != "" {
 			return RunEnd{Reason: stop}, nil
 		}
-		if len(step.calls) == 0 {
+		if len(step.calls) == 0 && step.finish.Reason != provider.FinishPause {
 			return RunEnd{Reason: EndCompleted}, nil
 		}
 	}
@@ -313,6 +320,24 @@ type modelStep struct {
 
 func (s *runState) readModel(ctx context.Context, request provider.Request) (step modelStep, err error) {
 	step.content.Role = provider.RoleAssistant
+	step.content.Origin = providerOrigin{Protocol: s.params.Protocol, Endpoint: s.params.Endpoint, Model: s.params.Model}
+	started := time.Now()
+	defer func() {
+		if len(step.content.Searches) > 0 {
+			failed := 0
+			for _, search := range step.content.Searches {
+				if search.Status == "failed" {
+					failed++
+				}
+			}
+			code := ""
+			if failed > 0 {
+				code = "search_failed"
+			}
+			s.logger.InfoContext(ctx, "管家模型搜索结束", "event", "steward.search.finished", "message", "管家模型搜索结束", "module", "steward",
+				"search_count", len(step.content.Searches), "failed_count", failed, "duration_ms", time.Since(started).Milliseconds(), "error_code", code)
+		}
+	}()
 	stream, err := s.params.Provider.Stream(ctx, request)
 	if err != nil {
 		return step, err
@@ -346,10 +371,21 @@ func (s *runState) readModel(ctx context.Context, request provider.Request) (ste
 			step.content.Content = append(step.content.Content, provider.ContentBlock{Type: provider.BlockToolCall, ToolCall: event.ToolCall})
 		case provider.EventOpaque:
 			step.content.Content = append(step.content.Content, provider.ContentBlock{Type: provider.BlockOpaque, Opaque: event.Opaque})
+		case provider.EventSearch:
+			search := provider.CleanSearch(*event.Search)
+			step.content.Searches = append(step.content.Searches, search)
+			s.sink(Event{Type: EventSearch, Step: s.step, Search: &search})
+		case provider.EventCitations:
+			step.content.Citations = provider.CleanCitations(append(step.content.Citations, event.Citations...))
 		case provider.EventUsage:
 			step.usage = *event.Usage
 		case provider.EventDone:
 			step.finish = *event.Finish
+			step.content.FinishReason = step.finish.Reason
+			step.content.ProviderBlocks = event.ProviderBlocks
+			if len(step.content.Citations) > 0 {
+				s.sink(Event{Type: EventCitations, Step: s.step, Citations: step.content.Citations})
+			}
 			return step, nil
 		}
 	}

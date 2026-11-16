@@ -1,9 +1,9 @@
 import { formatDateTime } from "../../../shared/lib/time";
 import { Button, FailureNotice, useMenu, type MenuAction } from "../../../shared/ui";
-import { protocols, toolSupports, type ProbeResultDTO, type Protocol, type SettingsDTO, type ToolSupport } from "../api/decoders";
+import { nativeSearchSupports, protocols, toolSupports, type NativeSearchSupport, type ProbeResultDTO, type Protocol, type SettingsDTO, type ToolSupport } from "../api/decoders";
 import type { SettingsPatch } from "../api/endpoints";
 import { useProbePending, useUpdateSettings } from "../hooks/use-agent-settings";
-import { failureKindLabel, probeStepLabels, protocolLabels, settingsFailureMessages, toolSupportLabels } from "./settings-messages";
+import { failureKindLabel, nativeSearchLabels, probeStepLabels, protocolLabels, settingsFailureMessages, toolSupportLabels } from "./settings-messages";
 import styles from "./settings.module.css";
 
 type Overrides = NonNullable<SettingsPatch["overrides"]>;
@@ -22,7 +22,7 @@ function ModifyMenu({ label, actions, disabled }: { label: string; actions: read
 }
 
 /**
- * 检测结果：时间、服务商，接口类型与调用工具两行（已保存的结论可以“修改”，写进 overrides；改过的标出“手动修改”，可以改回检测结果），
+ * 检测结果：时间、服务商，接口类型、调用工具与自带搜索（C8）三行（已保存的结论可以“修改”，写进 overrides；改过的标出“手动修改”，可以改回检测结果），
  * 以及每一步失败的原因。settings 为 null 时是这次没有通过的检测（报告没有保存），只读。
  * report 为 null：检测结论被后端清掉了（改了接口类型、换了地址或密钥，合同 4.2 规则 2），只剩“接口类型”一行，并提示重新检测。
  */
@@ -33,6 +33,9 @@ export function ProbeResult({ report, probedAt, settings }: { report: ProbeResul
   const savedProtocol = settings === null || settings.protocol === "" ? undefined : settings.protocol;
   const protocol = overrides.protocol ?? report?.protocol ?? savedProtocol;
   const toolSupport = report === null ? null : (overrides.tool_support ?? report.tool_support);
+  const nativeSearch = report === null ? null : (overrides.native_search ?? report.native_search ?? "unknown");
+  // Responses 接口没有被检测确认时仍然可以手动选（C8），菜单与说明里提一句。手动改了接口类型后检测结论会被清掉（规则 2），说明按“手动选的”写。
+  const responsesUnconfirmed = report?.responses_available !== true;
   const disabled = update.isPending || probing;
   // overrides 给出时整体替换（合同 4.2）：在已有的覆盖项上改一项。
   const write = (next: Overrides) => update.mutate({ overrides: next });
@@ -42,12 +45,22 @@ export function ProbeResult({ report, probedAt, settings }: { report: ProbeResul
     return next;
   };
   const protocolActions: MenuAction[] = [
-    ...protocols.map((value: Protocol) => ({ id: value, label: protocolLabels[value], ...(value === protocol ? { hint: "当前" } : {}), onSelect: () => write({ ...overrides, protocol: value }) })),
+    ...protocols.map((value: Protocol) => ({
+      id: value,
+      label: protocolLabels[value],
+      ...(value === protocol ? { hint: "当前" } : {}),
+      ...(value === "responses" && responsesUnconfirmed ? { description: "检测没有确认这个接口支持" } : {}),
+      onSelect: () => write({ ...overrides, protocol: value }),
+    })),
     ...(overrides.protocol === undefined ? [] : [{ id: "reset", label: "改回检测结果", group: "reset", untitledGroup: true, onSelect: () => write(without("protocol")) }]),
   ];
   const toolActions: MenuAction[] = [
     ...toolSupports.map((value: ToolSupport) => ({ id: value, label: toolSupportLabels[value], ...(value === toolSupport ? { hint: "当前" } : {}), onSelect: () => write({ ...overrides, tool_support: value }) })),
     ...(overrides.tool_support === undefined ? [] : [{ id: "reset", label: "改回检测结果", group: "reset", untitledGroup: true, onSelect: () => write(without("tool_support")) }]),
+  ];
+  const searchActions: MenuAction[] = [
+    ...nativeSearchSupports.map((value: NativeSearchSupport) => ({ id: value, label: nativeSearchLabels[value], ...(value === nativeSearch ? { hint: "当前" } : {}), onSelect: () => write({ ...overrides, native_search: value }) })),
+    ...(overrides.native_search === undefined ? [] : [{ id: "reset", label: "改回检测结果", group: "reset", untitledGroup: true, onSelect: () => write(without("native_search")) }]),
   ];
   const heading = settings === null ? "这次检测的结果（没有保存）" : report === null || probedAt === null ? "还没有检测结果" : `检测结果，${formatDateTime(probedAt)}`;
   return (
@@ -75,6 +88,16 @@ export function ProbeResult({ report, probedAt, settings }: { report: ProbeResul
             {settings === null ? <span /> : <ModifyMenu label="修改调用工具" actions={toolActions} disabled={disabled} />}
           </div>
         )}
+        {nativeSearch === null ? null : (
+          <div className={styles.probeRow}>
+            <dt>自带搜索</dt>
+            <dd>
+              {nativeSearchLabels[nativeSearch]}
+              {overrides.native_search === undefined ? null : <span className={styles.muted}>手动修改</span>}
+            </dd>
+            {settings === null ? <span /> : <ModifyMenu label="修改自带搜索" actions={searchActions} disabled={disabled} />}
+          </div>
+        )}
       </dl>
       {report?.failures === undefined || report.failures.length === 0 ? null : (
         <ul className={styles.failures} aria-label="没有通过的步骤">
@@ -94,6 +117,9 @@ export function ProbeResult({ report, probedAt, settings }: { report: ProbeResul
       ) : null}
       {settings !== null && toolSupport === "unconfirmed" && settings.model !== "" ? (
         <p className={styles.note}>还没有确认这个模型能调用工具。可以先用着；点“检测”会试调用一次。</p>
+      ) : null}
+      {settings !== null && overrides.protocol === "responses" && responsesUnconfirmed ? (
+        <p className={styles.note}>Responses 接口是手动选的，检测没有确认这个接口支持它。可以先试着对话；出错时改回检测结果。</p>
       ) : null}
       {update.isError ? <FailureNotice error={update.error} context="write" messages={settingsFailureMessages} title="没有修改成功" /> : null}
     </section>

@@ -91,3 +91,6 @@ func associatedData(userID, purpose string) []byte {
 	data = binary.BigEndian.AppendUint64(data, uint64(len(purpose)))
 	return append(data, purpose...)
 }
+
+// SearchKeyPurpose 将搜索密钥与模型密钥绑定到不同用途，仍使用同一加密实现。
+const SearchKeyPurpose = "steward.search"

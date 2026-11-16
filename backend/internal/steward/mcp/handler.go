@@ -46,7 +46,7 @@ func New(guard *identity.Guard, tokens TokenValidator, settings MemberSettings, 
 		throttle: identity.NewSourceThrottle(nil)}
 	h.transport = sdk.NewStreamableHTTPHandler(func(r *http.Request) *sdk.Server {
 		principal := r.Context().Value(principalKey{}).(token.Principal)
-		return h.serverFor(principal, r.Header.Get("X-Request-ID"))
+		return h.serverFor(r.Context(), principal, r.Header.Get("X-Request-ID"))
 	}, &sdk.StreamableHTTPOptions{Stateless: true, JSONResponse: true, MaxRequestBodyBytes: 1 << 20})
 	return h
 }

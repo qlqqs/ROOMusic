@@ -5,13 +5,13 @@ import { AccessTokens } from "../components/access-tokens";
 import { DEFAULT_STEWARD_NAME, isStewardDisabled, useStewardSettings } from "../hooks/use-steward-settings";
 import { AgentModel } from "./agent-model";
 import { AgentName } from "./agent-name";
+import { AgentSearch } from "./agent-search";
 import { MembersSection } from "./members-section";
 import styles from "./settings.module.css";
 
 /**
- * 设置 › Agent 的内容：名字、模型、访问令牌，管理员另有“成员”一段（成员开关与内网地址放行）。所有登录用户都有这一栏。
- * 成员开关关闭时成员看到说明，名字与模型不显示；访问令牌一组保留（C3：开关关闭时仍能查看与吊销已有的令牌，只是不能新建）。
- * 联网搜索、审查模型与模式的设置随后续阶段出现（C4 的决定 D1），这里不显示。
+ * 设置 › Agent 的内容：名字、模型（含审查模型，C7）、联网搜索（C8）、访问令牌，管理员另有“成员”一段（成员开关与内网地址放行）。所有登录用户都有这一栏。
+ * 成员开关关闭时成员看到说明，名字、模型与联网搜索不显示；访问令牌一组保留（C3：开关关闭时仍能查看与吊销已有的令牌，只是不能新建）。
  */
 export function AgentSettings() {
   const { viewer } = useViewerScope();
@@ -28,6 +28,7 @@ export function AgentSettings() {
         <>
           <AgentName settings={settings.data} />
           <AgentModel settings={settings.data} />
+          <AgentSearch settings={settings.data} />
         </>
       )}
       <AccessTokens />

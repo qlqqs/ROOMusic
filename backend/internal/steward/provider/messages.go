@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 )
 
@@ -21,7 +22,12 @@ func messagesRequest(request Request) (map[string]any, error) {
 			role = RoleUser
 		}
 		content := make([]json.RawMessage, 0, len(message.Content))
-		for _, block := range message.Content {
+		blocks := message.Content
+		if raw := protocolBlocks(message, ProtocolMessages); len(raw) > 0 {
+			content = raw
+			blocks = nil
+		}
+		for _, block := range blocks {
 			var wire any
 			switch block.Type {
 			case BlockText:
@@ -88,14 +94,17 @@ func messagesRequest(request Request) (map[string]any, error) {
 	if request.System != "" {
 		body["system"] = request.System
 	}
-	if len(request.Tools) > 0 {
-		tools := make([]ToolDefinition, len(request.Tools))
-		copy(tools, request.Tools)
-		for i := range tools {
-			if len(tools[i].InputSchema) == 0 {
-				tools[i].InputSchema = json.RawMessage(`{"type":"object","properties":{}}`)
-			}
+	tools := make([]any, 0, len(request.Tools)+1)
+	for _, definition := range request.Tools {
+		if len(definition.InputSchema) == 0 {
+			definition.InputSchema = json.RawMessage(`{"type":"object","properties":{}}`)
 		}
+		tools = append(tools, definition)
+	}
+	if request.NativeSearch && request.ForceTool == "" {
+		tools = append(tools, map[string]any{"type": "web_search_20250305", "name": "web_search", "max_uses": 5})
+	}
+	if len(tools) > 0 {
 		body["tools"] = tools
 	}
 	if request.ForceTool != "" {
@@ -109,6 +118,8 @@ type messageBlock struct {
 	raw                               json.RawMessage
 	fields                            map[string]json.RawMessage
 	id, name                          string
+	text                              strings.Builder
+	citations                         []json.RawMessage
 	arguments                         strings.Builder
 	hasArguments                      bool
 	thinking, signature               strings.Builder
@@ -123,6 +134,8 @@ type messagesUsage struct {
 }
 
 type messagesParser struct {
+	rawBlocks           map[int]json.RawMessage
+	searches            map[string]string
 	incompleteArguments error
 	blocks              map[int]*messageBlock
 	usage               messagesUsage
@@ -138,12 +151,13 @@ func (p *messagesParser) parse(event sseEvent) ([]Event, bool, error) {
 		Index        int             `json:"index"`
 		ContentBlock json.RawMessage `json:"content_block"`
 		Delta        struct {
-			Type        string  `json:"type"`
-			Text        string  `json:"text"`
-			PartialJSON string  `json:"partial_json"`
-			Thinking    string  `json:"thinking"`
-			Signature   string  `json:"signature"`
-			StopReason  *string `json:"stop_reason"`
+			Type        string          `json:"type"`
+			Text        string          `json:"text"`
+			PartialJSON string          `json:"partial_json"`
+			Thinking    string          `json:"thinking"`
+			Signature   string          `json:"signature"`
+			StopReason  *string         `json:"stop_reason"`
+			Citation    json.RawMessage `json:"citation"`
 		} `json:"delta"`
 		Message struct {
 			Usage *messagesUsage `json:"usage"`
@@ -173,7 +187,9 @@ func (p *messagesParser) parse(event sseEvent) ([]Event, bool, error) {
 		if p.incompleteArguments != nil && finishEvent(ProtocolMessages, p.finish).Finish.Reason != FinishOutputLimit {
 			return nil, false, p.incompleteArguments
 		}
-		return []Event{finishEvent(ProtocolMessages, p.finish)}, true, nil
+		done := finishEvent(ProtocolMessages, p.finish)
+		done.ProviderBlocks = orderedBlocks(ProtocolMessages, p.rawBlocks)
+		return []Event{done}, true, nil
 	case "content_block_start":
 		return p.startBlock(frame.Index, frame.ContentBlock)
 	case "content_block_delta":
@@ -186,13 +202,19 @@ func (p *messagesParser) parse(event sseEvent) ([]Event, bool, error) {
 			if block.kind != "text" {
 				return nil, false, invalidDelta()
 			}
+			block.text.WriteString(frame.Delta.Text)
 			return []Event{{Type: EventText, Text: frame.Delta.Text}}, false, nil
 		case "input_json_delta":
-			if block.kind != "tool_use" {
+			if block.kind != "tool_use" && block.kind != "server_tool_use" {
 				return nil, false, invalidDelta()
 			}
 			block.hasArguments = true
 			block.arguments.WriteString(frame.Delta.PartialJSON)
+		case "citations_delta":
+			if block.kind != "text" || !json.Valid(frame.Delta.Citation) {
+				return nil, false, invalidDelta()
+			}
+			block.citations = append(block.citations, frame.Delta.Citation)
 		case "thinking_delta":
 			if block.kind != "thinking" {
 				return nil, false, invalidDelta()
@@ -233,6 +255,12 @@ func (p *messagesParser) startBlock(index int, raw json.RawMessage) ([]Event, bo
 	if json.Unmarshal(raw, &block.fields) != nil {
 		return nil, false, invalidDelta()
 	}
+	block.text.WriteString(initial.Text)
+	if raw := block.fields["citations"]; len(raw) > 0 && string(raw) != "null" {
+		if json.Unmarshal(raw, &block.citations) != nil {
+			return nil, false, invalidDelta()
+		}
+	}
 	block.thinking.WriteString(initial.Thinking)
 	block.signature.WriteString(initial.Signature)
 	p.blocks[index] = block
@@ -248,10 +276,32 @@ func (p *messagesParser) stopBlock(index int) ([]Event, bool, error) {
 		return nil, false, failure(ErrorInvalidResponse, 0, "Messages 结束了不存在的内容块", "")
 	}
 	delete(p.blocks, index)
+	var events []Event
+	changed := false
 	switch block.kind {
 	case "text":
-		return nil, false, nil
-	case "tool_use":
+		block.fields["text"], _ = json.Marshal(block.text.String())
+		if len(block.citations) > 0 {
+			block.fields["citations"], _ = json.Marshal(block.citations)
+			var citations []Citation
+			for _, raw := range block.citations {
+				var citation struct {
+					Type string `json:"type"`
+					Citation
+				}
+				if json.Unmarshal(raw, &citation) != nil {
+					return nil, false, invalidDelta()
+				}
+				if citation.Type == "web_search_result_location" {
+					citations = append(citations, citation.Citation)
+				}
+			}
+			if citations = CleanCitations(citations); len(citations) > 0 {
+				events = append(events, Event{Type: EventCitations, Citations: citations})
+			}
+		}
+		changed = true
+	case "tool_use", "server_tool_use":
 		if block.id == "" || block.name == "" {
 			return nil, false, failure(ErrorInvalidResponse, 0, "Messages 工具调用缺少标识或名称", "")
 		}
@@ -259,7 +309,6 @@ func (p *messagesParser) stopBlock(index int) ([]Event, bool, error) {
 		if !block.hasArguments {
 			input = string(block.fields["input"])
 		}
-		// 调研没有确认空 partial_json 的行为；按运行时合同规范为 {}。
 		arguments, err := normalizedArguments(input)
 		if err != nil {
 			p.incompleteArguments = err
@@ -268,24 +317,108 @@ func (p *messagesParser) stopBlock(index int) ([]Event, bool, error) {
 		if arguments[0] != '{' {
 			return nil, false, failure(ErrorInvalidResponse, 0, "Messages 工具参数不是 JSON 对象", "")
 		}
-		return []Event{{Type: EventToolCall, ToolCall: &ToolCall{ID: block.id, Name: block.name, Arguments: arguments}}}, false, nil
+		block.fields["input"] = arguments
+		changed = true
+		if block.kind == "tool_use" {
+			events = append(events, Event{Type: EventToolCall, ToolCall: &ToolCall{ID: block.id, Name: block.name, Arguments: arguments}})
+		} else if block.name == "web_search" {
+			var input struct {
+				Query string `json:"query"`
+			}
+			if json.Unmarshal(arguments, &input) != nil {
+				return nil, false, invalidDelta()
+			}
+			if p.searches == nil {
+				p.searches = map[string]string{}
+			}
+			p.searches[block.id] = input.Query
+		}
+	case "web_search_tool_result":
+		var result struct {
+			ToolUseID string          `json:"tool_use_id"`
+			Content   json.RawMessage `json:"content"`
+		}
+		if json.Unmarshal(block.raw, &result) != nil || result.ToolUseID == "" {
+			return nil, false, invalidDelta()
+		}
+		search := &Search{SearchID: result.ToolUseID, Query: p.searches[result.ToolUseID], Status: "completed", Results: []Citation{}}
+		var items []struct {
+			Type string `json:"type"`
+			Citation
+		}
+		if json.Unmarshal(result.Content, &items) == nil && items != nil {
+			for _, item := range items {
+				if item.Type == "web_search_result" {
+					search.Results = append(search.Results, item.Citation)
+				}
+			}
+			search.Results = CleanCitations(search.Results)
+		} else {
+			var problem struct {
+				Type string `json:"type"`
+			}
+			if json.Unmarshal(result.Content, &problem) != nil || problem.Type != "web_search_tool_result_error" {
+				return nil, false, invalidDelta()
+			}
+			search.Status, search.ErrorCode = "failed", "search_failed"
+		}
+		*search = CleanSearch(*search)
+		events = append(events, Event{Type: EventSearch, Search: search})
 	case "thinking":
-		// 保留初始块所有字段，只把已核实的 thinking/signature 增量还原到原字段。
 		if block.changedThinking {
 			block.fields["thinking"], _ = json.Marshal(block.thinking.String())
+			changed = true
 		}
 		if block.changedSignature {
 			block.fields["signature"], _ = json.Marshal(block.signature.String())
+			changed = true
 		}
-		if block.changedThinking || block.changedSignature {
-			var err error
-			block.raw, err = json.Marshal(block.fields)
-			if err != nil {
-				return nil, false, failure(ErrorInvalidResponse, 0, "无法还原思考块", "")
+	}
+	if changed {
+		block.raw, _ = json.Marshal(block.fields)
+	}
+	if p.rawBlocks == nil {
+		p.rawBlocks = map[int]json.RawMessage{}
+	}
+	p.rawBlocks[index] = block.raw
+	if block.kind != "text" && block.kind != "tool_use" {
+		events = append(events, Event{Type: EventOpaque, Opaque: &OpaqueBlock{Protocol: ProtocolMessages, Data: block.raw}})
+	}
+	return events, false, nil
+}
+
+func newMessagesParser(request Request) *messagesParser {
+	p := &messagesParser{blocks: map[int]*messageBlock{}, searches: map[string]string{}}
+	// pause_turn 可能将结果移至下一次响应，查询词从同一端点的原始历史块关联。
+	for _, message := range request.Messages {
+		for _, raw := range protocolBlocks(message, ProtocolMessages) {
+			var block struct {
+				Type  string `json:"type"`
+				ID    string `json:"id"`
+				Name  string `json:"name"`
+				Input struct {
+					Query string `json:"query"`
+				} `json:"input"`
+			}
+			if json.Unmarshal(raw, &block) == nil && block.Type == "server_tool_use" && block.Name == "web_search" {
+				p.searches[block.ID] = block.Input.Query
 			}
 		}
 	}
-	return []Event{{Type: EventOpaque, Opaque: &OpaqueBlock{Protocol: ProtocolMessages, Data: block.raw}}}, false, nil
+	return p
+}
+
+func orderedBlocks(protocol Protocol, blocks map[int]json.RawMessage) []OpaqueBlock {
+	indices := make([]int, 0, len(blocks))
+	for index := range blocks {
+		indices = append(indices, index)
+	}
+	sort.Ints(indices)
+	result := make([]OpaqueBlock, 0, len(indices))
+	for _, index := range indices {
+		result = append(result, OpaqueBlock{Protocol: protocol, Data: blocks[index]})
+	}
+	return result
 }
 
 func (p *messagesParser) updateUsage(usage *messagesUsage) []Event {

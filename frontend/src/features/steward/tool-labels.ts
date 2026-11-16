@@ -1,6 +1,7 @@
 import {
   Activity,
   ArrowUpDown,
+  BookOpen,
   Cast,
   ClipboardCheck,
   Disc3,
@@ -8,15 +9,18 @@ import {
   FileInput,
   FileSearch,
   FileText,
+  Globe,
   Heart,
   History,
   Layers,
+  Library,
   ListMinus,
   ListMusic,
   ListOrdered,
   ListPlus,
   Merge,
   MicVocal,
+  Newspaper,
   Pencil,
   PenLine,
   Pin,
@@ -33,18 +37,21 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { StewardDataScope } from "./context/host";
+import { NATIVE_SEARCH } from "./run/reduce";
 
 // 过程条目的显示：工具的中文名称、图标，以及从输入与输出里取“主要参数”和“结果”的规则（工具清单见后端合同第 3 节）。
 // 只读工具 16 个（C2）；C5 加了播放、队列、播放历史、收藏与歌单的工具；C6 加了曲库与艺人的治理工具（管理员，修改前要确认）。
-// 参数与标题来自曲库与个人数据，是不可信文本，只按文本节点渲染。
+// C8 加了联网的四个工具（网页搜索、读取网页、MusicBrainz 的搜索与读取）与模型自带搜索的条目（NATIVE_SEARCH）：
+// 只显示查询词与访问的域名，不显示完整地址（查询串可能带别的内容）。
+// 参数与标题来自曲库、个人数据与外部网页，是不可信文本，只按文本节点渲染。
 
 type ToolLabel = {
   label: string;
   icon: LucideIcon;
   /** 数量的单位；没有时不显示数量。函数形式按输入决定（搜索的类型、收藏的种类）。 */
   unit?: string | ((input: unknown) => string | undefined);
-  /** 主要参数：按输入取的动作、模式或名字；取不到时按通用规则（搜索词、结果里对象的标题）。 */
-  argument?: (input: unknown) => string | undefined;
+  /** 主要参数：按输入（个别工具也看输出）取的动作、模式、名字或域名；取不到时按通用规则（搜索词、结果里对象的标题）。 */
+  argument?: (input: unknown, output: unknown) => string | undefined;
   /** 成功后右侧的结果说明（改动类工具）；取不到时显示数量。 */
   result?: (input: unknown, output: unknown) => string | undefined;
   /** 这个工具会改动的数据：结束后让对应查询失效。有它就是改动类工具。 */
@@ -126,6 +133,53 @@ function ignoredOf(input: unknown, phrases: readonly [string, string]): string |
   return input["ignored"] ? phrases[0] : phrases[1];
 }
 
+/** 地址的域名（去掉开头的 www.）；不是 http、https 的地址是 null。只显示域名，不显示路径与查询串。 */
+export function domainOf(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+/** fetch_page 访问的域名：跳转到了别的域名时写“甲 → 乙”。 */
+function fetchedDomainOf(input: unknown, output: unknown): string | undefined {
+  const requested = domainOf(stringField(input, "url") ?? "");
+  const final = domainOf(stringField(output, "final_url") ?? "");
+  if (requested === null) return final ?? undefined;
+  return final !== null && final !== requested ? `${requested} → ${final}` : requested;
+}
+
+function fetchedOf(_input: unknown, output: unknown): string | undefined {
+  return isRecord(output) && output["truncated"] === true ? "已读取，过长的部分截掉了" : "已读取";
+}
+
+/** 结果列表的条数：输出的 results，没有时 items。 */
+function resultCountOf(output: unknown, unit: string): string | undefined {
+  if (!isRecord(output)) return undefined;
+  const list = Array.isArray(output["results"]) ? output["results"] : Array.isArray(output["items"]) ? output["items"] : null;
+  return list === null ? undefined : `${list.length.toLocaleString("zh-CN")} ${unit}`;
+}
+
+const musicEntities: Readonly<Record<string, string>> = { artist: "艺人", release: "版本", "release-group": "专辑", recording: "录音" };
+
+/** search_music_metadata：“专辑：查询词”。 */
+function musicQueryOf(input: unknown): string | undefined {
+  const query = stringField(input, "query");
+  const entity = musicEntities[stringField(input, "entity") ?? ""];
+  if (query === undefined) return entity;
+  return entity === undefined ? query : `${entity}：${query}`;
+}
+
+/** get_music_metadata：结果的标题或名字，没有时是条目的种类。 */
+function musicEntryOf(input: unknown, output: unknown): string | undefined {
+  return stringField(output, "title") ?? stringField(output, "name") ?? musicEntities[stringField(input, "entity") ?? ""];
+}
+
+const searchResultsOf = (_input: unknown, output: unknown) => resultCountOf(output, "条结果");
+
 const toolLabels: Readonly<Record<string, ToolLabel>> = {
   // ---- 曲库（只读，C2）----
   search_library: { label: "搜索曲库", icon: Search, unit: (input) => searchUnits[stringField(input, "type") ?? ""] },
@@ -202,6 +256,13 @@ const toolLabels: Readonly<Record<string, ToolLabel>> = {
     changes: "artists",
   },
   revert_operation: { label: "撤销一条修改", icon: Undo2, result: done("已撤销"), changes: "catalog" },
+
+  // ---- 联网（C8，只读）：外部内容带来源标记进入模型 ----
+  web_search: { label: "联网搜索", icon: Globe, result: searchResultsOf },
+  [NATIVE_SEARCH]: { label: "联网搜索（模型自带）", icon: Globe, result: searchResultsOf },
+  fetch_page: { label: "读取网页", icon: Newspaper, argument: fetchedDomainOf, result: fetchedOf },
+  search_music_metadata: { label: "查 MusicBrainz", icon: Library, argument: musicQueryOf, result: (_input, output) => resultCountOf(output, "条") },
+  get_music_metadata: { label: "读取 MusicBrainz 条目", icon: BookOpen, argument: musicEntryOf },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -225,7 +286,7 @@ export function toolLabelOf(name: string): { label: string; icon: LucideIcon } {
  * （专辑、版本、曲目、艺人、歌单）；都没有时是 null。
  */
 export function toolArgumentOf(name: string, input: unknown, output: unknown): string | null {
-  const own = toolLabels[name]?.argument?.(input);
+  const own = toolLabels[name]?.argument?.(input, output);
   if (own !== undefined) return own;
   const query = stringField(input, "q");
   if (query !== undefined) return query;
@@ -239,6 +300,17 @@ export function toolArgumentOf(name: string, input: unknown, output: unknown): s
     stringField(output["track"], "title") ??
     null
   );
+}
+
+/** 搜索结果里的来源（web_search 与模型自带搜索）：标题与地址；标题可能为空，没有可用地址的项不列。 */
+export function toolSourcesOf(name: string, output: unknown): { title: string; url: string }[] {
+  if ((name !== "web_search" && name !== NATIVE_SEARCH) || !isRecord(output) || !Array.isArray(output["results"])) return [];
+  const sources: { title: string; url: string }[] = [];
+  for (const result of output["results"] as unknown[]) {
+    const url = stringField(result, "url");
+    if (url !== undefined) sources.push({ url, title: stringField(result, "title") ?? "" });
+  }
+  return sources;
 }
 
 /** 结果数量：输出的 pagination.total，没有分页时取 items 的长度；都没有、或工具没有单位时是 null。 */
@@ -291,6 +363,21 @@ const failurePhrases: Readonly<Record<string, string>> = {
   playlist_limit_reached: "歌单数量已到上限",
   playlist_track_limit_reached: "歌单曲目已到上限",
   no_playable_tracks: "没有可播放的曲目",
+  // C8：联网搜索、读取网页与音乐资料库。
+  search_not_configured: "没有配置搜索",
+  searxng_json_disabled: "SearXNG 没有开启 JSON 输出",
+  search_key_invalid: "搜索密钥不对",
+  search_quota_exceeded: "搜索额度用完了",
+  search_unreachable: "连不上搜索服务",
+  egress_denied: "地址不允许连接",
+  fetch_blocked_address: "不能访问这个地址",
+  fetch_blocked_port: "只能访问 80 和 443 端口",
+  fetch_unsupported_type: "不是文字网页",
+  fetch_too_many_redirects: "跳转太多次",
+  fetch_timeout: "超时",
+  fetch_failed: "没能读取",
+  rate_limited: "请求太频繁",
+  source_unavailable: "资料来源暂时不可用",
 };
 
 /** 失败的工具调用右侧的短语。 */

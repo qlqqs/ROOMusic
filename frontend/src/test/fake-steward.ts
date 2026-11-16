@@ -44,9 +44,17 @@ export function fakeSse(): FakeSse {
 
 type Settings = ReturnType<typeof settingsOf>;
 
+/** 联网搜索的字段（C8）没配置时的样子；样本里有这些字段时以样本为准。 */
+export const searchSettingsDefaults: Readonly<Record<string, unknown>> = { search_source: "none", searxng_url: "", search_key_saved: false, search_key_last_four: "", search_key_needs_reentry: false };
+
 /** 管家设置：默认是检测通过、可以对话的设置（样本 probe-supported），可以覆盖名字等字段。 */
-export function settingsOf(overrides: Record<string, unknown> = {}) {
-  return { ...(sampleBody("steward/probe-supported") as Record<string, unknown>), ...overrides };
+export function settingsOf(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return { ...searchSettingsDefaults, ...(sampleBody("steward/probe-supported") as Record<string, unknown>), ...overrides };
+}
+
+/** 没有配置过的设置（样本 settings-empty，补上联网搜索的字段）。 */
+function emptySettingsSample(): Record<string, unknown> {
+  return { ...searchSettingsDefaults, ...(sampleBody("steward/settings-empty") as Record<string, unknown>) };
 }
 
 export type FakeConversation = {
@@ -183,6 +191,8 @@ export type StewardFake = {
   nextRunResponse: Response | null;
   /** 检测的响应；null 时按提交的地址、模型与密钥合成一次通过的检测并保存。 */
   probeResponse: Response | null;
+  /** 测试搜索（C8）的响应体；null 时按已保存的来源：SearXNG、Tavily 是成功 3 条，其他是 search_not_configured。 */
+  searchTestResult: unknown;
   /** 方案（C6）：会话详情带上其中 pending 且没过期的那份；发新消息时作废，确认接口按设计的校验顺序检查。 */
   plans: FakePlan[];
   /** 确认接口收到的请求与对应的流。 */
@@ -249,7 +259,7 @@ function authorityOf(endpoint: string): string {
 
 /**
  * 管家接口的替身：设置、会话的增删改查（含模式）、运行流（可控，记下请求体里的页面上下文）与取消、
- * 方案的确认接口与作废（C6）、方案项的撤销、审查结果与重新审查（C7）。形状按 C2、C5、C6、C7 的接口合同与样本。
+ * 方案的确认接口与作废（C6）、方案项的撤销、审查结果与重新审查（C7）、联网搜索的设置与测试搜索（C8）。形状按 C2、C5–C8 的接口合同与样本。
  */
 export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = {}): StewardFake {
   const state: StewardFake = {
@@ -259,6 +269,7 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
     runs: [],
     nextRunResponse: null,
     probeResponse: null,
+    searchTestResult: null,
     plans: [],
     decisions: [],
     reviews: [],
@@ -289,20 +300,23 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
     return { ...conversation, pending_plan: plan === null ? null : planPayload(plan), plans };
   };
 
-  api.on("GET", "/api/v1/me/steward/settings", () => denied() ?? (state.settings === null ? sampleResponse("steward/settings-empty") : jsonResponse(200, state.settings)));
-  const current = () => state.settings ?? (sampleBody("steward/settings-empty") as Settings);
+  api.on("GET", "/api/v1/me/steward/settings", () => denied() ?? jsonResponse(200, state.settings ?? emptySettingsSample()));
+  const current = () => state.settings ?? (emptySettingsSample() as Settings);
   // 部分更新，按后端 mergeSettings（steward/httpapi/settings.go，合同 4.2）的语义：
   // 省略的键保留，overrides 给出时整体替换；key 为 null 清除、为字符串时保存（只留末四位）；
   // 规则 1：主机或端口变了、没提交 key、库里有密钥时清除密钥，没提交 protocol 时协议置空；
   // 规则 2：地址、协议、生效协议或密钥变了时清除检测结论，没提交 overrides 时置为 {}；
   // 规则 3：否则模型或生效模型变了时，检测结论的工具能力改为 unconfirmed 并去掉 tools 步骤的失败，去掉 overrides.tool_support（提交了 model 时也去掉 overrides.model）。
+  // 联网搜索（C8）：规则 3 里自带搜索的检测结论同样失效为 unknown、去掉既有的 overrides.native_search；search_key 与 key 同样处理；提交来源 native 而合并后生效的自带搜索不是 supported 时 400 invalid_input，什么都不保存。
   api.on("PUT", "/api/v1/me/steward/settings", (request) => {
     const refused = denied();
     if (refused !== null) return refused;
     const patch = request.body as Record<string, unknown>;
     const before = current() as Record<string, unknown> & { overrides: Record<string, unknown> };
     const next: Record<string, unknown> & { overrides: Record<string, unknown> } = { ...before, updated_at: "2026-11-16T00:00:01Z" };
-    for (const field of ["endpoint", "protocol", "model", "review_model", "display_name", "overrides"]) if (patch[field] !== undefined) next[field] = patch[field];
+    for (const field of ["endpoint", "protocol", "model", "review_model", "display_name", "overrides", "search_source", "searxng_url"]) if (patch[field] !== undefined) next[field] = patch[field];
+    if (patch["search_key"] === null) Object.assign(next, { search_key_saved: false, search_key_last_four: "", search_key_needs_reentry: false });
+    else if (typeof patch["search_key"] === "string") Object.assign(next, { search_key_saved: true, search_key_last_four: patch["search_key"].slice(-4), search_key_needs_reentry: false });
     let keyChanged = false;
     if (patch["key"] === null) {
       keyChanged = before["key_saved"] === true;
@@ -325,14 +339,29 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
       const probe = before["probe_result"] as { tool_support: string; failures?: { step: string }[] } | null;
       if (probe !== null) {
         const failures = (probe.failures ?? []).filter((failure) => failure.step !== "tools");
-        next["probe_result"] = { ...probe, tool_support: "unconfirmed", ...(failures.length === 0 ? { failures: undefined } : { failures }) };
+        // C8：自带搜索的检测结论随模型失效为 unknown（只在原来有这一项时写）。
+        next["probe_result"] = { ...probe, tool_support: "unconfirmed", ...("native_search" in probe ? { native_search: "unknown" } : {}), ...(failures.length === 0 ? { failures: undefined } : { failures }) };
       }
-      const { tool_support: _tool, ...rest } = next.overrides;
+      const submitted = isRecord(patch["overrides"]) ? patch["overrides"] : {};
+      const { tool_support: _tool, native_search: nativeSearch, ...kept } = next.overrides;
+      // 既有的自带搜索覆盖项清除，本次显式提交的保留。
+      const rest = "native_search" in submitted ? { ...kept, native_search: nativeSearch } : kept;
       const { model: _model, ...withoutModel } = rest;
       next.overrides = patch["model"] !== undefined ? withoutModel : rest;
     }
+    if (patch["search_source"] === "native") {
+      const probe = next["probe_result"] as { native_search?: string } | null;
+      if ((next.overrides["native_search"] ?? probe?.native_search ?? "unknown") !== "supported") return failureOf(400, "invalid_input", "自带搜索没有确认支持");
+    }
     state.settings = JSON.parse(JSON.stringify(next)) as Settings;
     return jsonResponse(200, state.settings);
+  });
+  api.on("POST", "/api/v1/me/steward/settings/search-test", () => {
+    const refused = denied();
+    if (refused !== null) return refused;
+    if (state.searchTestResult !== null) return jsonResponse(200, state.searchTestResult);
+    const source = current()["search_source"];
+    return jsonResponse(200, source === "searxng" || source === "tavily" ? { ok: true, result_count: 3 } : { ok: false, code: "search_not_configured" });
   });
   api.on("POST", "/api/v1/me/steward/settings/probe", (request) => {
     const refused = denied();

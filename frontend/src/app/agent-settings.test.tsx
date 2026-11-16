@@ -66,6 +66,102 @@ describe("设置 › Agent › 名字", () => {
   });
 });
 
+describe("设置 › Agent › 联网搜索（C8）", () => {
+  const searchTestPath = "/api/v1/me/steward/settings/search-test";
+  const source = (name: RegExp) => group("联网搜索").getByRole("radio", { name });
+  const openSearch = async (options: Parameters<typeof setup>[0] = {}) => {
+    const context = await openAgent(options);
+    await screen.findByRole("region", { name: "联网搜索" });
+    return context;
+  };
+
+  it("选 SearXNG 填地址保存，只提交来源与地址；保存后测试搜索显示结果数", async () => {
+    const { api } = await openSearch();
+    const test = await group("联网搜索").findByRole("button", { name: "测试搜索" });
+    expect((test as HTMLButtonElement).disabled).toBe(true);
+    expect((source(/^不联网搜索/) as HTMLInputElement).checked).toBe(true);
+    await userEvent.click(source(/^自己的 SearXNG/));
+    await userEvent.type(screen.getByLabelText("SearXNG 地址"), " http://192.168.1.30:8888 ");
+    expect(group("联网搜索").getByText("保存之后才能测试。")).toBeTruthy();
+    await userEvent.click(group("联网搜索").getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body)).toEqual([{ search_source: "searxng", searxng_url: "http://192.168.1.30:8888" }]));
+    expect(await group("联网搜索").findByText("已保存")).toBeTruthy();
+    await waitFor(() => expect((test as HTMLButtonElement).disabled).toBe(false));
+    await userEvent.click(test);
+    expect(await group("联网搜索").findByText("这次搜到 3 条结果。")).toBeTruthy();
+    expect(api.requestsTo("POST", searchTestPath).map((request) => request.body ?? null)).toEqual([null]);
+  });
+
+  it("测试没有通过时说明原因：SearXNG 没有开启 JSON、Tavily 额度用完", async () => {
+    const { state } = await openSearch({ settings: settingsOf({ search_source: "searxng", searxng_url: "http://192.168.1.30:8888" }) });
+    state.searchTestResult = { ok: false, code: "searxng_json_disabled" };
+    await userEvent.click(await group("联网搜索").findByRole("button", { name: "测试搜索" }));
+    expect(await group("联网搜索").findByText(/这个实例没有开启 JSON 输出/)).toBeTruthy();
+    state.searchTestResult = { ok: false, code: "search_quota_exceeded" };
+    await userEvent.click(group("联网搜索").getByRole("button", { name: "测试搜索" }));
+    expect(await group("联网搜索").findByText("搜索服务的额度用完了，或者超出了套餐的限制。")).toBeTruthy();
+  });
+
+  it("Tavily 密钥：保存时作为 search_key 提交，之后只显示末四位，不留在页面与 mutation 缓存里；可以清除", async () => {
+    const { api, runtime } = await openSearch();
+    await userEvent.click(await group("联网搜索").findByRole("radio", { name: /^Tavily/ }));
+    const save = group("联网搜索").getByRole("button", { name: "保存" }) as HTMLButtonElement;
+    // 没有密钥时不能保存。
+    expect(save.disabled).toBe(true);
+    await userEvent.type(screen.getByLabelText("Tavily 密钥"), "tvly-synthetic-secret");
+    await userEvent.click(save);
+    await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body)).toEqual([{ search_source: "tavily", search_key: "tvly-synthetic-secret" }]));
+    expect(await group("联网搜索").findByText("已保存，末四位 cret")).toBeTruthy();
+    expect(screen.queryByDisplayValue("tvly-synthetic-secret")).toBeNull();
+    expect(JSON.stringify(runtime.queryClient.getMutationCache().getAll().map((mutation) => mutation.state.variables))).not.toContain("tvly-synthetic-secret");
+    await userEvent.click(group("联网搜索").getByRole("button", { name: "清除 Tavily 密钥" }));
+    await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body).at(-1)).toEqual({ search_key: null }));
+    expect(await screen.findByLabelText("Tavily 密钥")).toBeTruthy();
+  });
+
+  it("Tavily 密钥解不开：提示重新填写，可以清除", async () => {
+    const { api } = await openSearch({ settings: settingsOf({ search_source: "tavily", search_key_saved: true, search_key_last_four: "abcd", search_key_needs_reentry: true }) });
+    expect(await group("联网搜索").findByText("Tavily 密钥需要重新填写")).toBeTruthy();
+    expect((screen.getByLabelText("Tavily 密钥") as HTMLInputElement).type).toBe("password");
+    await userEvent.click(group("联网搜索").getByRole("button", { name: "清除 Tavily 密钥" }));
+    await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body)).toEqual([{ search_key: null }]));
+  });
+
+  it("模型自带：检测没有确认支持时不能选并说明去哪里改；在检测结果里改成支持之后可以选", async () => {
+    const { api } = await openSearch();
+    const native = source(/^模型自带的搜索/) as HTMLInputElement;
+    expect(native.disabled).toBe(true);
+    expect(group("联网搜索").getByText(/检测没能确认这个模型支持/)).toBeTruthy();
+    const result = within(screen.getByRole("region", { name: "检测结果" }));
+    expect(result.getByText("自带搜索")).toBeTruthy();
+    await userEvent.click(result.getByRole("button", { name: "修改自带搜索" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "支持" }));
+    await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body)).toEqual([{ overrides: { native_search: "supported" } }]));
+    await waitFor(() => expect((source(/^模型自带的搜索/) as HTMLInputElement).disabled).toBe(false));
+    await userEvent.click(source(/^模型自带的搜索/));
+    await userEvent.click(group("联网搜索").getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body).at(-1)).toEqual({ search_source: "native" }));
+    // 自带搜索不用测试：测试按钮停用。
+    expect((group("联网搜索").getByRole("button", { name: "测试搜索" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("检测确认不支持时说明检测的结论", async () => {
+    await openSearch({ settings: settingsOf({ probe_result: { models: [], protocol: "messages", tool_support: "supported", native_search: "unsupported" } }) });
+    expect(await group("联网搜索").findByText(/检测结果是这个模型不支持/)).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "检测结果" })).getByText("不支持")).toBeTruthy();
+  });
+
+  it("成员的 SearXNG 地址被出站策略拒绝：沿用模型端点的说明，提示管理员放行", async () => {
+    const { api } = await openSearch({ role: "user" });
+    api.on("PUT", settingsPath, () => sampleResponse("steward/egress-denied-settings"));
+    await userEvent.click(await group("联网搜索").findByRole("radio", { name: /^自己的 SearXNG/ }));
+    await userEvent.type(screen.getByLabelText("SearXNG 地址"), "http://192.168.1.30:8888");
+    await userEvent.click(group("联网搜索").getByRole("button", { name: "保存" }));
+    expect(await group("联网搜索").findByText(/成员的 SearXNG 地址只能是公网地址/)).toBeTruthy();
+    expect(group("联网搜索").getByText("联网搜索没有保存")).toBeTruthy();
+  });
+});
+
 describe("设置 › Agent › 模型", () => {
   it("未配置时在这一栏填地址、密钥与模型，检测通过后可以直接开始对话；密钥不留在页面、浏览器存储与 mutation 缓存里", async () => {
     const { api, history, runtime } = await openAgent({ settings: emptySettings() });
@@ -203,6 +299,16 @@ describe("设置 › Agent › 模型", () => {
     expect(restored.queryByText("手动修改")).toBeNull();
   });
 
+  it("接口类型可以手动选 Responses：检测没有确认时菜单与说明里提一句", async () => {
+    const { api } = await openAgent({ settings: settingsOf({ probe_result: { models: [], protocol: "openai", tool_support: "supported", responses_available: false } }) });
+    await userEvent.click(within(await screen.findByRole("region", { name: "检测结果" })).getByRole("button", { name: "修改接口类型" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: /OpenAI Responses 接口.*检测没有确认这个接口支持/ }));
+    await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body)).toEqual([{ overrides: { protocol: "responses" } }]));
+    const changed = within(await screen.findByRole("region", { name: "检测结果" }));
+    expect(await changed.findByText("OpenAI Responses 接口")).toBeTruthy();
+    expect(changed.getByText(/Responses 接口是手动选的，检测没有确认这个接口支持它/)).toBeTruthy();
+  });
+
   it("保存对话模型或清除密钥时，上一次失败检测的报告一起清掉", async () => {
     const { state } = await openAgent();
     state.probeResponse = sampleResponse("steward/provider-unreachable");
@@ -316,9 +422,9 @@ describe("设置 › Agent › 成员（管理员）", () => {
     expect(screen.getByRole("heading", { level: 2, name: "访问令牌" })).toBeTruthy();
   });
 
-  it("不显示联网搜索、审查模型与模式的设置", async () => {
+  it("各组依次是名字、模型、联网搜索、访问令牌与管理员的成员段", async () => {
     await openAgent();
     await screen.findByLabelText("接口地址");
-    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["名字", "模型", "访问令牌", "成员", "成员可以连接的内网地址"]);
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["名字", "模型", "联网搜索", "访问令牌", "成员", "成员可以连接的内网地址"]);
   });
 });

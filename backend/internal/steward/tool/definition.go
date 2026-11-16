@@ -96,6 +96,9 @@ type Basis struct {
 // 两个 schema 都仅支持 type、properties、required、additionalProperties: false、
 // enum、items、minimum、maximum、minLength、maxLength；不支持的关键字在注册时拒绝。
 type Definition struct {
+	// Available 按当前调用者设置决定是否可见和可调用；nil 表示始终可用。
+	Available func(context.Context, Caller) bool
+
 	Preview func(context.Context, Caller, json.RawMessage) (Preview, error)
 
 	// Name 是唯一工具名。

@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
+	"github.com/qlqq/roomusic/backend/internal/steward/provider"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
@@ -158,7 +159,8 @@ func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identit
 	}
 	h.streamRun(w, r, ctx, cancel, runtime.RunParams{Caller: tool.Caller{User: user, Source: "chat", RequestID: r.Header.Get("X-Request-ID")},
 		ReviewPlanID: reviewPlanID, ReviewModel: settings.ReviewModel, Decision: decision, ConversationID: id, Text: text, Context: messageContext, Continue: continuation, DisplayName: settings.DisplayName,
-		Provider: model, Model: modelName}, user)
+		Provider: model, Model: modelName, Protocol: provider.Protocol(settings.Protocol), Endpoint: settings.Endpoint,
+		NativeSearch: settings.SearchSource == "native" && effectiveNativeSearch(settings, settingsUpdate(settings)) == provider.NativeSearchSupported}, user)
 }
 
 type runResult struct {

@@ -1414,3 +1414,80 @@ describe("审查", () => {
     expect(await list.findByText("1 项等你确认")).toBeTruthy();
   });
 });
+
+describe("联网（C8）", () => {
+  const searchResults = [
+    { title: "Bayreuth 1951 <script>", url: "https://www.example.org/bayreuth?utm=1" },
+    { title: "", url: "https://archive.example.net/x" },
+  ];
+  const citations = [{ url: "https://www.example.org/bayreuth?utm=1", title: "Bayreuth 1951 <script>" }, { url: "https://archive.example.net/x", title: "" }];
+
+  it("模型自带搜索与读取网页显示为过程条目（查询词、域名、结果），回答下面列出来源；刷新后从落库内容显示一致", async () => {
+    const { state } = setup({ conversations: [conversationOf(id)] });
+    renderApp({ path: `/steward/${id}` });
+    const conversation = within(await screen.findByRole("region", { name: "对话" }));
+    await userEvent.type(await conversation.findByRole("textbox", { name: "问问小蓝" }), "拜罗伊特那版是哪年？{Enter}");
+    await waitFor(() => expect(state.runs).toHaveLength(1));
+    const stream = state.runs[0]?.stream;
+    stream?.send("search", { type: "search", step: 1, search_id: "srv-1", query: "Furtwängler Bayreuth 1951", status: "completed", results: searchResults });
+    const search = (await conversation.findByText("联网搜索（模型自带）")).closest("li") as HTMLElement;
+    expect(within(search).getByText("Furtwängler Bayreuth 1951")).toBeTruthy();
+    expect(within(search).getByText("2 条结果")).toBeTruthy();
+    const found = within(search).getByRole("list", { name: "联网搜索（模型自带）的结果" });
+    expect(Array.from(found.querySelectorAll("a")).map((link) => link.textContent)).toEqual(["Bayreuth 1951 <script>", "archive.example.net"]);
+    expect(found.textContent).not.toContain("utm=1");
+
+    stream?.send("tool_started", { type: "tool_started", step: 1, tool_started: { call_id: "call-f", name: "fetch_page", input: { url: "https://www.example.org/bayreuth?utm=1" } } });
+    stream?.send("tool_finished", { type: "tool_finished", step: 1, tool_finished: { call_id: "call-f", status: "failed", output: { code: "fetch_blocked_port" }, truncated: false, untrusted: true, error_code: "fetch_blocked_port" } });
+    const fetch = (await conversation.findByText("读取网页")).closest("li") as HTMLElement;
+    expect(within(fetch).getByText("example.org")).toBeTruthy();
+    expect(within(fetch).getByText("只能访问 80 和 443 端口")).toBeTruthy();
+
+    stream?.send("text", { type: "text", step: 2, text: "是 1951 年。" });
+    stream?.send("citations", { type: "citations", step: 2, citations });
+    const sources = await conversation.findByRole("list", { name: "来源" });
+    expect(Array.from(sources.querySelectorAll("a")).map((link) => [link.textContent, link.getAttribute("rel"), link.getAttribute("target")])).toEqual([
+      ["Bayreuth 1951 <script>", "noopener noreferrer", "_blank"],
+      ["archive.example.net", "noopener noreferrer", "_blank"],
+    ]);
+
+    const created = state.conversations[0];
+    if (created === undefined) throw new Error("没有会话");
+    created.messages = [
+      storedMessage(1, "user", [{ type: "text", text: "拜罗伊特那版是哪年？" }]),
+      {
+        ...storedMessage(
+          2,
+          "assistant",
+          [{ type: "tool_call", tool_call: { id: "call-f", name: "fetch_page", arguments: { url: "https://www.example.org/bayreuth?utm=1" } } }],
+          [{ id: "00000000-0000-4000-8000-0000000000f1", name: "fetch_page", input: { url: "https://www.example.org/bayreuth?utm=1" }, output: { code: "fetch_blocked_port" }, truncated: false, untrusted: true, status: "failed", error_code: "fetch_blocked_port", duration_ms: 40 }],
+        ),
+        searches: [{ search_id: "srv-1", query: "Furtwängler Bayreuth 1951", status: "completed", results: searchResults }],
+        citations: [],
+      },
+      storedMessage(3, "tool", [{ type: "tool_result", tool_result: { call_id: "call-f", content: "{}", is_error: true } }]),
+      { ...storedMessage(4, "assistant", [{ type: "text", text: "是 1951 年。" }]), searches: [], citations },
+    ];
+    stream?.send("done", { type: "done", step: 2, end: { reason: "completed" } });
+    stream?.close();
+    await userEvent.click(await conversation.findByText("查了 2 处资料，用时 不到 1 秒"));
+    const restored = (conversation.getByText("联网搜索（模型自带）").closest("li") as HTMLElement);
+    expect(within(restored).getByText("Furtwängler Bayreuth 1951")).toBeTruthy();
+    expect(within(restored).getAllByRole("link")).toHaveLength(2);
+    expect(Array.from(conversation.getByRole("list", { name: "来源" }).querySelectorAll("a")).map((link) => link.getAttribute("href"))).toEqual(["https://www.example.org/bayreuth?utm=1", "https://archive.example.net/x"]);
+    // 外部标题按文字显示，不会变成元素。
+    expect(document.querySelector("[role=region] script")).toBeNull();
+  });
+
+  it("模型自带搜索失败时条目写原因、不列结果", async () => {
+    const { state } = setup({ conversations: [conversationOf(id)] });
+    renderApp({ path: `/steward/${id}` });
+    const conversation = within(await screen.findByRole("region", { name: "对话" }));
+    await userEvent.type(await conversation.findByRole("textbox", { name: "问问小蓝" }), "查一下{Enter}");
+    await waitFor(() => expect(state.runs).toHaveLength(1));
+    state.runs[0]?.stream.send("search", { type: "search", step: 1, search_id: "srv-2", query: "q", status: "failed", error_code: "unavailable" });
+    const search = (await conversation.findByText("联网搜索（模型自带）")).closest("li") as HTMLElement;
+    expect(within(search).getByText("失败")).toBeTruthy();
+    expect(within(search).queryByRole("list")).toBeNull();
+  });
+});

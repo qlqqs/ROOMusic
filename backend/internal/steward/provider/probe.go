@@ -23,6 +23,7 @@ const (
 
 // Model 是端点模型列表中的模型，不从列表推断客户端工具能力。
 type Model struct {
+	nativeSearch *bool
 	// ID 是请求使用的模型名。
 	ID string `json:"id"`
 	// DisplayName 是 Messages 可选的展示名称。
@@ -41,6 +42,8 @@ type ProbeFailure struct {
 
 // ProbeResult 是可持久化的探测报告，不包含端点密钥。
 type ProbeResult struct {
+	NativeSearch       NativeSearchSupport `json:"native_search"`
+	ResponsesAvailable bool                `json:"responses_available"`
 	// ProviderName 是地址预设识别的服务商名，未知时为空。
 	ProviderName string `json:"provider_name,omitempty"`
 	// Protocol 是模型列表请求成功的协议，全部失败时为空。
@@ -57,7 +60,7 @@ type ProbeResult struct {
 // model 为空时只列模型；不为空时使用该模型做一次明确提示调用工具的流式探测。
 // 无协议可用或 ctx 取消时返回错误；工具探测失败以报告中的三态和 Failures 表达。
 func Probe(ctx context.Context, client *http.Client, endpoint, key, model string) (ProbeResult, error) {
-	result := ProbeResult{Models: []Model{}, ToolSupport: ToolSupportUnconfirmed}
+	result := ProbeResult{Models: []Model{}, ToolSupport: ToolSupportUnconfirmed, NativeSearch: NativeSearchUnknown}
 	u, err := parseEndpoint(endpoint)
 	if err != nil {
 		result.addFailure("endpoint", "", err)
@@ -67,6 +70,11 @@ func Probe(ctx context.Context, client *http.Client, endpoint, key, model string
 	if p := matchPreset(u); p != nil {
 		result.ProviderName = p.name
 		protocols = []Protocol{p.protocol}
+		for _, protocol := range []Protocol{ProtocolOpenAI, ProtocolMessages} {
+			if protocol != p.protocol {
+				protocols = append(protocols, protocol)
+			}
+		}
 	}
 	var selected *adapter
 	for _, protocol := range protocols {
@@ -98,6 +106,30 @@ func Probe(ctx context.Context, client *http.Client, endpoint, key, model string
 	result.ToolSupport, err = selected.probeTools(ctx, model)
 	if err != nil {
 		result.addFailure("tools", result.Protocol, err)
+	}
+	if selected.protocol == ProtocolMessages {
+		for _, candidate := range result.Models {
+			if candidate.ID == model && candidate.nativeSearch != nil {
+				result.NativeSearch = NativeSearchUnsupported
+				if *candidate.nativeSearch {
+					result.NativeSearch = NativeSearchSupported
+				}
+				break
+			}
+		}
+	} else if ctx.Err() == nil {
+		responses := *selected
+		responses.protocol = ProtocolResponses
+		responseErr := responses.probeResponses(ctx, model)
+		if responseErr != nil {
+			result.addFailure("responses", ProtocolResponses, responseErr)
+		} else {
+			result.ResponsesAvailable = true
+			result.NativeSearch, responseErr = responses.probeNativeSearch(ctx, model)
+			if responseErr != nil {
+				result.addFailure("native_search", ProtocolResponses, responseErr)
+			}
+		}
 	}
 	if ctx.Err() != nil {
 		return result, contextFailure(ctx.Err(), 0)
@@ -217,4 +249,97 @@ func toolFailure(err error) (ToolSupport, error) {
 		return ToolSupportUnsupported, err
 	}
 	return ToolSupportUnconfirmed, err
+}
+
+// NativeSearchSupport 是模型自带搜索的能力结论。
+type NativeSearchSupport string
+
+const (
+	NativeSearchSupported   NativeSearchSupport = "supported"
+	NativeSearchUnsupported NativeSearchSupport = "unsupported"
+	NativeSearchUnknown     NativeSearchSupport = "unknown"
+)
+
+// ValidNativeSearch 校验设置覆盖项，不从模型名称推断能力。
+func ValidNativeSearch(value NativeSearchSupport) bool {
+	return value == NativeSearchSupported || value == NativeSearchUnsupported || value == NativeSearchUnknown
+}
+
+// UnmarshalJSON 只提取当前模型的搜索能力，不将供应方能力字典扩展成设置接口。
+func (model *Model) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		ID           string `json:"id"`
+		DisplayName  string `json:"display_name"`
+		Capabilities struct {
+			ServerTools struct {
+				WebSearch struct {
+					Supported *bool `json:"supported"`
+				} `json:"web_search"`
+			} `json:"server_tools"`
+		} `json:"capabilities"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	model.ID, model.DisplayName, model.nativeSearch = wire.ID, wire.DisplayName, wire.Capabilities.ServerTools.WebSearch.Supported
+	return nil
+}
+
+func (a *adapter) probeNativeSearch(ctx context.Context, model string) (NativeSearchSupport, error) {
+	stream, err := a.Stream(ctx, Request{Model: model, MaxOutputTokens: 1024, NativeSearch: true,
+		Messages: []Message{{Role: RoleUser, Content: []ContentBlock{{Type: BlockText, Text: "请使用网页搜索工具搜索 MusicBrainz 官方网站，仅回复其地址。"}}}}})
+	if err != nil {
+		return nativeSearchFailure(err)
+	}
+	defer stream.Close()
+	supported := false
+	failed := false
+	for {
+		event, err := stream.Next()
+		if err != nil {
+			return nativeSearchFailure(err)
+		}
+		if event.Type == EventSearch {
+			if event.Search.Status == "completed" {
+				supported = true
+			} else {
+				failed = true
+			}
+		}
+		if event.Type == EventDone {
+			if supported {
+				return NativeSearchSupported, nil
+			}
+			if failed {
+				return NativeSearchUnknown, failure(ErrorOther, 0, "搜索探测未完成", "")
+			}
+			return NativeSearchUnknown, nil
+		}
+	}
+}
+
+func nativeSearchFailure(err error) (NativeSearchSupport, error) {
+	var typed *Error
+	if errors.As(err, &typed) && typed.Kind == ErrorToolUnsupported {
+		return NativeSearchUnsupported, err
+	}
+	return NativeSearchUnknown, err
+}
+
+func (a *adapter) probeResponses(ctx context.Context, model string) error {
+	stream, err := a.Stream(ctx, Request{Model: model, MaxOutputTokens: 1024,
+		Messages: []Message{{Role: RoleUser, Content: []ContentBlock{{Type: BlockText, Text: "请只回复 OK。"}}}}})
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+	for {
+		event, err := stream.Next()
+		if err != nil {
+			return err
+		}
+		if event.Type == EventDone {
+			return nil
+		}
+	}
 }

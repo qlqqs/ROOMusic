@@ -1,8 +1,9 @@
 import type { Page, Route } from "@playwright/test";
 import { loadApiSample, sampleBody } from "../../src/test/api-samples";
 
-// 管家接口的受控实现（steward.spec.ts、steward-plan.spec.ts、steward-review.spec.ts）：设置、会话的增删改查（含模式）、发消息（一次性返回整段 SSE）、取消、
-// 修改方案的确认（C6，同样一次性返回整段 SSE）与方案项的撤销、审查结果与重新审查（C7，一次性返回整段 SSE）、令牌与管理员接口。
+// 管家接口的受控实现（steward.spec.ts、steward-plan.spec.ts、steward-review.spec.ts、steward-web.spec.ts）：设置、会话的增删改查（含模式）、发消息（一次性返回整段 SSE）、取消、
+// 修改方案的确认（C6，同样一次性返回整段 SSE）与方案项的撤销、审查结果与重新审查（C7，一次性返回整段 SSE）、
+// 联网搜索的设置与测试搜索、带模型自带搜索与引用来源的会话（C8）、令牌与管理员接口。
 // 用 page.route 注册，优先于 api-mock 在浏览器上下文上的拦截；形状取自后端样本与 C2、C6 的接口合同。不调用任何真实模型。
 
 type Mode = "assistant" | "steward" | "operator";
@@ -201,6 +202,49 @@ function applyDecision(conversation: Conversation, accepted: readonly string[]):
   return `: ping\n\n${events.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join("")}`;
 }
 
+// ---- 联网（C8）----
+
+/** 联网搜索的字段没配置时的样子；样本里有这些字段时以样本为准。 */
+const searchSettingsDefaults = { search_source: "none", searxng_url: "", search_key_saved: false, search_key_last_four: "", search_key_needs_reentry: false };
+
+/** 模型自带搜索的结果与回答引用的来源：标题很长、一项没有标题（显示域名），地址带查询串（只显示域名）。 */
+export const WEB_RESULTS = [
+  { title: "Wilhelm Furtwängler conducts Beethoven's Ninth at the reopening of the Bayreuth Festival, 29 July 1951 — a complete discography", url: "https://www.example.org/furtwangler/bayreuth-1951?utm_source=synthetic" },
+  { title: "", url: "https://archive.example.net/recordings/1951" },
+];
+
+/**
+ * 预置一个用过联网的会话（刷新后的样子）：模型自带搜索一次（两条结果），读取网页一次（成功），回答引用两处来源。
+ */
+export function seedWebConversation(mock: StewardMock): Conversation {
+  counter += 1;
+  const at = "2026-11-16T00:00:00Z";
+  const conversation: Conversation = { id: idOf(4000 + counter), title: "拜罗伊特 1951", mode: "assistant", model: "synthetic-model", status: "idle", created_at: at, updated_at: at, messages: [], plan: null, history: [] };
+  conversation.messages.push(message(conversation, "user", [{ type: "text", text: "富特文格勒的拜罗伊特贝九是哪年录的？" }]));
+  const fetchInput = { url: "https://www.example.org/furtwangler/bayreuth-1951?utm_source=synthetic" };
+  conversation.messages.push({
+    ...message(conversation, "assistant", [{ type: "text", text: "我查一下外部资料。" }, { type: "tool_call", tool_call: { id: "call-web-1", name: "fetch_page", arguments: fetchInput } }], [
+      {
+        id: idOf(7600),
+        name: "fetch_page",
+        input: fetchInput,
+        output: { url: fetchInput.url, final_url: fetchInput.url, title: "Bayreuth 1951", text: "…", truncated: true },
+        truncated: false,
+        untrusted: true,
+        status: "succeeded",
+        error_code: null,
+        duration_ms: 800,
+      },
+    ]),
+    searches: [{ search_id: "srv-1", query: "Furtwängler Beethoven 9 Bayreuth 1951", status: "completed", results: WEB_RESULTS }],
+    citations: [],
+  });
+  conversation.messages.push(message(conversation, "tool", [{ type: "tool_result", tool_result: { call_id: "call-web-1", content: "{}", is_error: false } }]));
+  conversation.messages.push({ ...message(conversation, "assistant", [{ type: "text", text: "是 **1951 年 7 月 29 日**，拜罗伊特音乐节战后重开的首场。" }]), searches: [], citations: WEB_RESULTS.map(({ url, title }) => ({ url, title })) });
+  mock.conversations.push(conversation);
+  return conversation;
+}
+
 // ---- 审查（C7）----
 
 /** 审查模型的名字（与对话模型 synthetic-model 不同）。 */
@@ -342,10 +386,19 @@ function applyRereview(conversation: Conversation): string {
   return sse(events);
 }
 
-/** reviewModel：设置里的审查模型（C7），空字符串表示与对话同一个模型；省略时沿用样本。 */
-export async function installStewardMock(page: Page, { displayName = "小蓝", reviewModel }: { displayName?: string; reviewModel?: string } = {}): Promise<StewardMock> {
+/** reviewModel：设置里的审查模型（C7），空字符串表示与对话同一个模型；省略时沿用样本。settings：覆盖设置里的其他字段（C8 的联网搜索等）。 */
+export async function installStewardMock(
+  page: Page,
+  { displayName = "小蓝", reviewModel, settings: overrides = {} }: { displayName?: string; reviewModel?: string; settings?: Record<string, unknown> } = {},
+): Promise<StewardMock> {
   const mock: StewardMock = { conversations: [], requests: [] };
-  const settings = { ...(sampleBody("steward/probe-supported") as Record<string, unknown>), display_name: displayName, ...(reviewModel === undefined ? {} : { review_model: reviewModel }) };
+  let settings: Record<string, unknown> = {
+    ...searchSettingsDefaults,
+    ...(sampleBody("steward/probe-supported") as Record<string, unknown>),
+    display_name: displayName,
+    ...(reviewModel === undefined ? {} : { review_model: reviewModel }),
+    ...overrides,
+  };
   const summary = ({ messages: _messages, plan: _plan, history: _history, ...rest }: Conversation) => rest;
   // 会话列表另带未处理方案里等用户确认的项数（C7）。
   const listItem = (conversation: Conversation) => ({
@@ -397,6 +450,18 @@ export async function installStewardMock(page: Page, { displayName = "小蓝", r
     mock.requests.push({ method, path, body });
 
     if (path === `${BASE}/settings` && method === "GET") return json(route, 200, settings);
+    // 联网搜索的保存（C8）：只合并这一组的字段；search_key 只留末四位。
+    if (path === `${BASE}/settings` && method === "PUT") {
+      const { search_key: key, ...patch } = body as Record<string, unknown>;
+      settings = { ...settings, ...patch };
+      if (key === null) settings = { ...settings, search_key_saved: false, search_key_last_four: "", search_key_needs_reentry: false };
+      else if (typeof key === "string") settings = { ...settings, search_key_saved: true, search_key_last_four: key.slice(-4), search_key_needs_reentry: false };
+      return json(route, 200, settings);
+    }
+    if (path === `${BASE}/settings/search-test` && method === "POST") {
+      const source = settings["search_source"];
+      return json(route, 200, source === "searxng" || source === "tavily" ? { ok: true, result_count: 3 } : { ok: false, code: "search_not_configured" });
+    }
     if (path === `${BASE}/tokens` && method === "GET") return sample(route, "steward/tokens/list");
     if (path === `${BASE}/conversations` && method === "GET") {
       const items = [...mock.conversations].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map(listItem);

@@ -1,0 +1,16 @@
+{
+  "body": {
+    "query": "合成音乐查询",
+    "results": [
+      {
+        "title": "合成来源",
+        "url": "https://example.org/music"
+      }
+    ],
+    "search_id": "sample-search",
+    "status": "completed",
+    "step": 1,
+    "type": "search"
+  },
+  "status": 200
+}

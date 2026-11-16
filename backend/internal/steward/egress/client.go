@@ -142,16 +142,21 @@ func IsPublicIP(ip netip.Addr) bool {
 		netip.MustParsePrefix("100.64.0.0/10"),   // 运营商级 NAT 的共享地址空间。
 		netip.MustParsePrefix("192.0.0.0/24"),    // IETF 协议分配的特殊用途地址。
 		netip.MustParsePrefix("192.0.2.0/24"),    // 文档示例地址 TEST-NET-1。
+		netip.MustParsePrefix("192.88.99.0/24"),  // 已弃用的 6to4 中继地址。
 		netip.MustParsePrefix("198.18.0.0/15"),   // 网络设备基准测试地址。
 		netip.MustParsePrefix("198.51.100.0/24"), // 文档示例地址 TEST-NET-2。
 		netip.MustParsePrefix("203.0.113.0/24"),  // 文档示例地址 TEST-NET-3。
 		netip.MustParsePrefix("240.0.0.0/4"),     // 保留地址空间，包含有限广播地址。
 		netip.MustParsePrefix("::/96"),           // IPv4 兼容地址，可内嵌非公网 IPv4。
+		netip.MustParsePrefix("::ffff:0:0:0/96"), // IPv4 转换地址，可内嵌非公网 IPv4。
 		netip.MustParsePrefix("64:ff9b::/96"),    // NAT64 知名前缀，可内嵌私有 IPv4。
 		netip.MustParsePrefix("64:ff9b:1::/48"),  // NAT64 本地用途前缀，可内嵌私有 IPv4。
 		netip.MustParsePrefix("2002::/16"),       // 6to4 隧道地址，可转向非公网 IPv4。
 		netip.MustParsePrefix("2001::/32"),       // Teredo 隧道地址，可转向非公网 IPv4。
+		netip.MustParsePrefix("2001:2::/48"),     // IPv6 基准测试地址。
+		netip.MustParsePrefix("2001:10::/28"),    // 已弃用的 ORCHID 标识地址。
 		netip.MustParsePrefix("2001:db8::/32"),   // IPv6 文档示例地址。
+		netip.MustParsePrefix("3fff::/20"),       // IPv6 文档示例地址。
 		netip.MustParsePrefix("100::/64"),        // IPv6 丢弃用途地址。
 	}
 	for _, prefix := range blocked {

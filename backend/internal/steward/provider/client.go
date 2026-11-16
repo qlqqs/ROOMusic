@@ -28,6 +28,11 @@ func NewMessages(client *http.Client, endpoint, key string) (Provider, error) {
 	return newAdapter(client, endpoint, key, ProtocolMessages)
 }
 
+// NewResponses 创建 Responses 适配器，复用调用方提供的出站客户端。
+func NewResponses(client *http.Client, endpoint, key string) (Provider, error) {
+	return newAdapter(client, endpoint, key, ProtocolResponses)
+}
+
 func newAdapter(client *http.Client, endpoint, key string, protocol Protocol) (*adapter, error) {
 	if client == nil {
 		return nil, failure(ErrorOther, 0, "必须传入 HTTP 客户端", "")
@@ -49,7 +54,11 @@ func (a *adapter) Stream(ctx context.Context, request Request) (Stream, error) {
 	if a.protocol == ProtocolMessages {
 		resource = "messages"
 		body, err = messagesRequest(request)
-		parser = &messagesParser{blocks: make(map[int]*messageBlock)}
+		parser = newMessagesParser(request)
+	} else if a.protocol == ProtocolResponses {
+		resource = "responses"
+		body, err = responsesRequest(request)
+		parser = &responsesParser{}
 	} else {
 		body, err = a.openAIRequest(request)
 		parser = &openAIParser{calls: make(map[int]*callFragments)}
@@ -155,6 +164,8 @@ func finishEvent(protocol Protocol, raw string) Event {
 		switch raw {
 		case "end_turn", "stop_sequence":
 			reason = FinishNormal
+		case "pause_turn":
+			reason = FinishPause
 		case "tool_use":
 			reason = FinishToolCalls
 		case "max_tokens", "model_context_window_exceeded":

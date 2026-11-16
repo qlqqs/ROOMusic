@@ -13,7 +13,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
-func TestRunC5ModelToolsContainReadAndPersonalOnly(t *testing.T) {
+func TestRunC5ModelToolsContainReadPersonalAndSharedForAdmin(t *testing.T) {
 	r := tool.NewRegistry()
 	for _, scope := range []tool.Scope{tool.ScopeRead, tool.ScopePersonal, tool.ScopeShared} {
 		err := r.Register(tool.Definition{Name: string(scope), Scope: scope, MinRole: tool.RoleMember, Input: json.RawMessage(`{"type":"object"}`), Output: json.RawMessage(`{}`), Handler: func(context.Context, tool.Caller, json.RawMessage) (json.RawMessage, error) {
@@ -26,14 +26,16 @@ func TestRunC5ModelToolsContainReadAndPersonalOnly(t *testing.T) {
 	p := &fakeProvider{next: func(context.Context, int, provider.Request) ([]provider.Event, error) {
 		return []provider.Event{modelDone(provider.FinishNormal)}, nil
 	}}
-	if err := NewRunner(&memoryRunStore{}, r, slog.New(slog.NewTextHandler(io.Discard, nil))).Run(context.Background(), runParams(p), func(Event) {}); err != nil {
+	params := runParams(p)
+	params.Caller.User.Role = "admin"
+	if err := NewRunner(&memoryRunStore{}, r, slog.New(slog.NewTextHandler(io.Discard, nil))).Run(context.Background(), params, func(Event) {}); err != nil {
 		t.Fatal(err)
 	}
 	var names []string
 	for _, d := range p.requests[0].Tools {
 		names = append(names, d.Name)
 	}
-	if !reflect.DeepEqual(names, []string{"personal", "read"}) {
+	if !reflect.DeepEqual(names, []string{"personal", "read", "shared"}) {
 		t.Fatalf("model tools=%v", names)
 	}
 }

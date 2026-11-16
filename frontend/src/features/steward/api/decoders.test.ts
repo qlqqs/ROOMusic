@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { decodeConversationDetail, decodeConversationPage, decodeConversationPatch, decodeRunEvent, decodeSettings, operationIdOf } from "./decoders";
-import { sampleBody } from "../../../test/api-samples";
+import { decodeConversationDetail, decodeConversationPage, decodeConversationPatch, decodeRunEvent, decodeSearchTest, decodeSettings, effectiveNativeSearch, operationIdOf } from "./decoders";
+import { searchSettingsDefaults, settingsOf } from "../../../test/fake-steward";
 
 const planItem = {
   id: "00000000-0000-4000-8000-0000000000b1",
@@ -152,12 +152,58 @@ describe("审查（C7）", () => {
   });
 
   it("设置的审查模型与会话列表的等确认项数可以省略", () => {
-    const settings = sampleBody("steward/probe-supported") as Record<string, unknown>;
+    const settings = settingsOf();
     expect(decodeSettings({ ...settings, review_model: "review-model" }).review_model).toBe("review-model");
     const { review_model: _omitted, ...withoutReviewModel } = settings;
     expect(decodeSettings(withoutReviewModel).review_model).toBeUndefined();
     const item = { id: "00000000-0000-4000-8000-000000000001", title: "", mode: "steward", model: "", status: "idle", created_at: "2026-11-16T00:00:00Z", updated_at: "2026-11-16T00:00:00Z" };
     const page = decodeConversationPage({ items: [{ ...item, pending_item_count: 2 }, item], pagination: { page: 1, page_size: 100, total: 2 } });
     expect(page.items.map((entry) => entry.pending_item_count)).toEqual([2, undefined]);
+  });
+});
+
+describe("联网（C8）", () => {
+  it("设置带搜索来源与 Tavily 密钥的末四位；接口类型可以是 responses；检测结论的自带搜索可以省略", () => {
+    const settings = settingsOf({ search_source: "tavily", search_key_saved: true, search_key_last_four: "abcd", protocol: "responses", overrides: { native_search: "supported" } });
+    const decoded = decodeSettings(settings);
+    expect(decoded).toMatchObject({ search_source: "tavily", search_key_last_four: "abcd", protocol: "responses" });
+    expect(effectiveNativeSearch(decoded)).toBe("supported");
+    expect(effectiveNativeSearch(decodeSettings(settingsOf({ overrides: {} })))).toBe("unknown");
+    const probed = decodeSettings(settingsOf({ probe_result: { models: [], tool_support: "supported", native_search: "unsupported", responses_available: true } }));
+    expect(effectiveNativeSearch(probed)).toBe("unsupported");
+    expect(probed.probe_result?.responses_available).toBe(true);
+    const { search_source: _omitted, ...withoutSource } = settings;
+    expect(() => decodeSettings(withoutSource)).toThrow();
+    expect(() => decodeSettings({ ...settings, search_source: "brave" })).toThrow();
+    expect(Object.keys(searchSettingsDefaults).every((key) => key in decoded)).toBe(true);
+  });
+
+  it("测试搜索的结果：成功带条数，失败带原因", () => {
+    expect(decodeSearchTest({ ok: true, result_count: 3 })).toEqual({ ok: true, result_count: 3 });
+    expect(decodeSearchTest({ ok: false, code: "searxng_json_disabled" })).toEqual({ ok: false, code: "searxng_json_disabled" });
+    expect(() => decodeSearchTest({ ok: true })).toThrow();
+    expect(() => decodeSearchTest({ code: "x" })).toThrow();
+  });
+
+  it("search 与 citations 事件；结果与标题可以省略", () => {
+    expect(decodeRunEvent("search", JSON.stringify({ type: "search", step: 1, search_id: "s1", query: "贝九 1951", status: "completed", results: [{ title: "Bayreuth", url: "https://example.org/a" }] }))).toMatchObject({
+      search_id: "s1",
+      results: [{ title: "Bayreuth" }],
+    });
+    expect(decodeRunEvent("search", JSON.stringify({ type: "search", step: 1, search_id: "s2", query: "q", status: "failed", error_code: "max_uses_exceeded" }))).toMatchObject({ status: "failed", error_code: "max_uses_exceeded" });
+    expect(() => decodeRunEvent("search", JSON.stringify({ type: "search", step: 1, search_id: "s3", query: "q", status: "running" }))).toThrow();
+    expect(decodeRunEvent("citations", JSON.stringify({ type: "citations", step: 2, citations: [{ url: "https://example.org/a" }] }))).toEqual({ type: "citations", step: 2, citations: [{ url: "https://example.org/a" }] });
+  });
+
+  it("助手消息可以带 searches 与 citations，省略时照常解码", () => {
+    const detail = { id: "00000000-0000-4000-8000-000000000001", title: "", mode: "assistant", model: "m", status: "idle", created_at: "2026-11-16T00:00:00Z", updated_at: "2026-11-16T00:00:00Z" };
+    const message = { id: "00000000-0000-4000-8000-000000000002", sequence: 1, role: "assistant", content: [{ type: "text", text: "答" }], input_tokens: null, output_tokens: null, created_at: "2026-11-16T00:00:00Z", tool_calls: [] };
+    const decoded = decodeConversationDetail({
+      ...detail,
+      messages: [{ ...message, searches: [{ search_id: "s1", query: "q", status: "completed", results: [] }], citations: [{ url: "https://example.org", title: "" }] }, { ...message, id: "00000000-0000-4000-8000-000000000003", sequence: 2 }],
+    });
+    expect(decoded.messages[0]?.searches?.[0]?.query).toBe("q");
+    expect(decoded.messages[0]?.citations).toEqual([{ url: "https://example.org", title: "" }]);
+    expect(decoded.messages[1]?.searches).toBeUndefined();
   });
 });

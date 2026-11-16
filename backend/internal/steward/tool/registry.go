@@ -61,14 +61,20 @@ func (registry *Registry) Register(definition Definition) error {
 }
 
 // List 按名称排序返回当前用户有权调用的工具合同副本，不返回处理器。
-// 此列表按身份过滤；共享写入仍由 Invoke 的审批门禁决定是否执行。
+// 此列表按身份和当前可用性过滤；共享写入仍由 Invoke 的审批门禁决定是否执行。
 func (registry *Registry) List(caller Caller) []Definition {
+	return registry.ListContext(context.Background(), caller)
+}
+
+// ListContext 在请求上下文中按身份与当前设置筛选工具。
+func (registry *Registry) ListContext(ctx context.Context, caller Caller) []Definition {
 	definitions := make([]Definition, 0, len(registry.tools))
 	for _, registered := range registry.tools {
-		if registered.definition.MinRole.Allows(caller.User) {
+		if registered.definition.MinRole.Allows(caller.User) && (registered.definition.Available == nil || registered.definition.Available(ctx, caller)) {
 			definition := cloneDefinition(registered.definition)
 			definition.Handler = nil
 			definition.Preview = nil
+			definition.Available = nil
 			definitions = append(definitions, definition)
 		}
 	}
@@ -84,7 +90,7 @@ func (registry *Registry) Invoke(ctx context.Context, caller Caller, name string
 		return Result{}, &Error{Code: CodeNotFound, Tool: name, Message: "工具不存在"}
 	}
 	definition := registered.definition
-	if !definition.MinRole.Allows(caller.User) {
+	if !definition.MinRole.Allows(caller.User) || (definition.Available != nil && !definition.Available(ctx, caller)) {
 		return Result{}, &Error{Code: CodePermissionDenied, Tool: name, Message: "无权调用此工具"}
 	}
 	if definition.Scope == ScopeShared && !caller.SharedExecution {
@@ -158,7 +164,7 @@ func (registry *Registry) PreviewCall(ctx context.Context, caller Caller, name s
 	if !exists {
 		return Preview{}, &Error{Code: CodeNotFound, Tool: name, Message: "工具不存在"}
 	}
-	if !registered.definition.MinRole.Allows(caller.User) {
+	if !registered.definition.MinRole.Allows(caller.User) || (registered.definition.Available != nil && !registered.definition.Available(ctx, caller)) {
 		return Preview{}, &Error{Code: CodePermissionDenied, Tool: name, Message: "无权调用此工具"}
 	}
 	value, err := decodeJSON(input)

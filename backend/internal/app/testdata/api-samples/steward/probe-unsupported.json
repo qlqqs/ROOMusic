@@ -17,6 +17,15 @@
           },
           "protocol": "openai",
           "step": "tools"
+        },
+        {
+          "error": {
+            "kind": "tool_unsupported",
+            "message": "model does not support tools",
+            "status_code": 400
+          },
+          "protocol": "responses",
+          "step": "responses"
         }
       ],
       "models": [
@@ -24,12 +33,19 @@
           "id": "synthetic-model"
         }
       ],
+      "native_search": "unknown",
       "protocol": "openai",
+      "responses_available": false,
       "tool_support": "unsupported"
     },
     "probed_at": "2026-01-01T00:00:00Z",
     "protocol": "openai",
     "review_model": "synthetic-review-model",
+    "search_key_last_four": "",
+    "search_key_needs_reentry": false,
+    "search_key_saved": false,
+    "search_source": "none",
+    "searxng_url": "",
     "updated_at": "2026-01-01T00:00:01Z"
   },
   "status": 200

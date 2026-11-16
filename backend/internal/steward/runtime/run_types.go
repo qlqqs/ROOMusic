@@ -23,6 +23,9 @@ func NewRunner(store RunStore, registry *tool.Registry, logger *slog.Logger) *Ru
 
 // RunParams 是入口已取得的调用者身份、会话及模型配置，不包含端点密钥。
 type RunParams struct {
+	Protocol     provider.Protocol
+	Endpoint     string
+	NativeSearch bool
 	ReviewPlanID string
 	ReviewModel  string
 	Decision     *PlanDecision
@@ -53,6 +56,8 @@ const (
 	EventReviewStarted  EventType = "review_started"
 	EventReviewFinished EventType = "review_finished"
 	EventPlan           EventType = "plan"
+	EventSearch         EventType = "search"
+	EventCitations      EventType = "citations"
 	// EventText 表示助手文本增量。
 	EventText EventType = "text"
 	// EventToolStarted 表示开始执行工具。
@@ -125,10 +130,12 @@ type ToolFinished struct {
 
 // Event 由 Type 选择载荷；不向接收方暴露助手的不透明块。
 type Event struct {
-	PlanID string  `json:"plan_id,omitempty"`
-	Model  string  `json:"model,omitempty"`
-	Review *Review `json:"review,omitempty"`
-	Plan   *Plan   `json:"plan,omitempty"`
+	*provider.Search
+	Citations []provider.Citation `json:"citations,omitempty"`
+	PlanID    string              `json:"plan_id,omitempty"`
+	Model     string              `json:"model,omitempty"`
+	Review    *Review             `json:"review,omitempty"`
+	Plan      *Plan               `json:"plan,omitempty"`
 	// Type 是事件类型。
 	Type EventType `json:"type"`
 	// Step 是从一开始的模型调用序号。

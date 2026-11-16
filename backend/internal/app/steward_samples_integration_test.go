@@ -59,11 +59,23 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	registerSteward(ctx, mux, db, identity.NewGuard(db, false, ""), dir, logger, library.NewService(ctx, db, dir, logger), nil, nil, nil, nil)
 	var mode atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/search") {
+			if mode.Load() == 6 {
+				w.WriteHeader(403)
+			}
+			io.WriteString(w, `{"results":[]}`)
+			return
+		}
 		if r.Method == "GET" {
 			_, _ = io.WriteString(w, `{"data":[{"id":"synthetic-model"}]}`)
 			return
 		}
 		switch mode.Load() {
+		case 5:
+			io.WriteString(w, "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"合成联网回答\"}\n\n")
+			io.WriteString(w, "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":\"web_search_call\",\"id\":\"sample-search\",\"status\":\"completed\",\"action\":{\"type\":\"search\",\"query\":\"合成音乐查询\",\"sources\":[{\"url\":\"https://example.org/music\",\"title\":\"合成来源\"}]}}}\n\n")
+			io.WriteString(w, "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"output_index\":1,\"item\":{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"合成联网回答\",\"annotations\":[{\"type\":\"url_citation\",\"url\":\"https://example.org/music\",\"title\":\"合成来源\"}]}]}}\n\n")
+			io.WriteString(w, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n")
 		case 1:
 			w.WriteHeader(400)
 			_, _ = io.WriteString(w, `{"error":{"message":"model does not support tools"}}`)
@@ -96,7 +108,7 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 		mux.ServeHTTP(w, r)
 		return w
 	}
-	samples := &apiSampleRecorder{scope: "steward", t: t, samples: map[string][]byte{}, forbidden: []string{dir, "synthetic-sample-model-key", tokens["admin"], tokens["user"], identity.SessionCookieName}}
+	samples := &apiSampleRecorder{scope: "steward", t: t, samples: map[string][]byte{}, forbidden: []string{dir, "synthetic-sample-model-key", "synthetic-search-key-5678", tokens["admin"], tokens["user"], identity.SessionCookieName}}
 	record := func(name string, w *httptest.ResponseRecorder, status int) {
 		t.Helper() // 随机本地监听端口不属于接口合同，样本固定成合成地址。
 		body := strings.ReplaceAll(w.Body.String(), server.URL, "http://127.0.0.1:12345")
@@ -195,10 +207,56 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	record("allowlist-added", call("admin", "POST", "admin/steward/egress-allowlist", address), 200)
 	record("allowlist", call("admin", "GET", "admin/steward/egress-allowlist", nil), 200)
 	record("allowlist-deleted", call("admin", "DELETE", "admin/steward/egress-allowlist", address), 200)
+	// C8：只使用本机假搜索与假模型生成联网设置、搜索结果和 SSE 投影样本。
+	record("search-not-configured", call("admin", "POST", "me/steward/settings/search-test", nil), 200)
+	record("settings-search", call("admin", "PUT", "me/steward/settings", map[string]any{"search_source": "searxng", "searxng_url": server.URL, "search_key": "synthetic-search-key-5678"}), 200)
+	record("search-empty", call("admin", "POST", "me/steward/settings/search-test", nil), 200)
+	mode.Store(6)
+	record("search-json-disabled", call("admin", "POST", "me/steward/settings/search-test", nil), 200)
+	mode.Store(5)
+	record("settings-responses-native", call("admin", "PUT", "me/steward/settings", map[string]any{"protocol": "responses", "search_source": "native", "overrides": map[string]string{"native_search": "supported", "tool_support": "supported"}}), 200)
+	webCreated := call("admin", "POST", "me/steward/conversations", map[string]string{"title": "合成联网对话"})
+	var webConversation struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(webCreated.Body.Bytes(), &webConversation); err != nil || webCreated.Code != 201 {
+		t.Fatalf("联网对话：%s %v", webCreated.Body, err)
+	}
+	webPath := "me/steward/conversations/" + webConversation.ID
+	stream := call("admin", "POST", webPath+"/messages", map[string]string{"text": "查合成资料"})
+	if stream.Code != 200 {
+		t.Fatalf("联网流：%s", stream.Body)
+	}
+	eventCount := 0
+	for _, line := range strings.Split(stream.Body.String(), "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		var event map[string]any
+		if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event) != nil {
+			t.Fatal("无效 SSE")
+		}
+		kind, _ := event["type"].(string)
+		if kind != "search" && kind != "citations" {
+			continue
+		}
+		response := httptest.NewRecorder()
+		response.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(response).Encode(event)
+		record("event-"+kind, response, 200)
+		eventCount++
+	}
+	if eventCount != 2 {
+		t.Fatalf("联网事件数=%d：%s", eventCount, stream.Body)
+	}
+	record("conversation-web", call("admin", "GET", webPath, nil), 200)
+	if w := call("admin", "PUT", "me/steward/settings", map[string]any{"protocol": "openai", "search_source": "none", "search_key": nil, "overrides": map[string]string{}}); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
 	record("settings-cleared-key", call("admin", "PUT", "me/steward/settings", map[string]any{"key": nil}), 200)
 	mode.Store(3)
 	record("probe-keyless-unconfirmed", call("admin", "POST", "me/steward/settings/probe", map[string]any{"key": nil}), 200)
-	if len(samples.samples) != 36 {
+	if len(samples.samples) != 44 {
 		t.Fatalf("管家样本覆盖清单发生变化：%d", len(samples.samples))
 	}
 	samples.finish()

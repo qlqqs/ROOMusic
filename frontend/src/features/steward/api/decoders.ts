@@ -2,10 +2,17 @@ import { decode as d, decodeErrorEnvelope } from "../../../shared/api";
 
 // ---- 设置与探测（合同 4.2、4.3）----
 
-export const protocols = ["openai", "messages"] as const;
+// responses（C8）：OpenAI 的 Responses 接口，探测确认端点支持时可选，也可以手动选；模型自带搜索在 OpenAI 上只走它。
+export const protocols = ["openai", "messages", "responses"] as const;
 export type Protocol = (typeof protocols)[number];
 export const toolSupports = ["supported", "unsupported", "unconfirmed"] as const;
 export type ToolSupport = (typeof toolSupports)[number];
+/** 模型接口自带的联网搜索（C8）：检测的结论，可以手动改写。 */
+export const nativeSearchSupports = ["supported", "unsupported", "unknown"] as const;
+export type NativeSearchSupport = (typeof nativeSearchSupports)[number];
+/** 联网搜索的来源（C8）：不用、自己部署的 SearXNG、Tavily（密钥）、模型自带。 */
+export const searchSources = ["none", "searxng", "tavily", "native"] as const;
+export type SearchSource = (typeof searchSources)[number];
 
 /** 名字最多这么多个字符（后端的上限）。 */
 export const MAX_DISPLAY_NAME = 20;
@@ -14,7 +21,7 @@ export const MAX_DISPLAY_NAME = 20;
 const json: d.Decoder<unknown> = (input) => input;
 
 const probeFailureDecoder = d.object({
-  step: d.oneOf(["endpoint", "models", "tools"] as const),
+  step: d.oneOf(["endpoint", "models", "tools", "responses", "native_search"] as const),
   protocol: d.optional(d.oneOf(protocols)),
   error: d.object({ kind: d.string({ min: 1 }), status_code: d.optional(d.integer()), message: d.string() }),
 });
@@ -25,6 +32,9 @@ const probeResultDecoder = d.object({
   protocol: d.optional(d.oneOf(protocols)),
   models: d.array(d.object({ id: d.string({ min: 1 }), display_name: d.optional(d.string()) }), { max: 5000 }),
   tool_support: d.oneOf(toolSupports),
+  // C8 之前保存的检测结论没有这两项：自带搜索按“没有确认”、Responses 按没有确认处理。
+  native_search: d.optional(d.oneOf(nativeSearchSupports)),
+  responses_available: d.optional(d.boolean()),
   failures: d.optional(d.array(probeFailureDecoder, { max: 20 })),
 });
 
@@ -44,8 +54,15 @@ const settingsDecoder = d.object({
     protocol: d.optional(d.oneOf(protocols)),
     model: d.optional(d.string({ min: 1 })),
     tool_support: d.optional(d.oneOf(toolSupports)),
+    native_search: d.optional(d.oneOf(nativeSearchSupports)),
   }),
   updated_at: d.nullable(d.timestamp()),
+  // 联网搜索（C8）：来源、SearXNG 地址（未填为空串），Tavily 密钥与模型密钥一样只给末四位。
+  search_source: d.oneOf(searchSources),
+  searxng_url: d.string(),
+  search_key_saved: d.boolean(),
+  search_key_last_four: d.string({ max: 4 }),
+  search_key_needs_reentry: d.boolean(),
 });
 
 export const decodeSettings = d.defineDecoder(settingsDecoder);
@@ -59,6 +76,24 @@ export function decodeProbeFailure(input: unknown) {
   return { ...decodeErrorEnvelope(input), ...decodeProbeReport(input) };
 }
 export type ProbeFailureResponseDTO = ReturnType<typeof decodeProbeFailure>;
+
+/** 生效的自带搜索结论：手动改写的优先，其次是检测结果，都没有时是“没有确认”。 */
+export function effectiveNativeSearch(settings: SettingsDTO): NativeSearchSupport {
+  return settings.overrides.native_search ?? settings.probe_result?.native_search ?? "unknown";
+}
+
+/** 测试搜索失败的原因（C8）：按已保存的设置请求一次。来源是不用或模型自带时是 search_not_configured。 */
+export const searchTestCodes = ["search_not_configured", "searxng_json_disabled", "search_key_invalid", "search_quota_exceeded", "search_unreachable", "egress_denied"] as const;
+export type SearchTestCode = (typeof searchTestCodes)[number];
+
+const searchTestDecoder: d.Decoder<{ ok: true; result_count: number } | { ok: false; code: string }> = (input, path) => {
+  const ok = typeof input === "object" && input !== null && "ok" in input ? input.ok : undefined;
+  if (ok === true) return { ok: true, result_count: d.object({ result_count: d.integer({ min: 0 }) })(input, path).result_count };
+  if (ok === false) return { ok: false, code: d.object({ code: d.string({ min: 1 }) })(input, path).code };
+  throw new d.DecodeError(`${path}.ok`, "应为布尔值");
+};
+export const decodeSearchTest = d.defineDecoder(searchTestDecoder);
+export type SearchTestDTO = d.Infer<typeof searchTestDecoder>;
 
 // ---- 会话与消息（合同 4.4）----
 
@@ -151,6 +186,26 @@ const messageContextDecoder = d.object({
   ),
 });
 
+// ---- 模型自带搜索（C8）----
+// 模型接口自己做的搜索：每次一个 search 事件（查询词与结果的标题、地址），回答引用的来源在该步文字结束后以 citations 事件给出（已去重）；
+// 落库后在助手消息的 searches 与 citations 里，没有时为空数组。标题与地址来自外部网页，只按文字显示；标题可能为空。
+
+const searchResultDecoder = d.object({ title: d.optional(d.string({ max: d.unbounded })), url: d.string({ max: d.unbounded }) });
+const searchRecordShape = {
+  search_id: d.string({ min: 1 }),
+  query: d.string({ max: d.unbounded }),
+  status: d.oneOf(["completed", "failed"] as const),
+  results: d.optional(d.array(searchResultDecoder, { max: d.unbounded })),
+  error_code: d.optional(d.nullable(d.string())),
+};
+const searchRecordDecoder = d.object(searchRecordShape);
+export const decodeSearchRecord = d.defineDecoder(searchRecordDecoder);
+export type SearchRecordDTO = d.Infer<typeof searchRecordDecoder>;
+
+const citationDecoder = d.object({ url: d.string({ max: d.unbounded }), title: d.optional(d.string({ max: d.unbounded })) });
+export const decodeCitation = d.defineDecoder(citationDecoder);
+export type CitationDTO = d.Infer<typeof citationDecoder>;
+
 const messageDecoder = d.object({
   id: d.uuid(),
   sequence: d.integer({ min: 1 }),
@@ -161,6 +216,9 @@ const messageDecoder = d.object({
   created_at: d.timestamp(),
   tool_calls: d.array(toolCallRecordDecoder, { max: d.unbounded }),
   context: d.optional(d.nullable(messageContextDecoder)),
+  /** 助手消息里模型自带搜索的记录与回答引用的来源（C8）；其他消息与旧消息没有，按空数组处理。 */
+  searches: d.optional(d.array(searchRecordDecoder, { max: d.unbounded })),
+  citations: d.optional(d.array(citationDecoder, { max: d.unbounded })),
 });
 export type MessageDTO = d.Infer<typeof messageDecoder>;
 export type ToolCallDTO = d.Infer<typeof toolCallRecordDecoder>;
@@ -308,6 +366,9 @@ const runEventDecoders = {
   // 审查（C7）：开始时只有方案与审查模型，结束时是每项的结论；重新审查的流里没有 step。
   review_started: d.object({ type: d.literal("review_started"), step: d.optional(step), plan_id: d.uuid(), model: d.string() }),
   review_finished: d.object({ type: d.literal("review_finished"), step: d.optional(step), review: reviewDecoder }),
+  // 模型自带搜索（C8）：每次搜索结束发一次；回答引用的来源在该步文字结束后发一次。
+  search: d.object({ type: d.literal("search"), step: d.optional(step), ...searchRecordShape }),
+  citations: d.object({ type: d.literal("citations"), step: d.optional(step), citations: d.array(citationDecoder, { max: d.unbounded }) }),
   done: d.object({ type: d.literal("done"), step: d.optional(step), end: runEndDecoder }),
 };
 

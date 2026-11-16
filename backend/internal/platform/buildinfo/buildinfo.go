@@ -19,3 +19,6 @@ func Current() Info {
 	}
 	return info
 }
+
+// ProjectURL 是公开项目地址，供要求应用联系地址的数据源识别客户端。
+const ProjectURL = "https://github.com/qlqqs/ROOMusic"

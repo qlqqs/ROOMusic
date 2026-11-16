@@ -354,3 +354,60 @@
   justify-content: flex-end;
   gap: var(--space-2);
 }
+
+/* 联网搜索的结果（C8）：过程条目下面一列标题与域名，缩进到名称那一列。 */
+.stepSources {
+  grid-column: 2 / -1;
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-12);
+}
+
+/* 回答下面的来源（C8）。 */
+.citations {
+  display: grid;
+  gap: var(--space-1);
+  max-width: 660px;
+  min-width: 0;
+  font-size: var(--fs-13);
+}
+
+.citationsTitle {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+.sources {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: 1.4em;
+}
+
+.sources li,
+.stepSources li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sourceTitle {
+  color: var(--text-primary);
+}
+
+a.sourceTitle {
+  color: var(--text-accent);
+}
+
+a.sourceTitle:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.sourceDomain {
+  margin-left: 6px;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}

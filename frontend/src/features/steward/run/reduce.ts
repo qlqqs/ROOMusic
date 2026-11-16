@@ -1,6 +1,15 @@
-import type { MessageDTO, RunEndDTO, RunEvent } from "../api/decoders";
+import type { CitationDTO, MessageDTO, RunEndDTO, RunEvent, SearchRecordDTO } from "../api/decoders";
 
 // 事件 → 回合视图的纯函数。流式显示与刷新后从已落库消息还原用同一种结构，两者显示一致。
+
+/**
+ * 模型自带搜索（C8）在过程里的条目名：它不是登记给模型的工具，名字带 $，不会与工具重名。
+ * 条目的 input 是 {q: 查询词}，output 是 {results: [{title, url}]}，与 web_search 工具的形状相近，过程条目按同样的规则显示。
+ */
+export const NATIVE_SEARCH = "$native_web_search";
+
+/** 回答引用的一处来源（C8）：地址与标题，标题可能为空（显示时用域名）。都来自外部网页，只按文字显示。 */
+export type Citation = { url: string; title: string };
 
 /** 过程里的一次工具调用。callId 是模型给的调用标识。 */
 export type StepItem = {
@@ -27,15 +36,45 @@ export type StepItem = {
  * 一个回合：一条用户消息，加上到下一条用户消息之前的全部助手与工具消息。
  * items 是所有步骤的工具调用（按顺序），texts 是各步的文字（按步骤顺序，可能有空的）。
  */
-export type Turn = { key: string; userText: string | null; items: StepItem[]; texts: string[] };
+export type Turn = { key: string; userText: string | null; items: StepItem[]; texts: string[]; citations: Citation[] };
 
 /**
  * 一次运行收到的事件归并出的样子；texts 的下标是 step - 1。
  * waiting：在等模型的下一段输出（刚开始，或这一步的工具都执行完了），界面显示“正在想…”。
+ * citations：回答引用的来源（C8，各步合在一起、按地址去重）。
  */
-export type RunView = { items: StepItem[]; texts: string[]; end: RunEndDTO | null; waiting: boolean };
+export type RunView = { items: StepItem[]; texts: string[]; citations: Citation[]; end: RunEndDTO | null; waiting: boolean };
 
-export const emptyRunView: RunView = { items: [], texts: [], end: null, waiting: true };
+export const emptyRunView: RunView = { items: [], texts: [], citations: [], end: null, waiting: true };
+
+/** 一次模型自带搜索的条目：搜索事件到达时已经结束，成功或失败；不计耗时。 */
+function searchItemOf(search: SearchRecordDTO, textsBefore: number): StepItem {
+  const results = (search.results ?? []).map((result) => ({ title: result.title ?? "", url: result.url }));
+  const failed = search.status === "failed";
+  return {
+    callId: search.search_id,
+    name: NATIVE_SEARCH,
+    input: { q: search.query },
+    status: failed ? "failed" : "succeeded",
+    output: { results },
+    errorCode: failed ? (search.error_code ?? null) : null,
+    durationMs: null,
+    executed: true,
+    textsBefore,
+  };
+}
+
+/** 合并来源：按地址去重，先出现的在前。 */
+export function mergeCitations(current: readonly Citation[], incoming: readonly CitationDTO[]): Citation[] {
+  const seen = new Set(current.map((citation) => citation.url));
+  const merged = [...current];
+  for (const citation of incoming) {
+    if (seen.has(citation.url)) continue;
+    seen.add(citation.url);
+    merged.push({ url: citation.url, title: citation.title ?? "" });
+  }
+  return merged;
+}
 
 export function applyRunEvent(view: RunView, event: RunEvent): RunView {
   switch (event.type) {
@@ -83,6 +122,14 @@ export function applyRunEvent(view: RunView, event: RunEvent): RunView {
     case "review_finished":
       // 审查之后：批准的项接着执行，或模型接着回答。
       return { ...view, waiting: !view.items.some((item) => item.status === "running") };
+    case "search": {
+      // 同一次搜索再来一次事件时原地替换。
+      const item = searchItemOf(event, event.step ?? view.texts.length);
+      const known = view.items.some((entry) => entry.callId === item.callId && entry.name === NATIVE_SEARCH);
+      return { ...view, waiting: false, items: known ? view.items.map((entry) => (entry.callId === item.callId && entry.name === NATIVE_SEARCH ? item : entry)) : [...view.items, item] };
+    }
+    case "citations":
+      return { ...view, citations: mergeCitations(view.citations, event.citations) };
     case "usage":
       return view;
     case "done":
@@ -97,21 +144,25 @@ function textOf(message: MessageDTO): string {
 /**
  * 已落库消息 → 回合。助手消息的 content 里 tool_call 块的顺序与 tool_calls 的顺序一致（合同 4.4），按下标对上：
  * 调用标识、名称、参数取自块，状态、输出、错误码与耗时取自存储的调用记录。工具消息的内容已经在调用记录里，不再单独显示。
+ * 助手消息上的模型自带搜索（searches）与引用的来源（citations）同样还原成条目与回合的来源，与流式显示一致。
  */
 export function turnsFromMessages(messages: readonly MessageDTO[]): Turn[] {
   const turns: Turn[] = [];
   for (const message of messages) {
     if (message.role === "user") {
-      turns.push({ key: message.id, userText: textOf(message), items: [], texts: [] });
+      turns.push({ key: message.id, userText: textOf(message), items: [], texts: [], citations: [] });
       continue;
     }
     if (message.role !== "assistant") continue;
     let turn = turns.at(-1);
     if (turn === undefined) {
-      turn = { key: message.id, userText: null, items: [], texts: [] };
+      turn = { key: message.id, userText: null, items: [], texts: [], citations: [] };
       turns.push(turn);
     }
     turn.texts.push(textOf(message));
+    // 模型自带搜索（C8）发生在这一步生成的过程中，排在这一步的工具调用之前；来源合进回合，按地址去重。
+    for (const search of message.searches ?? []) turn.items.push(searchItemOf(search, turn.texts.length));
+    turn.citations = mergeCitations(turn.citations, message.citations ?? []);
     let index = 0;
     for (const block of message.content) {
       if (block.type !== "tool_call") continue;

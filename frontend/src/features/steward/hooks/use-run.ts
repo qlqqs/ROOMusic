@@ -6,7 +6,7 @@ import { stewardKeys } from "../query-keys";
 import type { ConversationDetailDTO } from "../api/decoders";
 import type { StewardRequestContext } from "../context/context";
 import { useStewardHost } from "../context/host";
-import { isIncomplete, turnsFromMessages, type Turn } from "../run/reduce";
+import { isIncomplete, mergeCitations, turnsFromMessages, type Turn } from "../run/reduce";
 import { rememberPlan, unfinishedPlanIdsOf } from "../run/plan-store";
 import { reviewFinished, reviewStarted, settleReviews } from "../run/review-store";
 import { getRunSnapshot, startRun, subscribeRuns, type ActiveRun, type RunEnd, type RunSnapshot, type StartResult, type StartRunParams } from "../run/run-store";
@@ -113,7 +113,7 @@ export function threadOf(detail: ConversationDetailDTO | undefined, snapshot: Ru
   if (run !== null) {
     const last = turns.at(-1);
     if (run.userText !== null || last === undefined) {
-      turns.push({ key: "live", userText: run.userText, items: run.view.items, texts: run.view.texts });
+      turns.push({ key: "live", userText: run.userText, items: run.view.items, texts: run.view.texts, citations: run.view.citations });
     } else {
       // 继续或确认方案：并进最后一个回合。同一个调用（确认后执行的方案项）用运行里的状态替换落库的，位置不变；
       // 新的调用排在后面，它们之前的文字段数加上回合里已有的。
@@ -125,7 +125,7 @@ export function threadOf(detail: ConversationDetailDTO | undefined, snapshot: Ru
         return { ...current, textsBefore: item.textsBefore };
       });
       for (const item of live.values()) items.push({ ...item, textsBefore: item.textsBefore + last.texts.length });
-      turns[turns.length - 1] = { ...last, items, texts: [...last.texts, ...run.view.texts] };
+      turns[turns.length - 1] = { ...last, items, texts: [...last.texts, ...run.view.texts], citations: mergeCitations(last.citations, run.view.citations) };
     }
   }
   const stored = id === null ? undefined : snapshot.ends.get(id);

@@ -13,10 +13,12 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"
 	"github.com/qlqq/roomusic/backend/internal/steward/token"
+	"github.com/qlqq/roomusic/backend/internal/steward/web"
 )
 
 // Handlers 持有管家接口依赖及本进程内按用户隔离的运行取消登记。
 type Handlers struct {
+	web              *web.Service
 	guard            *identity.Guard
 	checkCredentials func(*http.Request, identity.User) (bool, error)
 	store            *runtime.Store
@@ -32,7 +34,9 @@ type runKey struct{ userID, conversationID string }
 
 // New 构造接口，不执行 I/O；依赖由 app 装配并共享。
 func New(guard *identity.Guard, store *runtime.Store, secrets *secret.Store, runner *runtime.Runner, logger *slog.Logger) *Handlers {
-	return &Handlers{checkCredentials: func(r *http.Request, user identity.User) (bool, error) {
+	return &Handlers{web: web.New(store, secrets, func(ctx context.Context, user identity.User) (*http.Client, error) {
+		return OutboundClient(ctx, user, store)
+	}, logger), checkCredentials: func(r *http.Request, user identity.User) (bool, error) {
 		current, err := guard.Authenticate(r)
 		return err == nil && current.ID == user.ID && current.Role == user.Role, nil
 	}, guard: guard, store: store, secrets: secrets, runner: runner, logger: logger,
@@ -53,6 +57,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	h.route(mux, "GET /api/v1/me/steward/settings", false, h.getSettings)
 	h.route(mux, "PUT /api/v1/me/steward/settings", false, h.putSettings)
 	h.route(mux, "POST /api/v1/me/steward/settings/probe", false, h.probe)
+	h.route(mux, "POST /api/v1/me/steward/settings/search-test", false, h.searchTest)
 	h.route(mux, "GET /api/v1/me/steward/conversations", false, h.listConversations)
 	h.route(mux, "POST /api/v1/me/steward/conversations", false, h.createConversation)
 	h.route(mux, "GET /api/v1/me/steward/conversations/{id}", false, h.getConversation)

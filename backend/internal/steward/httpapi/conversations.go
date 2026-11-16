@@ -91,6 +91,8 @@ func (h *Handlers) createConversation(w http.ResponseWriter, r *http.Request, us
 }
 
 type messageResponse struct {
+	Searches  []provider.Search   `json:"searches"`
+	Citations []provider.Citation `json:"citations"`
 	// ID 是资源标识。
 	ID string `json:"id"`
 	// Sequence 是会话内递增的消息序号。
@@ -144,13 +146,21 @@ type toolCallResponse struct {
 }
 
 func messageView(message runtime.Message) (messageResponse, error) {
-	var content provider.Message
+	var content struct {
+		provider.Message
+		Searches  []provider.Search   `json:"searches"`
+		Citations []provider.Citation `json:"citations"`
+	}
 	if err := json.Unmarshal(message.Content, &content); err != nil {
 		return messageResponse{}, err
 	}
 	result := messageResponse{ID: message.ID, Sequence: message.Sequence, Role: message.Role, Context: message.Context,
 		InputTokens: message.InputTokens, OutputTokens: message.OutputTokens, CreatedAt: message.CreatedAt,
-		Content: []visibleBlock{}, ToolCalls: []toolCallResponse{}}
+		Content: []visibleBlock{}, ToolCalls: []toolCallResponse{}, Searches: []provider.Search{}, Citations: provider.CleanCitations(content.Citations)}
+	for _, search := range content.Searches {
+		search.Results = provider.CleanCitations(search.Results)
+		result.Searches = append(result.Searches, search)
+	}
 	for _, block := range content.Content {
 		// 白名单投影：不透明块及协议私有字段只留在数据库，不能发送到界面。
 		switch block.Type {

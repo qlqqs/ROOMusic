@@ -14,6 +14,15 @@
           },
           "protocol": "openai",
           "step": "tools"
+        },
+        {
+          "error": {
+            "kind": "authentication",
+            "message": "[已隐藏]",
+            "status_code": 401
+          },
+          "protocol": "responses",
+          "step": "responses"
         }
       ],
       "models": [
@@ -21,7 +30,9 @@
           "id": "synthetic-model"
         }
       ],
+      "native_search": "unknown",
       "protocol": "openai",
+      "responses_available": false,
       "tool_support": "unconfirmed"
     },
     "probed_at": "2026-01-01T00:00:00Z",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MessageDTO, RunEvent } from "../api/decoders";
-import { applyRunEvent, emptyRunView, formatElapsed, isIncomplete, summarizeSteps, turnsFromMessages } from "./reduce";
+import { applyRunEvent, emptyRunView, formatElapsed, isIncomplete, NATIVE_SEARCH, summarizeSteps, turnsFromMessages } from "./reduce";
 
 const at = "2026-11-16T00:00:00Z";
 let sequence = 0;
@@ -232,5 +232,44 @@ describe("审查的事件（C7）", () => {
   it("审查结论之后：没有进行中的调用时等模型接着回答", () => {
     const review = { review_id: "00000000-0000-4000-8000-0000000000e1", plan_id: "00000000-0000-4000-8000-0000000000c1", model: "m", status: "completed" as const, policy_version: 1, expires_at: at, items: [] };
     expect(applyRunEvent({ ...emptyRunView, waiting: false }, { type: "review_finished", review }).waiting).toBe(true);
+  });
+});
+
+describe("模型自带搜索（C8）", () => {
+  const search = { search_id: "s1", query: "贝九 1951", status: "completed" as const, results: [{ title: "Bayreuth", url: "https://example.org/a" }, { url: "https://example.org/b" }] };
+
+  it("search 事件是一条已结束的过程条目，citations 按地址去重合并", () => {
+    const events = [
+      { type: "search", step: 1, ...search },
+      { type: "search", step: 1, search_id: "s2", query: "坏的", status: "failed", error_code: "max_uses_exceeded" },
+      { type: "text", step: 1, text: "拜罗伊特那版是 1951 年。" },
+      { type: "citations", step: 1, citations: [{ url: "https://example.org/a", title: "Bayreuth" }, { url: "https://example.org/b" }] },
+      { type: "citations", step: 2, citations: [{ url: "https://example.org/a", title: "重复" }] },
+    ] satisfies RunEvent[];
+    const view = events.reduce<typeof emptyRunView>(applyRunEvent, emptyRunView);
+    expect(view.items.map(({ callId, name, status, errorCode, executed, input }) => ({ callId, name, status, errorCode, executed, input }))).toEqual([
+      { callId: "s1", name: NATIVE_SEARCH, status: "succeeded", errorCode: null, executed: true, input: { q: "贝九 1951" } },
+      { callId: "s2", name: NATIVE_SEARCH, status: "failed", errorCode: "max_uses_exceeded", executed: true, input: { q: "坏的" } },
+    ]);
+    expect(view.items[0]?.output).toEqual({ results: [{ title: "Bayreuth", url: "https://example.org/a" }, { title: "", url: "https://example.org/b" }] });
+    expect(view.items[1]?.output).toEqual({ results: [] });
+    expect(view.citations).toEqual([{ url: "https://example.org/a", title: "Bayreuth" }, { url: "https://example.org/b", title: "" }]);
+    expect(view.waiting).toBe(false);
+  });
+
+  it("落库的 searches 与 citations 还原成同样的条目与来源；没有这两项的消息按空处理", () => {
+    const streamed = [{ type: "search", step: 1, ...search }, { type: "text", step: 1, text: "答" }, { type: "citations", step: 1, citations: [{ url: "https://example.org/a", title: "Bayreuth" }] }] satisfies RunEvent[];
+    const view = streamed.reduce<typeof emptyRunView>(applyRunEvent, emptyRunView);
+    const turns = turnsFromMessages([
+      message("user", [{ type: "text", text: "贝九" }]),
+      { ...message("assistant", [{ type: "text", text: "答" }]), searches: [search], citations: [{ url: "https://example.org/a", title: "Bayreuth" }] },
+      message("user", [{ type: "text", text: "再问" }]),
+      message("assistant", [{ type: "text", text: "没有搜索" }]),
+    ]);
+    expect(turns[0]?.items.map(({ callId, name, input, status, output }) => ({ callId, name, input, status, output }))).toEqual(
+      view.items.map(({ callId, name, input, status, output }) => ({ callId, name, input, status, output })),
+    );
+    expect(turns[0]?.citations).toEqual(view.citations);
+    expect(turns[1]).toMatchObject({ items: [], citations: [] });
   });
 });

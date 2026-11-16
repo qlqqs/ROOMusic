@@ -1,6 +1,7 @@
 import { Wrench } from "lucide-react";
 import { describe, expect, it } from "vitest";
-import { toolArgumentOf, toolCountOf, toolDataScopeOf, toolFailureOf, toolLabelOf, toolResultOf, toolWritesOf } from "./tool-labels";
+import { NATIVE_SEARCH } from "./run/reduce";
+import { domainOf, toolArgumentOf, toolCountOf, toolDataScopeOf, toolFailureOf, toolLabelOf, toolResultOf, toolSourcesOf, toolWritesOf } from "./tool-labels";
 
 // 后端登记的 16 个只读工具（合同第 3 节）、C5 的播放、播放历史、收藏与歌单工具，以及 C6 的曲库与艺人治理工具。
 const tools = [
@@ -13,6 +14,7 @@ const tools = [
   "add_playlist_tracks", "remove_playlist_track", "move_playlist_track",
   "correct_release", "change_release_group", "set_default_release", "review_release_issue", "preview_release_claim", "claim_release",
   "merge_artists", "preview_artist_split", "split_artist", "rename_artist", "ignore_artist_candidate", "revert_operation",
+  "web_search", "fetch_page", "search_music_metadata", "get_music_metadata", NATIVE_SEARCH,
 ];
 
 describe("工具的中文名称", () => {
@@ -190,5 +192,55 @@ describe("失败原因", () => {
     [null, "失败"],
   ] as const)("%s → %s", (code, text) => {
     expect(toolFailureOf(code)).toBe(text);
+  });
+});
+
+describe("联网（C8）", () => {
+  it("只显示域名，不显示路径与查询串；不是 http、https 的地址没有域名", () => {
+    expect(domainOf("https://www.example.org/path?token=secret#x")).toBe("example.org");
+    expect(domainOf("http://music.example.com:8080/a")).toBe("music.example.com");
+    expect(domainOf("javascript:alert(1)")).toBeNull();
+    expect(domainOf("不是地址")).toBeNull();
+  });
+
+  it("搜索显示查询词与结果条数，结果列出标题与地址；模型自带的搜索相同", () => {
+    const output = { results: [{ title: "Bayreuth 1951", url: "https://example.org/a", snippet: "…" }, { title: "", url: "https://b.example.com/x" }, { title: "没有地址" }] };
+    for (const name of ["web_search", NATIVE_SEARCH]) {
+      expect(toolArgumentOf(name, { q: "贝九 拜罗伊特", max_results: 5 }, output)).toBe("贝九 拜罗伊特");
+      expect(toolResultOf(name, {}, output)).toBe("3 条结果");
+      expect(toolSourcesOf(name, output)).toEqual([
+        { title: "Bayreuth 1951", url: "https://example.org/a" },
+        { title: "", url: "https://b.example.com/x" },
+      ]);
+    }
+    expect(toolSourcesOf("list_albums", output)).toEqual([]);
+    expect(toolSourcesOf("web_search", "截断的文字")).toEqual([]);
+    expect(toolLabelOf(NATIVE_SEARCH).label).toBe("联网搜索（模型自带）");
+  });
+
+  it("读取网页显示访问的域名（跳转到别的域名时两个都写）与是否截断", () => {
+    expect(toolArgumentOf("fetch_page", { url: "https://www.example.org/a?b=c" }, null)).toBe("example.org");
+    expect(toolArgumentOf("fetch_page", { url: "https://a.example.org/" }, { final_url: "https://b.example.net/x", title: "页面标题" })).toBe("a.example.org → b.example.net");
+    expect(toolArgumentOf("fetch_page", { url: "https://a.example.org/" }, { final_url: "https://a.example.org/x" })).toBe("a.example.org");
+    expect(toolResultOf("fetch_page", {}, { truncated: false })).toBe("已读取");
+    expect(toolResultOf("fetch_page", {}, { truncated: true })).toBe("已读取，过长的部分截掉了");
+  });
+
+  it("MusicBrainz：搜索写种类与查询词，读取写条目的标题", () => {
+    expect(toolArgumentOf("search_music_metadata", { entity: "release-group", query: "Kind of Blue", limit: 5 }, { results: [1, 2] })).toBe("专辑：Kind of Blue");
+    expect(toolResultOf("search_music_metadata", {}, { results: [1, 2] })).toBe("2 条");
+    expect(toolArgumentOf("get_music_metadata", { entity: "release", mbid: "x" }, { title: "Kind of Blue" })).toBe("Kind of Blue");
+    expect(toolArgumentOf("get_music_metadata", { entity: "artist", mbid: "x" }, null)).toBe("艺人");
+    expect(toolWritesOf("fetch_page")).toBe(false);
+    expect(toolDataScopeOf("web_search")).toBeNull();
+  });
+
+  it("联网的错误码有中文说明", () => {
+    expect(toolFailureOf("fetch_blocked_address")).toBe("不能访问这个地址");
+    expect(toolFailureOf("fetch_blocked_port")).toBe("只能访问 80 和 443 端口");
+    expect(toolFailureOf("fetch_unsupported_type")).toBe("不是文字网页");
+    expect(toolFailureOf("searxng_json_disabled")).toBe("SearXNG 没有开启 JSON 输出");
+    expect(toolFailureOf("rate_limited")).toBe("请求太频繁");
+    expect(toolFailureOf("source_unavailable")).toBe("资料来源暂时不可用");
   });
 });
