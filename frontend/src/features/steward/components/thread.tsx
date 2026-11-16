@@ -4,6 +4,7 @@ import type { PlacedPlan } from "../hooks/use-plans";
 import type { ThreadView } from "../hooks/use-run";
 import { Answer } from "./answer";
 import { RunEnded } from "./run-ended";
+import { Citations } from "./sources";
 import { Steps } from "./steps";
 import styles from "./thread.module.css";
 
@@ -11,7 +12,7 @@ const nonEmpty = (text: string) => text.trim() !== "";
 
 /**
  * 一个回合：用户的话（右侧浅底），过程，然后按顺序是各步的文字（中间步骤说的话与最终回答）。
- * 有修改方案时，方案卡片排在提出它的那一步的文字之后，确认之后的回答接在卡片下面。
+ * 有修改方案时，方案卡片排在提出它的那一步的文字之后，确认之后的回答接在卡片下面。回答引用的来源（C8）列在这一回合的回答下面。
  */
 function TurnView({ turn, live, waiting, plans, renderPlan }: { turn: Turn; live: boolean; waiting: boolean; plans: readonly PlacedPlan[]; renderPlan: (plan: PlacedPlan, turn: Turn) => ReactNode }) {
   const cut = plans.length === 0 ? turn.texts.length : Math.min(...plans.map((plan) => plan.textsBefore));
@@ -34,6 +35,7 @@ function TurnView({ turn, live, waiting, plans, renderPlan }: { turn: Turn; live
       {after.map((text, index) => (
         <Answer key={before.length + index} text={text} cursor={before.length + index === cursorAt} />
       ))}
+      <Citations citations={turn.citations} />
       {/* 刚开始、或这一步的工具都执行完了，在等模型的下一段输出。 */}
       {live && waiting ? <p className={styles.thinking}>正在想…</p> : null}
     </>
@@ -61,7 +63,7 @@ export function Thread({ view, busy, onContinue, empty, footer, plans = noPlans,
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const last = view.turns.at(-1);
-  const contentKey = `${view.turns.length}:${last?.items.length ?? 0}:${last?.items.filter((item) => item.status !== "running").length ?? 0}:${last?.texts.join("").length ?? 0}:${view.end === null ? "" : view.end.kind}:${plans.map((plan) => `${plan.entry.plan.plan_id}:${plan.entry.phase}`).join(",")}`;
+  const contentKey = `${view.turns.length}:${last?.items.length ?? 0}:${last?.items.filter((item) => item.status !== "running").length ?? 0}:${last?.texts.join("").length ?? 0}:${last?.citations.length ?? 0}:${view.end === null ? "" : view.end.kind}:${plans.map((plan) => `${plan.entry.plan.plan_id}:${plan.entry.phase}`).join(",")}`;
   useEffect(() => {
     const element = scroller.current;
     if (element !== null && pinned.current) element.scrollTop = element.scrollHeight;

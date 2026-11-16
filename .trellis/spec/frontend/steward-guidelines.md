@@ -1,6 +1,6 @@
 # 管家的前端约定
 
-本文记 M6 C4（对话页）、C5（页面上下文、播放与个人库工具）、C6（修改方案、模式、治理工具）与 C7（审查结果、Steward 模式、审查模型）落地后的前端结构与约定，以代码为准：`frontend/src/features/steward/`、`frontend/src/app/shell/`、
+本文记 M6 C4（对话页）、C5（页面上下文、播放与个人库工具）、C6（修改方案、模式、治理工具）、C7（审查结果、Steward 模式、审查模型）与 C8（联网搜索、读取网页、MusicBrainz、Responses 接口）落地后的前端结构与约定，以代码为准：`frontend/src/features/steward/`、`frontend/src/app/shell/`、
 `frontend/src/app/routes/steward-page.tsx`、`frontend/src/app/routes/agent-settings-page.tsx`。后端接口、SSE 事件与错误码见
 [管家运行时合同](../backend/steward-runtime-contracts.md) 第 4、5、10 节与“C6 共享写入与确认合同”，审查的提示词、证据摘要与策略见[管家审查合同](../backend/steward-review-contracts.md)；界面与原型的对应见 [DESIGN.md](../../../frontend/DESIGN.md) 第 4 节“管家”。
 
@@ -12,8 +12,10 @@
   C6 起有修改方案卡片（逐项确认、结果与撤销、刷新后恢复、作废与过期）、输入框下的模式按钮与菜单（Assistant、Operator）、
   曲库与艺人治理工具的过程条目与查询失效，以及操作记录页的来源标签（见第 11 节）；
   C7 起有审查结果（审查中、按项的状态与理由、撤销、转人工的确认、审查不可用后的重新审查与自己确认）、模式菜单里的 Steward、设置里的审查模型、
-  模型菜单里标出审查模型、会话列表的“N 项等你确认”与“审查中”，以及操作记录的“管家（审查通过）”（见第 12 节）。
-- 没有（后端也没有）：联网搜索设置、审查模型用另一个端点、
+  模型菜单里标出审查模型、会话列表的“N 项等你确认”与“审查中”，以及操作记录的“管家（审查通过）”（见第 12 节）；
+  C8 起有设置里的“联网搜索”一组（来源、SearXNG 地址、Tavily 密钥、测试搜索）、检测结果里的“自带搜索”、接口类型 Responses，
+  联网四个工具与模型自带搜索的过程条目，以及回答下面的来源列表（见第 13 节）。
+- 没有（后端也没有）：审查模型用另一个端点、
   断线或刷新后接回正在进行的回答、展开工具条目看原始输入输出、在对话里显示历史消息带过的上下文。不做禁用占位。
 
 ## 1. 目录与两个公开入口
@@ -29,8 +31,8 @@ features/steward/
 ├── hooks/            # use-steward-settings、use-conversations、use-run、use-plans（C6；C7 加重新审查与审查的快照）、use-agent-settings、use-access-tokens
 ├── tool-labels.ts    # 工具的中文名、图标、主要参数、结果说明、失败短语与会改动的数据
 ├── plan-text.ts      # 方案卡片的字段名、旧值新值与依据来源的文字（C6）
-├── components/       # 面板、整页、对话区、回合、过程、回答（Markdown）、结束说明、输入框、模式与模型菜单、方案卡片、审查结果（C7）、会话列表、令牌（C3）
-└── settings/         # Agent 栏目：名字、模型与检测结果、成员段、文案
+├── components/       # 面板、整页、对话区、回合、过程、回答（Markdown）、来源列表（C8）、结束说明、输入框、模式与模型菜单、方案卡片、审查结果（C7）、会话列表、令牌（C3）
+└── settings/         # Agent 栏目：名字、模型与检测结果、联网搜索（C8）、成员段、文案
 ```
 
 - `index.ts` 只导出外壳与路由需要的东西：`useStewardEntry`、`DEFAULT_STEWARD_NAME`、`useDockState`、`setDockOpen`、`toggleDock`、
@@ -268,11 +270,39 @@ features/steward/
 - 模型菜单（`model-menu.tsx`）：Steward 模式下标出审查模型：另选了的写“正用作审查模型”，没有另选时当前模型写“当前，也用作审查模型”。其他模式不标。
 - 会话列表（`session-list.tsx` 的 `sessionStateOf`）：名字下面写“正在回答”（本页正在审查时是“审查中”），`pending_item_count` 大于 0 时写“N 项等你确认”，两者用“，”连接。
 
-## 13. 测试
+## 13. 联网（C8）
+
+- 线上形状（`api/decoders.ts`，按任务的 `wire-shapes.md`）：设置多 `search_source`（`none`/`searxng`/`tavily`/`native`）、`searxng_url`、`search_key_saved`、
+  `search_key_last_four`、`search_key_needs_reentry`（都是必需字段）；`protocol` 多 `responses`；`probe_result` 多可省略的 `native_search`（`supported`/`unsupported`/`unknown`）
+  与 `responses_available`（C8 之前保存的检测结论没有，按“没有确认”处理），`overrides` 多 `native_search`。生效的自带搜索是 `effectiveNativeSearch`：覆盖项、检测结果、`unknown` 依次取。
+  测试搜索 `POST …/settings/search-test`（没有请求体，`decodeSearchTest`）总是 200：`{ok: true, result_count}` 或 `{ok: false, code}`。
+  运行事件多 `search {step?, search_id, query, status: completed|failed, results?: [{title?, url}], error_code?}` 与 `citations {step?, citations: [{url, title?}]}`；
+  助手消息多可省略的 `searches`（同 search 事件去掉 type、step）与 `citations`，缺省按空数组。导出的解码器 `decodeSearchTest`、`decodeSearchRecord`、`decodeCitation` 供契约测试登记。
+- 设置（`settings/agent-search.tsx`，模型一组之后，原型的 `.radio`）：说明一句（只发搜索词，搜到的内容是外部资料）、四个带说明的单选项（不联网搜索、自己的 SearXNG、Tavily、模型自带的搜索），
+  SearXNG 时一行地址，Tavily 时一行密钥；“保存”只提交 `{search_source}`，SearXNG 另带 `searxng_url`，填了 Tavily 密钥另带 `search_key`。
+  密钥与模型密钥同样处理：只在组件 state 里，提交时放进 ref（`useSaveSearchSettings`），不进 mutation 的 variables；已存的只显示末四位，带“更换”“清除”（`{search_key: null}`，按钮的可访问名称带“Tavily 密钥”）；
+  `search_key_needs_reentry` 时警示并换成输入框，同样可以清除。SearXNG 没填地址、Tavily 没有可用的密钥时不能保存。
+  “模型自带的搜索”只在生效的自带搜索是 `supported` 时可选，否则停用并说明原因（检测确认不支持、没能确认、还没检测）与去哪里改；已保存为模型自带、之后结论变了时这一项保持选中，可以换走。
+  “测试搜索”只在已保存的来源是 SearXNG 或 Tavily、并且没有未保存的改动时可用（否则写“保存之后才能测试。”）；成功写“这次搜到 N 条结果。”，失败按 `code` 一句中文
+  （`searchTestFailureTexts`：`searxng_json_disabled`“这个实例没有开启 JSON 输出……”、密钥不对、额度用完、连不上、没有配置、地址不允许）。
+  保存被拒绝按错误信封说明：`egress_denied` 写成员的 SearXNG 地址只能是公网地址、请管理员放行（与模型端点同一种写法），`invalid_input` 提到模型自带要先确认支持。
+- 检测结果（`settings/probe-result.tsx`）多“自带搜索”一行（支持、不支持、还没有确认），“修改”写 `overrides.native_search`，可以改回检测结果；检测结论被清掉时这一行与“调用工具”一样不显示。
+  接口类型的菜单多“OpenAI Responses 接口”：检测没有确认（`responses_available` 不是 true）时这一项带说明“检测没有确认这个接口支持”，仍然可以选；手动选了它时检测结果下面再写一句。
+- 过程条目（`tool-labels.ts`）：`web_search`“联网搜索”（查询词，“N 条结果”）、`fetch_page`“读取网页”（访问的域名，跳到别的域名写“甲 → 乙”；“已读取”或“已读取，过长的部分截掉了”）、
+  `search_music_metadata`“查 MusicBrainz”（“专辑：查询词”，“N 条”）、`get_music_metadata`“读取 MusicBrainz 条目”（条目的标题，没有时是种类）。只显示域名（`domainOf`，去掉 `www.`），不显示路径与查询串。
+  失败短语加联网的错误码（`fetch_blocked_address`“不能访问这个地址”、`fetch_blocked_port`“只能访问 80 和 443 端口”、`fetch_unsupported_type`“不是文字网页”、`rate_limited`“请求太频繁”等）。
+- 模型自带搜索（`run/reduce.ts`）：search 事件与落库的 `searches` 都还原成名字为 `NATIVE_SEARCH`（`$native_web_search`，不会与工具重名）的已结束条目，`input` 是 `{q}`，`output` 是 `{results}`，
+  显示为“联网搜索（模型自带）”；落库时排在这条助手消息的工具调用之前。算进“查了 N 处资料”，没有耗时。
+  搜索条目（工具与模型自带）成功时下面列出结果（`components/sources.tsx` 的 `SourceList`，可访问名称“<条目名>的结果”）：标题（空时用域名）与灰色的域名。
+- 来源（`Turn.citations`、`RunView.citations`，`mergeCitations` 按地址去重）：回合里所有回答之后一块“来源”（列表的可访问名称“来源”）；继续或确认时运行里的来源并进最后一个回合。
+  没有可显示的来源时整块不出现。
+- 外部内容的显示：标题、地址、查询词只按文本节点渲染；只有 `http`/`https` 的地址是链接（`safeHref`），新标签页打开，`rel="noopener noreferrer"`；其他地址只显示标题，标题也没有时不列。
+
+## 14. 测试
 
 | 位置 | 内容 |
 | --- | --- |
-| `src/test/fake-steward.ts` | Vitest 的管家替身（C6 起另有方案：会话详情带 `pending_plan` 与 `plans`（调用已有结果的项带 `result`），读取时判定过期；发新消息作废未处理的方案；确认接口按设计的校验顺序——会话与方案归属且 pending → 未过期 → 摘要 → 会话空闲 → 选择的项与工具（免确认的工具须全部可撤销且至少有一项被接受）——返回 `plan_not_found`、`plan_expired`、`plan_digest_mismatch`、`conversation_busy`、`invalid_input`，通过后记下 `decisions[i].stream`；新建与 `PATCH` 接受 `assistant`、`steward`、`operator`，有运行或未处理方案时改模式 409；撤销接口记下操作 ID 与幂等键，`nextRevertResponse` 预置拒绝；
+| `src/test/fake-steward.ts` | Vitest 的管家替身（C8 起设置带联网搜索的字段（`searchSettingsDefaults`，样本有这些字段时以样本为准），`PUT` 处理 `search_source`、`searxng_url`、`search_key`，提交来源 `native` 而生效的自带搜索不是 `supported` 时 `400 invalid_input`；测试搜索按已保存的来源回答，`searchTestResult` 预置结果；C6 起另有方案：会话详情带 `pending_plan` 与 `plans`（调用已有结果的项带 `result`），读取时判定过期；发新消息作废未处理的方案；确认接口按设计的校验顺序——会话与方案归属且 pending → 未过期 → 摘要 → 会话空闲 → 选择的项与工具（免确认的工具须全部可撤销且至少有一项被接受）——返回 `plan_not_found`、`plan_expired`、`plan_digest_mismatch`、`conversation_busy`、`invalid_input`，通过后记下 `decisions[i].stream`；新建与 `PATCH` 接受 `assistant`、`steward`、`operator`，有运行或未处理方案时改模式 409；撤销接口记下操作 ID 与幂等键，`nextRevertResponse` 预置拒绝；
 C7 起方案可带 `review`（`reviewOf` 合成）与 `reviewed`（审查已处理的项：批准执行的 `accepted` 带操作记录，拒绝的 `rejected_by_review`，这些项不能再确认），
 会话列表带 `pending_item_count`；Steward 模式会话的确认带非空 `auto_approve_tools` 是 `400 invalid_input`；
 重新审查接口的校验顺序是会话与方案归属且 pending → 未过期 → 会话是 Steward 模式（否则 `409 review_not_applicable`）→ 会话空闲，`nextReviewResponse` 预置开流前的拒绝，
@@ -284,7 +314,9 @@ C7 起方案可带 `review`（`reviewOf` 合成）与 `reviewed`（审查已处�
 | `src/features/steward/run/review-store.test.ts`、`components/session-list.test.ts` | 审查的界面状态（审查中、结论、运行中与刷新后的取舍、运行结束去掉审查中）、会话名下的状态 |
 | `src/app/operations.test.tsx` 的来源标签 | 管家（确认）、管家（直接执行）、MCP、管家（审查通过），没有来源的不显示 |
 | `src/app/steward.test.tsx` 的“页面上下文”“工具结束后刷新个人数据” | 用 `vi.mock` 换掉 `features/player/zones/api` 的 `browserZoneApi`：设了 `fakeZoneServer` 的用例有分区与曲目，其余用例照旧（没有播放区）；专辑页的标签与请求体、点掉后发送、点掉后中断再继续（继续没有请求体）、整页里没有“正在看”、`invalidateQueries` 的键 |
+| `src/app/agent-settings.test.tsx` 的“联网搜索（C8）”、`src/app/steward.test.tsx` 的“联网（C8）” | SearXNG 保存的请求体与测试搜索、测试失败的原因、Tavily 密钥（请求体、末四位、不进 mutation 缓存、清除、需要重新填写）、模型自带的可选条件与“修改自带搜索”、成员的 `egress_denied`、手动选 Responses；运行里的 search 事件、读取网页的域名与失败原因、citations 的来源列表，刷新后从落库的 `searches`、`citations` 显示一致，模型自带搜索失败 |
+| `src/features/steward/**` 的 C8 用例 | 解码器（设置的搜索字段、测试搜索、search 与 citations 事件、消息上的 `searches`、`citations` 可省略）、归并（搜索条目与来源去重、落库还原）、工具标签（域名、结果条数、读取网页、MusicBrainz、错误码）、过程条目的结果列表与来源列表（只有 http/https 是链接、标题按文字显示） |
 | `src/app/steward.test.tsx`、`src/app/agent-settings.test.tsx`、`src/app/tokens.test.tsx` | 页面级：入口与名字、面板与整页、流式与结束说明、会话列表、`/steward` 去向、焦点与 Esc、Agent 栏目、令牌与旧地址 |
-| `e2e/support/steward.ts`、`e2e/steward.spec.ts`、`e2e/steward-plan.spec.ts`、`e2e/steward-review.spec.ts` | 浏览器冒烟（C7 另有 `seedReviewedConversation`（批准已执行、转人工、拒绝各一项）与 `seedUnavailableReviewConversation`，重新审查接口一次性返回整段 SSE；审查结果、撤销与确认、390px 重新审查、三种模式与模型菜单里的审查模型；C6 另有 `seedPlanConversation` 预置停在方案上的会话，确认接口一次性返回整段 SSE，撤销接口只认方案里的那条记录；方案的勾选、应用、结果与撤销，模式菜单与 Shift+Tab）：`installStewardMock(page)` 用 `page.route` 接管管家接口（优先于 `api-mock.ts` 的上下文拦截），发消息一次性返回整段 SSE；桌面面板到整页、390px 标签栏对话与切换会话、旧地址重定向 |
+| `e2e/support/steward.ts`、`e2e/steward.spec.ts`、`e2e/steward-plan.spec.ts`、`e2e/steward-review.spec.ts`、`e2e/steward-web.spec.ts` | 浏览器冒烟（C8 另有设置的 PUT 与测试搜索、`seedWebConversation`（模型自带搜索、读取网页、回答引用两处来源）；联网搜索一组的保存与测试、对话里的搜索条目与来源、390px 无横向溢出；C7 另有 `seedReviewedConversation`（批准已执行、转人工、拒绝各一项）与 `seedUnavailableReviewConversation`，重新审查接口一次性返回整段 SSE；审查结果、撤销与确认、390px 重新审查、三种模式与模型菜单里的审查模型；C6 另有 `seedPlanConversation` 预置停在方案上的会话，确认接口一次性返回整段 SSE，撤销接口只认方案里的那条记录；方案的勾选、应用、结果与撤销，模式菜单与 Shift+Tab）：`installStewardMock(page)` 用 `page.route` 接管管家接口（优先于 `api-mock.ts` 的上下文拦截），发消息一次性返回整段 SSE；桌面面板到整页、390px 标签栏对话与切换会话、旧地址重定向 |
 
 其他页面的测试没有装管家替身时，设置接口得到 404，入口不显示，不影响它们原有的断言。

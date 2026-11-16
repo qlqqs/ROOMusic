@@ -9,12 +9,18 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/steward/egress"
 	"github.com/qlqq/roomusic/backend/internal/steward/provider"
+	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 )
 
 func (h *Handlers) outboundClient(ctx context.Context, user identity.User) (*http.Client, error) {
+	return OutboundClient(ctx, user, h.store)
+}
+
+// OutboundClient 为模型端点和 SearXNG 复用同一出站策略。
+func OutboundClient(ctx context.Context, user identity.User, store *runtime.Store) (*http.Client, error) {
 	options := egress.Options{Policy: egress.Unrestricted, MaxRedirects: 0, Timeout: 5 * time.Minute}
 	if user.Role != "admin" {
-		entries, err := h.store.ListAllowlist(ctx)
+		entries, err := store.ListAllowlist(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -47,6 +53,9 @@ func preflight(ctx context.Context, client *http.Client, endpoint string) error 
 }
 
 func modelProvider(client *http.Client, endpoint, key, protocol string) (provider.Provider, error) {
+	if protocol == string(provider.ProtocolResponses) {
+		return provider.NewResponses(client, endpoint, key)
+	}
 	if protocol == string(provider.ProtocolMessages) {
 		return provider.NewMessages(client, endpoint, key)
 	}

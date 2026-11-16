@@ -30,6 +30,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"
 	"github.com/qlqq/roomusic/backend/internal/steward/token"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
+	"github.com/qlqq/roomusic/backend/internal/steward/web"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 	zonestools "github.com/qlqq/roomusic/backend/internal/zones/stewardtools"
 )
@@ -62,6 +63,9 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		logger.Info("管家会话状态已恢复", "event", "steward.recovery.completed", "message", "管家会话状态已恢复", "module", "steward", "conversations", count)
 	}
 	secrets := secret.New(filepath.Join(dataDirectory, "steward", "instance.key"))
+	webService := web.New(store, secrets, func(ctx context.Context, user identity.User) (*http.Client, error) {
+		return stewardapi.OutboundClient(ctx, user, store)
+	}, logger)
 	registry := tool.NewRegistry()
 	definitions := catalogtools.StewardTools(catalog.NewStore(database), governance.NewStore(database))
 	definitions = append(definitions, governancetools.StewardTools(database, artistResolutionAdapter{})...)
@@ -71,6 +75,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	definitions = append(definitions, zonestools.StewardTools(playback, catalog.NewStore(database))...)
 	definitions = append(definitions, listeningtools.StewardTools(history)...)
 	definitions = append(definitions, personaltools.StewardTools(personalLibrary)...)
+	definitions = append(definitions, webService.StewardTools()...)
 	for _, definition := range definitions {
 		if definition.Scope == tool.ScopeShared {
 			handler := definition.Handler
@@ -111,7 +116,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	})
 	tokens := token.NewStore(database, guard)
 	mux.Handle("/api/v1/mcp", stewardmcp.New(guard, tokens, store, registry, logger))
-	stewardapi.New(guard, store, secrets, runner, logger).WithTokens(tokens).WithCredentialCheck(func(r *http.Request, user identity.User) (bool, error) {
+	stewardapi.New(guard, store, secrets, runner, logger).WithWeb(webService).WithTokens(tokens).WithCredentialCheck(func(r *http.Request, user identity.User) (bool, error) {
 		cookie, err := r.Cookie(identity.SessionCookieName)
 		if err != nil || cookie.Value == "" {
 			return false, nil

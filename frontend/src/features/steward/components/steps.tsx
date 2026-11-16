@@ -1,9 +1,13 @@
 import { ChevronRight } from "lucide-react";
 import { formatElapsed, summarizeSteps, type StepItem } from "../run/reduce";
-import { toolArgumentOf, toolFailureOf, toolLabelOf, toolResultOf, toolWritesOf } from "../tool-labels";
+import { toolArgumentOf, toolFailureOf, toolLabelOf, toolResultOf, toolSourcesOf, toolWritesOf } from "../tool-labels";
+import { SourceList } from "./sources";
 import styles from "./thread.module.css";
 
-/** 一次工具调用：图标、中文名称、主要参数（灰字），右侧是结果（数量或改动的说明）、失败原因、“进行中”或“等你确认”。参数来自曲库，只按文字显示。 */
+/**
+ * 一次工具调用：图标、中文名称、主要参数（灰字），右侧是结果（数量或改动的说明）、失败原因、“进行中”或“等你确认”。参数来自曲库，只按文字显示。
+ * 联网搜索（工具与模型自带的，C8）在下面列出搜到的结果：标题与域名。
+ */
 function StepRow({ item }: { item: StepItem }) {
   const { label, icon: Icon } = toolLabelOf(item.name);
   const argument = toolArgumentOf(item.name, item.input, item.output);
@@ -23,6 +27,7 @@ function StepRow({ item }: { item: StepItem }) {
         {argument === null ? null : <span className={styles.stepArg}>{argument}</span>}
       </span>
       {result === null ? <span /> : <span className={styles.stepResult}>{result}</span>}
+      {item.status === "succeeded" ? <SourceList sources={toolSourcesOf(item.name, item.output)} label={`${label}的结果`} className={styles.stepSources} /> : null}
     </li>
   );
 }

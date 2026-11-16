@@ -13,6 +13,7 @@ import {
   decodeDeleted,
   decodeInstanceSettings,
   decodeReverted,
+  decodeSearchTest,
   decodeSettings,
   decodeTokenList,
   type AllowlistEntryDTO,
@@ -22,7 +23,10 @@ import {
   type ConversationPatchDTO,
   type CreatedTokenDTO,
   type InstanceSettingsDTO,
+  type NativeSearchSupport,
   type Protocol,
+  type SearchSource,
+  type SearchTestDTO,
   type SettingsDTO,
   type StewardMode,
   type TokenListDTO,
@@ -40,7 +44,7 @@ export function fetchSettings(signal?: AbortSignal): Promise<ApiResponse<Setting
   return apiRequest({ method: "GET", path: `${base}/settings`, signal }, decodeSettings);
 }
 
-/** 部分更新：省略的键保留原值；key 写 null 清除已存密钥（合同 4.2）。 */
+/** 部分更新：省略的键保留原值；key、search_key 写 null 清除已存密钥（合同 4.2）。 */
 export type SettingsPatch = {
   endpoint?: string;
   key?: string | null;
@@ -49,7 +53,12 @@ export type SettingsPatch = {
   /** 审查模型（C7）；空字符串表示与对话用同一个模型。 */
   review_model?: string;
   display_name?: string;
-  overrides?: { protocol?: Protocol; model?: string; tool_support?: ToolSupport };
+  overrides?: { protocol?: Protocol; model?: string; tool_support?: ToolSupport; native_search?: NativeSearchSupport };
+  /** 联网搜索（C8）：来源是 native 而生效的自带搜索不是 supported 时 400 invalid_input；成员的 SearXNG 地址按模型端点的出站规则检查。 */
+  search_source?: SearchSource;
+  searxng_url?: string;
+  /** Tavily 密钥，含义与 key 相同：省略保留，null 清除，字符串去空白后非空。 */
+  search_key?: string | null;
 };
 
 export function updateSettings(patch: SettingsPatch): Promise<ApiResponse<SettingsDTO>> {
@@ -59,6 +68,11 @@ export function updateSettings(patch: SettingsPatch): Promise<ApiResponse<Settin
 /** 探测端点，成功即保存（合同 4.3）。失败响应里的探测报告用 decodeProbeFailure 读。 */
 export function probeSettings(input: { endpoint?: string; key?: string | null; model?: string }): Promise<ApiResponse<SettingsDTO>> {
   return apiRequest({ method: "POST", path: `${base}/settings/probe`, body: input }, decodeSettings);
+}
+
+/** 测试搜索（C8）：按已保存的设置请求一次，没有请求体；成功与失败都是 200，失败带原因。 */
+export function testSearch(): Promise<ApiResponse<SearchTestDTO>> {
+  return apiRequest({ method: "POST", path: `${base}/settings/search-test` }, decodeSearchTest);
 }
 
 // ---- 会话 ----

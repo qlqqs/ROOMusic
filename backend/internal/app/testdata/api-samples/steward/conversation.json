@@ -4,6 +4,7 @@
     "id": "00000000-0000-4000-8000-000000000001",
     "messages": [
       {
+        "citations": [],
         "content": [
           {
             "text": "合成问题",
@@ -28,6 +29,7 @@
         "input_tokens": null,
         "output_tokens": null,
         "role": "user",
+        "searches": [],
         "sequence": 1,
         "tool_calls": []
       }

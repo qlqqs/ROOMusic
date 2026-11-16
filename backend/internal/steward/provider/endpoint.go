@@ -77,7 +77,7 @@ func endpointURL(endpoint string, protocol Protocol, resource string) (string, e
 	// 按 Messages 约定在其后拼 /v1/messages（模型列表同理）。
 	if path == "" {
 		path = "/v1"
-		if p := matchPreset(u); p != nil && p.protocol == protocol {
+		if p := matchPreset(u); p != nil && (p.protocol == protocol || (protocol == ProtocolResponses && p.protocol == ProtocolOpenAI)) {
 			path = p.base
 		}
 	}

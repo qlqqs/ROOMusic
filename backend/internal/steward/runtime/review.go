@@ -220,7 +220,7 @@ func callReview(ctx context.Context, p provider.Provider, model string, items []
 			return nil, usage, err
 		}
 		switch event.Type {
-		case provider.EventText, provider.EventOpaque:
+		case provider.EventText, provider.EventOpaque, provider.EventSearch, provider.EventCitations:
 			return nil, usage, ErrReviewUnavailable
 		case provider.EventUsage:
 			if event.Usage == nil {

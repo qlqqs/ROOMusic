@@ -31,7 +31,7 @@ func (h *Handlers) probe(w http.ResponseWriter, r *http.Request, user identity.U
 		invalidInput(w, r)
 		return
 	}
-	result := provider.ProbeResult{Models: []provider.Model{}, ToolSupport: provider.ToolSupportUnconfirmed}
+	result := provider.ProbeResult{Models: []provider.Model{}, ToolSupport: provider.ToolSupportUnconfirmed, NativeSearch: provider.NativeSearchUnknown}
 	var failure *problem
 	probedAt := time.Now().UTC()
 	saved, err := h.store.UpdateUserSettings(r.Context(), user.ID, func(current runtime.UserSettings) (runtime.UserSettingsInput, error) {

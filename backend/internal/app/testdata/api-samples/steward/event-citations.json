@@ -1,0 +1,13 @@
+{
+  "body": {
+    "citations": [
+      {
+        "title": "合成来源",
+        "url": "https://example.org/music"
+      }
+    ],
+    "step": 1,
+    "type": "citations"
+  },
+  "status": 200
+}

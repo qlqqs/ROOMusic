@@ -100,5 +100,5 @@ func normalizeHost(host string) string {
 }
 
 func validProtocol(protocol string) bool {
-	return protocol == string(provider.ProtocolOpenAI) || protocol == string(provider.ProtocolMessages)
+	return protocol == string(provider.ProtocolOpenAI) || protocol == string(provider.ProtocolMessages) || protocol == string(provider.ProtocolResponses)
 }

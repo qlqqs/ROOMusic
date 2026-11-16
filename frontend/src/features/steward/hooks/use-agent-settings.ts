@@ -9,6 +9,7 @@ import {
   fetchInstanceSettings,
   probeSettings,
   removeAllowlistEntry,
+  testSearch,
   updateInstanceSettings,
   updateSettings,
   type SettingsPatch,
@@ -56,6 +57,32 @@ export function useProbeSettings(secretRef: RefObject<string | null>) {
 /** 正在检测：同一栏的保存、清除、修改与改名保存先停用，免得与检测的保存交错。 */
 export function useProbePending(): boolean {
   return useIsMutating({ mutationKey: probeMutationKey }) > 0;
+}
+
+/**
+ * 保存联网搜索的设置（C8，PUT）。Tavily 密钥与模型密钥一样不进 mutation 的 variables：调用方把它放进 secretRef，
+ * mutationFn 取用并作为 search_key 提交，成功或失败后都清掉。
+ */
+export function useSaveSearchSettings(secretRef: RefObject<string | null>) {
+  const store = useStoreSettings();
+  const checkDisabled = useStewardDisabledCheck();
+  return useMutation({
+    mutationFn: (patch: Omit<SettingsPatch, "search_key">) => {
+      const key = secretRef.current;
+      return updateSettings(key === null ? patch : { ...patch, search_key: key });
+    },
+    onSuccess: store,
+    onError: (error) => checkDisabled(error),
+    onSettled: () => {
+      secretRef.current = null;
+    },
+  });
+}
+
+/** 测试搜索（C8）：按已保存的设置请求一次；结果只显示在这一组里，不改设置。 */
+export function useTestSearch() {
+  const checkDisabled = useStewardDisabledCheck();
+  return useMutation({ mutationFn: () => testSearch(), onError: (error) => checkDisabled(error) });
 }
 
 /** 管理员：成员开关。 */

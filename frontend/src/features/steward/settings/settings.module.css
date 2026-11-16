@@ -147,3 +147,77 @@
   justify-content: flex-end;
   gap: var(--space-2);
 }
+
+/* 联网搜索（C8）：来源是一组带说明的单选项（原型的 .radio），底部一行是保存与测试搜索。 */
+.sources {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  border: 0;
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+
+.option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.option:has(input:checked) {
+  border-color: var(--color-accent);
+  background: var(--color-selected);
+}
+
+.option:has(input:focus-visible) {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+.option[data-disabled] {
+  cursor: not-allowed;
+}
+
+.option[data-disabled] > input,
+.option[data-disabled] .optionText > span {
+  opacity: 0.45;
+}
+
+.option input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--color-accent-700);
+}
+
+.optionText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--fs-13);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.optionHint {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}

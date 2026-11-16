@@ -87,6 +87,11 @@ func responseFailure(status int, data []byte, key string) *Error {
 				message = plain
 			}
 		}
+	} else {
+		// Responses 的 error 流事件把 code/message 放在事件顶层。
+		if json.Unmarshal(data, &detail) == nil && detail.Type == "error" && detail.Message != "" {
+			message = detail.Message
+		}
 	}
 	var code string
 	_ = json.Unmarshal(detail.Code, &code)
@@ -95,14 +100,14 @@ func responseFailure(status int, data []byte, key string) *Error {
 		kind = ErrorTimeout
 	case status == 401 || detail.Type == "authentication_error":
 		kind = ErrorAuthentication
-	case status == 429 || detail.Type == "rate_limit_error":
+	case status == 429 || detail.Type == "rate_limit_error" || code == "rate_limit_exceeded":
 		kind = ErrorRateLimit
 	case code == "model_not_found":
 		kind = ErrorModelNotFound
 	case status == 404 && strings.HasPrefix(message, "model \"") && strings.Contains(message, "not found"):
 		// 调研核实的 Ollama 模型错误；不把所有 404 推定为模型不存在。
 		kind = ErrorModelNotFound
-	case strings.Contains(message, "does not support tools"):
+	case code == "tool_unsupported" || strings.Contains(message, "does not support tools"):
 		// 仅采用调研核实的能力拒绝文本，不把普通 400 当成不支持工具。
 		kind = ErrorToolUnsupported
 	}

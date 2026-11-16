@@ -8,17 +8,35 @@
     "model": "synthetic-model",
     "overrides": {},
     "probe_result": {
+      "failures": [
+        {
+          "error": {
+            "kind": "invalid_response",
+            "message": "无法解析 Responses 流事件",
+            "status_code": 200
+          },
+          "protocol": "responses",
+          "step": "responses"
+        }
+      ],
       "models": [
         {
           "id": "synthetic-model"
         }
       ],
+      "native_search": "unknown",
       "protocol": "openai",
+      "responses_available": false,
       "tool_support": "supported"
     },
     "probed_at": "2026-01-01T00:00:00Z",
     "protocol": "openai",
     "review_model": "synthetic-review-model",
+    "search_key_last_four": "",
+    "search_key_needs_reentry": false,
+    "search_key_saved": false,
+    "search_source": "none",
+    "searxng_url": "",
     "updated_at": "2026-01-01T00:00:01Z"
   },
   "status": 200

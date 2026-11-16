@@ -19,7 +19,8 @@ import (
 const modelKeyPurpose = "steward.model"
 
 type manualOverrides struct {
-	// Protocol 是 openai 或 messages 协议。
+	NativeSearch *provider.NativeSearchSupport `json:"native_search,omitempty"`
+	// Protocol 是 openai、messages 或 responses 协议。
 	Protocol *string `json:"protocol,omitempty"`
 	// Model 是对话模型名称。
 	Model *string `json:"model,omitempty"`
@@ -28,11 +29,14 @@ type manualOverrides struct {
 }
 
 type settingsInput struct {
+	SearchSource *string         `json:"search_source"`
+	SearXNGURL   *string         `json:"searxng_url"`
+	SearchKey    json.RawMessage `json:"search_key"`
 	// Endpoint 是用户填写的 HTTP(S) 基础地址。
 	Endpoint *string `json:"endpoint"`
 	// Key 是只写的模型密钥，省略保留，显式 null 清除。
 	Key json.RawMessage `json:"key"`
-	// Protocol 是 openai 或 messages 协议。
+	// Protocol 是 openai、messages 或 responses 协议。
 	Protocol *string `json:"protocol"`
 	// Model 是对话模型名称。
 	Model       *string `json:"model"`
@@ -44,6 +48,11 @@ type settingsInput struct {
 }
 
 type settingsResponse struct {
+	SearchSource          string `json:"search_source"`
+	SearXNGURL            string `json:"searxng_url"`
+	SearchKeySaved        bool   `json:"search_key_saved"`
+	SearchKeyLastFour     string `json:"search_key_last_four"`
+	SearchKeyNeedsReentry bool   `json:"search_key_needs_reentry"`
 	// Endpoint 是用户填写的 HTTP(S) 基础地址。
 	Endpoint string `json:"endpoint"`
 	// KeyLastFour 是已保存密钥的末四位。
@@ -52,7 +61,7 @@ type settingsResponse struct {
 	KeySaved bool `json:"key_saved"`
 	// KeyNeedsReentry 表示密文无法解密，需要重新填写密钥。
 	KeyNeedsReentry bool `json:"key_needs_reentry"`
-	// Protocol 是 openai 或 messages 协议。
+	// Protocol 是 openai、messages 或 responses 协议。
 	Protocol string `json:"protocol"`
 	// Model 是对话模型名称。
 	Model       string `json:"model"`
@@ -71,17 +80,22 @@ type settingsResponse struct {
 
 func (h *Handlers) settingsView(userID string, settings runtime.UserSettings) settingsResponse {
 	result := settingsResponse{Endpoint: settings.Endpoint, Protocol: settings.Protocol, Model: settings.Model, ReviewModel: settings.ReviewModel,
-		DisplayName: settings.DisplayName, Overrides: settings.Overrides}
+		DisplayName: settings.DisplayName, Overrides: settings.Overrides, SearchSource: settings.SearchSource, SearXNGURL: settings.SearXNGURL}
+	if result.SearchSource == "" {
+		result.SearchSource = "none"
+	}
 	if result.Overrides == nil {
 		result.Overrides = json.RawMessage(`{}`)
 	}
-	if settings.Key != nil {
-		result.KeyLastFour, result.KeySaved = settings.Key.LastFour, true
-		_, err := h.secrets.Open(userID, modelKeyPurpose, settings.Key.Ciphertext)
-		result.KeyNeedsReentry = err != nil
-	}
+	result.KeyLastFour, result.KeySaved, result.KeyNeedsReentry = h.keyView(userID, modelKeyPurpose, settings.Key)
+	result.SearchKeyLastFour, result.SearchKeySaved, result.SearchKeyNeedsReentry = h.keyView(userID, secret.SearchKeyPurpose, settings.SearchKey)
 	if settings.Probe != nil {
 		result.ProbeResult, result.ProbedAt = settings.Probe.Result, &settings.Probe.ProbedAt
+		var probe provider.ProbeResult
+		if json.Unmarshal(result.ProbeResult, &probe) == nil && probe.NativeSearch == "" {
+			probe.NativeSearch = provider.NativeSearchUnknown
+			result.ProbeResult, _ = json.Marshal(probe)
+		}
 	}
 	if !settings.UpdatedAt.IsZero() {
 		result.UpdatedAt = &settings.UpdatedAt
@@ -112,13 +126,23 @@ func (h *Handlers) putSettings(w http.ResponseWriter, r *http.Request, user iden
 		if err != nil {
 			return update, err
 		}
-		if update.Endpoint != "" {
+		if input.SearchSource != nil && *input.SearchSource == "native" && effectiveNativeSearch(current, update) != provider.NativeSearchSupported {
+			return update, runtime.ErrInvalidInput
+		}
+		endpoints := []string{update.Endpoint}
+		if input.SearXNGURL != nil || update.SearchSource == "searxng" {
+			endpoints = append(endpoints, update.SearXNGURL)
+		}
+		for _, endpoint := range endpoints {
+			if endpoint == "" {
+				continue
+			}
 			client, err := h.outboundClient(r.Context(), user)
 			if err != nil {
 				return update, err
 			}
 			defer client.CloseIdleConnections()
-			if err := preflight(r.Context(), client, update.Endpoint); err != nil {
+			if err := preflight(r.Context(), client, endpoint); err != nil {
 				return update, &settingsOutboundError{err}
 			}
 		}
@@ -132,6 +156,18 @@ func (h *Handlers) putSettings(w http.ResponseWriter, r *http.Request, user iden
 }
 
 func validSettingsInput(input *settingsInput) bool {
+	if input.SearchSource != nil && *input.SearchSource != "none" && *input.SearchSource != "searxng" && *input.SearchSource != "tavily" && *input.SearchSource != "native" {
+		return false
+	}
+	if input.SearXNGURL != nil {
+		*input.SearXNGURL = strings.TrimSpace(*input.SearXNGURL)
+		if *input.SearXNGURL != "" && !validEndpoint(*input.SearXNGURL) {
+			return false
+		}
+	}
+	if _, _, err := parseKey(input.SearchKey); err != nil {
+		return false
+	}
 	if input.Endpoint != nil {
 		*input.Endpoint = strings.TrimSpace(*input.Endpoint)
 		if *input.Endpoint != "" && !validEndpoint(*input.Endpoint) {
@@ -164,6 +200,9 @@ func validSettingsInput(input *settingsInput) bool {
 	}
 	if input.Overrides != nil {
 		o := input.Overrides
+		if o.NativeSearch != nil && !provider.ValidNativeSearch(*o.NativeSearch) {
+			return false
+		}
 		if o.Protocol != nil && !validProtocol(*o.Protocol) {
 			return false
 		}
@@ -193,8 +232,8 @@ func validKey(key string) bool {
 	return true
 }
 
-func (h *Handlers) encryptKey(userID, key string) (*runtime.EncryptedKey, error) {
-	ciphertext, err := h.secrets.Seal(userID, modelKeyPurpose, []byte(key))
+func (h *Handlers) encryptKey(userID, purpose, key string) (*runtime.EncryptedKey, error) {
+	ciphertext, err := h.secrets.Seal(userID, purpose, []byte(key))
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +242,7 @@ func (h *Handlers) encryptKey(userID, key string) (*runtime.EncryptedKey, error)
 
 func settingsUpdate(settings runtime.UserSettings) runtime.UserSettingsInput {
 	return runtime.UserSettingsInput{Endpoint: settings.Endpoint, Protocol: settings.Protocol, Model: settings.Model, ReviewModel: settings.ReviewModel,
-		DisplayName: settings.DisplayName}
+		DisplayName: settings.DisplayName, SearchSource: settings.SearchSource, SearXNGURL: settings.SearXNGURL}
 }
 
 func effectiveSettings(settings runtime.UserSettings) (runtime.UserSettings, provider.ToolSupport, error) {
@@ -255,6 +294,23 @@ func (h *Handlers) configured(w http.ResponseWriter, r *http.Request, user ident
 		if err != nil {
 			writeProblem(w, r, notConfiguredProblem)
 			return settings, "", false
+		}
+	}
+	// 默认协议仍为 Chat Completions；自带搜索及其手动覆盖生效时使用 Responses。
+	if settings.SearchSource == "native" && settings.Protocol == string(provider.ProtocolOpenAI) && effectiveNativeSearch(settings, settingsUpdate(settings)) == provider.NativeSearchSupported {
+		settings.Protocol = string(provider.ProtocolResponses)
+		// Chat Completions 的工具结论不能当作 Responses 的结论；显式覆盖仍优先。
+		var overrides manualOverrides
+		if settings.Overrides != nil {
+			if err := json.Unmarshal(settings.Overrides, &overrides); err != nil {
+				h.logFailure(r, "internal")
+				writeProblem(w, r, internalProblem)
+				return settings, "", false
+			}
+		}
+		support = provider.ToolSupportUnconfirmed
+		if overrides.ToolSupport != nil {
+			support = *overrides.ToolSupport
 		}
 	}
 	if support == provider.ToolSupportUnsupported {
@@ -313,23 +369,23 @@ func (h *Handlers) mergeSettings(userID string, current runtime.UserSettings, in
 	if input.Overrides != nil {
 		update.Overrides, _ = json.Marshal(input.Overrides)
 	}
-	key, clearKey, err := parseKey(input.Key)
+	var err error
+	var keyChanged bool
+	update.Key, update.ClearKey, keyChanged, err = h.mergeKey(userID, modelKeyPurpose, current.Key, input.Key)
 	if err != nil {
 		return update, err
 	}
-	update.ClearKey = clearKey
-	keyChanged := clearKey && current.Key != nil
-	if key != nil {
-		keyChanged = true
-		if current.Key != nil {
-			old, openErr := h.secrets.Open(userID, modelKeyPurpose, current.Key.Ciphertext)
-			keyChanged = openErr != nil || string(old) != *key
-		}
-		update.Key, err = h.encryptKey(userID, *key)
-		if err != nil {
-			return update, &settingsSecretError{err}
-		}
+	update.SearchKey, update.ClearSearchKey, _, err = h.mergeKey(userID, secret.SearchKeyPurpose, current.SearchKey, input.SearchKey)
+	if err != nil {
+		return update, err
 	}
+	if input.SearchSource != nil {
+		update.SearchSource = *input.SearchSource
+	}
+	if input.SearXNGURL != nil {
+		update.SearXNGURL = *input.SearXNGURL
+	}
+
 	if endpointAuthority(current.Endpoint) != endpointAuthority(update.Endpoint) && input.Key == nil && current.Key != nil {
 		update.ClearKey, keyChanged = true, true
 		// 改换认证目标后，未显式提交协议时需重新确认。
@@ -362,6 +418,7 @@ func (h *Handlers) mergeSettings(userID string, current runtime.UserSettings, in
 				return update, err
 			}
 			probe.ToolSupport = provider.ToolSupportUnconfirmed
+			probe.NativeSearch = provider.NativeSearchUnknown
 			failures := probe.Failures[:0]
 			for _, failure := range probe.Failures {
 				if failure.Step != "tools" {
@@ -380,10 +437,68 @@ func (h *Handlers) mergeSettings(userID string, current runtime.UserSettings, in
 			return update, err
 		}
 		overrides.ToolSupport = nil
+		if input.Overrides == nil || input.Overrides.NativeSearch == nil {
+			overrides.NativeSearch = nil
+		}
 		if input.Model != nil {
 			overrides.Model = nil
 		}
 		update.Overrides, _ = json.Marshal(overrides)
 	}
 	return update, nil
+}
+
+// 两类密钥共用输入语义、加解密和展示路径，仅用途标签不同。
+func (h *Handlers) mergeKey(userID, purpose string, current *runtime.EncryptedKey, raw json.RawMessage) (*runtime.EncryptedKey, bool, bool, error) {
+	key, clear, err := parseKey(raw)
+	if err != nil {
+		return nil, false, false, err
+	}
+	if key == nil {
+		return nil, clear, clear && current != nil, nil
+	}
+	changed := true
+	if current != nil {
+		old, err := h.secrets.Open(userID, purpose, current.Ciphertext)
+		changed = err != nil || string(old) != *key
+	}
+	encrypted, err := h.encryptKey(userID, purpose, *key)
+	if err != nil {
+		return nil, false, false, &settingsSecretError{err}
+	}
+	return encrypted, false, changed, nil
+}
+
+func (h *Handlers) keyView(userID, purpose string, key *runtime.EncryptedKey) (string, bool, bool) {
+	if key == nil {
+		return "", false, false
+	}
+	_, err := h.secrets.Open(userID, purpose, key.Ciphertext)
+	return key.LastFour, true, err != nil
+}
+
+func effectiveNativeSearch(current runtime.UserSettings, update runtime.UserSettingsInput) provider.NativeSearchSupport {
+	probe := current.Probe
+	if update.ClearProbe {
+		probe = nil
+	}
+	if update.Probe != nil {
+		probe = update.Probe
+	}
+	support := provider.NativeSearchUnknown
+	if probe != nil {
+		var result provider.ProbeResult
+		if json.Unmarshal(probe.Result, &result) == nil && result.NativeSearch != "" {
+			support = result.NativeSearch
+		}
+	}
+	raw := current.Overrides
+	if update.Overrides != nil {
+		raw = update.Overrides
+	}
+	var overrides manualOverrides
+	if json.Unmarshal(raw, &overrides) == nil && overrides.NativeSearch != nil {
+		support = *overrides.NativeSearch
+	}
+	return support
 }

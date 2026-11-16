@@ -12,6 +12,8 @@ type Protocol string
 const (
 	// ProtocolOpenAI 表示兼容 Chat Completions 的协议。
 	ProtocolOpenAI Protocol = "openai"
+	// ProtocolResponses 表示 OpenAI Responses 协议。
+	ProtocolResponses Protocol = "responses"
 	// ProtocolMessages 表示兼容 Anthropic Messages 的协议。
 	ProtocolMessages Protocol = "messages"
 )
@@ -44,6 +46,8 @@ const (
 
 // Message 是可直接编码为 JSON 的运行时消息。
 type Message struct {
+	// ProviderBlocks 是完整的原协议内容；调用方先检查端点归属，再交给适配器回传。
+	ProviderBlocks []OpaqueBlock `json:"-"`
 	// Role 是消息角色。
 	Role Role `json:"role"`
 	// Content 按协议中的内容顺序保存，包含不透明块。
@@ -104,6 +108,8 @@ type ToolDefinition struct {
 
 // Request 是一次模型请求，不包含端点密钥或采样参数。
 type Request struct {
+	// NativeSearch 由调用者的搜索来源与生效能力共同决定。
+	NativeSearch bool `json:"native_search,omitempty"`
 	// ForceTool 指定唯一必须调用的工具；空值保留普通对话行为。
 	ForceTool string `json:"force_tool,omitempty"`
 	// Model 是调用方选择的模型。
@@ -132,6 +138,8 @@ type FinishReason string
 const (
 	// FinishNormal 表示正常结束。
 	FinishNormal FinishReason = "normal"
+	// FinishPause 要求原样回传助手块后继续当前轮次。
+	FinishPause FinishReason = "pause_turn"
 	// FinishToolCalls 表示请求执行工具。
 	FinishToolCalls FinishReason = "tool_calls"
 	// FinishOutputLimit 表示输出或上下文达到上限。
@@ -153,7 +161,9 @@ type EventType string
 
 const (
 	// EventText 表示文本增量。
-	EventText EventType = "text"
+	EventText      EventType = "text"
+	EventSearch    EventType = "search"
+	EventCitations EventType = "citations"
 	// EventToolCall 表示已拼接并校验的完整调用。
 	EventToolCall EventType = "tool_call"
 	// EventOpaque 表示完整不透明块。
@@ -166,6 +176,10 @@ const (
 
 // Event 由 Type 选择对应载荷，可直接编码为 JSON。
 type Event struct {
+	Search    *Search    `json:"search,omitempty"`
+	Citations []Citation `json:"citations,omitempty"`
+	// ProviderBlocks 仅在完整结束时提供，不进入界面或日志。
+	ProviderBlocks []OpaqueBlock `json:"-"`
 	// Type 是事件类型。
 	Type EventType `json:"type"`
 	// Text 是文本增量。

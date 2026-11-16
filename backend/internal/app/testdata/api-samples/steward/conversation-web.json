@@ -1,0 +1,67 @@
+{
+  "body": {
+    "created_at": "2026-01-01T00:00:00Z",
+    "id": "00000000-0000-4000-8000-000000000001",
+    "messages": [
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "查合成资料",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000002",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "user",
+        "searches": [],
+        "sequence": 1,
+        "tool_calls": []
+      },
+      {
+        "citations": [
+          {
+            "title": "合成来源",
+            "url": "https://example.org/music"
+          }
+        ],
+        "content": [
+          {
+            "text": "合成联网回答",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:02Z",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "assistant",
+        "searches": [
+          {
+            "query": "合成音乐查询",
+            "results": [
+              {
+                "title": "合成来源",
+                "url": "https://example.org/music"
+              }
+            ],
+            "search_id": "sample-search",
+            "status": "completed"
+          }
+        ],
+        "sequence": 2,
+        "tool_calls": []
+      }
+    ],
+    "mode": "assistant",
+    "model": "synthetic-model",
+    "pending_plan": null,
+    "plans": [],
+    "status": "idle",
+    "title": "合成联网对话",
+    "updated_at": "2026-01-01T00:00:03Z"
+  },
+  "status": 200
+}
