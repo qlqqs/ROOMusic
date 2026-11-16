@@ -8,7 +8,7 @@ import { tokenFailureMessages } from "./token-messages";
 import { TokenTable } from "./token-table";
 
 /**
- * 设置页“访问令牌”的内容：自己的令牌列表、新建（对话框，成功后显示一次明文）与吊销（先确认）。
+ * 设置页 Agent 栏目里“访问令牌”一组的内容：自己的令牌列表、新建（对话框，成功后显示一次明文）与吊销（先确认）。
  * 明文只存在于签发请求的返回值里，关闭对话框时随请求状态一起丢弃。
  * 管理员关闭成员使用管家时，成员仍能看到并吊销已有的令牌，但不能新建。
  */
@@ -29,7 +29,7 @@ export function AccessTokens() {
   return (
     <>
       <SettingsGroup
-        title="我的令牌"
+        title="访问令牌"
         action={
           <Button
             variant="primary"

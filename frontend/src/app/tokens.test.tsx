@@ -44,12 +44,22 @@ function setup(options: { role?: "admin" | "user"; available?: boolean; tokens?:
 
 async function openTokens(options: Parameters<typeof setup>[0] = {}) {
   const context = setup(options);
-  renderApp({ path: "/settings/tokens" });
-  await screen.findByRole("heading", { level: 1, name: "访问令牌" });
+  renderApp({ path: "/settings/agent" });
+  await screen.findByRole("heading", { level: 1, name: "Agent" });
   return context;
 }
 
-describe("设置 › 访问令牌", () => {
+// C4 起访问令牌是“设置 › Agent”里的一组，功能不变；旧地址 /settings/tokens 转到新栏目。
+describe("设置 › Agent › 访问令牌", () => {
+  it("旧地址 /settings/tokens 转到 /settings/agent", async () => {
+    setup();
+    const { history } = renderApp({ path: "/settings/tokens" });
+    await screen.findByRole("heading", { level: 1, name: "Agent" });
+    expect(history.location.pathname).toBe("/settings/agent");
+    expect(await screen.findByRole("heading", { level: 2, name: "访问令牌" })).toBeTruthy();
+    expect(await screen.findByRole("rowheader", { name: "书房电脑" })).toBeTruthy();
+  });
+
   it("列出令牌：名称、权限、末四位、不过期与从未使用", async () => {
     await openTokens();
     const row = (await screen.findByRole("rowheader", { name: "书房电脑" })).closest("tr");

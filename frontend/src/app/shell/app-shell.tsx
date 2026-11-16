@@ -1,10 +1,11 @@
 import { useRouterState } from "@tanstack/react-router";
 import { Search } from "lucide-react";
-import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { lazy, useCallback, useEffect, useId, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { useViewerScope } from "../../features/auth";
 import { usePlayerSelector, FullscreenPlayer, PlayerBar, PlayerAnnouncement } from "../../features/player";
 import { GLOBAL_SEARCH_INPUT_SELECTOR, GlobalSearchBox } from "../../features/search";
 import { ArtistLinksScope } from "../../features/catalog";
+import { setDockOpen, useDockState, useStewardEntry } from "../../features/steward";
 import { useMediaQuery } from "../../shared/lib/use-media-query";
 import { Button, ModalDialog } from "../../shared/ui";
 import { CurrentTrackFavorite, SaveQueueAsPlaylist } from "../player-personal-actions";
@@ -16,15 +17,27 @@ import styles from "./app-shell.module.css";
 const renderBarTrackActions = (track: PlayerTrack) => <CurrentTrackFavorite track={track} message="screen-reader" />;
 const renderFullscreenTrackActions = (track: PlayerTrack) => <CurrentTrackFavorite track={track} />;
 const renderQueueActions = (tracks: readonly PlayerTrack[]) => <SaveQueueAsPlaylist tracks={tracks} />;
+import { LazyPage } from "../routes/lazy-page";
 import { Brand } from "./brand";
 import { PlaybackOriginProvider } from "./playback-origin";
-import { PrimaryNav } from "./primary-nav";
+import { PrimaryNav, STEWARD_DOCK_ID, STEWARD_ENTRY_ID } from "./primary-nav";
 import { TabBar } from "./tab-bar";
 import { useCatalogEpochSync } from "./use-catalog-epoch-sync";
 import { UserMenu } from "./user-menu";
 
 /** 与外壳样式表的断点一致：窄于 768px 时没有侧栏，底部是标签栏。 */
 const NARROW = "(max-width: 767px)";
+/** 管家面板浮在主内容上的宽度区间（与外壳样式表一致）：这时按 Esc 收起面板。 */
+const DOCK_OVERLAY = "(min-width: 768px) and (max-width: 1099px)";
+
+/** 面板内容加载期间用户没有把焦点挪去别处（仍在侧栏入口或没有焦点）：面板就绪后才可以把焦点移进去。 */
+function focusStillOnEntry(): boolean {
+  const active = document.activeElement;
+  return active === null || active === document.body || active.id === STEWARD_ENTRY_ID;
+}
+
+// 管家的停靠面板连同 Markdown 依赖按需加载：面板第一次打开时才下载。
+const StewardPanel = lazy(() => import("../../features/steward/chat").then((module) => ({ default: module.StewardPanel })));
 
 /** 把元素的实际高度写进外壳的 CSS 变量，随元素尺寸变化更新（迷你播放栏与标签栏的留白据此计算）。 */
 function useMeasuredHeight(enabled: boolean, target: RefObject<HTMLElement | null>, frame: RefObject<HTMLElement | null>, variable: string) {
@@ -49,8 +62,9 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 /**
  * 已登录界面的外壳。≥768px：左侧导航与主内容各自滚动，当前用户（齿轮进设置、“更多”里是账号与退出登录）固定在侧栏底部；
- * <768px：顶部栏是品牌与搜索按钮（打开搜索对话框），底部是标签栏（概览、专辑、艺人、我的），迷你播放栏浮在标签栏上方，页面只有一个滚动区。
+ * <768px：顶部栏是品牌与搜索按钮（打开搜索对话框），底部是标签栏（概览、专辑、艺人、管家、我的），迷你播放栏浮在标签栏上方，页面只有一个滚动区。
  * 导航切换页面后，焦点回到主内容区，读屏用户得到页面变化的反馈。
+ * 管家的停靠面板（侧栏入口开合）：≥1100px 在主内容右侧占一列，768–1099px 浮在主内容上，<768px 与整页对话里不显示。
  */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -83,6 +97,27 @@ function ShellFrame({ children }: { children: ReactNode }) {
   const searchTitleId = useId();
 
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const dock = useDockState();
+  const steward = useStewardEntry();
+  const showDock = dock.open && steward.available && !narrow && pathname !== "/steward" && !pathname.startsWith("/steward/");
+  const dockOverlay = useMediaQuery(DOCK_OVERLAY);
+  // 收起面板：焦点回到侧栏入口。
+  const closeDock = useCallback(() => {
+    setDockOpen(false);
+    document.getElementById(STEWARD_ENTRY_ID)?.focus();
+  }, []);
+  // 浮层状态下、焦点在面板里时按 Esc 收起。焦点在面板外时 Esc 归页面自己（提示、专辑详情等），不同时收起面板；
+  // 输入法组合中的 Esc、菜单与对话框已经处理过的 Esc（preventDefault，或有打开的模态对话框）也不算。
+  useEffect(() => {
+    if (!showDock || !dockOverlay) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.isComposing || event.defaultPrevented || document.querySelector("dialog[open]") !== null) return;
+      if (!(event.target instanceof Node && document.getElementById(STEWARD_DOCK_ID)?.contains(event.target))) return;
+      closeDock();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [showDock, dockOverlay, closeDock]);
   // 在结果页时，搜索框显示地址里的查询词；别的页面（包括专辑页自己的搜索）不带过来。
   const searchQuery = useRouterState({ select: (state) => (state.location.pathname === "/search" ? state.location.search.q : undefined) });
   useCatalogEpochSync();
@@ -132,7 +167,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
   return (
     // 艺人名能不能做成链接：整个已登录界面只读一次目录状态（主内容与播放器里的艺人名都在范围里）。
     <ArtistLinksScope>
-    <div ref={frameRef} className={styles.frame} data-player={hasPlayer ? "visible" : undefined}>
+    <div ref={frameRef} className={styles.frame} data-player={hasPlayer ? "visible" : undefined} data-steward={showDock ? "open" : undefined}>
       <PlayerAnnouncement />
       <a href="#main" className={styles.skipLink} onClick={skipToMain}>
         跳到主要内容
@@ -154,6 +189,13 @@ function ShellFrame({ children }: { children: ReactNode }) {
       <main id="main" ref={mainRef} tabIndex={-1} className={styles.main}>
         {children}
       </main>
+      {showDock ? (
+        <div className={styles.dock}>
+          <LazyPage>
+            <StewardPanel id={STEWARD_DOCK_ID} onClose={closeDock} canTakeFocus={focusStillOnEntry} />
+          </LazyPage>
+        </div>
+      ) : null}
       {hasPlayer ? <div ref={playerRef} className={styles.player}><PlayerBar renderCurrentTrackActions={renderBarTrackActions} renderQueueActions={renderQueueActions} /></div> : null}
       {narrow ? <TabBar ref={tabBarRef} /> : null}
       <FullscreenPlayer renderCurrentTrackActions={renderFullscreenTrackActions} renderQueueActions={renderQueueActions} />

@@ -1,0 +1,76 @@
+/*
+ * 整页对话占满主内容区：会话列表与对话各自滚动，输入框留在底部。
+ * 手机上主内容区随文档滚动，这里改成固定高度（窗口减去顶部栏与底部的迷你播放栏、标签栏），只有对话内容滚动。
+ */
+.page {
+  display: grid;
+  grid-template-columns: var(--layout-session-width) minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.listPane {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  border-right: 1px solid var(--color-divider);
+}
+
+.conversation {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  min-height: var(--layout-topbar-height);
+  padding: 0 var(--space-2) 0 var(--layout-page-inset-x);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-16);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message {
+  padding: var(--layout-page-inset-y) var(--layout-page-inset-x);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+    height: calc(100dvh - var(--layout-topbar-height) - 1px - var(--shell-bottom-inset, 0px));
+  }
+
+  .listPane {
+    grid-template-rows: auto minmax(0, 1fr);
+    border-right: 0;
+  }
+
+  .head {
+    padding-left: var(--space-2);
+  }
+
+  .page[data-screen="list"] .title {
+    padding-left: var(--space-2);
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "nothing_to_continue",
+      "message": "这个会话没有需要继续的回答"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

@@ -13,11 +13,17 @@ export type ApiFailure =
 
 export class ApiError extends Error {
   readonly failure: ApiFailure;
+  /**
+   * http 失败时整个 JSON 响应体（错误信封与它旁边的字段，例如管家探测失败带回的探测报告）；其他分类为 undefined。
+   * 只交给知道这个接口合同的调用方用它自己的解码器读，界面文案仍按错误码选择。
+   */
+  readonly body: unknown;
 
-  constructor(failure: ApiFailure, options?: ErrorOptions) {
+  constructor(failure: ApiFailure, options?: ErrorOptions & { body?: unknown }) {
     super(describeForDebug(failure), options);
     this.name = "ApiError";
     this.failure = failure;
+    this.body = options?.body;
   }
 }
 
@@ -41,6 +47,11 @@ export function isApiError(error: unknown): error is ApiError {
 /** 取出 ApiError 携带的分类；不是 ApiError（例如程序错误）时返回 null。 */
 export function failureOf(error: unknown): ApiFailure | null {
   return isApiError(error) ? error.failure : null;
+}
+
+/** http 失败时的 JSON 响应体（见 ApiError.body）；不是 ApiError 或不是 http 失败时为 undefined。 */
+export function errorBodyOf(error: unknown): unknown {
+  return isApiError(error) ? error.body : undefined;
 }
 
 /** 失败是否是后端返回的指定 HTTP 状态与错误码；code 省略时只比较状态。 */

@@ -30,6 +30,7 @@ type runState struct {
 	outputTokens int64
 	countedSteps int
 	definitions  map[string]tool.Definition
+	history      []Message
 }
 
 // Run 原子占用会话后同步执行多步对话；会话忙时返回 ErrConversationBusy 且不发送事件。
@@ -51,8 +52,12 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 			state.logger.ErrorContext(context.WithoutCancel(ctx), "管家运行异常", "event", "steward.run.panicked", "stack", string(debug.Stack()))
 		}
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeTimeout)
-		err = errors.Join(err, r.store.ReleaseConversation(cleanup, userID, params.ConversationID))
+		releaseErr := r.store.ReleaseConversation(cleanup, userID, params.ConversationID)
+		err = errors.Join(err, releaseErr)
 		cancel()
+		if errors.Is(err, ErrNothingToContinue) && releaseErr == nil {
+			return
+		}
 		level := slog.LevelInfo
 		if err != nil {
 			level = slog.LevelError
@@ -70,6 +75,20 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 			sink(Event{Type: EventDone, Step: state.step, End: &end})
 		}
 	}()
+	if params.Continue {
+		detail, err := r.store.GetConversation(ctx, userID, params.ConversationID)
+		if err != nil {
+			return err
+		}
+		if len(detail.Messages) == 0 {
+			return ErrNothingToContinue
+		}
+		lastRole := detail.Messages[len(detail.Messages)-1].Role
+		if lastRole != string(provider.RoleUser) && lastRole != string(provider.RoleTool) {
+			return ErrNothingToContinue
+		}
+		state.history = detail.Messages
+	}
 	state.logger.InfoContext(ctx, "管家运行开始", "event", "steward.run.started", "message", "管家运行开始")
 	if params.Started != nil {
 		params.Started()
@@ -79,6 +98,9 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 }
 
 func (s *runState) prepare(ctx context.Context) ([]provider.Message, error) {
+	if s.params.Continue {
+		return replayMessages(s.history)
+	}
 	input, err := messageInput(textMessage(provider.RoleUser, s.params.Text), provider.Usage{}, nil)
 	if err != nil {
 		return nil, err
@@ -126,7 +148,7 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 			return RunEnd{Reason: EndCancelled}, nil
 		}
 		s.step++
-		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: systemPrompt,
+		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: systemPromptWithName(s.params.DisplayName),
 			Messages: messages, Tools: definitions, MaxOutputTokens: maxOutputTokens})
 		s.recordUsage(ctx, step.usage)
 		if err != nil {

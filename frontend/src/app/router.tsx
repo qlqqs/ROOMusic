@@ -31,12 +31,14 @@ const ArtistCandidatesPage = lazyRouteComponent(() => import("./routes/artist-ca
 const IssuesPage = lazyRouteComponent(() => import("./routes/issues-page"), "IssuesPage");
 const ClaimsPage = lazyRouteComponent(() => import("./routes/claims-page"), "ClaimsPage");
 const PlaybackSettingsPage = lazyRouteComponent(() => import("./routes/playback-settings-page"), "PlaybackSettingsPage");
-const TokensPage = lazyRouteComponent(() => import("./routes/tokens-page"), "TokensPage");
+const AgentSettingsPage = lazyRouteComponent(() => import("./routes/agent-settings-page"), "AgentSettingsPage");
 const LibraryPage = lazyRouteComponent(() => import("./routes/library-page"), "LibraryPage");
 const ScanDetail = lazyRouteComponent(() => import("../features/library"), "ScanDetail");
 const MembersPage = lazyRouteComponent(() => import("./routes/members-page"), "MembersPage");
 const OperationsPage = lazyRouteComponent(() => import("./routes/operations-page"), "OperationsPage");
 const BackupsPage = lazyRouteComponent(() => import("./routes/backups-page"), "BackupsPage");
+// 管家的整页对话连同 Markdown 依赖按需加载。
+const StewardPage = lazyRouteComponent(() => import("./routes/steward-page"), "StewardRoutePage");
 
 export type RouterContext = { session: SessionController };
 
@@ -105,6 +107,8 @@ const legacyRoutes = [
   legacyRedirectRoute("/members", "/members", "/settings/members"),
   legacyRedirectRoute("/operations", "/operations", "/settings/operations"),
   legacyRedirectRoute("/system/backups", "/system/backups", "/settings/backups"),
+  // 访问令牌并进了 Agent 栏目（C4）。
+  legacyRedirectRoute("/settings/tokens", "/settings/tokens", "/settings/agent"),
   // 正在播放页改成了全屏播放器：旧地址回到概览，不带路径后缀与 #queue。
   createRoute({
     getParentRoute: () => rootRoute,
@@ -321,6 +325,29 @@ const claimsRoute = createRoute({
 
 // 设置：/settings 没有内容，转到所有人都有的“账号”（替换历史项，返回键不会回到 /settings）。分栏由布局显示，各管理栏仍由 AdminGate 把关：
 // 非管理员显示“需要管理员权限”，不渲染页面内容，也就不会调用管理接口。
+// 管家：/steward 是面板里正在看的会话（没有时是空白的新对话），/steward/$conversationId 是指定的会话。所有登录用户都能打开；
+// 成员开关关闭时页面只有说明，后端同样拒绝。
+function StewardIndexRoute() {
+  return (
+    <LazyPage>
+      <StewardPage conversationId={null} />
+    </LazyPage>
+  );
+}
+
+const stewardRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/steward", component: StewardIndexRoute });
+
+function StewardConversationRoute() {
+  const { conversationId } = stewardConversationRoute.useParams();
+  return (
+    <LazyPage>
+      <StewardPage conversationId={conversationId} />
+    </LazyPage>
+  );
+}
+
+const stewardConversationRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/steward/$conversationId", component: StewardConversationRoute });
+
 const settingsRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/settings", component: SettingsLayout });
 
 const settingsIndexRoute = createRoute({
@@ -344,16 +371,16 @@ function PlaybackSettingsRoute() {
 
 const playbackSettingsRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/playback", component: PlaybackSettingsRoute });
 
-// 访问令牌（MCP 客户端用）：所有登录用户都能管理自己的令牌。
-function TokensRoute() {
+// Agent（管家的名字、模型、访问令牌；管理员另有成员开关与内网地址）：所有登录用户都有。
+function AgentSettingsRoute() {
   return (
     <LazyPage>
-      <TokensPage />
+      <AgentSettingsPage />
     </LazyPage>
   );
 }
 
-const tokensRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/tokens", component: TokensRoute });
+const agentSettingsRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/agent", component: AgentSettingsRoute });
 
 function LibraryRoute() {
   const { scan_page: scanPage } = libraryRoute.useSearch();
@@ -455,7 +482,9 @@ const routeTree = rootRoute.addChildren([
     issuesRoute,
     claimsRoute,
     artistCandidatesRoute,
-    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, tokensRoute, libraryRoute, scanDetailRoute, membersRoute, operationsRoute, backupsRoute]),
+    stewardRoute,
+    stewardConversationRoute,
+    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, agentSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, operationsRoute, backupsRoute]),
     notFoundRoute,
   ]),
 ]);

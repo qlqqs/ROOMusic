@@ -3,7 +3,7 @@
 ## 现状与意图
 
 2026-10-01 的 M1a 已按下面的结构重建 `frontend/src/`。目录只为获批页面和真实消费者建立，不预建空文件夹；
-M2a 已建立 `player`，M3 已建立 `governance`，M5 ② ③ 已建立 `personal`；`curation`、通用 `operations`（Change Set 与审批）、`artists`、`steward` 随对应获批阶段建立，
+M2a 已建立 `player`，M3 已建立 `governance`，M5 ② ③ 已建立 `personal`，M5 ⑤ 已建立 `artists`，M6 C3/C4 已建立 `steward`；`curation`、通用 `operations`（Change Set 与审批）随对应获批阶段建立，
 基础 Release 搜索由 `catalog` 拥有，不为它新增搜索服务。阶段命名和依赖见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)。
 设计变量集中在 `styles/`，不复制设计工具的运行时。
 
@@ -34,6 +34,7 @@ frontend/
     │   ├── personal/               # 收藏与歌单（M5 ② ③）：心形与批量收藏状态、收藏页、歌单列表与详情（拖动与菜单排序、撤销）、“添加到歌单…”与新建对话框、跨标签页刷新
     │   ├── search/                 # 全局搜索（M5 ④）：侧栏搜索框与建议、结果页的艺人（M5 ⑤）、专辑、曲目各栏与分页、匹配说明
     │   ├── artists/                # 艺人（M5 ⑤）：艺人列表（首字母、两种排序、角色筛选）与艺人页（名字、专辑、按角色的曲目），播放与管理经插槽由 app 组合
+    │   ├── steward/                # 管家（M6 C3/C4）：访问令牌、停靠面板与整页对话、运行 store、设置页 Agent 栏目；轻量入口 index.ts 与按需加载的 chat.ts
     │   ├── governance/             # 受治理操作（M3，管理员）：编辑发行信息、调整归组、设定默认版本（M4）、撤销、操作记录页与专辑详情的“修改记录”
     │   └── catalog/                # 专辑：列表（M1b）、详情（M1b）、封面、证据展示、默认版本标签与版本对比（M4），以及概览的计数（M1a）
     ├── shared/
@@ -135,6 +136,8 @@ features/governance/
 - `artists`（M5 ⑤）拥有艺人列表与艺人页的 API、解码器、查询键（带目录 epoch）、URL 校验与视图；只导入 catalog 的公开合同（艺人摘要、艺人引用、可点的艺人名
   `ArtistNames`、封面与卡片网格），不导入 player、personal、governance、search。艺人页的播放全部/随机播放（`app/routes/artist-playback.tsx`）、心形、曲目行动作与
   管理员的合并/拆开/改名（governance 的 `useArtistAdminActions`）由 app 经插槽组合（`app/routes/artist-detail-page.tsx`）。详细合同见[艺人约定](./artist-guidelines.md)。
+- `steward`（M6 C3/C4）拥有管家的 API 与解码器、进行中的运行（模块级 store）、面板状态、对话界面与设置页的 Agent 栏目；只导入 auth 的公开入口与 shared，
+  不导入其他 feature。外壳经 `index.ts` 取入口、名字与面板状态，对话界面经 `chat.ts` 按需加载；SSE 行解析在 `shared/lib/sse.ts`。详细约定见[管家的前端约定](./steward-guidelines.md)。
 - 通用 `operations` 拥有 Change Set 与审批的状态及受支持的恢复界面，不是通用 toast（尚未建立；M3 的操作记录与撤销界面在 `governance`）。
 - `shared/api` 拥有同源请求、凭据、请求关联、响应体处理、错误信封、重试策略与解码原语；feature 的端点与 DTO 留在 feature。
   `fetch` 只在 `shared/api/request.ts` 中调用，由 ESLint 规则保证。

@@ -21,7 +21,8 @@
   "children": [
     "11-15-steward-c1-adr",
     "11-15-steward-c2-runtime",
-    "11-16-steward-c3-mcp"
+    "11-16-steward-c3-mcp",
+    "11-16-steward-c4-chat"
   ],
   "parent": null,
   "relatedFiles": [],

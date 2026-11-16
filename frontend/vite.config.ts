@@ -6,6 +6,10 @@ function thirdPartyScript(pattern: RegExp) {
   return (moduleId: string) => pattern.test(moduleId) && !/\.css(\?|$)/.test(moduleId);
 }
 
+// 回答的 Markdown 渲染（react-markdown、remark-gfm 及其间接依赖）：只有管家的对话界面用到，单独成块，随对话界面按需加载，不进首屏的 vendor。
+const markdownPackages =
+  /[\\/]node_modules[\\/](react-markdown|remark-[^\\/]+|mdast-util-[^\\/]+|micromark[^\\/]*|hast-util-[^\\/]+|unist-util-[^\\/]+|unified|vfile[^\\/]*|bail|ccount|character-entities[^\\/]*|character-reference-invalid|comma-separated-tokens|space-separated-tokens|decode-named-character-reference|devlop|estree-util-is-identifier-name|extend|html-url-attributes|inline-style-parser|style-to-object|style-to-js|is-alphabetical|is-alphanumerical|is-decimal|is-hexadecimal|is-plain-obj|longest-streak|markdown-table|escape-string-regexp|parse-entities|stringify-entities|property-information|trim-lines|trough|zwitch|@ungap[\\/]structured-clone|debug|ms)[\\/]/;
+
 export default defineConfig({
   plugins: [react()],
   build: {
@@ -17,12 +21,13 @@ export default defineConfig({
     rolldownOptions: {
       output: {
         // 第三方库各自成块：应用代码更新时这些块的内容哈希不变，浏览器继续用缓存；每个块也都低于 500 kB 的体积提示线。
-        // 只按依赖拆分，不做路由懒加载，页面加载行为不变。优先级高的组先认领模块，其余第三方代码落进 vendor。
+        // 只按依赖拆分，页面加载行为不变。优先级高的组先认领模块，其余第三方代码落进 vendor。
         codeSplitting: {
           groups: [
             { name: "react", test: thirdPartyScript(/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/), priority: 30 },
             { name: "tanstack", test: thirdPartyScript(/[\\/]node_modules[\\/]@tanstack[\\/]/), priority: 20 },
             { name: "lucide", test: thirdPartyScript(/[\\/]node_modules[\\/]lucide-react[\\/]/), priority: 20 },
+            { name: "markdown", test: thirdPartyScript(markdownPackages), priority: 20 },
             { name: "vendor", test: thirdPartyScript(/[\\/]node_modules[\\/]/), priority: 10 },
           ],
         },

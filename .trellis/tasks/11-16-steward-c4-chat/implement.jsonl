@@ -1,0 +1,11 @@
+{"file":".trellis/spec/backend/steward-runtime-contracts.md","reason":"C2、C3 的接口、SSE 事件、循环与错误码合同"}
+{"file":".trellis/spec/backend/index.md","reason":"后端模块边界与规范索引"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"错误码与响应结构"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端测试质量要求"}
+{"file":"docs/architecture/adr/0005-steward-data-and-egress.md","reason":"发给模型的内容范围与提示注入的处理"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端规范索引"}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"功能目录的放置"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"查询缓存与应用级状态的用法"}
+{"file":".trellis/spec/frontend/interface-layout-guidelines.md","reason":"外壳、断点与布局 token"}
+{"file":".trellis/spec/frontend/session-lifecycle.md","reason":"登出与 401 时的清理"}
+{"file":"frontend/DESIGN.md","reason":"设计系统与 Steward 面板的约定"}

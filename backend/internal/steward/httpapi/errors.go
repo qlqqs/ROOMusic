@@ -36,6 +36,8 @@ func storeProblem(err error) problem {
 		return problem{404, "not_found", "会话或放行项不存在"}
 	case errors.Is(err, runtime.ErrConversationBusy):
 		return busyProblem
+	case errors.Is(err, runtime.ErrNothingToContinue):
+		return problem{409, "nothing_to_continue", "这个会话没有需要继续的回答"}
 	case errors.Is(err, runtime.ErrInvalidInput):
 		return problem{400, "invalid_input", "请求参数无效"}
 	default:

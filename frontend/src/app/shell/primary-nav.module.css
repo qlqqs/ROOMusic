@@ -45,6 +45,21 @@
   color: var(--text-secondary);
 }
 
+/* 管家入口在别的页面上是开合面板的按钮，外观与链接相同；面板打开时文字与图标用强调色（当前页仍是左侧的那一项）。 */
+button.link {
+  width: 100%;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link[aria-expanded="true"],
+.link[aria-expanded="true"] svg {
+  color: var(--text-accent);
+}
+
 .link:hover {
   background: var(--color-hover);
 }

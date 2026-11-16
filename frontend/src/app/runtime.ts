@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import type { RouterHistory } from "@tanstack/react-router";
 import { createBroadcastSessionChannel, createSessionController, type SessionChannel, type SessionController } from "../features/auth";
+import { resetStewardState } from "../features/steward";
 import { setSessionBoundary, shouldRetryQuery } from "../shared/api";
 import { createAppRouter, type AppRouter } from "./router";
 
@@ -27,7 +28,7 @@ export type AppRuntimeOptions = {
  * 装配应用：查询缓存、会话控制器、路由，以及三者之间唯一的接线：
  * - 请求层的 401 通知会话控制器（带请求发出时的代次）；
  * - 会话状态一变就重新执行路由守卫（登录后离开登录页、会话失效后去登录）；
- * - 离开已登录状态时先取消再清空全部查询与写操作缓存，随后才渲染新状态；
+ * - 离开已登录状态时先取消再清空全部查询与写操作缓存，随后才渲染新状态；管家进行中的回答一并中止；
  * - 页面重新可见时核对会话。
  */
 export function createAppRuntime(options: AppRuntimeOptions = {}): AppRuntime {
@@ -42,6 +43,7 @@ export function createAppRuntime(options: AppRuntimeOptions = {}): AppRuntime {
   setSessionBoundary({ currentGeneration: session.currentGeneration, onUnauthorized: session.handleUnauthorized });
   const stopRouting = session.subscribe(() => void router.invalidate());
   const stopCleanup = session.onEnded(() => {
+    resetStewardState();
     void queryClient.cancelQueries();
     queryClient.clear();
   });
@@ -61,6 +63,7 @@ export function createAppRuntime(options: AppRuntimeOptions = {}): AppRuntime {
       stopCleanup();
       setSessionBoundary(null);
       session.dispose();
+      resetStewardState();
       void queryClient.cancelQueries();
       queryClient.clear();
     },

@@ -96,13 +96,16 @@ function settle<T>(status: number, body: JsonBody, requestId: string, generation
     if (status === 401 && envelope.error.code === "unauthorized" && session !== "none") {
       sessionBoundary?.onUnauthorized(generation);
     }
-    throw new ApiError({
-      kind: "http",
-      status,
-      code: envelope.error.code,
-      message: envelope.error.message,
-      requestId: envelope.request_id === "" ? requestId : envelope.request_id,
-    });
+    throw new ApiError(
+      {
+        kind: "http",
+        status,
+        code: envelope.error.code,
+        message: envelope.error.message,
+        requestId: envelope.request_id === "" ? requestId : envelope.request_id,
+      },
+      { body: body.value },
+    );
   }
 
   try {
@@ -174,16 +177,22 @@ export function apiUpload<T>(spec: ApiUploadSpec, decode: (input: unknown, statu
 }
 
 /**
- * 打开一条长响应（播放区事件流 text/event-stream）：与 apiRequest 同样同源、带 Cookie、不缓存、带请求 ID。
+ * 打开一条长响应（播放区事件流、管家的运行流 text/event-stream）：与 apiRequest 同样同源、带 Cookie、不缓存、带请求 ID。
+ * 默认 GET；管家发消息与继续运行用 POST（body 省略时不带请求体）。
  * 200 时把响应交给调用方逐块读取；其他状态按错误信封抛出 ApiError，401 unauthorized 同样通知会话边界（带请求发出时的代次）。
  */
-export async function apiStream(spec: { path: ApiPath; signal: AbortSignal }): Promise<Response> {
+export async function apiStream(spec: { path: ApiPath; signal: AbortSignal; method?: "GET" | "POST"; body?: unknown }): Promise<Response> {
   const requestId = newRequestId();
   const generation = sessionBoundary?.currentGeneration() ?? 0;
   const headers = new Headers({ Accept: "text/event-stream", "X-Request-ID": requestId });
+  const init: RequestInit = { method: spec.method ?? "GET", headers, credentials: "same-origin", cache: "no-store", signal: spec.signal };
+  if (spec.body !== undefined) {
+    headers.set("Content-Type", "application/json");
+    init.body = JSON.stringify(spec.body);
+  }
   let response: Response;
   try {
-    response = await fetch(spec.path, { method: "GET", headers, credentials: "same-origin", cache: "no-store", signal: spec.signal });
+    response = await fetch(spec.path, init);
   } catch (error) {
     if (spec.signal.aborted) throw new ApiError({ kind: "aborted" }, { cause: error });
     throw new ApiError({ kind: "network", requestId }, { cause: error });

@@ -28,6 +28,10 @@ type RunParams struct {
 	ConversationID string
 	// Text 是本次新发的用户消息。
 	Text string
+	// Continue 表示从已有历史继续，不追加用户消息或修改标题。
+	Continue bool
+	// DisplayName 是调用者当前设置中的管家名字。
+	DisplayName string
 	// Provider 是调用方按用户配置构造的适配器。
 	Provider provider.Provider
 	// Model 是本次使用的模型名。
