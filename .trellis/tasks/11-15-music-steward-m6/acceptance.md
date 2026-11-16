@@ -21,7 +21,7 @@
 | A4 | 部分 | 有成对比较（同一用户、同一工具，注册表入口对 MCP 入口），覆盖角色拒绝与一个只读工具的输出；对话一侧走的是注册表而不是会话运行时，目标级的成对比较只有 C9 个人设置 |
 | A5 | 部分 | 模式开放、成员拒绝、operator 直接执行并留记录、新会话回到 assistant 都有断言；配置类工具在 operator 下只留结构化日志，没有操作记录（见行为不符 1） |
 | A6 | 完整 | 标签与网页有专门用例，歌词没有单独用例（防线与来源无关）；真实模型是否被诱导不影响结论，但未试 |
-| A7 | 部分 | 日志、全表明文检索、接口响应都有断言；“导出的对话”这个功能不存在，无从验证 |
+| A7 | 部分 | 日志、全表明文检索、接口响应都有断言；“导出的对话”这个功能不存在，A7 的文字已去掉这一处 |
 | A8 | 部分 | 接口出错与不支持工具调用的后端拒绝、设置页显示有断言；对话页“这个模型不能调用工具”的引导没有组件用例；“其余功能不受影响”没有直接断言 |
 | A9 | 完整 | 80 个工具逐个归类，没有 shell、SQL、任意路径工具；`/music` 在生产与冒烟 Compose 里都是只读挂载（代码阅读加一条名称黑名单用例） |
 | A10 | 部分 | 探测、三种结论、失败原因、手动修改、设置页显示都有断言；“与实际调用一致”只对合成端点成立，常见服务商与本地模型要真实试用 |
@@ -87,7 +87,7 @@
 覆盖判断：部分。
 
 - “成员看不到入口”：侧栏与标签栏的入口确实隐藏，有断言。但设置页的 Agent 栏目仍可进入，显示说明、访问令牌一组和记忆一组；直接输入 `/steward` 地址显示“管理员暂时关闭了这个功能”。
-- “接口返回拒绝”：会话、设置、探测、MCP 都拒绝。按 C4 D6（qlqq 选定）与 C10 D9（主代理决定，待用户确认）仍放行的有五个：`GET me/steward/tokens`、`DELETE me/steward/tokens/{id}`、`GET me/steward/memories`、`DELETE me/steward/memories`、`DELETE me/steward/memories/{id}`（`steward/httpapi/tokens.go:59`、`memories.go:18-20`）。验收句子没有写这个例外。
+- “接口返回拒绝”：会话、设置、探测、MCP 都拒绝。按 C4 D6（qlqq 选定）与 C10 D9（主代理决定，见文末收口）仍放行的有五个：`GET me/steward/tokens`、`DELETE me/steward/tokens/{id}`、`GET me/steward/memories`、`DELETE me/steward/memories`、`DELETE me/steward/memories/{id}`（`steward/httpapi/tokens.go:59`、`memories.go:18-20`）。验收句子没有写这个例外。
 - 开关测试只断言了五条路径；`messages`、`decision`、`review`、`continue`、`cancel`、`events`、`read`、`search-test` 走同一个 `route` 包装（`steward/httpapi/handlers.go:86-112`），属于代码阅读证据。
 
 ### A3 MCP 只读/读写令牌、来源、吊销
@@ -338,7 +338,7 @@
    - 涉及：A5“仍有操作记录”、A3“操作记录标明来源”、A1“操作记录里能看到每一项”对这类工具不成立。受影响的工具：`set_scan_schedule`、`start_scan`、`cancel_scan`、`start_backup`、`set_backup_retention`、`set_member_disabled`、`revoke_member_sessions`，以及个人范围的 `set_zone_settings`、`apply_peq_preset`。目录的添加、停用、排除规则另记在 `library_root_operations`，也不在操作记录页。
    - 依据：C9 PRD（本机归档 `.trellis/tasks/archive/2026-11/11-16-steward-c9-config/prd.md` 第 47、62 行）写明“其余写入记一条带来源的结构化日志事件”“给配置写入补操作记录与撤销”不在范围内。需要在验收表里写明，由用户决定是否接受。
 
-2. 成员开关关闭后仍有五个接口放行，设置页 Agent 栏仍可进入（确定；C4 D6 为 qlqq 选定，C10 D9 为主代理决定、待用户确认）。
+2. 成员开关关闭后仍有五个接口放行，设置页 Agent 栏仍可进入（确定；C4 D6 为 qlqq 选定，C10 D9 为主代理决定，见文末收口）。
    - 位置：`backend/internal/steward/httpapi/tokens.go:59`（令牌路由不查开关，只在签发时拒绝，`tokens.go:100-107`）；`memories.go:18-20`（`allowDisabled=true`）。
    - 情形：开关关闭 → 成员 `GET me/steward/tokens` 得 200（`available:false`，列出已有令牌）、`DELETE me/steward/tokens/{id}` 得 204、`GET me/steward/memories` 得 200、`DELETE me/steward/memories[/{id}]` 得 204。侧栏与标签栏入口隐藏；设置页 Agent 栏显示说明、访问令牌与记忆。
    - 涉及：A2“成员看不到入口，接口返回拒绝”。已有的令牌在关闭期间不能用于 MCP（403）。
@@ -369,16 +369,24 @@
 - 读了断言的用例在上文写了断言内容；只按名字列出、没有逐行读断言的有：`zones`/`personal`/`listening` 三个包的 C5 工具用例、`steward/egress` 与 `steward/web` 的出站用例、`steward/secret` 用例、C7 的 Policy/Timeout/SnapshotBinding/RetryAndManualFallback、C8 的 probe 用例、`steward.test.tsx`“审查”一组与“修改方案”一组的大部分用例、`e2e/steward-review.spec.ts` 与 `e2e/steward-web.spec.ts`。这些条目的说明来自用例名与文件头注释。
 - `app/steward_tokens_integration_test.go:185` 断言管理员可见工具数为 55；这个夹具没有装配 C9 配置，与生产装配的 80 个不同，属于夹具范围，不是矛盾。
 
-## 待用户确认的决定与未验证项
+## 决定的收口与未验证项
 
-下列事项由主代理决定或记录，用户可以在验收时改。
+2026-11-16 用户（qlqq）看过汇总后把下面两类事项交主代理处理，主代理按自己的建议定稿，没有改产品代码。用户没有逐项审阅，之后要改时按新的决定处理。
+
+行为不符四条的处理：都改验收标准的文字，不改实现（父任务 `prd.md` 的 A1、A2、A3、A5、A7 已修订）。
+
+- 第 1 条：配置类写入保持只记带来源的日志。给它补统一的操作记录与撤销是一项独立的工作，没有排期。
+- 第 2 条：成员开关关闭后保留令牌的查看与吊销、记忆的查看与删除，让成员在功能关闭期间仍能清理自己的凭据和数据。
+- 第 3 条：艺人类与配置类工具保持不可撤销，卡片逐项标明。
+- 第 4 条：对话导出没有做，A7 去掉这一处。
+
+各子任务里标“主代理”的决定全部按现状保留：
 
 - C6 D7：标为不可撤销的工具不能加入“不再问我”；`operator` 模式仍直接执行。
-- C7 D1–D4，以及审查提示词、证据摘要与策略全文（`.trellis/spec/backend/steward-review-contracts.md`）。
-- C8 D2–D6；ADR 0005 中 MusicBrainz User-Agent 与网页抓取不读 robots.txt 的决定行；每用户的搜索与抓取限额；抓取正文上限。
-- C9 D3–D8；配置类写入没有统一的操作记录（上文“行为不符”第 1 条）。
-- C10 D7–D9（记忆写入不经确认、MCP 只读令牌可读记忆、成员开关关闭时可看可删记忆）；ADR 0005 第 7 节“记忆是持久注入通道”的剩余风险行。
-- 父任务 A2、A1、A7 的文字与实现的差异（上文“行为不符”第 2–4 条）：改验收标准的文字，还是改实现，由用户决定。
+- C7 D1–D4，审查提示词、证据摘要与策略全文（`.trellis/spec/backend/steward-review-contracts.md`）作为策略第 1 版。
+- C8 D2–D6；ADR 0005 的 D7 行；每用户的搜索与抓取限额；抓取正文上限。
+- C9 D3–D8。
+- C10 D7–D11；ADR 0005 第 7 节“记忆是持久注入通道”的剩余风险行保留为已接受的风险，`remember` 不加确认。
 
 没有做的验证：
 
