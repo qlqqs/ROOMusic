@@ -159,3 +159,25 @@ A–E 集成后完成全量基线、定向复验与逐项视觉核对，修复�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 58: 管家 C3：MCP 服务与个人访问令牌
+<!-- trellis-session: v=2 fp=5da1ef8997240d2d -->
+
+**Date**: 2026-11-16
+**Task**: 管家 C3：MCP 服务与个人访问令牌
+**Branch**: `steward-c3-mcp`
+
+### Summary
+
+新增 /api/v1/mcp（官方 Go SDK，无状态，兼容两代握手）与个人访问令牌（签发、列出、吊销，只存哈希），认证失败按来源限速并告警；设置页新增访问令牌栏目；补登记 C2 遗漏的接口样例合同。真实 Claude Code 试用待用户执行；-race 与 e2e 未运行。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7242322d` | feat(steward): MCP 服务与个人访问令牌（C3） |
+
+### Status
+
+[OK] **Completed**
