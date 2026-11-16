@@ -69,8 +69,8 @@ export type StewardFake = {
   /** 成员开关关闭：设置与会话接口都返回 403 steward_disabled。 */
   disabled: boolean;
   conversations: FakeConversation[];
-  /** 发消息与继续运行收到的请求与对应的流；测试据此推送事件。 */
-  runs: { request: RecordedRequest; kind: "messages" | "continue"; stream: FakeSse }[];
+  /** 发消息与继续运行收到的请求、请求体里的页面上下文（没有时是 null）与对应的流；测试据此推送事件。 */
+  runs: { request: RecordedRequest; kind: "messages" | "continue"; context: unknown; stream: FakeSse }[];
   /** 下一次发消息或继续时直接返回的响应（开始流之前的拒绝）。 */
   nextRunResponse: Response | null;
   /** 检测的响应；null 时按提交的地址、模型与密钥合成一次通过的检测并保存。 */
@@ -85,6 +85,33 @@ const runPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/(messages|cont
 const cancelPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/cancel$/;
 const idOf = (request: RecordedRequest, pattern: RegExp) => pattern.exec(request.path.split("?")[0] ?? "")?.[1] ?? "";
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const pageKinds = ["album", "artist", "playlist", "track", "other"];
+
+/**
+ * 请求体里的页面上下文（C5）：按后端的规则检查——发消息只认 text 与 context（DisallowUnknownFields），
+ * context 只有 page 与 playback，page.kind 是枚举，路径不超过 512、标题类不超过 300 个字符；继续不接受 context。
+ * 不合格时返回说明，合格时是 null。
+ */
+function contextProblemOf(body: unknown, kind: "messages" | "continue"): string | null {
+  if (kind === "continue") return isRecord(body) && "context" in body ? "继续不接受 context" : null;
+  if (!isRecord(body)) return "请求体应为对象";
+  if (Object.keys(body).some((key) => key !== "text" && key !== "context")) return "请求体有不认识的字段";
+  const context = body["context"];
+  if (context === undefined) return null;
+  if (!isRecord(context) || Object.keys(context).some((key) => key !== "page" && key !== "playback")) return "context 形状不对";
+  const tooLong = (value: unknown, max: number) => value !== undefined && (typeof value !== "string" || Array.from(value).length > max);
+  const page = context["page"];
+  if (page !== undefined && (!isRecord(page) || typeof page["path"] !== "string" || tooLong(page["path"], 512) || !pageKinds.includes(String(page["kind"])) || tooLong(page["title"], 300))) {
+    return "page 不合格";
+  }
+  const playback = context["playback"];
+  if (playback !== undefined && (!isRecord(playback) || typeof playback["zone_id"] !== "string" || ["zone_name", "title", "artist"].some((key) => tooLong(playback[key], 300)))) {
+    return "playback 不合格";
+  }
+  return null;
+}
+
 let created = 0;
 
 /** 与后端 endpointAuthority 相同：主机名转小写、去掉末尾的点，未写端口时 http 取 80、https 取 443。 */
@@ -97,7 +124,7 @@ function authorityOf(endpoint: string): string {
   }
 }
 
-/** 管家接口的替身：设置、会话的增删改查、运行流（可控）与取消。形状按 C2 的接口合同与样本。 */
+/** 管家接口的替身：设置、会话的增删改查、运行流（可控，记下请求体里的页面上下文）与取消。形状按 C2、C5 的接口合同与样本。 */
 export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = {}): StewardFake {
   const state: StewardFake = {
     settings: settingsOf(),
@@ -240,10 +267,13 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
       state.nextRunResponse = null;
       return response;
     }
+    const kind = match?.[2] === "continue" ? "continue" : "messages";
+    const problem = contextProblemOf(request.body, kind);
+    if (problem !== null) return jsonResponse(400, { error: { code: "invalid_request", message: problem }, request_id: "fake-request" });
     const stream = fakeSse();
     // 与浏览器一致：请求被中止时，正在读的响应体随之出错。
     request.signal?.addEventListener("abort", () => stream.fail(), { once: true });
-    state.runs.push({ request, kind: match?.[2] === "continue" ? "continue" : "messages", stream });
+    state.runs.push({ request, kind, context: isRecord(request.body) ? (request.body["context"] ?? null) : null, stream });
     return stream.response;
   });
   api.on("POST", cancelPath, (request) => {

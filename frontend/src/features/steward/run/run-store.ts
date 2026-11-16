@@ -2,6 +2,7 @@ import { failureOf, type ApiFailure } from "../../../shared/api";
 import { SseParser } from "../../../shared/lib/sse";
 import { decodeRunEvent, type RunEndDTO } from "../api/decoders";
 import { cancelConversation, openRun } from "../api/endpoints";
+import type { StewardRequestContext } from "../context/context";
 import { applyRunEvent, emptyRunView, type RunView } from "./reduce";
 
 // 进行中的运行（应用级）：发消息或继续时由这里发起请求并读流，与组件的生命周期无关，
@@ -34,8 +35,12 @@ export type StartRunParams = {
   conversationId: string;
   text: string | null;
   baseSequence: number;
+  /** 随这条消息发的页面上下文；null 时请求体里没有。继续（text 为 null）不带上下文，这里也是 null。 */
+  context: StewardRequestContext | null;
   /** 运行结束后重读会话与列表（以落库内容为准）；完成后这次运行从 store 里移除。 */
   refresh: () => Promise<unknown>;
+  /** 一次工具调用结束（成功或失败）时，带上工具名：调用方据此刷新被改动的个人数据。 */
+  onToolFinished: (name: string) => void;
 };
 
 /** 流是否开起来了：没开起来时带失败原因（调用方据此把草稿放回输入框）；同一会话已有运行时 failure 为 null。 */
@@ -77,7 +82,7 @@ export function getRunSnapshot(): RunSnapshot {
   return snapshot;
 }
 
-export function startRun({ conversationId, text, baseSequence, refresh }: StartRunParams): Promise<StartResult> {
+export function startRun({ conversationId, text, baseSequence, context, refresh, onToolFinished }: StartRunParams): Promise<StartResult> {
   if (snapshot.runs.has(conversationId)) return Promise.resolve({ started: false, failure: null });
   const controller = new AbortController();
   controllers.set(conversationId, controller);
@@ -93,7 +98,7 @@ export function startRun({ conversationId, text, baseSequence, refresh }: StartR
     void (async () => {
       let response: Response;
       try {
-        response = await openRun(conversationId, text, controller.signal);
+        response = await openRun(conversationId, text === null ? null : { text, context }, controller.signal);
       } catch (error) {
         if (!live()) return resolve({ started: false, failure: null });
         controllers.delete(conversationId);
@@ -105,7 +110,7 @@ export function startRun({ conversationId, text, baseSequence, refresh }: StartR
         return;
       }
       resolve({ started: true });
-      const end = await readStream(conversationId, response, controller.signal, live);
+      const end = await readStream(conversationId, response, controller.signal, live, onToolFinished);
       if (!live()) return;
       controllers.delete(conversationId);
       setRun(conversationId, (run) => ({ ...run, phase: "settling" }));
@@ -116,7 +121,13 @@ export function startRun({ conversationId, text, baseSequence, refresh }: StartR
   });
 }
 
-async function readStream(conversationId: string, response: Response, signal: AbortSignal, live: () => boolean): Promise<RunEnd> {
+async function readStream(
+  conversationId: string,
+  response: Response,
+  signal: AbortSignal,
+  live: () => boolean,
+  onToolFinished: (name: string) => void,
+): Promise<RunEnd> {
   const body = response.body;
   if (body === null) return { kind: "disconnected" };
   const reader = body.getReader();
@@ -139,6 +150,11 @@ async function readStream(conversationId: string, response: Response, signal: Ab
         if (event.type === "done") end = { kind: "done", end: event.end };
         const applied = event;
         setRun(conversationId, (run) => ({ ...run, view: applyRunEvent(run.view, applied) }));
+        if (event.type === "tool_finished") {
+          const callId = event.tool_finished.call_id;
+          const name = snapshot.runs.get(conversationId)?.view.items.find((item) => item.callId === callId)?.name;
+          if (name !== undefined) onToolFinished(name);
+        }
       }
     }
   } catch {

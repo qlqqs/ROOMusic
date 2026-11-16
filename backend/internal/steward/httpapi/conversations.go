@@ -91,6 +91,8 @@ type messageResponse struct {
 	Role string `json:"role"`
 	// Content 是过滤不透明内容后的消息块。
 	Content []visibleBlock `json:"content"`
+	// Context 是原用户消息的界面状态，不混入正文。
+	Context json.RawMessage `json:"context,omitempty"`
 	// InputTokens 是输入 token 用量，未知时为 null。
 	InputTokens *int64 `json:"input_tokens"`
 	// OutputTokens 是输出 token 用量，未知时为 null。
@@ -138,7 +140,7 @@ func messageView(message runtime.Message) (messageResponse, error) {
 	if err := json.Unmarshal(message.Content, &content); err != nil {
 		return messageResponse{}, err
 	}
-	result := messageResponse{ID: message.ID, Sequence: message.Sequence, Role: message.Role,
+	result := messageResponse{ID: message.ID, Sequence: message.Sequence, Role: message.Role, Context: message.Context,
 		InputTokens: message.InputTokens, OutputTokens: message.OutputTokens, CreatedAt: message.CreatedAt,
 		Content: []visibleBlock{}, ToolCalls: []toolCallResponse{}}
 	for _, block := range content.Content {

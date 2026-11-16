@@ -4,9 +4,12 @@ import { useCallback, useSyncExternalStore } from "react";
 import { useViewerScope } from "../../auth";
 import { stewardKeys } from "../query-keys";
 import type { ConversationDetailDTO } from "../api/decoders";
+import type { StewardRequestContext } from "../context/context";
+import { useStewardHost } from "../context/host";
 import { isIncomplete, turnsFromMessages, type Turn } from "../run/reduce";
 import { getRunSnapshot, startRun, subscribeRuns, type ActiveRun, type RunEnd, type RunSnapshot, type StartResult } from "../run/run-store";
 import { refreshConversation } from "../run/refresh";
+import { toolDataScopeOf } from "../tool-labels";
 import { isStewardDisabled } from "./use-steward-settings";
 
 export function useRunSnapshot(): RunSnapshot {
@@ -30,18 +33,32 @@ export function useStewardDisabledCheck() {
   );
 }
 
-/** 发消息（text）或从现有历史继续（null）。运行结束后重读会话与列表。 */
+/**
+ * 发消息（text）或从现有历史继续（null），context 是随消息发的页面上下文（继续时为 null）。运行结束后重读会话与列表；
+ * 改了收藏、歌单或播放历史的工具每结束一次，就让那类个人数据的查询失效（播放类不用，分区事件会推过来）。
+ */
 export function useStartRun() {
   const queryClient = useQueryClient();
   const { generation } = useViewerScope();
   const checkDisabled = useStewardDisabledCheck();
+  const { refreshData } = useStewardHost();
   return useCallback(
-    async (conversationId: string, text: string | null, baseSequence: number): Promise<StartResult> => {
-      const result = await startRun({ conversationId, text, baseSequence, refresh: () => refreshConversation(queryClient, generation, conversationId) });
+    async (conversationId: string, text: string | null, baseSequence: number, context: StewardRequestContext | null): Promise<StartResult> => {
+      const result = await startRun({
+        conversationId,
+        text,
+        baseSequence,
+        context,
+        refresh: () => refreshConversation(queryClient, generation, conversationId),
+        onToolFinished: (name) => {
+          const scope = toolDataScopeOf(name);
+          if (scope !== null) refreshData(scope);
+        },
+      });
       if (!result.started && isHttpFailure(result.failure, 403, "steward_disabled")) checkDisabled(null, true);
       return result;
     },
-    [queryClient, generation, checkDisabled],
+    [queryClient, generation, checkDisabled, refreshData],
   );
 }
 

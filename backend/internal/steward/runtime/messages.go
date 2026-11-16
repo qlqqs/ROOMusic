@@ -22,6 +22,8 @@ type Message struct {
 	// Content 原样保存适配器给出的 JSON，包含不透明块及协议内工具调用标识。
 	// 调用方负责只将不透明块回传原协议，且不向界面暴露这些块。
 	Content json.RawMessage
+	// Context 保存用户消息的界面状态，与正文分开。
+	Context json.RawMessage
 	// InputTokens 为 nil 表示输入用量未知，不估算。
 	InputTokens *int64
 	// OutputTokens 为 nil 表示输出用量未知，不估算。
@@ -38,6 +40,8 @@ type MessageInput struct {
 	Role string
 	// Content 是完整 JSON，存储层不解释内容结构。
 	Content json.RawMessage
+	// Context 保存用户消息的界面状态，与正文分开。
+	Context json.RawMessage
 	// InputTokens 为 nil 表示输入用量未知。
 	InputTokens *int64
 	// OutputTokens 为 nil 表示输出用量未知。
@@ -118,14 +122,21 @@ func (s *Store) AppendMessage(ctx context.Context, userID, conversationID string
 }
 
 func appendMessage(ctx context.Context, tx *sql.Tx, userID, conversationID string, input MessageInput) (Message, error) {
+	normalizedContext, err := NormalizeContext(input.Context)
+	if err != nil {
+		return Message{}, err
+	}
+	if len(normalizedContext) != 0 && input.Role != "user" {
+		return Message{}, ErrInvalidInput
+	}
 	// 锁行与分配序号分成两条语句，使 READ COMMITTED 能看到前一个持锁事务的消息。
 	message, err := scanMessage(tx.QueryRowContext(ctx, `INSERT INTO steward_messages
- (id,conversation_id,sequence,role,content,input_tokens,output_tokens,created_at)
- SELECT $3::uuid,c.id,COALESCE(MAX(m.sequence),0)+1,$4,$5::json,$6,$7,clock_timestamp()
+ (id,conversation_id,sequence,role,content,input_tokens,output_tokens,created_at,context)
+ SELECT $3::uuid,c.id,COALESCE(MAX(m.sequence),0)+1,$4,$5::json,$6,$7,clock_timestamp(),$8::jsonb
  FROM steward_conversations c LEFT JOIN steward_messages m ON m.conversation_id=c.id
  WHERE c.user_id=$1::uuid AND c.id=$2::uuid GROUP BY c.id
- RETURNING id::text,conversation_id::text,sequence,role,content::text,input_tokens,output_tokens,created_at`,
-		userID, conversationID, uuid.New(), input.Role, input.Content, input.InputTokens, input.OutputTokens))
+ RETURNING id::text,conversation_id::text,sequence,role,content::text,input_tokens,output_tokens,created_at,context::text`,
+		userID, conversationID, uuid.New(), input.Role, input.Content, input.InputTokens, input.OutputTokens, []byte(normalizedContext)))
 	if err != nil {
 		return Message{}, storeError("追加管家消息", err)
 	}
@@ -189,7 +200,7 @@ func finishToolCall(ctx context.Context, tx *sql.Tx, userID, conversationID, cal
 
 func readMessages(ctx context.Context, tx *sql.Tx, userID, conversationID string) ([]Message, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT m.id::text,m.conversation_id::text,m.sequence,m.role,m.content::text,
- m.input_tokens,m.output_tokens,m.created_at FROM steward_messages m
+ m.input_tokens,m.output_tokens,m.created_at,m.context::text FROM steward_messages m
  JOIN steward_conversations c ON c.id=m.conversation_id
  WHERE c.user_id=$1::uuid AND c.id=$2::uuid ORDER BY m.sequence`, userID, conversationID)
 	if err != nil {
@@ -240,7 +251,7 @@ func readToolCalls(ctx context.Context, tx *sql.Tx, userID, conversationID strin
 func scanMessage(row scanner) (Message, error) {
 	message := Message{ToolCalls: []ToolCall{}}
 	err := row.Scan(&message.ID, &message.ConversationID, &message.Sequence, &message.Role,
-		(*[]byte)(&message.Content), &message.InputTokens, &message.OutputTokens, &message.CreatedAt)
+		(*[]byte)(&message.Content), &message.InputTokens, &message.OutputTokens, &message.CreatedAt, (*[]byte)(&message.Context))
 	message.CreatedAt = message.CreatedAt.UTC()
 	return message, err
 }

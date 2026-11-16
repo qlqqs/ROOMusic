@@ -1,6 +1,20 @@
 import { FailureNotice, Notice, Skeleton } from "../../../shared/ui";
 import type { SettingsDTO } from "../api/decoders";
-import { dockEpoch, draftOf, saveDraft, setNewConversationModel, setViewNotice, useDockState, useDraft, useViewNotice } from "../dock-store";
+import { noDismissed, pageIdentityOf, playbackIdentityOf, requestContextOf, visibleContextOf } from "../context/context";
+import { ContextChips } from "../context/context-chips";
+import { usePageContext, usePlaybackContext } from "../context/host";
+import {
+  dockEpoch,
+  draftOf,
+  saveDraft,
+  setDismissedContext,
+  setNewConversationModel,
+  setViewNotice,
+  useDismissedContext,
+  useDockState,
+  useDraft,
+  useViewNotice,
+} from "../dock-store";
 import { isMissingConversation, useConversation, useCreateConversation, usePatchConversation } from "../hooks/use-conversations";
 import { useStartRun, useStewardDisabledCheck, useThread } from "../hooks/use-run";
 import { effectiveModelOf, readinessOf } from "../hooks/use-steward-settings";
@@ -34,7 +48,8 @@ const noticeTitles = {
 
 /**
  * 一个会话的对话区（面板与整页共用）：对话内容、结束说明与输入框。未配置时没有输入框，换成配置引导。
- * 调用方以会话 ID 为 key 渲染；草稿与提示按会话存在内存里，切回来还在。
+ * 调用方以会话 ID 为 key 渲染；草稿、草稿里点掉的上下文标签与提示按会话存在内存里，切回来还在。
+ * 发消息时带上没被点掉的页面上下文（正在看、正在播放），发出后点掉的标签恢复；继续不带上下文。
  */
 export function ConversationView({ conversationId, settings, name, onCreated }: ConversationViewProps) {
   const detail = useConversation(conversationId);
@@ -49,6 +64,15 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
   const draft = useDraft(draftKey);
   const failure = useViewNotice(draftKey);
   const setDraft = (text: string) => saveDraft(draftKey, text);
+  const pageContext = usePageContext();
+  const playbackContext = usePlaybackContext();
+  const dismissed = useDismissedContext(draftKey);
+  const shownContext = visibleContextOf(pageContext, playbackContext, dismissed);
+
+  function dismissContext(key: "page" | "playback") {
+    if (key === "page" && pageContext !== null) setDismissedContext(draftKey, { ...dismissed, page: pageIdentityOf(pageContext) });
+    if (key === "playback" && playbackContext !== null) setDismissedContext(draftKey, { ...dismissed, playback: playbackIdentityOf(playbackContext) });
+  }
 
   const readiness = readinessOf(settings);
   const running = view.run !== null;
@@ -58,14 +82,22 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
   async function send() {
     const text = draft.trim();
     if (text === "") return;
+    const context = requestContextOf(pageContext, playbackContext, dismissed);
     setViewNotice(draftKey, null);
     setDraft("");
+    setDismissedContext(draftKey, noDismissed);
+    // 开流前失败：文字回到输入框（期间没有新输入时），点掉的标签也一起放回。
+    const restore = (key: string) => {
+      if (draftOf(key) !== "") return;
+      saveDraft(key, text);
+      setDismissedContext(key, dismissed);
+    };
     // 每次异步返回后先核对：期间登出或换了用户（例如请求得到 401）时，草稿、提示与导航都属于上一个人，不再写。
     const started = dockEpoch();
     const stale = () => dockEpoch() !== started;
     if (conversationId !== null) {
-      const result = await startRun(conversationId, text, view.lastSequence);
-      if (!stale() && !result.started && result.failure !== null && draftOf(draftKey) === "") saveDraft(draftKey, text);
+      const result = await startRun(conversationId, text, view.lastSequence, context);
+      if (!stale() && !result.started && result.failure !== null) restore(draftKey);
       return;
     }
     let id: string;
@@ -73,7 +105,7 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
       id = (await create.mutateAsync()).id;
     } catch (error) {
       if (stale()) return;
-      if (draftOf(draftKey) === "") saveDraft(draftKey, text);
+      restore(draftKey);
       setViewNotice(draftKey, { action: "create", error });
       checkDisabled(error);
       return;
@@ -87,7 +119,7 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
       } catch (error) {
         if (stale()) return;
         // 会话已经建好：换到它，消息先不发（模型不是用户选的那个），文字留在输入框里，提示模型没有切换成功。
-        saveDraft(id, text);
+        restore(id);
         setViewNotice(id, { action: "new_model", error });
         onCreated(id);
         return;
@@ -95,15 +127,16 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
       if (stale()) return;
     }
     // 先登记运行再换到新会话：新会话的对话区一出现就能看到这次运行。开流前被拒绝时文字回到新会话的输入框。
-    const run = startRun(id, text, 0);
+    const run = startRun(id, text, 0, context);
     onCreated(id);
     const result = await run;
-    if (!stale() && !result.started && result.failure !== null && draftOf(id) === "") saveDraft(id, text);
+    if (!stale() && !result.started && result.failure !== null) restore(id);
   }
 
   function continueRun() {
     if (conversationId === null) return;
-    void startRun(conversationId, null, view.lastSequence);
+    // 继续不带上下文：原用户消息的上下文保持发送时的样子。
+    void startRun(conversationId, null, view.lastSequence, null);
   }
 
   function selectModel(model: string) {
@@ -168,6 +201,7 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
           onSend={() => void send()}
           onStop={() => conversationId !== null && stopRun(conversationId)}
           note={elsewhere ? "正在别处回答，结束后才能继续发消息。" : undefined}
+          context={<ContextChips page={shownContext.page} playback={shownContext.playback} onDismiss={dismissContext} />}
           tools={
             <ModelMenu
               current={currentModel}

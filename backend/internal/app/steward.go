@@ -14,8 +14,12 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/library"
 	librarytools "github.com/qlqq/roomusic/backend/internal/library/stewardtools"
+	"github.com/qlqq/roomusic/backend/internal/listening"
+	listeningtools "github.com/qlqq/roomusic/backend/internal/listening/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	operationtools "github.com/qlqq/roomusic/backend/internal/operations/stewardtools"
+	"github.com/qlqq/roomusic/backend/internal/personal"
+	personaltools "github.com/qlqq/roomusic/backend/internal/personal/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	stewardapi "github.com/qlqq/roomusic/backend/internal/steward/httpapi"
 	stewardmcp "github.com/qlqq/roomusic/backend/internal/steward/mcp"
@@ -23,10 +27,12 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"
 	"github.com/qlqq/roomusic/backend/internal/steward/token"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
+	"github.com/qlqq/roomusic/backend/internal/zones"
+	zonestools "github.com/qlqq/roomusic/backend/internal/zones/stewardtools"
 )
 
 // registerSteward 在接受请求前恢复会话状态；失败时记录日志并让管家接口返回 503。
-func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sql.DB, guard *identity.Guard, dataDirectory string, logger *slog.Logger, scans *library.Service, kinds []operations.Kind) {
+func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sql.DB, guard *identity.Guard, dataDirectory string, logger *slog.Logger, scans *library.Service, kinds []operations.Kind, playback *zones.Service, history *listening.Service, personalLibrary *personal.Service) {
 	store := runtime.NewStore(database)
 	if database != nil {
 		ctx, cancel := context.WithTimeout(lifecycle, 10*time.Second)
@@ -51,6 +57,9 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	definitions := catalogtools.StewardTools(catalog.NewStore(database), governance.NewStore(database))
 	definitions = append(definitions, librarytools.StewardTools(scans)...)
 	definitions = append(definitions, operationtools.StewardTools(database, kinds...)...)
+	definitions = append(definitions, zonestools.StewardTools(playback, catalog.NewStore(database))...)
+	definitions = append(definitions, listeningtools.StewardTools(history)...)
+	definitions = append(definitions, personaltools.StewardTools(personalLibrary)...)
 	for _, definition := range definitions {
 		if err := registry.Register(definition); err != nil {
 			// 工具合同是编译期装配；重复名称或非法 schema 属于程序错误。

@@ -168,11 +168,13 @@ type RegisterDeviceResult struct {
 	Zone       Zone      `json:"zone"`
 }
 type CommandResult struct {
-	ServerTime  Timestamp    `json:"server_time"`
-	Zone        Zone         `json:"zone"`
-	QueueChange *QueueChange `json:"queue_change"`
-	TargetZone  *Zone        `json:"target_zone,omitempty"`
-	Imported    *bool        `json:"imported,omitempty"`
+	// AffectedEntries 在命令持锁时计数，供工具返回摘要，不改变播放区响应协议。
+	AffectedEntries int          `json:"-"`
+	ServerTime      Timestamp    `json:"server_time"`
+	Zone            Zone         `json:"zone"`
+	QueueChange     *QueueChange `json:"queue_change"`
+	TargetZone      *Zone        `json:"target_zone,omitempty"`
+	Imported        *bool        `json:"imported,omitempty"`
 }
 
 // Timer 与时钟、随机数和 ID 一起注入，不需要真实等待即可驱动边界。

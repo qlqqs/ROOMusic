@@ -579,6 +579,7 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "steward/conversation-busy": { status: 409, code: "conversation_busy" },
   "steward/continue-nothing": { status: 409, code: "nothing_to_continue" },
   "steward/conversation-not-found": { status: 404, code: "not_found" },
+  "steward/invalid-context": { status: 400, code: "invalid_request" },
   "steward/disabled": { status: 403, code: "steward_disabled" },
   "steward/egress-denied-settings": { status: 403, code: "egress_denied" },
   "steward/not-configured": { status: 409, code: "steward_not_configured" },

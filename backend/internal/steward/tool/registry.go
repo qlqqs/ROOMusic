@@ -75,7 +75,7 @@ func (registry *Registry) List(caller Caller) []Definition {
 	return definitions
 }
 
-// Invoke 逐次鉴权、检查只读范围、校验输入后执行，并返回有界输出。
+// Invoke 逐次鉴权、检查工具范围、校验输入后执行，并返回有界输出。
 // 调用入口错误返回 *Error，处理器错误保留原始错误链；不缓存用户权限。
 func (registry *Registry) Invoke(ctx context.Context, caller Caller, name string, input json.RawMessage) (Result, error) {
 	registered, exists := registry.tools[name]
@@ -86,8 +86,8 @@ func (registry *Registry) Invoke(ctx context.Context, caller Caller, name string
 	if !definition.MinRole.Allows(caller.User) {
 		return Result{}, &Error{Code: CodePermissionDenied, Tool: name, Message: "无权调用此工具"}
 	}
-	// C6 在此处接入非只读工具的确认路径；任何执行都必须先经过上面的鉴权。
-	if definition.Scope != ScopeRead {
+	// C6 在此处接入共享写工具的确认路径；任何执行都必须先经过上面的鉴权。
+	if definition.Scope != ScopeRead && definition.Scope != ScopePersonal {
 		return Result{}, &Error{Code: CodeUnsupportedScope, Tool: name, Message: "此入口不支持该工具的影响范围"}
 	}
 	value, err := decodeJSON(input)

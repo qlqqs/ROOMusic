@@ -203,3 +203,25 @@ A–E 集成后完成全量基线、定向复验与逐项视觉核对，修复�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 60: 管家 C5：播放与个人库工具、页面上下文
+<!-- trellis-session: v=2 fp=d8d0cd48014d8463 -->
+
+**Date**: 2026-11-16
+**Task**: 管家 C5：播放与个人库工具、页面上下文
+**Branch**: `steward-c5-personal`
+
+### Summary
+
+规划 C5–C10；实现 C5：personal 范围放开、21 个工具、页面上下文；独立审查 1 缺陷 5 疑点已修。未做浏览器核对与真实模型试用。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6345be12` | feat(steward): 播放与个人库工具、页面上下文（C5） |
+
+### Status
+
+[OK] **Completed**

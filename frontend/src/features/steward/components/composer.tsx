@@ -15,6 +15,8 @@ type ComposerProps = {
   stopping: boolean;
   /** 输入框下方左侧的工具（模型菜单）。 */
   tools: ReactNode;
+  /** 输入框上方的上下文标签行；没有时不渲染。 */
+  context?: ReactNode;
   note?: ReactNode;
 };
 
@@ -24,7 +26,7 @@ const MAX_HEIGHT = 200;
 /**
  * 输入框：Enter 发送，Shift+Enter 换行，输入法组合期间（选字的回车）不发送；运行中发送按钮变成停止按钮。
  */
-export function Composer({ value, onChange, placeholder, running, sendDisabled, onSend, onStop, stopping, tools, note }: ComposerProps) {
+export function Composer({ value, onChange, placeholder, running, sendDisabled, onSend, onStop, stopping, tools, context, note }: ComposerProps) {
   const textarea = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     const element = textarea.current;
@@ -40,6 +42,7 @@ export function Composer({ value, onChange, placeholder, running, sendDisabled, 
   };
   return (
     <div className={styles.compose}>
+      {context}
       <div className={styles.box}>
         <textarea
           ref={textarea}

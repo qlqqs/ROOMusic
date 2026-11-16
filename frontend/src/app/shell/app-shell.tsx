@@ -21,6 +21,7 @@ import { LazyPage } from "../routes/lazy-page";
 import { Brand } from "./brand";
 import { PlaybackOriginProvider } from "./playback-origin";
 import { PrimaryNav, STEWARD_DOCK_ID, STEWARD_ENTRY_ID } from "./primary-nav";
+import { StewardHostScope } from "./steward-host";
 import { TabBar } from "./tab-bar";
 import { useCatalogEpochSync } from "./use-catalog-epoch-sync";
 import { UserMenu } from "./user-menu";
@@ -64,12 +65,15 @@ function isEditableTarget(target: EventTarget | null): boolean {
  * 已登录界面的外壳。≥768px：左侧导航与主内容各自滚动，当前用户（齿轮进设置、“更多”里是账号与退出登录）固定在侧栏底部；
  * <768px：顶部栏是品牌与搜索按钮（打开搜索对话框），底部是标签栏（概览、专辑、艺人、管家、我的），迷你播放栏浮在标签栏上方，页面只有一个滚动区。
  * 导航切换页面后，焦点回到主内容区，读屏用户得到页面变化的反馈。
- * 管家的停靠面板（侧栏入口开合）：≥1100px 在主内容右侧占一列，768–1099px 浮在主内容上，<768px 与整页对话里不显示。
+ * 管家的停靠面板（侧栏入口开合）：≥1100px 在主内容右侧占一列，768–1099px 浮在主内容上，<768px 与整页对话里不显示；
+ * 面板与整页对话的页面上下文、个人数据的刷新由 StewardHostScope 交给管家。
  */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <PlaybackOriginProvider>
-      <ShellFrame>{children}</ShellFrame>
+      <StewardHostScope>
+        <ShellFrame>{children}</ShellFrame>
+      </StewardHostScope>
     </PlaybackOriginProvider>
   );
 }

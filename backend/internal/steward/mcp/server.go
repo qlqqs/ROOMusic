@@ -133,9 +133,9 @@ func toolFailure(err error) (string, json.RawMessage) {
 		case tool.CodePermissionDenied:
 			code, message = string(failure.Code), "无权调用此工具"
 		case tool.CodeUnsupportedScope:
-			code, message = string(failure.Code), "此入口只支持只读工具"
+			code, message = string(failure.Code), "此入口不支持该工具的影响范围"
 		case tool.CodeInvalidInput:
-			code, message = string(failure.Code), "工具输入不符合要求"
+			code, message = string(failure.Code), failure.Message
 		default:
 			code, message = string(failure.Code), failure.Message
 		}

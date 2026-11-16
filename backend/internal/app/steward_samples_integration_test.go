@@ -54,7 +54,7 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mux := http.NewServeMux()
-	registerSteward(ctx, mux, db, identity.NewGuard(db, false, ""), dir, logger, library.NewService(ctx, db, dir, logger), nil)
+	registerSteward(ctx, mux, db, identity.NewGuard(db, false, ""), dir, logger, library.NewService(ctx, db, dir, logger), nil, nil, nil, nil)
 	var mode atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -131,13 +131,22 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	record("conversation-created", created, 201)
 	path := "me/steward/conversations/" + c.ID
 	record("conversations", call("admin", "GET", "me/steward/conversations", nil), 200)
-	record("conversation", call("admin", "GET", path, nil), 200)
 	record("continue-nothing", call("admin", "POST", path+"/continue", nil), 409)
+	// C5 的界面上下文只存在用户消息上，响应样本使用合成 UUID。
+	store := runtime.NewStore(db)
+	_, err = store.AppendMessage(ctx, users["admin"], c.ID, runtime.MessageInput{Role: "user",
+		Content: json.RawMessage(`{"role":"user","content":[{"type":"text","text":"合成问题"}]}`),
+		Context: json.RawMessage(`{"page":{"kind":"album","path":"/albums/11111111-1111-4111-8111-111111111111","id":"11111111-1111-4111-8111-111111111111","title":"合成专辑"},"playback":{"zone_id":"22222222-2222-4222-8222-222222222222","zone_name":"合成分区","status":"paused"}}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	record("conversation", call("admin", "GET", path, nil), 200)
+	record("invalid-context", call("admin", "POST", path+"/messages", map[string]any{"text": "合成问题", "context": map[string]any{"page": map[string]any{"kind": "invalid"}}}), 400)
+
 	record("conversation-renamed", call("admin", "PATCH", path, map[string]string{"title": "新标题"}), 200)
 	record("conversation-model-updated", call("admin", "PATCH", path, map[string]string{"model": "synthetic-other-model"}), 200)
 	record("conversation-model-default", call("admin", "PATCH", path, map[string]string{"model": ""}), 200)
 	record("cancel-idle", call("admin", "POST", path+"/cancel", map[string]string{}), 200)
-	store := runtime.NewStore(db)
 	if err := store.AcquireConversation(ctx, users["admin"], c.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +166,7 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	record("settings-cleared-key", call("admin", "PUT", "me/steward/settings", map[string]any{"key": nil}), 200)
 	mode.Store(3)
 	record("probe-keyless-unconfirmed", call("admin", "POST", "me/steward/settings/probe", map[string]any{"key": nil}), 200)
-	if len(samples.samples) != 31 {
+	if len(samples.samples) != 32 {
 		t.Fatalf("管家样本覆盖清单发生变化：%d", len(samples.samples))
 	}
 	samples.finish()

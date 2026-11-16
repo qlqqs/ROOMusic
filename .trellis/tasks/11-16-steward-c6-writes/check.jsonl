@@ -1,0 +1,10 @@
+{"file":".trellis/spec/backend/steward-runtime-contracts.md","reason":"工具合同、循环、重放、SSE 与错误码"}
+{"file":".trellis/spec/backend/governance-contracts.md","reason":"operations.Run、幂等、撤销"}
+{"file":".trellis/spec/backend/agent-and-operation-guidelines.md","reason":"模式、确认与审批的产品合同"}
+{"file":".trellis/spec/backend/claim-contracts.md","reason":"认领的预览令牌"}
+{"file":".trellis/spec/backend/issue-review-contracts.md","reason":"问题核对的证据令牌"}
+{"file":".trellis/spec/backend/artist-contracts.md","reason":"艺人合并、拆分、改名"}
+{"file":".trellis/spec/backend/default-version-contracts.md","reason":"默认版本"}
+{"file":"docs/architecture/adr/0005-steward-data-and-egress.md","reason":"确认边界与已接受的风险"}
+{"file":".trellis/spec/frontend/steward-guidelines.md","reason":"对话界面的结构"}
+{"file":".trellis/spec/frontend/governance-components.md","reason":"旧值新值与操作记录的现有组件"}

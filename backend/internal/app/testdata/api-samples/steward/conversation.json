@@ -2,12 +2,41 @@
   "body": {
     "created_at": "2026-01-01T00:00:00Z",
     "id": "00000000-0000-4000-8000-000000000001",
-    "messages": [],
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "合成问题",
+            "type": "text"
+          }
+        ],
+        "context": {
+          "page": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "kind": "album",
+            "path": "/albums/00000000-0000-4000-8000-000000000002",
+            "title": "合成专辑"
+          },
+          "playback": {
+            "status": "paused",
+            "zone_id": "00000000-0000-4000-8000-000000000003",
+            "zone_name": "合成分区"
+          }
+        },
+        "created_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "user",
+        "sequence": 1,
+        "tool_calls": []
+      }
+    ],
     "mode": "assistant",
     "model": "synthetic-model",
     "status": "idle",
     "title": "合成对话",
-    "updated_at": "2026-01-01T00:00:00Z"
+    "updated_at": "2026-01-01T00:00:02Z"
   },
   "status": 200
 }

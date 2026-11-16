@@ -25,6 +25,9 @@ type packageRule struct {
 // 各 httpapi 包只依赖本能力、identity 与 platform，且彼此不导入；只有 app 可以装配全部。
 // 新增包必须先在这里声明规则，测试才会通过。
 var packageRules = map[string]packageRule{
+	"zones/stewardtools":             {imports: []string{"catalog", "zones", "zones/queue", "platform/uuid", "steward/tool"}},
+	"listening/stewardtools":         {imports: []string{"listening", "platform/uuid", "steward/tool"}},
+	"personal/stewardtools":          {imports: []string{"personal", "platform/uuid", "steward/tool"}},
 	"catalog/stewardtools":           {imports: []string{"catalog", "catalog/governance", "platform/uuid", "steward/tool"}},
 	"library/stewardtools":           {imports: []string{"library", "platform/uuid", "steward/tool"}},
 	"operations/stewardtools":        {imports: []string{"operations", "platform/uuid", "steward/tool"}},
@@ -102,6 +105,7 @@ var packageRules = map[string]packageRule{
 	"playback/httpapi":               {imports: []string{"identity", "platform/httpserver", "platform/uuid", "playback"}, http: true},
 	"listening/httpapi":              {imports: []string{"identity", "listening", "platform/httpserver", "platform/uuid"}, http: true},
 	"app": {imports: []string{
+		"zones/stewardtools", "listening/stewardtools", "personal/stewardtools",
 		"catalog/stewardtools", "library/stewardtools", "operations", "operations/stewardtools",
 		"steward/httpapi", "steward/runtime", "steward/secret", "steward/tool",
 		"steward/token", "steward/mcp",
