@@ -101,5 +101,6 @@ git tag -a vX.Y.Z -m "ROOMusic vX.Y.Z" && git push origin vX.Y.Z
 ## 文档
 
 - [部署说明](deploy/production/README.md)：配置、备份恢复、反向代理、排查
+- [用 MCP 客户端连接](docs/steward-mcp.md)：访问令牌与 Claude Code 的接入
 - [Core 1 路线](docs/architecture/core-1-roadmap.md)：能力矩阵、各阶段范围与 ADR
 - [前端设计依据](frontend/DESIGN.md)、[前端规范](.trellis/spec/frontend/index.md)、[后端规范](.trellis/spec/backend/index.md)

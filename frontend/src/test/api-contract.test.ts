@@ -1,3 +1,4 @@
+import { decodeCreatedToken, decodeTokenList } from "../features/steward/api/decoders";
 import { decodeBackupOverview, decodeBackupCommand, decodeBackupDeletions, decodeRetentionSave, decodeBuildInfo } from "../features/system/api/decoders";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -384,6 +385,8 @@ const successContracts: Record<string, Contract> = {
   "auth/password-changed": { status: 200, decode: decodePasswordChanged },
   "auth/logout": { status: 200, decode: decodeLoggedOut },
   "users/list": { status: 200, decode: decodeMemberList },
+  "steward/tokens/list": { status: 200, decode: decodeTokenList },
+  "steward/tokens/issued": { status: 201, decode: decodeCreatedToken },
   "users/create": { status: 201, decode: decodeCreatedMember },
   "users/disable": { status: 200, decode: decodeMemberDisabledState },
   "users/enable": { status: 200, decode: decodeMemberDisabledState },
@@ -535,6 +538,13 @@ const successContracts: Record<string, Contract> = {
 
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。
 const errorContracts: Record<string, { status: number; code: string }> = {
+  "steward/conversation-busy": { status: 409, code: "conversation_busy" },
+  "steward/conversation-not-found": { status: 404, code: "not_found" },
+  "steward/disabled": { status: 403, code: "steward_disabled" },
+  "steward/egress-denied-settings": { status: 403, code: "egress_denied" },
+  "steward/not-configured": { status: 409, code: "steward_not_configured" },
+  "steward/provider-no-tool-support": { status: 422, code: "provider_no_tool_support" },
+  "steward/unauthorized": { status: 401, code: "unauthorized" },
   "dsp/responses/opra-not-found": { status: 404, code: "not_found" },
   "dsp/responses/ir-cfg-invalid": { status: 400, code: "ir_cfg_invalid" },
   "dsp/responses/ir-too-large": { status: 413, code: "ir_too_large" },
@@ -717,6 +727,7 @@ const errorContracts: Record<string, { status: number; code: string }> = {
 // 204 没有 JSON 响应体；生产 API 的空结果回调不承担解码。
 const emptyResponseContracts: Record<string, { status: number }> = {
   "dsp/responses/preset-delete": { status: 204 },
+  "steward/tokens/revoked": { status: 204 },
   "playback-zones/responses/delete-device": { status: 204 },
   "playback-zones/responses/release-before-playing": { status: 204 },
   "playback-zones/responses/release-fixed": { status: 204 },
@@ -728,6 +739,34 @@ const emptyResponseContracts: Record<string, { status: number }> = {
 const mediaResponseContracts: Record<string, { reason: string }> = {
   "playback-zones/responses/stream-headers": { reason: "渲染流响应头由媒体元素消费，不是 JSON 响应体" },
 };
+
+// 后端已有接口、前端还没有页面的样本：管家的设置与对话页在后续任务里做，届时换成 decoder 契约并从这里移走。
+// 其中三个探测失败的样本是错误信封外加 probe_result、probed_at，通用的错误信封 decoder 不保留这两个字段。
+const unconsumedContracts: readonly string[] = [
+  "steward/egress-denied",
+  "steward/provider-timeout",
+  "steward/provider-unreachable",
+  "steward/allowlist",
+  "steward/allowlist-added",
+  "steward/allowlist-deleted",
+  "steward/cancel-idle",
+  "steward/conversation",
+  "steward/conversation-created",
+  "steward/conversation-deleted",
+  "steward/conversation-model-default",
+  "steward/conversation-model-updated",
+  "steward/conversation-renamed",
+  "steward/conversations",
+  "steward/instance-members-disabled",
+  "steward/instance-settings",
+  "steward/probe-keyless-unconfirmed",
+  "steward/probe-supported",
+  "steward/probe-unsupported",
+  "steward/settings-cleared-key",
+  "steward/settings-empty",
+  "steward/settings-name",
+  "steward/settings-saved",
+];
 
 const eventContracts: Record<string, { event: string; preservesWireShape: boolean }> = {
   "playback-zones/events/device-removed": { event: "device_removed", preservesWireShape: false },
@@ -886,6 +925,7 @@ describe("API 样本契约", () => {
       ...Object.keys(errorContracts),
       ...Object.keys(emptyResponseContracts),
       ...Object.keys(mediaResponseContracts),
+      ...unconsumedContracts,
       ...Object.keys(eventContracts),
       ...Object.keys(requestContracts),
     ].sort();

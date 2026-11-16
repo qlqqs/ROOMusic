@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端测试质量要求"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"核对令牌明文与工具输入输出不进日志"}
+{"file":".trellis/spec/backend/identity-origin-contracts.md","reason":"核对来源校验没有被放宽"}
+{"file":"docs/architecture/adr/0005-steward-data-and-egress.md","reason":"核对实现与 ADR 第 6 节一致"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端栏目的质量要求"}

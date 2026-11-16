@@ -29,7 +29,9 @@ var packageRules = map[string]packageRule{
 	"library/stewardtools":           {imports: []string{"library", "platform/uuid", "steward/tool"}},
 	"operations/stewardtools":        {imports: []string{"operations", "platform/uuid", "steward/tool"}},
 	"steward/provider":               {imports: []string{"steward/egress"}, http: true},
-	"steward/httpapi":                {imports: []string{"identity", "platform/httpserver", "platform/uuid", "steward/egress", "steward/provider", "steward/runtime", "steward/secret", "steward/tool"}, http: true},
+	"steward/httpapi":                {imports: []string{"identity", "platform/httpserver", "platform/uuid", "steward/egress", "steward/provider", "steward/runtime", "steward/secret", "steward/tool", "steward/token"}, http: true},
+	"steward/token":                  {imports: []string{"identity", "platform/uuid"}},
+	"steward/mcp":                    {imports: []string{"identity", "platform/buildinfo", "platform/httpserver", "steward/token", "steward/tool"}, http: true},
 	"steward/runtime":                {imports: []string{"platform/uuid", "steward/provider", "steward/tool"}},
 	"steward/secret":                 {},
 	"steward/egress":                 {http: true},
@@ -102,6 +104,7 @@ var packageRules = map[string]packageRule{
 	"app": {imports: []string{
 		"catalog/stewardtools", "library/stewardtools", "operations", "operations/stewardtools",
 		"steward/httpapi", "steward/runtime", "steward/secret", "steward/tool",
+		"steward/token", "steward/mcp",
 		"dspsettings", "dspsettings/httpapi", "dspsettings/irload", "dsp/chain", "backup", "backup/httpapi", "zones", "zones/queue", "zones/httpapi",
 		"catalog", "catalog/governance", "catalog/httpapi", "catalog/maintenance", "identity", "identity/httpapi", "library", "library/httpapi", "listening", "listening/httpapi",
 		"personal", "personal/httpapi", "operations/httpapi", "platform/config", "platform/httpserver", "playback", "playback/analysis", "playback/httpapi", "playback/render", "playback/render/ffmpeg",
