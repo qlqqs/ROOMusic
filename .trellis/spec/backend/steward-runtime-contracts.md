@@ -383,7 +383,7 @@ overrides 新增可选 native_search，覆盖优先。仅显式提交 search_sou
 同一迁移增加 responses 协议 CHECK 和助手 provider_blocks jsonb；同协议同端点同模型原样重放，换端点/协议/模型只保留普通消息历史。
 provider_blocks 归属包含 model，单条消息连同归属序列化后超过 256 KiB 不落库原始块，保留文字、展示投影与本地工具历史。
 Responses 的请求、函数工具/结果、强制 submit_review、用量、错误、探测与本地历史规则见联网合同。
-Responses 自带搜索设置 max_tool_calls=5（单次响应所有内置工具合计）；Messages 使用 web_search_20250305/max_uses=5；pause_turn 继续且计入步数。只有 native+supported 的主调用附加搜索工具。
+Responses 自带搜索不设置 max_tool_calls（Codex 类上游拒绝该参数）；Messages 使用 web_search_20250305/max_uses=5；pause_turn 继续且计入步数。只有 native+supported 的主调用附加搜索工具。
 search/citations SSE 按线上顶层字段输出，详情 searches/citations 缺省 []；原始块不进日志或审查证据。
 每次搜索最多 10 条结果、每步最多 20 条引用；query/title 按 rune 截断至 400/200 字符，URL 超过 2048 字符丢弃条目。
 steward.search.finished 固定 message=管家模型搜索结束、module=steward，不记录查询词与原始块。

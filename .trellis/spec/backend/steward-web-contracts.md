@@ -64,9 +64,9 @@ SearXNG 地址使用模型端点的 URL 校验规则；仅本次 PUT 提交了 s
 - `provider.Request.NativeSearch bool` 由已认证入口根据 `search_source=native` 和 `effectiveNativeSearch=supported` 同时决定。
   `ForceTool` 非空时两种协议都不附加搜索工具。C7 继续只发独立的 submit_review 请求，不读取主会话或 provider_blocks。
 - Responses 请求为 `POST {base}/responses`，`stream:true`、`store:false`、`input`、可选 instructions/max_output_tokens；
-  include 含 reasoning.encrypted_content，搜索时另含 web_search_call.action.sources，并设置 max_tool_calls=5。
-  [OpenAI 官方请求文档](https://developers.openai.com/api/reference/resources/responses/methods/create)（2026-11-16 核实）：
-  max_tool_calls 限制单次响应内所有内置工具的调用总数，不是每种工具各自的次数；达到上限后忽略后续调用。
+  include 含 reasoning.encrypted_content，搜索时另含 web_search_call.action.sources。
+  不发送 max_tool_calls：[OpenAI 官方请求文档](https://developers.openai.com/api/reference/resources/responses/methods/create)有这个参数，
+  但 2026-11-20 实测 Codex 类上游以 "Unsupported parameter: max_tool_calls" 拒绝整个请求；搜索次数只受单次运行的步数与 token 上限约束。
   函数定义是平铺的 type/function、name、description、parameters、strict:false；保留现有 schema 的可选字段。
   强制具名工具使用 `{"type":"function","name":"submit_review"}` 与 parallel_tool_calls:false。
   输出 function_call 用 call_id 关联本地结果，回传 `{"type":"function_call_output","call_id":"…","output":"…"}`。

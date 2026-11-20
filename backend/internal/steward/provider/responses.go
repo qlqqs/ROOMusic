@@ -57,7 +57,6 @@ func responsesRequest(request Request) (map[string]any, error) {
 	}
 	if request.NativeSearch && request.ForceTool == "" {
 		tools = append(tools, map[string]any{"type": "web_search"})
-		body["max_tool_calls"] = 5
 		include = append(include, "web_search_call.action.sources")
 	}
 	body["include"] = include

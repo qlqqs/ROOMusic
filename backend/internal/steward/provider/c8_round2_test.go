@@ -2,17 +2,18 @@ package provider
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
 )
 
-func TestC8ResponsesSearchCallLimit(t *testing.T) {
+func TestC8ResponsesNativeSearchRequest(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		native bool
-		force  string
-		want   bool
+		name       string
+		native     bool
+		force      string
+		wantSearch bool
 	}{
 		{"search", true, "", true}, {"no_search", false, "", false}, {"forced_review", true, "submit_review", false},
 	} {
@@ -24,9 +25,20 @@ func TestC8ResponsesSearchCallLimit(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			value, exists := body["max_tool_calls"]
-			if exists != tc.want || exists && value != 5 {
-				t.Fatalf("max_tool_calls=%v，存在=%v", value, exists)
+			if value, exists := body["max_tool_calls"]; exists {
+				t.Fatalf("请求不应包含 max_tool_calls，实际=%v", value)
+			}
+			hasSearch := false
+			for _, tool := range body["tools"].([]any) {
+				if tool.(map[string]any)["type"] == "web_search" {
+					hasSearch = true
+				}
+			}
+			if hasSearch != tc.wantSearch {
+				t.Fatalf("web_search 工具存在=%v，期望=%v", hasSearch, tc.wantSearch)
+			}
+			if tc.wantSearch && !slices.Contains(body["include"].([]string), "web_search_call.action.sources") {
+				t.Fatalf("include 缺少搜索来源：%v", body["include"])
 			}
 		})
 	}
