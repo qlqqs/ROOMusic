@@ -50,8 +50,9 @@ SearXNG 地址使用模型端点的 URL 校验规则；仅本次 PUT 提交了 s
 `overrides.native_search` 使用同样三态，覆盖优先于探测；仅本次显式提交 `search_source=native` 且生效值不为 supported 时返回 400 invalid_input；已存 native 的用户改其他字段不被此校验拒绝。
 模型改变时探测中的 native_search 失效为 unknown，既有 native_search 覆盖项清除；本次显式提交的新覆盖值保留。
 端点、密钥与协议变化沿用原探测失效规则。
-协议取值增加 responses；默认仍为 openai。配置为 native 且当前协议 openai、生效 native_search=supported（含手动覆盖）时，
-对话入口使用 Responses，保留已存默认协议；手动选择 responses 则直接使用 Responses。
+协议取值增加 responses；OpenAI 兼容端点在 Responses 工具调用探测通过时探测结论就是 responses，否则为 openai。
+配置为 native 且当前协议 openai、生效 native_search=supported（含手动覆盖）时，
+对话入口使用 Responses，保留已存默认协议；探测结论或手动选择为 responses 则直接使用 Responses。
 自动切换时不沿用 Chat Completions 的工具结论，显式 tool_support 覆盖仍优先。
 
 `POST /api/v1/me/steward/settings/search-test` 无请求体，使用已保存设置和固定查询 `MusicBrainz`，最多 3 项。
@@ -89,9 +90,11 @@ SearXNG 地址使用模型端点的 URL 校验规则；仅本次 PUT 提交了 s
   OpenAI Chat Completions 的原 refusal 字段也绑定端点保存，重放为原 assistant 扩展字段。
 - pause_turn 原样回传助手块后继续，每次调用计入 24 步和 token 限制；达到限制仍保留已完成块。
   continue 也接受最后一条助手消息的 finish_reason=pause_turn。确认模式下 shared 工具仍经过已有方案确认入口。
-- 探测先尝试地址预设，再按 openai/messages 去重尝试模型列表；默认协议保持模型列表识别结果。
+- 探测先尝试地址预设，再按 openai/messages 去重尝试模型列表。
   Messages 从选中模型 capabilities.server_tools.web_search.supported 读取 supported/unsupported，缺失为 unknown。
-  OpenAI 端点额外发一次最小 Responses 对话验证接口，完整结束才置 responses_available=true；随后发一次带 web_search 的最小请求。
+  OpenAI 端点先在 Responses 下做工具调用探测：调用了工具则协议定为 responses；请求完整结束就置 responses_available=true，
+  没调用工具或请求出错时协议回退为 openai 并在 Chat Completions 下再测工具（步骤见运行时合同第 6 节）。
+  responses_available=true 时随后发一次带 web_search 的最小请求。
   出现 completed 搜索才置 native_search=supported；明确错误码 tool_unsupported（包括搜索工具拒绝）为 unsupported；没搜索、搜索失败、其他错误为 unknown。
   Responses 可用性失败和原生搜索失败分别记录 failures 的 responses/native_search 步骤，不抹去成功的基础探测。
 
@@ -232,7 +235,7 @@ runtime 的 `TestRunC5ModelToolsContainReadAndPersonalOnly` 失败：断言不�
 3. 原始块落库/读取/同协议同端点同模型重放没有重复文字与调用；协议、端点或模型改变不泄漏块；详情不泄漏加密字段。
 4. search/citations 的顶层字段、step、空数组、HTTP(S) 过滤和去重；缺失 Responses 查询/标题、多 queries、open_page/find_in_page。
 5. native 来源与 supported 的双重门禁；none/unknown/unsupported 不加工具；已存 native 修改其他字段；覆盖优先、模型和端点失效。
-6. 预设失败后的候选顺序、默认 openai、Responses 可用但搜索失败、Messages 能力缺失/真假；不因普通 400 推断 unsupported。
+6. 预设失败后的候选顺序、Responses 工具探测通过选 responses、出错或没调用工具回退 openai、Responses 可用但搜索失败、Messages 能力缺失/真假；不因普通 400 推断 unsupported。
 7. pause_turn 连续 24 步、token 限制、取消和 continue；无未确认写入；审查请求无搜索和主历史，意外 search/citations 事件拒绝。
 8. 0056 up/down 往返及恢复旧协议 CHECK、清理 Responses 探测失败条目；日志与公开解析错误没有搜索或加密内容。
 9. Responses 顶层 error/response.failed、流中断、未完成输出项、非法参数、max_output_tokens；现有三种协议回归。

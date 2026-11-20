@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -220,46 +221,110 @@ func TestC8MessagesForcedReviewExcludesSearch(t *testing.T) {
 	}
 }
 func TestC8ProbeResponsesAndNativeSearch(t *testing.T) {
-	for _, supported := range []bool{true, false} {
-		t.Run(fmt.Sprint(supported), func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method == "GET" {
-					io.WriteString(w, `{"data":[{"id":"synthetic-model"}]}`)
-					return
-				}
-				var body map[string]any
-				json.NewDecoder(r.Body).Decode(&body)
-				if strings.HasSuffix(r.URL.Path, "/responses") {
-					raw, _ := json.Marshal(body)
-					if strings.Contains(string(raw), "web_search") {
-						if !supported {
-							w.WriteHeader(400)
-							io.WriteString(w, `{"error":{"code":"tool_unsupported","message":"web_search is not supported"}}`)
+	for _, tc := range []struct {
+		name        string
+		protocol    Protocol
+		available   bool
+		chatCalls   int32
+		nativeCalls int32
+		modelCalls  int32
+	}{
+		{"tools_supported", ProtocolResponses, true, 0, 1, 2},
+		{"not_found", ProtocolOpenAI, false, 1, 0, 2},
+		{"no_tool_call", ProtocolOpenAI, true, 1, 1, 3},
+	} {
+		for _, supported := range []bool{true, false} {
+			t.Run(tc.name+"/native_"+fmt.Sprint(supported), func(t *testing.T) {
+				var responsesCalls, chatCalls, nativeCalls atomic.Int32
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodGet {
+						if r.URL.Path != "/v1/models" {
+							t.Errorf("模型列表路径=%s", r.URL.Path)
+						}
+						io.WriteString(w, `{"data":[{"id":"synthetic-model"}]}`)
+						return
+					}
+					body := checkRequest(t, r)
+					if body["model"] != "synthetic-model" || body["stream"] != true {
+						t.Errorf("模型请求=%v", body)
+					}
+					switch r.URL.Path {
+					case "/v1/responses":
+						raw, _ := json.Marshal(body["tools"])
+						if strings.Contains(string(raw), "web_search") {
+							nativeCalls.Add(1)
+							if responsesCalls.Load() != 1 || chatCalls.Load() != tc.chatCalls {
+								t.Error("自带搜索没有在工具探测之后执行")
+							}
+							if !supported {
+								w.WriteHeader(http.StatusBadRequest)
+								io.WriteString(w, `{"error":{"code":"tool_unsupported","message":"web_search is not supported"}}`)
+								return
+							}
+							io.WriteString(w, c8ResponseItem(0, `{"type":"web_search_call","id":"s1","status":"completed","action":{"type":"search","query":"合成","sources":[]}}`)+c8ResponseEnd())
 							return
 						}
-						io.WriteString(w, c8ResponseItem(0, `{"type":"web_search_call","id":"s1","status":"completed","action":{"type":"search","query":"合成","sources":[]}}`))
+						responsesCalls.Add(1)
+						if chatCalls.Load() != 0 || body["max_output_tokens"] != float64(1024) || !strings.Contains(string(raw), "roomusic_probe") {
+							t.Errorf("Responses 未优先执行工具探测：%v", body)
+						}
+						switch tc.name {
+						case "not_found":
+							http.NotFound(w, r)
+						case "no_tool_call":
+							io.WriteString(w, c8ResponseEnd())
+						default:
+							io.WriteString(w, c8ResponseItem(0, `{"type":"function_call","id":"item-1","call_id":"call-1","name":"roomusic_probe","arguments":"{}"}`)+c8ResponseEnd())
+						}
+					case "/v1/chat/completions":
+						chatCalls.Add(1)
+						if responsesCalls.Load() != 1 {
+							t.Error("Chat Completions 没有等待 Responses 探测")
+						}
+						io.WriteString(w, openAICalls("whole", 1, "roomusic_probe"))
+					default:
+						t.Errorf("意外模型路径=%s", r.URL.Path)
+						http.NotFound(w, r)
 					}
-					io.WriteString(w, c8ResponseEnd())
-					return
+				}))
+				defer server.Close()
+				result, err := Probe(context.Background(), server.Client(), server.URL, syntheticKey, "synthetic-model")
+				if err != nil {
+					t.Fatal(err)
 				}
-				io.WriteString(w, openAICalls("whole", 1, "roomusic_probe"))
-			}))
-			defer server.Close()
-			result, err := Probe(context.Background(), server.Client(), server.URL, syntheticKey, "synthetic-model")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if result.Protocol != ProtocolOpenAI || !result.ResponsesAvailable {
-				t.Fatalf("探测=%+v", result)
-			}
-			want := NativeSearchSupported
-			if !supported {
-				want = NativeSearchUnsupported
-			}
-			if result.NativeSearch != want {
-				t.Fatalf("探测=%+v", result)
-			}
-		})
+				if result.Protocol != tc.protocol || result.ToolSupport != ToolSupportSupported || result.ResponsesAvailable != tc.available {
+					t.Fatalf("工具探测=%+v", result)
+				}
+				wantSearch := NativeSearchUnknown
+				if tc.available {
+					wantSearch = NativeSearchSupported
+					if !supported {
+						wantSearch = NativeSearchUnsupported
+					}
+				}
+				if result.NativeSearch != wantSearch {
+					t.Fatalf("自带搜索探测=%+v", result)
+				}
+				if responsesCalls.Load() != 1 || chatCalls.Load() != tc.chatCalls || nativeCalls.Load() != tc.nativeCalls || responsesCalls.Load()+chatCalls.Load()+nativeCalls.Load() != tc.modelCalls {
+					t.Fatalf("模型调用次数：Responses=%d，Chat=%d，自带搜索=%d；期望总数=%d", responsesCalls.Load(), chatCalls.Load(), nativeCalls.Load(), tc.modelCalls)
+				}
+				wantFailures := 0
+				if tc.name == "not_found" {
+					wantFailures = 1
+					if len(result.Failures) != 1 || result.Failures[0].Step != "responses" || result.Failures[0].Protocol != ProtocolResponses || result.Failures[0].Error.StatusCode != http.StatusNotFound {
+						t.Fatalf("Responses 失败归属错误：%+v", result.Failures)
+					}
+				} else if !supported {
+					wantFailures = 1
+					if len(result.Failures) != 1 || result.Failures[0].Step != "native_search" || result.Failures[0].Protocol != ProtocolResponses || result.Failures[0].Error.Kind != ErrorToolUnsupported {
+						t.Fatalf("自带搜索失败归属错误：%+v", result.Failures)
+					}
+				}
+				if len(result.Failures) != wantFailures {
+					t.Fatalf("不应产生额外探测失败：%+v", result.Failures)
+				}
+			})
+		}
 	}
 }
 

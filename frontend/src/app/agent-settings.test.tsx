@@ -311,6 +311,18 @@ describe("设置 › Agent › 模型", () => {
     expect(changed.getByText(/Responses 接口是手动选的，检测没有确认这个接口支持它/)).toBeTruthy();
   });
 
+  it("检测结论为 Responses 时直接显示这个接口，不带未确认的说明", async () => {
+    await openAgent({ settings: settingsOf({ protocol: "responses", probe_result: { models: [], protocol: "responses", tool_support: "supported", responses_available: true } }) });
+    const result = within(await screen.findByRole("region", { name: "检测结果" }));
+    expect(await result.findByText("OpenAI Responses 接口")).toBeTruthy();
+    expect(result.queryByText("手动修改")).toBeNull();
+    expect(result.queryByText(/检测没有确认这个接口支持/)).toBeNull();
+    await userEvent.click(result.getByRole("button", { name: "修改接口类型" }));
+    const item = screen.getByRole("menuitem", { name: /OpenAI Responses 接口/ });
+    expect(item.textContent).toContain("当前");
+    expect(item.textContent).not.toContain("检测没有确认这个接口支持");
+  });
+
   it("保存对话模型或清除密钥时，上一次失败检测的报告一起清掉", async () => {
     const { state } = await openAgent();
     state.probeResponse = sampleResponse("steward/provider-unreachable");

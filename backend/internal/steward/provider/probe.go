@@ -32,7 +32,7 @@ type Model struct {
 
 // ProbeFailure 保存某一步的失败原因，成功后的早先协议尝试失败也会保留。
 type ProbeFailure struct {
-	// Step 是 endpoint、models 或 tools。
+	// Step 是 endpoint、models、tools、responses 或 native_search。
 	Step string `json:"step"`
 	// Protocol 是这次尝试的协议。
 	Protocol Protocol `json:"protocol,omitempty"`
@@ -46,7 +46,7 @@ type ProbeResult struct {
 	ResponsesAvailable bool                `json:"responses_available"`
 	// ProviderName 是地址预设识别的服务商名，未知时为空。
 	ProviderName string `json:"provider_name,omitempty"`
-	// Protocol 是模型列表请求成功的协议，全部失败时为空。
+	// Protocol 是探测选定的协议，模型列表全部失败时为空。
 	Protocol Protocol `json:"protocol,omitempty"`
 	// Models 是完整模型列表，Messages 自动翻页。
 	Models []Model `json:"models"`
@@ -57,7 +57,7 @@ type ProbeResult struct {
 }
 
 // Probe 先按已核实地址猜测协议，未知地址依次尝试 OpenAI、Messages 的模型列表。
-// model 为空时只列模型；不为空时使用该模型做一次明确提示调用工具的流式探测。
+// model 为空时只列模型；不为空时探测工具调用，OpenAI 兼容端点优先选支持工具的 Responses。
 // 无协议可用或 ctx 取消时返回错误；工具探测失败以报告中的三态和 Failures 表达。
 func Probe(ctx context.Context, client *http.Client, endpoint, key, model string) (ProbeResult, error) {
 	result := ProbeResult{Models: []Model{}, ToolSupport: ToolSupportUnconfirmed, NativeSearch: NativeSearchUnknown}
@@ -103,11 +103,11 @@ func Probe(ctx context.Context, client *http.Client, endpoint, key, model string
 	if model == "" {
 		return result, nil
 	}
-	result.ToolSupport, err = selected.probeTools(ctx, model)
-	if err != nil {
-		result.addFailure("tools", result.Protocol, err)
-	}
 	if selected.protocol == ProtocolMessages {
+		result.ToolSupport, err = selected.probeTools(ctx, model)
+		if err != nil {
+			result.addFailure("tools", result.Protocol, err)
+		}
 		for _, candidate := range result.Models {
 			if candidate.ID == model && candidate.nativeSearch != nil {
 				result.NativeSearch = NativeSearchUnsupported
@@ -117,14 +117,25 @@ func Probe(ctx context.Context, client *http.Client, endpoint, key, model string
 				break
 			}
 		}
-	} else if ctx.Err() == nil {
+	} else {
 		responses := *selected
 		responses.protocol = ProtocolResponses
-		responseErr := responses.probeResponses(ctx, model)
+		var responseErr error
+		result.ToolSupport, responseErr = responses.probeTools(ctx, model)
 		if responseErr != nil {
 			result.addFailure("responses", ProtocolResponses, responseErr)
 		} else {
 			result.ResponsesAvailable = true
+		}
+		if result.ToolSupport == ToolSupportSupported {
+			result.Protocol = ProtocolResponses
+		} else if ctx.Err() == nil {
+			result.ToolSupport, err = selected.probeTools(ctx, model)
+			if err != nil {
+				result.addFailure("tools", result.Protocol, err)
+			}
+		}
+		if result.ResponsesAvailable && ctx.Err() == nil {
 			result.NativeSearch, responseErr = responses.probeNativeSearch(ctx, model)
 			if responseErr != nil {
 				result.addFailure("native_search", ProtocolResponses, responseErr)
@@ -324,22 +335,4 @@ func nativeSearchFailure(err error) (NativeSearchSupport, error) {
 		return NativeSearchUnsupported, err
 	}
 	return NativeSearchUnknown, err
-}
-
-func (a *adapter) probeResponses(ctx context.Context, model string) error {
-	stream, err := a.Stream(ctx, Request{Model: model, MaxOutputTokens: 1024,
-		Messages: []Message{{Role: RoleUser, Content: []ContentBlock{{Type: BlockText, Text: "请只回复 OK。"}}}}})
-	if err != nil {
-		return err
-	}
-	defer stream.Close()
-	for {
-		event, err := stream.Next()
-		if err != nil {
-			return err
-		}
-		if event.Type == EventDone {
-			return nil
-		}
-	}
 }

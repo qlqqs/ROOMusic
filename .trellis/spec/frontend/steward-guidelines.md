@@ -297,6 +297,7 @@ features/steward/
   保存被拒绝按错误信封说明：`egress_denied` 写成员的 SearXNG 地址只能是公网地址、请管理员放行（与模型端点同一种写法），`invalid_input` 提到模型自带要先确认支持。
 - 检测结果（`settings/probe-result.tsx`）多“自带搜索”一行（支持、不支持、还没有确认），“修改”写 `overrides.native_search`，可以改回检测结果；检测结论被清掉时这一行与“调用工具”一样不显示。
   接口类型的菜单多“OpenAI Responses 接口”：检测没有确认（`responses_available` 不是 true）时这一项带说明“检测没有确认这个接口支持”，仍然可以选；手动选了它时检测结果下面再写一句。
+  检测结论本身是 `responses` 时（OpenAI 兼容端点的 Responses 工具调用探测通过）接口类型直接显示这一项，不带这两处说明。
 - 过程条目（`tool-labels.ts`）：`web_search`“联网搜索”（查询词，“N 条结果”）、`fetch_page`“读取网页”（访问的域名，跳到别的域名写“甲 → 乙”；“已读取”或“已读取，过长的部分截掉了”）、
   `search_music_metadata`“查 MusicBrainz”（“专辑：查询词”，“N 条”）、`get_music_metadata`“读取 MusicBrainz 条目”（条目的标题，没有时是种类）。只显示域名（`domainOf`，去掉 `www.`），不显示路径与查询串。
   失败短语加联网的错误码（`fetch_blocked_address`“不能访问这个地址”、`fetch_blocked_port`“只能访问 80 和 443 端口”、`fetch_unsupported_type`“不是文字网页”、`rate_limited`“请求太频繁”等）。

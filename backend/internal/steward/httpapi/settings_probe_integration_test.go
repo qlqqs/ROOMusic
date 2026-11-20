@@ -51,7 +51,7 @@ func TestPostgreSQLStewardHTTPProbeUnsupportedSavesAndOverrideAllowsMessages(t *
 	if settings.Endpoint != s.URL+"/changed" || settings.Protocol != "openai" || settings.Model != "probed-model" || !settings.KeySaved || settings.KeyLastFour != "5678" || settings.ProbedAt == nil || settings.UpdatedAt == nil {
 		t.Fatalf("不支持工具的有效探测没有保存设置：%s", w.Body)
 	}
-	if probe.Protocol != provider.ProtocolOpenAI || probe.ToolSupport != provider.ToolSupportUnsupported || len(probe.Models) != 1 || probe.Models[0].ID != "probed-model" || len(probe.Failures) != 2 || probe.Failures[0].Step != "tools" || probe.Failures[0].Error.Kind != provider.ErrorToolUnsupported || probe.Failures[1].Step != "responses" || probe.Failures[1].Error.Kind != provider.ErrorToolUnsupported {
+	if probe.Protocol != provider.ProtocolOpenAI || probe.ToolSupport != provider.ToolSupportUnsupported || len(probe.Models) != 1 || probe.Models[0].ID != "probed-model" || len(probe.Failures) != 2 || probe.ResponsesAvailable || probe.Failures[0].Step != "responses" || probe.Failures[0].Protocol != provider.ProtocolResponses || probe.Failures[0].Error.Kind != provider.ErrorToolUnsupported || probe.Failures[1].Step != "tools" || probe.Failures[1].Protocol != provider.ProtocolOpenAI || probe.Failures[1].Error.Kind != provider.ErrorToolUnsupported {
 		t.Fatalf("不支持工具的报告不完整：%s", settings.ProbeResult)
 	}
 	read := f.request("admin", "GET", "me/steward/settings", nil)

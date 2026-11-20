@@ -841,8 +841,15 @@ JSON 错误信封只给上表的固定消息；适配器脱敏后的 `Message` �
    `messages` 的列表按 `has_more`/`last_id` 用 `after_id` 翻页；`openai` 列表里出现 `has_more` 视为无效响应。
 3. 全部失败：`protocol` 为空，返回最后一个错误。
 4. `model` 为空时到此为止，`tool_support` 为 `unconfirmed`。
-5. 否则用该模型发一次流式请求：提示词明确要求调用 `roomusic_probe` 工具（空对象参数）、`MaxOutputTokens` 1024，不使用强制工具调用。
-6. C8 增加 Messages 模型能力字段读取，以及 OpenAI 端点的 Responses 可用性与搜索探测；默认仍为 openai，细则见联网合同。
+5. 否则用该模型做工具调用探测：一次流式请求，提示词明确要求调用 `roomusic_probe` 工具（空对象参数）、`MaxOutputTokens` 1024，不使用强制工具调用。
+   `messages` 端点在 Messages 下探测一次，并读取模型能力字段里的自带搜索结论。
+6. 模型列表选定 `openai` 的端点先在 Responses 下做这次探测：
+   - 结论为 `supported`：`protocol` 定为 `responses`，`tool_support=supported`，`responses_available=true`。
+   - 请求出错：记一条 `step: "responses"`、`protocol: "responses"` 的失败，`responses_available=false`，回退。
+   - 请求完整结束但没有调用工具：`responses_available=true`，不记失败，回退。
+   - 回退时 `protocol` 保持 `openai`，在 Chat Completions 下再做一次工具调用探测，结论与失败（`step: "tools"`）取这一次的。
+   Responses 阶段的失败只用 `step: "responses"`：`step: "tools"` 的非“不支持工具”失败会让探测接口放弃保存（4.3）。
+7. `responses_available=true` 时在 Responses 下做自带搜索探测，细则见联网合同。
 
 | `tool_support` | 条件 |
 | --- | --- |

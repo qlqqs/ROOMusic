@@ -330,51 +330,87 @@ func apiModelResponse(protocol string, step int, probe bool) string {
 	return body + wireEvent("message_stop", `{"type":"message_stop"}`)
 }
 func TestPostgreSQLStewardHTTPProbeSavesResultAndEgressAllowlist(t *testing.T) {
-	f := newAPIFixture(t)
-	var hits atomic.Int32
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		if r.Method == "GET" {
-			_, _ = io.WriteString(w, `{"data":[{"id":"synthetic-model"}]}`)
-		} else {
-			_, _ = io.WriteString(w, apiModelResponse("openai", 1, true))
-		}
-	}))
-	defer s.Close()
-	for _, endpoint := range []string{s.URL, "http://10.2.3.4:1234"} {
-		w := f.request("member", "POST", "me/steward/settings/probe", map[string]string{"endpoint": endpoint, "model": "synthetic-model", "key": apiSyntheticKey})
-		apiStatus(t, w, 403, "egress_denied")
+	for _, tc := range []struct {
+		name      string
+		protocol  provider.Protocol
+		available bool
+	}{
+		{"responses_tools", provider.ProtocolResponses, true},
+		{"responses_not_found", provider.ProtocolOpenAI, false},
+		{"responses_no_tool_call", provider.ProtocolOpenAI, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newAPIFixture(t)
+			var hits atomic.Int32
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hits.Add(1)
+				if r.Method == "GET" {
+					_, _ = io.WriteString(w, `{"data":[{"id":"synthetic-model"}]}`)
+				} else if r.URL.Path == "/v1/responses" {
+					if !tc.available {
+						http.NotFound(w, r)
+						return
+					}
+					raw, _ := io.ReadAll(r.Body)
+					if tc.protocol == provider.ProtocolResponses && bytes.Contains(raw, []byte("roomusic_probe")) {
+						_, _ = io.WriteString(w, wireEvent("response.output_item.done", `{"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"item-1","call_id":"call-1","name":"roomusic_probe","arguments":"{}"}}`))
+					}
+					_, _ = io.WriteString(w, wireEvent("response.completed", `{"type":"response.completed","response":{"status":"completed"}}`))
+				} else {
+					if r.URL.Path != "/v1/chat/completions" || tc.protocol == provider.ProtocolResponses {
+						t.Errorf("意外的回退请求：%s", r.URL.Path)
+					}
+					_, _ = io.WriteString(w, apiModelResponse("openai", 1, true))
+				}
+			}))
+			defer s.Close()
+			for _, endpoint := range []string{s.URL, "http://10.2.3.4:1234"} {
+				w := f.request("member", "POST", "me/steward/settings/probe", map[string]string{"endpoint": endpoint, "model": "synthetic-model", "key": apiSyntheticKey})
+				apiStatus(t, w, 403, "egress_denied")
+			}
+			if hits.Load() != 0 {
+				t.Fatal("denied endpoint received request")
+			}
+			u, _ := url.Parse(s.URL)
+			port, _ := strconv.Atoi(u.Port())
+			entry := map[string]any{"host": u.Hostname(), "port": port}
+			apiStatus(t, f.request("admin", "POST", "admin/steward/egress-allowlist", entry), 200, "")
+			apiStatus(t, f.request("admin", "GET", "admin/steward/egress-allowlist", nil), 200, "")
+			w := f.request("member", "POST", "me/steward/settings/probe", map[string]string{"endpoint": s.URL, "model": "synthetic-model", "key": apiSyntheticKey})
+			apiStatus(t, w, 200, "")
+			var settings settingsResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &settings); err != nil {
+				t.Fatal(err)
+			}
+			var probe provider.ProbeResult
+			if err := json.Unmarshal(settings.ProbeResult, &probe); err != nil || settings.Protocol != string(tc.protocol) || probe.Protocol != tc.protocol || probe.ToolSupport != provider.ToolSupportSupported || probe.ResponsesAvailable != tc.available || settings.ProbedAt == nil {
+				t.Fatalf("probe=%+v err=%v body=%s", probe, err, w.Body)
+			}
+			if !tc.available {
+				if len(probe.Failures) != 1 || probe.Failures[0].Step != "responses" || probe.Failures[0].Protocol != provider.ProtocolResponses || probe.Failures[0].Error.StatusCode != http.StatusNotFound {
+					t.Fatalf("回退报告未正确保存 Responses 失败：%s", settings.ProbeResult)
+				}
+			} else if len(probe.Failures) != 0 {
+				t.Fatalf("完整结束的 Responses 不应记失败：%s", settings.ProbeResult)
+			}
+			stored, err := f.store.GetUserSettings(context.Background(), f.users["member"])
+			if err != nil || stored.Protocol != string(tc.protocol) || stored.Probe == nil || !stored.Probe.ProbedAt.Equal(*settings.ProbedAt) {
+				t.Fatalf("probe not saved: %+v %v", stored, err)
+			}
+			var storedProbe provider.ProbeResult
+			if err := json.Unmarshal(stored.Probe.Result, &storedProbe); err != nil || !reflect.DeepEqual(storedProbe, probe) {
+				t.Fatalf("已保存的探测报告不一致：%s %v", stored.Probe.Result, err)
+			}
+			apiStatus(t, f.request("member", "PUT", "me/steward/settings", map[string]any{"overrides": map[string]string{"model": "manual-model", "tool_support": "unconfirmed"}}), 200, "")
+			apiStatus(t, f.request("member", "PUT", "me/steward/settings", map[string]string{"display_name": "合成"}), 200, "")
+			stored, err = f.store.GetUserSettings(context.Background(), f.users["member"])
+			if err != nil || !bytes.Contains(stored.Overrides, []byte("manual-model")) || stored.Probe == nil {
+				t.Fatal("ordinary save overwrote probe/manual override")
+			}
+			apiStatus(t, f.request("admin", "DELETE", "admin/steward/egress-allowlist", entry), 200, "")
+			assertPrivateLogs(t, f)
+		})
 	}
-	if hits.Load() != 0 {
-		t.Fatal("denied endpoint received request")
-	}
-	u, _ := url.Parse(s.URL)
-	port, _ := strconv.Atoi(u.Port())
-	entry := map[string]any{"host": u.Hostname(), "port": port}
-	apiStatus(t, f.request("admin", "POST", "admin/steward/egress-allowlist", entry), 200, "")
-	apiStatus(t, f.request("admin", "GET", "admin/steward/egress-allowlist", nil), 200, "")
-	w := f.request("member", "POST", "me/steward/settings/probe", map[string]string{"endpoint": s.URL, "model": "synthetic-model", "key": apiSyntheticKey})
-	apiStatus(t, w, 200, "")
-	var settings settingsResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &settings); err != nil {
-		t.Fatal(err)
-	}
-	var probe provider.ProbeResult
-	if err := json.Unmarshal(settings.ProbeResult, &probe); err != nil || probe.Protocol != provider.ProtocolOpenAI || probe.ToolSupport != provider.ToolSupportSupported || settings.ProbedAt == nil {
-		t.Fatalf("probe=%+v err=%v body=%s", probe, err, w.Body)
-	}
-	stored, err := f.store.GetUserSettings(context.Background(), f.users["member"])
-	if err != nil || stored.Probe == nil || !stored.Probe.ProbedAt.Equal(*settings.ProbedAt) {
-		t.Fatalf("probe not saved: %+v %v", stored, err)
-	}
-	apiStatus(t, f.request("member", "PUT", "me/steward/settings", map[string]any{"overrides": map[string]string{"model": "manual-model", "tool_support": "unconfirmed"}}), 200, "")
-	apiStatus(t, f.request("member", "PUT", "me/steward/settings", map[string]string{"display_name": "合成"}), 200, "")
-	stored, err = f.store.GetUserSettings(context.Background(), f.users["member"])
-	if err != nil || !bytes.Contains(stored.Overrides, []byte("manual-model")) || stored.Probe == nil {
-		t.Fatal("ordinary save overwrote probe/manual override")
-	}
-	apiStatus(t, f.request("admin", "DELETE", "admin/steward/egress-allowlist", entry), 200, "")
-	assertPrivateLogs(t, f)
 }
 func TestPostgreSQLStewardHTTPBothProtocolsStreamAndPersist(t *testing.T) {
 	for _, protocol := range []string{"openai", "messages"} {

@@ -474,6 +474,10 @@ func TestProbeProtocolsModelsAndThreeToolConclusions(t *testing.T) {
 						return
 					}
 					checkRequest(t, r)
+					if r.URL.Path == "/v1/responses" {
+						http.NotFound(w, r)
+						return
+					}
 					if support == ToolSupportUnsupported {
 						w.WriteHeader(400)
 						_, _ = io.WriteString(w, `{"error":{"message":"model does not support tools"}}`)
@@ -498,6 +502,11 @@ func TestProbeProtocolsModelsAndThreeToolConclusions(t *testing.T) {
 				}
 				if result.Protocol != protocol || result.ToolSupport != support || len(result.Models) != 2 || result.Models[0].ID != "a" || result.Models[1].ID != "b" {
 					t.Fatalf("probe=%+v", result)
+				}
+				if protocol == ProtocolOpenAI {
+					if result.ResponsesAvailable || len(result.Failures) == 0 || result.Failures[0].Step != "responses" || result.Failures[0].Protocol != ProtocolResponses || result.Failures[0].Error.StatusCode != http.StatusNotFound {
+						t.Fatalf("Responses 失败未保留在回退结果中：%+v", result)
+					}
 				}
 				raw, _ := json.Marshal(result)
 				if strings.Contains(string(raw), syntheticKey) {

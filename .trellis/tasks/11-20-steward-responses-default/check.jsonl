@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/steward-runtime-contracts.md","reason":"探测合同与失败响应"}
+{"file":".trellis/spec/backend/steward-web-contracts.md","reason":"探测用例清单（第 235 行附近）"}
+{"file":".trellis/spec/frontend/steward-guidelines.md","reason":"检测结果组件的显示规则"}
+{"file":".trellis/tasks/11-20-steward-responses-default/prd.md","reason":"验收标准 A1–A5"}
