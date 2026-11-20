@@ -300,7 +300,7 @@ features/steward/
   检测结论本身是 `responses` 时（OpenAI 兼容端点的 Responses 工具调用探测通过）接口类型直接显示这一项，不带这两处说明。
 - 过程条目（`tool-labels.ts`）：`web_search`“联网搜索”（查询词，“N 条结果”）、`fetch_page`“读取网页”（访问的域名，跳到别的域名写“甲 → 乙”；“已读取”或“已读取，过长的部分截掉了”）、
   `search_music_metadata`“查 MusicBrainz”（“专辑：查询词”，“N 条”）、`get_music_metadata`“读取 MusicBrainz 条目”（条目的标题，没有时是种类）。只显示域名（`domainOf`，去掉 `www.`），不显示路径与查询串。
-  失败短语加联网的错误码（`fetch_blocked_address`“不能访问这个地址”、`fetch_blocked_port`“只能访问 80 和 443 端口”、`fetch_unsupported_type`“不是文字网页”、`rate_limited`“请求太频繁”等）。
+  失败短语加联网的错误码（`fetch_blocked_address`“不能访问这个地址”、`fetch_blocked_port`“只能访问 80 和 443 端口”、`fetch_unsupported_type`“不是文字网页”、`fetch_not_found`“网页不存在”、`fetch_forbidden`“网站拒绝访问”、`rate_limited`“请求太频繁”等）。
 - 模型自带搜索（`run/reduce.ts`）：search 事件与落库的 `searches` 都还原成名字为 `NATIVE_SEARCH`（`$native_web_search`，不会与工具重名）的已结束条目，`input` 是 `{q}`，`output` 是 `{results}`，
   显示为“联网搜索（模型自带）”；落库时排在这条助手消息的工具调用之前。算进“查了 N 处资料”，没有耗时。
   搜索条目（工具与模型自带）成功时下面列出结果（`components/sources.tsx` 的 `SourceList`，可访问名称“<条目名>的结果”）：标题（空时用域名）与灰色的域名。

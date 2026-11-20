@@ -237,5 +237,5 @@ func systemPromptWithMode(name, mode string) string {
 	if mode == "operator" {
 		return systemPromptWithName(name) + "曲库修改在鉴权后直接执行，不询问用户。"
 	}
-	return systemPromptWithName(name) + "曲库修改先生成方案，等待用户确认；本会话已获用户免确认的工具可以直接执行。"
+	return systemPromptWithName(name) + "曲库修改直接调用对应的修改工具，不要先用文字征求确认。调用后系统会自动把它整理成方案，等用户在界面上确认后才执行；本会话已获用户免确认的工具会直接执行。"
 }

@@ -91,7 +91,13 @@ func (s *Service) FetchPage(ctx context.Context, address string) (page Page, err
 		return page, fetchFailure(err)
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
+	switch response.StatusCode {
+	case http.StatusNotFound, http.StatusGone:
+		return page, failure("fetch_not_found")
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return page, failure("fetch_forbidden")
+	case http.StatusOK:
+	default:
 		return page, failure("fetch_failed")
 	}
 	mediaType, params, err := mime.ParseMediaType(response.Header.Get("Content-Type"))

@@ -194,6 +194,8 @@ cover-art 是本工具的本地选项，不传给 MusicBrainz；只对 release �
 | 网页响应类型或字符集不支持 | fetch_unsupported_type |
 | 第六次重定向 | fetch_too_many_redirects |
 | 网页超时 | fetch_timeout |
+| 网页最终响应 404、410 | fetch_not_found |
+| 网页最终响应 401、403 | fetch_forbidden |
 | 网页其他 HTTP/读取错误 | fetch_failed |
 | 用户工具频率超限或 MusicBrainz 排队超限 | rate_limited |
 | MusicBrainz/封面源 503、连接、解析或其他失败 | source_unavailable |

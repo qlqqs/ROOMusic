@@ -361,7 +361,7 @@ func TestProtocolsHTTPAndStreamErrorsRedactKey(t *testing.T) {
 			status int
 			body   string
 			kind   ErrorKind
-		}{{"401", 401, `{"error":{"message":"` + syntheticKey + `"}}`, ErrorAuthentication}, {"404_model", 404, `{"error":{"code":"model_not_found","message":"missing"}}`, ErrorModelNotFound}, {"404_route", 404, `{"error":{"message":"route missing"}}`, ErrorOther}, {"429", 429, `{"error":{"message":"quota"}}`, ErrorRateLimit}, {"500", 500, `{"error":{"message":"` + syntheticKey + `"}}`, ErrorOther}, {"interrupted", 200, "", ErrorStreamInterrupted}, {"error_event", 200, namedFrame("error", `{"type":"error","error":{"type":"rate_limit_error","message":"`+syntheticKey+`"}}`), ErrorRateLimit}} {
+		}{{"401", 401, `{"error":{"message":"` + syntheticKey + `"}}`, ErrorAuthentication}, {"404_model", 404, `{"error":{"code":"model_not_found","message":"missing"}}`, ErrorModelNotFound}, {"404_model_type", 404, `{"error":{"type":"model_not_found","message":"missing"}}`, ErrorModelNotFound}, {"404_route", 404, `{"error":{"message":"route missing"}}`, ErrorOther}, {"429", 429, `{"error":{"message":"quota"}}`, ErrorRateLimit}, {"500", 500, `{"error":{"message":"` + syntheticKey + `"}}`, ErrorOther}, {"interrupted", 200, "", ErrorStreamInterrupted}, {"error_event", 200, namedFrame("error", `{"type":"error","error":{"type":"rate_limit_error","message":"`+syntheticKey+`"}}`), ErrorRateLimit}} {
 			t.Run(string(protocol)+"/"+tc.name, func(t *testing.T) {
 				s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					checkRequest(t, r)

@@ -59,6 +59,8 @@ func failure(code string) *tool.Error {
 		"fetch_unsupported_type":   "网页类型或字符编码不受支持",
 		"fetch_too_many_redirects": "网页重定向超过 5 次",
 		"fetch_timeout":            "网页读取超过 20 秒",
+		"fetch_not_found":          "网页不存在",
+		"fetch_forbidden":          "网站拒绝访问",
 		"fetch_failed":             "网页读取失败",
 		"rate_limited":             "外部资料请求达到频率上限或排队超时，请稍后重试",
 		"source_unavailable":       "音乐数据源暂时不可用，请稍后重试",

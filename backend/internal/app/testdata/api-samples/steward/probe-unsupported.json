@@ -15,8 +15,8 @@
             "message": "model does not support tools",
             "status_code": 400
           },
-          "protocol": "openai",
-          "step": "tools"
+          "protocol": "responses",
+          "step": "responses"
         },
         {
           "error": {
@@ -24,8 +24,8 @@
             "message": "model does not support tools",
             "status_code": 400
           },
-          "protocol": "responses",
-          "step": "responses"
+          "protocol": "openai",
+          "step": "tools"
         }
       ],
       "models": [

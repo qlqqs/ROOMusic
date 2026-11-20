@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
@@ -115,10 +116,18 @@ func TestPostgreSQLStewardC6Migration54RoundTrip(t *testing.T) {
 }
 
 func TestC6ModeSystemPrompt(t *testing.T) {
-	for _, tc := range []struct{ mode, suffix string }{{"assistant", "曲库修改先生成方案，等待用户确认；本会话已获用户免确认的工具可以直接执行。"}, {"operator", "曲库修改在鉴权后直接执行，不询问用户。"}} {
+	for _, tc := range []struct{ mode, suffix string }{{"assistant", "曲库修改直接调用对应的修改工具，不要先用文字征求确认。调用后系统会自动把它整理成方案，等用户在界面上确认后才执行；本会话已获用户免确认的工具会直接执行。"}, {"operator", "曲库修改在鉴权后直接执行，不询问用户。"}} {
 		t.Run(tc.mode, func(t *testing.T) {
-			if got := systemPromptWithMode("合成管家", tc.mode); got != systemPrompt+"用户称呼你为「合成管家」。"+tc.suffix {
+			got := systemPromptWithMode("合成管家", tc.mode)
+			if got != systemPrompt+"用户称呼你为「合成管家」。"+tc.suffix {
 				t.Fatal(got)
+			}
+			if tc.mode == "assistant" {
+				for _, want := range []string{"直接调用对应的修改工具", "不要先用文字征求确认"} {
+					if !strings.Contains(got, want) {
+						t.Errorf("assistant 提示词缺少 %q：%s", want, got)
+					}
+				}
 			}
 		})
 	}

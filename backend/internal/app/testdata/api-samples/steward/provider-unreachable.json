@@ -12,8 +12,8 @@
             "message": "[已隐藏]",
             "status_code": 401
           },
-          "protocol": "openai",
-          "step": "tools"
+          "protocol": "responses",
+          "step": "responses"
         },
         {
           "error": {
@@ -21,8 +21,8 @@
             "message": "[已隐藏]",
             "status_code": 401
           },
-          "protocol": "responses",
-          "step": "responses"
+          "protocol": "openai",
+          "step": "tools"
         }
       ],
       "models": [

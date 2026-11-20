@@ -203,7 +203,7 @@ describe("设置 › Agent › 模型", () => {
     const result = within(screen.getByRole("region", { name: "检测结果" }));
     expect(result.getByText("这次检测的结果（没有保存）")).toBeTruthy();
     expect(result.getByRole("list", { name: "没有通过的步骤" }).textContent).toBe(
-      "试调用工具（OpenAI 兼容接口）：认证失败，请检查密钥，接口返回 401：[已隐藏]检查 Responses 接口（OpenAI Responses 接口）：认证失败，请检查密钥，接口返回 401：[已隐藏]",
+      "检查 Responses 接口（OpenAI Responses 接口）：认证失败，请检查密钥，接口返回 401：[已隐藏]试调用工具（OpenAI 兼容接口）：认证失败，请检查密钥，接口返回 401：[已隐藏]",
     );
     expect(result.queryByRole("button", { name: "修改调用工具" })).toBeNull();
     // 原设置不变：地址与已存密钥一行照旧。

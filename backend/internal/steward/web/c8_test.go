@@ -92,6 +92,11 @@ func TestC8FetchBoundaries(t *testing.T) {
 		{"port", "http://synthetic.invalid:8080/", "fetch_blocked_port"},
 		{"redirect_private", "/private", "fetch_blocked_address"}, {"redirect_six", "/loop/0", "fetch_too_many_redirects"},
 		{"redirect_five", "/five/0", ""}, {"timeout", "/timeout", "fetch_timeout"}, {"status", "/status", "fetch_failed"},
+		{"status_404", "/status/404", "fetch_not_found"}, {"status_410", "/status/410", "fetch_not_found"},
+		{"status_401", "/status/401", "fetch_forbidden"}, {"status_403", "/status/403", "fetch_forbidden"},
+		{"redirect_404", "/redirect_status/404", "fetch_not_found"}, {"redirect_410", "/redirect_status/410", "fetch_not_found"},
+		{"redirect_401", "/redirect_status/401", "fetch_forbidden"}, {"redirect_403", "/redirect_status/403", "fetch_forbidden"},
+		{"redirect_500", "/redirect_status/500", "fetch_failed"},
 		{"type", "/binary", "fetch_unsupported_type"}, {"charset", "/charset", ""}, {"unknown_charset", "/unknown", "fetch_unsupported_type"},
 		{"large", "/large", ""}, {"gzip", "/gzip", ""}, {"html", "/html", ""},
 	} {
@@ -120,6 +125,12 @@ func TestC8FetchBoundaries(t *testing.T) {
 					<-r.Context().Done()
 				case r.URL.Path == "/status":
 					w.WriteHeader(500)
+				case strings.HasPrefix(r.URL.Path, "/redirect_status/"):
+					http.Redirect(w, r, "/status/"+strings.TrimPrefix(r.URL.Path, "/redirect_status/"), http.StatusFound)
+				case strings.HasPrefix(r.URL.Path, "/status/"):
+					var status int
+					fmt.Sscanf(r.URL.Path, "/status/%d", &status)
+					w.WriteHeader(status)
 				case r.URL.Path == "/binary":
 					w.Header().Set("Content-Type", "image/png")
 					io.WriteString(w, "binary")

@@ -134,7 +134,7 @@ func assertContinueSystemName(t *testing.T, protocol string, raw []byte) {
 		}
 		request.System = request.Messages[0].Content
 	}
-	if !strings.HasSuffix(request.System, "用户称呼你为「小曲」。曲库修改先生成方案，等待用户确认；本会话已获用户免确认的工具可以直接执行。") || strings.ContainsAny(request.System, "\r\n") {
+	if !strings.HasSuffix(request.System, "用户称呼你为「小曲」。曲库修改直接调用对应的修改工具，不要先用文字征求确认。调用后系统会自动把它整理成方案，等用户在界面上确认后才执行；本会话已获用户免确认的工具会直接执行。") || strings.ContainsAny(request.System, "\r\n") {
 		t.Errorf("继续请求的系统提示词=%q", request.System)
 	}
 }

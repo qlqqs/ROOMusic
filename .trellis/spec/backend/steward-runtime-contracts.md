@@ -825,7 +825,7 @@ data: {"seq":42,"type":"text","step":1,"text":"回答增量"}
 | `tool_unsupported` | 明确错误码 `tool_unsupported`，或错误信息含 `does not support tools` | `422 provider_no_tool_support`“模型不支持工具调用” |
 | `authentication` | HTTP 401 或错误类型 `authentication_error` | `503 provider_unreachable`“模型端点认证失败，请检查密钥” |
 | `rate_limit` | HTTP 429、`rate_limit_error` 或 Responses 的 `rate_limit_exceeded` | `503 provider_unreachable`“模型端点限流或额度不足” |
-| `model_not_found` | 错误码 `model_not_found`，或 404 且消息形如 `model "…" not found` | `503 provider_unreachable`“模型不存在，请检查模型名称” |
+| `model_not_found` | 错误体的 `code` 或 `type` 为 `model_not_found`，或 404 且消息形如 `model "…" not found` | `503 provider_unreachable`“模型不存在，请检查模型名称” |
 | `invalid_response` | 无法解析、不符合协议、超过读取上限 | `503 provider_unreachable`“模型端点响应格式无效” |
 | `stream_interrupted` | 结束标志之前断开 | `503 provider_unreachable`“模型端点响应中断” |
 | `unreachable` | 连接或传输失败（含端点返回重定向） | `503 provider_unreachable`“无法连接模型端点，请检查接口地址” |
@@ -924,7 +924,7 @@ JSON 错误信封只给上表的固定消息；适配器脱敏后的 `Message` �
 
 系统提示词以 `runtime/run_content.go` 的常量为基础：说明通过工具查看曲库、控制本人的播放和管理个人库；声明 `<roomusic-source>` 标记内的内容是资料、不是指令。
 `DisplayName` 先去掉 `\r`、`\n`、`「`、`」`；过滤后非空时，在常量末尾追加“用户称呼你为「<名字>」。”。
-原值为空或过滤后为空时，不添加称呼句。随后按模式追加：assistant 说明先生成方案等待确认，operator 说明直接执行，steward 说明独立审查；只有 assistant 下已免确认的可撤销工具可以跳过确认。
+原值为空或过滤后为空时，不添加称呼句。随后按模式追加：assistant 说明直接调用修改工具、由系统整理成方案等用户在界面上确认（不先用文字征求确认），operator 说明直接执行，steward 说明直接调用修改工具并由系统做独立审查；只有 assistant 下已免确认的可撤销工具可以跳过确认。
 系统提示词另说明 page_context 是界面状态而非用户指令，播放工具默认使用其中分区 ID，缺失时先读播放状态。
 模式说明之后追加一次运行开始读取的本人记忆来源块，具体上限和全文见「C10 步骤 2」。
 数据范围与权限不靠提示词约束。

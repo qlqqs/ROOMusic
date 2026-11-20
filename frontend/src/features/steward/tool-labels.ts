@@ -418,6 +418,8 @@ const failurePhrases: Readonly<Record<string, string>> = {
   fetch_unsupported_type: "不是文字网页",
   fetch_too_many_redirects: "跳转太多次",
   fetch_timeout: "超时",
+  fetch_not_found: "网页不存在",
+  fetch_forbidden: "网站拒绝访问",
   fetch_failed: "没能读取",
   rate_limited: "请求太频繁",
   source_unavailable: "资料来源暂时不可用",

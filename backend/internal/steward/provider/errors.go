@@ -102,7 +102,7 @@ func responseFailure(status int, data []byte, key string) *Error {
 		kind = ErrorAuthentication
 	case status == 429 || detail.Type == "rate_limit_error" || code == "rate_limit_exceeded":
 		kind = ErrorRateLimit
-	case code == "model_not_found":
+	case code == "model_not_found" || detail.Type == "model_not_found":
 		kind = ErrorModelNotFound
 	case status == 404 && strings.HasPrefix(message, "model \"") && strings.Contains(message, "not found"):
 		// 调研核实的 Ollama 模型错误；不把所有 404 推定为模型不存在。
