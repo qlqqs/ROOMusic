@@ -52,8 +52,9 @@ func TestPostgreSQLStewardC6Migration54RoundTrip(t *testing.T) {
 	mustStore(t, err)
 	checkIndex := func(want bool) {
 		t.Helper()
-		var found bool
-		mustStore(t, db.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname=current_schema() AND indexname='steward_plans_conversation_idx' AND indexdef LIKE '% USING btree (conversation_id)' AND indexdef NOT LIKE '% WHERE %')`).Scan(&found))
+		var definition *string
+		mustStore(t, db.QueryRow(`SELECT pg_get_indexdef(to_regclass('steward_plans_conversation_idx'))`).Scan(&definition))
+		found := definition != nil && strings.HasSuffix(*definition, " USING btree (conversation_id)") && !strings.Contains(*definition, " WHERE ")
 		if found != want {
 			t.Fatalf("conversation_id 普通索引=%v，预期=%v", found, want)
 		}

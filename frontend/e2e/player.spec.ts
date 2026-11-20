@@ -819,6 +819,9 @@ test("键盘拖动：空格拿起、方向键下移、空格放下，发送完�
   await expect(handle).toBeFocused();
   const count = mock.callsTo("POST", /\/commands$/).length;
   await page.keyboard.press("Space");
+  // dnd-kit 拿起后延迟挂上方向键监听，先等拿起生效再按方向键。
+  await expect(handle).toHaveAttribute("aria-pressed", "true");
+  await expect(drawer.getByRole("status")).toHaveText(/《队列曲目 3》.*第 4 首/);
   await page.keyboard.press("ArrowUp");
   await expect(drawer.getByRole("status")).toContainText("移到第 3 首");
   await page.keyboard.press("Escape");
