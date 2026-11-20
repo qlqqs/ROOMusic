@@ -84,7 +84,7 @@ func (s *Store) Remember(ctx context.Context, userID string, id *string, content
 		if count >= Limit {
 			return Item{}, ErrLimitReached
 		}
-		row = tx.QueryRowContext(ctx, `INSERT INTO steward_memories (id,user_id,content) VALUES ($1::uuid,$2::uuid,$3) RETURNING id::text,content,created_at,updated_at`, uuid.New(), userID, content)
+		row = tx.QueryRowContext(ctx, `INSERT INTO steward_memories (id,user_id,content,created_at,updated_at) SELECT $1::uuid,$2::uuid,$3,ts,ts FROM (SELECT clock_timestamp() AS ts) AS creation_time RETURNING id::text,content,created_at,updated_at`, uuid.New(), userID, content)
 	} else {
 		row = tx.QueryRowContext(ctx, `UPDATE steward_memories SET content=$3,updated_at=clock_timestamp() WHERE user_id=$1::uuid AND id=$2::uuid RETURNING id::text,content,created_at,updated_at`, userID, *id, content)
 	}
