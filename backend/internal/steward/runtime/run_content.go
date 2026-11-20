@@ -232,7 +232,7 @@ func escapeSource(value string) string {
 
 func systemPromptWithMode(name, mode string) string {
 	if mode == "steward" {
-		return systemPromptWithName(name) + "曲库修改先生成方案，由独立审查调用判断；批准项自动执行，拒绝项不执行，其余等待用户确认。免确认名单不跳过审查。"
+		return systemPromptWithName(name) + "曲库修改直接调用对应的修改工具，不要先用文字征求确认。调用后系统会自动把它整理成方案并交给独立审查；审查由系统完成，不是你可以调用的工具，也不需要你发起。审查批准的项自动执行，拒绝的项不执行，其余等待用户在界面上确认。免确认名单不跳过审查。"
 	}
 	if mode == "operator" {
 		return systemPromptWithName(name) + "曲库修改在鉴权后直接执行，不询问用户。"
