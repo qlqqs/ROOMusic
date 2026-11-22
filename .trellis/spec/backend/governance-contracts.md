@@ -10,6 +10,8 @@ M4 的第一项（2026-10）在同一流程上增加以专辑为目标的“设�
 [默认版本与版本对比合同](./default-version-contracts.md)；本文件只记它对共同流程的扩展（目标类型、撤销响应、列表筛选）。
 M4 的第二项（2026-10）增加以发行为目标的“核对问题”（与修正、归组共用发行的版本号），规则在[元数据问题与核对合同](./issue-review-contracts.md)。
 M4 的第三项（2026-10）增加“认领”：把不可见旧发行上的修正、归组、默认版本与核对迁给新发行，规则在[认领合同](./claim-contracts.md)。
+M7 子任务 A（2026-11）增加**自动层**：后台自动整理写的发行字段值排在人工修正之下、扫描值之上，有自己的操作类型 `release_auto_correction`、
+来源 `curation`、批次与撤销规则，全部在[自动整理合同](./curation-contracts.md)；本文件只记它对共同流程、有效值与列表的扩展。
 
 决策依据：[ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md)、[ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md)。
 
@@ -20,6 +22,7 @@ M4 的第三项（2026-10）增加“认领”：把不可见旧发行上的修�
   `target_id`（不设外键：记录可能比目标活得久）、
   `idempotency_key`、`fingerprint`、`expected_revision`、`result_revision`、`before_state`/`after_state`（执行器定义的类型化前后状态，撤销的依据）、
   `response`（原样返回客户端，也是同键重放的响应）、`reverts_operation_id`、`request_id`、`created_at`、`origin`（0054，可空 JSONB）。
+  0058 加入类型 `release_auto_correction` 与可空的 `batch_id`（自动整理的批次，见[自动整理合同](./curation-contracts.md)）。
   约束都有名字：`operations_revision_ck`（`result = expected + 1`）、`operations_reverts_ck`（只有撤销记录指向原操作）、
   `operations_actor_key_uq`（`(actor_id, idempotency_key)`）、`operations_reverts_uq`（一条操作至多被撤销一次）。
 - **`releases.edit_revision`**（`BIGINT NOT NULL DEFAULT 1`，`> 0`）：发行的人工修改版本号。**只有受控操作（修正、归组、核对、撤销）递增，扫描从不改它。**
@@ -28,8 +31,9 @@ M4 的第三项（2026-10）增加“认领”：把不可见旧发行上的修�
   年份 1–9999，其余文本非空且 ≤4096 字节；0032 起流派用 `list_value TEXT[]`，见[多流派合同](./genre-contracts.md)。
   `operation_id` 引用设下意图的操作，外键 `DEFERRABLE INITIALLY DEFERRED`（执行器后插入记录）。
 - **`release_effective`**（视图）：列与 `releases` 同名，可修正字段换成有效值：`title`、`album_artist`、`year`、`genres`、`label`、`catalog_number`、
-  `edition`、`barcode` 取修正值（`null` 为空，没有修正取扫描值）；展示艺人 `artist` 跟随专辑艺人的修正；另带 `edit_revision`；其余列原样。
-  每个字段一次主键上的 `LEFT JOIN`，不被引用的列对应的连接会被优化器去掉。
+  `edition`、`barcode` 取修正值（`null` 为空）；没有修正时取自动层的值（0058，同样 `null` 为空），两者都没有才取扫描值；
+  展示艺人 `artist` 跟随专辑艺人的修正与自动值；另带 `edit_revision`；其余列原样。
+  每个字段在修正表与自动层的主键上各一次 `LEFT JOIN`，不被引用的列对应的连接会被优化器去掉。
 - 可修正字段固定为八个，顺序固定：`title`、`album_artist`、`year`、`genre`、`label`、`catalog_number`、`edition`、`barcode`
   （后端 `catalog.CorrectableFields` 与前端 `CORRECTABLE_FIELDS` 一致，样本契约测试守住）。
 - 组（`release_groups`）在 M3 没有自己的字段（M4 起有默认版本与专辑的版本号，见[默认版本合同](./default-version-contracts.md)），**从不删除**：
@@ -60,7 +64,9 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
   `Describe(ctx, db, records)`（批量补充列表展示：目标当前状态——发行目标给 `Release`、专辑目标给 `Album`——、改动摘要、`Revertible`）。`RevertExecutor(kind, originalID)` 负责通用部分：
   先**单独一条语句** `SELECT … FOR UPDATE` 锁住原记录，再读取它（READ COMMITTED 下带连接的 `FOR UPDATE` 只重检被锁的行，连接来的行仍取自语句快照，
   读不到刚提交的撤销记录），所以对同一条记录的并发撤销串行，后到的得到 `already_reverted`。
-- C6 的 `Spec.Origin *Origin` 可选，形状为 `{source:chat|mcp,conversation_id?,plan_id?,mode?,token_id?}`。
+- C6 的 `Spec.Origin *Origin` 可选，形状为 `{source:chat|mcp,conversation_id?,plan_id?,mode?,token_id?}`；
+  M7 A 增加 `{source:curation,provider_kind,provider,basis}`，同时 `Spec.BatchID` 写入 `operations.batch_id`。
+  执行器可以用 `operations.ActorID(ctx)` 取本次 `Run` 的操作者；`Outcome.ResponseRevision` 非零时作为撤销响应的 `revision`。
   只由后端入口构造，不参与指纹；旧 HTTP 调用不传时列为 SQL NULL，行为不变。对话确认写含 plan_id；直接执行不含 plan_id；MCP 含 token_id。
   `operations.Record.Origin`、列表接口和 list_operations 输出 origin（旧记录为 null）。同键重放仍返回原操作，不覆盖原来源。
 - 方案项独立进入 Run；幂等键由后端生成并保存，同项恢复执行复用原键。展示依据 basis 不进入指纹。
@@ -110,33 +116,38 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
   `release_group_default`：前后的默认版本快照，见[默认版本合同](./default-version-contracts.md)；`release_issue_review`：问题与前后是否有核对，
   见[核对合同](./issue-review-contracts.md)；`release_claim`：来源版本与迁移、保留的各类，见[认领合同](./claim-contracts.md)），
   撤销记录的前后状态与它所撤销的操作相反；记录里的状态损坏时 `changes` 为 `null`，不让列表失败。
-  `revertible` = 未被撤销 ∧ 本身不是撤销 ∧ 目标可见 ∧ 目标的 `edit_revision` 等于记录的 `result_revision`。展示信息由 `Kind.Describe` 按类型批量查询，不逐条查询；
+  `revertible` = 未被撤销 ∧ 本身不是撤销 ∧ 目标可见 ∧ 目标的 `edit_revision` 等于记录的 `result_revision`
+  （`release_auto_correction` 例外：不看可见性与版本号，看每个字段的自动值是否仍是这条操作写的）。展示信息由 `Kind.Describe` 按类型批量查询，不逐条查询；
   操作者用户名经 `identity.Guard.Usernames` 批量取。响应不含请求体、前后状态原文、路径与密钥。
+- M7 A：列表另接受 `source=curation`、`provider`、`batch_id`，与目标筛选之间是“并且”（无效值 `400 invalid_input`，`batch_id` 非 UUID `400 invalid_id`）；
+  属于批次的记录带 `batch_id`，不属于的省略这个键，所以既有样本不变。
 - 记录永久保留，没有清理，不提供“回滚到某点”。
 
 ## 5. 有效值投影
 
 - 所有 catalog 读取（列表、详情、搜索、排序、分页、按组读取、代表版本规则、最近播放的曲目位置）的发行来源是常量
   `releasesql.ReleaseSource = "release_effective releases"`（别名仍叫 `releases`），所以展示、排序与搜索用的都是有效值。扫描与身份规划读写 `releases` 本表。
-- **无修正时与旧行为逐项一致**（既有视图与列表样本测试守住）。
-- **需要关注**：`uncertain_apply` 的字段决定如果该字段有修正（`set` 或 `null`）就不计数，`artist` 由专辑艺人的修正覆盖；分组原因与缺失曲目照旧计数；
-  清除修正后扫描的不确定重新计入。M4 第二项起被仍然有效的核对压下的问题也不计数（[核对合同](./issue-review-contracts.md)第 3 节）。
-- **制作人员**：详情的专辑级署名里，专辑艺人有修正时用修正值替换扫描写入的 `album_artist` 署名。
+- **无修正、无自动值时与旧行为逐项一致**（既有视图与列表样本测试守住）。
+- **需要关注**：`uncertain_apply` 的字段决定如果该字段有修正（`set` 或 `null`）或有自动值就不计数，`artist` 由专辑艺人的修正或自动值覆盖；分组原因与缺失曲目照旧计数；
+  清除修正、撤销自动值后扫描的不确定重新计入。M4 第二项起被仍然有效的核对压下的问题也不计数（[核对合同](./issue-review-contracts.md)第 3 节）。
+- **制作人员**：详情的专辑级署名里，专辑艺人有修正或自动值时用有效的专辑艺人替换扫描写入的 `album_artist` 署名。
 - **证据**：发行详情增加 `revision` 与 `corrected_fields`（有修正的字段名，固定顺序，没有时是空数组，所有登录成员可见，不含修正值的来源与操作者）；
   证据摘要与管理员完整证据照旧写扫描结论，不把人工选择伪装成高置信标签。
 
 ## 6. 撤销规则
 
 - 撤销是一次新操作，恢复的是前态的**意图**（没有修正、设值或设空；归组回到原组），不把历史有效值写回扫描列：因此撤销“从没有修正到设值”之后，
-  显示的是**现在**的扫描值（重扫之后可能已不是修改前那一刻的值）。
+  显示的是**现在**的自动值，没有自动值时是现在的扫描值（重扫之后可能已不是修改前那一刻的值）。
 - 只能撤销发行最近一次修改（`edit_revision` 相等）；撤销本身也递增版本号、写一条记录，**不能再被撤销**，需要时重新修改。没有链式恢复。
 - 撤销只恢复这条记录改动过的字段，不碰其他字段。
+- 自动层的写入与撤销不递增 `edit_revision`，所以不占用“最近一次修改”：自动写入之后，之前的人工修改仍可撤销。自动修改自己的撤销规则
+  （按写入者判断、按批与按来源、撤销后不再提出）见[自动整理合同](./curation-contracts.md)第 5 节。
 
 ## 7. 与扫描的关系
 
-- 扫描只更新 `releases` 的扫描值与证据，不碰 `release_corrections`、`edit_revision`、`operations`、`releases.group_id`（既有发行），也不更新组行（M4 的默认版本列）：
+- 扫描只更新 `releases` 的扫描值与证据，不碰 `release_corrections`、`release_auto_values`、`edit_revision`、`auto_revision`、`operations`、`releases.group_id`（既有发行），也不更新组行（M4 的默认版本列）：
   修正按视图继续生效、人工归组保持，这是结构保证而不是约定（真实重扫用例守住，见第 9 节）。
-- 扫描值在打开编辑框与提交之间变化不算冲突：`set` 与 `null` 的结果与扫描值无关；`clear` 的结果是提交时的扫描值，响应返回实际有效值。
+- 扫描值在打开编辑框与提交之间变化不算冲突：`set` 与 `null` 的结果与扫描值无关；`clear` 的结果是提交时的自动值或扫描值，响应返回实际有效值。
 - **已知限制（G8）**：成员关系不连续而新建发行时（整张替换等），新发行按扫描值显示、单独成组；旧发行的修正与归组留在旧发行上（不可见但保留，记录里 `visible: false`），
   不自动继承；M4 第三项起管理员可以把这些修改认领给新发行（预览、撤销，见[认领合同](./claim-contracts.md)），认领之前它们一直留在旧发行上。
 - 并发：修正事务只锁发行行与自己的修正行，归组事务锁发行行与组行（按 UUID 顺序），设定默认版本同样先锁发行行再锁组行，核对只锁发行行

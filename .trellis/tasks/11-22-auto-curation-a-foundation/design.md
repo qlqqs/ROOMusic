@@ -163,7 +163,10 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error)
 - 范围：`batch`（批次 ID）或 `provider`（来源标识）。候选是范围内 `origin.source='curation'`、不是撤销、还没被撤销的操作，
   按 `(created_at, id)` 倒序，从 `cursor` 之后开始。
 - 逐条调用 `operations.Run(撤销)`，每条一个事务、独立成败。操作者是发起请求的管理员。每条的幂等键由请求的键与操作 ID 派生（UUIDv5），
-  同一请求重试不会重复撤销，已成功的重放原结果。
+  同时到达的同键请求由 `Run` 的幂等锁串行并重放。
+- 同一请求重试不会重复撤销：已经撤销的操作不再是候选，返回的 `reverted` 只统计这次调用实际撤销的条数；总数看批次详情的计数。
+  （2026-11-22 实现时修订：最初写的是“已成功的重放原结果”，那需要每次调用在 `operations` 里找同一请求的收据，
+  而这张表随每次自动写入增长；候选查询改成只取未撤销的操作，按批次不带来源谓词以命中批次索引。）
 - 返回 `{reverted, skipped:[{operation_id, code}], next_cursor}`；`next_cursor` 为空表示做完。客户端带着它继续调用。
 
 它没有自己的状态表：每条撤销本身是一条受治理的操作记录。倒序保证同一格上后写的先撤，批内与跨批都成立。
