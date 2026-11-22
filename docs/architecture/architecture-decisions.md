@@ -164,6 +164,8 @@ enforce physical storage constraints.
 - PostgreSQL remains authoritative; any future search index or provider output is
   a rebuildable projection, candidate, observation, or explicitly authorized
   execution result.
+  管理员开启自动整理后，外部源与模型的产出写入独立的自动层，属于这里的“明确授权的执行结果”：
+  它排在人工修正之后、扫描值之前，有记录并可撤销（[ADR 0006](adr/0006-auto-curation-and-sources.md)）。
 - Ordinary REST responses and logs must not expose passwords, tokens, database
   URLs, allowlists, or unnecessary absolute music paths.
 
@@ -178,15 +180,26 @@ Capability Registry and Plugin Host are future runtime infrastructure. Do not
 introduce a service locator, dynamic plugin loader, RPC layer, or WASM runtime
 until an approved feature requires that boundary.
 
-### 扩展边界的两步走（指导原则，2026-09-28）
+### 扩展边界的两步走（指导原则，2026-09-28；2026-11-22 修订）
 
 以下是评估后的指导原则，不是已批准的插件方案；未来插件立项时须复核。
 
-- 插件只能从两个口子进入：**观察层**（格式解析器、元数据与封面提供方的产出只作为候选或证据，
+2026-11-22 立项外部数据源与自动整理（M7）时复核，“元数据与封面提供方的产出只作为候选或证据”一句由下面六条原则替换
+（[ADR 0006](adr/0006-auto-curation-and-sources.md) 第 3 节，决定 U1、U2）：
+
+1. 三层分工：程序判定能确定的 → 模型判断程序拿不准的 → 人只处理模型上交或判断不了的。
+2. 默认自动，例外才问人：程序和模型能定的直接生效，不进待确认队列。
+3. 安全靠事后可撤，不靠事前确认：每次自动修改有记录、依据与来源，可以单条撤销，也可以按批或按来源撤销。
+4. 人工修正永远优先：用户亲手改过的，程序和模型都不再改。
+5. 音乐文件只读。
+6. 能力由宿主分配：外部源只拿到自己那类能力的口子，不能自行取得其他权限。
+
+- 扩展从两个口子进入：**数据侧**（格式解析器、元数据与封面提供方；外部源的产出经后端的匹配规则或审查之后写入自动层，
   不覆盖人工修正）和**意图侧**（Agent 与审查插件只产出 Change Set；执行插件只能由 operations
-  在授权包裹下调用）。任何插件都不能直接写有效值结果层，也不能给自己授权。
+  在授权包裹下调用）。任何扩展都不能绕过 `operations.Run` 直接写有效值，也不能给自己授权。
 - **第一步（Core 1 期间）**：只做“插件形状”，不建插件基础设施。各模块由使用方定义窄接口，
   外部依赖实现为同一二进制内的适配器，例如 M2b 的 ffmpeg、以后的元数据提供方和 M6 的模型服务。
+  M7 的外部数据源按这一步做：内置适配器加统一的能力接口与声明，设置页可开关（决定 U4）。
 - **第二步（出现第三方或仓库外扩展需求时）**：把已稳定的接口升级为 `extensions/` 下的类型化
   合同，再建能力注册表与插件宿主。插件优先运行在独立进程并通过类型化 RPC 调用；不采用 Go 的
   `plugin` 包（要求工具链与依赖版本完全一致、仅支持 Linux/macOS、不能卸载）；只有需要运行

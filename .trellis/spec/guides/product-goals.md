@@ -54,6 +54,20 @@ program-owned behavior. AI is used for unresolved interpretation and user
 assistance, not as a replacement for deterministic rules that are already
 reliable.
 
+### 三层分工与后台整理（2026-11-22 决定，尚未实现）
+
+M7（外部数据源与自动整理）把上面这条分工延伸到扫描之后的整理，规则见 [ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md)：
+
+- 程序判定能确定的，模型判断程序拿不准的，人只处理模型上交或判断不了的。程序和模型能定的直接生效，
+  不进待确认队列；安全靠每条自动修改都有记录并可撤销，不靠事前确认。
+- 程序层的匹配与补全是程序自己的行为，不是 Agent：它按后端写定的把握规则工作，不调用模型，也不经过审查。
+- 模型层是没有人发起的 `steward` 运行：由后台调度启动，归开启自动整理的管理员，用他自己的端点与密钥，
+  模式固定为 `steward`，必须经过独立审查。它不是第四种模式，也不新增权限。
+- 自动整理的产出写入独立的自动层，排在人工修正之后、扫描值之前；人工修正永远优先。
+- 不可撤销的操作不自动执行。审查转人工或没通过的项成为例外，等管理员处理。
+
+在各子任务实现之前，本文其余部分描述的仍是现状：运行只由登录用户发起，外部产出不会自动写入。
+
 ## Long-Term Change Management
 
 ROOMusic does not use runtime logs as a substitute for Git. Logs are ephemeral
@@ -135,6 +149,8 @@ These rules survive later phases and adapter changes:
 - Versions remain distinct, and multi-disc releases use multiple Medium
   entities. Weak title, artist, year, or folder similarity cannot perform an
   authoritative cross-directory merge.
+  2026-11-22 起（[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 7 节，尚未实现）允许一种自动归组与合并的依据：已保存且生效的外部对应
+  指向同一个外部对象。这是强证据，不是相似度；弱相似仍然只能产生候选。
 - A failed, canceled, offline, permission-denied, or incomplete scan cannot
   mark previously observed sources missing. Only a complete successful scan can
   perform negative reconciliation.
@@ -170,6 +186,10 @@ queues, Music Steward runtime and review, playback, notifications, PWA behavior,
 and tightly scoped file or tag execution. Each is an optional adapter or feature
 behind the permanent invariants above. No roadmap entry pre-approves a library,
 protocol, database bypass, or unsafe file capability.
+
+截至 2026-11-22：播放、Music Steward 的运行与审查已经交付；外部元数据提供方已立项为 M7（[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md)），
+首批是 MusicBrainz、Cover Art Archive、LRCLIB 与 AcoustID，做成内置适配器，尚未实现。
+专用搜索、持久作业队列、通知、PWA 与文件或标签的写入仍是以后的方向。
 
 Core 0 explicitly does not include GraphQL, Redis sessions, Meilisearch search,
 runtime plugins, model calls, playback, transcoding, file mutation, automatic
