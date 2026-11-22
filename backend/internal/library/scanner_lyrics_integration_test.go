@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/library/parser"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 )
@@ -187,14 +188,14 @@ func TestPostgreSQLTrackLyricsConstraint(t *testing.T) {
 		"MP4 source":                       {"text", parser.LyricsSourceMP4, false},
 		"external LRC source":              {"text", parser.LyricsSourceLRCFile, false},
 		"ID3 source":                       {"text", parser.LyricsSourceID3USLT, false},
-		"exactly 64 KiB":                   {strings.Repeat("a", parser.MaxLyricsBytes), parser.LyricsSourceVorbisLyrics, false},
+		"exactly 64 KiB":                   {strings.Repeat("a", metadata.MaxLyricsBytes), parser.LyricsSourceVorbisLyrics, false},
 		"lyrics without a source":          {"text", nil, true},
 		"a source without lyrics":          {nil, parser.LyricsSourceVorbisLyrics, true},
 		"empty lyrics":                     {"", parser.LyricsSourceVorbisLyrics, true},
 		"an unknown source":                {"text", "lrc_sidecar", true},
-		"one byte over 64 KiB":             {strings.Repeat("a", parser.MaxLyricsBytes+1), parser.LyricsSourceVorbisLyrics, true},
-		"the limit counts bytes":           {strings.Repeat("歌", parser.MaxLyricsBytes/3+1), parser.LyricsSourceMP4, true},
-		"multi-byte text within the limit": {strings.Repeat("歌", parser.MaxLyricsBytes/3), parser.LyricsSourceMP4, false},
+		"one byte over 64 KiB":             {strings.Repeat("a", metadata.MaxLyricsBytes+1), parser.LyricsSourceVorbisLyrics, true},
+		"the limit counts bytes":           {strings.Repeat("歌", metadata.MaxLyricsBytes/3+1), parser.LyricsSourceMP4, true},
+		"multi-byte text within the limit": {strings.Repeat("歌", metadata.MaxLyricsBytes/3), parser.LyricsSourceMP4, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := update(testCase.lyrics, testCase.source)

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/library/parser"
 )
 
@@ -83,7 +84,7 @@ func TestSidecarLyricsMatching(t *testing.T) {
 		{name: "空文件", audio: "Song.flac", files: map[string]string{"Song.lrc": ""}},
 		{name: "原始字节超限", audio: "Song.flac", files: map[string]string{"Song.lrc": strings.Repeat("\x00", parser.MaxExternalLyricsBytes) + "a"}},
 		{name: "原始字节恰好上限", audio: "Song.flac", files: map[string]string{"Song.lrc": strings.Repeat("\x00", parser.MaxExternalLyricsBytes-1) + "a"}, want: "a"},
-		{name: "规范化后超限", audio: "Song.flac", files: map[string]string{"Song.lrc": strings.Repeat("a", parser.MaxLyricsBytes+1)}},
+		{name: "规范化后超限", audio: "Song.flac", files: map[string]string{"Song.lrc": strings.Repeat("a", metadata.MaxLyricsBytes+1)}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := registeredRoot{Path: t.TempDir()}

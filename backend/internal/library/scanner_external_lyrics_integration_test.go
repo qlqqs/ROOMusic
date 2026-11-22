@@ -12,6 +12,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/library/parser"
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
@@ -68,7 +69,7 @@ func TestPostgreSQLExternalLyricsEncodingAndFallback(t *testing.T) {
 		{"替换字符", []byte{0x81}, false, false},
 		{"UTF-32", []byte{0xff, 0xfe, 0, 0, 'a', 0, 0, 0}, false, false},
 		{"原始超限", []byte(strings.Repeat("\x00", parser.MaxExternalLyricsBytes) + "a"), false, false},
-		{"规范化后超限", []byte(strings.Repeat("a", parser.MaxLyricsBytes+1)), false, false},
+		{"规范化后超限", []byte(strings.Repeat("a", metadata.MaxLyricsBytes+1)), false, false},
 		{"符号链接", []byte(text), false, true},
 	}
 	for i, tc := range cases {

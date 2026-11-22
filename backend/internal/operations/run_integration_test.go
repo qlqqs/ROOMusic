@@ -291,6 +291,62 @@ func TestPostgreSQLRunRollsBackWhenTheRecordCannotBeWritten(t *testing.T) {
 	}
 }
 
+func TestPostgreSQLRunAfterCommit(t *testing.T) {
+	f := newRunFixture(t)
+	ctx := t.Context()
+	spec := f.spec(f.actorID, uuid.New(), TypeReleaseCorrection, map[string]any{"target": f.releaseID})
+	calls := 0
+	execute := func(ctx context.Context, tx *sql.Tx, id string) (Outcome, error) {
+		out, err := f.bump(1, nil)(ctx, tx, id)
+		out.AfterCommit = func() {
+			calls++
+			record, err := Load(ctx, f.database, id)
+			if err != nil || record.ResultRevision != 2 || f.revision() != 2 {
+				t.Errorf("回调观察到的操作=%+v，错误=%v，期望提交后的版本 2", record, err)
+			}
+		}
+		return out, err
+	}
+	_, err := Run(ctx, f.database, spec, func(ctx context.Context, tx *sql.Tx, id string) (Outcome, error) {
+		out, err := execute(ctx, tx, id)
+		if err != nil {
+			return out, err
+		}
+		return out, Conflict("fixture_failure", "合成执行器失败")
+	})
+	if status, code, _ := Problem(err); status != 409 || code != "fixture_failure" || calls != 0 || f.recordCount() != 0 || f.revision() != 1 {
+		t.Fatalf("执行失败后的状态：错误=%v，回调=%d，记录=%d，版本=%d", err, calls, f.recordCount(), f.revision())
+	}
+
+	// 修正行仅在提交时检查操作外键，保证失败发生在 Commit。
+	_, err = Run(ctx, f.database, spec, func(ctx context.Context, tx *sql.Tx, id string) (Outcome, error) {
+		out, err := execute(ctx, tx, id)
+		if err != nil {
+			return out, err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id)
+			VALUES($1,'title','set','合成标题',$2)`, f.releaseID, uuid.New())
+		if err != nil {
+			t.Errorf("延迟外键的插入提前失败：%v", err)
+		}
+		return out, err
+	})
+	if !errors.Is(err, ErrOperationFailed) || !strings.Contains(err.Error(), "commit") || calls != 0 || f.recordCount() != 0 || f.revision() != 1 {
+		t.Fatalf("提交失败后的状态：错误=%v，回调=%d，记录=%d，版本=%d", err, calls, f.recordCount(), f.revision())
+	}
+	first, err := Run(ctx, f.database, spec, execute)
+	if err != nil || first.Replayed || calls != 1 || f.recordCount() != 1 || f.revision() != 2 {
+		t.Fatalf("首次提交=%+v，错误=%v，回调=%d，记录=%d，版本=%d", first, err, calls, f.recordCount(), f.revision())
+	}
+	replay, err := Run(ctx, f.database, spec, func(context.Context, *sql.Tx, string) (Outcome, error) {
+		t.Error("同键重放执行了执行器")
+		return Outcome{AfterCommit: func() { calls++ }}, nil
+	})
+	if err != nil || !replay.Replayed || replay.OperationID != first.OperationID || calls != 1 || f.recordCount() != 1 || f.revision() != 2 {
+		t.Fatalf("同键重放=%+v，错误=%v，回调=%d，记录=%d，版本=%d", replay, err, calls, f.recordCount(), f.revision())
+	}
+}
+
 func TestPostgreSQLRunRefusesRecordsThatBreakTheRevisionContract(t *testing.T) {
 	fixture := newRunFixture(t)
 	spec := fixture.spec(fixture.actorID, uuid.New(), TypeReleaseCorrection, map[string]any{"target": fixture.releaseID})

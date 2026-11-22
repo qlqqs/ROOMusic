@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -19,6 +20,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
+	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
+	"github.com/qlqq/roomusic/backend/internal/sources/lrclib"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 	"github.com/qlqq/roomusic/backend/internal/steward/web"
@@ -191,7 +194,7 @@ func TestPostgreSQLCurationSourcesSettings(t *testing.T) {
 		t.Helper()
 		var list struct{ Items []curation.SourceSettings }
 		getJSON(t, f.application, &f.admin, path, &list)
-		if len(list.Items) != 1 {
+		if len(list.Items) != 3 {
 			t.Fatal(list)
 		}
 		item := list.Items[0]
@@ -213,6 +216,156 @@ func TestPostgreSQLCurationSourcesSettings(t *testing.T) {
 	requireAPIError(t, f.application.request(t, "GET", path, nil, &f.ordinary, nil), 403, "forbidden")
 	requireAPIError(t, f.application.request(t, "PUT", path+"/musicbrainz", map[string]bool{"enabled": false}, &f.ordinary, nil), 403, "forbidden")
 	requireAPIError(t, f.application.request(t, "PUT", path+"/unknown", map[string]bool{"enabled": false}, &f.admin, nil), 404, "not_found")
+}
+
+func TestPostgreSQLCurationSourcesCoverAndLyricsGate(t *testing.T) {
+	f := newCurationFixture(t)
+	const mbid = "abcdef01-0000-4000-8000-000000000001"
+	const releasePath = "/release/" + mbid + "/"
+	const imagePath = releasePath + "42-1200"
+	const lyric = `{"id":43,"trackName":"合成曲目","artistName":"合成艺人","albumName":"合成专辑","duration":42.5,"instrumental":false,"plainLyrics":"合成歌词","syncedLyrics":null}`
+	var manifestHits, imageHits, getHits, searchHits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case releasePath:
+			manifestHits.Add(1)
+			io.WriteString(w, `{"images":[{"id":42,"front":true}]}`)
+		case imagePath:
+			imageHits.Add(1)
+			io.WriteString(w, "fixture")
+		case "/api/get":
+			getHits.Add(1)
+			io.WriteString(w, lyric)
+		case "/api/search":
+			searchHits.Add(1)
+			io.WriteString(w, "["+lyric+"]")
+		default:
+			t.Errorf("意外请求 %s", r.URL)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	factory := func(egress.Options) (*http.Client, error) { return server.Client(), nil }
+	covers := coverartarchive.New(coverartarchive.Options{
+		BaseURL: server.URL, NewClient: factory,
+		ManifestLimiter: sources.NewLimiter(0, nil, nil), Limiter: sources.NewLimiter(0, nil, nil),
+	})
+	lyrics := lrclib.New(lrclib.Options{BaseURL: server.URL, NewClient: factory, Limiter: sources.NewLimiter(0, nil, nil)})
+	gate := curation.NewSources(f.application.database,
+		curation.SourceRegistration{Declaration: coverartarchive.Declaration(), Covers: covers},
+		curation.SourceRegistration{Declaration: lrclib.Declaration(), Lyrics: lyrics},
+	)
+	coverFinder, coverOK := gate.CoverFinder("coverartarchive")
+	lyricsFinder, lyricsOK := gate.LyricsFinder("lrclib")
+	if !coverOK || !lyricsOK {
+		t.Fatalf("封面能力 %t，歌词能力 %t，期望均已注册", coverOK, lyricsOK)
+	}
+	ctx := t.Context()
+	target := sources.CoverTarget{Kind: "release", ID: mbid}
+	query := sources.LyricsQuery{Title: "合成曲目", Artist: "合成艺人"}
+	wantLyrics := sources.Lyrics{ID: "43", Title: "合成曲目", Artist: "合成艺人", Album: "合成专辑", DurationSeconds: 42.5, Plain: "合成歌词"}
+	checkCovers := func(t *testing.T, code, reason string) {
+		t.Helper()
+		manifestBefore, imageBefore := manifestHits.Load(), imageHits.Load()
+		list, listErr := coverFinder.Covers(ctx, target)
+		front, frontErr := coverFinder.FrontCover(ctx, target)
+		if code != "" {
+			requireCurationProblem(t, listErr, code, reason)
+			requireCurationProblem(t, frontErr, code, reason)
+			if list != nil || !reflect.DeepEqual(front, sources.CoverFile{}) || manifestHits.Load() != manifestBefore || imageHits.Load() != imageBefore {
+				t.Fatalf("拒绝时返回 %#v、%#v，清单出站 %d 次，图片出站 %d 次", list, front, manifestHits.Load()-manifestBefore, imageHits.Load()-imageBefore)
+			}
+			return
+		}
+		want := sources.CoverImage{ID: "42", Front: true}
+		if listErr != nil || !reflect.DeepEqual(list, []sources.CoverImage{want}) || manifestHits.Load()-manifestBefore != 2 {
+			t.Fatalf("放行时清单 %#v，错误 %v，出站 %d 次", list, listErr, manifestHits.Load()-manifestBefore)
+		}
+		want.ReleaseID = mbid
+		if frontErr != nil || !reflect.DeepEqual(front, sources.CoverFile{Image: want, Size: "1200", Data: []byte("fixture")}) || imageHits.Load()-imageBefore != 1 {
+			t.Fatalf("放行时封面 %#v，错误 %v，出站 %d 次", front, frontErr, imageHits.Load()-imageBefore)
+		}
+	}
+	checkLyrics := func(t *testing.T, code, reason string) {
+		t.Helper()
+		getBefore, searchBefore := getHits.Load(), searchHits.Load()
+		exact, exactErr := lyricsFinder.LyricsFor(ctx, query)
+		results, searchErr := lyricsFinder.SearchLyrics(ctx, query)
+		if code != "" {
+			requireCurationProblem(t, exactErr, code, reason)
+			requireCurationProblem(t, searchErr, code, reason)
+			if exact != (sources.Lyrics{}) || results != nil || getHits.Load() != getBefore || searchHits.Load() != searchBefore {
+				t.Fatalf("拒绝时返回 %#v、%#v，精确查询出站 %d 次，搜索出站 %d 次", exact, results, getHits.Load()-getBefore, searchHits.Load()-searchBefore)
+			}
+			return
+		}
+		if exactErr != nil || exact != wantLyrics || getHits.Load()-getBefore != 1 {
+			t.Fatalf("放行时精确歌词 %#v，错误 %v，出站 %d 次", exact, exactErr, getHits.Load()-getBefore)
+		}
+		if searchErr != nil || !slices.Equal(results, []sources.Lyrics{wantLyrics}) || searchHits.Load()-searchBefore != 1 {
+			t.Fatalf("放行时歌词搜索 %#v，错误 %v，出站 %d 次", results, searchErr, searchHits.Load()-searchBefore)
+		}
+	}
+	checkBoth := func(t *testing.T, code, reason string) {
+		t.Helper()
+		checkCovers(t, code, reason)
+		checkLyrics(t, code, reason)
+	}
+	setSource := func(t *testing.T, id string, enabled bool) {
+		t.Helper()
+		path := curationBase + "/sources/" + id
+		result := f.application.request(t, "PUT", path, map[string]bool{"enabled": enabled}, &f.admin, nil)
+		if result.Code != http.StatusOK {
+			t.Fatalf("更新 %s 得到 %d %s", id, result.Code, result.Body.String())
+		}
+	}
+	t.Run("global_disabled_by_default", func(t *testing.T) {
+		var list struct{ Items []curation.SourceSettings }
+		getJSON(t, f.application, &f.admin, curationBase+"/sources", &list)
+		wantIDs := []string{"musicbrainz", "coverartarchive", "lrclib"}
+		if len(list.Items) != len(wantIDs) {
+			t.Fatalf("源列表 %#v，期望三个源 %v", list.Items, wantIDs)
+		}
+		for i, id := range wantIDs {
+			item := list.Items[i]
+			if item.ID != id || !item.Enabled || item.Active || item.InactiveReason == nil || *item.InactiveReason != "curation_disabled" {
+				t.Errorf("源 %s 的初始状态 %#v", id, item)
+			}
+		}
+		if !slices.Equal(list.Items[1].Capabilities, []sources.Capability{sources.CoverArt}) || !slices.Equal(list.Items[2].Capabilities, []sources.Capability{sources.LyricsLookup}) {
+			t.Fatalf("封面和歌词的能力声明分别为 %v、%v", list.Items[1].Capabilities, list.Items[2].Capabilities)
+		}
+		checkBoth(t, "curation_disabled", "开关")
+	})
+	f.enable(t)
+	t.Run("enabled", func(t *testing.T) { checkBoth(t, "", "") })
+	t.Run("cover_source_disabled", func(t *testing.T) {
+		setSource(t, "coverartarchive", false)
+		checkCovers(t, "source_disabled", "外部源")
+		checkLyrics(t, "", "")
+	})
+	setSource(t, "coverartarchive", true)
+	t.Run("lyrics_source_disabled", func(t *testing.T) {
+		setSource(t, "lrclib", false)
+		checkLyrics(t, "source_disabled", "外部源")
+		checkCovers(t, "", "")
+	})
+	setSource(t, "lrclib", true)
+	t.Run("global_closed_after_enable", func(t *testing.T) {
+		if _, err := f.writer.SetSettings(t.Context(), f.admin.id, false); err != nil {
+			t.Fatal(err)
+		}
+		checkBoth(t, "curation_disabled", "开关")
+	})
+	f.enable(t)
+	t.Run("enabler_disabled", func(t *testing.T) {
+		mustExec(t, f.application, `UPDATE users SET disabled_at=now() WHERE id=$1`, f.admin.id)
+		checkBoth(t, "curation_disabled", "开启者")
+	})
+	t.Run("enabler_demoted", func(t *testing.T) {
+		mustExec(t, f.application, `UPDATE users SET disabled_at=NULL,role='user' WHERE id=$1`, f.admin.id)
+		checkBoth(t, "curation_disabled", "开启者")
+	})
 }
 
 func TestPostgreSQLCurationSourcesLinks(t *testing.T) {

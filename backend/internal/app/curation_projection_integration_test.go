@@ -29,7 +29,7 @@ func TestPostgreSQLCurationRescan(t *testing.T) {
 	if err := app.database.QueryRow("SELECT id FROM releases WHERE title='Original'").Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	w := curation.NewWriter(app.database)
+	w := curation.NewWriter(app.database, app.dataDirectory, nil)
 	if _, err := w.SetSettings(t.Context(), admin.id, true); err != nil {
 		t.Fatal(err)
 	}

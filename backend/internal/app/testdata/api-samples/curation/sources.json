@@ -12,6 +12,26 @@
         "id": "musicbrainz",
         "inactive_reason": "curation_disabled",
         "name": "MusicBrainz"
+      },
+      {
+        "active": false,
+        "capabilities": [
+          "cover_art"
+        ],
+        "enabled": true,
+        "id": "coverartarchive",
+        "inactive_reason": "curation_disabled",
+        "name": "Cover Art Archive"
+      },
+      {
+        "active": false,
+        "capabilities": [
+          "lyrics"
+        ],
+        "enabled": true,
+        "id": "lrclib",
+        "inactive_reason": "curation_disabled",
+        "name": "LRCLIB"
       }
     ]
   },

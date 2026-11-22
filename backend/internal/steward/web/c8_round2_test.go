@@ -14,6 +14,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/sources"
+	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"
@@ -145,6 +146,7 @@ func TestC8FixedSourceClientsPublicOnly(t *testing.T) {
 				return c8LocalClient(t, server, o), nil
 			}
 			s.WithMusic(musicbrainz.New(musicbrainz.Options{Limiter: sources.NewLimiter(time.Second, nil, nil), NewClient: s.newClient}))
+			s.WithCovers(coverartarchive.New(coverartarchive.Options{NewClient: s.newClient, ManifestLimiter: sources.NewLimiter(0, nil, nil)}))
 			invoke := func() error {
 				switch source {
 				case "tavily":
@@ -154,7 +156,7 @@ func TestC8FixedSourceClientsPublicOnly(t *testing.T) {
 					_, err := s.SearchMusic(context.Background(), "artist", "合成", 1)
 					return err
 				default:
-					_, err := s.coverArt(context.Background(), "synthetic")
+					_, err := s.coverArt(context.Background(), "00000000-0000-4000-8000-000000000001")
 					return err
 				}
 			}
@@ -172,6 +174,7 @@ func TestC8FixedSourceClientsPublicOnly(t *testing.T) {
 				return egress.NewClient(o)
 			}
 			s.WithMusic(musicbrainz.New(musicbrainz.Options{Limiter: sources.NewLimiter(time.Second, nil, nil), NewClient: s.newClient}))
+			s.WithCovers(coverartarchive.New(coverartarchive.Options{NewClient: s.newClient, ManifestLimiter: sources.NewLimiter(0, nil, nil)}))
 			if err := invoke(); err == nil || hits != 1 {
 				t.Fatalf("固定域名私网解析被放行：%v hits=%d", err, hits)
 			}

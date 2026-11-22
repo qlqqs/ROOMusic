@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 )
 
@@ -32,16 +33,16 @@ func TestNormalizeLyrics(t *testing.T) {
 		{"controls only", "\x00\x01\x02", "", false},
 		{"byte order mark only", "\ufeff", "", false},
 		{"invalid UTF-8", "ab\xffcd", "", false},
-		{"exactly at the limit", strings.Repeat("a", MaxLyricsBytes), strings.Repeat("a", MaxLyricsBytes), true},
-		{"one byte over the limit", strings.Repeat("a", MaxLyricsBytes+1), "", false},
-		{"the limit applies after normalization", strings.Repeat("a", MaxLyricsBytes) + "\r\n\r\n   \x00", strings.Repeat("a", MaxLyricsBytes), true},
-		{"the limit counts bytes, not characters (fits)", strings.Repeat("歌", MaxLyricsBytes/3), strings.Repeat("歌", MaxLyricsBytes/3), true},
-		{"the limit counts bytes, not characters (over)", strings.Repeat("歌", MaxLyricsBytes/3+1), "", false},
+		{"exactly at the limit", strings.Repeat("a", metadata.MaxLyricsBytes), strings.Repeat("a", metadata.MaxLyricsBytes), true},
+		{"one byte over the limit", strings.Repeat("a", metadata.MaxLyricsBytes+1), "", false},
+		{"the limit applies after normalization", strings.Repeat("a", metadata.MaxLyricsBytes) + "\r\n\r\n   \x00", strings.Repeat("a", metadata.MaxLyricsBytes), true},
+		{"the limit counts bytes, not characters (fits)", strings.Repeat("歌", metadata.MaxLyricsBytes/3), strings.Repeat("歌", metadata.MaxLyricsBytes/3), true},
+		{"the limit counts bytes, not characters (over)", strings.Repeat("歌", metadata.MaxLyricsBytes/3+1), "", false},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			got, ok := NormalizeLyrics(testCase.raw)
+			got, ok := metadata.NormalizeLyrics(testCase.raw)
 			if got != testCase.want || ok != testCase.ok {
-				t.Fatalf("NormalizeLyrics(%q) = %q, %v; want %q, %v", truncateForLog(testCase.raw), truncateForLog(got), ok, truncateForLog(testCase.want), testCase.ok)
+				t.Fatalf("metadata.NormalizeLyrics(%q) = %q, %v; want %q, %v", truncateForLog(testCase.raw), truncateForLog(got), ok, truncateForLog(testCase.want), testCase.ok)
 			}
 		})
 	}
@@ -94,9 +95,9 @@ func TestFLACParserReadsVorbisLyrics(t *testing.T) {
 		{"a blank LYRICS falls back to UNSYNCEDLYRICS", []string{"LYRICS=  \r\n", "UNSYNCEDLYRICS=plain"}, "plain", LyricsSourceVorbisUnsynced},
 		{"invalid UTF-8 is skipped", []string{"LYRICS=\xff\xfe\xfd", "UNSYNCEDLYRICS=plain"}, "plain", LyricsSourceVorbisUnsynced},
 		{"CRLF is normalized", []string{"LYRICS=a\r\nb\r\n"}, "a\nb", LyricsSourceVorbisLyrics},
-		{"exactly at the limit", []string{"LYRICS=" + strings.Repeat("a", MaxLyricsBytes)}, strings.Repeat("a", MaxLyricsBytes), LyricsSourceVorbisLyrics},
-		{"over the limit", []string{"LYRICS=" + strings.Repeat("a", MaxLyricsBytes+1)}, "", ""},
-		{"over the limit falls back to UNSYNCEDLYRICS", []string{"LYRICS=" + strings.Repeat("a", MaxLyricsBytes+1), "UNSYNCEDLYRICS=short"}, "short", LyricsSourceVorbisUnsynced},
+		{"exactly at the limit", []string{"LYRICS=" + strings.Repeat("a", metadata.MaxLyricsBytes)}, strings.Repeat("a", metadata.MaxLyricsBytes), LyricsSourceVorbisLyrics},
+		{"over the limit", []string{"LYRICS=" + strings.Repeat("a", metadata.MaxLyricsBytes+1)}, "", ""},
+		{"over the limit falls back to UNSYNCEDLYRICS", []string{"LYRICS=" + strings.Repeat("a", metadata.MaxLyricsBytes+1), "UNSYNCEDLYRICS=short"}, "short", LyricsSourceVorbisUnsynced},
 		{"no lyrics", []string{"ALBUM=Only an album"}, "", ""},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -185,7 +186,7 @@ func TestM4AParserReadsLyrics(t *testing.T) {
 		{"invalid UTF-8 is ignored", item(repairM4AData(1, []byte("ab\xffcd"))), "", ""},
 		{"the first valid data atom wins", item(repairM4AData(1, []byte("first")), repairM4AData(1, []byte("second"))), "first", LyricsSourceMP4},
 		{"a blank data atom is skipped", item(repairM4AData(1, []byte("  ")), repairM4AData(1, []byte("second"))), "second", LyricsSourceMP4},
-		{"over the limit", item(repairM4AData(1, []byte(strings.Repeat("a", MaxLyricsBytes+1)))), "", ""},
+		{"over the limit", item(repairM4AData(1, []byte(strings.Repeat("a", metadata.MaxLyricsBytes+1)))), "", ""},
 		{"no lyrics item", nil, "", ""},
 	} {
 		for _, codec := range []string{"mp4a", "alac"} {
@@ -404,7 +405,7 @@ func TestMP3ParserIgnoresMalformedUSLTFrames(t *testing.T) {
 		{"unpaired UTF-16 surrogate", usltPayload(2, nil, []byte{0xd8, 0x00, 0x00, 0x41})},
 		{"invalid UTF-8 text", usltPayload(3, nil, []byte("ab\xffcd"))},
 		{"blank text", usltPayload(3, nil, []byte(" \r\n\t"))},
-		{"text over the limit", usltPayload(3, nil, bytes.Repeat([]byte("a"), MaxLyricsBytes+1))},
+		{"text over the limit", usltPayload(3, nil, bytes.Repeat([]byte("a"), metadata.MaxLyricsBytes+1))},
 		{"text far over the limit", usltPayload(3, nil, bytes.Repeat([]byte("a"), maxLyricsFrameTextBytes+1))},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {

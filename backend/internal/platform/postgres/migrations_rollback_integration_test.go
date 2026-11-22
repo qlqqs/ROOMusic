@@ -14,6 +14,20 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	61: `INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
+ SELECT id::uuid,'f6100000-0000-4000-8000-000000000000',kind,'release','e6100000-0000-4000-8000-000000000002',gen_random_uuid(),kind,1,2,'{}','{}','{}','fixture'
+ FROM (VALUES ('d6100000-0000-4000-8000-000000000001','release_external_artwork'),('d6100000-0000-4000-8000-000000000002','track_external_lyrics')) AS fixture(id,kind);
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id,reverts_operation_id)
+ SELECT 'd6100000-0000-4000-8000-000000000003',actor_id,'revert',target_type,target_id,gen_random_uuid(),'undo',2,3,'{}','{}','{}','fixture',id FROM operations WHERE id='d6100000-0000-4000-8000-000000000001';
+ INSERT INTO release_external_artworks(release_id,content_hash,mime_type,width,height,storage_key,source,external_id,operation_id)
+ VALUES('e6100000-0000-4000-8000-000000000002',repeat('a',64),'image/jpeg',1,1,'fixture.jpeg','synthetic','image/1','d6100000-0000-4000-8000-000000000001');
+ INSERT INTO track_external_lyrics(track_id,lyrics,content_hash,source,external_id,operation_id)
+ VALUES('e6100000-0000-4000-8000-000000000004','合成歌词',repeat('b',64),'synthetic','1','d6100000-0000-4000-8000-000000000002');
+ INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by)
+ SELECT target,id::uuid,subject,repeat('c',64),'{}','d6100000-0000-4000-8000-000000000003','f6100000-0000-4000-8000-000000000000'
+ FROM (VALUES ('release','e6100000-0000-4000-8000-000000000002','artwork'),('release','e6100000-0000-4000-8000-000000000002','artwork_source'),
+ ('track','e6100000-0000-4000-8000-000000000004','lyrics'),('track','e6100000-0000-4000-8000-000000000004','lyrics_source')) AS fixture(target,id,subject);
+ UPDATE steward_plan_items SET operation_id='d6100000-0000-4000-8000-000000000003' WHERE id='f6100000-0000-4000-8000-000000000006';`,
 	60: `INSERT INTO curation_source_settings(source,enabled,updated_by) VALUES
  ('musicbrainz',true,'f6000000-0000-4000-8000-000000000000');
  INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence) VALUES
@@ -269,6 +283,22 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO release_groups(id) VALUES('f6000000-0000-4000-8000-000000000001');
  INSERT INTO releases(id,group_id,title,artist) VALUES
  ('f6000000-0000-4000-8000-000000000002','f6000000-0000-4000-8000-000000000001','外部对应迁移测试发行','测试艺人');`)
+			}
+			if m.Version == 61 {
+				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role) VALUES('f6100000-0000-4000-8000-000000000000','external-rollback','synthetic','admin');
+ INSERT INTO steward_conversations(id,user_id,title,model,mode) VALUES('f6100000-0000-4000-8000-000000000001','f6100000-0000-4000-8000-000000000000','C7 旧会话','synthetic','steward');
+ INSERT INTO steward_messages(id,conversation_id,sequence,role,content) VALUES('f6100000-0000-4000-8000-000000000002','f6100000-0000-4000-8000-000000000001',1,'assistant','{}');
+ INSERT INTO steward_tool_calls(id,message_id,position,tool_name,input,status,error_code) VALUES('f6100000-0000-4000-8000-000000000003','f6100000-0000-4000-8000-000000000002',0,'revert_operation','{}','failed','rejected_by_review');
+ INSERT INTO steward_plans(id,conversation_id,user_id,digest,expires_at) VALUES('f6100000-0000-4000-8000-000000000005','f6100000-0000-4000-8000-000000000001','f6100000-0000-4000-8000-000000000000','c7',now()+interval '1 day');
+ INSERT INTO steward_plan_items(id,plan_id,tool_call_id,position,tool_name,input,preview,revertible,idempotency_key,decision) SELECT 'f6100000-0000-4000-8000-000000000006','f6100000-0000-4000-8000-000000000005',id,0,'revert_operation','{}','{}',true,idempotency_key,'declined' FROM steward_tool_calls WHERE id='f6100000-0000-4000-8000-000000000003';
+ INSERT INTO library_roots(id,path) VALUES('e6100000-0000-4000-8000-000000000000','/synthetic/identifier-rollback');
+ INSERT INTO release_groups(id) VALUES('e6100000-0000-4000-8000-000000000001');
+ INSERT INTO releases(id,group_id,title,artist) VALUES
+ ('e6100000-0000-4000-8000-000000000002','e6100000-0000-4000-8000-000000000001','标识迁移测试发行','测试艺人');
+ INSERT INTO media(id,release_id,position) VALUES('e6100000-0000-4000-8000-000000000003','e6100000-0000-4000-8000-000000000002',1);
+ INSERT INTO tracks(id,medium_id,position,title,artist,source_root_id,relative_path,observed_at) VALUES
+ ('e6100000-0000-4000-8000-000000000004','e6100000-0000-4000-8000-000000000003',1,'标识迁移测试曲目','测试艺人',
+ 'e6100000-0000-4000-8000-000000000000','synthetic-identifier.flac',NOW());`)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
