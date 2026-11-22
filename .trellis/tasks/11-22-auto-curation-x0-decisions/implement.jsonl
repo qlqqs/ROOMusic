@@ -1,5 +1,0 @@
-{"file":".trellis/tasks/11-22-auto-curation-sources/prd.md","reason":"父任务的决定 U1–U12、默认值、原则与取代的既有决定"}
-{"file":".trellis/tasks/11-22-auto-curation-sources/design.md","reason":"三层、撤销、强证据、外部源、后台运行的规则来源"}
-{"file":"docs/architecture/adr/0005-steward-data-and-egress.md","reason":"ADR 0006 沿用的格式与决策记录表写法"}
-{"file":".trellis/spec/backend/agent-and-operation-guidelines.md","reason":"管家产品合同，ADR 0006 不能与它冲突"}
-{"file":".trellis/spec/guides/product-goals.md","reason":"永久约束与管家模式的定义"}
