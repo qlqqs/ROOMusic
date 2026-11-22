@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"path/filepath"
 )
 
 // TxBeginner 只描述封面关联短事务所需的数据库能力。
@@ -13,92 +12,81 @@ type TxBeginner interface {
 	BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
 }
 
-// ScanFeedback 由扫描显式注入；文件读写不进入这些反馈/关联事务。
+// ScanFeedback 由扫描注入，记录绑定前后的封面。
 type ScanFeedback interface {
 	CaptureArtworkBefore(context.Context, *sql.Tx, string) error
 	CaptureArtworkAfter(context.Context, *sql.Tx, string) error
 }
 
-// SaveWithFeedback 先准备文件，再原子提交关联与扫描记账，最后清理不再引用的旧文件。
+// SaveWithFeedback 在绑定关联的事务内写受管文件，提交后清理旧键。
 func (s *Store) SaveWithFeedback(ctx context.Context, database TxBeginner, releaseID string, data []byte, sourceType string, feedback ScanFeedback) error {
-	prepared, err := s.prepare(data)
+	stored, err := s.Describe(data)
 	if err != nil {
 		return err
 	}
-	previous, err := s.bindWithFeedback(ctx, database, releaseID, &prepared, sourceType, feedback)
-	if err != nil {
-		if prepared.wroteManagedFile {
-			if cleanupErr := cleanupArtwork(ctx, database, prepared.path, prepared.key); cleanupErr != nil {
-				return errors.Join(err, cleanupErr)
-			}
-		}
-		return err
-	}
-	if previous != "" && previous != prepared.key && safeStorageKey(previous) {
-		return cleanupArtwork(ctx, database, filepath.Join(s.directory, previous), previous)
-	}
-	return nil
+	return s.bindWithFeedback(ctx, database, releaseID, data, stored, sourceType, feedback)
 }
 
-// RemoveWithFeedback 将删除关联与反馈放在同一短事务，文件清理只发生在提交之后。
 func (s *Store) RemoveWithFeedback(ctx context.Context, database TxBeginner, releaseID string, feedback ScanFeedback) error {
-	previous, err := s.bindWithFeedback(ctx, database, releaseID, nil, "", feedback)
-	if err != nil {
-		return err
-	}
-	if previous != "" && safeStorageKey(previous) {
-		return cleanupArtwork(ctx, database, filepath.Join(s.directory, previous), previous)
-	}
-	return nil
+	return s.bindWithFeedback(ctx, database, releaseID, nil, Stored{}, "", feedback)
 }
 
-func (s *Store) bindWithFeedback(ctx context.Context, database TxBeginner, releaseID string, prepared *preparedArtwork, sourceType string, feedback ScanFeedback) (string, error) {
+func (s *Store) bindWithFeedback(ctx context.Context, database TxBeginner, releaseID string, data []byte, stored Stored, sourceType string, feedback ScanFeedback) (err error) {
 	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
-		return "", err
+		return err
 	}
-	defer tx.Rollback()
+	wrote := false
+	defer func() {
+		tx.Rollback()
+		if err != nil && wrote {
+			err = errors.Join(err, s.Discard(context.WithoutCancel(ctx), database, stored.Key))
+		}
+	}()
 	if feedback != nil {
 		if err := feedback.CaptureArtworkBefore(ctx, tx, releaseID); err != nil {
-			return "", err
+			return err
 		}
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT id FROM releases WHERE id=$1::uuid FOR UPDATE`, releaseID); err != nil {
+		return err
 	}
 	var previous string
 	err = tx.QueryRowContext(ctx, `SELECT storage_key FROM release_artworks WHERE release_id=$1::uuid`, releaseID).Scan(&previous)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return "", err
+		return err
 	}
-	if prepared == nil {
+	if stored.Key == "" {
 		_, err = tx.ExecContext(ctx, `DELETE FROM release_artworks WHERE release_id=$1::uuid`, releaseID)
 	} else {
+		wrote, err = s.WriteIfChanged(ctx, tx, data, stored)
+		if err != nil {
+			return err
+		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO release_artworks(release_id,content_hash,mime_type,width,height,storage_key,source_type)
    VALUES($1::uuid,$2,$3,$4,$5,$6,$7) ON CONFLICT(release_id) DO UPDATE SET content_hash=EXCLUDED.content_hash,
    mime_type=EXCLUDED.mime_type,width=EXCLUDED.width,height=EXCLUDED.height,storage_key=EXCLUDED.storage_key,source_type=EXCLUDED.source_type`,
-			releaseID, prepared.hash, prepared.mimeType, prepared.width, prepared.height, prepared.key, sourceType)
+			releaseID, stored.Hash, stored.MIMEType, stored.Width, stored.Height, stored.Key, sourceType)
 	}
-	if err != nil {
-		return "", err
-	}
-	if feedback != nil {
-		if err := feedback.CaptureArtworkAfter(ctx, tx, releaseID); err != nil {
-			return "", err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return "", err
-	}
-	return previous, nil
-}
-
-// 清理使用另一个无 catalog 行锁的事务，只读取引用，沿用内容寻址存储的清理语义。
-func cleanupArtwork(ctx context.Context, database TxBeginner, path, key string) error {
-	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	if err := removeUnreferencedArtwork(ctx, tx, path, key); err != nil {
-		return fmt.Errorf("clean artwork: %w", err)
+	if feedback != nil {
+		if err := feedback.CaptureArtworkAfter(ctx, tx, releaseID); err != nil {
+			return err
+		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	wrote = false
+	if previous != stored.Key && safeStorageKey(previous) {
+		if cleanupErr := s.Discard(context.WithoutCancel(ctx), database, previous); cleanupErr != nil {
+			if stored.Key == "" {
+				return fmt.Errorf("remove released artwork: %w", cleanupErr)
+			}
+			return fmt.Errorf("remove replaced artwork: %w", cleanupErr)
+		}
+	}
+	return nil
 }

@@ -13,6 +13,8 @@ const (
 	ReleaseLookup   Capability = "release_lookup"
 	RecordingLookup Capability = "recording_lookup"
 	ArtistLookup    Capability = "artist_lookup"
+	CoverArt        Capability = "cover_art"
+	LyricsLookup    Capability = "lyrics"
 )
 
 type Declaration struct {
@@ -39,6 +41,48 @@ type RecordingFinder interface {
 type ArtistFinder interface {
 	ArtistByID(context.Context, string) (Artist, error)
 	SearchArtists(context.Context, string) ([]Artist, error)
+}
+
+type CoverFinder interface {
+	Covers(context.Context, CoverTarget) ([]CoverImage, error)
+	FrontCover(context.Context, CoverTarget) (CoverFile, error)
+}
+
+type CoverTarget struct {
+	Kind string // release 或 release_group
+	ID   string
+}
+
+type CoverImage struct {
+	ID, ReleaseID string
+	Front, Back   bool
+	Types         []string
+	URL           string
+	Thumbnails    map[string]string
+}
+
+type CoverFile struct {
+	Image CoverImage
+	Size  string
+	Data  []byte
+}
+
+type LyricsFinder interface {
+	LyricsFor(context.Context, LyricsQuery) (Lyrics, error)
+	SearchLyrics(context.Context, LyricsQuery) ([]Lyrics, error)
+}
+
+type LyricsQuery struct {
+	Title, Artist, Album string
+	DurationSeconds      int
+}
+
+type Lyrics struct {
+	ID                   string
+	Title, Artist, Album string
+	DurationSeconds      float64
+	Instrumental         bool
+	Synced, Plain        string
 }
 
 type ReleaseQuery struct {

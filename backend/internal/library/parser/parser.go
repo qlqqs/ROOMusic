@@ -45,7 +45,7 @@ type AudioObservation struct {
 	// ContentFingerprint 是解析时无需额外读盘就能得到的内容指纹（FLAC 的音频 MD5、OGG 的音频包哈希）；
 	// 其他格式为空，需要时用 ContentFingerprint 函数计算。
 	ContentFingerprint string
-	// Lyrics 是规范化后的内嵌歌词原文（见 NormalizeLyrics），LyricsSource 是来源键（LyricsSource* 常量）；没有有效歌词时两者都为空。
+	// Lyrics 是规范化后的内嵌歌词原文（见 metadata.NormalizeLyrics），LyricsSource 是来源键（LyricsSource* 常量）；没有有效歌词时两者都为空。
 	// 解析器只提取原文，不解析 LRC。
 	Lyrics       string
 	LyricsSource string

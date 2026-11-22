@@ -2,7 +2,9 @@ package curation
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"time"
 
@@ -91,5 +93,43 @@ func (w *Writer) ClearSuppression(ctx context.Context, id string) error {
 	if err == nil && n == 0 {
 		return operations.NotFound("not_found", "不再提出标记不存在")
 	}
+	return err
+}
+
+func hashExternalValue(value string) string {
+	digest := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(digest[:])
+}
+
+type externalIdentity struct {
+	Source     string `json:"source"`
+	ExternalID string `json:"external_id"`
+}
+
+type externalSuppression struct {
+	targetType, targetID, subject, contentHash string
+	identity                                   externalIdentity
+}
+
+func (s externalSuppression) identityHash() string {
+	return hashExternalValue(s.identity.Source + "\x00" + s.identity.ExternalID)
+}
+
+func (s externalSuppression) exists(ctx context.Context, tx *sql.Tx) (bool, error) {
+	var found bool
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM curation_suppressions
+ WHERE target_type=$1 AND target_id=$2::uuid AND ((subject=$3 AND value_hash=$4) OR (subject=$5 AND value_hash=$6)))`,
+		s.targetType, s.targetID, s.subject, s.contentHash, s.subject+"_source", s.identityHash()).Scan(&found)
+	return found, err
+}
+
+func (s externalSuppression) insert(ctx context.Context, tx *sql.Tx, value any, revertID string) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by)
+ VALUES($1,$2::uuid,$3,$4,$5::jsonb,$6::uuid,$7::uuid),($1,$2::uuid,$8,$9,$5::jsonb,$6::uuid,$7::uuid)
+ ON CONFLICT(target_type,target_id,subject,value_hash) DO NOTHING`, s.targetType, s.targetID, s.subject, s.contentHash, string(raw), revertID, operations.ActorID(ctx), s.subject+"_source", s.identityHash())
 	return err
 }

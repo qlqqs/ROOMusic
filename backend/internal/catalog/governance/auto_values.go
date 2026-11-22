@@ -72,11 +72,15 @@ func lockAutoRelease(ctx context.Context, tx *sql.Tx, releaseID string, requireV
 	if err := writegate.Lock(ctx, tx); err != nil {
 		return nil, err
 	}
+	return lockAutoReleaseRow(ctx, tx, releaseID, requireVisible)
+}
+
+func lockAutoReleaseRow(ctx context.Context, tx *sql.Tx, releaseID string, requireVisible bool) (*LockedAutoRelease, error) {
 	locked := &LockedAutoRelease{tx: tx, id: releaseID}
 	var err error
 	if requireVisible {
-		err = tx.QueryRowContext(ctx, `SELECT auto_revision FROM releases WHERE releases.id=$1::uuid AND `+
-			releasesql.ReleaseVisiblePredicate+` FOR UPDATE`, releaseID).Scan(&locked.revision)
+		err = tx.QueryRowContext(ctx, `SELECT auto_revision,edit_revision FROM releases WHERE releases.id=$1::uuid AND `+
+			releasesql.ReleaseVisiblePredicate+` FOR UPDATE`, releaseID).Scan(&locked.revision, &locked.editRevision)
 	} else {
 		err = tx.QueryRowContext(ctx, `SELECT auto_revision, edit_revision FROM releases WHERE id=$1::uuid FOR UPDATE`, releaseID).
 			Scan(&locked.revision, &locked.editRevision)
@@ -92,6 +96,35 @@ func lockAutoRelease(ctx context.Context, tx *sql.Tx, releaseID string, requireV
 		return nil, err
 	}
 	return locked, nil
+}
+
+func LockAutoReleaseOfTrack(ctx context.Context, tx *sql.Tx, trackID string) (*LockedAutoRelease, error) {
+	if err := writegate.Lock(ctx, tx); err != nil {
+		return nil, err
+	}
+	var releaseID string
+	err := tx.QueryRowContext(ctx, `SELECT m.release_id::text FROM tracks t JOIN media m ON m.id=t.medium_id
+ WHERE t.id=$1::uuid AND t.source_status='present'`, trackID).Scan(&releaseID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, operations.NotFound("not_found", "曲目不存在")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return lockAutoReleaseRow(ctx, tx, releaseID, true)
+}
+
+func LockAutoReleaseForRevert(ctx context.Context, tx *sql.Tx, releaseID string) (*LockedAutoRelease, error) {
+	return lockAutoRelease(ctx, tx, releaseID, false)
+}
+
+func (r *LockedAutoRelease) ID() string          { return r.id }
+func (r *LockedAutoRelease) EditRevision() int64 { return r.editRevision }
+
+func (r *LockedAutoRelease) Bump(ctx context.Context) (expected, result int64, err error) {
+	expected = r.revision
+	err = r.tx.QueryRowContext(ctx, "UPDATE releases SET auto_revision=auto_revision+1 WHERE id=$1::uuid RETURNING auto_revision", r.id).Scan(&r.revision)
+	return expected, r.revision, err
 }
 
 // Current 返回锁定时该字段的自动值；没有记录与明确设空可以区分。

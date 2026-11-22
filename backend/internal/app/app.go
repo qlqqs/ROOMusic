@@ -38,6 +38,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
 	playbackapi "github.com/qlqq/roomusic/backend/internal/playback/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
+	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
+	"github.com/qlqq/roomusic/backend/internal/sources/lrclib"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/zones"
@@ -145,12 +147,21 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
 	music := musicbrainz.New(musicbrainz.Options{DataDirectory: settings.DataDirectory, Logger: logger})
+	covers := coverartarchive.New(coverartarchive.Options{DataDirectory: settings.DataDirectory, Logger: logger})
+	lyrics := lrclib.New(lrclib.Options{DataDirectory: settings.DataDirectory, Logger: logger})
 	if lifecycle != nil {
+		covers.StartCacheCleanup(lifecycle)
+		lyrics.StartCacheCleanup(lifecycle)
 		music.StartCacheCleanup(lifecycle)
 	}
-	sourceGate := curation.NewSources(database, curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: music, Recordings: music, Artists: music})
-	curationWriter := curation.NewWriter(database)
-	operationKinds := []operations.Kind{governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
+	sourceGate := curation.NewSources(database,
+		curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: music, Recordings: music, Artists: music},
+		curation.SourceRegistration{Declaration: coverartarchive.Declaration(), Covers: covers},
+		curation.SourceRegistration{Declaration: lrclib.Declaration(), Lyrics: lyrics},
+	)
+	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger)
+	operationKinds := []operations.Kind{curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
+		governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}}
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
@@ -171,7 +182,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		close(analysisDone)
 	}
 	progress := playback.NewAnalysisProgressProvider(database, analysis.Version, analysisWorker)
-	supervisor := registerSteward(lifecycle, mux, database, guard, settings.DataDirectory, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{music: music, diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
+	supervisor := registerSteward(lifecycle, mux, database, guard, settings.DataDirectory, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{music: music, covers: covers, diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		AnalysisProgress: progress,
 	}).Register(mux)

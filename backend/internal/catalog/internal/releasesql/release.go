@@ -25,10 +25,10 @@ const (
 		NULLIF(BTRIM(releases.source_type), ''),
 		NULLIF(BTRIM(releases.media_type), '')`
 
-	releaseSummaryArtworkProjection = `release_artwork.storage_key,
-		release_artwork.mime_type,
-		release_artwork.width,
-		release_artwork.height`
+	releaseSummaryArtworkProjection = `COALESCE(release_artwork.storage_key, release_external_artwork.storage_key),
+		COALESCE(release_artwork.mime_type, release_external_artwork.mime_type),
+		COALESCE(release_artwork.width, release_external_artwork.width),
+		COALESCE(release_artwork.height, release_external_artwork.height)`
 )
 
 var ReleaseSummaryProjection = releaseSummaryIdentityProjection + `,
@@ -46,7 +46,8 @@ var ReleaseSummaryProjection = releaseSummaryIdentityProjection + `,
 
 const (
 	ReleaseSummaryArtworkJoin = ` LEFT JOIN release_artworks release_artwork
-		ON release_artwork.release_id = releases.id`
+		ON release_artwork.release_id = releases.id
+		LEFT JOIN release_external_artworks release_external_artwork ON release_external_artwork.release_id = releases.id AND release_artwork.release_id IS NULL`
 
 	// ReleaseGroupMemberOrder 是代表版本规则：先是管理员指定的默认版本（release_groups.default_release_id），
 	// 再是年份最早（没有年份排最后）、创建时间、ID。第一项只有在默认版本是这个组的可见成员时才会让某一行排到最前：

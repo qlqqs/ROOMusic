@@ -288,6 +288,22 @@ func loadReleaseInfos(ctx context.Context, database operations.Queryer, records 
 	for _, record := range records {
 		ids = append(ids, record.TargetID)
 	}
+	return readReleaseInfos(ctx, database, ids)
+}
+
+func LoadOperationReleases(ctx context.Context, q operations.Queryer, ids []string) (map[string]operations.ReleaseInfo, error) {
+	entries, err := readReleaseInfos(ctx, q, ids)
+	if err != nil {
+		return nil, err
+	}
+	infos := make(map[string]operations.ReleaseInfo, len(entries))
+	for id, entry := range entries {
+		infos[id] = entry.info
+	}
+	return infos, nil
+}
+
+func readReleaseInfos(ctx context.Context, database operations.Queryer, ids []string) (releaseInfos, error) {
 	infos := releaseInfos{}
 	if len(ids) == 0 {
 		return infos, nil

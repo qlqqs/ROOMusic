@@ -34,17 +34,19 @@ import (
 
 const (
 	// Type 常量是 operations.operation_type 允许的发行、专辑、艺人治理与撤销类型。
-	TypeReleaseAutoCorrection = "release_auto_correction"
-	TypeReleaseCorrection     = "release_correction"
-	TypeReleaseGroupChange    = "release_group_change"
-	TypeReleaseGroupDefault   = "release_group_default"
-	TypeReleaseIssueReview    = "release_issue_review"
-	TypeReleaseClaim          = "release_claim"
-	TypeRevert                = "revert"
-	TypeArtistMerge           = "artist_merge"
-	TypeArtistSplit           = "artist_split"
-	TypeArtistRename          = "artist_rename"
-	TypeArtistCandidateIgnore = "artist_candidate_ignore"
+	TypeReleaseExternalArtwork = "release_external_artwork"
+	TypeTrackExternalLyrics    = "track_external_lyrics"
+	TypeReleaseAutoCorrection  = "release_auto_correction"
+	TypeReleaseCorrection      = "release_correction"
+	TypeReleaseGroupChange     = "release_group_change"
+	TypeReleaseGroupDefault    = "release_group_default"
+	TypeReleaseIssueReview     = "release_issue_review"
+	TypeReleaseClaim           = "release_claim"
+	TypeRevert                 = "revert"
+	TypeArtistMerge            = "artist_merge"
+	TypeArtistSplit            = "artist_split"
+	TypeArtistRename           = "artist_rename"
+	TypeArtistCandidateIgnore  = "artist_candidate_ignore"
 
 	// Target 常量是 operations.target_type 允许的目标：发行、专辑与艺人。
 	TargetRelease      = "release"
@@ -156,6 +158,7 @@ type Spec struct {
 
 // Outcome 是执行器在事务内完成业务变化之后交给 Run 记录的结果。
 type Outcome struct {
+	AfterCommit      func() // 仅在本次事务成功提交后执行。
 	TargetType       string
 	TargetID         string
 	Targets          []Target // 额外受影响目标；艺人主目标也自动记入关联。
@@ -281,6 +284,9 @@ func Run(ctx context.Context, database *sql.DB, spec Spec, execute Executor) (Re
 	}
 	if err = tx.Commit(); err != nil {
 		return Result{}, classify("commit", err)
+	}
+	if outcome.AfterCommit != nil {
+		outcome.AfterCommit()
 	}
 	return Result{OperationID: operationID, Response: response}, nil
 }

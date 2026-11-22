@@ -17,6 +17,7 @@ const (
 	LyricsKindPlain      = "plain"
 	LyricsSourceEmbedded = "embedded"
 	LyricsSourceExternal = "external"
+	LyricsSourceOnline   = "online"
 )
 
 const (
@@ -50,10 +51,11 @@ type TrackLyrics struct {
 // trackID 必须是 UUID 文本，由调用方在传输层校验。
 func (s *Store) LoadTrackLyrics(ctx context.Context, trackID string) (TrackLyrics, error) {
 	var id string
-	var raw sql.NullString
+	var raw, online sql.NullString
 	var external bool
 	// lrc_file 是迁移 0050 约束中的来源键，与 parser.LyricsSourceLRCFile 同值。
-	err := s.database.QueryRowContext(ctx, `SELECT id::text, lyrics, COALESCE(lyrics_source = 'lrc_file', false) FROM tracks WHERE id=$1::uuid AND source_status='present'`, trackID).Scan(&id, &raw, &external)
+	err := s.database.QueryRowContext(ctx, `SELECT t.id::text,t.lyrics,COALESCE(t.lyrics_source='lrc_file',false),e.lyrics
+ FROM tracks t LEFT JOIN track_external_lyrics e ON e.track_id=t.id WHERE t.id=$1::uuid AND t.source_status='present'`, trackID).Scan(&id, &raw, &external, &online)
 	if errors.Is(err, sql.ErrNoRows) {
 		return TrackLyrics{}, ErrTrackNotFound
 	}
@@ -66,6 +68,12 @@ func (s *Store) LoadTrackLyrics(ctx context.Context, trackID string) (TrackLyric
 			if external {
 				lyrics.Source = LyricsSourceExternal
 			}
+			result.Lyrics = &lyrics
+		}
+	}
+	if result.Lyrics == nil && online.Valid {
+		if lyrics, ok := ParseLyrics(online.String); ok {
+			lyrics.Source = LyricsSourceOnline
 			result.Lyrics = &lyrics
 		}
 	}
