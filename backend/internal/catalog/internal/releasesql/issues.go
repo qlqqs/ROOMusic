@@ -17,7 +17,7 @@ const (
 	// 写入与比较用同一个表达式：曲目回来时扫描更新 observed_at，再缺失时时间已经不同。
 	MissingTrackSeenAt = `(EXTRACT(EPOCH FROM missing_track.observed_at) * 1000000)::bigint`
 
-	// FieldIssueRows 是发行里拿不准、也没有人工修正的字段决定（artist 由专辑艺人的修正覆盖）。
+	// FieldIssueRows 是发行里拿不准、也没有人工修正或自动值的字段决定（artist 由专辑艺人的修正覆盖）。
 	FieldIssueRows = `FROM release_field_decisions decision
 		WHERE decision.release_id = releases.id
 		  AND decision.action = 'uncertain_apply'
@@ -25,6 +25,11 @@ const (
 			SELECT 1 FROM release_corrections correction
 			WHERE correction.release_id = decision.release_id
 			  AND correction.field = CASE decision.field_key WHEN 'artist' THEN 'album_artist' ELSE decision.field_key END
+		  )
+		  AND NOT EXISTS (
+			SELECT 1 FROM release_auto_values auto_value
+			WHERE auto_value.release_id = decision.release_id
+			  AND auto_value.field = CASE decision.field_key WHEN 'artist' THEN 'album_artist' ELSE decision.field_key END
 		  )`
 	// FieldReviewValid 在这个字段有依据相同的核对时为真（只有来源类型、介质类型可能有核对行）。
 	FieldReviewValid = `EXISTS (

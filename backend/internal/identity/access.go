@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 )
 
@@ -19,4 +20,11 @@ func (guard *Guard) RequireOriginIfPresent(w http.ResponseWriter, r *http.Reques
 		return true
 	}
 	return guard.RequireSameOrigin(w, r)
+}
+
+// IsEnabledAdmin 在当前事务中核对管理员身份，并持有行共享锁直到事务结束。
+func IsEnabledAdmin(ctx context.Context, tx *sql.Tx, id string) (bool, error) {
+	var enabled bool
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE id=$1::uuid AND role='admin' AND disabled_at IS NULL FOR SHARE)`, id).Scan(&enabled)
+	return enabled, err
 }

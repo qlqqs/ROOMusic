@@ -78,7 +78,7 @@ func restoredIntent(field catalog.CorrectableField, intent *catalog.CorrectionIn
 	return nil, fmt.Errorf("recorded correction for %s is malformed", field.Name)
 }
 
-// Revert 把被这条修正改过的字段恢复成它之前的意图（没有修正、设值或设空），清除修正后显示的是当前的扫描值。
+// Revert 把被这条修正改过的字段恢复成它之前的意图（没有修正、设值或设空），清除修正后显示当前自动值或扫描值。
 func (correctionKind) Revert(ctx context.Context, tx *sql.Tx, operationID string, original operations.Record) (operations.Outcome, error) {
 	locked, err := lockVisibleRelease(ctx, tx, original.TargetID)
 	if err != nil {

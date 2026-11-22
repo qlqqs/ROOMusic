@@ -21,7 +21,7 @@ import (
 
 // 发行字段的人工修正（阶段 M3）。修正单独存放在 release_corrections，扫描只写 releases：每次读取经视图
 // release_effective 把修正叠加在扫描值上，所以重扫不会覆盖修正。一个字段至多有一条当前意图——改成某个值（set）或
-// 明确设为空（null）；没有这一行就是“没有修正”，字段显示当前的扫描值。写入只经 operations.Run 的共同流程（鉴权、
+// 明确设为空（null）；没有这一行就是“没有修正”，字段显示自动值或扫描值。写入只经 operations.Run 的共同流程（鉴权、
 // 幂等、预期版本与操作记录由它和传输层负责），这里提供它的执行器与读取投影。
 
 // 修正文本与列表的上限；列表形状也受 release_corrections_value_ck 约束。
@@ -72,7 +72,7 @@ func ParseCorrectionChanges(raw map[string]RawCorrectionChange) (map[string]Corr
 		switch item.Mode {
 		case catalog.CorrectionClear:
 			if hasValue {
-				return nil, invalidCorrection("%s：恢复为扫描值时不能带值", field.Label)
+				return nil, invalidCorrection("%s：清除修正时不能带值", field.Label)
 			}
 			changes[name] = CorrectionChange{Mode: catalog.CorrectionClear}
 		case catalog.CorrectionNull:
@@ -208,8 +208,17 @@ type CorrectionField struct {
 	Field          string                    `json:"field"`
 	ScanValue      any                       `json:"scan_value"`
 	Correction     *catalog.CorrectionIntent `json:"correction"`
+	Auto           *catalog.AutoValue        `json:"auto"`
 	EffectiveValue any                       `json:"effective_value"`
 	Uncertain      bool                      `json:"uncertain"`
+}
+
+// ValueAfterClear 返回清除人工修正后实际显示的值，包括自动层明确设空的情况。
+func (f CorrectionField) ValueAfterClear() any {
+	if f.Auto != nil {
+		return f.Auto.Value
+	}
+	return f.ScanValue
 }
 
 // CorrectionState 是一张发行的修正状态：当前人工修改版本号与八个字段（固定顺序）。
@@ -288,6 +297,10 @@ func loadCorrectionState(ctx context.Context, database catalog.Queryer, releaseI
 	if err != nil {
 		return CorrectionState{}, err
 	}
+	autoValues, err := catalog.LoadAutoValues(ctx, database, releaseID)
+	if err != nil {
+		return CorrectionState{}, err
+	}
 	uncertain, err := loadUncertainFields(ctx, database, releaseID)
 	if err != nil {
 		return CorrectionState{}, err
@@ -299,6 +312,9 @@ func loadCorrectionState(ctx context.Context, database catalog.Queryer, releaseI
 			Uncertain: field.Name != "genre" && (uncertain[field.Name] || (field.Name == "album_artist" && uncertain["artist"]))}
 		if intent, corrected := intents[field.Name]; corrected {
 			item.Correction = &intent
+		}
+		if auto, ok := autoValues[field.Name]; ok {
+			item.Auto = &auto
 		}
 		state.Fields[index] = item
 	}
@@ -326,10 +342,13 @@ func loadUncertainFields(ctx context.Context, database catalog.Queryer, releaseI
 // LoadCorrectionState 读取发行的修正状态（管理员编辑发行信息用）；不存在或不可见时返回 ErrReleaseNotFound。
 func (s *Store) LoadCorrectionState(ctx context.Context, releaseID string) (CorrectionState, error) {
 	state, err := loadCorrectionState(ctx, s.database, releaseID)
-	if err != nil && !errors.Is(err, catalog.ErrReleaseNotFound) {
+	if errors.Is(err, catalog.ErrReleaseNotFound) {
+		return CorrectionState{}, err
+	}
+	if err != nil {
 		return CorrectionState{}, fmt.Errorf("%w: load corrections: %w", catalog.ErrQuery, err)
 	}
-	return state, err
+	return state, nil
 }
 
 // correctionRecordState 是操作记录里的类型化状态：被改字段的修正意图（null 表示没有修正）与这些字段当时的有效值。
@@ -473,8 +492,13 @@ func sameIntent(field catalog.CorrectableField, previous catalog.CorrectionInten
 
 // writeIntent 写下字段的新意图：next 为 nil 删除修正行，否则插入或替换（operation_id 记下设下它的操作）。
 func writeIntent(ctx context.Context, tx *sql.Tx, releaseID string, field catalog.CorrectableField, next *catalog.CorrectionIntent, operationID string) error {
+	return writeFieldIntent(ctx, tx, "release_corrections", releaseID, field, next, operationID)
+}
+
+// table 由人工修正和自动值的写入入口固定，字段名与取值均通过参数传入。
+func writeFieldIntent(ctx context.Context, tx *sql.Tx, table, releaseID string, field catalog.CorrectableField, next *catalog.CorrectionIntent, operationID string) error {
 	if next == nil {
-		_, err := tx.ExecContext(ctx, `DELETE FROM release_corrections WHERE release_id=$1::uuid AND field=$2`, releaseID, field.Name)
+		_, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE release_id=$1::uuid AND field=$2`, releaseID, field.Name)
 		return err
 	}
 	var text sql.NullString
@@ -489,7 +513,7 @@ func writeIntent(ctx context.Context, tx *sql.Tx, releaseID string, field catalo
 			text = sql.NullString{String: next.Value.(string), Valid: true}
 		}
 	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO release_corrections(release_id, field, mode, text_value, year_value, list_value, operation_id)
+	_, err := tx.ExecContext(ctx, `INSERT INTO `+table+`(release_id, field, mode, text_value, year_value, list_value, operation_id)
 		VALUES($1::uuid, $2, $3, $4, $5, $6::text[], $7::uuid)
 		ON CONFLICT (release_id, field) DO UPDATE
 		SET mode = EXCLUDED.mode, text_value = EXCLUDED.text_value, year_value = EXCLUDED.year_value, list_value = EXCLUDED.list_value, operation_id = EXCLUDED.operation_id`,

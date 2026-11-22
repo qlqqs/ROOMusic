@@ -16,6 +16,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	catalogapi "github.com/qlqq/roomusic/backend/internal/catalog/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
+	"github.com/qlqq/roomusic/backend/internal/curation"
+	curationapi "github.com/qlqq/roomusic/backend/internal/curation/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/dspsettings"
 	dspsettingsapi "github.com/qlqq/roomusic/backend/internal/dspsettings/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/dspsettings/irload"
@@ -141,7 +143,8 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
-	operationKinds := []operations.Kind{governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
+	curationWriter := curation.NewWriter(database)
+	operationKinds := []operations.Kind{governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}}
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
@@ -149,6 +152,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	catalogapi.NewArtistGovernance(database, guard, logger, artistResolutionAdapter{}).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
 	operationsapi.New(database, guard, logger, operationKinds...).Register(mux)
+	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), guard, logger).Register(mux)
 	var analysisWorker *playback.AnalysisWorker
 	analysisDone := make(chan struct{})
 	if database != nil && assembly.analysis != nil {

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 )
 
-// 修正的三种修改方式：set 与 null 是存下来的意图，clear 删除意图（回到当前的扫描值）。
+// 修正的三种修改方式：set 与 null 是存下来的意图，clear 删除意图（显示下一层的值）。
 const (
 	CorrectionSet   = "set"
 	CorrectionNull  = "null"
@@ -63,19 +63,9 @@ func LoadCorrectionIntents(ctx context.Context, database Queryer, releaseID stri
 		if err := rows.Scan(&name, &mode, &text, &year, &listJSON); err != nil {
 			return nil, err
 		}
-		intent := CorrectionIntent{Mode: mode}
-		switch {
-		case mode != CorrectionSet:
-		case name == "genre":
-			var genres []string
-			if err := json.Unmarshal([]byte(listJSON.String), &genres); err != nil {
-				return nil, err
-			}
-			intent.Value = genres
-		case year.Valid:
-			intent.Value = int(year.Int64)
-		default:
-			intent.Value = text.String
+		intent, err := decodeIntent(name, mode, text, listJSON, year)
+		if err != nil {
+			return nil, err
 		}
 		intents[name] = intent
 	}
@@ -95,4 +85,63 @@ func loadCorrectedFieldNames(ctx context.Context, database Queryer, releaseID st
 		}
 	}
 	return names, nil
+}
+
+func decodeIntent(name, mode string, text, listJSON sql.NullString, year sql.NullInt64) (CorrectionIntent, error) {
+	intent := CorrectionIntent{Mode: mode}
+	switch {
+	case mode != CorrectionSet:
+	case name == "genre":
+		var genres []string
+		if err := json.Unmarshal([]byte(listJSON.String), &genres); err != nil {
+			return CorrectionIntent{}, err
+		}
+		intent.Value = genres
+	case year.Valid:
+		intent.Value = int(year.Int64)
+	default:
+		intent.Value = text.String
+	}
+	return intent, nil
+}
+
+// AutoValue 是自动层当前的意图与来源。明确留空时只记录模式。
+type AutoValue struct {
+	Mode         string `json:"mode"`
+	Value        any    `json:"value,omitempty"`
+	OperationID  string `json:"operation_id"`
+	ProviderKind string `json:"provider_kind"`
+	Provider     string `json:"provider"`
+}
+
+// Intent 返回可与规范化请求比较的意图。
+func (v AutoValue) Intent() CorrectionIntent {
+	return CorrectionIntent{Mode: v.Mode, Value: v.Value}
+}
+
+func LoadAutoValues(ctx context.Context, database Queryer, releaseID string) (map[string]AutoValue, error) {
+	rows, err := database.QueryContext(ctx, `SELECT a.field, a.mode, a.text_value, a.year_value, to_jsonb(a.list_value)::text,
+ a.operation_id::text, o.origin->>'provider_kind', o.origin->>'provider'
+ FROM release_auto_values a JOIN operations o ON o.id=a.operation_id WHERE a.release_id=$1::uuid`, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	values := map[string]AutoValue{}
+	for rows.Next() {
+		var name string
+		var value AutoValue
+		var text, list sql.NullString
+		var year sql.NullInt64
+		if err := rows.Scan(&name, &value.Mode, &text, &year, &list, &value.OperationID, &value.ProviderKind, &value.Provider); err != nil {
+			return nil, err
+		}
+		intent, err := decodeIntent(name, value.Mode, text, list, year)
+		if err != nil {
+			return nil, err
+		}
+		value.Value = intent.Value
+		values[name] = value
+	}
+	return values, rows.Err()
 }
