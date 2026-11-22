@@ -22,7 +22,8 @@ M7 子任务 A（2026-11）增加**自动层**：后台自动整理写的发行�
   `target_id`（不设外键：记录可能比目标活得久）、
   `idempotency_key`、`fingerprint`、`expected_revision`、`result_revision`、`before_state`/`after_state`（执行器定义的类型化前后状态，撤销的依据）、
   `response`（原样返回客户端，也是同键重放的响应）、`reverts_operation_id`、`request_id`、`created_at`、`origin`（0054，可空 JSONB）。
-  0058 加入类型 `release_auto_correction` 与可空的 `batch_id`（自动整理的批次，见[自动整理合同](./curation-contracts.md)）。
+  0058 加入类型 `release_auto_correction` 与可空的 `batch_id`（自动整理的批次，见[自动整理合同](./curation-contracts.md)）；0061 加入 `release_external_artwork`、`track_external_lyrics`；
+  0062 加入 `external_link`（自动整理建立的外部对应，同一合同第 15 节）。
   约束都有名字：`operations_revision_ck`（`result = expected + 1`）、`operations_reverts_ck`（只有撤销记录指向原操作）、
   `operations_actor_key_uq`（`(actor_id, idempotency_key)`）、`operations_reverts_uq`（一条操作至多被撤销一次）。
 - **`releases.edit_revision`**（`BIGINT NOT NULL DEFAULT 1`，`> 0`）：发行的人工修改版本号。**只有受控操作（修正、归组、核对、撤销）递增，扫描从不改它。**
@@ -143,6 +144,8 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 - 撤销只恢复这条记录改动过的字段，不碰其他字段。
 - 自动层的写入与撤销不递增 `edit_revision`，所以不占用“最近一次修改”：自动写入之后，之前的人工修改仍可撤销。自动修改自己的撤销规则
   （按写入者判断、按批与按来源、撤销后不再提出）见[自动整理合同](./curation-contracts.md)第 5 节。
+- 归组的撤销仍按版本号规则；M7 C 起 `GroupChangeOperations(suppressions)` 必须传入“不再提出”的写入器：撤销来源为 `curation` 的归入时，
+  同一事务里写 `group_join` 标记，后台不再把这个发行归入同一个专辑；人工归组的撤销不写。归组记录的后态多了 `action`（`join | detach`），之前的记录没有它。
 
 ## 7. 与扫描的关系
 

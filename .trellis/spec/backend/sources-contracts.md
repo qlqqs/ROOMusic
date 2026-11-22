@@ -5,7 +5,7 @@
 M7 子任务 B1（2026-11）把向外部音乐数据源发请求这件事从管家里分出来：出站客户端迁到平台层，新增外部源的共用部分
 （`backend/internal/sources`）与第一个适配器 MusicBrainz（`backend/internal/sources/musicbrainz`）。管家的两个音乐资料工具与
 后台自动整理共用同一个适配器实例。子任务 B2 加了封面与歌词两种能力、请求器的重定向与取字节，以及 Cover Art Archive、LRCLIB 两个适配器
-（第 7、8 节）。B1、B2 都**没有后台调用方**：匹配与自动写入的调度在子任务 C。
+（第 7、8 节）。后台调用方是子任务 C 的程序层（[自动整理合同](./curation-contracts.md)第 15 节）。
 
 新增或修改以下内容时必须阅读并更新本文件：`backend/internal/platform/egress`、`backend/internal/sources` 及其子包、新的外部源、
 能力接口、限速、缓存、重试、重定向、外部源的日志。各源的开关、闸门、外部对应与外部封面歌词的存储在[自动整理合同](./curation-contracts.md)第 11、12、14 节；
@@ -139,7 +139,7 @@ type Declaration struct {
 - `Covers(target)`：`GET <base>/<release|release-group>/<mbid>/`。MBID 校验 UUID 外形并转小写（大写会被服务拒绝），不合法 `ErrInvalidQuery`。
   结构校验只有一条：顶层 `images` 是数组。`id` 接受数字或字符串；`ReleaseID` 取顶层 `release` 地址的最后一段；`thumbnails` 是 null 时保持 nil。
   404 是空切片，不是错误。
-- `FrontCover(target)`：只在 `ID` 非空的项里选——`front` 为真的第一张，没有则类型含 `Front` 的第一张，都没有 `ErrNotFound`。
+- `FrontCover(target)`：用 `sources.FrontImage` 选（程序层下载前查标记也用它，保证选的是同一张）——只在 `ID` 非空的项里选，`front` 为真的第一张，没有则类型含 `Front` 的第一张，都没有 `ErrNotFound`。
   清单没给 `ReleaseID` 时：目标是 release 就用目标的 ID，目标是 release group 则 `ErrNotFound`。
 - 下载地址**由适配器自己拼**，不用清单里的地址（旧清单里是 `http://`）：`<base>/release/<ReleaseID>/<ID>-1200`，404 依次试 `-500`、`-250`、
   不带后缀的原图。每一档上限 16 MiB（与 `catalog/artwork` 的上限相同）。原图的 `Content-Type` 是 `application/pdf` 或内容以 `%PDF` 开头时视为没有。
