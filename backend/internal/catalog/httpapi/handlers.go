@@ -196,7 +196,7 @@ func (handlers *Handlers) releaseDetail(responseWriter http.ResponseWriter, requ
 		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_error", "无法读取整理证据")
 		return
 	}
-	httpserver.WriteJSON(responseWriter, http.StatusOK, catalog.ReleaseDetail{
+	detail := catalog.ReleaseDetail{
 		ReleaseSummary:  summary,
 		CandidateKind:   header.CandidateKind,
 		Genres:          header.Genres,
@@ -209,7 +209,11 @@ func (handlers *Handlers) releaseDetail(responseWriter http.ResponseWriter, requ
 		Evidence:        evidence,
 		Revision:        header.Revision,
 		CorrectedFields: header.CorrectedFields,
-	})
+	}
+	httpserver.WriteJSON(responseWriter, http.StatusOK, struct {
+		catalog.ReleaseDetail
+		AutoFields []string `json:"auto_fields,omitempty"`
+	}{ReleaseDetail: detail, AutoFields: header.AutoFields})
 }
 
 func (handlers *Handlers) writeReleaseLoadError(responseWriter http.ResponseWriter, request *http.Request, err error) {

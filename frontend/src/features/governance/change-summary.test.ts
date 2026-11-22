@@ -229,7 +229,7 @@ describe("自动整理的记录（M7 A）", () => {
   });
 
   it("来源标签带来源标识；标识缺失时只写“自动整理”", () => {
-    expect(operationOriginLabel({ source: "curation", provider_kind: "source", provider: "musicbrainz", basis: "条码一致" })).toBe("自动整理 · musicbrainz");
+    expect(operationOriginLabel({ source: "curation", provider_kind: "source", provider: "musicbrainz", basis: "条码一致" })).toBe("自动整理 · MusicBrainz");
     expect(operationOriginLabel({ source: "curation" })).toBe("自动整理");
   });
 
@@ -357,7 +357,7 @@ describe("自动补的封面与歌词：后端样本", () => {
 
   it("类型名、来源标签与改动", () => {
     expect([operationTypeLabel(artwork), operationTypeLabel(lyrics)]).toEqual(["自动补封面", "自动补歌词"]);
-    expect([operationOriginLabel(artwork.origin), operationOriginLabel(lyrics.origin)]).toEqual(["自动整理 · coverartarchive", "自动整理 · lrclib"]);
+    expect([operationOriginLabel(artwork.origin), operationOriginLabel(lyrics.origin)]).toEqual(["自动整理 · Cover Art Archive", "自动整理 · LRCLIB"]);
     expect(changeLines(artwork)).toEqual(["补了 1×1 的封面，来自 Cover Art Archive"]);
     expect(changeLines(lyrics)).toEqual(["给《Album A track 1》补了同步歌词（2 行），来自 LRCLIB"]);
   });

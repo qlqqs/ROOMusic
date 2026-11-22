@@ -36,6 +36,7 @@ const LibraryPage = lazyRouteComponent(() => import("./routes/library-page"), "L
 const ScanDetail = lazyRouteComponent(() => import("../features/library"), "ScanDetail");
 const MembersPage = lazyRouteComponent(() => import("./routes/members-page"), "MembersPage");
 const OperationsPage = lazyRouteComponent(() => import("./routes/operations-page"), "OperationsPage");
+const CurationPage = lazyRouteComponent(() => import("./routes/curation-page"), "CurationPage");
 const BackupsPage = lazyRouteComponent(() => import("./routes/backups-page"), "BackupsPage");
 // 管家的整页对话连同 Markdown 依赖按需加载。
 const StewardPage = lazyRouteComponent(() => import("./routes/steward-page"), "StewardRoutePage");
@@ -433,13 +434,35 @@ function MembersRoute() {
 
 const membersRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/members", component: MembersRoute });
 
-// page 是记录的页码（2 及以上），release 是只看某个版本的记录，group 是看某张专辑的记录（默认版本）；不合法的值显式写成 undefined。
-function OperationsRoute() {
-  const { page, release, group, artist } = operationsRoute.useSearch();
+// batch_page、marker_page 是批次与“不再提出”的页码，只在 2 及以上时出现；不合法的值显式写成 undefined。
+function CurationRoute() {
+  const { batch_page: batchPage, marker_page: markerPage } = curationRoute.useSearch();
   return (
     <AdminGate>
       <LazyPage>
-        <OperationsPage page={page ?? 1} releaseId={release} groupId={group} artistId={artist} />
+        <CurationPage batchPage={batchPage ?? 1} markerPage={markerPage ?? 1} />
+      </LazyPage>
+    </AdminGate>
+  );
+}
+
+const curationRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/curation",
+  validateSearch: (search: Record<string, unknown>): { batch_page?: number | undefined; marker_page?: number | undefined } => ({
+    batch_page: parsePageParam(search["batch_page"]),
+    marker_page: parsePageParam(search["marker_page"]),
+  }),
+  component: CurationRoute,
+});
+
+// page 是记录的页码（2 及以上），release 是只看某个版本的记录，group 是看某张专辑的记录（默认版本）；不合法的值显式写成 undefined。
+function OperationsRoute() {
+  const { page, release, group, artist, source, provider, batch } = operationsRoute.useSearch();
+  return (
+    <AdminGate>
+      <LazyPage>
+        <OperationsPage page={page ?? 1} releaseId={release} groupId={group} artistId={artist} curation={{ source, provider, batchId: batch }} />
       </LazyPage>
     </AdminGate>
   );
@@ -484,7 +507,7 @@ const routeTree = rootRoute.addChildren([
     artistCandidatesRoute,
     stewardRoute,
     stewardConversationRoute,
-    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, agentSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, operationsRoute, backupsRoute]),
+    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, agentSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, curationRoute, operationsRoute, backupsRoute]),
     notFoundRoute,
   ]),
 ]);

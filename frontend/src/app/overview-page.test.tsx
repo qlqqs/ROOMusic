@@ -73,16 +73,18 @@ describe("概览资料库卡片", () => {
 });
 
 describe("概览资料库状态表", () => {
-  it("管理员看到五行：扫描、音频分析、需要关注、音乐目录、成员；除音频分析外整行是链接", async () => {
+  it("管理员看到六行：扫描、音频分析、需要关注、自动整理、音乐目录、成员；除音频分析外整行是链接", async () => {
     setup("admin");
     renderApp();
     const table = await statusTable();
     await waitFor(() => expect(within(table).queryByText("正在读取…")).toBeNull());
-    expect(statusLabels(table)).toEqual(["扫描", "音频分析", "需要关注", "音乐目录", "成员"]);
+    expect(statusLabels(table)).toEqual(["扫描", "音频分析", "需要关注", "自动整理", "音乐目录", "成员"]);
     const hrefOf = (label: string) => within(statusRow(table, label)).queryByRole("link")?.getAttribute("href") ?? null;
     expect(hrefOf("扫描")).toBe("/settings/library");
     expect(hrefOf("音频分析")).toBeNull();
     expect(hrefOf("需要关注")).toBe("/albums?attention=required");
+    expect(hrefOf("自动整理")).toBe("/settings/curation");
+    expect(statusRow(table, "自动整理").textContent).toContain("未打开");
     expect(hrefOf("音乐目录")).toBe("/settings/library");
     expect(hrefOf("成员")).toBe("/settings/members");
     expect(statusRow(table, "扫描").textContent).toContain("没有正在运行的扫描");

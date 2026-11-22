@@ -4,6 +4,7 @@ import type { ComparedReleaseDTO } from "../api/decoders";
 import { versionLabel, type ComparisonCell, type ComparisonRow } from "../comparison";
 import styles from "./comparison-table.module.css";
 import { DefaultVersionTag } from "./default-version-tag";
+import { AutoFilledTag } from "./auto-filled-tag";
 import { ManualCorrectionTag } from "./manual-correction-tag";
 
 type ComparisonTableProps = {
@@ -43,6 +44,11 @@ function CellValue({ cell }: { cell: ComparisonCell }) {
         <>
           {" "}
           <ManualCorrectionTag />
+        </>
+      ) : cell.autoFilled ? (
+        <>
+          {" "}
+          <AutoFilledTag />
         </>
       ) : null}
       {cell.differs ? <VisuallyHidden>（与{versionLabel(0)} 不同）</VisuallyHidden> : null}

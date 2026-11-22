@@ -14,3 +14,7 @@ export { ArtistCandidatesView, type ArtistCandidateStatus } from "./components/a
 export { useArtistCommands, type ArtistCommands } from "./hooks/use-artist-commands";
 export { useCachedTodoCounts } from "./hooks/use-cached-todo-counts";
 export { governanceKeys } from "./query-keys";
+export type { CurationFilter } from "./hooks/use-operations";
+export { operationOriginLabel, sourceName } from "./change-summary";
+export { correctionFieldLabels, displayValue } from "./labels";
+export type { CorrectableField } from "./api/decoders";

@@ -39,7 +39,7 @@ func revertExternal(t *testing.T, f *curationFixture, op, release string, revisi
 	return id
 }
 
-func externalMarkers(t *testing.T, f *curationFixture, targetType, target, subject, digest, source, extID, revert string, value any) []string {
+func externalMarkers(t *testing.T, f *curationFixture, targetType, target, subject, digest, source, extID, revert string, value any) map[string]string {
 	t.Helper()
 	identity := fmt.Sprintf("%x", sha256.Sum256([]byte(source+"\x00"+extID)))
 	rows, err := f.application.database.Query(`SELECT id::text,subject,value_hash,value,operation_id::text,created_by::text
@@ -49,7 +49,7 @@ func externalMarkers(t *testing.T, f *curationFixture, targetType, target, subje
 	}
 	defer rows.Close()
 	want := map[string]string{subject: digest, subject + "_source": identity}
-	var ids []string
+	ids := make(map[string]string, len(want))
 	for rows.Next() {
 		var id, field, hash, op, actor string
 		var raw json.RawMessage
@@ -61,7 +61,7 @@ func externalMarkers(t *testing.T, f *curationFixture, targetType, target, subje
 		}
 		delete(want, field)
 		requireExternalJSON(t, raw, value)
-		ids = append(ids, id)
+		ids[field] = id
 	}
 	if err := rows.Err(); err != nil || len(want) != 0 {
 		t.Fatalf("缺少标记=%v，错误=%v", want, err)
@@ -69,13 +69,11 @@ func externalMarkers(t *testing.T, f *curationFixture, targetType, target, subje
 	return ids
 }
 
-func clearExternalMarkers(t *testing.T, f *curationFixture, ids []string) {
+func clearCurationSuppression(t *testing.T, f *curationFixture, id string) {
 	t.Helper()
-	for _, id := range ids {
-		r := f.application.request(t, "DELETE", curationBase+"/suppressions/"+id, nil, &f.admin, nil)
-		if r.Code != 204 || r.Body.Len() != 0 {
-			t.Fatalf("清除标记 %s 返回 %d %s", id, r.Code, r.Body)
-		}
+	r := f.application.request(t, "DELETE", curationBase+"/suppressions/"+id, nil, &f.admin, nil)
+	if r.Code != 204 || r.Body.Len() != 0 {
+		t.Fatalf("清除标记 %s 返回 %d %s", id, r.Code, r.Body)
 	}
 }
 
@@ -110,7 +108,7 @@ func TestPostgreSQLExternalArtworkRevert(t *testing.T) {
 	if n := countRows(t, app, "SELECT count(*) FROM operations"); n != before {
 		t.Fatalf("不再提出命中后的操作数=%d，期望 %d", n, before)
 	}
-	clearExternalMarkers(t, f, marks)
+	clearCurationSuppression(t, f, marks["artwork"])
 	req.Key = uuid.New()
 	next := applyExternalArtwork(t, f.writer, req)
 	externalArtworkState(t, app, f.a, next, stored)
@@ -186,7 +184,7 @@ func TestPostgreSQLExternalLyricsRevert(t *testing.T) {
 		t.Fatalf("不再提出命中后的操作数=%d，期望 %d", n, before)
 	}
 	requireExternalLyricsHTTP(t, app, &f.admin, track, "", "", nil)
-	clearExternalMarkers(t, f, marks)
+	clearCurationSuppression(t, f, marks["lyrics"])
 	req.Key, req.BatchID = uuid.New(), f.batch(t, "program")
 	next := applyExternalLyrics(t, f.writer, req)
 	externalRecord(t, f, next, f.b, "track_external_lyrics", req.BatchID, req.Source)

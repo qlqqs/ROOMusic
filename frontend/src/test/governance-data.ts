@@ -41,7 +41,11 @@ type ReleaseState = {
   baseArtist: string;
 };
 
-type OperationType = "release_correction" | "release_group_change" | "release_group_default" | "release_issue_review" | "release_claim" | "revert";
+/** 自动整理写的四种记录（M7）：撤销按“这一格仍是这条操作写的”判断，不看人工修改版本号。 */
+export const AUTO_OPERATION_TYPES = ["release_auto_correction", "release_external_artwork", "track_external_lyrics", "external_link"] as const;
+type AutoOperationType = (typeof AUTO_OPERATION_TYPES)[number];
+type OperationType = "release_correction" | "release_group_change" | "release_group_default" | "release_issue_review" | "release_claim" | "revert" | AutoOperationType;
+const isAutoType = (type: OperationType): type is AutoOperationType => (AUTO_OPERATION_TYPES as readonly string[]).includes(type);
 
 /** 记录的目标：发行（修正、归组）或专辑（默认版本）。 */
 type OperationTarget = { type: "release" | "release_group"; id: string };
@@ -60,7 +64,28 @@ type OperationRecord = {
   restore: () => void;
   /** 经管家或 MCP 做的操作的来源（M6 C6）；测试直接写上，没有时列表里不带这个字段。 */
   origin?: OperationOriginDTO;
+  /** 自动整理的批次（M7）；撤销记录没有。 */
+  batchId?: string;
+  /** 自动整理的记录：这一格现在是否仍是这条操作写的（决定能不能撤销）；没有时视为是。 */
+  owned?: () => boolean;
 };
+
+/** 测试预置一条自动整理的记录（目标是发行）：来源、批次与撤销时怎样恢复由调用方给出；返回记录 ID。 */
+export function seedAutoOperation(
+  data: GovernanceData,
+  seed: { type: AutoOperationType; releaseId: string; changes: OperationChangesDTO; provider: string; basis?: string; batchId?: string; restore?: () => void; owned?: () => boolean },
+): string {
+  const record = nextOperation(data, seed.type, { type: "release", id: seed.releaseId }, 0, seed.changes, seed.restore ?? (() => undefined));
+  record.origin = { source: "curation", provider_kind: "source", provider: seed.provider, ...(seed.basis === undefined ? {} : { basis: seed.basis }) };
+  if (seed.batchId !== undefined) record.batchId = seed.batchId;
+  if (seed.owned !== undefined) record.owned = seed.owned;
+  return record.id;
+}
+
+/** 全部操作记录（自动整理替身按批次与来源统计、挑选要撤销的记录）。 */
+export function operationsOf(data: GovernanceData): readonly Readonly<OperationRecord>[] {
+  return data.operations;
+}
 
 /** 专辑自己的状态：人工修改版本号（设定、清除默认版本与撤销递增；修正与归组不改它）与已存的默认版本（可能是失效中的，即不是这个专辑的成员）。 */
 type GroupState = { revision: number; defaultReleaseId: string | null };
@@ -551,6 +576,7 @@ function itemOf(data: GovernanceData, record: OperationRecord): OperationItemDTO
     reverts: record.reverts,
     reverted_by: record.revertedBy,
     ...(record.origin === undefined ? {} : { origin: record.origin }),
+    ...(record.batchId === undefined ? {} : { batch_id: record.batchId }),
   };
   const notReverted = record.type !== "revert" && record.revertedBy === null;
   if (record.target.type === "release_group") {
@@ -566,6 +592,8 @@ function itemOf(data: GovernanceData, record: OperationRecord): OperationItemDTO
   const groupId = groupIdOf(data.catalog, releaseId);
   const state = data.releases.get(releaseId);
   const release = detail === undefined || groupId === undefined ? null : { id: releaseId, title: detail.title, group_id: groupId, visible: true };
+  // 自动整理的记录不看版本号与可见性：只看这一格是否仍是它写的。撤销记录的类型是 revert，按原记录的规则不适用。
+  if (isAutoType(record.type)) return { ...common, release, album: null, artist: null, revertible: notReverted && (record.owned?.() ?? true) };
   return { ...common, release, album: null, artist: null, revertible: notReverted && release !== null && state !== undefined && state.revision === record.resultRevision };
 }
 
@@ -575,9 +603,16 @@ export function respondToOperations(data: GovernanceData, query: URLSearchParams
   if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) return failure(400, "invalid_pagination", "分页参数无效");
   const releaseId = query.get("release_id");
   const groupId = query.get("group_id");
-  // 两个筛选都给出时取并集：这个版本自己的记录，加上这张专辑的记录。
+  const source = query.get("source");
+  const provider = query.get("provider");
+  const batchId = query.get("batch_id");
+  if (source !== null && source !== "curation") return failure(400, "invalid_input", "来源只接受 curation");
+  // 目标筛选之间取并集（这个版本自己的记录，加上这张专辑的记录）；自动整理的筛选与它们之间是“并且”，provider 隐含 source=curation。
   const matching = data.operations
     .filter((record) => (releaseId === null && groupId === null) || (releaseId !== null && record.target.type === "release" && record.target.id === releaseId) || (groupId !== null && record.target.type === "release_group" && record.target.id === groupId))
+    .filter((record) => (source === null && provider === null) || record.origin?.source === "curation")
+    .filter((record) => provider === null || record.origin?.provider === provider)
+    .filter((record) => batchId === null || record.batchId === batchId)
     .reverse();
   const start = (page - 1) * pageSize;
   return {
@@ -595,6 +630,18 @@ export function respondToRevert(data: GovernanceData, operationId: string, key: 
   if (original === undefined) return failure(404, "not_found", "操作记录不存在");
   if (original.type === "revert") return failure(409, "not_revertible", "撤销不能再被撤销；需要的话请重新修改");
   if (original.revertedBy !== null) return failure(409, "already_reverted", "这条操作已经撤销过了");
+  if (isAutoType(original.type)) {
+    // 自动整理：这一格已被更晚的改写时冲突；否则恢复，不动人工修改版本号。
+    if (!(original.owned?.() ?? true)) return failure(409, "revert_conflict", "这个值之后又被自动整理改写，不能撤销这一条");
+    original.restore();
+    const revert = nextOperation(data, "revert", original.target, 0, invertChanges(original.changes), () => undefined, original.id);
+    original.revertedBy = revert.id;
+    const revision = stateOf(data, original.target.id)?.revision ?? 1;
+    return remember(data, key, fingerprint, {
+      status: 200,
+      body: { operation_id: revert.id, reverts_operation_id: original.id, target_type: original.target.type, target_id: original.target.id, revision },
+    });
+  }
   // 目标的版本号：发行与专辑各有自己的。撤销之后目标的版本号加一，只有最近一次修改可以撤销。
   const targetState = original.target.type === "release_group" ? (groupDetailFor(data.catalog, original.target.id) === undefined ? undefined : groupStateOf(data, original.target.id)) : stateOf(data, original.target.id);
   if (targetState === undefined) return failure(404, "not_found", original.target.type === "release_group" ? "专辑不存在" : "发行版本不存在");

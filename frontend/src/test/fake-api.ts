@@ -1,4 +1,5 @@
 import { sampleBody } from "./api-samples";
+import { installCurationApi } from "./fake-curation";
 import { installPersonalApi } from "./fake-personal";
 import { jsonResponse, sampleResponse, stubFetch, type RecordedRequest } from "./http";
 import { respondToSearch, searchDataOf, type SearchData } from "./search-data";
@@ -68,6 +69,8 @@ export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> =
 
   // 新心形和默认收藏页需要明确的空状态；测试可再次安装带 catalog 的完整替身。
   installPersonalApi(api, { session });
+  // 管理员概览读取自动整理的设置与进度（M7 E1）：默认是从未打开、曲库里没有可整理的发行，不出现一次性提示。
+  installCurationApi(api);
 
   api.on("GET", "/api/v1/setup/status", () => jsonResponse(200, { setup_required: session.setupRequired }));
   api.on("GET", "/api/v1/auth/me", () => {

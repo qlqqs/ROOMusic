@@ -2,10 +2,10 @@ import { Fragment } from "react";
 import { Panel } from "../../../shared/ui";
 import type { ReleaseDetailDTO } from "../api/decoders";
 import type { ReleaseCreditDTO } from "../api/decoders";
-import { isFieldCorrected, releaseFacts } from "../format";
+import { fieldMarksOf, releaseFacts } from "../format";
 import { ArtistNames } from "./artist-names";
 import { creditRoleLabel } from "../labels";
-import { ManualCorrectionTag } from "./manual-correction-tag";
+import { FieldMarkTag, hasFieldMark } from "./field-mark-tag";
 import styles from "./release-facts.module.css";
 
 type ReleaseFactsProps = {
@@ -36,10 +36,10 @@ export function ReleaseFacts({ release, versioned }: ReleaseFactsProps) {
                 <dt>{fact.label}</dt>
                 <dd>
                   {fact.value}
-                  {isFieldCorrected(release.corrected_fields, fact.field) ? (
+                  {hasFieldMark(fieldMarksOf(release), fact.field) ? (
                     <>
                       {" "}
-                      <ManualCorrectionTag />
+                      <FieldMarkTag marks={fieldMarksOf(release)} field={fact.field} />
                     </>
                   ) : null}
                 </dd>

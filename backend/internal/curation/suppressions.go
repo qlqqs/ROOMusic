@@ -80,7 +80,27 @@ func (w *Writer) ClearSuppression(ctx context.Context, id string) error {
 	if !uuid.Valid(id) {
 		return operations.Invalid("invalid_id", "标记标识无效")
 	}
-	result, err := w.db.ExecContext(ctx, "DELETE FROM curation_suppressions WHERE id=$1::uuid", id)
+	// 按 ID 顺序锁定标记，避免同时清除一对标记的两端时互相等待。
+	result, err := w.db.ExecContext(ctx, `WITH requested AS (
+		SELECT id, target_type, target_id, operation_id, CASE subject
+			WHEN 'artwork' THEN 'artwork_source'
+			WHEN 'artwork_source' THEN 'artwork'
+			WHEN 'lyrics' THEN 'lyrics_source'
+			WHEN 'lyrics_source' THEN 'lyrics'
+		END AS paired_subject
+		FROM curation_suppressions WHERE id=$1::uuid
+	), matching AS (
+		SELECT id FROM requested
+		UNION ALL
+		SELECT paired.id FROM requested
+		JOIN curation_suppressions paired ON paired.target_type=requested.target_type
+			AND paired.target_id=requested.target_id AND paired.subject=requested.paired_subject
+			AND paired.operation_id=requested.operation_id
+	)
+	DELETE FROM curation_suppressions WHERE id IN (
+		SELECT marker.id FROM curation_suppressions marker JOIN matching ON matching.id=marker.id
+		ORDER BY marker.id FOR UPDATE OF marker
+	)`, id)
 	if err != nil {
 		return err
 	}

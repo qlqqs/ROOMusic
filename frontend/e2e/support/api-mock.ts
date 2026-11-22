@@ -33,6 +33,20 @@ import {
   respondToRevert,
   type GovernanceData,
 } from "../../src/test/governance-data";
+import {
+  curationDataOf,
+  respondToClearSuppression,
+  respondToCurationBatch,
+  respondToCurationBatches,
+  respondToCurationProgress,
+  respondToCurationSettings,
+  respondToCurationSources,
+  respondToScopeRevert,
+  respondToSetCurationSource,
+  respondToSuppressions,
+  respondToUpdateCurationSettings,
+  type CurationData,
+} from "../../src/test/curation-data";
 import { personalTracksOf, personalDataOf, respondToPersonal, type PersonalData } from "../../src/test/personal-data";
 import { respondToSearch, searchDataOf, type SearchData } from "../../src/test/search-data";
 import { backupFileAt, backupNotFound, respondToSystem, systemDataOf, type SystemData } from "../../src/test/system-data";
@@ -68,6 +82,8 @@ export type ApiMock = CatalogData & {
   zones: ReturnType<typeof zonesMock>;
   /** 管理员对发行与专辑的受治理操作（字段修正、归组、默认版本、撤销、操作记录）的状态与行为，与上面的专辑数据共用：修改会反映到列表与详情。 */
   governance: GovernanceData;
+  /** 自动整理的管理员接口（M7 E1）：批次计数与范围撤销用上面的操作记录。默认从未打开、曲库里没有可整理的发行。 */
+  curation: CurationData;
   /** 收藏与歌单按当前会话的用户 ID 隔离；seed helper 与 Vitest 共用。 */
   personal: PersonalData;
   /** 搜索结果须按完整查询显式登记，未登记返回 404。 */
@@ -167,6 +183,7 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     ...catalogDataOf(albumGroups(12, (index) => ({ artwork: index % 3 !== 0, attention_count: index % 4 === 0 ? 1 : 0, release_count: index === 5 ? 2 : 1 }))),
     // 占位：治理数据必须引用 mock 本身（测试会改写 mock.groups 等字段），所以对象建好之后马上换成真正的。
     governance: governanceDataOf(catalogDataOf()),
+    curation: curationDataOf(),
     personal: personalDataOf(),
     recentPlays: [],
     hasPlayHistory: false,
@@ -227,6 +244,7 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
   };
 
   mock.governance = governanceDataOf(mock);
+  mock.curation = curationDataOf(mock.governance);
   mock.personal = personalDataOf(mock);
 
   let setupStatusFailures = failSetupStatusTimes;
@@ -487,6 +505,20 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     if (key === "GET /api/v1/release-claims") return guarded(method, path, true, () => respondToClaims(mock.governance, search));
     const claimRead = /^\/api\/v1\/release-claims\/([^/]+)$/.exec(path);
     if (claimRead !== null && method === "GET") return guarded(method, path, true, () => respondToClaim(mock.governance, claimRead[1] ?? ""));
+    // 自动整理（管理员）。
+    if (key === "GET /api/v1/admin/curation/settings") return guarded(method, path, true, () => respondToCurationSettings(mock.curation));
+    if (key === "PUT /api/v1/admin/curation/settings") return guarded(method, path, true, () => respondToUpdateCurationSettings(mock.curation, body));
+    if (key === "GET /api/v1/admin/curation/sources") return guarded(method, path, true, () => respondToCurationSources(mock.curation));
+    const curationSource = /^\/api\/v1\/admin\/curation\/sources\/([^/]+)$/.exec(path);
+    if (curationSource !== null && method === "PUT") return guarded(method, path, true, () => respondToSetCurationSource(mock.curation, decodeURIComponent(curationSource[1] ?? ""), body));
+    if (key === "GET /api/v1/admin/curation/progress") return guarded(method, path, true, () => respondToCurationProgress(mock.curation));
+    if (key === "GET /api/v1/admin/curation/batches") return guarded(method, path, true, () => respondToCurationBatches(mock.curation, search));
+    const curationBatch = /^\/api\/v1\/admin\/curation\/batches\/([^/]+)$/.exec(path);
+    if (curationBatch !== null && method === "GET") return guarded(method, path, true, () => respondToCurationBatch(mock.curation, curationBatch[1] ?? ""));
+    if (key === "POST /api/v1/admin/curation/reverts") return guarded(method, path, true, () => respondToScopeRevert(mock.curation, headers["idempotency-key"] ?? null, body));
+    if (key === "GET /api/v1/admin/curation/suppressions") return guarded(method, path, true, () => respondToSuppressions(mock.curation, search));
+    const curationMarker = /^\/api\/v1\/admin\/curation\/suppressions\/([^/]+)$/.exec(path);
+    if (curationMarker !== null && method === "DELETE") return guarded(method, path, true, () => respondToClearSuppression(mock.curation, curationMarker[1] ?? ""));
     if (key === "GET /api/v1/operations") return guarded(method, path, true, () => respondToOperations(mock.governance, search));
     const operationRevert = /^\/api\/v1\/operations\/([^/]+)\/revert$/.exec(path);
     if (operationRevert !== null && method === "POST") {
@@ -660,7 +692,8 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
       await route.abort("failed");
       return;
     }
-    await route.fulfill({ status: handled.status, contentType: "application/json", body: JSON.stringify(handled.body) });
+    if (handled.status === 204) await route.fulfill({ status: 204 });
+    else await route.fulfill({ status: handled.status, contentType: "application/json", body: JSON.stringify(handled.body) });
   });
 
   return mock;

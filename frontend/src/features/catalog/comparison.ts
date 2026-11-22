@@ -2,7 +2,7 @@ import { dsdRateName } from "../../shared/lib/dsd";
 import { formatDuration } from "../../shared/lib/duration";
 import { formatCount } from "../../shared/lib/number";
 import type { AudioFormatDTO, ComparedReleaseDTO } from "./api/decoders";
-import { albumArtistOf, formatGenres, isFieldCorrected } from "./format";
+import { albumArtistOf, formatGenres, isFieldAutoFilled, isFieldCorrected } from "./format";
 import { codecLabel } from "./labels";
 
 // 版本对比表的数据模型：把接口给的各版本字段整理成“字段 × 版本”的行。只做显示规则（哪些行出现、哪些格与基准不同、
@@ -40,6 +40,8 @@ export type ComparisonCell = {
   differs: boolean;
   /** 这个字段有人工修正：显示的是管理员改过的值。 */
   corrected: boolean;
+  /** 显示的值来自自动整理（M7 E1）；有人工修正时为 false。 */
+  autoFilled: boolean;
 };
 
 export type ComparisonRow = {
@@ -105,6 +107,7 @@ export function comparisonRows(releases: readonly ComparedReleaseDTO[]): Compari
             lines: lines[index] ?? [],
             differs: index > 0 && keys[index] !== baseline,
             corrected: spec.field !== undefined && isFieldCorrected(release.corrected_fields, spec.field),
+            autoFilled: spec.field !== undefined && isFieldAutoFilled(release.auto_fields, release.corrected_fields, spec.field),
           }),
         ),
       },

@@ -9,7 +9,7 @@ import { correctionFieldLabels, displayValue, reviewableIssueLabels } from "./la
 export function operationOriginLabel(origin: OperationOriginDTO | null | undefined): string | null {
   if (origin === null || origin === undefined) return null;
   if (origin.source === "mcp") return "MCP";
-  if (origin.source === "curation") return origin.provider === null || origin.provider === undefined || origin.provider === "" ? "自动整理" : `自动整理 · ${origin.provider}`;
+  if (origin.source === "curation") return origin.provider === null || origin.provider === undefined || origin.provider === "" ? "自动整理" : `自动整理 · ${sourceName(origin.provider)}`;
   const reviewed = origin.review_id !== null && origin.review_id !== undefined && (origin.review_decision ?? "approved") === "approved";
   if (reviewed) return "管家（审查通过）";
   return origin.plan_id === null || origin.plan_id === undefined ? "管家（直接执行）" : "管家（确认）";
