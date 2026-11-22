@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
-	"github.com/qlqq/roomusic/backend/internal/steward/egress"
+	"github.com/qlqq/roomusic/backend/internal/platform/egress"
+	"github.com/qlqq/roomusic/backend/internal/sources"
+	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
@@ -41,9 +43,9 @@ func TestC8PerUserToolRateLimits(t *testing.T) {
 			defs := make([]map[string]tool.Definition, 2)
 			for i, s := range services {
 				s.newClient = func(o egress.Options) (*http.Client, error) { return c8LocalClient(t, server, o), nil }
-				s.musicLimiter = newRequestLimiter()
 				tick := now
-				s.musicLimiter.now = func() time.Time { tick = tick.Add(2 * time.Second); return tick }
+				limiter := sources.NewLimiter(time.Second, func() time.Time { tick = tick.Add(2 * time.Second); return tick }, nil)
+				s.WithMusic(musicbrainz.New(musicbrainz.Options{Limiter: limiter, NewClient: s.newClient}))
 				defs[i] = map[string]tool.Definition{}
 				for _, d := range s.StewardTools() {
 					defs[i][d.Name] = d
@@ -130,7 +132,6 @@ func TestC8FixedSourceClientsPublicOnly(t *testing.T) {
 			}
 			settings := &c8Settings{value: runtime.UserSettings{SearchSource: "tavily", SearchKey: &runtime.EncryptedKey{Ciphertext: sealed}}}
 			s := New(settings, secrets, nil, nil)
-			s.musicLimiter = newRequestLimiter()
 			hits := 0
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				hits++
@@ -143,6 +144,7 @@ func TestC8FixedSourceClientsPublicOnly(t *testing.T) {
 				}
 				return c8LocalClient(t, server, o), nil
 			}
+			s.WithMusic(musicbrainz.New(musicbrainz.Options{Limiter: sources.NewLimiter(time.Second, nil, nil), NewClient: s.newClient}))
 			invoke := func() error {
 				switch source {
 				case "tavily":
@@ -169,7 +171,7 @@ func TestC8FixedSourceClientsPublicOnly(t *testing.T) {
 				}
 				return egress.NewClient(o)
 			}
-			s.musicLimiter.last = time.Time{}
+			s.WithMusic(musicbrainz.New(musicbrainz.Options{Limiter: sources.NewLimiter(time.Second, nil, nil), NewClient: s.newClient}))
 			if err := invoke(); err == nil || hits != 1 {
 				t.Fatalf("固定域名私网解析被放行：%v hits=%d", err, hits)
 			}

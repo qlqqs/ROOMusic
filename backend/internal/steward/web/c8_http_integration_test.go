@@ -14,11 +14,11 @@ import (
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
+	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
-	"github.com/qlqq/roomusic/backend/internal/steward/egress"
 	"github.com/qlqq/roomusic/backend/internal/steward/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"

@@ -1,51 +1,6 @@
 package web
 
-// 只解码整理专辑需要的字段，不把数据源的账户、注释、关系或任意扩展直接交给模型。
-type mbEntity struct {
-	ID               string     `json:"id"`
-	Name             string     `json:"name"`
-	Title            string     `json:"title"`
-	Disambiguation   string     `json:"disambiguation"`
-	Date             string     `json:"date"`
-	FirstReleaseDate string     `json:"first-release-date"`
-	Country          string     `json:"country"`
-	Barcode          string     `json:"barcode"`
-	Length           *int64     `json:"length"`
-	ArtistCredit     []mbCredit `json:"artist-credit"`
-	LabelInfo        []struct {
-		Label struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"label"`
-		CatalogNumber string `json:"catalog-number"`
-	} `json:"label-info"`
-	Media []struct {
-		Position int    `json:"position"`
-		Format   string `json:"format"`
-		Title    string `json:"title"`
-		Tracks   []struct {
-			ID           string     `json:"id"`
-			Number       string     `json:"number"`
-			Title        string     `json:"title"`
-			Length       *int64     `json:"length"`
-			ArtistCredit []mbCredit `json:"artist-credit"`
-			Recording    *mbEntity  `json:"recording"`
-		} `json:"tracks"`
-	} `json:"media"`
-	ReleaseGroup  *mbEntity  `json:"release-group"`
-	Releases      []mbEntity `json:"releases"`
-	ReleaseGroups []mbEntity `json:"release-groups"`
-	Recordings    []mbEntity `json:"recordings"`
-}
-
-type mbCredit struct {
-	Name       string `json:"name"`
-	JoinPhrase string `json:"joinphrase"`
-	Artist     struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	} `json:"artist"`
-}
+import "github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 
 // Metadata 是经过裁剪的音乐实体，不包含数据源的任意字段。
 type Metadata struct {
@@ -99,7 +54,7 @@ type Track struct {
 	Recording *Metadata      `json:"recording,omitempty"`
 }
 
-func projectCredits(credits []mbCredit) []ArtistCredit {
+func projectCredits(credits []musicbrainz.ArtistCredit) []ArtistCredit {
 	result := make([]ArtistCredit, 0, len(credits))
 	for _, credit := range credits {
 		result = append(result, ArtistCredit{credit.Artist.ID, credit.Name, credit.JoinPhrase})
@@ -107,7 +62,7 @@ func projectCredits(credits []mbCredit) []ArtistCredit {
 	return result
 }
 
-func projectEntities(entities []mbEntity) []Metadata {
+func projectEntities(entities []musicbrainz.Entity) []Metadata {
 	result := make([]Metadata, 0, len(entities))
 	for _, entity := range entities {
 		result = append(result, projectMetadata(entity))
@@ -115,7 +70,7 @@ func projectEntities(entities []mbEntity) []Metadata {
 	return result
 }
 
-func projectMetadata(entity mbEntity) Metadata {
+func projectMetadata(entity musicbrainz.Entity) Metadata {
 	result := Metadata{MBID: entity.ID, Title: entity.Title, Name: entity.Name, Disambiguation: entity.Disambiguation,
 		Artists: projectCredits(entity.ArtistCredit), Date: entity.Date, FirstReleaseDate: entity.FirstReleaseDate,
 		Country: entity.Country, Barcode: entity.Barcode, LengthMS: entity.Length,

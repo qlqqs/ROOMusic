@@ -1,7 +1,7 @@
 package web
 
 import (
-	"github.com/qlqq/roomusic/backend/internal/steward/egress"
+	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"net/http"
 )
 

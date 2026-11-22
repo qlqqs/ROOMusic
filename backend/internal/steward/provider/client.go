@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/qlqq/roomusic/backend/internal/steward/egress"
+	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 )
 
 type adapter struct {

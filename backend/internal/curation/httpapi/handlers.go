@@ -15,18 +15,21 @@ import (
 )
 
 type Handlers struct {
+	sources  *curation.Sources
 	writer   *curation.Writer
 	reverter *curation.Reverter
 	guard    *identity.Guard
 	logger   *slog.Logger
 }
 
-func New(writer *curation.Writer, reverter *curation.Reverter, guard *identity.Guard, logger *slog.Logger) *Handlers {
-	return &Handlers{writer: writer, reverter: reverter, guard: guard, logger: logger}
+func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, guard *identity.Guard, logger *slog.Logger) *Handlers {
+	return &Handlers{sources: sources, writer: writer, reverter: reverter, guard: guard, logger: logger}
 }
 
 func (h *Handlers) Register(mux *http.ServeMux) {
 	const base = "/api/v1/admin/curation"
+	mux.HandleFunc("GET "+base+"/sources", h.admin(h.listSources))
+	mux.HandleFunc("PUT "+base+"/sources/{id}", h.admin(h.setSource))
 	mux.HandleFunc("GET "+base+"/settings", h.admin(h.settings))
 	mux.HandleFunc("PUT "+base+"/settings", h.admin(h.setSettings))
 	mux.HandleFunc("GET "+base+"/batches", h.admin(h.batches))
@@ -84,18 +87,40 @@ func (h *Handlers) settings(w http.ResponseWriter, r *http.Request, _ identity.U
 }
 
 func (h *Handlers) setSettings(w http.ResponseWriter, r *http.Request, actor identity.User) {
+	enabled, ok := decodeEnabled(w, r, "需要指定是否开启自动整理")
+	if !ok {
+		return
+	}
+	s, err := h.writer.SetSettings(r.Context(), actor.ID, enabled)
+	h.respond(w, r, s, err)
+}
+
+func decodeEnabled(w http.ResponseWriter, r *http.Request, message string) (bool, bool) {
 	var body struct {
 		Enabled *bool `json:"enabled"`
 	}
 	if !decode(w, r, &body) {
-		return
+		return false, false
 	}
 	if body.Enabled == nil {
-		httpserver.WriteError(w, r, 400, "invalid_input", "需要指定是否开启自动整理")
+		httpserver.WriteError(w, r, http.StatusBadRequest, "invalid_input", message)
+		return false, false
+	}
+	return *body.Enabled, true
+}
+
+func (h *Handlers) listSources(w http.ResponseWriter, r *http.Request, _ identity.User) {
+	items, err := h.sources.List(r.Context())
+	h.respond(w, r, map[string]any{"items": items}, err)
+}
+
+func (h *Handlers) setSource(w http.ResponseWriter, r *http.Request, actor identity.User) {
+	enabled, ok := decodeEnabled(w, r, "需要指定是否开启外部源")
+	if !ok {
 		return
 	}
-	s, err := h.writer.SetSettings(r.Context(), actor.ID, *body.Enabled)
-	h.respond(w, r, s, err)
+	item, err := h.sources.SetEnabled(r.Context(), r.PathValue("id"), actor.ID, enabled)
+	h.respond(w, r, item, err)
 }
 
 func pagination(w http.ResponseWriter, r *http.Request) (int, int, bool) {

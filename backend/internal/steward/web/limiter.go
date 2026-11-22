@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"sync"
 	"time"
 )
@@ -55,55 +54,5 @@ func (l *userLimiter) allow(userID, group string, limit int) error {
 		l.requests = make(map[userLimitKey][]time.Time)
 	}
 	l.requests[key] = append(stamps, now)
-	return nil
-}
-
-// 一个许可串行安排所有 MusicBrainz 请求；时钟和等待通道供包内测试替换。
-type requestLimiter struct {
-	gate  chan struct{}
-	last  time.Time
-	now   func() time.Time
-	after func(time.Duration) <-chan time.Time
-}
-
-func newRequestLimiter() *requestLimiter {
-	gate := make(chan struct{}, 1)
-	gate <- struct{}{}
-	return &requestLimiter{gate: gate, now: time.Now, after: time.After}
-}
-
-var globalMusicLimiter = newRequestLimiter()
-
-func (l *requestLimiter) wait(ctx context.Context) error {
-	deadline := l.now().Add(10 * time.Second)
-	timeout := l.after(10 * time.Second)
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timeout:
-		return failure("rate_limited")
-	case <-l.gate:
-	}
-	defer func() { l.gate <- struct{}{} }()
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	if !l.now().Before(deadline) {
-		return failure("rate_limited")
-	}
-	delay := l.last.Add(time.Second).Sub(l.now())
-	if delay > 0 {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-timeout:
-			return failure("rate_limited")
-		case <-l.after(delay):
-		}
-	}
-	if !l.now().Before(deadline) {
-		return failure("rate_limited")
-	}
-	l.last = l.now()
 	return nil
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/playback"
 	playbacktools "github.com/qlqq/roomusic/backend/internal/playback/stewardtools"
+	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	stewardapi "github.com/qlqq/roomusic/backend/internal/steward/httpapi"
 	stewardmcp "github.com/qlqq/roomusic/backend/internal/steward/mcp"
 	"github.com/qlqq/roomusic/backend/internal/steward/memory"
@@ -46,6 +47,7 @@ import (
 )
 
 type stewardConfig struct {
+	music        *musicbrainz.Client
 	diagnostics  *diagnostics.Service
 	backups      *backup.Service
 	allowedRoots []string
@@ -94,6 +96,9 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	definitions = append(definitions, librarytools.StewardTools(scans)...)
 	if len(configurations) > 0 {
 		configuration := configurations[0]
+		if configuration.music != nil {
+			webService.WithMusic(configuration.music)
+		}
 		definitions = append(definitions, librarytools.ConfigTools(scans, configuration.allowedRoots, logger)...)
 		definitions = append(definitions, diagnostictools.StewardTools(configuration.diagnostics)...)
 		definitions = append(definitions, backuptools.StewardTools(configuration.backups, database, logger)...)

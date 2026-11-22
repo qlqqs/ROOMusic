@@ -18,7 +18,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
-	"github.com/qlqq/roomusic/backend/internal/steward/egress"
+	"github.com/qlqq/roomusic/backend/internal/platform/egress"
+	"github.com/qlqq/roomusic/backend/internal/sources"
+	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
@@ -311,18 +313,13 @@ func TestC8MusicRateLimitUserAgentAndFailures(t *testing.T) {
 		io.WriteString(w, `{"artists":[{"id":"synthetic-id","name":"艺人","secret":"不能输出"}]}`)
 	}))
 	defer server.Close()
-	old := musicBrainzBaseURL
-	musicBrainzBaseURL = server.URL
-	t.Cleanup(func() { musicBrainzBaseURL = old })
 	s1, s2 := New(nil, nil, nil, nil), New(nil, nil, nil, nil)
-	if s1.musicLimiter != s2.musicLimiter || s1.musicLimiter != globalMusicLimiter {
+	if s1.music.Limiter() != s2.music.Limiter() || s1.music.Limiter() != sources.DefaultLimiter(musicbrainz.Declaration()) {
 		t.Fatal("多个 Service 没有共用实例限速")
 	}
-	limiter := newRequestLimiter()
-	s1.musicLimiter = limiter
-	s2.musicLimiter = limiter
+	limiter := sources.NewLimiter(time.Second, nil, nil)
 	for _, s := range []*Service{s1, s2} {
-		s.newClient = func(egress.Options) (*http.Client, error) { return server.Client(), nil }
+		s.WithMusic(musicbrainz.New(musicbrainz.Options{BaseURL: server.URL, Limiter: limiter, NewClient: func(egress.Options) (*http.Client, error) { return server.Client(), nil }}))
 		result, err := s.SearchMusic(context.Background(), "artist", "query", 1)
 		if err != nil || len(result) != 1 {
 			t.Fatalf("结果=%v 错误=%v", result, err)
@@ -336,9 +333,6 @@ func TestC8MusicRateLimitUserAgentAndFailures(t *testing.T) {
 	if len(times) != 3 {
 		t.Fatal("503 被重试")
 	}
-	limiter.gate = make(chan struct{})
-	limiter.after = func(time.Duration) <-chan time.Time { c := make(chan time.Time, 1); c <- time.Now(); return c }
-	c8Code(t, limiter.wait(context.Background()), "rate_limited")
 }
 func TestC8CoverArtRedirectOfficialOnly(t *testing.T) {
 	for _, tc := range []struct {

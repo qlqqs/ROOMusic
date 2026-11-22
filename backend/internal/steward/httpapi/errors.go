@@ -6,8 +6,8 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
-	"github.com/qlqq/roomusic/backend/internal/steward/egress"
 	"github.com/qlqq/roomusic/backend/internal/steward/memory"
 	"github.com/qlqq/roomusic/backend/internal/steward/provider"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
