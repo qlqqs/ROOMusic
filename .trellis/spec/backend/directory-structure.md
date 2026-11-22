@@ -29,6 +29,9 @@ backend/
 │   │   ├── musicbrainz/            # MusicBrainz 适配器
 │   │   ├── coverartarchive/        # Cover Art Archive 适配器：图片清单、选主封面、下载
 │   │   └── lrclib/                 # LRCLIB 适配器：歌词的精确查询与搜索
+│   ├── curation/                   # 自动整理：自动层写入与撤销、批次、不再提出、开关与闸门、外部对应、外部封面歌词、工作状态与待定项
+│   │   ├── httpapi/                # 管理员接口：设置与暂停、各源、批次、范围撤销、标记、进度
+│   │   └── program/                # 程序层后台循环：摘要、匹配与把握规则、补全、批次与调度（只面向能力接口；证据经 catalog.LoadCurationEvidence，不导入 catalog/internal）
 │   ├── identity/                   # 会话、密码、Guard（同源、登录、管理员校验）
 │   │   └── httpapi/                # setup、登录登出、成员管理
 │   ├── library/                    # 路径校验、扫描引擎（遍历、解析、把观察交给 catalog/ingest 暂存）、诊断、扫描执行锁与中断恢复、Service

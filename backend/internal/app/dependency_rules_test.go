@@ -77,6 +77,7 @@ var packageRules = map[string]packageRule{
 	"catalog/governance":                {imports: []string{"catalog/textnorm", "catalog/internal/artistgraph", "catalog", "catalog/internal/releasesql", "catalog/metadata", "operations", "platform/uuid", "catalog/internal/searchindex", "catalog/internal/writegate"}},
 	"curation":                          {imports: []string{"sources", "operations", "identity", "catalog", "catalog/artwork", "catalog/metadata", "catalog/governance", "platform/uuid"}},
 	"curation/httpapi":                  {imports: []string{"curation", "identity", "operations", "platform/httpserver"}, http: true},
+	"curation/program":                  {imports: []string{"curation", "catalog", "catalog/metadata", "catalog/textnorm", "operations", "sources", "platform/uuid"}},
 	"operations":                        {imports: []string{"platform/uuid"}},
 	"operations/httpapi":                {imports: []string{"identity", "operations", "platform/httpserver", "platform/uuid"}, http: true},
 	"library/parser":                    {imports: []string{"catalog/metadata", "catalog/classical", "playback/dsdio"}},
@@ -120,7 +121,7 @@ var packageRules = map[string]packageRule{
 	"playback/httpapi":                  {imports: []string{"identity", "platform/httpserver", "platform/uuid", "playback"}, http: true},
 	"listening/httpapi":                 {imports: []string{"identity", "listening", "platform/httpserver", "platform/uuid"}, http: true},
 	"app": {imports: []string{
-		"curation", "curation/httpapi", "sources/musicbrainz", "sources/coverartarchive", "sources/lrclib",
+		"curation", "curation/program", "curation/httpapi", "sources/musicbrainz", "sources/coverartarchive", "sources/lrclib",
 		"platform/diagnostics", "platform/diagnostics/stewardtools", "backup/stewardtools", "identity/stewardtools", "playback/stewardtools", "dspsettings/stewardtools",
 		"zones/stewardtools", "listening/stewardtools", "personal/stewardtools",
 		"catalog/stewardtools", "catalog/governance/stewardtools", "library/stewardtools", "operations", "operations/stewardtools",

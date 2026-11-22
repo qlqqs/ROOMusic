@@ -18,6 +18,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	curationapi "github.com/qlqq/roomusic/backend/internal/curation/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/dspsettings"
 	dspsettingsapi "github.com/qlqq/roomusic/backend/internal/dspsettings/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/dspsettings/irload"
@@ -54,6 +55,7 @@ type App struct {
 	library           *library.Service
 	catalogDone       <-chan struct{}
 	analysisDone      <-chan struct{}
+	programDone       <-chan struct{}
 	scanSchedulerDone <-chan struct{}
 	zonesDone         <-chan struct{}
 }
@@ -71,6 +73,21 @@ type options struct {
 	scanSchedulerClock library.ScanSchedulerClock
 	// 测试直接插入旧目录夹具时暂停后台，搜索测试再显式回填。
 	pauseCatalogMaintenance bool
+	disableProgram          bool
+	program                 program.Options
+	music                   musicbrainz.Options
+	covers                  coverartarchive.Options
+	lyrics                  lrclib.Options
+}
+
+// WithCurationProgram 控制后台循环并注入时钟与轮询间隔。
+func WithCurationProgram(enabled bool, opts program.Options) Option {
+	return func(o *options) { o.disableProgram = !enabled; o.program = opts }
+}
+
+// WithCurationSources 为三个外部源注入地址、客户端工厂与限速器。
+func WithCurationSources(music musicbrainz.Options, covers coverartarchive.Options, lyrics lrclib.Options) Option {
+	return func(o *options) { o.music, o.covers, o.lyrics = music, covers, lyrics }
 }
 
 // WithScanSchedulerClock 为调度集成测试注入可控时钟与计时器。
@@ -146,22 +163,29 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
-	music := musicbrainz.New(musicbrainz.Options{DataDirectory: settings.DataDirectory, Logger: logger})
-	covers := coverartarchive.New(coverartarchive.Options{DataDirectory: settings.DataDirectory, Logger: logger})
-	lyrics := lrclib.New(lrclib.Options{DataDirectory: settings.DataDirectory, Logger: logger})
+	assembly.music.DataDirectory, assembly.music.Logger = settings.DataDirectory, logger
+	assembly.covers.DataDirectory, assembly.covers.Logger = settings.DataDirectory, logger
+	assembly.lyrics.DataDirectory, assembly.lyrics.Logger = settings.DataDirectory, logger
+	music := musicbrainz.New(assembly.music)
+	covers := coverartarchive.New(assembly.covers)
+	lyrics := lrclib.New(assembly.lyrics)
 	if lifecycle != nil {
 		covers.StartCacheCleanup(lifecycle)
 		lyrics.StartCacheCleanup(lifecycle)
 		music.StartCacheCleanup(lifecycle)
 	}
+	scanRunning := func(ctx context.Context) (bool, error) {
+		scan, err := libraryService.ActiveScan(ctx)
+		return scan != nil, err
+	}
 	sourceGate := curation.NewSources(database,
 		curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: music, Recordings: music, Artists: music},
 		curation.SourceRegistration{Declaration: coverartarchive.Declaration(), Covers: covers},
 		curation.SourceRegistration{Declaration: lrclib.Declaration(), Lyrics: lyrics},
-	)
+	).WithScanCheck(scanRunning)
 	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger)
-	operationKinds := []operations.Kind{curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
-		governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
+	operationKinds := []operations.Kind{curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
+		governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.GroupChangeOperations(curationWriter), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}}
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
@@ -169,14 +193,20 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	catalogapi.NewArtistGovernance(database, guard, logger, artistResolutionAdapter{}).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
 	operationsapi.New(database, guard, logger, operationKinds...).Register(mux)
-	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), sourceGate, guard, logger).Register(mux)
+	var programStatus curation.ProgramStatus
+	programDone := make(chan struct{})
+	if database != nil && !assembly.disableProgram {
+		worker := program.NewWorker(database, curationWriter, sourceGate, scanRunning, logger, assembly.program)
+		programStatus = worker
+		go func() { defer close(programDone); worker.Run(lifecycle) }()
+	} else {
+		close(programDone)
+	}
+	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), sourceGate, programStatus, program.StoredRuleVersion, guard, logger).Register(mux)
 	var analysisWorker *playback.AnalysisWorker
 	analysisDone := make(chan struct{})
 	if database != nil && assembly.analysis != nil {
-		analysisWorker = playback.NewAnalysisWorker(database, settings.AllowedLibraryRoots, assembly.analysis, func(ctx context.Context) (bool, error) {
-			scan, err := libraryService.ActiveScan(ctx)
-			return scan != nil, err
-		}, logger)
+		analysisWorker = playback.NewAnalysisWorker(database, settings.AllowedLibraryRoots, assembly.analysis, scanRunning, logger)
 		go func() { defer close(analysisDone); analysisWorker.Run(lifecycle) }()
 	} else {
 		close(analysisDone)
@@ -211,7 +241,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 			supervisor.CancelUser(userID)
 		}
 	}).Register(mux)
-	return &App{steward: supervisor, mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, scanSchedulerDone: scanSchedulerDone, zonesDone: zonesDone}
+	return &App{steward: supervisor, mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, programDone: programDone, scanSchedulerDone: scanSchedulerDone, zonesDone: zonesDone}
 }
 
 // InitializeCatalog 在允许扫描与治理写入前短事务登记目标版本，不发现对象或等待回填。
@@ -247,6 +277,16 @@ func (application *App) Handler() http.Handler { return application.handler }
 func (application *App) WaitForAnalysis(ctx context.Context) error {
 	select {
 	case <-application.analysisDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// WaitForCurationProgram 等待程序层停止使用数据库与外部源。
+func (application *App) WaitForCurationProgram(ctx context.Context) error {
+	select {
+	case <-application.programDone:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

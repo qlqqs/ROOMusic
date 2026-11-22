@@ -49,6 +49,7 @@ const titles = {
   release_auto_correction: "撤销这次自动补全？",
   release_external_artwork: "去掉这张自动补的封面？",
   track_external_lyrics: "去掉这份自动补的歌词？",
+  external_link: "解除这次外部对应？",
 } as const;
 
 /**

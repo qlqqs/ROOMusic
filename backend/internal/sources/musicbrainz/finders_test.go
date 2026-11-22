@@ -21,8 +21,9 @@ const (
 	creditJSON  = `[{"name":"署名","joinphrase":" & ","artist":{"id":"art","name":"标准名"}}]`
 	releaseJSON = `{"id":"rel","title":"发行","date":"2001","country":"JP","status":"Official","barcode":"0123456789012","artist-credit":` + creditJSON + `,
  "label-info":[{"catalog-number":"CAT-1","label":{"name":"厂牌"}}],"release-group":{"id":"grp","title":"专辑","primary-type":"Album","first-release-date":"2000"},
- "media":[{"position":1,"format":"CD","title":"第一碟","track-count":1,"discs":[{"id":"disc-id"}],
- "tracks":[{"position":1,"number":"A1","id":"trk","title":"曲名","length":1010,"artist-credit":` + creditJSON + `,"recording":{"id":"rec","title":"录音","length":2030,"isrcs":["USABC2300001"]}}]}]}`
+ "media":[{"position":1,"format":"CD","title":"第一碟","track-count":1,"discs":[{"id":"disc-id"},{"id":"disc-alt"}],
+ "tracks":[{"position":1,"number":"A1","id":"trk","title":"曲名","length":1010,"artist-credit":` + creditJSON + `,"recording":{"id":"rec","title":"录音","length":2030,"isrcs":["USABC2300001"]}}]},
+ {"position":2,"format":"Digital Media","title":"第二碟","track-count":0,"tracks":[]}]}`
 	recordingJSON = `{"id":"rec","title":"录音","length":2030,"isrcs":["USABC2300001"],"artist-credit":` + creditJSON + `,"releases":[{"id":"rel","title":"发行"}]}`
 	artistJSON    = `{"id":"art","name":"标准名","sort-name":"排序","type":"Person","country":"JP","disambiguation":"区别","aliases":[{"name":"别名","primary":true,"locale":"zh"}]}`
 )
@@ -68,7 +69,11 @@ func TestLookupProjections(t *testing.T) {
 		length := int64(1010)
 		want := sources.Release{ID: "rel", Title: "发行", Date: "2001", Country: "JP", Status: "Official", Barcode: "0123456789012", Artists: credits, Complete: true,
 			Labels: []sources.Label{{Name: "厂牌", CatalogNumber: "CAT-1"}}, Group: sources.Group{ID: "grp", Title: "专辑", PrimaryType: "Album", FirstReleaseDate: "2000"},
-			Media: []sources.Medium{{Position: 1, Title: "第一碟", Format: "CD", TrackCount: 1, DiscIDs: []string{"disc-id"}, Tracks: []sources.Track{{ID: "trk", Position: 1, Number: "A1", Title: "曲名", LengthMS: &length, Artists: credits, RecordingID: "rec", RecordingTitle: "录音", ISRCs: []string{"USABC2300001"}}}}}}
+			Media: []sources.Medium{
+				{Position: 1, Title: "第一碟", Format: "CD", TrackCount: 1, DiscIDs: []string{"disc-id", "disc-alt"},
+					Tracks: []sources.Track{{ID: "trk", Position: 1, Number: "A1", Title: "曲名", LengthMS: &length, Artists: credits, RecordingID: "rec", RecordingTitle: "录音", ISRCs: []string{"USABC2300001"}}}},
+				{Position: 2, Title: "第二碟", Format: "Digital Media"},
+			}}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("发行投影=%+v，期望 %+v", got, want)
 		}
@@ -107,8 +112,15 @@ func TestSearchQueries(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := queryClient(t, "release", url.Values{"query": {tc.query}, "limit": {tc.limit}}, 200, `{"releases":[`+releaseJSON+`]}`)
 			got, err := tc.call(c)
-			if err != nil || len(got) != 1 || got[0].ID != "rel" || got[0].Complete || len(got[0].Media) != 1 || got[0].Media[0].TrackCount != 1 || len(got[0].Media[0].Tracks) != 0 {
+			if err != nil || len(got) != 1 || got[0].ID != "rel" || got[0].Complete {
 				t.Fatalf("搜索投影=%+v %v", got, err)
+			}
+			want := []sources.Medium{
+				{Position: 1, Title: "第一碟", Format: "CD", TrackCount: 1, DiscIDs: []string{"disc-id", "disc-alt"}},
+				{Position: 2, Title: "第二碟", Format: "Digital Media"},
+			}
+			if !reflect.DeepEqual(got[0].Media, want) {
+				t.Fatalf("搜索碟片=%+v，期望 %+v", got[0].Media, want)
 			}
 		})
 	}

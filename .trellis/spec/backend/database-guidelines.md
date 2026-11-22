@@ -92,6 +92,10 @@ M3 起，发行字段修正、人工归组与撤销（M4 起还有默认版本�
 `<DATA_DIR>/artwork/` 里的文件由 `release_artworks` 与 `release_external_artworks` 两张表共同引用，删文件前要数两张表并持有存储键的锁
 （见[自动整理合同](./curation-contracts.md)第 14.3 节）。回退有损：先解开 `steward_plan_items.operation_id` 对这两类操作的引用，再删标记、表与操作记录。
 
+迁移 0062（M7 子任务 C）加程序层的 `curation_work_states`、`curation_pending_items`、`curation_settings.paused` 与操作类型 `external_link`，都归自动整理所有、扫描不写。
+回退有损：解开方案项的引用，删 `external_link`、`group_join` 标记、它建的对应、两张表、`external_link` 操作及其撤销；自动整理做的归组是已有类型，保留。
+回退夹具里不要新建 `release_group_change` 操作（回退不删这一类型，快照对不上）。
+
 **迁移 0018（M4，默认版本）**：`release_groups` 增加 `default_release_id`（外键 `ON DELETE SET NULL`，**不约束属于这个组**）与组自己的 `edit_revision`，
 并放宽 `operations` 的类型与目标类型约束（约束名不变，先 `DROP` 再 `ADD`）。默认版本不在别处随归组或扫描清除，而是由读取时的排序判断是否生效
 （可见且仍在这个组里），所以扫描与归组都不用改组行。加锁顺序与归组一致：先发行行、后组行。规则见[默认版本合同](./default-version-contracts.md)。

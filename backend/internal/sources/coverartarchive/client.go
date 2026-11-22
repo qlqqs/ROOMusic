@@ -96,7 +96,7 @@ func (c *Client) FrontCover(ctx context.Context, target sources.CoverTarget) (so
 	if err != nil {
 		return sources.CoverFile{}, err
 	}
-	image := frontImage(images)
+	image := sources.FrontImage(images)
 	if image.ID == "" {
 		return sources.CoverFile{}, sources.ErrNotFound
 	}
@@ -128,25 +128,4 @@ func (c *Client) FrontCover(ctx context.Context, target sources.CoverTarget) (so
 		return sources.CoverFile{Image: image, Size: size, Data: data}, nil
 	}
 	return sources.CoverFile{}, sources.ErrNotFound
-}
-
-func frontImage(images []sources.CoverImage) sources.CoverImage {
-	var fallback sources.CoverImage
-	for _, image := range images {
-		if image.ID == "" {
-			continue
-		}
-		if image.Front {
-			return image
-		}
-		if fallback.ID == "" {
-			for _, kind := range image.Types {
-				if strings.EqualFold(kind, "Front") {
-					fallback = image
-					break
-				}
-			}
-		}
-	}
-	return fallback
 }

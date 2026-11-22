@@ -4,7 +4,8 @@
     "enabled": false,
     "enabled_at": null,
     "enabled_by": null,
-    "inactive_reason": "disabled"
+    "inactive_reason": "disabled",
+    "paused": false
   },
   "status": 200
 }

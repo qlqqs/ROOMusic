@@ -204,6 +204,7 @@ const OPERATION_TYPES = [
   "release_auto_correction",
   "release_external_artwork",
   "track_external_lyrics",
+  "external_link",
   "revert",
   "artist_merge",
   "artist_split",
@@ -257,6 +258,24 @@ const externalLyricsChangesDecoder = d.object({
   track: d.object({ id: d.uuid(), title: d.string() }),
   lyrics_kind: d.oneOf(["synced", "plain"] as const),
   lines: d.integer({ min: 1, max: 2000 }),
+});
+// 自动整理建立的外部对应（M7 C）：一次匹配是一条记录，含发行、配对上的曲目与必要时它所在的专辑；external 是外部发行的展示信息，按不可信文本显示。
+// 撤销记录带的是被撤销的那一条的内容（撤销就是去掉这些对应）。
+const externalLinkChangesDecoder = d.object({
+  kind: d.literal("external_link"),
+  source: d.string({ min: 1, max: MAX_PROVIDER }),
+  method: d.string({ min: 1, max: 32 }),
+  confidence: d.string({ min: 1, max: 32 }),
+  external: d.object({ title: d.string(), artist: d.string(), date: d.string(), country: d.string() }),
+  links: d.array(
+    d.object({
+      object_type: d.oneOf(["release", "release_group", "track"] as const),
+      object_id: d.uuid(),
+      external_id: d.string({ min: 1, max: 128 }),
+      external_group_id: d.optional(d.string({ min: 1, max: 128 })),
+    }),
+    { min: 1, max: 1000 },
+  ),
 });
 const groupSnapshotDecoder = d.object({ group_id: d.uuid(), group_title: d.string() });
 const groupChangesDecoder = d.object({ kind: d.literal("release_group_change"), from: groupSnapshotDecoder, to: groupSnapshotDecoder });
@@ -322,6 +341,7 @@ type OperationChanges =
   | d.Infer<typeof autoCorrectionChangesDecoder>
   | d.Infer<typeof externalArtworkChangesDecoder>
   | d.Infer<typeof externalLyricsChangesDecoder>
+  | d.Infer<typeof externalLinkChangesDecoder>
   | d.Infer<typeof groupChangesDecoder>
   | d.Infer<typeof defaultChangesDecoder>
   | d.Infer<typeof issueReviewChangesDecoder>
@@ -333,6 +353,7 @@ const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   if (kind === "release_auto_correction") return autoCorrectionChangesDecoder(input, path);
   if (kind === "release_external_artwork") return externalArtworkChangesDecoder(input, path);
   if (kind === "track_external_lyrics") return externalLyricsChangesDecoder(input, path);
+  if (kind === "external_link") return externalLinkChangesDecoder(input, path);
   if (kind === "release_group_change") return groupChangesDecoder(input, path);
   if (kind === "release_group_default") return defaultChangesDecoder(input, path);
   if (kind === "release_issue_review") return issueReviewChangesDecoder(input, path);

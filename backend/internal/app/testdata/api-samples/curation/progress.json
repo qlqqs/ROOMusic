@@ -1,0 +1,20 @@
+{
+  "body": {
+    "batch": null,
+    "last_pass_finished_at": null,
+    "pending": {
+      "waiting_model": 0
+    },
+    "releases": {
+      "matched": 0,
+      "no_match": 0,
+      "processed": 0,
+      "total": 2,
+      "try_later": 0,
+      "uncertain": 0
+    },
+    "rule_version": 101,
+    "state": "unavailable"
+  },
+  "status": 200
+}

@@ -40,6 +40,9 @@ const (
 	)`
 )
 
+// VisibleReleaseIDsSQL 返回至少有一首现存曲目的发行，供集合查询复用。
+const VisibleReleaseIDsSQL = "SELECT releases.id FROM releases WHERE " + releasesql.ReleaseVisiblePredicate
+
 // Queryer 是读取 Release 图所需的最小数据库能力。
 type Queryer interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)

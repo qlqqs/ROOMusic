@@ -15,21 +15,24 @@ import (
 )
 
 type Handlers struct {
-	sources  *curation.Sources
-	writer   *curation.Writer
-	reverter *curation.Reverter
-	guard    *identity.Guard
-	logger   *slog.Logger
+	program     curation.ProgramStatus
+	ruleVersion int16
+	sources     *curation.Sources
+	writer      *curation.Writer
+	reverter    *curation.Reverter
+	guard       *identity.Guard
+	logger      *slog.Logger
 }
 
-func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, guard *identity.Guard, logger *slog.Logger) *Handlers {
-	return &Handlers{sources: sources, writer: writer, reverter: reverter, guard: guard, logger: logger}
+func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, program curation.ProgramStatus, ruleVersion int16, guard *identity.Guard, logger *slog.Logger) *Handlers {
+	return &Handlers{sources: sources, writer: writer, reverter: reverter, program: program, ruleVersion: ruleVersion, guard: guard, logger: logger}
 }
 
 func (h *Handlers) Register(mux *http.ServeMux) {
 	const base = "/api/v1/admin/curation"
 	mux.HandleFunc("GET "+base+"/sources", h.admin(h.listSources))
 	mux.HandleFunc("PUT "+base+"/sources/{id}", h.admin(h.setSource))
+	mux.HandleFunc("GET "+base+"/progress", h.admin(h.progress))
 	mux.HandleFunc("GET "+base+"/settings", h.admin(h.settings))
 	mux.HandleFunc("PUT "+base+"/settings", h.admin(h.setSettings))
 	mux.HandleFunc("GET "+base+"/batches", h.admin(h.batches))
@@ -81,17 +84,25 @@ func decode(w http.ResponseWriter, r *http.Request, body any) bool {
 	return true
 }
 
+func (h *Handlers) progress(w http.ResponseWriter, r *http.Request, _ identity.User) {
+	p, err := h.writer.Progress(r.Context(), h.ruleVersion, h.program)
+	h.respond(w, r, p, err)
+}
+
 func (h *Handlers) settings(w http.ResponseWriter, r *http.Request, _ identity.User) {
 	s, err := h.writer.Settings(r.Context())
 	h.respond(w, r, s, err)
 }
 
 func (h *Handlers) setSettings(w http.ResponseWriter, r *http.Request, actor identity.User) {
-	enabled, ok := decodeEnabled(w, r, "需要指定是否开启自动整理")
-	if !ok {
+	var body struct {
+		Enabled *bool `json:"enabled"`
+		Paused  *bool `json:"paused"`
+	}
+	if !decode(w, r, &body) {
 		return
 	}
-	s, err := h.writer.SetSettings(r.Context(), actor.ID, enabled)
+	s, err := h.writer.UpdateSettings(r.Context(), actor.ID, body.Enabled, body.Paused)
 	h.respond(w, r, s, err)
 }
 

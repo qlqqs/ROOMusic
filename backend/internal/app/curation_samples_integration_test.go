@@ -38,4 +38,6 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 	record("curation/suppressions", "GET", curationBase+"/suppressions?release_id="+f.b, nil)
 	record("curation/batches", "GET", curationBase+"/batches", nil)
 	record("curation/batch", "GET", curationBase+"/batches/"+batch, nil)
+	record("curation/settings-paused", "PUT", curationBase+"/settings", map[string]bool{"paused": true})
+	record("curation/progress", "GET", curationBase+"/progress", nil)
 }

@@ -248,7 +248,7 @@ func TestPostgreSQLDefaultVersionGoesDormantAndComesBack(t *testing.T) {
 		t.Fatalf("the detached version's own album: revision %d, stored %q; want a fresh album", ownDetail.Revision, fixture.storedDefault(own))
 	}
 	// 撤销这次移出：版本回到原专辑，重新成为默认版本。
-	fixture.mustRevert(GroupChangeOperations(), detachOperation.OperationID)
+	fixture.mustRevert(GroupChangeOperations(testGroupSuppressions{}), detachOperation.OperationID)
 	fixture.requireDefault(fixture.requireOrder(group, hires.releaseID, original.releaseID), hires.releaseID)
 
 	// 另一条路径：再次移出后归入另一张专辑，它不会成为那张专辑的默认版本；归回原来的专辑后重新生效。

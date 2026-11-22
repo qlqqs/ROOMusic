@@ -390,6 +390,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 
 	recordCurationSamples(t, samples)
 	recordExternalCurationSamples(t, samples)
+	recordCurationCLinkSamples(t, samples)
 	samples.finish()
 }
 

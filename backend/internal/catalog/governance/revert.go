@@ -25,8 +25,17 @@ func errRevertConflict() error {
 // CorrectionOperations 返回字段修正操作的撤销与展示能力。
 func CorrectionOperations() operations.Kind { return correctionKind{} }
 
-// GroupChangeOperations 返回人工归组操作的撤销与展示能力。
-func GroupChangeOperations() operations.Kind { return groupChangeKind{} }
+type GroupSuppressionWriter interface {
+	SuppressGroupJoin(ctx context.Context, tx *sql.Tx, releaseID, groupID, revertID, actorID string) error
+}
+
+// GroupChangeOperations 在同一撤销事务里记录不再自动归入的专辑。
+func GroupChangeOperations(suppressions GroupSuppressionWriter) operations.Kind {
+	if suppressions == nil {
+		panic("注册归组操作需要提供不再提出标记的写入器")
+	}
+	return groupChangeKind{suppressions}
+}
 
 type correctionKind struct{}
 
@@ -202,12 +211,12 @@ func (correctionKind) Describe(ctx context.Context, database operations.Queryer,
 	return descriptions, nil
 }
 
-type groupChangeKind struct{}
+type groupChangeKind struct{ suppressions GroupSuppressionWriter }
 
 func (groupChangeKind) Type() string { return operations.TypeReleaseGroupChange }
 
 // Revert 把版本移回它原来的组。组从不删除，所以原来的组总在；它可能已经没有别的可见版本，这个版本回去之后它再次可见。
-func (groupChangeKind) Revert(ctx context.Context, tx *sql.Tx, operationID string, original operations.Record) (operations.Outcome, error) {
+func (k groupChangeKind) Revert(ctx context.Context, tx *sql.Tx, operationID string, original operations.Record) (operations.Outcome, error) {
 	locked, err := lockVisibleRelease(ctx, tx, original.TargetID)
 	if err != nil {
 		return operations.Outcome{}, err
@@ -215,7 +224,8 @@ func (groupChangeKind) Revert(ctx context.Context, tx *sql.Tx, operationID strin
 	if locked.revision != original.ResultRevision {
 		return operations.Outcome{}, errRevertConflict()
 	}
-	var recordedBefore, recordedAfter groupRecordState
+	var recordedBefore groupRecordState
+	var recordedAfter groupAfterState
 	if err := json.Unmarshal(original.Before, &recordedBefore); err != nil {
 		return operations.Outcome{}, fmt.Errorf("decode recorded group state: %w", err)
 	}
@@ -250,6 +260,17 @@ func (groupChangeKind) Revert(ctx context.Context, tx *sql.Tx, operationID strin
 	}
 	if err := refreshGovernedRelease(ctx, tx, original.TargetID); err != nil {
 		return operations.Outcome{}, err
+	}
+	if recordedAfter.Action == GroupJoin && len(original.Origin) > 0 {
+		var source operations.Origin
+		if err := json.Unmarshal(original.Origin, &source); err != nil {
+			return operations.Outcome{}, err
+		}
+		if source.Source == "curation" {
+			if err := k.suppressions.SuppressGroupJoin(ctx, tx, original.TargetID, locked.groupID, operationID, operations.ActorID(ctx)); err != nil {
+				return operations.Outcome{}, err
+			}
+		}
 	}
 	return operations.Outcome{
 		TargetType: operations.TargetRelease, TargetID: original.TargetID,

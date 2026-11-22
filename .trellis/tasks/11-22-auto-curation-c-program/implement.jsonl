@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/11-22-auto-curation-c-program/research/program-curation-current.md", "reason": "后台循环、证据列、标识、CUE、零散单曲、归组、外部对应、写入口、接线位置、输入变化信号、管理接口与迁移的现状与锚点"}
+{"file": "docs/architecture/adr/0006-auto-curation-and-sources.md", "reason": "第 5–7 节：撤销与不再提出、程序层的判定、结构操作的自动使用"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "自动层写入、撤销、不再提出、闸门、外部对应与外部封面歌词的现有合同"}
+{"file": ".trellis/spec/backend/sources-contracts.md", "reason": "能力接口、中立类型、调用身份与哨兵错误、各适配器的请求"}
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "受治理操作的共同写入流程、记录与撤销、归组的现有规则"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移编号顺延、回退脚本与夹具、事务写法"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新包 curation/program 的位置与依赖方向"}
+{"file": ".trellis/spec/backend/library-scan-tags.md", "reason": "标签标识的解析与落库"}

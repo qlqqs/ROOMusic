@@ -25,11 +25,15 @@ func NewWriter(db *sql.DB, dataDirectory string, logger *slog.Logger) *Writer {
 	return &Writer{db: db, artworks: artwork.NewStore(dataDirectory), logger: logger}
 }
 
+// ArtworkExists 检查自动封面写入使用的同一个受管存储。
+func (w *Writer) ArtworkExists(key string) bool { return w.artworks.Exists(key) }
+
 type Enabler struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
 }
 type Settings struct {
+	Paused         bool       `json:"paused"`
 	Enabled        bool       `json:"enabled"`
 	EnabledBy      *Enabler   `json:"enabled_by"`
 	EnabledAt      *time.Time `json:"enabled_at"`
@@ -41,9 +45,9 @@ type Settings struct {
 func loadSettings(ctx context.Context, tx *sql.Tx) (Settings, error) {
 	var s Settings
 	var id, username *string
-	err := tx.QueryRowContext(ctx, `SELECT s.enabled,s.enabled_by::text,u.username,s.enabled_at
+	err := tx.QueryRowContext(ctx, `SELECT s.paused,s.enabled,s.enabled_by::text,u.username,s.enabled_at
  FROM curation_settings s LEFT JOIN users u ON u.id=s.enabled_by WHERE s.id=1 FOR SHARE OF s`).
-		Scan(&s.Enabled, &id, &username, &s.EnabledAt)
+		Scan(&s.Paused, &s.Enabled, &id, &username, &s.EnabledAt)
 	if err != nil {
 		return Settings{}, err
 	}
@@ -97,14 +101,26 @@ func (w *Writer) Settings(ctx context.Context) (Settings, error) {
 }
 
 func (w *Writer) SetSettings(ctx context.Context, actorID string, enabled bool) (Settings, error) {
+	return w.UpdateSettings(ctx, actorID, &enabled, nil)
+}
+
+func (w *Writer) SetPaused(ctx context.Context, actorID string, paused bool) (Settings, error) {
+	return w.UpdateSettings(ctx, actorID, nil, &paused)
+}
+
+func (w *Writer) UpdateSettings(ctx context.Context, actorID string, enabled, paused *bool) (Settings, error) {
+	if enabled == nil && paused == nil {
+		return Settings{}, operations.Invalid("invalid_input", "需要指定开关或暂停状态")
+	}
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Settings{}, err
 	}
 	defer tx.Rollback()
-	_, err = tx.ExecContext(ctx, `UPDATE curation_settings SET enabled=$1,
+	_, err = tx.ExecContext(ctx, `UPDATE curation_settings SET enabled=COALESCE($1::boolean,enabled),
+ paused=CASE WHEN NOT enabled AND $1 THEN false ELSE COALESCE($3::boolean,paused) END,
  enabled_at=CASE WHEN $1 AND (NOT enabled OR enabled_by IS DISTINCT FROM $2::uuid) THEN now() ELSE enabled_at END,
- enabled_by=CASE WHEN $1 THEN $2::uuid ELSE enabled_by END,updated_at=now() WHERE id=1`, enabled, actorID)
+ enabled_by=CASE WHEN $1 THEN $2::uuid ELSE enabled_by END,updated_at=now() WHERE id=1`, enabled, actorID, paused)
 	if err != nil {
 		return Settings{}, err
 	}

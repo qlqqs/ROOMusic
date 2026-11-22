@@ -14,6 +14,27 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	62: `INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
+ SELECT id::uuid,'f6200000-0000-4000-8000-000000000000','external_link','release','e6200000-0000-4000-8000-000000000002',
+ gen_random_uuid(),'external_link',revision,revision+1,'{}','{}','{}','fixture'
+ FROM (VALUES ('d6200000-0000-4000-8000-000000000001',1),('d6200000-0000-4000-8000-000000000002',3)) AS fixture(id,revision);
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id,reverts_operation_id)
+ SELECT 'd6200000-0000-4000-8000-000000000003',actor_id,'revert',target_type,target_id,gen_random_uuid(),'undo',2,3,'{}','{}','{}','fixture',id
+ FROM operations WHERE id='d6200000-0000-4000-8000-000000000001';
+ INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence,operation_id)
+ VALUES('e6200000-0000-4000-8000-000000000004','musicbrainz','release','e6200000-0000-4000-8000-000000000002','fixture-release','barcode','high','d6200000-0000-4000-8000-000000000002');
+ INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by)
+ VALUES('release','e6200000-0000-4000-8000-000000000002','external_link',repeat('a',64),'{"source":"musicbrainz","external_id":"old-release"}',
+ 'd6200000-0000-4000-8000-000000000003','f6200000-0000-4000-8000-000000000000'),
+ ('release','e6200000-0000-4000-8000-000000000002','group_join',repeat('b',64),'{"group_id":"e6200000-0000-4000-8000-000000000001"}',
+ NULL,'f6200000-0000-4000-8000-000000000000');
+ INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status,attempts,generation)
+ VALUES('release','e6200000-0000-4000-8000-000000000002',101,repeat('c',64),'uncertain',1,1);
+ INSERT INTO curation_pending_items(target_type,target_id,kind,status,rule_version,input_digest,evidence)
+ VALUES('release','e6200000-0000-4000-8000-000000000002','release_match','waiting_model',101,repeat('c',64),'{}');
+ UPDATE curation_settings SET paused=true WHERE id=1;
+ UPDATE steward_plan_items SET operation_id='d6200000-0000-4000-8000-000000000002' WHERE id='f6200000-0000-4000-8000-000000000006';
+ UPDATE steward_plan_items SET operation_id='d6200000-0000-4000-8000-000000000003' WHERE id='f6200000-0000-4000-8000-000000000007';`,
 	61: `INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
  SELECT id::uuid,'f6100000-0000-4000-8000-000000000000',kind,'release','e6100000-0000-4000-8000-000000000002',gen_random_uuid(),kind,1,2,'{}','{}','{}','fixture'
  FROM (VALUES ('d6100000-0000-4000-8000-000000000001','release_external_artwork'),('d6100000-0000-4000-8000-000000000002','track_external_lyrics')) AS fixture(id,kind);
@@ -299,6 +320,28 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO tracks(id,medium_id,position,title,artist,source_root_id,relative_path,observed_at) VALUES
  ('e6100000-0000-4000-8000-000000000004','e6100000-0000-4000-8000-000000000003',1,'标识迁移测试曲目','测试艺人',
  'e6100000-0000-4000-8000-000000000000','synthetic-identifier.flac',NOW());`)
+			}
+			if m.Version == 62 {
+				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role)
+ VALUES('f6200000-0000-4000-8000-000000000000','program-rollback','synthetic','admin');
+ INSERT INTO steward_conversations(id,user_id,title,model,mode)
+ VALUES('f6200000-0000-4000-8000-000000000001','f6200000-0000-4000-8000-000000000000','旧会话','synthetic','steward');
+ INSERT INTO steward_messages(id,conversation_id,sequence,role,content)
+ VALUES('f6200000-0000-4000-8000-000000000002','f6200000-0000-4000-8000-000000000001',1,'assistant','{}');
+ INSERT INTO steward_tool_calls(id,message_id,position,tool_name,input,status,error_code)
+ VALUES('f6200000-0000-4000-8000-000000000003','f6200000-0000-4000-8000-000000000002',0,'revert_operation','{}','failed','rejected_by_review'),
+ ('f6200000-0000-4000-8000-000000000004','f6200000-0000-4000-8000-000000000002',1,'revert_operation','{}','failed','rejected_by_review');
+ INSERT INTO steward_plans(id,conversation_id,user_id,digest,expires_at)
+ VALUES('f6200000-0000-4000-8000-000000000005','f6200000-0000-4000-8000-000000000001','f6200000-0000-4000-8000-000000000000','c-program',now()+interval '1 day');
+ INSERT INTO steward_plan_items(id,plan_id,tool_call_id,position,tool_name,input,preview,revertible,idempotency_key,decision)
+ SELECT item::uuid,'f6200000-0000-4000-8000-000000000005',id,position,tool_name,'{}','{}',true,idempotency_key,'declined'
+ FROM steward_tool_calls JOIN (VALUES (0,'f6200000-0000-4000-8000-000000000006'),(1,'f6200000-0000-4000-8000-000000000007')) AS fixture(pos,item)
+ ON position=pos WHERE message_id='f6200000-0000-4000-8000-000000000002';
+ INSERT INTO release_groups(id) VALUES('e6200000-0000-4000-8000-000000000001');
+ INSERT INTO releases(id,group_id,title,artist)
+ VALUES('e6200000-0000-4000-8000-000000000002','e6200000-0000-4000-8000-000000000001','程序迁移测试发行','测试艺人');
+ INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence)
+ VALUES('e6200000-0000-4000-8000-000000000003','musicbrainz','release_group','e6200000-0000-4000-8000-000000000001','existing-group','barcode','high');`)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
