@@ -202,6 +202,8 @@ const OPERATION_TYPES = [
   "release_issue_review",
   "release_claim",
   "release_auto_correction",
+  "release_external_artwork",
+  "track_external_lyrics",
   "revert",
   "artist_merge",
   "artist_split",
@@ -234,6 +236,27 @@ const autoCorrectionChangesDecoder = d.object({
     d.object({ field: d.oneOf(CORRECTABLE_FIELDS), before: autoFieldStateDecoder, after: autoFieldStateDecoder }),
     { max: CORRECTABLE_FIELDS.length },
   ),
+});
+// 自动整理补的外部封面与外部歌词（M7 B2）：本地没有时才写入，一个发行一张、一首曲目一份；撤销就是去掉它。
+// 来源是外部源的标识，外部编号按不可信文本显示。封面的 resource_id 在撤销之后可能已经读不到图片。
+const externalArtworkChangesDecoder = d.object({
+  kind: d.literal("release_external_artwork"),
+  source: d.string({ min: 1, max: MAX_PROVIDER }),
+  external_id: d.string({ min: 1, max: 128 }),
+  artwork: d.object({
+    resource_id: d.string({ min: 1, max: 255 }),
+    mime: d.string({ min: 1, max: 100 }),
+    width: d.integer({ min: 1, max: 100_000 }),
+    height: d.integer({ min: 1, max: 100_000 }),
+  }),
+});
+const externalLyricsChangesDecoder = d.object({
+  kind: d.literal("track_external_lyrics"),
+  source: d.string({ min: 1, max: MAX_PROVIDER }),
+  external_id: d.string({ min: 1, max: 128 }),
+  track: d.object({ id: d.uuid(), title: d.string() }),
+  lyrics_kind: d.oneOf(["synced", "plain"] as const),
+  lines: d.integer({ min: 1, max: 2000 }),
 });
 const groupSnapshotDecoder = d.object({ group_id: d.uuid(), group_title: d.string() });
 const groupChangesDecoder = d.object({ kind: d.literal("release_group_change"), from: groupSnapshotDecoder, to: groupSnapshotDecoder });
@@ -297,6 +320,8 @@ type OperationChanges =
   | d.Infer<typeof artistIgnoreChangesDecoder>
   | d.Infer<typeof correctionChangesDecoder>
   | d.Infer<typeof autoCorrectionChangesDecoder>
+  | d.Infer<typeof externalArtworkChangesDecoder>
+  | d.Infer<typeof externalLyricsChangesDecoder>
   | d.Infer<typeof groupChangesDecoder>
   | d.Infer<typeof defaultChangesDecoder>
   | d.Infer<typeof issueReviewChangesDecoder>
@@ -306,6 +331,8 @@ const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   const kind = typeof input === "object" && input !== null && "kind" in input ? input.kind : undefined;
   if (kind === "release_correction") return correctionChangesDecoder(input, path);
   if (kind === "release_auto_correction") return autoCorrectionChangesDecoder(input, path);
+  if (kind === "release_external_artwork") return externalArtworkChangesDecoder(input, path);
+  if (kind === "track_external_lyrics") return externalLyricsChangesDecoder(input, path);
   if (kind === "release_group_change") return groupChangesDecoder(input, path);
   if (kind === "release_group_default") return defaultChangesDecoder(input, path);
   if (kind === "release_issue_review") return issueReviewChangesDecoder(input, path);

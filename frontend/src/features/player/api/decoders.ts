@@ -35,8 +35,8 @@ const lyricsLineDecoder = d.object({
 
 const rawLyricsDecoder = d.object({
   kind: d.oneOf(["synced", "plain"] as const),
-  // embedded 是音频内嵌标签，external 是与音频同名的外置 .lrc 文件；面板不显示来源。
-  source: d.oneOf(["embedded", "external"] as const),
+  // embedded 是音频内嵌标签，external 是与音频同名的外置 .lrc 文件，online 是自动整理从外部源取来的（M7 B2，本地没有歌词时才用）；面板不显示来源。
+  source: d.oneOf(["embedded", "external", "online"] as const),
   lines: d.array(lyricsLineDecoder, { min: 1, max: MAX_LYRICS_LINES }),
 });
 
@@ -50,7 +50,7 @@ const trackLyricsDecoder = d.object({
 export type SyncedLyricsLine = { start_ms: number; text: string };
 /** 纯文本歌词的一行：没有开始时间；text 可以是空串（分段）。 */
 export type PlainLyricsLine = { start_ms: null; text: string };
-export type LyricsSource = "embedded" | "external";
+export type LyricsSource = "embedded" | "external" | "online";
 export type LyricsDTO =
   | { kind: "synced"; source: LyricsSource; lines: SyncedLyricsLine[] }
   | { kind: "plain"; source: LyricsSource; lines: PlainLyricsLine[] };
