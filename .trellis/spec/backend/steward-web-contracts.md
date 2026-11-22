@@ -152,10 +152,19 @@ HTML 使用 x/net/html 分词，移除 script/style/nav/header/footer/aside/form
 
 ### 音乐资料
 
-MusicBrainz 固定 `https://musicbrainz.org/ws/2`，请求带 fmt=json；MusicBrainz 与 Cover Art Archive 客户端均使用 PublicOnly，保留 newClient 测试注入；
-User-Agent 为 `ROOMusic/<构建版本或 dev> ( <buildinfo.ProjectURL> )`，不含实例信息。
-进程内一个 `globalMusicLimiter` 按秒排队，超过 10 秒返回 rate_limited，取消立即退出；503 不重试。
-测试可以替换 Service 的 musicLimiter、newClient、包内基础地址，及 limiter 的 now/after；不添加用户配置项。
+M7 B1 起，两个工具经 `sources/musicbrainz` 的适配器请求 MusicBrainz（实体级的 `Lookup` 与 `Search`，对话身份），
+与后台自动整理共用同一个适配器实例、同一个每秒一次的限速器与同一份缓存；规则见[外部源合同](./sources-contracts.md)。
+工具的名字、参数、输出字段与每用户额度没有变化：
+
+- 固定 `https://musicbrainz.org/ws/2`，请求带 fmt=json，PublicOnly；User-Agent 为 `ROOMusic/<构建版本或 dev> ( <buildinfo.ProjectURL> )`，不含实例信息。
+- 对话调用排队超过 10 秒返回 rate_limited，取消立即退出；503 不重试；响应读取上限 2 MiB。
+- 错误码的对应：适配器的 `ErrRateLimited` → `rate_limited`；`ErrNotFound`、`ErrUnavailable`、`ErrTryLater` → `source_unavailable`。
+- 适配器多解出的字段（ISRC、别名、disc ID 等）不进入工具输出。
+- 有结果的响应缓存 30 天、空结果 1 天：有效期内同一查询读到的是缓存，不反映 MusicBrainz 上更新的编辑。
+- **自动整理的总开关与各源开关不影响这两个工具**：对话里的查询是用户本人发起的请求。
+- `web.New` 自己构造一个不缓存的默认适配器；`app` 用 `WithMusic` 换成带缓存的共用实例。测试经适配器的构造参数替换基础地址、
+  客户端工厂与限速器；不添加用户配置项。
+- Cover Art Archive 的清单读取仍在本包里直接请求（PublicOnly，保留 newClient 测试注入），不经过上述限速器；子任务 B2 迁移。
 
 include 白名单：
 

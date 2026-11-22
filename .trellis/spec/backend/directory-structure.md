@@ -18,12 +18,15 @@ backend/
 │   ├── app/                        # 组合根：装配服务与 handler、挂载全部路由、降级 handler
 │   ├── platform/
 │   │   ├── config/                 # 环境变量解码与校验
+│   │   ├── egress/                 # 出站 HTTP 客户端与地址策略（管家与外部源共用）
 │   │   ├── httpserver/             # 请求 ID 与完成日志中间件、JSON 与错误信封、/api 兜底、
 │   │   │                           # 前端静态资源、健康检查
 │   │   ├── postgres/               # 连接与迁移执行器：Connect 只连接与 ping，Open = Connect + 迁移
 │   │   │   └── postgrestest/       # 仅测试使用：隔离 schema 的测试库
 │   │   ├── workpool/               # 固定并发、有界有序流水线与按输入顺序返回的 Map（只依赖标准库）
 │   │   └── uuid/                   # UUID 生成与格式校验
+│   ├── sources/                    # 外部源的共用部分：声明、能力接口、限速、缓存、带重试的请求（不依赖数据库与业务包）
+│   │   └── musicbrainz/            # MusicBrainz 适配器
 │   ├── identity/                   # 会话、密码、Guard（同源、登录、管理员校验）
 │   │   └── httpapi/                # setup、登录登出、成员管理
 │   ├── library/                    # 路径校验、扫描引擎（遍历、解析、把观察交给 catalog/ingest 暂存）、诊断、扫描执行锁与中断恢复、Service

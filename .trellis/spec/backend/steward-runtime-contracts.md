@@ -339,10 +339,10 @@ ReleaseConversation 和启动恢复只中断 running 调用，不中断 awaiting
 | 包 | 职责 | 允许导入（`app/dependency_rules_test.go`） |
 | --- | --- | --- |
 | `steward/tool` | `Definition`、`Registry`、`Invoke`、schema 子集 | `identity` |
-| `steward/egress` | 出站 HTTP 客户端与地址策略 | 无内部包；可用 `net/http` |
+| `platform/egress` | 出站 HTTP 客户端与地址策略（M7 B1 起从管家包迁到平台层，与外部源共用） | 无内部包；可用 `net/http` |
 | `steward/secret` | 实例密钥文件、加解密 | 无 |
-| `steward/web` | 搜索、网页正文、MusicBrainz 与封面清单 | `steward/runtime`（只读设置端口）、`steward/secret`、`steward/egress`、`steward/tool`、`platform/buildinfo`、`platform/uuid` |
-| `steward/provider` | 三种协议适配、流解析、探测、地址预设 | `steward/egress`；可用 `net/http` |
+| `steward/web` | 搜索、网页正文、MusicBrainz 与封面清单 | `steward/runtime`（只读设置端口）、`steward/secret`、`platform/egress`、`sources`、`sources/musicbrainz`、`steward/tool`、`platform/buildinfo`、`platform/uuid` |
+| `steward/provider` | 三种协议适配、流解析、探测、地址预设 | `platform/egress`；可用 `net/http` |
 | `steward/runtime` | 循环、历史摘要、设置/会话/消息/工具调用/放行名单存储 | `platform/uuid`、`steward/provider`、`steward/tool`、`steward/memory` |
 | `steward/memory` | 本人记忆存储、限额与三个工具 | `platform/uuid`、`steward/tool` |
 | `steward/httpapi` | 路由、SSE 订阅、成员开关 | `identity`、`platform/httpserver`、`platform/uuid`、`steward/{egress,memory,provider,runtime,secret,tool}`；可用 `net/http` |
@@ -560,9 +560,9 @@ UUID 校验格式并转小写；分页默认 `page=1/page_size=20`，页码最�
 | `POST /me/steward/conversations/{id}/read` | 登录、同源 | 标记本人会话已读，不改变排序 | `200 {read: true}` |
 | `GET /admin/steward/settings` | 管理员 | 读成员开关 | `200 {members_enabled}` |
 | `PUT /admin/steward/settings` | 管理员 | 写成员开关 | `200 {members_enabled}` |
-| `GET /admin/steward/egress-allowlist` | 管理员 | 放行名单 | `200 {items}` |
-| `POST /admin/steward/egress-allowlist` | 管理员 | 添加放行项 | `200 AllowlistEntry` |
-| `DELETE /admin/steward/egress-allowlist` | 管理员 | 删除放行项（请求体指定） | `200 {deleted: true}` |
+| `GET /admin/platform/egress-allowlist` | 管理员 | 放行名单 | `200 {items}` |
+| `POST /admin/platform/egress-allowlist` | 管理员 | 添加放行项 | `200 AllowlistEntry` |
+| `DELETE /admin/platform/egress-allowlist` | 管理员 | 删除放行项（请求体指定） | `200 {deleted: true}` |
 
 ### 4.2 设置
 
@@ -966,7 +966,7 @@ JSON 错误信封只给上表的固定消息；适配器脱敏后的 `Message` �
 
 规则与理由见 ADR 0005 第 5、6 节。实现后的具体情况：
 
-出站（`steward/egress`，由 `httpapi/outbound.go` 按请求构造）：
+出站（`platform/egress`，由 `httpapi/outbound.go` 按请求构造）：
 
 | 项 | 实现 |
 | --- | --- |
@@ -1086,7 +1086,7 @@ C5 的独立测试交接（实现阶段不新增测试）：
 | --- | --- | --- |
 | `steward/tool/registry_test.go` | 否 | 列表按身份过滤、每次调用重新鉴权；四种调用错误码；schema 子集的接受与拒绝；非法注册；截断后仍是合法 JSON |
 | `steward/secret/secret_test.go` | 否 | 密钥文件生成（32 字节、0600）与加解密往返；绑定不符、篡改、密钥被替换统一得到 `ErrCannotOpen`；`LastFour`；密钥文件不存在时解密不创建文件 |
-| `steward/egress/client_test.go` | 否 | `IsPublicIP` 的网段表；解析到私有地址与混合结果被拒绝；放行名单与不限策略；重定向后按实际目的地重新判断；重定向次数与协议限制 |
+| `platform/egress/client_test.go` | 否 | `IsPublicIP` 的网段表；解析到私有地址与混合结果被拒绝；放行名单与不限策略；重定向后按实际目的地重新判断；重定向次数与协议限制 |
 | `steward/provider/protocol_test.go` | 否 | 两种协议的文本、用量（有与无）、请求不含多余字段；单个与并行工具调用的分片与整块累积；Messages 思考块与工具结果往返；OpenAI 工具结果的线上格式；HTTP 与流内错误的分类及密钥隐藏；取消阻塞中的读取会释放连接；预设识别不发请求；探测的协议、模型列表与三种工具结论 |
 | `steward/provider/regressions_test.go` | 否 | 输出上限字段按端点取 `max_tokens`/`max_completion_tokens`；两种协议截断在工具参数中间；超时分类 |
 | `steward/runtime/run_test.go` | 否 | 多步工具调用的事件顺序与原始输出保留；工具错误变成结果并继续；步数与 token 上限、取消、模型错误后释放会话；流截断与输出上限；存储失败的各退出路径、会话忙时不发事件；不泄漏协程；来源标记只转义标记字符 |
@@ -1105,7 +1105,7 @@ C5 的独立测试交接（实现阶段不新增测试）：
 
 ```bash
 # 不需要数据库的包，在 backend/ 下
-mise exec -- go test ./internal/steward/tool/... ./internal/steward/secret/... ./internal/steward/egress/... ./internal/steward/provider/...
+mise exec -- go test ./internal/steward/tool/... ./internal/steward/secret/... ./internal/platform/egress/... ./internal/steward/provider/...
 mise exec -- go test ./internal/steward/runtime/... -run 'TestRun|TestSourceWrapper'
 mise exec -- go test ./internal/app/... -run 'TestRoutesResolveToRegisteredPatterns|TestPackageDependencyDirections'
 
@@ -1123,8 +1123,8 @@ C2 实现后核对出三处与 ADR 0005 原文的出入，2026-11-16 由用户�
 
 | 出入 | 处理 |
 | --- | --- |
-| ADR 原文写重定向逐跳重新判断；代码对模型端点不跟随任何重定向（`steward/httpapi/outbound.go`、`steward/egress/client.go`） | 修订 ADR 第 5 节：模型端点不跟随重定向，逐跳判断留给网页抓取 |
-| 代码的 `IsPublicIP` 排除的网段比 ADR 原文列的多（`steward/egress/client.go`，清单见第 8 节） | 修订 ADR 第 5 节：另排除特殊用途网段 |
+| ADR 原文写重定向逐跳重新判断；代码对模型端点不跟随任何重定向（`steward/httpapi/outbound.go`、`platform/egress/client.go`） | 修订 ADR 第 5 节：模型端点不跟随重定向，逐跳判断留给网页抓取 |
+| 代码的 `IsPublicIP` 排除的网段比 ADR 原文列的多（`platform/egress/client.go`，清单见第 8 节） | 修订 ADR 第 5 节：另排除特殊用途网段 |
 | 代码在工具执行失败时把处理器的错误文本记进日志的 `cause`，panic 时记调用栈 | 改代码去掉 `cause`（`steward/runtime/run_tools.go`）；调用栈保留，写进 ADR 第 6 节 |
 
 ## 14. MCP 入口与访问令牌（C3）
