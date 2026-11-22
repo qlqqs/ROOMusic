@@ -1,0 +1,11 @@
+{"file": ".trellis/tasks/11-22-auto-curation-b2-covers-lyrics/research/covers-and-lyrics-current.md", "reason": "封面与歌词的表、扫描、读取点、可复用函数、管家封面清单、出站与限速的现状与锚点"}
+{"file": ".trellis/tasks/11-22-auto-curation-b2-covers-lyrics/research/caa-and-lrclib-api.md", "reason": "Cover Art Archive 与 LRCLIB 的接口、重定向链、错误码、限速与内容特点"}
+{"file": ".trellis/spec/backend/sources-contracts.md", "reason": "外部源的声明、能力、调用身份、限速、缓存与请求的现有合同"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "自动写入、撤销、不再提出、闸门与源开关的现有合同"}
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "受治理操作的共同写入流程、记录与撤销的通用规则"}
+{"file": ".trellis/spec/backend/lyrics-contracts.md", "reason": "歌词的来源、规范化、解析与接口的现有合同"}
+{"file": ".trellis/spec/backend/steward-web-contracts.md", "reason": "管家音乐资料工具与封面清单的输出、错误码与断言点"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移与回退脚本、数据目录内容的要求"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "包的归属与依赖方向"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "接口样本与测试的要求"}
+{"file": "docs/architecture/adr/0006-auto-curation-and-sources.md", "reason": "外部封面与歌词只补空缺、存放位置、发出的数据（第 4、8 节）"}

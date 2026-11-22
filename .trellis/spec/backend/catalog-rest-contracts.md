@@ -170,7 +170,7 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
 | 最近新增带任意查询参数 | `400 invalid_query` |
 | 最近新增查询或投影失败 | `503 database_unavailable` |
 | 组列表的读取失败 | `503 database_unavailable`（查询无法执行）或 `503 database_error`，不回显 SQL |
-| 无 `release_artworks` 关系 | 列表与详情返回显式 `artwork: null` |
+| 本地（`release_artworks`）与外部（`release_external_artworks`）都没有封面 | 列表与详情返回显式 `artwork: null`；有本地的用本地的，否则用外部的（M7 B2，见[自动整理合同](./curation-contracts.md)第 14.2 节），`artwork` 对象不带来源 |
 | 封面四列完整且合法 | 列表与详情返回相同 artwork 对象 |
 | 封面列部分为空，ID 超过 255 字节或含路径分隔符/点目录/控制字符，MIME 或尺寸非法 | fail closed 为既有 `503` 安全错误 envelope；不得回显存储值、SQL 或路径 |
 | artwork 资源不存在、记录不安全或文件不可读 | `404 not_found`，不返回主机路径；带 `If-None-Match` 也不是 304（数据库读取错误同样归为 404，既有合同） |

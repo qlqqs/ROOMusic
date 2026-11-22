@@ -14,7 +14,7 @@
 ## 2. 签名
 
 - `parser.AudioObservation.Lyrics`、`LyricsSource`：规范化后的原文与来源键；没有有效歌词时两者都为空。解析器不解析 LRC。
-- `parser.NormalizeLyrics(raw) (string, bool)`；常量 `MaxLyricsBytes = 64 KiB`；来源键常量 `LyricsSource*`（含外置文件 `LyricsSourceLRCFile = "lrc_file"`）。
+- `metadata.NormalizeLyrics(raw) (string, bool)`；常量 `metadata.MaxLyricsBytes = 64 KiB`（在 `catalog/metadata`：解析器与自动整理共用）；来源键常量 `parser.LyricsSource*`（含外置文件 `LyricsSourceLRCFile = "lrc_file"`）。
 - `parser.DecodeExternalLyrics(data) (string, bool)`、常量 `MaxExternalLyricsBytes = 256 KiB`；`parser.ApplyExternalLyrics(observation, text)` 把外置歌词与随之抽取的署名应用到观察副本。
 - `library/sidecar_lyrics.go`：每个目录建一次 `.lrc` 文件名索引，按第 3a 节匹配并有界读取。
 - `ingest.SourceObservation.Lyrics`、`LyricsSource`（JSON `lyrics`、`lyrics_source`，`omitempty`），随暂存观察进入整理与曲目写入。
@@ -83,7 +83,10 @@ CUE 虚拟轨没有歌词：它的观察由 CUE 事实构造，不复制父文�
 ```
 
 没有歌词、或去掉元标签后没有可显示的行是 200 加 `lyrics: null`，不是 404。`synced` 的每行 `start_ms` 是 0 到 24 小时之间的整数且非递减；
-`plain` 的每行都是 `null`，`text` 可以是空串（分段）。`source` 是 `embedded`（内嵌标签）或 `external`（`lyrics_source = lrc_file`）；`ParseLyrics` 不变，来源由 `LoadTrackLyrics` 按 `lyrics_source` 设置。前端不显示来源。
+`plain` 的每行都是 `null`，`text` 可以是空串（分段）。`source` 是 `embedded`（内嵌标签）、`external`（`lyrics_source = lrc_file`，音频旁的同名文件）或 `online`（自动整理从外部源取来的，存在 `track_external_lyrics`）；`ParseLyrics` 不变，来源由 `LoadTrackLyrics` 设置。前端不显示来源。
+
+**本地优先，外部补空缺**（M7 子任务 B2）：本地歌词能解析出可显示的行时用本地的；本地没有、或有但解析不出可显示的行时，用外部的。
+外部歌词不写进 `tracks.lyrics`，扫描不清除它；写入、撤销与不再提出见[自动整理合同](./curation-contracts.md)第 14 节。
 
 ## 6. 解析规则（`catalog.ParseLyrics`）
 
@@ -104,7 +107,7 @@ CUE 虚拟轨没有歌词：它的观察由 CUE 事实构造，不复制父文�
 - 解码器（`features/player/api/decoders.ts`）在字段形状之外按形态检查：`synced` 每行有开始时间且非递减，`plain` 每行没有；违反则整份拒绝，
   界面不会拿到顺序错乱的“同步歌词”。上限与后端一致（2,000 行、文本 2,000 个 UTF-16 码元、开始时间 24 小时）。
 - `fetchTrackLyrics` 要求响应的 `track_id` 与请求一致；404 与 401 是错误，不当成“没有歌词”。
-- 查询键 `viewerQueryKey(generation, "player", "lyrics", trackId)`，`staleTime: Infinity`：歌词只在重扫时变化，会话结束随代次清空。
+- 查询键 `viewerQueryKey(generation, "player", "lyrics", trackId)`，`staleTime: Infinity`：歌词只在重扫、自动整理补上或撤销时变化，会话结束随代次清空；修改发行数据之后的统一刷新（`useReleaseDataRefresh`）让当前会话的全部歌词查询失效，撤销自动补的歌词后不再显示旧的。
 - 分组与定位是纯函数（`engine/lyrics.ts`）：同一 `start_ms` 的相邻行成一组（主行在前，对照行在后），没有文字的组是间奏；
   当前组是最后一个“开始时间不晚于播放位置 + 40 毫秒”的组（容差让点击一行后略早于该行的位置也算轮到它）。
 
