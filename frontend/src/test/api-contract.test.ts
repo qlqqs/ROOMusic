@@ -516,6 +516,8 @@ const successContracts: Record<string, Contract> = {
   // M7 B2：自动补的封面与歌词及它们的撤销记录。
   "operations/external-list": { status: 200, decode: decodeOperationPage },
   "operations/external-reverted": { status: 200, decode: decodeRevertResult },
+  "operations/link-list": { status: 200, decode: decodeOperationPage },
+  "operations/link-reverted": { status: 200, decode: decodeRevertResult },
   "group-changes/joined": { status: 200, decode: decodeGroupChangeResult },
   "group-changes/detached": { status: 200, decode: decodeGroupChangeResult },
   "group-defaults/set": { status: 200, decode: decodeGroupDefaultResult },
@@ -833,14 +835,16 @@ const mediaResponseContracts: Record<string, { reason: string }> = {
 };
 
 // 后端已有接口、前端还没有消费的样本。
-// 自动整理的开关、批次、范围撤销与不再提出（M7 A）以及各外部源的开关（M7 B1）：后端接口已有，界面在子任务 E1 才做；
+// 自动整理的开关、批次、范围撤销与不再提出（M7 A）、各外部源的开关（M7 B1）以及暂停与进度（M7 C）：后端接口已有，界面在子任务 E1 才做；
 // 那时把它们移到 successContracts 并配上解码器。
 const unconsumedContracts: readonly string[] = [
   "curation/batch",
   "curation/batches",
+  "curation/progress",
   "curation/scope-reverted",
   "curation/settings-disabled",
   "curation/settings-enabled",
+  "curation/settings-paused",
   "curation/source-updated",
   "curation/sources",
   "curation/suppressions",

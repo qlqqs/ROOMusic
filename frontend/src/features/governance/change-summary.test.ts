@@ -280,6 +280,58 @@ describe("自动补的封面与歌词（M7 B2）", () => {
   });
 });
 
+describe("外部对应（M7 C）", () => {
+  const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  const link: Pick<OperationItemDTO, "type" | "changes"> = {
+    type: "external_link",
+    changes: {
+      kind: "external_link",
+      source: "musicbrainz",
+      method: "barcode",
+      confidence: "certain",
+      external: { title: "Sample Album", artist: "Sample Artist", date: "2015-03-02", country: "JP" },
+      links: [
+        { object_type: "release", object_id: id(1), external_id: "11111111-1111-4111-8111-111111111111", external_group_id: "22222222-2222-4222-8222-222222222222" },
+        { object_type: "track", object_id: id(2), external_id: "33333333-3333-4333-8333-333333333333" },
+        { object_type: "track", object_id: id(3), external_id: "44444444-4444-4444-8444-444444444444" },
+        { object_type: "release_group", object_id: id(4), external_id: "22222222-2222-4222-8222-222222222222" },
+      ],
+    },
+  };
+  const bare: Pick<OperationItemDTO, "changes"> = {
+    changes: {
+      kind: "external_link",
+      source: "musicbrainz",
+      method: "model_judgement",
+      confidence: "likely",
+      external: { title: "", artist: "", date: "", country: "" },
+      links: [{ object_type: "release", object_id: id(1), external_id: "11111111-1111-4111-8111-111111111111" }],
+    },
+  };
+
+  it("类型名与撤销记录的类型名", () => {
+    expect(operationTypeLabel(link)).toBe("对上外部资料");
+    expect(operationTypeLabel({ type: "revert", changes: link.changes })).toBe("解除外部对应");
+  });
+
+  it("改动：外部发行、依据与一并对上的专辑与曲目；空的部分不写，不认识的依据写标识本身", () => {
+    expect(changeLines(link)).toEqual(["对上 MusicBrainz：《Sample Album》— Sample Artist（2015 · JP）", "依据条码，同时对上专辑、2 首曲目"]);
+    expect(changeLines(bare)).toEqual(["对上 MusicBrainz：外部发行", "依据model_judgement"]);
+  });
+
+  it("撤销前的说明与撤销记录都写成解除", () => {
+    const expected = ["解除与 MusicBrainz：《Sample Album》— Sample Artist（2015 · JP） 的对应", "同时去掉专辑、2 首曲目的对应"];
+    expect(revertLines(link)).toEqual(expected);
+    expect(changeLines({ type: "revert", changes: link.changes })).toEqual(expected);
+  });
+
+  it("撤不了的原因：对应已被改动；已撤销时写已撤销", () => {
+    const release = { id: id(1), title: "Album", group_id: id(4), visible: false };
+    expect(notRevertibleReason({ type: "external_link", revertible: false, reverted_by: null, release, album: null })).toBe("对应已被改动");
+    expect(notRevertibleReason({ type: "external_link", revertible: false, reverted_by: id(9), release, album: null })).toBe("已撤销");
+  });
+});
+
 describe("自动整理的记录：后端样本", () => {
   const [revert, written] = decodeOperationPage(sampleBody("operations/auto-list")).items;
   if (revert === undefined || written === undefined) throw new Error("样本里没有自动整理的记录");

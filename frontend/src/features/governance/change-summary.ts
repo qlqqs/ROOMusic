@@ -42,6 +42,8 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       return "自动补封面";
     case "track_external_lyrics":
       return "自动补歌词";
+    case "external_link":
+      return "对上外部资料";
     case "artist_merge":
       return "合并艺人";
     case "artist_split":
@@ -59,6 +61,7 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       if (item.changes?.kind === "release_auto_correction") return "撤销自动补全";
       if (item.changes?.kind === "release_external_artwork") return "撤销自动补的封面";
       if (item.changes?.kind === "track_external_lyrics") return "撤销自动补的歌词";
+      if (item.changes?.kind === "external_link") return "解除外部对应";
       return "撤销";
   }
 }
@@ -103,6 +106,16 @@ function artistScopeText(scope: { name_count: number; release_count: number; tra
 function autoText(auto: CorrectionIntentDTO | null): string {
   if (auto === null) return "无";
   return auto.mode === "null" || auto.value === undefined ? "留空" : displayValue(auto.value);
+}
+
+// 匹配依据的中文名：程序层的五种依据；以后新增的（如模型判断）按标识原样显示。
+const linkMethodLabels: Record<string, string> = { tag_id: "标签里的编号", barcode: "条码", catalog_number: "厂牌编号", isrc: "ISRC", disc_id: "光盘目录" };
+
+/** 外部发行的一行说明：《标题》— 艺人（年份 · 地区），空的部分不写。 */
+function externalReleaseText(external: { title: string; artist: string; date: string; country: string }): string {
+  const detail = [external.date.slice(0, 4), external.country].filter((part) => part !== "").join(" · ");
+  const title = external.title === "" ? "外部发行" : `《${external.title}》`;
+  return `${title}${external.artist === "" ? "" : `— ${external.artist}`}${detail === "" ? "" : `（${detail}）`}`;
 }
 
 function sameValue(a: FieldValue | null, b: FieldValue | null): boolean {
@@ -162,6 +175,16 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
     const what = `${changes.lyrics_kind === "synced" ? "同步歌词" : "歌词"}（${changes.lines} 行），来自 ${sourceName(changes.source)}`;
     return [reverse ? `去掉给《${changes.track.title}》自动补的${what}` : `给《${changes.track.title}》补了${what}`];
   }
+  // 外部对应：撤销就是去掉这些对应（专辑与曲目的对应一并去掉）。
+  if (changes.kind === "external_link") {
+    const source = sourceName(changes.source);
+    const tracks = changes.links.filter((link) => link.object_type === "track").length;
+    const album = changes.links.some((link) => link.object_type === "release_group");
+    const extra = [album ? "专辑" : null, tracks === 0 ? null : `${tracks} 首曲目`].filter((part) => part !== null).join("、");
+    const what = `${source}：${externalReleaseText(changes.external)}`;
+    if (reverse) return [`解除与 ${what} 的对应`, ...(extra === "" ? [] : [`同时去掉${extra}的对应`])];
+    return [`对上 ${what}`, `依据${linkMethodLabels[changes.method] ?? changes.method}${extra === "" ? "" : `，同时对上${extra}`}`];
+  }
   if (changes.kind === "release_auto_correction") {
     return changes.fields.map((field) => {
       const [from, to] = reverse ? [field.after, field.before] : [field.before, field.after];
@@ -181,11 +204,11 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
 
 /**
  * 这条记录改了什么。撤销记录的前后状态与它撤销的操作相反，所以同样的写法读起来就是“恢复成了什么”。
- * 自动补的封面与歌词例外：它们的撤销记录带的是被撤销的那一份（不分前后），所以按记录的类型写成“去掉”。
+ * 自动补的封面、歌词与外部对应例外：它们的撤销记录带的是被撤销的那一份（不分前后），所以按记录的类型写成“去掉”。
  */
 export function changeLines(item: Pick<OperationItemDTO, "changes"> & Partial<Pick<OperationItemDTO, "type">>): string[] {
   const kind = item.changes?.kind;
-  const removal = item.type === "revert" && (kind === "release_external_artwork" || kind === "track_external_lyrics");
+  const removal = item.type === "revert" && (kind === "release_external_artwork" || kind === "track_external_lyrics" || kind === "external_link");
   return linesOf(item.changes, removal);
 }
 
@@ -208,6 +231,8 @@ export function notRevertibleReason(item: Pick<OperationItemDTO, "type" | "rever
   if (item.type === "release_auto_correction") return "之后又被自动整理改写";
   // 外部封面与外部歌词同理：撤不了只可能是它已经不在了（恢复备份后图片文件丢失、被新的一张替换）。
   if (item.type === "release_external_artwork" || item.type === "track_external_lyrics") return "已被替换";
+  // 外部对应从不被替换：撤不了只可能是其中某一项已经不在（被别的撤销去掉了）。
+  if (item.type === "external_link") return "对应已被改动";
   // 认领的撤销不要求新版本可见（它的目的就是把修改还给旧版本），所以不写“专辑已不可见”：能不能撤销只看之后有没有修改。
   if (item.type === "release_claim") return "之后又有修改";
   // 目标是发行的记录看发行，目标是专辑的记录看专辑：专辑没有可见版本了，就没有可以撤销的东西。
