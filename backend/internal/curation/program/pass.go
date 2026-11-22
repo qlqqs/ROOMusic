@@ -231,10 +231,14 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 		}
 		return err
 	}
-	if retry {
+	if retry || out.status == "try_later" {
 		delay := min(24*time.Hour, 10*time.Minute<<min(state.RetryCount, 8))
 		next := w.opts.Now().Add(delay)
 		state.Status, state.NextAttemptAt, state.RetryCount = "try_later", &next, state.RetryCount+1
+		if out.status == "try_later" {
+			state.Generation = u.generation
+			return w.saveConclusion(ctx, e, state, out, states)
+		}
 		if err := curation.SaveWorkState(ctx, w.db, state); err != nil {
 			return err
 		}
@@ -271,7 +275,7 @@ func (w *Worker) saveConclusion(ctx context.Context, e *catalog.CurationEvidence
 		switch {
 		case state.Subject == "release" && out.status == "matched":
 			expected = afterMatch(*e, fresh, out)
-		case state.Subject != "release" && out.status == "done":
+		case state.Subject != "release" && (out.status == "done" || out.status == "try_later"):
 			expected = afterMedia(*e, fresh, state.Subject, state.TargetID)
 		default:
 			return errReleaseChanged

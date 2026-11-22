@@ -66,12 +66,36 @@ func (w *Worker) applyArtwork(ctx context.Context, u *unit, e catalog.CurationEv
 		}
 		request := curation.ArtworkRequest{ReleaseID: e.ID, Data: file.Data, ExternalID: externalID,
 			Source: curation.Source{Kind: "source", Provider: provider, Basis: "Cover Art Archive 主封面 " + externalID}}
-		err = u.write(ctx, "artwork", func(batch, key string) error {
+		write := func(batch, key string) error {
 			request.BatchID, request.Key = batch, key
 			_, err := w.writer.ApplyArtwork(ctx, request)
 			return err
-		})
-		return "done", err
+		}
+		for attempt := range 2 {
+			if attempt == 1 {
+				u.generation++
+			}
+			if err := u.write(ctx, "artwork", write); err != nil {
+				return "", err
+			}
+			// 同键回放只返回原操作，仍需确认当前封面行指向的文件存在。
+			entries, err := catalog.LoadCurationEvidence(ctx, w.db, []string{e.ID}, w.writer.ArtworkExists)
+			if err != nil {
+				return "", err
+			}
+			fresh, visible := entries[e.ID]
+			if !visible {
+				return "", errReleaseChanged
+			}
+			if !fresh.ExternalArtwork || !artworkGap(fresh) {
+				return "done", nil
+			}
+			fresh = subjectEvidence(u.subject, fresh, u.releaseState)
+			if ArtworkDigest(afterMedia(e, fresh, u.subject, e.ID)) != ArtworkDigest(fresh) {
+				return "", errReleaseChanged
+			}
+		}
+		return "try_later", nil
 	}
 	return "no_match", nil
 }
