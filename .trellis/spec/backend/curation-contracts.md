@@ -140,13 +140,16 @@ type Applied struct {
 | `GET /api/v1/admin/curation/batches/{id}` | 单个批次；改动明细用操作记录列表按 `batch_id` 取 |
 | `POST /api/v1/admin/curation/reverts` | 需要 `Idempotency-Key`。`{scope:{kind:"batch", id} \| {kind:"provider", provider}, cursor}` → `{reverted, skipped:[{operation_id, code}], next_cursor}`；`next_cursor` 为 null 表示做完，客户端带着它和同一个键继续调用 |
 | `GET /api/v1/admin/curation/suppressions?release_id=&page=&page_size=` | 倒序分页；每项 `{id, target_type, target_id, subject, value_hash, value, operation_id, created_by, created_at}`；`value` 按不可信文本显示 |
-| `DELETE /api/v1/admin/curation/suppressions/{id}` | `204`；不存在 `404 not_found` |
+| `DELETE /api/v1/admin/curation/suppressions/{id}` | 成功返回 `204`，标记不存在返回 `404 not_found`。清除封面或歌词的任一标记时，同一事务内清除同一目标且 `operation_id` 相同、非空的对应标记（见第 14.5 节）。其余主题仅清除指定标记 |
 | `GET /api/v1/admin/curation/sources` | `{items:[{id, name, capabilities, enabled, active, inactive_reason}]}`，按注册顺序；见第 11 节 |
 | `PUT /api/v1/admin/curation/sources/{id}` | `{enabled}`，返回同上的一项；未知的源 `404 not_found` |
 | `GET /api/v1/operations` | 增加 `source`（只接受 `curation`）、`provider`、`batch_id`，与现有目标筛选之间是“并且”；有批次的记录带 `batch_id`（没有批次时省略）；`origin` 多出 `provider_kind`、`provider`、`basis` |
 | `GET /api/v1/releases/{id}/corrections` 与修正成功的响应 | 每个字段增加 `auto`：`{mode, value?, operation_id, provider_kind, provider}` 或 null；`effective_value` 是三层结果 |
 
-面向成员的接口不变：`corrected_fields` 仍只列人工修正的字段。
+发行详情 `GET /api/v1/releases/{id}` 和版本对比 `GET /api/v1/release-groups/{id}/comparison` 的每个发行可带
+`auto_fields`（字符串数组）。它只列有自动值且没有人工修正行的字段名，包含自动设空的字段，排序与 `corrected_fields` 相同。
+字段名按实际存储列出，例如专辑艺人用 `album_artist`。没有符合条件的字段时省略 `auto_fields`。
+`corrected_fields` 仍只列人工修正的字段。
 
 “清除人工修正之后显示什么”的三处预览（修正的撤销预览、管家 `correct_release` 的清除预览、修正状态）取自动值，没有自动值才是扫描值
 （`CorrectionField.ValueAfterClear`）。
@@ -326,6 +329,8 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 - 按**记录的目标发行**加锁，不要求可见；发行行已不存在时 `409 revert_conflict`。
 - 外部表这一行存在且 `operation_id` 是原操作：删除，`auto_revision` 加一，写两条不再提出（`created_by` 是执行撤销的人）；否则 `409 revert_conflict`。
   不读 `edit_revision` 作判断，之后的人工修改不妨碍撤销；响应的 `revision` 是发行当前的 `edit_revision`。
+- 清除 `artwork` 或 `artwork_source`、`lyrics` 或 `lyrics_source` 中任一标记时，按 `target_type`、`target_id` 和非空的 `operation_id`
+  匹配对应主题，两条在同一事务中删除。对应标记不存在或指定标记的 `operation_id` 为空时，仅删除指定标记。
 - 封面的文件在提交之后清理：`operations.Outcome.AfterCommit`（`Run` 在提交成功后调用一次，重放与失败时不调用）里 `Store.Discard`。清理失败只记日志
   `curation.artwork.discard_failed`。
 - `Describe` 的 `changes`：

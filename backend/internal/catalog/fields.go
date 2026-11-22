@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 )
 
 // 修正的三种修改方式：set 与 null 是存下来的意图，clear 删除意图（显示下一层的值）。
@@ -72,19 +73,54 @@ func LoadCorrectionIntents(ctx context.Context, database Queryer, releaseID stri
 	return intents, rows.Err()
 }
 
-// loadCorrectedFieldNames 返回发行有修正的字段名，按 CorrectableFields 的顺序；没有修正时是空切片。
-func loadCorrectedFieldNames(ctx context.Context, database Queryer, releaseID string) ([]string, error) {
-	intents, err := LoadCorrectionIntents(ctx, database, releaseID)
+type releaseFieldNames struct {
+	corrected []string
+	automatic []string
+}
+
+// loadReleaseFieldNames 批量读取两个来源的字段名，按 CorrectableFields 排序，人工修正优先。
+func loadReleaseFieldNames(ctx context.Context, database Queryer, releaseIDs []string) (map[string]releaseFieldNames, error) {
+	rows, err := database.QueryContext(ctx, `SELECT release_id::text, field, true FROM release_corrections
+		WHERE release_id=ANY($1::text[]::uuid[])
+		UNION ALL
+		SELECT release_id::text, field, false FROM release_auto_values
+		WHERE release_id=ANY($1::text[]::uuid[])`, releaseIDs)
 	if err != nil {
+		return nil, fmt.Errorf("%w: load release field names: %w", ErrQuery, err)
+	}
+	defer rows.Close()
+	fieldsByRelease := make(map[string]map[string]bool, len(releaseIDs))
+	for rows.Next() {
+		var releaseID, field string
+		var corrected bool
+		if err := rows.Scan(&releaseID, &field, &corrected); err != nil {
+			return nil, err
+		}
+		fields := fieldsByRelease[releaseID]
+		if fields == nil {
+			fields = make(map[string]bool, len(CorrectableFields))
+			fieldsByRelease[releaseID] = fields
+		}
+		fields[field] = fields[field] || corrected
+	}
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	names := []string{}
-	for _, field := range CorrectableFields {
-		if _, corrected := intents[field.Name]; corrected {
-			names = append(names, field.Name)
+	namesByRelease := make(map[string]releaseFieldNames, len(releaseIDs))
+	for _, releaseID := range releaseIDs {
+		fields := fieldsByRelease[releaseID]
+		names := releaseFieldNames{corrected: []string{}}
+		for _, field := range CorrectableFields {
+			switch corrected, present := fields[field.Name]; {
+			case corrected:
+				names.corrected = append(names.corrected, field.Name)
+			case present:
+				names.automatic = append(names.automatic, field.Name)
+			}
 		}
+		namesByRelease[releaseID] = names
 	}
-	return names, nil
+	return namesByRelease, nil
 }
 
 func decodeIntent(name, mode string, text, listJSON sql.NullString, year sql.NullInt64) (CorrectionIntent, error) {

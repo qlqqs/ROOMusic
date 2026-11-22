@@ -27,6 +27,7 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 	batch := f.batch(t, "program")
 	op := f.apply(t, f.a, "fixture-catalog", batch, map[string]any{"title": "合成自动标题", "year": nil})
 	record("corrections/get-auto", "GET", "/api/v1/releases/"+f.a+"/corrections", nil)
+	record("releases/get-auto", "GET", "/api/v1/releases/"+f.a, nil)
 	record("operations/auto-reverted", "POST", revertPath(op), nil)
 	record("operations/auto-list", "GET", "/api/v1/operations?release_id="+f.a, nil)
 	// 单个标记生成列表，避免来自同一事务的多个标记按随机 UUID 排序。

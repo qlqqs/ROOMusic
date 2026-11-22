@@ -84,6 +84,7 @@ type ReleaseHeader struct {
 	CatalogNumber, Edition, Label, Barcode *string
 	Revision                               int64
 	CorrectedFields                        []string
+	AutoFields                             []string
 }
 
 // listReleasesLegacy 保留旧匹配与浏览顺序；非空 q 的调用方已开启同一读取快照。
@@ -128,10 +129,11 @@ func (s *Store) listReleasesLegacy(ctx context.Context, params ListParams) (Rele
 // LoadReleaseHeader 读取详情里摘要以外的 Release 字段。
 func (s *Store) LoadReleaseHeader(ctx context.Context, releaseID string) (ReleaseHeader, error) {
 	var candidateKind, catalogNumber, edition, label, barcode sql.NullString
-	var genresJSON string
+	var canonicalID, genresJSON string
 	genres := []string{}
 	var revision int64
 	err := s.database.QueryRowContext(ctx, `SELECT
+		id::text,
 		candidate_kind,
 		to_jsonb(genres)::text,
 		NULLIF(BTRIM(catalog_number),''),
@@ -139,14 +141,14 @@ func (s *Store) LoadReleaseHeader(ctx context.Context, releaseID string) (Releas
 		NULLIF(BTRIM(label),''),
 		NULLIF(BTRIM(barcode),''),
 		edit_revision
-		FROM release_effective WHERE id=$1::uuid`, releaseID).Scan(&candidateKind, &genresJSON, &catalogNumber, &edition, &label, &barcode, &revision)
+		FROM release_effective WHERE id=$1::uuid`, releaseID).Scan(&canonicalID, &candidateKind, &genresJSON, &catalogNumber, &edition, &label, &barcode, &revision)
 	if err != nil {
 		return ReleaseHeader{}, err
 	}
 	if err := json.Unmarshal([]byte(genresJSON), &genres); err != nil {
 		return ReleaseHeader{}, err
 	}
-	corrected, err := loadCorrectedFieldNames(ctx, s.database, releaseID)
+	fields, err := loadReleaseFieldNames(ctx, s.database, []string{canonicalID})
 	if err != nil {
 		return ReleaseHeader{}, err
 	}
@@ -158,7 +160,8 @@ func (s *Store) LoadReleaseHeader(ctx context.Context, releaseID string) (Releas
 		Label:           releasesql.StringPointerFromNull(label),
 		Barcode:         releasesql.StringPointerFromNull(barcode),
 		Revision:        revision,
-		CorrectedFields: corrected,
+		CorrectedFields: fields[canonicalID].corrected,
+		AutoFields:      fields[canonicalID].automatic,
 	}, nil
 }
 

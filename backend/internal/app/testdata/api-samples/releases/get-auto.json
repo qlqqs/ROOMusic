@@ -1,0 +1,67 @@
+{
+  "body": {
+    "album_artist": null,
+    "album_artist_refs": [],
+    "artist": "Artist A",
+    "artist_refs": [],
+    "artwork": null,
+    "attention_count": 1,
+    "auto_fields": [
+      "title",
+      "year"
+    ],
+    "barcode": null,
+    "candidate_kind": "ordinary_directory",
+    "catalog_number": null,
+    "corrected_fields": [],
+    "credits": [],
+    "edition": null,
+    "evidence": [
+      {
+        "action": "uncertain_apply",
+        "confidence": "medium",
+        "field": "field_0",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      }
+    ],
+    "genres": [],
+    "id": "00000000-0000-4000-8000-000000000001",
+    "label": null,
+    "media": [
+      {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "position": 1,
+        "title": "Medium",
+        "tracks": [
+          {
+            "artist": "Artist A",
+            "artist_refs": [],
+            "bit_depth": null,
+            "bitrate": null,
+            "channels": null,
+            "codec": null,
+            "credits": [],
+            "cue": null,
+            "duration_seconds": null,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "position": 1,
+            "sample_rate": null,
+            "source": "0.flac",
+            "source_kind": "physical",
+            "title": "Album A track 1",
+            "work": null
+          }
+        ]
+      }
+    ],
+    "media_type": null,
+    "medium_count": 1,
+    "revision": 1,
+    "source_type": null,
+    "title": "合成自动标题",
+    "track_count": 1,
+    "year": null
+  },
+  "status": 200
+}
