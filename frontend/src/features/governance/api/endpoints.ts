@@ -111,6 +111,10 @@ export type OperationListParams = {
   groupId?: string | undefined;
   /** 只看这位艺人的记录（M5 ⑤：它作为目标、被并入或被恢复的都算）；与上面两项同时给出时取并集。 */
   artistId?: string | undefined;
+  /** 自动整理的筛选（M7 E1）：与上面的目标筛选之间是“并且”；provider 隐含 source=curation。 */
+  source?: "curation" | undefined;
+  provider?: string | undefined;
+  batchId?: string | undefined;
   signal?: AbortSignal | undefined;
 };
 
@@ -120,6 +124,9 @@ export function fetchOperations(params: OperationListParams): Promise<ApiRespons
   if (params.releaseId !== undefined) query.set("release_id", params.releaseId);
   if (params.groupId !== undefined) query.set("group_id", params.groupId);
   if (params.artistId !== undefined) query.set("artist_id", params.artistId);
+  if (params.source !== undefined) query.set("source", params.source);
+  if (params.provider !== undefined) query.set("provider", params.provider);
+  if (params.batchId !== undefined) query.set("batch_id", params.batchId);
   return apiRequest({ method: "GET", path: `/api/v1/operations?${query}`, signal: params.signal }, decodeOperationPage);
 }
 

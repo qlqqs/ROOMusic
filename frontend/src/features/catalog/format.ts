@@ -74,6 +74,23 @@ export function isFieldCorrected(correctedFields: readonly string[], field: stri
   return correctedFields.includes(field) || (field === "artist" && correctedFields.includes("album_artist"));
 }
 
+/** 一个版本的字段来源标记：人工修正过的字段名与显示的值来自自动整理的字段名（后者没有时为 undefined）。 */
+export type FieldMarks = { corrected: readonly string[]; auto: readonly string[] | undefined };
+
+/** 从版本详情或对比里取字段来源标记。 */
+export function fieldMarksOf(release: { corrected_fields: readonly string[]; auto_fields?: readonly string[] | undefined }): FieldMarks {
+  return { corrected: release.corrected_fields, auto: release.auto_fields };
+}
+
+/**
+ * 字段显示的值是否来自自动整理（M7 E1）：autoFields 是接口给的字段名（没有人工修正、有自动值）；人工修正优先，所以同一字段有人工修正时不算。
+ * 专辑艺人的自动值同时覆盖展示的“艺人”，与 isFieldCorrected 的规则相同。
+ */
+export function isFieldAutoFilled(autoFields: readonly string[] | undefined, correctedFields: readonly string[], field: string): boolean {
+  if (autoFields === undefined || isFieldCorrected(correctedFields, field)) return false;
+  return autoFields.includes(field) || (field === "artist" && autoFields.includes("album_artist"));
+}
+
 /** 专辑的流派：“国语流行乐 · 台语流行乐”；没有流派时是空字符串。 */
 export function formatGenres(genres: readonly string[]): string {
   return genres.join(" · ");

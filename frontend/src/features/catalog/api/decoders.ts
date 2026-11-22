@@ -131,6 +131,8 @@ const comparedReleaseDecoder = d.object({
   formats: d.array(audioFormatDecoder, { max: MAX_COMPARED_FORMATS }),
   // 字段名按字符串解码（与发行详情一致）：后端新增可修正字段不会让对比失败。
   corrected_fields: d.array(d.string({ min: 1, max: 64 }), { max: MAX_CORRECTED_FIELDS }),
+  // 显示的值来自自动整理的字段（没有人工修正、有自动值；M7 E1）；没有时后端省略这个键。
+  auto_fields: d.optional(d.array(d.string({ min: 1, max: 64 }), { max: MAX_CORRECTED_FIELDS })),
 });
 
 const releaseComparisonDecoder = d.object({
@@ -247,6 +249,8 @@ const releaseDetailDecoder = d.object({
   // 后端新增可修正字段不会让页面解码失败，显示时由 labels 给已知值中文标签。
   revision: d.integer({ min: 1 }),
   corrected_fields: d.array(d.string({ min: 1, max: 64 }), { max: MAX_CORRECTED_FIELDS }),
+  // 显示的值来自自动整理的字段：没有人工修正、有自动值（包括自动设空）；没有时后端省略这个键（M7 E1）。
+  auto_fields: d.optional(d.array(d.string({ min: 1, max: 64 }), { max: MAX_CORRECTED_FIELDS })),
 });
 
 // 管理员证据里的来源引用必须是有界的安全相对路径：绝对路径、盘符、`file://`、反斜杠与上级目录一律拒绝。

@@ -53,3 +53,11 @@
   margin-inline-start: calc(-1 * var(--space-2));
   white-space: nowrap;
 }
+
+/* 自动整理的依据：外部来的不可信文本，次要色小字，任意处换行。 */
+.basis {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  overflow-wrap: anywhere;
+}

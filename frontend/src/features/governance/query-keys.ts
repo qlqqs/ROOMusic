@@ -9,7 +9,10 @@ export const governanceKeys = {
   /** 操作记录的全部页：撤销与修改后前缀失效。 */
   operations: (generation: number) => viewerQueryKey(generation, "governance", "operations"),
   /** 操作记录的一页：发行与专辑筛选、页码与页大小都在键里。 */
-  operationPage: (generation: number, filter: { releaseId: string | null; groupId: string | null; artistId: string | null; page: number; pageSize: number }) =>
+  operationPage: (
+    generation: number,
+    filter: { releaseId: string | null; groupId: string | null; artistId: string | null; source?: string | null; provider?: string | null; batchId?: string | null; page: number; pageSize: number },
+  ) =>
     viewerQueryKey(generation, "governance", "operations", filter),
   /** 问题列表的全部页：核对与修改后前缀失效。 */
   issues: (generation: number) => viewerQueryKey(generation, "governance", "issues"),

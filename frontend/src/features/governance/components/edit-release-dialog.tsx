@@ -1,4 +1,5 @@
-import { PencilLine, TriangleAlert } from "lucide-react";
+import { PencilLine, Sparkles, TriangleAlert } from "lucide-react";
+import { sourceName } from "../change-summary";
 import { useId, useMemo, useRef, useState, type RefObject } from "react";
 import { failureOf, isHttpFailure } from "../../../shared/api";
 import { Button, FailureNotice, ModalDialog, Notice, Skeleton, StatusTag, TextField } from "../../../shared/ui";
@@ -28,13 +29,18 @@ type FieldEditorProps = {
 
 const modeLabels: Readonly<Record<FieldMode, string>> = { scan: "使用扫描值", custom: "自定义", empty: "留空" };
 
-/** 一个字段：扫描值与当前显示、三选一与自定义输入。扫描结果不确定的字段多一个“确认扫描值”。 */
+/**
+ * 一个字段：扫描值与当前显示、三选一与自定义输入。扫描结果不确定的字段多一个“确认扫描值”。
+ * 有自动整理补上的值时（M7 E1）：不用人工修正的那一项显示的是自动补全的值，所以那一项叫“使用自动补全的值”，并写出当前显示的值与来源；
+ * 这时不出现“确认扫描值”（确认会写一条人工修正，盖掉自动补全的值）。没有自动值时与之前完全相同。
+ */
 function FieldEditor({ field, draft, error, disabled, onChange }: FieldEditorProps) {
   const name = useId();
   const label = correctionFieldLabels[field.field];
   const modes: FieldMode[] = canBeEmpty(field.field) ? ["scan", "custom", "empty"] : ["scan", "custom"];
   // 已经有修正时不需要“确认”：扫描结论已经被人工结果取代。
-  const canConfirm = field.uncertain && field.correction === null && draft.mode === "scan";
+  const canConfirm = field.uncertain && field.correction === null && field.auto === null && draft.mode === "scan";
+  const modeLabel = (mode: FieldMode) => (mode === "scan" && field.auto !== null ? "使用自动补全的值" : modeLabels[mode]);
   const select = (mode: FieldMode) => onChange({ mode, text: draft.text, list: draft.list });
 
   return (
@@ -57,7 +63,17 @@ function FieldEditor({ field, draft, error, disabled, onChange }: FieldEditorPro
             </StatusTag>
           ) : null}
         </p>
-        {field.correction === null ? null : (
+        {field.correction === null ? (
+          field.auto === null ? null : (
+            <p className={styles.fact}>
+              <span className={styles.factLabel}>当前显示</span>
+              <span className={styles.factValue}>{displayValue(field.effective_value)}</span>
+              <StatusTag tone="neutral" icon={<Sparkles size={12} />}>
+                自动补全 · {sourceName(field.auto.provider)}
+              </StatusTag>
+            </p>
+          )
+        ) : (
           <p className={styles.fact}>
             <span className={styles.factLabel}>当前显示</span>
             <span className={styles.factValue}>{displayValue(field.effective_value)}</span>
@@ -68,7 +84,7 @@ function FieldEditor({ field, draft, error, disabled, onChange }: FieldEditorPro
         {modes.map((mode) => (
           <label key={mode} className={styles.mode}>
             <input type="radio" name={name} checked={draft.mode === mode} onChange={() => select(mode)} />
-            {modeLabels[mode]}
+            {modeLabel(mode)}
           </label>
         ))}
       </div>

@@ -7,11 +7,11 @@ import type { ReleaseDetailDTO, ReleaseSummaryDTO } from "../api/decoders";
 import type { AlbumSearch } from "../album-search";
 import { albumArtistRefsOf } from "../api/track-summary";
 import { formatSpokenDuration } from "../../../shared/lib/duration";
-import { albumArtistOf, formatGenres, isFieldCorrected, totalDuration } from "../format";
+import { albumArtistOf, fieldMarksOf, formatGenres, totalDuration } from "../format";
 import styles from "./album-header.module.css";
 import { ArtistNames } from "./artist-names";
 import { Cover } from "./cover";
-import { ManualCorrectionTag } from "./manual-correction-tag";
+import { FieldMarkTag, hasFieldMark } from "./field-mark-tag";
 import { sharedTrackCredits, type TrackCreditGroup } from "../track-credits";
 
 type AlbumHeaderProps = {
@@ -84,7 +84,7 @@ function SharedCredits({ groups }: { groups: readonly TrackCreditGroup[] }) {
 const noFilters: AlbumSearch = {};
 
 export function AlbumHeader({ release, detail, list = noFilters, compactTitle = false, playing = false, actions }: AlbumHeaderProps) {
-  const corrected = detail?.corrected_fields ?? [];
+  const marks = detail === undefined ? { corrected: [], auto: undefined } : fieldMarksOf(detail);
   const artist = albumArtistOf(release);
   const media = detail?.media;
   const shared = useMemo(() => (media === undefined ? [] : sharedTrackCredits(media).groups), [media]);
@@ -126,9 +126,9 @@ export function AlbumHeader({ release, detail, list = noFilters, compactTitle = 
                 <li key={fact.label}>
                   <VisuallyHidden>{fact.label}：</VisuallyHidden>
                   {fact.value}
-                  {fact.field !== undefined && isFieldCorrected(corrected, fact.field) ? (
+                  {fact.field !== undefined && hasFieldMark(marks, fact.field) ? (
                     <span className={styles.factTag}>
-                      <ManualCorrectionTag />
+                      <FieldMarkTag marks={marks} field={fact.field} />
                     </span>
                   ) : null}
                 </li>

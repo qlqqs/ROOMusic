@@ -6,6 +6,7 @@ import { installFakeApi, installFakeSession, installOverviewApi } from "../test/
 import { installCatalogApi } from "../test/fake-catalog";
 import { installGovernanceApi } from "../test/fake-governance";
 import { markUncertain, respondToCorrect } from "../test/governance-data";
+import { sampleBody } from "../test/api-samples";
 import { jsonResponse, type RecordedRequest } from "../test/http";
 import { albumAdminActions, albumMoreButton, chooseAlbumAction } from "../test/album-actions";
 import { renderApp } from "../test/render-app";
@@ -42,6 +43,25 @@ describe("编辑发行信息：入口与读取", () => {
     await screen.findByText("Track 1-01");
     expect(await albumAdminActions(userEvent.setup())).toEqual([]);
     expect(api.requestsTo("GET", /\/corrections$/)).toHaveLength(0);
+  });
+
+  it("有自动补全的值时：写出当前显示的值与来源，那一项叫“使用自动补全的值”，不出现“确认扫描值”；其他字段照旧（M7 E1）", async () => {
+    const { api } = setup();
+    // 修正状态取自后端样本（标题有自动值，年份被自动设空），只改成这个版本的 ID。
+    const body = sampleBody("corrections/get-auto") as { release_id: string; fields: { field: string; uncertain: boolean }[] };
+    api.on("GET", correctionsPath, () => jsonResponse(200, { ...body, release_id: releaseId, fields: body.fields.map((item) => ({ ...item, uncertain: item.field === "title" })) }));
+    const user = userEvent.setup();
+    renderApp({ path: `/albums/${groupId}` });
+    await screen.findByRole("heading", { level: 1, name: "Sample Symphonies" });
+    const dialog = await openEditor(user);
+    const title = field(dialog, "标题");
+    await within(dialog).findByRole("group", { name: prefixed("标题") });
+    expect(title.getByText("合成自动标题")).toBeTruthy();
+    expect(title.getByText(/自动补全 · fixture-catalog/)).toBeTruthy();
+    expect(title.getByRole("radio", { name: "使用自动补全的值" })).toBeTruthy();
+    expect(title.queryByRole("button", { name: /确认扫描值/ })).toBeNull();
+    expect(field(dialog, "厂牌").getByRole("radio", { name: "使用扫描值" })).toBeTruthy();
+    expect(field(dialog, "厂牌").queryByText(/自动补全/)).toBeNull();
   });
 
   it("管理员打开对话框才读取修正状态：八个字段、扫描值、不确定标记与“确认扫描值”", async () => {
@@ -389,5 +409,23 @@ describe("撤销与人工修正的标记", () => {
     // 普通成员看不到谁改的，也没有任何编辑入口。
     expect(await albumAdminActions(user)).toEqual([]);
     expect(screen.queryByText("curator")).toBeNull();
+  });
+
+  it("显示的值来自自动整理的字段标出“自动补全”（M7 E1）；同一字段有人工修正时仍是“人工修正”；没有自动补全时不出现", async () => {
+    const { catalog, governance } = setup({ role: "user" });
+    respondToCorrect(governance, releaseId, "00000000-0000-4000-8000-0000000000c4", { expected_revision: 1, changes: { label: { mode: "set", value: "Corrected Label" } } });
+    const detail = catalog.releases.get(releaseId);
+    if (detail === undefined) throw new Error("没有这个版本");
+    catalog.releases.set(releaseId, { ...detail, year: 2001, barcode: "4988000000000", auto_fields: ["year", "barcode"] });
+    const user = userEvent.setup();
+    renderApp({ path: `/albums/${groupId}` });
+    await screen.findByText("Track 1-01");
+    const facts = within(screen.getByRole("region", { name: "发行信息" }));
+    expect(facts.getByText("厂牌").nextElementSibling?.textContent).toContain("人工修正");
+    expect(facts.getByText("厂牌").nextElementSibling?.textContent).not.toContain("自动补全");
+    expect(facts.getByText("条码").nextElementSibling?.textContent).toContain("自动补全");
+    expect(screen.getByRole("list", { name: "概况" }).textContent).toContain("自动补全");
+    await user.click(screen.getByText("来源与证据"));
+    expect(screen.getByText(/标有“自动补全”的字段/)).toBeTruthy();
   });
 });

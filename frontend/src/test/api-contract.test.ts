@@ -1,3 +1,4 @@
+import { decodeCurationBatch, decodeCurationBatchPage, decodeCurationProgress, decodeCurationSettings, decodeCurationSource, decodeCurationSources, decodeScopeRevert, decodeSuppressionPage } from "../features/curation/api/decoders";
 import {
   decodeAllowlist,
   decodeAllowlistEntry,
@@ -505,6 +506,7 @@ const successContracts: Record<string, Contract> = {
   "releases/get-dsf": { status: 200, decode: decodeReleaseDetail },
   "releases/get-dff": { status: 200, decode: decodeReleaseDetail },
   "releases/get-corrected": { status: 200, decode: decodeReleaseDetail },
+  "releases/get-auto": { status: 200, decode: decodeReleaseDetail },
   "releases/evidence": { status: 200, decode: decodeReleaseEvidence },
   "corrections/get": { status: 200, decode: decodeCorrectionState },
   "corrections/get-corrected": { status: 200, decode: decodeCorrectionState },
@@ -517,6 +519,17 @@ const successContracts: Record<string, Contract> = {
   "operations/external-list": { status: 200, decode: decodeOperationPage },
   "operations/external-reverted": { status: 200, decode: decodeRevertResult },
   "operations/link-list": { status: 200, decode: decodeOperationPage },
+  // 自动整理的管理员接口（M7 A、B1、C；界面 E1）。
+  "curation/settings-disabled": { status: 200, decode: decodeCurationSettings },
+  "curation/settings-enabled": { status: 200, decode: decodeCurationSettings },
+  "curation/settings-paused": { status: 200, decode: decodeCurationSettings },
+  "curation/sources": { status: 200, decode: decodeCurationSources },
+  "curation/source-updated": { status: 200, decode: decodeCurationSource },
+  "curation/progress": { status: 200, decode: decodeCurationProgress },
+  "curation/batches": { status: 200, decode: decodeCurationBatchPage },
+  "curation/batch": { status: 200, decode: decodeCurationBatch },
+  "curation/scope-reverted": { status: 200, decode: decodeScopeRevert },
+  "curation/suppressions": { status: 200, decode: decodeSuppressionPage },
   "operations/link-reverted": { status: 200, decode: decodeRevertResult },
   "group-changes/joined": { status: 200, decode: decodeGroupChangeResult },
   "group-changes/detached": { status: 200, decode: decodeGroupChangeResult },
@@ -834,21 +847,8 @@ const mediaResponseContracts: Record<string, { reason: string }> = {
   "playback-zones/responses/stream-headers": { reason: "渲染流响应头由媒体元素消费，不是 JSON 响应体" },
 };
 
-// 后端已有接口、前端还没有消费的样本。
-// 自动整理的开关、批次、范围撤销与不再提出（M7 A）、各外部源的开关（M7 B1）以及暂停与进度（M7 C）：后端接口已有，界面在子任务 E1 才做；
-// 那时把它们移到 successContracts 并配上解码器。
-const unconsumedContracts: readonly string[] = [
-  "curation/batch",
-  "curation/batches",
-  "curation/progress",
-  "curation/scope-reverted",
-  "curation/settings-disabled",
-  "curation/settings-enabled",
-  "curation/settings-paused",
-  "curation/source-updated",
-  "curation/sources",
-  "curation/suppressions",
-];
+// 后端已有接口、前端还没有消费的样本（自动整理的样本在 M7 E1 起都由界面消费）。
+const unconsumedContracts: readonly string[] = [];
 
 const eventContracts: Record<string, { event: string; preservesWireShape: boolean }> = {
   "playback-zones/events/device-removed": { event: "device_removed", preservesWireShape: false },

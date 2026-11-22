@@ -93,6 +93,9 @@ function ChangeCell({ item }: { item: OperationItemDTO }) {
           <li key={index}>{line}</li>
         ))}
       </ul>
+      {item.origin?.source === "curation" && item.origin.basis !== undefined && item.origin.basis !== null && item.origin.basis !== "" ? (
+        <p className={styles.basis}>依据：{item.origin.basis}</p>
+      ) : null}
     </div>
   );
 }

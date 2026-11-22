@@ -49,7 +49,8 @@ describe("词表标签", () => {
   });
 
   it("后端样本里出现过的取值都有中文名（样本之外新增的取值会原样显示）", () => {
-    const names = listApiSampleNames().filter((name) => name.startsWith("releases/get") || name === "releases/evidence");
+    // releases/get-auto 录在自动整理的夹具里，它的证据是合成的占位字段名，不是扫描会产生的取值。
+    const names = listApiSampleNames().filter((name) => (name.startsWith("releases/get") && name !== "releases/get-auto") || name === "releases/evidence");
     expect(names.length).toBeGreaterThan(0);
     const unknown: string[] = [];
     const check = (label: (value: string) => string, value: string, kind: string) => {
