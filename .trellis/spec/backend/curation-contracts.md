@@ -369,8 +369,8 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 ## 15. 程序层：后台匹配与补全（子任务 C）
 
 子任务 C 加了自动整理的第一个生产调用方：后台循环 `backend/internal/curation/program`。它按缺口把发行与 MusicBrainz 对上，有把握的直接建立外部对应、
-补空缺字段、取封面与歌词、在强证据下归组；拿不准的形成待定项留给模型层（子任务 D）。判定规则的完整表格在任务设计
-`.trellis/tasks/archive/2026-11/11-22-auto-curation-c-program/design.md` 第三、四节；本节记合同与不变量。
+补空缺字段、取封面与歌词、在强证据下归组；拿不准的形成待定项留给模型层（子任务 D）。本节记合同、判定规则与不变量；
+推导过程与取舍在本机归档的任务设计 `11-22-auto-curation-c-program/design.md`。
 
 ### 15.1 数据模型（迁移 0062）
 
@@ -388,6 +388,28 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 - 依据顺序：标签 ID → 条码（含 CUE 的 MCN）→ 厂牌编号 → ISRC → 光盘目录（只用 CUE 整轨）→ 搜索；**命中即定**，命中的一步拿不准就不往后走。搜索与模糊目录从不判定。
 - **把握足够** = 核对后恰好剩一个候选 + 这一步要求的佐证 + 没有任何相反证据（冲突代码表见设计 3.3）。列表可能被截断（25 条）、候选多于 3 个、曲号重复都直接拿不准。
 - 已经有外部对应的发行判定为别的外部发行时是 `existing_link`，拿不准；程序从不替换已有的对应。
+
+专辑方式的依据（每一步至多按 ID 读取 3 个完整发行再核对；曲目数只在读取之后核对）：
+
+| 步 | `method` | 候选 | 这一步要求的佐证 |
+| --- | --- | --- | --- |
+| 1 | `tag_id` | 在库曲目的 `mb_release` 唯一（多于一个即 `mixed_release_tags`） | 位置对得上（曲号不是推断时允许本地是子集），并且 `count_equal` 或 `durations_ok` |
+| 2 | `barcode` | `ReleasesByBarcode`（含 MCN） | `count_equal`，并且 `durations_ok`、`title_match`、`artist_match` 至少一项 |
+| 3 | `catalog_number` | `ReleasesByCatalog` | `count_equal`，并且 `label_match` 或 `durations_ok` |
+| 4 | `isrc` | 至多 4 首的 `RecordingsByISRC` 结果里发行集合的交集 | `count_equal`，并且至少一对 ISRC 相符 |
+| 5 | `disc_id` | CUE 整轨逐碟的精确 disc ID 交集（任一碟模糊即 `disc_fuzzy`） | `count_equal`，并且 `title_match` 或 `artist_match` |
+| 6 | `search` | `SearchReleases` | 从不判定（`search_only`） |
+
+`durations_ok` = 可比较的对数 ≥ ⌈配对数/2⌉ 且全部在容差内。本地有推断的曲号时，每一对都必须可比较且在容差内（否则 `inferred_positions`）；(碟号、曲号)重复即 `position_conflict`。
+其他直接拿不准的：`too_many`（候选多于 3 个）、`list_truncated`（列表 25 条或录音的发行数 25）、`isrc_spread`（交集为空）、`ambiguous`（多个候选都通过）。
+
+相反证据（任何一条就拿不准）：`duration_mismatch`、`barcode_mismatch`、`catalog_mismatch`、`title_artist_mismatch`（第 2–4 步，标题与艺人都对不上）、
+`release_tag_mismatch`、`group_tag_mismatch`、`artist_tag_mismatch`、`disc_tag_mismatch`、`recording_tag_mismatch`、`track_tag_mismatch`、`isrc_mismatch`、
+`media_count_mismatch`、`media_format_mismatch`（本地是 CD 而外部没有 CD 介质）、`pseudo_release`、`suppressed`、`existing_link`。
+
+单曲方式：`tag_id`（`mb_recording` 唯一，外部时长已知且在容差内）→ `isrc`（按时长筛选后恰好一个且标题相等）→ `search`（从不判定）。
+信息不足（标题与艺人都是占位、没有任何标识）记 `no_match` + `insufficient_evidence`，不查询、不建待定项。
+
 - 零散单曲（`candidate_kind='loose_unknown'`）只对录音，不补发行字段、不取封面。
 - 时长容差 max(3 秒, 外部时长的 1%)；松比较是 `textnorm.Loose(textnorm.Text(x))`，空键不相等。
 
