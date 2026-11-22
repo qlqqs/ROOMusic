@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/11-22-auto-curation-c-program/research/program-curation-current.md", "reason": "现状锚点，用于核对实现是否沿用已有入口"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "自动整理合同：写入口、撤销、不再提出、错误码与断言点"}
+{"file": ".trellis/spec/backend/sources-contracts.md", "reason": "能力接口与哨兵错误的含义（哪些算没匹配上、哪些是稍后再试）"}
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "受治理操作与撤销的通用规则"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移与回退夹具的规则"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试与变异检查的要求"}
