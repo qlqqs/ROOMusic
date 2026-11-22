@@ -29,7 +29,7 @@
 
 #### 版本号与升版本规则
 
-- `parser.CommonVersion=3`：⑦ 署名标签补齐是 ④ 合入 `94623b5` 后首次共用解析规则变更，从 1 升到 2；2026-11-15 内嵌封面解析（FLAC PICTURE、`METADATA_BLOCK_PICTURE`、WAV `id3 `、正面封面优先）覆盖多数格式，升到 3，使已有缓存重新解析；`formatVersions` 的 `.flac/.mp3/.ogg/.opus/.wav/.m4a/.ape/.wv/.aif/.aiff` 均保持 1。`CacheVersion(extension)` 返回如 `c3.f1`，未知扩展名返回空串。`artistgraph.Version=4`、`searchindex.ProjectionVersion=2` 不变，不参与解析缓存命中判定。
+- `parser.CommonVersion=4`：⑦ 署名标签补齐是 ④ 合入 `94623b5` 后首次共用解析规则变更，从 1 升到 2；2026-11-15 内嵌封面解析（FLAC PICTURE、`METADATA_BLOCK_PICTURE`、WAV `id3 `、正面封面优先）覆盖多数格式，升到 3；2026-11-22 扫描观察新增外部标识并扩展共用标签读取规则，升到 4，使已有缓存重新解析；`formatVersions` 的 `.flac/.mp3/.ogg/.opus/.wav/.m4a/.ape/.wv/.aif/.aiff` 均保持 1。`CacheVersion(extension)` 返回如 `c4.f1`，未知扩展名返回空串。`artistgraph.Version=4`、`searchindex.ProjectionVersion=2` 不变，不参与解析缓存命中判定。
 - `AudioObservation` 字段、类型、含义或共用解析规则（兜底、分隔、多值、歌词、日期以及 parser 内编号推断）改变，升 `CommonVersion`，使所有格式重新解析；只改某格式读取，升该格式版本；新增格式只加版本 1，不使其他格式失效。
 - `ingest.GroupingVersion=3`（2026-11-15 第 4 档收窄为纯 Box，从 2 升到 3；此前文件夹优先分档与内嵌去重键变化从 1 升到 2），覆盖同样观察所产生的 Release 图：organizer、folder_metadata、抓轨证据、字段决定、归组证据、署名/艺人、流派、作品、搜索投影字段与封面选择。只改这些规则而不改 parser，不升解析器版本，只升归组版本；升归组版本使所有候选重写而不使解析缓存失效。
 - ④ 合入之后的合入核对：O ②/③ 升 `GroupingVersion`（同批合入合计加一）；T ⑥ 升 `CommonVersion` 与 `GroupingVersion`；T ⑦/⑧ 按格式或共用解析改动升解析器版本，并升归组版本；T ⑬ 搜索独立回填不升；M ⑩ 新格式加 1，共用解析变化另升 `CommonVersion`，CUE 回退扩展名表无须另升；M ⑨ MP3 时长规则升 `.mp3` 版本，分析器自有版本另行维护。④ 之前已合入的规则不追补版本。本次⑦仅补 parser 入口与人员表文本形态，未改同样观察的写入规则，`GroupingVersion` 保持 1；候选元数据摘要已包含 Credits（含 detail/source）、艺人证据，成员签名也包含 `ParserVersion`，无需再升候选签名或分组版本。

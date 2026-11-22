@@ -38,6 +38,9 @@ func parseNumber(value string) int {
 }
 
 func setAudioTag(observation *AudioObservation, key, value string) error {
+	if kind := metadata.IdentifierKindForTag(key); kind != "" {
+		observation.Identifiers = metadata.AppendIdentifierValues(observation.Identifiers, kind, value)
+	}
 	if kind := personnelTagKind(key); kind == "PERSONNEL" || kind == "INVOLVEDPEOPLE" {
 		return addPersonnelCredits(observation, key, value)
 	}

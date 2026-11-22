@@ -1,4 +1,4 @@
-// Package egress 提供管家统一的出站 HTTP 客户端与连接地址策略。
+// Package egress 提供共用的出站 HTTP 客户端与连接地址策略。
 package egress
 
 import (

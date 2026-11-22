@@ -17,7 +17,7 @@ import (
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/transform"
 
-	"github.com/qlqq/roomusic/backend/internal/steward/egress"
+	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 

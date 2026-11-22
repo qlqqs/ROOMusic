@@ -2,19 +2,17 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/qlqq/roomusic/backend/internal/platform/buildinfo"
+	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
-	"github.com/qlqq/roomusic/backend/internal/steward/egress"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
-var musicBrainzBaseURL = "https://musicbrainz.org/ws/2"
 var coverArtBaseURL = "https://coverartarchive.org"
 
 var includesByEntity = map[string][]string{
@@ -25,79 +23,32 @@ var includesByEntity = map[string][]string{
 }
 
 func musicUserAgent() string {
-	version := buildinfo.Current().Version
-	if version == "" {
-		version = "dev"
-	}
-	return "ROOMusic/" + version + " ( " + buildinfo.ProjectURL + " )"
+	return sources.UserAgent()
 }
 
-func (s *Service) musicJSON(ctx context.Context, address string, target any) error {
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
-	client, err := s.newClient(egress.Options{Policy: egress.PublicOnly, Timeout: requestTimeout})
-	if err != nil {
+func musicError(err error) error {
+	switch {
+	case errors.Is(err, sources.ErrRateLimited):
+		return failure("rate_limited")
+	case errors.Is(err, sources.ErrNotFound), errors.Is(err, sources.ErrUnavailable), errors.Is(err, sources.ErrTryLater):
 		return failure("source_unavailable")
-	}
-	defer client.CloseIdleConnections()
-	req, err := request(ctx, http.MethodGet, address, nil, musicUserAgent())
-	if err != nil {
-		return failure("source_unavailable")
-	}
-	if err := s.musicLimiter.wait(ctx); err != nil {
+	default:
 		return err
 	}
-	response, err := client.Do(req)
-	if err != nil {
-		return failure("source_unavailable")
-	}
-	defer response.Body.Close()
-	// 503 表示服务端限流或暂不可用；不重试，不读取或回显错误正文。
-	if response.StatusCode != http.StatusOK || readJSON(response, target) != nil {
-		return failure("source_unavailable")
-	}
-	return nil
 }
 
 // SearchMusic 查找整理专辑所需的有限音乐实体字段。
 func (s *Service) SearchMusic(ctx context.Context, entity, query string, limit int) (results []Metadata, err error) {
 	started := time.Now()
-	defer func() { s.logRequest(ctx, "musicbrainz", musicBrainzBaseURL, started, len(results), err) }()
+	defer func() { s.logRequest(ctx, "musicbrainz", s.music.BaseURL(), started, len(results), err) }()
 	if _, ok := includesByEntity[entity]; !ok || strings.TrimSpace(query) == "" || limit < 1 || limit > 10 {
 		return nil, &tool.Error{Code: tool.CodeInvalidInput, Message: "音乐实体、查询词或结果数无效"}
 	}
-	params := url.Values{"query": {query}, "limit": {strconv.Itoa(limit)}, "fmt": {"json"}}
-	var response struct {
-		Artists       []mbEntity `json:"artists"`
-		Releases      []mbEntity `json:"releases"`
-		ReleaseGroups []mbEntity `json:"release-groups"`
-		Recordings    []mbEntity `json:"recordings"`
+	entities, err := s.music.Search(ctx, entity, query, limit)
+	if err != nil {
+		return nil, musicError(err)
 	}
-	if err := s.musicJSON(ctx, musicBrainzBaseURL+"/"+entity+"?"+params.Encode(), &response); err != nil {
-		return nil, err
-	}
-	var entities []mbEntity
-	switch entity {
-	case "artist":
-		entities = response.Artists
-	case "release":
-		entities = response.Releases
-	case "release-group":
-		entities = response.ReleaseGroups
-	case "recording":
-		entities = response.Recordings
-	}
-	if entities == nil {
-		return nil, failure("source_unavailable")
-	}
-	results = make([]Metadata, 0, min(limit, len(entities)))
-	for _, item := range entities {
-		if len(results) == limit {
-			break
-		}
-		results = append(results, projectMetadata(item))
-	}
-	return results, nil
+	return projectEntities(entities), nil
 }
 
 // MusicDetails 将 MusicBrainz 元数据与可选封面清单分开，不下载图片。
@@ -114,7 +65,7 @@ func (s *Service) GetMusic(ctx context.Context, entity, mbid string, include []s
 		if err == nil {
 			count = 1
 		}
-		s.logRequest(ctx, "musicbrainz", musicBrainzBaseURL, started, count, err)
+		s.logRequest(ctx, "musicbrainz", s.music.BaseURL(), started, count, err)
 	}()
 	allowed, ok := includesByEntity[entity]
 	if !ok || !uuid.Valid(mbid) {
@@ -144,16 +95,9 @@ func (s *Service) GetMusic(ctx context.Context, entity, mbid string, include []s
 		}
 		inc = append(inc, value)
 	}
-	params := url.Values{"fmt": {"json"}}
-	if len(inc) > 0 {
-		params.Set("inc", strings.Join(inc, "+"))
-	}
-	var response mbEntity
-	if err := s.musicJSON(ctx, musicBrainzBaseURL+"/"+entity+"/"+strings.ToLower(mbid)+"?"+params.Encode(), &response); err != nil {
-		return MusicDetails{}, err
-	}
-	if response.ID == "" {
-		return MusicDetails{}, failure("source_unavailable")
+	response, err := s.music.Lookup(ctx, entity, mbid, inc)
+	if err != nil {
+		return MusicDetails{}, musicError(err)
 	}
 	result = MusicDetails{Metadata: projectMetadata(response)}
 	if covers {

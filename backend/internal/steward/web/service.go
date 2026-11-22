@@ -12,7 +12,8 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
-	"github.com/qlqq/roomusic/backend/internal/steward/egress"
+	"github.com/qlqq/roomusic/backend/internal/platform/egress"
+	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
@@ -37,13 +38,18 @@ type Service struct {
 	endpointClient EndpointClient
 	logger         *slog.Logger
 	newClient      func(egress.Options) (*http.Client, error)
-	musicLimiter   *requestLimiter
+	music          *musicbrainz.Client
 }
 
 // New 装配依赖，不发出请求。
 func New(settings SettingsReader, secrets *secret.Store, endpointClient EndpointClient, logger *slog.Logger) *Service {
 	return &Service{settings: settings, secrets: secrets, endpointClient: endpointClient, logger: logger,
-		newClient: egress.NewClient, musicLimiter: globalMusicLimiter}
+		newClient: egress.NewClient, music: musicbrainz.New(musicbrainz.Options{Logger: logger})}
+}
+
+func (s *Service) WithMusic(client *musicbrainz.Client) *Service {
+	s.music = client
+	return s
 }
 
 func failure(code string) *tool.Error {

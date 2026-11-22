@@ -11,7 +11,10 @@ M7 子任务 A（2026-11）给后台自动整理准备好写入、记录与撤�
 `curation_settings`、包 `backend/internal/curation` 与它的管理员接口。共同写入流程、人工修正与操作记录列表的通用规则仍在
 [受治理操作合同](./governance-contracts.md)。
 
-决策依据：[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 4、5、10 节。
+子任务 B1 在这个包里加了三样（第 11、12 节）：各外部源的开关、后台取得外部源能力的闸门、外部对应的存储。
+外部源本身（怎样发请求）见[外部源合同](./sources-contracts.md)。
+
+决策依据：[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 4、5、8、10 节。
 
 ## 2. 数据模型（迁移 0058）
 
@@ -136,6 +139,8 @@ type Applied struct {
 | `POST /api/v1/admin/curation/reverts` | 需要 `Idempotency-Key`。`{scope:{kind:"batch", id} \| {kind:"provider", provider}, cursor}` → `{reverted, skipped:[{operation_id, code}], next_cursor}`；`next_cursor` 为 null 表示做完，客户端带着它和同一个键继续调用 |
 | `GET /api/v1/admin/curation/suppressions?release_id=&page=&page_size=` | 倒序分页；每项 `{id, target_type, target_id, subject, value_hash, value, operation_id, created_by, created_at}`；`value` 按不可信文本显示 |
 | `DELETE /api/v1/admin/curation/suppressions/{id}` | `204`；不存在 `404 not_found` |
+| `GET /api/v1/admin/curation/sources` | `{items:[{id, name, capabilities, enabled, active, inactive_reason}]}`，按注册顺序；见第 11 节 |
+| `PUT /api/v1/admin/curation/sources/{id}` | `{enabled}`，返回同上的一项；未知的源 `404 not_found` |
 | `GET /api/v1/operations` | 增加 `source`（只接受 `curation`）、`provider`、`batch_id`，与现有目标筛选之间是“并且”；有批次的记录带 `batch_id`（没有批次时省略）；`origin` 多出 `provider_kind`、`provider`、`basis` |
 | `GET /api/v1/releases/{id}/corrections` 与修正成功的响应 | 每个字段增加 `auto`：`{mode, value?, operation_id, provider_kind, provider}` 或 null；`effective_value` 是三层结果 |
 
@@ -165,13 +170,42 @@ type Applied struct {
 | 批次不存在或已经结束 | `409 batch_closed` |
 | 所有字段都相同或已标记为不再提出 | `409 nothing_to_apply` |
 | 自动值已被更晚的自动整理改写 | `409 revert_conflict` |
+| 经闸门调用外部源时这个源的开关关着（进程内的错误，没有对应的 HTTP 写入口） | `409 source_disabled` |
 | 来源、依据、范围或游标无效；缺少或非 UUID 的 `Idempotency-Key` | `400 invalid_input` |
 | 批次、标记或发行的 ID 不是 UUID | `400 invalid_id` |
 | 批次或标记不存在 | `404 not_found` |
 
 其余（未登录、跨源、非管理员、分页、数据库不可用）与[受治理操作合同](./governance-contracts.md)第 8 节相同。
 
-## 11. 必需测试与断言点
+## 11. 各源开关与闸门（子任务 B1）
+
+- **`curation_source_settings`**（迁移 0060）：`source`（主键，外部源的标识）、`enabled`、`updated_by`、`updated_at`。
+  没有行时取声明的 `DefaultEnabled`（MusicBrainz 为开）。源的清单来自 `app` 装配时注册的声明，不存库。
+- 接口返回的每一项：`enabled` 是这个源自己的开关；`active` 是“后台现在能不能用它”；`inactive_reason` 依次判断
+  `curation_disabled`（总开关关着）、`enabler_unavailable`（开启者不是启用状态的管理员）、`source_disabled`，都不是时为 null。
+- **闸门 `curation.Sources`**：后台代码只从它取能力（`ReleaseFinder`、`RecordingFinder`、`ArtistFinder`，参数是源的标识）。
+  取到的是包了一层的实现，每个方法先 `Check`，再用 `sources.WithBackground(ctx, permit)` 调用适配器，`permit` 就是对这个源的 `Check`。
+  所以核对发生在调用开始时、读缓存之前、每次出站之前（排队之后与每次重试之前）：调用排队或等待重试期间开关被关掉，之后不再出站。
+- `Check` 在一个事务里读设置（与 `Writer.Apply` 相同的 `loadSettings`，开启者资格由 `identity.IsEnabledAdmin` 判断）：
+  总开关关着或开启者失效返回 `curation_disabled`，源的开关关着返回 `source_disabled`；都不调用适配器，缓存里有结果也不返回。
+- **开关只管后台。** 管家对话里的两个 MusicBrainz 工具持有适配器本身，不经过闸门：对话里的查询是用户本人发起的请求，
+  未开启自动整理的实例行为不变（见[管家联网合同](./steward-web-contracts.md)的音乐资料一节）。
+- 本任务里 `Sources` 没有生产调用方，由测试里的调用验证；子任务 C 的匹配循环是第一个调用方。
+
+## 12. 外部对应的存储（子任务 B1）
+
+**`external_links`**（迁移 0060）：`id`、`source`、`object_type`（`release | release_group | track | artist`）、`object_id`、`external_id`、
+`method`、`confidence`（两者只约束形状 `^[a-z0-9_]{1,32}$`，取值表由子任务 C 的把握规则定义）、`operation_id`（可空，延迟外键）、`created_at`；
+唯一 `(source, object_type, object_id)`，反查索引 `(source, object_type, external_id)`。
+
+- 表里的每一行都是生效的对应；ADR 0006 所说的“状态”在这里是“行在不在”。一个本地对象在一个源里至多一个。
+- 对 MusicBrainz：发行 → release，专辑（本地的 release group）→ release group，曲目 → recording，艺人 → artist。
+- `object_id` 不设外键：非测试代码不删除这四类对象。艺人合并靠重定向，被并入的艺人身上的对应仍在——按外部 ID 反查艺人时要解析重定向。
+- 扫描、认领、人工修正的语句都不涉及这张表：重扫、认领、改名移动之后对应保持。
+- 事务内的函数：`PutLink`（写入或替换，返回被替换的行）、`RemoveLink`、`LinksOf`（按对象）、`ObjectsLinkedTo`（按外部 ID 反查）。
+  **它们不是受治理的写入口**：没有生产调用方，子任务 C 把建立对应做成 `operations.Run` 里的操作（记录、撤销、不再提出）时在执行器里调用。
+
+## 13. 必需测试与断言点
 
 集成测试在隔离的 PostgreSQL 上用合成数据运行；自动写入没有 HTTP 入口，测试直接调用 `curation.Writer.Apply`。
 
@@ -192,6 +226,17 @@ type Applied struct {
 | 筛选与候选查询走 `operations_provider_idx`、`operations_batch_idx`；候选查询没有排序与顺序扫描 | `TestPostgreSQLCurationFilterPlans` |
 | 迁移升级与回退往返 | `TestPostgreSQLMigrationRollbackRoundTrip/0058_auto_curation.sql` |
 | 接口样本：`corrections/get-auto`、`operations/auto-list`、`operations/auto-reverted`、`curation/*` | `TestPostgreSQLAPIResponseSamples` 与前端 `api-contract.test.ts` |
+
+子任务 B1 的断言点：
+
+| 断言点 | 用例 |
+| --- | --- |
+| 闸门：总开关关闭、源关闭、开启者失效时拒绝，零出站，缓存里有结果也不返回；管家工具照常可用 | `TestPostgreSQLCurationSourcesGate` |
+| 调用在排队或等待重试时关掉开关，之后不再出站 | `TestPostgreSQLCurationSourcesGateDuringWait` |
+| 源开关接口：默认开、管理员读写、成员 403、未知源 404、`active` 与 `inactive_reason` | `TestPostgreSQLCurationSourcesSettings` |
+| 外部对应：一对象一源一条、替换返回旧行、按对象读、按外部 ID 反查；移动、重扫与认领之后保持 | `TestPostgreSQLCurationSourcesLinks` |
+| 迁移升级与回退往返 | `TestPostgreSQLMigrationRollbackRoundTrip/0060_curation_sources.sql` |
+| 接口样本：`curation/sources`、`curation/source-updated` | `TestPostgreSQLAPIResponseSamples` 与前端 `api-contract.test.ts` |
 
 视图多了八个连接：目录的四个 EXPLAIN 用例与 `TestPostgreSQLCatalogHTTPPerformance` 是门禁，要设启用参数才会运行
 （`ROOMUSIC_CATALOG_EXPLAIN=1`、`ROOMUSIC_CATALOG_EXPLAIN_OUTPUT`、`ROOMUSIC_CATALOG_HTTP_PERF_OUTPUT`），不设时是跳过而不是通过。

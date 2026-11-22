@@ -70,3 +70,45 @@
 - 相邻作品名去首尾空白、小写相同且来源相同才可成组；标签乐章号都有值时须递增，相邻非空乐章名重复则断组，`promenade` 除外；无名不算同名。标题来源以 `SplitWorks.Group` 为准。只给至少两轨的组分配发行内从 1 递增的 Index；单轨标签仍保存作品供搜索。CUE 虚拟轨按 CUE TITLE 参与。重复规则按相邻语义，不采用参考伪码仅首曲更新 lastPart 的错误。
 - Catalog 取 `ParseCatalogs(Title)` 第一项的原文片段并裁首尾空白。六列 `work_title/work_catalog/work_index/movement_number/movement_title/work_source` 重扫整体替换，无作品全部 NULL；两个标题非空且≤4096字节，编号非空且≤256字节，序号正数，来源 `tag|title`。作品名与来源同空同有，无作品名不得有其他作品列；违反 CHECK 走既有候选写入失败路径。
 - down 先删 `work_title/work_catalog` 搜索值、恢复字段 CHECK，再删作品约束与六列。④尚未合入，不新增或提升解析/归组版本；⑥已提升的 `ProjectionVersion=2` 不再升，`textnorm.Version=1` 不变。读取形状见[REST合同](./catalog-rest-contracts.md)，搜索见[搜索合同](./search-contracts.md)，验证内容见[扫描验证](./library-scan-verification.md)。
+
+### 标签里的外部标识（M7 B1，迁移 0059）
+
+扫描把标签里可以拿去和外部数据源比对的标识读出来，逐轨保存在 `track_identifiers`；它们不参与归组，也不出现在现有接口里，
+只供自动整理读取。决策依据：[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 8 节。
+
+| 种类 `kind` | 归一化后的键名 | 值 |
+| --- | --- | --- |
+| `mb_release` | `musicbrainzalbumid` | MBID |
+| `mb_release_group` | `musicbrainzreleasegroupid` | MBID |
+| `mb_recording` | `musicbrainztrackid`、`musicbrainzrecordingid`；ID3 的 `UFID` 帧且 owner 为 `http://musicbrainz.org` | MBID |
+| `mb_track` | `musicbrainzreleasetrackid` | MBID |
+| `mb_artist` | `musicbrainzartistid` | MBID，多值 |
+| `mb_album_artist` | `musicbrainzalbumartistid` | MBID，多值 |
+| `mb_work` | `musicbrainzworkid` | MBID，多值 |
+| `mb_disc` | `musicbrainzdiscid` | disc ID |
+| `acoustid` | `acoustidid` | UUID，多值 |
+| `isrc` | `isrc`；ID3 的 `TSRC` 帧 | ISRC，多值 |
+
+- **键名归一化只用于这张表**（`metadata.IdentifierKindForTag`）：去掉所有非字母数字字符并转小写后比对，所以 `MUSICBRAINZ_ALBUMID`、
+  `MusicBrainz Album Id`、`Musicbrainz_Albumid` 等价。其余标签键的匹配规则不变。
+- **“Track Id” 是录音 ID**：这是 MusicBrainz 标签的历史命名；曲目 ID 用带 “Release Track” 的键。
+- 值的规则（`metadata.AppendIdentifierValues`）：MBID 与 AcoustID 在值里用 UUID 外形的正则提取全部匹配（兼容 NUL、`/`、`; ` 与重复出现），
+  转小写、丢弃全 0，不校验版本位；ISRC 按 NUL、`/`、`;`、`,` 与空白切分，去连字符转大写，必须是 `^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$`；
+  disc ID 去首尾空白后必须是 `^[A-Za-z0-9._-]{27}-$`。不合规则的值丢弃，不让文件解析失败。同一种类内去重并保持出现顺序，每条曲目每个种类至多 32 个。
+- 不保存 AcoustID 指纹（`ACOUSTID_FINGERPRINT`）。
+- 入口：
+  - Vorbis 与 APEv2：`setAudioTag` 在现有分派之前先收集标识；`ISRC` 键照旧写 `AudioObservation.ISRC`（后值覆盖前值），同时全部值进标识。
+  - ID3（MP3、WAV 内嵌 ID3、AIFF、DSF、DFF）：`UFID` 只认上述 owner；`TSRC` 的全部值进标识，`ISRC` 字段仍取第一个；
+    `TXXX` 的描述命中上表时只收集标识（`TXXX:ISRC` 也只进标识）。
+  - M4A：`com.apple.iTunes` 自由格式的名字命中上表时只收集标识（`----:ISRC` 同上）。
+  - WAV 的 RIFF INFO 没有这些标识的位置。
+- 同一次改动补上了 Picard、Mp3tag 写条码与厂牌编号的位置：ID3 的 `TXXX:BARCODE`、`TXXX:UPC`、`TXXX:EAN`、`TXXX:CATALOGNUMBER`、
+  `TXXX:CATALOG`、`TXXX:CATALOGNO`，M4A 的 `----:BARCODE`、`----:EAN`、`----:CATALOGNUMBER`、`----:CATALOG`、`----:CATALOGNO`
+  （`----:LABEL`、`----:UPC` 原来就有），都交给 `setAudioTag` 写发行的条码与厂牌编号。厂牌不变：ID3 仍只读 `TPUB`。
+- 链路：`AudioObservation.Identifiers` → `SourceObservation.Identifiers`（JSON `identifiers,omitempty`，随观察进入候选签名的元数据摘要；
+  没有标识的观察摘要不变）→ 落库时与 `track_observations` 相同，按 `track_id` 先删后插，`ordinal` 是同一种类内的出现次序（从 0 起）。
+- 多轨 CUE 的虚拟轨只带专辑级的种类（`mb_release`、`mb_release_group`、`mb_album_artist`、`mb_disc`）：父文件的录音、曲目、艺人、作品 ID、
+  ISRC 与 AcoustID 属于整轨。CUE 轨自己的 ISRC 仍在 `tracks.cue_isrc`。
+- 扫描反馈里“曲目有变化”的摘要不纳入标识。
+- 这次改动把 `parser.CommonVersion` 升到 4：升级后的第一次扫描重新解析全部文件的标签并重写全部候选，曲目与发行的 ID 不变
+  （见[增量扫描合同](./library-scan-incremental.md)）。

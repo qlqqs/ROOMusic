@@ -554,7 +554,7 @@ func cueTrackCanBeStaged(track parser.CueTrack) bool {
 }
 
 func buildPhysicalSourceObservation(observation parser.AudioObservation, relativePath string) ingest.SourceObservation {
-	return ingest.SourceObservation{RelativePath: relativePath, Directory: ingest.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genres: append([]string(nil), observation.Genres...), CatalogNumber: observation.Catalog, Work: observation.Work, MovementName: observation.MovementName, MovementNumber: observation.MovementNumber, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, Compilation: observation.Compilation, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, ArtworkRelativePath: relativePath, ParserVersion: parser.CacheVersion(filepath.Ext(relativePath)), Credits: append([]metadata.Credit(nil), observation.Credits...), ArtistTagEvidence: append([]metadata.ArtistTagEvidence(nil), observation.ArtistTagEvidence...), Lyrics: observation.Lyrics, LyricsSource: observation.LyricsSource, ContentFingerprint: observation.ContentFingerprint}
+	return ingest.SourceObservation{RelativePath: relativePath, Directory: ingest.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genres: append([]string(nil), observation.Genres...), Identifiers: observation.Identifiers, CatalogNumber: observation.Catalog, Work: observation.Work, MovementName: observation.MovementName, MovementNumber: observation.MovementNumber, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, Compilation: observation.Compilation, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, ArtworkRelativePath: relativePath, ParserVersion: parser.CacheVersion(filepath.Ext(relativePath)), Credits: append([]metadata.Credit(nil), observation.Credits...), ArtistTagEvidence: append([]metadata.ArtistTagEvidence(nil), observation.ArtistTagEvidence...), Lyrics: observation.Lyrics, LyricsSource: observation.LyricsSource, ContentFingerprint: observation.ContentFingerprint}
 }
 
 func buildCueVirtualObservation(parent parser.AudioObservation, document parser.CueDocument, cue parser.CueTrack, sheetRelativePath string) ingest.SourceObservation {
@@ -614,7 +614,15 @@ func buildCueVirtualObservation(parent parser.AudioObservation, document parser.
 	referencedIdentity := ingest.NormalizedPath(cue.ReferencedFile)
 	parentRelative := ingest.NormalizedPath(filepath.ToSlash(filepath.Join(filepath.Dir(sheetRelativePath), referencedIdentity)))
 	virtualPath := sheetRelativePath + "#track-" + strconv.Itoa(cue.Number) + "@" + parentRelative + "#index-" + strconv.Itoa(cue.IndexFrames)
+	var identifiers []metadata.Identifier
+	for _, id := range parent.Identifiers {
+		switch id.Kind {
+		case metadata.IdentifierMBRelease, metadata.IdentifierMBReleaseGroup, metadata.IdentifierMBAlbumArtist, metadata.IdentifierMBDisc:
+			identifiers = append(identifiers, id)
+		}
+	}
 	return ingest.SourceObservation{
+		Identifiers:           identifiers,
 		RelativePath:          virtualPath,
 		Directory:             ingest.DirectoryOf(sheetRelativePath),
 		Title:                 observation.Title,

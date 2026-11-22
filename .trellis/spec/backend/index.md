@@ -83,7 +83,8 @@ Before writing or reviewing backend code:
 | [受治理操作合同](./governance-contracts.md) | 阶段 M3：操作记录与共同写入流程 `operations.Run`、发行字段修正与有效值视图、人工归组、撤销、操作记录接口、错误码、测试与真实服务用例 |
 | [默认版本与版本对比合同](./default-version-contracts.md) | M4 第一项：迁移 0018、组的默认版本与版本号、生效与失效规则、设定接口与执行器、撤销与展示、版本对比接口、测试 |
 | [元数据问题与核对合同](./issue-review-contracts.md) | M4 第二项：迁移 0019、“需要关注”的三类拆分、依据与依据令牌、核对接口与执行器、撤销与展示、问题列表与版本的问题、测试 |
-| [自动整理合同](./curation-contracts.md) | M7 子任务 A：迁移 0058、自动层与三层有效值、`curation.Writer.Apply`、来源与批次、按写入者判断的撤销、按批与按来源撤销、不再提出、总开关、管理员接口与错误码 |
+| [自动整理合同](./curation-contracts.md) | M7 子任务 A：迁移 0058、自动层与三层有效值、`curation.Writer.Apply`、来源与批次、按写入者判断的撤销、按批与按来源撤销、不再提出、总开关、管理员接口与错误码；子任务 B1：各源开关、闸门、外部对应的存储 |
+| [外部源合同](./sources-contracts.md) | M7 子任务 B1：平台层出站客户端、声明与能力接口、对话与后台两种调用身份、限速、缓存、重试、MusicBrainz 适配器、发给外部的数据 |
 | [认领合同](./claim-contracts.md) | M4 第三项：迁移 0020、待认领的判定与推荐、预览与令牌、认领的执行器与撤销、读取接口、测试 |
 | [备份管理合同](./backup-management-contracts.md) | 删除与批量删除备份、保留规则（天数 / 份数上限、备份目录里的规则文件、未确认不删的保存语义）、测试 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |

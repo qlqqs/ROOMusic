@@ -38,6 +38,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
 	playbackapi "github.com/qlqq/roomusic/backend/internal/playback/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
+	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 	zonesapi "github.com/qlqq/roomusic/backend/internal/zones/httpapi"
@@ -143,6 +144,11 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
+	music := musicbrainz.New(musicbrainz.Options{DataDirectory: settings.DataDirectory, Logger: logger})
+	if lifecycle != nil {
+		music.StartCacheCleanup(lifecycle)
+	}
+	sourceGate := curation.NewSources(database, curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: music, Recordings: music, Artists: music})
 	curationWriter := curation.NewWriter(database)
 	operationKinds := []operations.Kind{governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}}
@@ -152,7 +158,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	catalogapi.NewArtistGovernance(database, guard, logger, artistResolutionAdapter{}).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
 	operationsapi.New(database, guard, logger, operationKinds...).Register(mux)
-	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), guard, logger).Register(mux)
+	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), sourceGate, guard, logger).Register(mux)
 	var analysisWorker *playback.AnalysisWorker
 	analysisDone := make(chan struct{})
 	if database != nil && assembly.analysis != nil {
@@ -165,7 +171,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		close(analysisDone)
 	}
 	progress := playback.NewAnalysisProgressProvider(database, analysis.Version, analysisWorker)
-	supervisor := registerSteward(lifecycle, mux, database, guard, settings.DataDirectory, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
+	supervisor := registerSteward(lifecycle, mux, database, guard, settings.DataDirectory, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{music: music, diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		AnalysisProgress: progress,
 	}).Register(mux)

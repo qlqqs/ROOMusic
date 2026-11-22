@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/11-22-auto-curation-b1-musicbrainz/research/musicbrainz-api-and-tags.md", "reason": "核对查询、限速、重试与标签键名是否符合外部事实"}
+{"file": ".trellis/spec/backend/steward-web-contracts.md", "reason": "核对管家工具的输出与错误码没有变化"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "核对闸门沿用总开关与开启者的判断"}
+{"file": ".trellis/spec/backend/library-scan-verification.md", "reason": "扫描改动要求的测试覆盖面"}
+{"file": ".trellis/spec/backend/library-scan-incremental.md", "reason": "版本升级后的增量扫描行为"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "接口样本、变异检查与验证记录的要求"}

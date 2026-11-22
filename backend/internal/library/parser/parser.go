@@ -33,6 +33,7 @@ type AudioObservation struct {
 	MovementNumber          int
 	Catalog                 string
 	ISRC                    string
+	Identifiers             []metadata.Identifier
 	SourceType              string
 	MediaType               string
 	Edition                 string

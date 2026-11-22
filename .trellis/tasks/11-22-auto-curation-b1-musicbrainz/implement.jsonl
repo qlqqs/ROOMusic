@@ -1,0 +1,10 @@
+{"file": ".trellis/tasks/11-22-auto-curation-b1-musicbrainz/research/musicbrainz-api-and-tags.md", "reason": "MusicBrainz 接口用法、限速与 503、光盘目录、各格式标签键名与格式校验"}
+{"file": ".trellis/tasks/11-22-auto-curation-b1-musicbrainz/research/scan-tag-identifiers.md", "reason": "解析器键入口、解析缓存与版本、落库链路、候选签名、依赖规则的现状"}
+{"file": "docs/architecture/adr/0006-auto-curation-and-sources.md", "reason": "外部源的形态、共用规则与发出的数据（第 8 节），开关与停止（第 10 节）"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "子任务 A 的总开关、开启者与 curation 包的现有合同"}
+{"file": ".trellis/spec/backend/steward-web-contracts.md", "reason": "管家音乐资料工具的现有合同：输出、限速、错误码、日志"}
+{"file": ".trellis/spec/backend/library-scan-tags.md", "reason": "各容器读哪些标签键"}
+{"file": ".trellis/spec/backend/library-scan-incremental.md", "reason": "解析器版本与归组版本的升级规则"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "包的归属与平台层的边界"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移与回退脚本的要求"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "接口样本与测试的要求"}

@@ -1,0 +1,15 @@
+{
+  "body": {
+    "active": false,
+    "capabilities": [
+      "release_lookup",
+      "recording_lookup",
+      "artist_lookup"
+    ],
+    "enabled": false,
+    "id": "musicbrainz",
+    "inactive_reason": "source_disabled",
+    "name": "MusicBrainz"
+  },
+  "status": 200
+}
