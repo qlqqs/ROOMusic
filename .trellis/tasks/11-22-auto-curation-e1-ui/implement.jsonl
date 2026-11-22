@@ -1,6 +1,0 @@
-{"file": ".trellis/tasks/11-22-auto-curation-e1-ui/research/frontend-current.md", "reason": "设置页、操作记录、接口层、详情字段、扫描信号、设计规范、通用组件与冒烟的现状与锚点"}
-{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "自动整理管理员接口的形状、错误码与样本（第 7、11、14、15 节）"}
-{"file": ".trellis/spec/frontend/interface-layout-guidelines.md", "reason": "设置页的分组卡片与行、主操作位置"}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "查询键与失效的约定"}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "测试层次与响应式、无障碍要求"}
-{"file": ".trellis/spec/frontend/governance-components.md", "reason": "操作记录与撤销组件的约定"}
