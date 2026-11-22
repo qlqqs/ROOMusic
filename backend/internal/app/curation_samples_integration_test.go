@@ -21,7 +21,9 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 		samples.record(name, r, 200)
 	}
 	record("curation/settings-disabled", "GET", curationBase+"/settings", nil)
+	record("curation/sources", "GET", curationBase+"/sources", nil)
 	record("curation/settings-enabled", "PUT", curationBase+"/settings", map[string]bool{"enabled": true})
+	record("curation/source-updated", "PUT", curationBase+"/sources/musicbrainz", map[string]bool{"enabled": false})
 	batch := f.batch(t, "program")
 	op := f.apply(t, f.a, "fixture-catalog", batch, map[string]any{"title": "合成自动标题", "year": nil})
 	record("corrections/get-auto", "GET", "/api/v1/releases/"+f.a+"/corrections", nil)

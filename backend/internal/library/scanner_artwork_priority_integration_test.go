@@ -284,8 +284,8 @@ func TestPostgreSQLArtworkPriority损坏封面逐档回退(t *testing.T) {
 	}
 }
 
-// artworkPriorityM4A 沿用解析器修复测试的 atom 布局，只保留音频样本入口与一个类型码为 0 的 covr。
-func artworkPriorityM4A(picture []byte) []byte {
+// artworkPriorityM4A 沿用解析器修复测试的 atom 布局，可写入类型码为 0 的 covr 与 iTunes 自由格式标签。
+func artworkPriorityM4A(picture []byte, freeformTags ...[2]string) []byte {
 	atom := func(kind string, payload []byte) []byte {
 		result := binary.BigEndian.AppendUint32(nil, uint32(8+len(payload)))
 		result = append(result, kind...)
@@ -300,8 +300,19 @@ func artworkPriorityM4A(picture []byte) []byte {
 	binary.BigEndian.PutUint32(mdhd[12:16], 44100)
 	binary.BigEndian.PutUint32(mdhd[16:20], 88200)
 	track := atom("trak", atom("mdia", append(atom("mdhd", mdhd), atom("minf", atom("stbl", stsd))...)))
-	covr := atom("covr", atom("data", append(make([]byte, 8), picture...)))
-	metadata := atom("udta", atom("meta", append(make([]byte, 4), atom("ilst", covr)...)))
+	var items []byte
+	if len(picture) > 0 {
+		items = atom("covr", atom("data", append(make([]byte, 8), picture...)))
+	}
+	for _, tag := range freeformTags {
+		mean := atom("mean", append(make([]byte, 4), "com.apple.iTunes"...))
+		name := atom("name", append(make([]byte, 4), tag[0]...))
+		dataHeader := make([]byte, 8)
+		binary.BigEndian.PutUint32(dataHeader, 1)
+		data := atom("data", append(dataHeader, tag[1]...))
+		items = append(items, atom("----", bytes.Join([][]byte{mean, name, data}, nil))...)
+	}
+	metadata := atom("udta", atom("meta", append(make([]byte, 4), atom("ilst", items)...)))
 	return bytes.Join([][]byte{
 		atom("ftyp", []byte("M4A \x00\x00\x00\x00")),
 		atom("moov", append(track, metadata...)), atom("mdat", []byte{1, 2, 3, 4}),

@@ -407,8 +407,8 @@ func TestPostgreSQLIncrementalParseCacheTagMtimeChangeOnlyReparsesChangedFile(t 
 	}
 }
 
-// writeIncrementalTestMP3 生成带可选 APIC 的 ID3v2.3 文件；seed 只改变音频帧，标签不影响内容身份。
-func writeIncrementalTestMP3(t *testing.T, root registeredRoot, relative string, seed byte, track int, artwork []byte) {
+// writeIncrementalTestMP3 生成带可选 APIC 与 TXXX 的 ID3v2.3 文件。seed 只改变音频帧。
+func writeIncrementalTestMP3(t *testing.T, root registeredRoot, relative string, seed byte, track int, artwork []byte, userTextTags ...[2]string) {
 	t.Helper()
 	var tags []byte
 	appendFrame := func(id string, payload []byte) {
@@ -422,6 +422,9 @@ func writeIncrementalTestMP3(t *testing.T, root registeredRoot, relative string,
 		{"TIT2", fmt.Sprintf("Track %d", track)}, {"TPE1", "Artist"}, {"TALB", "Album"}, {"TRCK", fmt.Sprint(track)},
 	} {
 		appendFrame(tag.id, append([]byte{3}, tag.value...))
+	}
+	for _, tag := range userTextTags {
+		appendFrame("TXXX", append([]byte{0}, tag[0]+"\x00"+tag[1]...))
 	}
 	if len(artwork) > 0 {
 		picture := append([]byte{0}, []byte("image/png")...)

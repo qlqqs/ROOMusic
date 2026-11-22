@@ -48,3 +48,9 @@ func TestCreditRoleCommonVersion(t *testing.T) {
 		t.Fatalf("署名读取规则变更后 CommonVersion = %d，期望至少为 2 以失效旧解析缓存", CommonVersion)
 	}
 }
+
+func TestIdentifiersCommonVersion(t *testing.T) {
+	if CommonVersion != 4 {
+		t.Fatalf("CommonVersion = %d，期望扫描标识版本 4", CommonVersion)
+	}
+}

@@ -50,67 +50,13 @@ func testParseCacheVersionUpgrade(t *testing.T, format bool) {
 	releases := releaseIDsByTitle(t, fixture, root.ID)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM library_parse_cache WHERE root_id=$1`, 2, root.ID)
 
-	var schema string
-	if err := fixture.database.QueryRow(`SELECT current_schema()`).Scan(&schema); err != nil {
-		t.Fatal(err)
-	}
-	scopedURL, err := postgrestest.ScopedURL(postgrestest.BaseURL(t), schema)
-	if err != nil {
-		t.Fatal(err)
-	}
-	packageDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := filepath.Join(packageDir, "..", "catalog", "ingest", "version.go")
+	source := filepath.Join("..", "catalog", "ingest", "version.go")
 	pattern := regexp.MustCompile(`(const GroupingVersion = )(\d+)`)
 	if format {
-		source = filepath.Join(packageDir, "parser", "version.go")
+		source = filepath.Join("parser", "version.go")
 		pattern = regexp.MustCompile(`("\.flac"\s*:\s*)(\d+)`)
 	}
-	contents, err := os.ReadFile(source)
-	if err != nil {
-		t.Fatal(err)
-	}
-	match := pattern.FindSubmatchIndex(contents)
-	if match == nil {
-		t.Fatal("找不到要升级的版本声明")
-	}
-	version, err := strconv.Atoi(string(contents[match[4]:match[5]]))
-	if err != nil {
-		t.Fatal(err)
-	}
-	replacement := append([]byte{}, contents[:match[4]]...)
-	replacement = strconv.AppendInt(replacement, int64(version+1), 10)
-	replacement = append(replacement, contents[match[5]:]...)
-	temporary := t.TempDir()
-	replacementPath := filepath.Join(temporary, "version.go")
-	if err := os.WriteFile(replacementPath, replacement, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	overlay, err := json.Marshal(map[string]any{"Replace": map[string]string{source: replacementPath}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	overlayPath := filepath.Join(temporary, "overlay.json")
-	if err := os.WriteFile(overlayPath, overlay, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	command := exec.CommandContext(ctx, "go", "test", "-overlay="+overlayPath, "./internal/library", "-run", "^"+t.Name()+"$", "-count=1", "-v")
-	command.Dir = filepath.Clean(filepath.Join(packageDir, "..", ".."))
-	command.Env = append(os.Environ(),
-		"ROOMUSIC_TEST_SCAN_VERSION_CASE="+t.Name(),
-		"ROOMUSIC_TEST_SCAN_VERSION_URL="+scopedURL,
-		"ROOMUSIC_TEST_SCAN_VERSION_ROOT="+root.ID,
-		"ROOMUSIC_TEST_SCAN_VERSION_DIRECTORY="+fixture.allowedRoot,
-		"ROOMUSIC_TEST_SCAN_VERSION_EXPECTED="+strconv.Itoa(version+1))
-	output, err := command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("升版本后的扫描失败：%v\n%s", err, output)
-	}
-	t.Logf("真实升版本子进程：\n%s", output)
+	runScanWithVersionOverlay(t, fixture, root, source, pattern, 1)
 	statesAfter := readIncrementalTestCandidateStates(t, fixture, root)
 	if format {
 		var flacRelease string
@@ -136,7 +82,68 @@ func testParseCacheVersionUpgrade(t *testing.T, format bool) {
 	requireNoMissingTracks(t, fixture, root.ID)
 }
 
-func runVersionUpgradedScan(t *testing.T, format bool) {
+func runScanWithVersionOverlay(t *testing.T, fixture *libraryFixture, root registeredRoot, sourceRelativePath string, pattern *regexp.Regexp, versionDelta int) {
+	t.Helper()
+	var schema string
+	if err := fixture.database.QueryRow(`SELECT current_schema()`).Scan(&schema); err != nil {
+		t.Fatal(err)
+	}
+	scopedURL, err := postgrestest.ScopedURL(postgrestest.BaseURL(t), schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packageDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(packageDir, sourceRelativePath)
+	contents, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	match := pattern.FindSubmatchIndex(contents)
+	if match == nil {
+		t.Fatal("找不到要升级的版本声明")
+	}
+	version, err := strconv.Atoi(string(contents[match[4]:match[5]]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	version += versionDelta
+	replacement := append([]byte{}, contents[:match[4]]...)
+	replacement = strconv.AppendInt(replacement, int64(version), 10)
+	replacement = append(replacement, contents[match[5]:]...)
+	temporary := t.TempDir()
+	replacementPath := filepath.Join(temporary, "version.go")
+	if err := os.WriteFile(replacementPath, replacement, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	overlay, err := json.Marshal(map[string]any{"Replace": map[string]string{source: replacementPath}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	overlayPath := filepath.Join(temporary, "overlay.json")
+	if err := os.WriteFile(overlayPath, overlay, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	command := exec.CommandContext(ctx, "go", "test", "-overlay="+overlayPath, "./internal/library", "-run", "^"+t.Name()+"$", "-count=1", "-v")
+	command.Dir = filepath.Clean(filepath.Join(packageDir, "..", ".."))
+	command.Env = append(os.Environ(),
+		"ROOMUSIC_TEST_SCAN_VERSION_CASE="+t.Name(),
+		"ROOMUSIC_TEST_SCAN_VERSION_URL="+scopedURL,
+		"ROOMUSIC_TEST_SCAN_VERSION_ROOT="+root.ID,
+		"ROOMUSIC_TEST_SCAN_VERSION_DIRECTORY="+fixture.allowedRoot,
+		"ROOMUSIC_TEST_SCAN_VERSION_EXPECTED="+strconv.Itoa(version))
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("使用覆盖版本扫描失败：%v\n%s", err, output)
+	}
+	t.Logf("覆盖版本的扫描子进程：\n%s", output)
+}
+
+func openVersionScanFixture(t *testing.T) (*libraryFixture, registeredRoot) {
 	t.Helper()
 	database, err := postgres.Open(context.Background(), os.Getenv("ROOMUSIC_TEST_SCAN_VERSION_URL"))
 	if err != nil {
@@ -148,6 +155,12 @@ func runVersionUpgradedScan(t *testing.T, format bool) {
 	if err := database.QueryRow(`SELECT path FROM library_roots WHERE id=$1`, root.ID).Scan(&root.Path); err != nil {
 		t.Fatal(err)
 	}
+	return fixture, root
+}
+
+func runVersionUpgradedScan(t *testing.T, format bool) {
+	t.Helper()
+	fixture, root := openVersionScanFixture(t)
 	wantVersion := os.Getenv("ROOMUSIC_TEST_SCAN_VERSION_EXPECTED")
 	wantParsed, wantHits := 0, 2
 	wantWritten, wantSkipped := int64(2), int64(0)
