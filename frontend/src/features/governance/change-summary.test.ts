@@ -181,3 +181,81 @@ describe("操作的来源（M6 C6）", () => {
     expect(operationOriginLabel(undefined)).toBeNull();
   });
 });
+
+describe("自动整理的记录（M7 A）", () => {
+  const OP = "00000000-0000-4000-8000-0000000000b1";
+  const written: Pick<OperationItemDTO, "type" | "changes"> = {
+    type: "release_auto_correction",
+    changes: {
+      kind: "release_auto_correction",
+      fields: [
+        { field: "year", before: { auto: null, effective: null }, after: { auto: { mode: "set", value: 1998, operation_id: OP }, effective: 1998 } },
+        { field: "label", before: { auto: { mode: "set", value: "Old Label", operation_id: OP }, effective: "Old Label" }, after: { auto: { mode: "null", operation_id: OP }, effective: null } },
+        // 标题有人工修正：自动值写进去了，但显示的值没有变。
+        { field: "title", before: { auto: null, effective: "Manual Title" }, after: { auto: { mode: "set", value: "Source Title", operation_id: OP }, effective: "Manual Title" } },
+      ],
+    },
+  };
+
+  it("类型名；撤销记录写“撤销自动补全”", () => {
+    expect(operationTypeLabel(written)).toBe("自动补全发行信息");
+    expect(operationTypeLabel({ type: "revert", changes: written.changes })).toBe("撤销自动补全");
+  });
+
+  it("改动一行：写有效值的前后；留空另加说明；有人工修正时写自动值本身的变化", () => {
+    expect(changeLines(written)).toEqual([
+      "年份：（空） → 1998",
+      "厂牌：Old Label → （空）（留空）",
+      "标题：自动值 无 → Source Title（人工修正优先，显示不变）",
+    ]);
+  });
+
+  it("撤销预览前后互换：没有更早的自动值时写“取消自动补全”", () => {
+    expect(revertLines(written)).toEqual([
+      "年份：1998 → （空）（取消自动补全）",
+      "厂牌：（空） → Old Label",
+      "标题：自动值 Source Title → 无（人工修正优先，显示不变）",
+    ]);
+  });
+
+  it("流派列表逐项比较：内容相同的两个列表算没有变化", () => {
+    const genres: Pick<OperationItemDTO, "changes"> = {
+      changes: {
+        kind: "release_auto_correction",
+        fields: [{ field: "genre", before: { auto: null, effective: ["Jazz", "Blues"] }, after: { auto: { mode: "set", value: ["Rock"], operation_id: OP }, effective: ["Jazz", "Blues"] } }],
+      },
+    };
+    expect(changeLines(genres)).toEqual(["流派：自动值 无 → Rock（人工修正优先，显示不变）"]);
+  });
+
+  it("来源标签带来源标识；标识缺失时只写“自动整理”", () => {
+    expect(operationOriginLabel({ source: "curation", provider_kind: "source", provider: "musicbrainz", basis: "条码一致" })).toBe("自动整理 · musicbrainz");
+    expect(operationOriginLabel({ source: "curation" })).toBe("自动整理");
+  });
+
+  it("撤不了的原因：已撤销，或同一个字段被更晚的自动整理改写；不看专辑是否可见", () => {
+    const hidden = { id: "00000000-0000-4000-8000-0000000000a1", title: "Hidden", group_id: "00000000-0000-4000-8000-0000000000a2", visible: false };
+    expect(notRevertibleReason({ type: "release_auto_correction", revertible: false, reverted_by: null, release: hidden, album: null })).toBe("之后又被自动整理改写");
+    expect(notRevertibleReason({ type: "release_auto_correction", revertible: false, reverted_by: "00000000-0000-4000-8000-0000000000a3", release: hidden, album: null })).toBe("已撤销");
+    expect(notRevertibleReason({ type: "release_auto_correction", revertible: true, reverted_by: null, release: hidden, album: null })).toBeNull();
+  });
+});
+
+describe("自动整理的记录：后端样本", () => {
+  const [revert, written] = decodeOperationPage(sampleBody("operations/auto-list")).items;
+  if (revert === undefined || written === undefined) throw new Error("样本里没有自动整理的记录");
+
+  it("类型名、来源标签与改动", () => {
+    expect(operationTypeLabel(written)).toBe("自动补全发行信息");
+    expect(operationOriginLabel(written.origin)).toBe("自动整理 · fixture-catalog");
+    expect(changeLines(written)).toEqual(["标题：Album A → 合成自动标题", "年份：1998 → （空）（留空）"]);
+  });
+
+  it("撤销记录写恢复成了什么；两条都不能再撤销，各有原因", () => {
+    expect(operationTypeLabel(revert)).toBe("撤销自动补全");
+    expect(operationOriginLabel(revert.origin)).toBeNull();
+    expect(changeLines(revert)).toEqual(["标题：合成自动标题 → Album A（取消自动补全）", "年份：（空） → 1998（取消自动补全）"]);
+    expect(notRevertibleReason(written)).toBe("已撤销");
+    expect(notRevertibleReason(revert)).toBe("已完成");
+  });
+});

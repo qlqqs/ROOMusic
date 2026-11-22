@@ -23,7 +23,7 @@ describe("baselineDraft 与 draftOf", () => {
   it("没有修正是“使用扫描值”，文本预填扫描值；扫描值为空时预填空串", () => {
     expect(baselineDraft(fieldOf(initial, "title"))).toEqual({ mode: "scan", text: "Sample Symphonies", list: [] });
     expect(baselineDraft(fieldOf(initial, "year"))).toEqual({ mode: "scan", text: "1998", list: [] });
-    const withoutScan: CorrectionFieldDTO = { field: "genre", scan_value: null, correction: null, effective_value: null, uncertain: false };
+    const withoutScan: CorrectionFieldDTO = { field: "genre", scan_value: null, correction: null, auto: null, effective_value: null, uncertain: false };
     expect(baselineDraft(withoutScan)).toEqual({ mode: "scan", text: "", list: [] });
   });
 
@@ -159,7 +159,7 @@ describe("confirmScanDraft", () => {
   });
 
   it("扫描值为空时确认的是“空”", () => {
-    const missing: CorrectionFieldDTO = { field: "genre", scan_value: null, correction: null, effective_value: null, uncertain: true };
+    const missing: CorrectionFieldDTO = { field: "genre", scan_value: null, correction: null, auto: null, effective_value: null, uncertain: true };
     expect(confirmScanDraft(missing)).toEqual({ mode: "empty", text: "", list: [] });
   });
 });

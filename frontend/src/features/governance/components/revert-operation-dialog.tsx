@@ -46,6 +46,7 @@ const titles = {
   release_group_default: "撤销这次默认版本调整？",
   release_issue_review: "撤销这次核对？",
   release_claim: "撤销这次认领？",
+  release_auto_correction: "撤销这次自动补全？",
 } as const;
 
 /**

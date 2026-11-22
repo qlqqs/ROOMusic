@@ -357,3 +357,58 @@ describe("decodeRevertResult", () => {
     expect(() => decodeRevertResult(input)).toThrow(d.DecodeError);
   });
 });
+
+describe("自动整理（M7 A）的样本", () => {
+  it("修正状态带自动层：自动设值与自动留空，各带写入的操作与来源；有效值是三层结果", () => {
+    const state = decodeCorrectionState(sampleBody("corrections/get-auto"));
+    const title = state.fields.find((field) => field.field === "title");
+    const year = state.fields.find((field) => field.field === "year");
+    expect(title).toMatchObject({ correction: null, auto: { mode: "set", value: "合成自动标题", provider_kind: "source", provider: "fixture-catalog" }, effective_value: "合成自动标题" });
+    expect(year).toMatchObject({ scan_value: 1998, correction: null, auto: { mode: "null", provider: "fixture-catalog" }, effective_value: null });
+    expect(year?.auto).not.toHaveProperty("value");
+    expect(state.fields.filter((field) => field.auto !== null)).toHaveLength(2);
+  });
+
+  it("没有自动值的修正状态每个字段的 auto 是 null；缺少 auto 或来源种类未知时拒绝", () => {
+    const initial = sampleBody("corrections/get");
+    expect(decodeCorrectionState(initial).fields.every((field) => field.auto === null)).toBe(true);
+    expect(() => decodeCorrectionState(without(initial, ["fields", 0, "auto"]))).toThrow(d.DecodeError);
+    expect(() => decodeCorrectionState(withValue(sampleBody("corrections/get-auto"), ["fields", 0, "auto", "provider_kind"], "plugin"))).toThrow(d.DecodeError);
+  });
+
+  it("修正成功的响应与读取同形，同样带 auto", () => {
+    expect(decodeCorrectionResult(sampleBody("corrections/patched")).fields.every((field) => field.auto === null)).toBe(true);
+  });
+
+  it("操作记录：自动整理的记录带来源与批次，它的撤销记录没有；改动按字段给出自动值与有效值", () => {
+    const page = decodeOperationPage(sampleBody("operations/auto-list"));
+    expect(page.items.map((item) => [item.type, item.changes?.kind, item.revertible])).toEqual([
+      ["revert", "release_auto_correction", false],
+      ["release_auto_correction", "release_auto_correction", false],
+    ]);
+    const [revert, written] = page.items;
+    expect(written?.origin).toEqual({ source: "curation", provider_kind: "source", provider: "fixture-catalog", basis: "合成标签匹配" });
+    expect(written?.batch_id).toEqual(expect.any(String));
+    expect(written?.reverted_by).toBe(revert?.id);
+    expect(revert?.origin).toBeNull();
+    expect(revert?.batch_id).toBeUndefined();
+    if (written?.changes?.kind !== "release_auto_correction") throw new Error("样本里没有自动整理的改动");
+    expect(written.changes.fields.map((field) => [field.field, field.before.auto, field.after.auto?.mode, field.after.effective])).toEqual([
+      ["title", null, "set", "合成自动标题"],
+      ["year", null, "null", null],
+    ]);
+  });
+
+  it.each([
+    ["来源未知", withValue(sampleBody("operations/auto-list"), ["items", 1, "origin", "source"], "plugin")],
+    ["批次不是 UUID", withValue(sampleBody("operations/auto-list"), ["items", 1, "batch_id"], "batch-1")],
+    ["改动缺少前态", without(sampleBody("operations/auto-list"), ["items", 1, "changes", "fields", 0, "before"])],
+    ["自动值的模式未知", withValue(sampleBody("operations/auto-list"), ["items", 1, "changes", "fields", 0, "after", "auto", "mode"], "clear")],
+  ])("拒绝%s", (_name, body) => {
+    expect(() => decodeOperationPage(body)).toThrow(d.DecodeError);
+  });
+
+  it("自动修改的撤销响应：版本号是发行的人工修改版本号（自动层的撤销不改它）", () => {
+    expect(decodeRevertResult(sampleBody("operations/auto-reverted"))).toMatchObject({ target_type: "release", revision: 1 });
+  });
+});
