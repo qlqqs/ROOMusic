@@ -119,3 +119,21 @@ func vacateSourceIdentity(ctx context.Context, tx *sql.Tx, scanID, rootID, ident
 	}
 	return searchindex.RefreshTrackVisibility(ctx, tx, ids)
 }
+
+func persistTrackIdentifiers(ctx context.Context, tx *sql.Tx, trackID string, identifiers []metadata.Identifier) error {
+	if _, err := tx.ExecContext(ctx, "DELETE FROM track_identifiers WHERE track_id=$1::uuid", trackID); err != nil {
+		return err
+	}
+	var normalized []metadata.Identifier
+	for _, id := range identifiers {
+		normalized = metadata.AppendIdentifierValues(normalized, id.Kind, id.Value)
+	}
+	ordinals := make(map[string]int)
+	for _, id := range normalized {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO track_identifiers(track_id,kind,value,ordinal) VALUES($1::uuid,$2,$3,$4)", trackID, id.Kind, id.Value, ordinals[id.Kind]); err != nil {
+			return err
+		}
+		ordinals[id.Kind]++
+	}
+	return nil
+}

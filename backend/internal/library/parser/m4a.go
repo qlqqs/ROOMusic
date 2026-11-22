@@ -610,6 +610,11 @@ func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observatio
 	if mean != "com.apple.iTunes" || observation == nil {
 		return nil
 	}
+	if kind := metadata.IdentifierKindForTag(name); kind != "" {
+		raw := decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode))
+		observation.Identifiers = metadata.AppendIdentifierValues(observation.Identifiers, kind, strings.Trim(raw, "\x00"))
+		return nil
+	}
 	key := "----:" + name
 	name = strings.ToUpper(strings.TrimSpace(name))
 	if kind := personnelTagKind(name); kind == "PERSONNEL" || kind == "INVOLVEDPEOPLE" {
@@ -643,6 +648,10 @@ func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observatio
 	case "UPC":
 		if observation.Barcode == "" {
 			observation.Barcode = text
+		}
+	case "BARCODE", "EAN", "CATALOGNUMBER", "CATALOG", "CATALOGNO":
+		if err := setAudioTag(observation, name, text); err != nil {
+			return err
 		}
 	default:
 		return nil

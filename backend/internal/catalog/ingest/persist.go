@@ -108,6 +108,9 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 					return "", err
 				}
 			}
+			if err = persistTrackIdentifiers(ctx, tx, trackID, observation.Identifiers); err != nil {
+				return "", err
+			}
 			if _, err = tx.ExecContext(ctx, "DELETE FROM track_credits WHERE track_id=$1::uuid", trackID); err != nil {
 				return "", err
 			}

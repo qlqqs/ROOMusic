@@ -63,6 +63,15 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 		}
 		frame := data[offset : offset+frameSize]
 		offset += frameSize
+		if frameID == "UFID" {
+			if payload, ok := id3FramePayload(frame, major, formatFlags); ok {
+				owner, id, found := bytes.Cut(payload, []byte{0})
+				if found && string(owner) == "http://musicbrainz.org" {
+					observation.Identifiers = metadata.AppendIdentifierValues(observation.Identifiers, metadata.IdentifierMBRecording, string(id))
+				}
+			}
+			continue
+		}
 		if frameID == "APIC" {
 			if payload, ok := id3FramePayload(frame, major, formatFlags); ok {
 				if artwork, mimeType, pictureType, valid := parseID3AttachedPicture(payload); valid {
@@ -100,15 +109,14 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			if !ok {
 				continue
 			}
-			key := frameID
-			var values []string
 			if frameID == "TXXX" {
-				key, values = parseID3TXXX(payload)
-			} else {
-				values = decodeID3ArtistValues(payload)
+				if err := parseID3TXXX(payload, observation); err != nil {
+					return err
+				}
+				continue
 			}
-			for _, raw := range values {
-				if err := setAudioTag(observation, key, raw); err != nil {
+			for _, raw := range decodeID3ArtistValues(payload) {
+				if err := setAudioTag(observation, frameID, raw); err != nil {
 					return err
 				}
 			}
@@ -149,6 +157,11 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			observation.Year = ParseYear(value)
 		case "TSRC":
 			observation.ISRC = value
+			if payload, ok := id3FramePayload(frame, major, formatFlags); ok {
+				for _, raw := range decodeID3ArtistValues(payload) {
+					observation.Identifiers = metadata.AppendIdentifierValues(observation.Identifiers, metadata.IdentifierISRC, raw)
+				}
+			}
 		case "TPUB":
 			observation.Label = value
 		}
@@ -430,26 +443,37 @@ func decodeID3ArtistValues(frame []byte) []string {
 }
 
 // parseID3TXXX 按帧编码解码描述和全部值；解码器按 UTF-16 码元识别 NUL 并保留字节序。
-func parseID3TXXX(frame []byte) (string, []string) {
+func parseID3TXXX(frame []byte, observation *AudioObservation) error {
 	parts := decodeID3ArtistValues(frame)
 	if len(parts) < 2 {
-		return "", nil
+		return nil
 	}
 	description := strings.ToUpper(strings.TrimSpace(parts[0]))
-	if kind := personnelTagKind(description); kind == "PERSONNEL" || kind == "INVOLVEDPEOPLE" {
-		if kind == "PERSONNEL" {
-			return "TXXX:" + description, parts[1:]
+	values := parts[1:]
+	if kind := metadata.IdentifierKindForTag(description); kind != "" {
+		for _, raw := range values {
+			observation.Identifiers = metadata.AppendIdentifierValues(observation.Identifiers, kind, raw)
 		}
-		// 参与人员表中的 NUL 是工种/名字配对边界，不可当独立值逐项处理。
-		return "TXXX:" + description, []string{strings.Join(parts[1:], "\x00")}
+		return nil
 	}
-	if len(creditTagRoles(description)) > 0 {
-		return "TXXX:" + description, parts[1:]
-	}
+	key := "TXXX:" + description
 	switch description {
-	case "ALBUMARTIST", "ALBUM_ARTIST", "ALBUM ARTIST", "ALBUMPERFORMER", "FEATURING", "COMPILATION", "ORIGINALDATE", "ORIGINALYEAR", "WORK", "MOVEMENTNAME", "MOVEMENT", "MOVEMENTNUMBER", "MOVEMENTTOTAL":
-		return "TXXX:" + description, parts[1:]
+	case "ALBUMARTIST", "ALBUM_ARTIST", "ALBUM ARTIST", "ALBUMPERFORMER", "FEATURING", "COMPILATION", "ORIGINALDATE", "ORIGINALYEAR", "WORK", "MOVEMENTNAME", "MOVEMENT", "MOVEMENTNUMBER", "MOVEMENTTOTAL",
+		"BARCODE", "UPC", "EAN", "CATALOGNUMBER", "CATALOG", "CATALOGNO":
 	default:
-		return "", nil
+		kind := personnelTagKind(description)
+		if kind == "INVOLVEDPEOPLE" {
+			// 参与人员表中的 NUL 是工种/名字配对边界。
+			return setAudioTag(observation, key, strings.Join(values, "\x00"))
+		}
+		if kind != "PERSONNEL" && len(creditTagRoles(description)) == 0 {
+			return nil
+		}
 	}
+	for _, raw := range values {
+		if err := setAudioTag(observation, key, raw); err != nil {
+			return err
+		}
+	}
+	return nil
 }

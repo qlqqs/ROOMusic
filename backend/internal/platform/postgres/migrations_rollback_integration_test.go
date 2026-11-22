@@ -14,6 +14,14 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	60: `INSERT INTO curation_source_settings(source,enabled,updated_by) VALUES
+ ('musicbrainz',true,'f6000000-0000-4000-8000-000000000000');
+ INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence) VALUES
+ ('f6000000-0000-4000-8000-000000000003','musicbrainz','release','f6000000-0000-4000-8000-000000000002',
+ 'f6000000-0000-4000-8000-000000000004','tag','exact');`,
+	59: `INSERT INTO track_identifiers(track_id,kind,value,ordinal) VALUES
+ ('f5900000-0000-4000-8000-000000000004','mb_recording','f5900000-0000-4000-8000-000000000005',0),
+ ('f5900000-0000-4000-8000-000000000004','isrc','ZZTST2600001',0);`,
 	58: `INSERT INTO curation_batches(id,tier,actor_id) VALUES
  ('f5800000-0000-4000-8000-000000000002','program','f5800000-0000-4000-8000-000000000000');
  UPDATE curation_settings SET enabled=true,enabled_by='f5800000-0000-4000-8000-000000000000',enabled_at=now() WHERE id=1;
@@ -245,6 +253,22 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO releases(id,group_id,title,artist) VALUES('f5800000-0000-4000-8000-000000000001','f5800000-0000-4000-8000-000000000005','扫描标题','扫描艺人');
  INSERT INTO artist_names(id,key_id,spelling,spelling_hash,origin)
  VALUES('f5800000-0000-4000-8000-000000000006','a1000000-0000-4000-8000-000000000001','合成艺人',decode(repeat('ab',32),'hex'),'scan');`)
+			}
+			if m.Version == 59 {
+				rollbackExec(t, db, `INSERT INTO library_roots(id,path) VALUES('f5900000-0000-4000-8000-000000000000','/synthetic/identifier-rollback');
+ INSERT INTO release_groups(id) VALUES('f5900000-0000-4000-8000-000000000001');
+ INSERT INTO releases(id,group_id,title,artist) VALUES
+ ('f5900000-0000-4000-8000-000000000002','f5900000-0000-4000-8000-000000000001','标识迁移测试发行','测试艺人');
+ INSERT INTO media(id,release_id,position) VALUES('f5900000-0000-4000-8000-000000000003','f5900000-0000-4000-8000-000000000002',1);
+ INSERT INTO tracks(id,medium_id,position,title,artist,source_root_id,relative_path,observed_at) VALUES
+ ('f5900000-0000-4000-8000-000000000004','f5900000-0000-4000-8000-000000000003',1,'标识迁移测试曲目','测试艺人',
+ 'f5900000-0000-4000-8000-000000000000','synthetic-identifier.flac',NOW());`)
+			}
+			if m.Version == 60 {
+				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash) VALUES('f6000000-0000-4000-8000-000000000000','rollback-sources','synthetic');
+ INSERT INTO release_groups(id) VALUES('f6000000-0000-4000-8000-000000000001');
+ INSERT INTO releases(id,group_id,title,artist) VALUES
+ ('f6000000-0000-4000-8000-000000000002','f6000000-0000-4000-8000-000000000001','外部对应迁移测试发行','测试艺人');`)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
