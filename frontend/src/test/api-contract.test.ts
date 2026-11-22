@@ -828,13 +828,16 @@ const mediaResponseContracts: Record<string, { reason: string }> = {
 };
 
 // 后端已有接口、前端还没有消费的样本。
-// 自动整理的开关、批次、范围撤销与不再提出（M7 A）：后端接口已有，界面在子任务 E1 才做；那时把它们移到 successContracts 并配上解码器。
+// 自动整理的开关、批次、范围撤销与不再提出（M7 A）以及各外部源的开关（M7 B1）：后端接口已有，界面在子任务 E1 才做；
+// 那时把它们移到 successContracts 并配上解码器。
 const unconsumedContracts: readonly string[] = [
   "curation/batch",
   "curation/batches",
   "curation/scope-reverted",
   "curation/settings-disabled",
   "curation/settings-enabled",
+  "curation/source-updated",
+  "curation/sources",
   "curation/suppressions",
 ];
 
