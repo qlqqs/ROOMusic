@@ -14,6 +14,21 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	58: `INSERT INTO curation_batches(id,tier,actor_id) VALUES
+ ('f5800000-0000-4000-8000-000000000002','program','f5800000-0000-4000-8000-000000000000');
+ UPDATE curation_settings SET enabled=true,enabled_by='f5800000-0000-4000-8000-000000000000',enabled_at=now() WHERE id=1;
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id,origin,batch_id)
+ VALUES('f5800000-0000-4000-8000-000000000003','f5800000-0000-4000-8000-000000000000','release_auto_correction','release','f5800000-0000-4000-8000-000000000001',gen_random_uuid(),'auto',1,2,'{}','{}','{}','fixture','{"source":"curation","provider":"synthetic"}','f5800000-0000-4000-8000-000000000002');
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id,reverts_operation_id)
+ SELECT 'f5800000-0000-4000-8000-000000000004',actor_id,'revert',target_type,target_id,gen_random_uuid(),'undo',2,3,'{}','{}','{}','fixture',id FROM operations WHERE operation_type='release_auto_correction';
+ INSERT INTO release_auto_values(release_id,field,mode,text_value,operation_id)
+ VALUES('f5800000-0000-4000-8000-000000000001','title','set','自动标题','f5800000-0000-4000-8000-000000000003');
+ UPDATE releases SET auto_revision=3 WHERE id='f5800000-0000-4000-8000-000000000001';
+ INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by)
+ SELECT target_type,target_id,'title',repeat('a',64),'{"mode":"set","value":"自动标题"}',id,actor_id FROM operations WHERE id='f5800000-0000-4000-8000-000000000004';
+ UPDATE artist_names SET origin='auto' WHERE id='f5800000-0000-4000-8000-000000000006';
+ INSERT INTO artist_credits(id,release_id,role,name_id,position,layer)
+ VALUES(gen_random_uuid(),'f5800000-0000-4000-8000-000000000001','album_artist','f5800000-0000-4000-8000-000000000006',1,'auto');`,
 	56: `UPDATE steward_user_settings SET protocol='responses',
  overrides='{"protocol":"responses","native_search":true}',
  probe_result='{"protocol":"responses","native_search":"supported","responses_available":true,"failures":[{"protocol":"openai","code":"synthetic"},{"protocol":"responses","code":"synthetic"}]}',
@@ -223,6 +238,13 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  '{"protocol":"openai","failures":[{"protocol":"openai","code":"synthetic"}]}',now());
  INSERT INTO steward_conversations(id,user_id,title,model) VALUES('f5600000-0000-4000-8000-000000000001','f5600000-0000-4000-8000-000000000000','C8 旧会话','synthetic-model');
  INSERT INTO steward_messages(id,conversation_id,sequence,role,content) VALUES('f5600000-0000-4000-8000-000000000002','f5600000-0000-4000-8000-000000000001',1,'assistant','{}');`)
+			}
+			if m.Version == 58 {
+				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash) VALUES('f5800000-0000-4000-8000-000000000000','rollback-auto','synthetic');
+ INSERT INTO release_groups(id) VALUES('f5800000-0000-4000-8000-000000000005');
+ INSERT INTO releases(id,group_id,title,artist) VALUES('f5800000-0000-4000-8000-000000000001','f5800000-0000-4000-8000-000000000005','扫描标题','扫描艺人');
+ INSERT INTO artist_names(id,key_id,spelling,spelling_hash,origin)
+ VALUES('f5800000-0000-4000-8000-000000000006','a1000000-0000-4000-8000-000000000001','合成艺人',decode(repeat('ab',32),'hex'),'scan');`)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))

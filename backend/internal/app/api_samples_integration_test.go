@@ -388,6 +388,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 
 	recordDSDFormatSamples(t, application, samples, call, admin)
 
+	recordCurationSamples(t, samples)
 	samples.finish()
 }
 

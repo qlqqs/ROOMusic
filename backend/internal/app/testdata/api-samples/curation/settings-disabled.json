@@ -1,0 +1,10 @@
+{
+  "body": {
+    "active": false,
+    "enabled": false,
+    "enabled_at": null,
+    "enabled_by": null,
+    "inactive_reason": "disabled"
+  },
+  "status": 200
+}

@@ -1,0 +1,128 @@
+{
+  "body": {
+    "items": [
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "changes": {
+          "fields": [
+            {
+              "after": {
+                "auto": null,
+                "effective": "Album A"
+              },
+              "before": {
+                "auto": {
+                  "mode": "set",
+                  "operation_id": "00000000-0000-4000-8000-000000000002",
+                  "value": "合成自动标题"
+                },
+                "effective": "合成自动标题"
+              },
+              "field": "title"
+            },
+            {
+              "after": {
+                "auto": null,
+                "effective": 1998
+              },
+              "before": {
+                "auto": {
+                  "mode": "null",
+                  "operation_id": "00000000-0000-4000-8000-000000000002"
+                },
+                "effective": null
+              },
+              "field": "year"
+            }
+          ],
+          "kind": "release_auto_correction"
+        },
+        "created_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "origin": null,
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000004",
+          "id": "00000000-0000-4000-8000-000000000005",
+          "title": "Album A",
+          "visible": true
+        },
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": "00000000-0000-4000-8000-000000000002",
+        "type": "revert"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "batch_id": "00000000-0000-4000-8000-000000000006",
+        "changes": {
+          "fields": [
+            {
+              "after": {
+                "auto": {
+                  "mode": "set",
+                  "operation_id": "00000000-0000-4000-8000-000000000002",
+                  "value": "合成自动标题"
+                },
+                "effective": "合成自动标题"
+              },
+              "before": {
+                "auto": null,
+                "effective": "Album A"
+              },
+              "field": "title"
+            },
+            {
+              "after": {
+                "auto": {
+                  "mode": "null",
+                  "operation_id": "00000000-0000-4000-8000-000000000002"
+                },
+                "effective": null
+              },
+              "before": {
+                "auto": null,
+                "effective": 1998
+              },
+              "field": "year"
+            }
+          ],
+          "kind": "release_auto_correction"
+        },
+        "created_at": "2026-01-01T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000002",
+        "origin": {
+          "basis": "合成标签匹配",
+          "provider": "fixture-catalog",
+          "provider_kind": "source",
+          "source": "curation"
+        },
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000004",
+          "id": "00000000-0000-4000-8000-000000000005",
+          "title": "Album A",
+          "visible": true
+        },
+        "reverted_by": "00000000-0000-4000-8000-000000000003",
+        "revertible": false,
+        "reverts": null,
+        "type": "release_auto_correction"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 2
+    }
+  },
+  "status": 200
+}

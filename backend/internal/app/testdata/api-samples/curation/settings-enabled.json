@@ -1,0 +1,13 @@
+{
+  "body": {
+    "active": true,
+    "enabled": true,
+    "enabled_at": "2026-01-01T00:00:00Z",
+    "enabled_by": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "username": "curator"
+    },
+    "inactive_reason": null
+  },
+  "status": 200
+}
