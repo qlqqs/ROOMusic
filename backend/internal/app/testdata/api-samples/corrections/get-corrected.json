@@ -2,6 +2,7 @@
   "body": {
     "fields": [
       {
+        "auto": null,
         "correction": {
           "mode": "set",
           "value": "Sample Symphonies (corrected)"
@@ -12,6 +13,7 @@
         "uncertain": false
       },
       {
+        "auto": null,
         "correction": null,
         "effective_value": "Sample Orchestra",
         "field": "album_artist",
@@ -19,6 +21,7 @@
         "uncertain": false
       },
       {
+        "auto": null,
         "correction": {
           "mode": "null"
         },
@@ -28,6 +31,7 @@
         "uncertain": false
       },
       {
+        "auto": null,
         "correction": {
           "mode": "set",
           "value": [
@@ -47,6 +51,7 @@
         "uncertain": false
       },
       {
+        "auto": null,
         "correction": {
           "mode": "set",
           "value": "Corrected Label"
@@ -57,6 +62,7 @@
         "uncertain": false
       },
       {
+        "auto": null,
         "correction": null,
         "effective_value": "SL-0001",
         "field": "catalog_number",
@@ -64,6 +70,7 @@
         "uncertain": false
       },
       {
+        "auto": null,
         "correction": null,
         "effective_value": "Remastered",
         "field": "edition",
@@ -71,6 +78,7 @@
         "uncertain": false
       },
       {
+        "auto": null,
         "correction": null,
         "effective_value": "0123456789012",
         "field": "barcode",

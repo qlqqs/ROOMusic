@@ -9,7 +9,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
-// PreviewRevert 在恢复扫描值时使用当前扫描快照，执行时仍重新核对版本。
+// PreviewRevert 使用清除后生效的当前自动值或扫描值，执行时仍重新核对版本。
 func (correctionKind) PreviewRevert(ctx context.Context, q operations.Queryer, record operations.Record) ([]operations.PreviewChange, error) {
 	var before correctionRecordState
 	if err := json.Unmarshal(record.Before, &before); err != nil {
@@ -25,7 +25,7 @@ func (correctionKind) PreviewRevert(ctx context.Context, q operations.Queryer, r
 		if !changed {
 			continue
 		}
-		var after any = field.ScanValue
+		var after any = field.ValueAfterClear()
 		if intent != nil {
 			after = nil
 			if intent.Mode == catalog.CorrectionSet {

@@ -1,0 +1,84 @@
+{
+  "body": {
+    "fields": [
+      {
+        "auto": {
+          "mode": "set",
+          "operation_id": "00000000-0000-4000-8000-000000000001",
+          "provider": "fixture-catalog",
+          "provider_kind": "source",
+          "value": "合成自动标题"
+        },
+        "correction": null,
+        "effective_value": "合成自动标题",
+        "field": "title",
+        "scan_value": "Album A",
+        "uncertain": false
+      },
+      {
+        "auto": null,
+        "correction": null,
+        "effective_value": "Artist A",
+        "field": "album_artist",
+        "scan_value": "Artist A",
+        "uncertain": false
+      },
+      {
+        "auto": {
+          "mode": "null",
+          "operation_id": "00000000-0000-4000-8000-000000000001",
+          "provider": "fixture-catalog",
+          "provider_kind": "source"
+        },
+        "correction": null,
+        "effective_value": null,
+        "field": "year",
+        "scan_value": 1998,
+        "uncertain": false
+      },
+      {
+        "auto": null,
+        "correction": null,
+        "effective_value": null,
+        "field": "genre",
+        "scan_value": null,
+        "uncertain": false
+      },
+      {
+        "auto": null,
+        "correction": null,
+        "effective_value": null,
+        "field": "label",
+        "scan_value": null,
+        "uncertain": false
+      },
+      {
+        "auto": null,
+        "correction": null,
+        "effective_value": null,
+        "field": "catalog_number",
+        "scan_value": null,
+        "uncertain": false
+      },
+      {
+        "auto": null,
+        "correction": null,
+        "effective_value": null,
+        "field": "edition",
+        "scan_value": null,
+        "uncertain": false
+      },
+      {
+        "auto": null,
+        "correction": null,
+        "effective_value": null,
+        "field": "barcode",
+        "scan_value": null,
+        "uncertain": false
+      }
+    ],
+    "release_id": "00000000-0000-4000-8000-000000000002",
+    "revision": 1
+  },
+  "status": 200
+}

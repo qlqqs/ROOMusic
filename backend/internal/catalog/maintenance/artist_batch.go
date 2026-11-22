@@ -267,6 +267,8 @@ const artistReleaseNameInputsSQL = `WITH scoped_tracks AS MATERIALIZED (
  UNION ALL SELECT album_artist FROM releases WHERE id=$1::uuid
  UNION ALL SELECT text_value FROM release_corrections WHERE release_id=$1::uuid AND field='album_artist'
  UNION ALL SELECT text_value FROM release_corrections WHERE release_id=$1::uuid AND field='album_artist'
+ UNION ALL SELECT text_value FROM release_auto_values WHERE release_id=$1::uuid AND field='album_artist'
+ UNION ALL SELECT text_value FROM release_auto_values WHERE release_id=$1::uuid AND field='album_artist'
  UNION ALL SELECT artist FROM scoped_tracks
  UNION ALL SELECT o.value FROM scoped_tracks t CROSS JOIN LATERAL (
  SELECT value FROM track_observations WHERE track_id=t.id AND field_name='artist' OFFSET 0) o

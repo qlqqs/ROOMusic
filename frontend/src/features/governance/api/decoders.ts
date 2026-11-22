@@ -27,10 +27,22 @@ const correctionDecoder = d.object({
   value: d.optional(fieldValueDecoder),
 });
 
+// 自动层的值（M7 A）：后台自动整理写下的意图，带写入它的操作与来源（外部源或模型的标识）。没有自动值时整个 auto 为 null。
+// 有效值按 人工修正 → 自动层 → 扫描值 取。provider 按不可信文本显示。
+const MAX_PROVIDER = 64; // 来源标识的字节上限（后端同样的上限）
+const autoValueDecoder = d.object({
+  mode: d.oneOf(["set", "null"] as const),
+  value: d.optional(fieldValueDecoder),
+  operation_id: d.uuid(),
+  provider_kind: d.oneOf(["source", "model"] as const),
+  provider: d.string({ min: 1, max: MAX_PROVIDER }),
+});
+
 const correctionFieldDecoder = d.object({
   field: d.oneOf(CORRECTABLE_FIELDS),
   scan_value: d.nullable(fieldValueDecoder),
   correction: d.nullable(correctionDecoder),
+  auto: d.nullable(autoValueDecoder),
   effective_value: d.nullable(fieldValueDecoder),
   uncertain: d.boolean(),
 });
@@ -189,6 +201,7 @@ const OPERATION_TYPES = [
   "release_group_default",
   "release_issue_review",
   "release_claim",
+  "release_auto_correction",
   "revert",
   "artist_merge",
   "artist_split",
@@ -208,6 +221,17 @@ const correctionChangesDecoder = d.object({
   kind: d.literal("release_correction"),
   fields: d.array(
     d.object({ field: d.oneOf(CORRECTABLE_FIELDS), before: fieldStateDecoder, after: fieldStateDecoder }),
+    { max: CORRECTABLE_FIELDS.length },
+  ),
+});
+// 自动整理写入发行字段（M7 A）：前后是自动层的意图（没有自动值为 null）与当时的有效值。有人工修正时有效值不随自动值变化。
+// auto 另带写入这个值的操作：撤销恢复的是前态的值与它原来的写入者。
+const ownedAutoDecoder = d.object({ mode: d.oneOf(["set", "null"] as const), value: d.optional(fieldValueDecoder), operation_id: d.uuid() });
+const autoFieldStateDecoder = d.object({ auto: d.nullable(ownedAutoDecoder), effective: d.nullable(fieldValueDecoder) });
+const autoCorrectionChangesDecoder = d.object({
+  kind: d.literal("release_auto_correction"),
+  fields: d.array(
+    d.object({ field: d.oneOf(CORRECTABLE_FIELDS), before: autoFieldStateDecoder, after: autoFieldStateDecoder }),
     { max: CORRECTABLE_FIELDS.length },
   ),
 });
@@ -272,6 +296,7 @@ type OperationChanges =
   | d.Infer<typeof artistRenameChangesDecoder>
   | d.Infer<typeof artistIgnoreChangesDecoder>
   | d.Infer<typeof correctionChangesDecoder>
+  | d.Infer<typeof autoCorrectionChangesDecoder>
   | d.Infer<typeof groupChangesDecoder>
   | d.Infer<typeof defaultChangesDecoder>
   | d.Infer<typeof issueReviewChangesDecoder>
@@ -280,6 +305,7 @@ type OperationChanges =
 const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   const kind = typeof input === "object" && input !== null && "kind" in input ? input.kind : undefined;
   if (kind === "release_correction") return correctionChangesDecoder(input, path);
+  if (kind === "release_auto_correction") return autoCorrectionChangesDecoder(input, path);
   if (kind === "release_group_change") return groupChangesDecoder(input, path);
   if (kind === "release_group_default") return defaultChangesDecoder(input, path);
   if (kind === "release_issue_review") return issueReviewChangesDecoder(input, path);
@@ -293,8 +319,12 @@ const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
 
 // 操作的来源（M6 C6）：经管家对话（确认方案后执行时带 plan_id，直接执行时没有）或 MCP 令牌；页面上的操作没有来源（null 或省略）。
 // C7：Steward 模式下审查批准后执行的项另带 review_id 与该项的审查结论 review_decision。
+// M7 A：后台自动整理的操作来源是 curation，带来源的种类（外部源或模型）、标识与依据的摘要；标识与依据按不可信文本显示。
 const operationOriginDecoder = d.object({
-  source: d.oneOf(["chat", "mcp"] as const),
+  source: d.oneOf(["chat", "mcp", "curation"] as const),
+  provider_kind: d.optional(d.nullable(d.oneOf(["source", "model"] as const))),
+  provider: d.optional(d.nullable(d.string({ max: MAX_PROVIDER }))),
+  basis: d.optional(d.nullable(d.string({ max: 500 }))),
   plan_id: d.optional(d.nullable(d.uuid())),
   mode: d.optional(d.nullable(d.string())),
   review_id: d.optional(d.nullable(d.uuid())),
@@ -304,6 +334,8 @@ const operationOriginDecoder = d.object({
 const operationItemDecoder = d.object({
   id: d.uuid(),
   origin: d.optional(d.nullable(operationOriginDecoder)),
+  // 自动整理的批次（M7 A）；不属于任何批次的操作是 null。
+  batch_id: d.optional(d.nullable(d.uuid())),
   type: d.oneOf(OPERATION_TYPES),
   created_at: d.timestamp(),
   actor: operationActorDecoder,

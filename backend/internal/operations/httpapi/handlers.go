@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -58,6 +59,7 @@ type actorItem struct {
 // operationItem 是列表里的一条记录：谁、何时、哪个目标（当前的状态）、改了什么、撤销关系，以及现在能不能撤销。
 // 目标是发行的记录给 release、album 为 null；目标是专辑的记录反过来。不含请求体、前后状态原文、路径与密钥。
 type operationItem struct {
+	BatchID    *string                 `json:"batch_id,omitempty"`
 	Origin     json.RawMessage         `json:"origin"`
 	ID         string                  `json:"id"`
 	Type       string                  `json:"type"`
@@ -79,6 +81,8 @@ func optionalID(value string) *string {
 	return &value
 }
 
+var providerPattern = regexp.MustCompile(`^[a-z0-9._:-]{1,64}$`)
+
 // listOperations 按时间倒序分页返回操作记录（管理员），可按发行筛选（release_id）、按专辑筛选（group_id）；
 // 两个都给时取并集，即这个版本的记录加上这张专辑的记录；按版本筛选还包含以它为来源的认领记录。检查顺序是 401、403、400（分页、release_id、group_id）、200。
 func (handlers *Handlers) listOperations(responseWriter http.ResponseWriter, request *http.Request) {
@@ -90,7 +94,20 @@ func (handlers *Handlers) listOperations(responseWriter http.ResponseWriter, req
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_pagination", "分页参数无效")
 		return
 	}
-	params := operations.ListParams{Page: page, PageSize: pageSize}
+	query := request.URL.Query()
+	params := operations.ListParams{Page: page, PageSize: pageSize, Source: query.Get("source"), Provider: query.Get("provider"), BatchID: query.Get("batch_id")}
+	if params.Source != "" && params.Source != "curation" {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", "操作来源无效")
+		return
+	}
+	if params.Provider != "" && !providerPattern.MatchString(params.Provider) {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", "整理来源标识无效")
+		return
+	}
+	if params.BatchID != "" && !uuid.Valid(params.BatchID) {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_id", "批次标识无效")
+		return
+	}
 	if releaseID := request.URL.Query().Get("release_id"); releaseID != "" {
 		if !uuid.Valid(releaseID) {
 			httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_id", "发行版本标识无效")
@@ -152,7 +169,7 @@ func (handlers *Handlers) listOperations(responseWriter http.ResponseWriter, req
 	for _, record := range listed.Items {
 		description := descriptions[record.ID]
 		items = append(items, operationItem{
-			ID: record.ID, Type: record.Type, CreatedAt: record.CreatedAt, Origin: record.Origin,
+			ID: record.ID, Type: record.Type, CreatedAt: record.CreatedAt, Origin: record.Origin, BatchID: record.BatchID,
 			Actor:   actorItem{ID: record.ActorID, Username: names[record.ActorID]},
 			Release: description.Release, Album: description.Album, Artist: description.Artist, Changes: description.Changes,
 			Reverts: optionalID(record.RevertsID), RevertedBy: optionalID(record.RevertedByID),

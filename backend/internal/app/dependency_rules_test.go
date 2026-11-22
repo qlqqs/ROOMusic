@@ -71,6 +71,8 @@ var packageRules = map[string]packageRule{
 	"catalog/ingest":                    {imports: []string{"catalog/classical", "catalog/internal/artistgraph", "catalog/metadata", "platform/uuid", "platform/workpool", "catalog/internal/searchindex", "catalog/internal/writegate"}},
 	"catalog":                           {imports: []string{"catalog/internal/artistgraph", "catalog/internal/writegate", "catalog/internal/releasesql", "platform/uuid", "catalog/textnorm", "catalog/internal/searchindex"}},
 	"catalog/governance":                {imports: []string{"catalog/textnorm", "catalog/internal/artistgraph", "catalog", "catalog/internal/releasesql", "catalog/metadata", "operations", "platform/uuid", "catalog/internal/searchindex", "catalog/internal/writegate"}},
+	"curation":                          {imports: []string{"operations", "identity", "catalog", "catalog/governance", "platform/uuid"}},
+	"curation/httpapi":                  {imports: []string{"curation", "identity", "operations", "platform/httpserver"}, http: true},
 	"operations":                        {imports: []string{"platform/uuid"}},
 	"operations/httpapi":                {imports: []string{"identity", "operations", "platform/httpserver", "platform/uuid"}, http: true},
 	"library/parser":                    {imports: []string{"catalog/metadata", "catalog/classical", "playback/dsdio"}},
@@ -114,6 +116,7 @@ var packageRules = map[string]packageRule{
 	"playback/httpapi":                  {imports: []string{"identity", "platform/httpserver", "platform/uuid", "playback"}, http: true},
 	"listening/httpapi":                 {imports: []string{"identity", "listening", "platform/httpserver", "platform/uuid"}, http: true},
 	"app": {imports: []string{
+		"curation", "curation/httpapi",
 		"platform/diagnostics", "platform/diagnostics/stewardtools", "backup/stewardtools", "identity/stewardtools", "playback/stewardtools", "dspsettings/stewardtools",
 		"zones/stewardtools", "listening/stewardtools", "personal/stewardtools",
 		"catalog/stewardtools", "catalog/governance/stewardtools", "library/stewardtools", "operations", "operations/stewardtools",

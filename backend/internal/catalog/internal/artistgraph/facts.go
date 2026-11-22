@@ -21,7 +21,7 @@ type creditFact struct {
 	Layer     string  `json:"layer"`
 }
 
-// refreshFacts 重建当前扫描事实与专辑艺人修正层，返回本次新建身份；不触碰任何艺人治理表。
+// refreshFacts 重建当前扫描事实与专辑艺人的自动层、修正层，返回本次新建身份；不触碰任何艺人治理表。
 func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, error) {
 	resolver := nameResolver{tx: tx, names: map[string]string{}}
 	facts := []creditFact{}
@@ -55,20 +55,21 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 		}
 		return nil
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT r.id::text,r.artist,COALESCE(r.album_artist,''),COALESCE(c.text_value,''),
+	rows, err := tx.QueryContext(ctx, `SELECT r.id::text,r.artist,COALESCE(r.album_artist,''),COALESCE(c.text_value,''),COALESCE(a.text_value,''),
  EXISTS(SELECT 1 FROM release_field_decisions d WHERE d.release_id=r.id AND d.field_key='artist' AND d.selected_source='default_fallback') OR (r.artist='未知艺术家' AND NOT EXISTS(SELECT 1 FROM release_field_decisions d WHERE d.release_id=r.id AND d.field_key='artist'))
- FROM releases r LEFT JOIN release_corrections c ON c.release_id=r.id AND c.field='album_artist' WHERE r.id=ANY($1::uuid[]) ORDER BY r.id`, ids)
+ FROM releases r LEFT JOIN release_corrections c ON c.release_id=r.id AND c.field='album_artist'
+ LEFT JOIN release_auto_values a ON a.release_id=r.id AND a.field='album_artist' WHERE r.id=ANY($1::uuid[]) ORDER BY r.id`, ids)
 	if err != nil {
 		return nil, err
 	}
 	type release struct {
-		id, artist, album, correction string
-		inferred                      bool
+		id, artist, album, correction, auto string
+		inferred                            bool
 	}
 	var releases []release
 	for rows.Next() {
 		var r release
-		if err = rows.Scan(&r.id, &r.artist, &r.album, &r.correction, &r.inferred); err != nil {
+		if err = rows.Scan(&r.id, &r.artist, &r.album, &r.correction, &r.auto, &r.inferred); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -91,9 +92,12 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 				return nil, err
 			}
 		}
-		if r.correction != "" && !metadata.IsCompilationPlaceholder(r.correction) {
+		for _, credit := range []struct{ layer, name string }{{"correction", r.correction}, {"auto", r.auto}} {
+			if credit.name == "" || metadata.IsCompilationPlaceholder(credit.name) {
+				continue
+			}
 			for _, role := range []string{"release_artist", "album_artist"} {
-				if err = add(r.id, "", role, r.correction, "correction"); err != nil {
+				if err = add(r.id, "", role, credit.name, credit.layer); err != nil {
 					return nil, err
 				}
 			}
@@ -190,11 +194,7 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 		return nil, err
 	}
 	for i := range facts {
-		origin := "scan"
-		if facts[i].Layer == "correction" {
-			origin = "correction"
-		}
-		facts[i].NameID, err = resolver.ensure(ctx, facts[i].Name, origin)
+		facts[i].NameID, err = resolver.ensure(ctx, facts[i].Name, facts[i].Layer)
 		if err != nil {
 			return nil, err
 		}

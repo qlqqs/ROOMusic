@@ -41,7 +41,7 @@ func (a adapter) preview(ctx context.Context, name string, raw json.RawMessage) 
 			var after any
 			switch c.Mode {
 			case catalog.CorrectionClear:
-				after = field.ScanValue
+				after = field.ValueAfterClear()
 			case catalog.CorrectionSet:
 				switch field.Field {
 				case "year":

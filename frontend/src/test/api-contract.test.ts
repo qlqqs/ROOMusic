@@ -507,6 +507,10 @@ const successContracts: Record<string, Contract> = {
   "corrections/get": { status: 200, decode: decodeCorrectionState },
   "corrections/get-corrected": { status: 200, decode: decodeCorrectionState },
   "corrections/patched": { status: 200, decode: decodeCorrectionResult },
+  // 自动整理（M7 A）：带自动层的修正状态、自动整理的操作记录与它的撤销响应。
+  "corrections/get-auto": { status: 200, decode: decodeCorrectionState },
+  "operations/auto-list": { status: 200, decode: decodeOperationPage },
+  "operations/auto-reverted": { status: 200, decode: decodeRevertResult },
   "group-changes/joined": { status: 200, decode: decodeGroupChangeResult },
   "group-changes/detached": { status: 200, decode: decodeGroupChangeResult },
   "group-defaults/set": { status: 200, decode: decodeGroupDefaultResult },
@@ -824,7 +828,15 @@ const mediaResponseContracts: Record<string, { reason: string }> = {
 };
 
 // 后端已有接口、前端还没有消费的样本。
-const unconsumedContracts: readonly string[] = [];
+// 自动整理的开关、批次、范围撤销与不再提出（M7 A）：后端接口已有，界面在子任务 E1 才做；那时把它们移到 successContracts 并配上解码器。
+const unconsumedContracts: readonly string[] = [
+  "curation/batch",
+  "curation/batches",
+  "curation/scope-reverted",
+  "curation/settings-disabled",
+  "curation/settings-enabled",
+  "curation/suppressions",
+];
 
 const eventContracts: Record<string, { event: string; preservesWireShape: boolean }> = {
   "playback-zones/events/device-removed": { event: "device_removed", preservesWireShape: false },

@@ -1,13 +1,15 @@
-import type { ClaimSummaryDTO, DefaultVersionDTO, OperationChangesDTO, OperationItemDTO, OperationOriginDTO } from "./api/decoders";
+import type { ClaimSummaryDTO, CorrectionIntentDTO, DefaultVersionDTO, FieldValue, OperationChangesDTO, OperationItemDTO, OperationOriginDTO } from "./api/decoders";
 import { correctionFieldLabels, displayValue, reviewableIssueLabels } from "./labels";
 
 /**
  * 操作的来源标签：审查批准后自动执行的写“管家（审查通过）”（C7），管家确认方案后执行的写“管家（确认）”，管家直接执行的写“管家（直接执行）”，
- * MCP 令牌写“MCP”；没有来源（页面上的操作）是 null。审查转给用户、由用户确认执行的项仍是“管家（确认）”。
+ * MCP 令牌写“MCP”；后台自动整理写“自动整理 · 来源标识”（标识缺失时只写“自动整理”）；没有来源（页面上的操作）是 null。
+ * 审查转给用户、由用户确认执行的项仍是“管家（确认）”。
  */
 export function operationOriginLabel(origin: OperationOriginDTO | null | undefined): string | null {
   if (origin === null || origin === undefined) return null;
   if (origin.source === "mcp") return "MCP";
+  if (origin.source === "curation") return origin.provider === null || origin.provider === undefined || origin.provider === "" ? "自动整理" : `自动整理 · ${origin.provider}`;
   const reviewed = origin.review_id !== null && origin.review_id !== undefined && (origin.review_decision ?? "approved") === "approved";
   if (reviewed) return "管家（审查通过）";
   return origin.plan_id === null || origin.plan_id === undefined ? "管家（直接执行）" : "管家（确认）";
@@ -26,6 +28,8 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       return "核对问题";
     case "release_claim":
       return "认领";
+    case "release_auto_correction":
+      return "自动补全发行信息";
     case "artist_merge":
       return "合并艺人";
     case "artist_split":
@@ -40,6 +44,7 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       if (item.changes?.kind === "release_group_default") return "撤销默认版本调整";
       if (item.changes?.kind === "release_issue_review") return "撤销核对";
       if (item.changes?.kind === "release_claim") return "撤销认领";
+      if (item.changes?.kind === "release_auto_correction") return "撤销自动补全";
       return "撤销";
   }
 }
@@ -78,6 +83,17 @@ function artistScopeText(scope: { name_count: number; release_count: number; tra
   ]
     .filter((part) => part !== null)
     .join("、");
+}
+
+/** 自动层的一个值：没有自动值写“无”，明确留空写“留空”，其余写值本身。 */
+function autoText(auto: CorrectionIntentDTO | null): string {
+  if (auto === null) return "无";
+  return auto.mode === "null" || auto.value === undefined ? "留空" : displayValue(auto.value);
+}
+
+function sameValue(a: FieldValue | null, b: FieldValue | null): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((item, index) => item === b[index]);
+  return a === b;
 }
 
 function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[] {
@@ -123,6 +139,16 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
     const label = trackCount === null ? reviewableIssueLabels[changes.issue] : `${reviewableIssueLabels[changes.issue]}（${trackCount} 首）`;
     return [`${label}：${to.reviewed ? "标记为已核对" : "取消核对"}`];
   }
+  if (changes.kind === "release_auto_correction") {
+    return changes.fields.map((field) => {
+      const [from, to] = reverse ? [field.after, field.before] : [field.before, field.after];
+      const label = correctionFieldLabels[field.field];
+      // 有人工修正时自动值不生效，显示的值没有变：这时写自动值本身的变化，并说明人工修正仍然优先。
+      if (sameValue(from.effective, to.effective)) return `${label}：自动值 ${autoText(from.auto)} → ${autoText(to.auto)}（人工修正优先，显示不变）`;
+      const note = to.auto === null ? "（取消自动补全）" : to.auto.mode === "null" ? "（留空）" : "";
+      return `${label}：${displayValue(from.effective)} → ${displayValue(to.effective)}${note}`;
+    });
+  }
   return changes.fields.map((field) => {
     const [from, to] = reverse ? [field.after, field.before] : [field.before, field.after];
     const note = to.correction === null ? "（恢复为扫描值）" : to.correction.mode === "null" ? "（留空）" : "";
@@ -150,6 +176,8 @@ export function notRevertibleReason(item: Pick<OperationItemDTO, "type" | "rever
   if (item.type === "artist_rename") return "需要时可以再改名";
   if (item.type === "artist_candidate_ignore") return "不能撤销";
   if (item.reverted_by !== null) return "已撤销";
+  // 自动补全的撤销不看专辑是否可见，也不受之后的人工修改影响：撤不了只可能是同一个字段又被更晚的自动整理改写了。
+  if (item.type === "release_auto_correction") return "之后又被自动整理改写";
   // 认领的撤销不要求新版本可见（它的目的就是把修改还给旧版本），所以不写“专辑已不可见”：能不能撤销只看之后有没有修改。
   if (item.type === "release_claim") return "之后又有修改";
   // 目标是发行的记录看发行，目标是专辑的记录看专辑：专辑没有可见版本了，就没有可以撤销的东西。

@@ -82,6 +82,8 @@ M3 起，发行字段修正、人工归组与撤销（M4 起还有默认版本�
 
 **覆盖层模式**：人工修正放在独立的表（`release_corrections`，没有行就是“没有修正”），扫描只写扫描列，读取经视图（`release_effective`）叠加修正，
 所以重扫不会覆盖修正是结构保证而不是约定；人工修改版本号 `releases.edit_revision` 只由受控操作递增，扫描从不改它，扫描与人工修改因此互不制造冲突。
+迁移 0058（M7 A）在两者之间加了第三层：后台自动整理的值放在 `release_auto_values`，版本号是 `releases.auto_revision`，视图按 人工修正 → 自动层 → 扫描值 取值；
+三层互不读写对方的表与版本号，见[自动整理合同](./curation-contracts.md)。0058 的回退是有损的，回退之后要做一次完整重扫（该合同第 2 节）。
 
 **迁移 0018（M4，默认版本）**：`release_groups` 增加 `default_release_id`（外键 `ON DELETE SET NULL`，**不约束属于这个组**）与组自己的 `edit_revision`，
 并放宽 `operations` 的类型与目标类型约束（约束名不变，先 `DROP` 再 `ADD`）。默认版本不在别处随归组或扫描清除，而是由读取时的排序判断是否生效

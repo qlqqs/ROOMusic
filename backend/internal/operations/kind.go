@@ -11,8 +11,7 @@ import (
 type Kind interface {
 	// Type 是它处理的 operation_type（TypeReleaseCorrection、TypeReleaseGroupChange、TypeReleaseGroupDefault、TypeReleaseIssueReview、TypeReleaseClaim）。
 	Type() string
-	// Revert 在 RevertExecutor 提供的事务里撤销 original：锁定目标、核对 original 是目标上最近一次修改
-	// （目标的人工修改版本号等于 original.ResultRevision，否则返回 revert_conflict）、恢复前态，返回撤销记录的目标、前后版本与前后状态。
+	// Revert 在事务里锁定目标，按类型核对版本或字段写入者，恢复前态并返回目标、前后版本与前后状态。
 	// original 已被锁住并确认不是撤销、没有被撤销过；RevertsID 与响应由 RevertExecutor 填写。
 	Revert(ctx context.Context, tx *sql.Tx, operationID string, original Record) (Outcome, error)
 	// Describe 批量补充记录在列表里的展示信息（每条记录一项，键是记录 ID）：目标当前的状态、改动摘要，以及目标现在是否仍可撤销它。
@@ -86,9 +85,13 @@ func RevertExecutor(kind Kind, originalID string) Executor {
 			return Outcome{}, err
 		}
 		outcome.RevertsID = original.ID
+		revision := outcome.ResultRevision
+		if outcome.ResponseRevision != 0 {
+			revision = outcome.ResponseRevision
+		}
 		outcome.Response = RevertResult{
 			OperationID: operationID, RevertsOperationID: original.ID,
-			TargetType: outcome.TargetType, TargetID: outcome.TargetID, Revision: outcome.ResultRevision,
+			TargetType: outcome.TargetType, TargetID: outcome.TargetID, Revision: revision,
 		}
 		return outcome, nil
 	}

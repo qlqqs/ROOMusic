@@ -78,7 +78,8 @@ func refreshEffective(ctx context.Context, tx *sql.Tx, ids []string) error {
 	_, err = tx.ExecContext(ctx, `WITH scoped AS MATERIALIZED (
  SELECT c.id,c.release_id,c.track_id,c.role,c.name_id,c.position,c.release_id AS owner_release_id
  FROM artist_credits c WHERE c.release_id=ANY($1::uuid[]) AND c.layer=CASE WHEN EXISTS(
- SELECT 1 FROM release_corrections rc WHERE rc.release_id=c.release_id AND rc.field='album_artist') THEN 'correction' ELSE 'scan' END
+ SELECT 1 FROM release_corrections rc WHERE rc.release_id=c.release_id AND rc.field='album_artist') THEN 'correction'
+ WHEN EXISTS(SELECT 1 FROM release_auto_values a WHERE a.release_id=c.release_id AND a.field='album_artist') THEN 'auto' ELSE 'scan' END
  UNION ALL
  SELECT c.id,c.release_id,c.track_id,c.role,c.name_id,c.position,m.release_id
  FROM media m JOIN tracks t ON t.medium_id=m.id JOIN artist_credits c ON c.track_id=t.id WHERE m.release_id=ANY($1::uuid[])

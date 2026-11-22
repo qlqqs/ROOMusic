@@ -1,0 +1,20 @@
+{
+  "body": {
+    "items": [
+      {
+        "closed_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000001",
+        "opened_at": "2026-01-01T00:00:00Z",
+        "operations": 2,
+        "reverted": 2,
+        "tier": "program"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 1
+    }
+  },
+  "status": 200
+}

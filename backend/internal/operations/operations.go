@@ -34,6 +34,7 @@ import (
 
 const (
 	// Type 常量是 operations.operation_type 允许的发行、专辑、艺人治理与撤销类型。
+	TypeReleaseAutoCorrection = "release_auto_correction"
 	TypeReleaseCorrection     = "release_correction"
 	TypeReleaseGroupChange    = "release_group_change"
 	TypeReleaseGroupDefault   = "release_group_default"
@@ -129,6 +130,9 @@ func NormalizeKey(header string) (key string, ok bool) {
 
 // Origin 记录后端入口提供的来源，不参与操作指纹。
 type Origin struct {
+	ProviderKind   string `json:"provider_kind,omitempty"`
+	Provider       string `json:"provider,omitempty"`
+	Basis          string `json:"basis,omitempty"`
 	ReviewID       string `json:"review_id,omitempty"`
 	ReviewDecision string `json:"review_decision,omitempty"`
 	Source         string `json:"source"`
@@ -140,7 +144,8 @@ type Origin struct {
 
 // Spec 是一次操作的请求侧信息，由入口在鉴权与校验之后构造。
 type Spec struct {
-	Origin *Origin
+	Origin  *Origin
+	BatchID string
 
 	ActorID     string // 操作者（会话中的用户）
 	Type        string // Type* 常量之一
@@ -156,9 +161,17 @@ type Outcome struct {
 	Targets          []Target // 额外受影响目标；艺人主目标也自动记入关联。
 	ExpectedRevision int64
 	ResultRevision   int64 // 必须等于 ExpectedRevision + 1
+	ResponseRevision int64 // 撤销响应的版本号，零表示沿用 ResultRevision。
 	Before, After    any   // 类型化的前后状态，序列化成 JSON；撤销依据它们
 	RevertsID        string
 	Response         any // 序列化成 JSON；原样返回给客户端，也是同键重放时的响应
+}
+
+type actorKey struct{}
+
+// ActorID 返回当前 Run 事务的操作者，供执行器在同一事务记录关联修改的作者。
+func ActorID(ctx context.Context) string {
+	return ctx.Value(actorKey{}).(string)
 }
 
 // Executor 在 Run 提供的事务里完成业务变化。operationID 是本次操作预先生成的 ID：业务行（例如修正行）写入时就带上它，
@@ -219,7 +232,7 @@ func Run(ctx context.Context, database *sql.DB, spec Spec, execute Executor) (Re
 	}
 
 	operationID := uuid.New()
-	outcome, err := execute(ctx, tx, operationID)
+	outcome, err := execute(context.WithValue(ctx, actorKey{}, actorID), tx, operationID)
 	if err != nil {
 		return Result{}, classify("execute", err)
 	}
@@ -252,10 +265,10 @@ func Run(ctx context.Context, database *sql.DB, spec Spec, execute Executor) (Re
 		reverts = strings.ToLower(outcome.RevertsID)
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO operations(id, actor_id, operation_type, target_type, target_id, idempotency_key, fingerprint,
-			expected_revision, result_revision, before_state, after_state, response, reverts_operation_id, request_id, origin)
-		VALUES($1::uuid, $2::uuid, $3, $4, $5::uuid, $6::uuid, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::uuid, $14, $15::jsonb)`,
+			expected_revision, result_revision, before_state, after_state, response, reverts_operation_id, request_id, origin, batch_id)
+		VALUES($1::uuid, $2::uuid, $3, $4, $5::uuid, $6::uuid, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::uuid, $14, $15::jsonb, NULLIF($16, '')::uuid)`,
 		operationID, actorID, spec.Type, outcome.TargetType, strings.ToLower(outcome.TargetID), key, spec.Fingerprint,
-		outcome.ExpectedRevision, outcome.ResultRevision, string(before), string(after), string(response), reverts, spec.RequestID, origin)
+		outcome.ExpectedRevision, outcome.ResultRevision, string(before), string(after), string(response), reverts, spec.RequestID, origin, spec.BatchID)
 	if err != nil {
 		var postgresError *pgconn.PgError
 		if errors.As(err, &postgresError) && postgresError.Code == "23505" && postgresError.ConstraintName == "operations_actor_key_uq" {

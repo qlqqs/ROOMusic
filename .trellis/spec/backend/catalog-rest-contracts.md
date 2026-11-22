@@ -36,7 +36,7 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
   与 `default_release_id`（生效中的默认版本，M4；失效或没有设定时为 `null`，非空时等于 `releases[0].id`）；组摘要（列表）没有这两个字段。
   两个接口都只读；人工归组由治理合同的 `POST /releases/{id}/group` 提供，默认版本由 `POST /release-groups/{id}/default` 提供。
 - Release 详情在摘要之外加 `revision`（发行的人工修改版本号，写操作用它做预期版本）与 `corrected_fields`（有人工修正的字段名，固定顺序，
-  没有时是空数组）；所有登录成员可见，不含修正值的来源与操作者。
+  没有时是空数组）；所有登录成员可见，不含修正值的来源与操作者。自动层的值（M7 A）不列入 `corrected_fields`。
 - Release 详情与版本对比的 `genres` 为有序文本数组，无流派为 `[]`；不再返回单值 `genre`。修正字段键仍为 `genre`，见[多流派合同](./genre-contracts.md)。
 - Release 详情的 `edition`、`label`、`barcode` 为 nullable string；每条 Track 的
   `credits` 项为 `{role,name,detail,artist_refs}`，`role` 按固定顺序允许
@@ -103,7 +103,8 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
 
 - 所有读取（列表、详情、搜索、排序、分页、按组读取、代表版本规则、最近播放的曲目位置）的发行来源是视图 `release_effective`
   （常量 `releasesql.ReleaseSource`，别名仍叫 `releases`）：标题、专辑艺人、年份、流派、厂牌、编号、版本说明、条码在有修正时取修正值（设空为空），
-  展示艺人 `artist` 跟随专辑艺人的修正。扫描与身份规划读写 `releases` 本表。**没有修正时与扫描值逐项一致。**
+  没有修正而有自动值时取自动值（M7 A，见[自动整理合同](./curation-contracts.md)），展示艺人 `artist` 跟随专辑艺人的修正与自动值。
+  扫描与身份规划读写 `releases` 本表。**没有修正也没有自动值时与扫描值逐项一致。**
 - `attention_count` 不计已有修正的字段（`artist` 由专辑艺人的修正覆盖），分组原因与缺失曲目照旧；详情的专辑级署名里，专辑艺人有修正时用修正值。
 - M4 第二项起 `attention_count` 是三类**待处理**问题之和（拿不准的字段、同一目录的归组冲突、缺失曲目），被仍然有效的核对压下的不计；
   没有核对时与上面的算法逐项相同。算法、依据与核对见[元数据问题与核对合同](./issue-review-contracts.md)。

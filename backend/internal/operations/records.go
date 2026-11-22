@@ -28,6 +28,7 @@ type Queryer interface {
 // Record 是一条已提交的操作记录。Before 与 After 是执行器写入的类型化状态，只有对应的执行器知道怎么解释；
 // 记录里没有请求体、路径或密钥。
 type Record struct {
+	BatchID          *string
 	Origin           json.RawMessage
 	ID               string
 	ActorID          string
@@ -55,7 +56,7 @@ func (record Record) ChangeType() string {
 const (
 	recordProjection = `o.id::text, o.actor_id::text, o.operation_type, o.target_type, o.target_id::text,
 		o.expected_revision, o.result_revision, o.before_state, o.after_state,
-		COALESCE(o.reverts_operation_id::text, ''), COALESCE(original.operation_type, ''), COALESCE(reverted.id::text, ''), o.created_at, o.origin`
+		COALESCE(o.reverts_operation_id::text, ''), COALESCE(original.operation_type, ''), COALESCE(reverted.id::text, ''), o.created_at, o.origin, o.batch_id::text`
 	recordSource = ` FROM operations o LEFT JOIN operations reverted ON reverted.reverts_operation_id = o.id
 		LEFT JOIN operations original ON original.id = o.reverts_operation_id`
 )
@@ -64,7 +65,7 @@ func scanRecord(row interface{ Scan(...any) error }) (Record, error) {
 	var record Record
 	var before, after []byte
 	if err := row.Scan(&record.ID, &record.ActorID, &record.Type, &record.TargetType, &record.TargetID,
-		&record.ExpectedRevision, &record.ResultRevision, &before, &after, &record.RevertsID, &record.OriginalType, &record.RevertedByID, &record.CreatedAt, (*[]byte)(&record.Origin)); err != nil {
+		&record.ExpectedRevision, &record.ResultRevision, &before, &after, &record.RevertsID, &record.OriginalType, &record.RevertedByID, &record.CreatedAt, (*[]byte)(&record.Origin), &record.BatchID); err != nil {
 		return Record{}, err
 	}
 	record.Before, record.After = before, after
@@ -114,6 +115,9 @@ type Target struct {
 // 以及来源是 Sources 里某个发行的记录（并集）。并集让专辑详情的“修改记录”同时列出一个版本的记录和这张专辑的记录，
 // 也让一个版本的记录同时包含以它为来源的认领（认领记录的目标是新版本，来源写在记录的状态里）。
 type ListParams struct {
+	Source   string
+	Provider string
+	BatchID  string
 	Targets  []Target
 	Sources  []string // 发行 ID（UUID）；匹配记录后态里的 source.release_id，认领与它的撤销记录都带这个键
 	Page     int
@@ -126,12 +130,9 @@ type Page struct {
 	Total int64
 }
 
-// listFilter 返回列表的 WHERE 子句（没有筛选时为空）和它的参数。来源的表达式必须与迁移 0020 里的部分索引逐字一致才能走索引；
+// listFilter 返回列表的 WHERE 子句（没有筛选时为空）和它的参数。认领与自动整理来源的表达式必须与迁移 0020、0058 里的部分索引表达式一致才能走索引；
 // 测试用同一个函数拼出 EXPLAIN，所以表达式一旦不一致就会被发现。
 func listFilter(params ListParams) (where string, arguments []any) {
-	if len(params.Targets) == 0 && len(params.Sources) == 0 {
-		return "", nil
-	}
 	clauses := make([]string, 0, len(params.Targets)+len(params.Sources))
 	for _, target := range params.Targets {
 		if target.Type == TargetArtist {
@@ -146,7 +147,25 @@ func listFilter(params ListParams) (where string, arguments []any) {
 		clauses = append(clauses, "(o.after_state #>> '{source,release_id}') = $"+strconv.Itoa(len(arguments)+1))
 		arguments = append(arguments, source)
 	}
-	return " WHERE " + strings.Join(clauses, " OR "), arguments
+	var filters []string
+	if len(clauses) != 0 {
+		filters = append(filters, "("+strings.Join(clauses, " OR ")+")")
+	}
+	if params.Source == "curation" || params.Provider != "" {
+		filters = append(filters, "o.origin->>'source' = 'curation'")
+	}
+	if params.Provider != "" {
+		arguments = append(arguments, params.Provider)
+		filters = append(filters, "(o.origin->>'provider') = $"+strconv.Itoa(len(arguments)))
+	}
+	if params.BatchID != "" {
+		arguments = append(arguments, params.BatchID)
+		filters = append(filters, "o.batch_id = $"+strconv.Itoa(len(arguments))+"::uuid")
+	}
+	if len(filters) == 0 {
+		return "", nil
+	}
+	return " WHERE " + strings.Join(filters, " AND "), arguments
 }
 
 // List 按时间倒序（再按 ID 倒序）返回一页记录。

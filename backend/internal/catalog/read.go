@@ -328,21 +328,20 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 	return media, nil
 }
 
-// LoadReleaseCredits 读取专辑级署名。专辑艺人有人工修正时，扫描写入的 album_artist 署名被修正值取代，
+// LoadReleaseCredits 读取专辑级署名。专辑艺人有人工修正或自动值时，扫描写入的 album_artist 署名被修正值取代，
 // 与头部显示的有效专辑艺人一致；其余署名原样。
 func (s *Store) LoadReleaseCredits(ctx context.Context, releaseID string) ([]ReleaseCredit, error) {
-	rows, err := s.database.QueryContext(ctx, `SELECT role,name,NULL::text,`+releasesql.ReleaseCreditArtistRefsProjection+` FROM (
-			SELECT credit.role,credit.name,credit.position
-			FROM release_credits credit
-			WHERE credit.release_id=$1::uuid
-			  AND NOT (credit.role='album_artist' AND EXISTS (
-				SELECT 1 FROM release_corrections correction
-				WHERE correction.release_id=credit.release_id AND correction.field='album_artist'))
-			UNION ALL
-			SELECT 'album_artist',correction.text_value,1
-			FROM release_corrections correction
-			WHERE correction.release_id=$1::uuid AND correction.field='album_artist'
-		) credits ORDER BY position,role,name LIMIT $2`, releaseID, maxReleaseCredits+1)
+	rows, err := s.database.QueryContext(ctx, `WITH album_artist_override AS (
+ SELECT text_value FROM (
+   SELECT text_value, 1 AS priority FROM release_corrections WHERE release_id=$1::uuid AND field='album_artist'
+   UNION ALL
+   SELECT text_value, 2 FROM release_auto_values WHERE release_id=$1::uuid AND field='album_artist'
+ ) layers ORDER BY priority LIMIT 1
+) SELECT role,name,NULL::text,`+releasesql.ReleaseCreditArtistRefsProjection+` FROM (
+ SELECT credit.role,credit.name,credit.position FROM release_credits credit
+ WHERE credit.release_id=$1::uuid AND (credit.role<>'album_artist' OR NOT EXISTS (SELECT 1 FROM album_artist_override))
+ UNION ALL SELECT 'album_artist',text_value,1 FROM album_artist_override
+ ) credits ORDER BY position,role,name LIMIT $2`, releaseID, maxReleaseCredits+1)
 	if err != nil {
 		return nil, err
 	}
