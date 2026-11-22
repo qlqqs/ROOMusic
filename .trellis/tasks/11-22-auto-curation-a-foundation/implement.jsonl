@@ -1,0 +1,8 @@
+{"file":"docs/architecture/adr/0006-auto-curation-and-sources.md","reason":"自动层、撤销、开关的规则（第 4、5、10 节）"}
+{"file":".trellis/tasks/11-22-auto-curation-a-foundation/research/auto-layer-coupling.md","reason":"现有代码的耦合点与工程约定，带文件与行号"}
+{"file":".trellis/tasks/11-22-auto-curation-sources/research/overlays-and-operations.md","reason":"覆盖层与受治理操作的现状"}
+{"file":".trellis/spec/backend/governance-contracts.md","reason":"受治理操作的现有合同，新类型要与它一致"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"迁移与回退脚本的作者规则"}
+{"file":".trellis/spec/backend/artist-contracts.md","reason":"署名事实与有效署名的合同"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"包的位置与依赖方向"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"错误分类与错误码"}

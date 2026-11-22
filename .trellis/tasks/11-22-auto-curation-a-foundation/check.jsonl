@@ -1,0 +1,5 @@
+{"file":"docs/architecture/adr/0006-auto-curation-and-sources.md","reason":"验收场景与规则"}
+{"file":".trellis/tasks/11-22-auto-curation-a-foundation/research/auto-layer-coupling.md","reason":"样本、隔离数据库、变异检查的做法"}
+{"file":".trellis/spec/backend/database-verification.md","reason":"数据库集成测试的验证要求"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端质量要求"}
+{"file":".trellis/spec/backend/governance-contracts.md","reason":"撤销、幂等与记录的既有断言"}
