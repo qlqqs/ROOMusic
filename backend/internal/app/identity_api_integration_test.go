@@ -804,6 +804,7 @@ func newAllowedOriginsIntegrationTestApplication(t *testing.T) *integrationTestA
 		DataDirectory:       data,
 	}, database, testFrontend(), slog.New(slog.NewTextHandler(io.Discard, nil)), func(settings *options) {
 		settings.pauseCatalogMaintenance = true
+		settings.disableProgram = true
 	})
 	t.Cleanup(func() {
 		stop()
@@ -964,6 +965,7 @@ func newSameHostIntegrationTestApplication(t *testing.T) *integrationTestApplica
 		DataDirectory:       data,
 	}, database, testFrontend(), slog.New(slog.NewTextHandler(io.Discard, nil)), func(settings *options) {
 		settings.pauseCatalogMaintenance = true
+		settings.disableProgram = true
 	})
 	t.Cleanup(func() {
 		stop()

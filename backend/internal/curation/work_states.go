@@ -19,6 +19,33 @@ type WorkState struct {
 	UpdatedAt                        time.Time
 }
 
+// ProgramChanges 是调度用的变化标记。发行轮的标记排除程序自己的写入，
+// 避免取歌词期间每新增一条歌词记录就重新扫描发行。
+type ProgramChanges struct {
+	Scan, Settings, Sources, Suppression, Operation, OtherOperation sql.NullTime
+	LatestDue, LatestReleaseDue                                     sql.NullTime
+	Suppressions, Due, ReleaseDue                                   int64
+}
+
+func LoadProgramChanges(ctx context.Context, q operations.Queryer, now time.Time) (ProgramChanges, error) {
+	var c ProgramChanges
+	err := q.QueryRowContext(ctx, `SELECT
+ (SELECT max(finished_at) FROM scan_runs),
+ (SELECT updated_at FROM curation_settings WHERE id=1),
+ (SELECT max(updated_at) FROM curation_source_settings),
+ (SELECT max(created_at) FROM curation_suppressions),
+ (SELECT max(created_at) FROM operations),
+ (SELECT o.created_at FROM operations o WHERE NOT EXISTS
+   (SELECT 1 FROM curation_batches b WHERE b.id=o.batch_id AND b.tier='program')
+   ORDER BY o.created_at DESC LIMIT 1),
+ (SELECT count(*) FROM curation_suppressions),
+ count(*),count(*) FILTER (WHERE subject IN ('release','artwork')),
+ max(next_attempt_at),max(next_attempt_at) FILTER (WHERE subject IN ('release','artwork'))
+ FROM curation_work_states WHERE status='try_later' AND next_attempt_at <= $1`, now).
+		Scan(&c.Scan, &c.Settings, &c.Sources, &c.Suppression, &c.Operation, &c.OtherOperation, &c.Suppressions, &c.Due, &c.ReleaseDue, &c.LatestDue, &c.LatestReleaseDue)
+	return c, err
+}
+
 type Execer interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }

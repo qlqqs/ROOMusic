@@ -1,0 +1,267 @@
+package program
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
+	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/operations"
+	"github.com/qlqq/roomusic/backend/internal/sources"
+)
+
+var methodNames = map[string]string{
+	"tag_id": "标签标识", "barcode": "条码", "catalog_number": "唱片编号", "isrc": "ISRC", "disc_id": "光盘目录",
+}
+
+func hasMarker(markers []catalog.CurationSuppression, objectType, objectID, subject, raw string) bool {
+	if len(markers) == 0 {
+		return false
+	}
+	hash := sha256.Sum256([]byte(raw))
+	valueHash := hex.EncodeToString(hash[:])
+	for _, marker := range markers {
+		if marker.TargetType == objectType && marker.TargetID == objectID && marker.Subject == subject && marker.ValueHash == valueHash {
+			return true
+		}
+	}
+	return false
+}
+
+// 操作记录的展示字段按 UTF-8 字节限制。待定项里的外部原文另存。
+func summaryText(value string) string {
+	value = strings.ReplaceAll(value, "\x00", "")
+	if len(value) <= 500 {
+		return value
+	}
+	end := 500
+	for !utf8.RuneStart(value[end]) {
+		end--
+	}
+	return value[:end]
+}
+
+func externalLabel(labels []sources.Label, number bool) string {
+	var only string
+	for _, label := range labels {
+		value := strings.TrimSpace(label.Name)
+		if number {
+			value = strings.TrimSpace(label.CatalogNumber)
+		}
+		if value == "" {
+			continue
+		}
+		if only != "" && only != value {
+			return ""
+		}
+		only = value
+	}
+	if (!number && strings.EqualFold(only, "[no label]")) || (number && strings.EqualFold(only, "[none]")) {
+		return ""
+	}
+	return only
+}
+
+func missingFields(e catalog.CurationEvidence, m sources.Release) map[string]catalog.CorrectionIntent {
+	fields := map[string]catalog.CorrectionIntent{}
+	vacant := func(name string) bool { return !e.Corrected[name] && !e.Automatic[name] }
+	add := func(name, value string, gap bool) {
+		value = metadata.NormalizeValue(value)
+		if gap && vacant(name) && value != "" && len(value) <= metadata.MaxTextBytes && strings.IndexFunc(value, unicode.IsControl) < 0 {
+			fields[name] = catalog.CorrectionIntent{Mode: catalog.CorrectionSet, Value: value}
+		}
+	}
+	add("title", m.Title, e.TitlePlaceholder)
+	add("album_artist", credits(m.Artists), e.AlbumArtist == "")
+	add("label", externalLabel(m.Labels, false), e.Label == "")
+	add("catalog_number", externalLabel(m.Labels, true), e.CatalogNumber == "" && !e.CatalogNumberIsMCN)
+	add("barcode", m.Barcode, len(e.Barcodes) == 0)
+	if e.Year == 0 && vacant("year") && len(m.Date) >= 4 {
+		y, err := strconv.ParseUint(m.Date[:4], 10, 16)
+		if err == nil && y > 0 {
+			fields["year"] = catalog.CorrectionIntent{Mode: catalog.CorrectionSet, Value: int(y)}
+		}
+	}
+	for name, intent := range fields {
+		// 写入口根据规范化后的意图做最终判断；已读到的标记无需打开批次。
+		raw, _ := json.Marshal(intent)
+		if hasMarker(e.Suppressions, "release", e.ID, name, string(raw)) {
+			delete(fields, name)
+		}
+	}
+	return fields
+}
+
+type groupPlan struct {
+	result, joinID string
+	link           bool
+}
+
+func (w *Worker) planGroup(ctx context.Context, e catalog.CurationEvidence, externalID string) (groupPlan, error) {
+	if externalID == "" {
+		return groupPlan{}, nil
+	}
+	if e.GroupChangeSource != "" && e.GroupChangeSource != "curation" {
+		return groupPlan{result: "manual"}, nil
+	}
+	groups, err := curation.ObjectsLinkedTo(ctx, w.db, "musicbrainz", "release_group", externalID)
+	if err != nil {
+		return groupPlan{}, err
+	}
+	if slices.Contains(groups, e.GroupID) {
+		return groupPlan{result: "linked"}, nil
+	}
+	visible, err := catalog.VisibleCurationGroups(ctx, w.db, groups)
+	if err != nil {
+		return groupPlan{}, err
+	}
+	switch len(visible) {
+	case 1:
+		if hasMarker(e.Suppressions, "release", e.ID, "group_join", visible[0]) {
+			return groupPlan{result: "suppressed"}, nil
+		}
+		return groupPlan{joinID: visible[0]}, nil
+	case 0:
+		// 这一页前面的发行可能刚把本组对应到了另一个外部专辑。
+		links, err := curation.LinksOf(ctx, w.db, "release_group", []string{e.GroupID})
+		if err != nil {
+			return groupPlan{}, err
+		}
+		for _, link := range links {
+			if link.Source == "musicbrainz" {
+				return groupPlan{result: "conflict"}, nil
+			}
+		}
+		agree, err := catalog.CurationGroupMembersAgree(ctx, w.db, e.GroupID, e.ID, externalID)
+		if err != nil {
+			return groupPlan{}, err
+		}
+		if agree {
+			if hasMarker(e.Suppressions, "release_group", e.GroupID, "external_link", "musicbrainz\x00"+externalID) {
+				return groupPlan{result: "suppressed"}, nil
+			}
+			return groupPlan{link: true}, nil
+		}
+	}
+	return groupPlan{result: "conflict"}, nil
+}
+
+func linkNeeded(e catalog.CurationEvidence, links []curation.LinkIntent) bool {
+	linkedTracks := make(map[string]string, len(e.Tracks))
+	for _, track := range e.Tracks {
+		linkedTracks[track.ID] = track.ExternalID
+	}
+	for _, link := range links {
+		var occupied bool
+		switch link.ObjectType {
+		case "release":
+			occupied = e.ExternalID != ""
+		case "track":
+			occupied = linkedTracks[link.ObjectID] != ""
+		case "release_group":
+			// planGroup 已经核对了本组的最新对应。
+			return true
+		}
+		if !occupied && !hasMarker(e.Suppressions, link.ObjectType, link.ObjectID, "external_link", "musicbrainz\x00"+link.ExternalID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvidence, m MatchResult) (string, error) {
+	var plan groupPlan
+	var request curation.LinkRequest
+	var fields map[string]catalog.CorrectionIntent
+	request.ReleaseID, request.Method, request.Confidence = e.ID, m.Method, "certain"
+	var basis string
+	if r := m.Release; r != nil {
+		var err error
+		plan, err = w.planGroup(ctx, e, r.Group.ID)
+		if err != nil {
+			return "", err
+		}
+		request.External = curation.ExternalSummary{Title: summaryText(r.Title), Artist: summaryText(credits(r.Artists)), Date: summaryText(r.Date), Country: summaryText(r.Country)}
+		basis = fmt.Sprintf("MusicBrainz 发行 %s，依据%s", r.ID, methodNames[m.Method])
+		request.Links = append(request.Links, curation.LinkIntent{ObjectType: "release", ObjectID: e.ID, ExternalID: r.ID, ExternalGroupID: r.Group.ID})
+		if plan.link {
+			request.Links = append(request.Links, curation.LinkIntent{ObjectType: "release_group", ObjectID: e.GroupID, ExternalID: r.Group.ID})
+		}
+		fields = missingFields(e, *r)
+	} else {
+		r := m.Recording
+		request.External = curation.ExternalSummary{Title: summaryText(r.Title), Artist: summaryText(credits(r.Artists))}
+		basis = fmt.Sprintf("MusicBrainz 录音 %s，依据%s", r.ID, methodNames[m.Method])
+	}
+	request.Source = curation.Source{Kind: "source", Provider: "musicbrainz", Basis: basis}
+	for _, pair := range m.Pairs {
+		if pair.RecordingID != "" {
+			request.Links = append(request.Links, curation.LinkIntent{ObjectType: "track", ObjectID: pair.TrackID, ExternalID: pair.RecordingID})
+		}
+	}
+	var applied curation.LinkApplied
+	if linkNeeded(e, request.Links) {
+		err := u.write(ctx, "links", func(batch, key string) error {
+			request.BatchID, request.Key = batch, key
+			var err error
+			applied, err = w.writer.ApplyLinks(ctx, request)
+			return err
+		})
+		if err != nil {
+			return "", err
+		}
+	}
+	if plan.link {
+		switch applied.Skipped["release_group:"+e.GroupID] {
+		case "suppressed":
+			plan.result = "suppressed"
+		case "occupied":
+			plan.result = "conflict"
+		default:
+			plan.result = "linked"
+		}
+	}
+	if len(fields) > 0 {
+		err := u.write(ctx, "fields", func(batch, key string) error {
+			_, err := w.writer.Apply(ctx, curation.Request{OnlyEmpty: true, ReleaseID: e.ID, Fields: fields, Source: request.Source, BatchID: batch, Key: key})
+			return err
+		})
+		if err != nil {
+			return "", err
+		}
+	}
+	if plan.joinID == "" {
+		return plan.result, nil
+	}
+	group := "joined"
+	err := u.write(ctx, "group", func(batch, key string) error {
+		_, err := w.writer.JoinGroup(ctx, curation.JoinRequest{ReleaseID: e.ID, GroupID: plan.joinID, Source: request.Source, BatchID: batch, Key: key})
+		var failure *operations.Failure
+		if errors.As(err, &failure) && failure.Code == "nothing_to_apply" {
+			group = "suppressed"
+		}
+		return err
+	})
+	var failure *operations.Failure
+	if errors.As(err, &failure) {
+		switch failure.Code {
+		case "manual_structure":
+			return "manual", nil
+		case "same_group":
+			return "linked", nil
+		case "no_strong_evidence", "group_not_found":
+			return "conflict", nil
+		}
+	}
+	return group, err
+}

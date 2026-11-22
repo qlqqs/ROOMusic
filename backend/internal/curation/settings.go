@@ -25,6 +25,9 @@ func NewWriter(db *sql.DB, dataDirectory string, logger *slog.Logger) *Writer {
 	return &Writer{db: db, artworks: artwork.NewStore(dataDirectory), logger: logger}
 }
 
+// ArtworkExists 检查自动封面写入使用的同一个受管存储。
+func (w *Writer) ArtworkExists(key string) bool { return w.artworks.Exists(key) }
+
 type Enabler struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`

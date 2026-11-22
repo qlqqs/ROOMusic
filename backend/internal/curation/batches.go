@@ -64,6 +64,17 @@ func (w *Writer) CloseOpenBatches(ctx context.Context, tier string) error {
 	return err
 }
 
+// DiscardEmptyProgramBatch 移除首笔写入被过滤或回放后仍为空的程序批次。
+func (w *Writer) DiscardEmptyProgramBatch(ctx context.Context, id string) (bool, error) {
+	result, err := w.db.ExecContext(ctx, `DELETE FROM curation_batches b WHERE id=$1 AND tier='program'
+ AND NOT EXISTS (SELECT 1 FROM operations o WHERE o.batch_id=b.id)`, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	return n > 0, err
+}
+
 func requireOpenBatch(ctx context.Context, tx *sql.Tx, id string) error {
 	var open bool
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM curation_batches WHERE id=$1::uuid AND closed_at IS NULL FOR SHARE)`, id).Scan(&open)

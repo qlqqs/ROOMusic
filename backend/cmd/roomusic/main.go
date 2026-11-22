@@ -129,6 +129,9 @@ func main() {
 		if err := application.WaitForAnalysis(shutdownContext); err != nil {
 			logger.Error("音频分析工作者退出超时", "event", "playback.analysis.shutdown_timeout", "error", err)
 		}
+		if err := application.WaitForCurationProgram(shutdownContext); err != nil {
+			logger.Error("自动整理工作者退出超时", "event", "curation.program.shutdown_timeout", "error", err)
+		}
 	}
 	if application != nil {
 		if err := application.WaitForCatalogMaintenance(shutdownContext); err != nil {
