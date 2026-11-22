@@ -395,6 +395,8 @@ const successContracts: Record<string, Contract> = {
   "tracks/lyrics-plain": { status: 200, decode: decodeTrackLyrics },
   "tracks/lyrics-none": { status: 200, decode: decodeTrackLyrics },
   "tracks/lyrics-external": { status: 200, decode: decodeTrackLyrics },
+  // M7 B2：本地没有歌词时用自动整理从外部源取来的，来源是 online。
+  "tracks/lyrics-online": { status: 200, decode: decodeTrackLyrics },
   "auth/setup-status-required": { status: 200, decode: decodeSetupStatus },
   "auth/setup-status-completed": { status: 200, decode: decodeSetupStatus },
   "auth/setup-admin-created": { status: 201, decode: decodeViewer },
@@ -511,6 +513,9 @@ const successContracts: Record<string, Contract> = {
   "corrections/get-auto": { status: 200, decode: decodeCorrectionState },
   "operations/auto-list": { status: 200, decode: decodeOperationPage },
   "operations/auto-reverted": { status: 200, decode: decodeRevertResult },
+  // M7 B2：自动补的封面与歌词及它们的撤销记录。
+  "operations/external-list": { status: 200, decode: decodeOperationPage },
+  "operations/external-reverted": { status: 200, decode: decodeRevertResult },
   "group-changes/joined": { status: 200, decode: decodeGroupChangeResult },
   "group-changes/detached": { status: 200, decode: decodeGroupChangeResult },
   "group-defaults/set": { status: 200, decode: decodeGroupDefaultResult },

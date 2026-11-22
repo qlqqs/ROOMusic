@@ -1,0 +1,150 @@
+{
+  "body": {
+    "items": [
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "changes": {
+          "external_id": "42",
+          "kind": "track_external_lyrics",
+          "lines": 2,
+          "lyrics_kind": "synced",
+          "source": "lrclib",
+          "track": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "Album A track 1"
+          }
+        },
+        "created_at": "2026-01-01T00:00:03Z",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "origin": null,
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000004",
+          "id": "00000000-0000-4000-8000-000000000005",
+          "title": "Album A",
+          "visible": true
+        },
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": "00000000-0000-4000-8000-000000000006",
+        "type": "revert"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "changes": {
+          "artwork": {
+            "height": 1,
+            "mime": "image/gif",
+            "resource_id": "fb6567d497606314a968515ebf9063dcee9fcff777897c384ed8e6a26dbd7190.gif",
+            "width": 1
+          },
+          "external_id": "fixture-release/42",
+          "kind": "release_external_artwork",
+          "source": "coverartarchive"
+        },
+        "created_at": "2026-01-01T00:00:02Z",
+        "id": "00000000-0000-4000-8000-000000000007",
+        "origin": null,
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000004",
+          "id": "00000000-0000-4000-8000-000000000005",
+          "title": "Album A",
+          "visible": true
+        },
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": "00000000-0000-4000-8000-000000000008",
+        "type": "revert"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "changes": {
+          "external_id": "42",
+          "kind": "track_external_lyrics",
+          "lines": 2,
+          "lyrics_kind": "synced",
+          "source": "lrclib",
+          "track": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "Album A track 1"
+          }
+        },
+        "created_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000006",
+        "origin": {
+          "basis": "合成歌词依据",
+          "provider": "lrclib",
+          "provider_kind": "source",
+          "source": "curation"
+        },
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000004",
+          "id": "00000000-0000-4000-8000-000000000005",
+          "title": "Album A",
+          "visible": true
+        },
+        "reverted_by": "00000000-0000-4000-8000-000000000003",
+        "revertible": false,
+        "reverts": null,
+        "type": "track_external_lyrics"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "changes": {
+          "artwork": {
+            "height": 1,
+            "mime": "image/gif",
+            "resource_id": "fb6567d497606314a968515ebf9063dcee9fcff777897c384ed8e6a26dbd7190.gif",
+            "width": 1
+          },
+          "external_id": "fixture-release/42",
+          "kind": "release_external_artwork",
+          "source": "coverartarchive"
+        },
+        "created_at": "2026-01-01T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000008",
+        "origin": {
+          "basis": "合成封面依据",
+          "provider": "coverartarchive",
+          "provider_kind": "source",
+          "source": "curation"
+        },
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000004",
+          "id": "00000000-0000-4000-8000-000000000005",
+          "title": "Album A",
+          "visible": true
+        },
+        "reverted_by": "00000000-0000-4000-8000-000000000007",
+        "revertible": false,
+        "reverts": null,
+        "type": "release_external_artwork"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 4
+    }
+  },
+  "status": 200
+}

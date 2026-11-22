@@ -25,7 +25,7 @@ type curationFixture struct {
 func newCurationFixture(t *testing.T) *curationFixture {
 	t.Helper()
 	e := newOperationsEnvironment(t)
-	return &curationFixture{e, curation.NewWriter(e.application.database)}
+	return &curationFixture{e, curation.NewWriter(e.application.database, e.application.dataDirectory, nil)}
 }
 
 func (f *curationFixture) enable(t *testing.T) {

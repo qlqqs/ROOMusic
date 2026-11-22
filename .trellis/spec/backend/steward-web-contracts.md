@@ -164,7 +164,10 @@ M7 B1 起，两个工具经 `sources/musicbrainz` 的适配器请求 MusicBrainz
 - **自动整理的总开关与各源开关不影响这两个工具**：对话里的查询是用户本人发起的请求。
 - `web.New` 自己构造一个不缓存的默认适配器；`app` 用 `WithMusic` 换成带缓存的共用实例。测试经适配器的构造参数替换基础地址、
   客户端工厂与限速器；不添加用户配置项。
-- Cover Art Archive 的清单读取仍在本包里直接请求（PublicOnly，保留 newClient 测试注入），不经过上述限速器；子任务 B2 迁移。
+- Cover Art Archive 的清单读取走 `sources/coverartarchive` 适配器的 `Covers`（M7 子任务 B2）：与 MusicBrainz 共用每秒 1 次的限速器（对话优先，
+  排队超过 10 秒 `rate_limited`），重定向只放行官方主机的 `index.json`；应用装配的共用实例有缓存（200 存 30 天，404 存 1 天）。
+  输出不变：`covers[]` 的 `url`、`front`、`back`、`thumbnails`（清单里是 null 时仍是 null），不下载图片。重定向被拒绝是 `source_unavailable`。
+  `web.New` 自己构造一个不缓存的默认实例（客户端工厂跟随 `newClient` 的测试注入）；`app` 用 `WithCovers` 换成与后台共用的实例。
 
 include 白名单：
 
@@ -230,7 +233,7 @@ cover-art 是本工具的本地选项，不传给 MusicBrainz；只对 release �
 5. Available 的聊天/MCP 列表与调用一致；设置变更后不能调用已失效工具；ctx 取消传递。
 6. fetch_page 的私网和混合 DNS、DNS 重绑定、重定向到私网、userinfo、端口/URL 长度、五/六跳、20 秒、类型、gzip 解压上限、字符集、UTF-8 截断、HTML 排除块与空白。
 7. MusicBrainz 全 Service 共用每秒许可、排队取消与十秒超限（注入时钟）、503 一次即失败；MBID/include 校验与字段裁剪。
-8. Cover Art Archive 的 404、清单 307 到官方 index.json、禁止跳图片/其他域名、不下载图片；User-Agent 与头部无用户/实例信息。
+8. Cover Art Archive 的 404 得空列表、清单 307 到官方 index.json、禁止跳图片/其他域名、不下载图片、四个字段的映射、清单请求经过限速器；User-Agent 与头部无用户/实例信息。
 9. 外部内容的 Untrusted 与既有来源标记，日志不得包含查询词、查询串、正文、密钥；64 KiB 注册表截断。
 
 本阶段按授权不新增或修改测试/testdata、不连接数据库或容器、不请求真实外部服务。

@@ -12,6 +12,7 @@ M7 子任务 A（2026-11）给后台自动整理准备好写入、记录与撤�
 [受治理操作合同](./governance-contracts.md)。
 
 子任务 B1 在这个包里加了三样（第 11、12 节）：各外部源的开关、后台取得外部源能力的闸门、外部对应的存储。
+子任务 B2 加了外部封面与外部歌词的存放、写入与撤销（第 14 节），闸门多了封面与歌词两种能力。
 外部源本身（怎样发请求）见[外部源合同](./sources-contracts.md)。
 
 决策依据：[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 4、5、8、10 节。
@@ -169,7 +170,10 @@ type Applied struct {
 | 开关关着、开启者不是启用状态的管理员、开启者在事务外读取之后变了 | `409 curation_disabled` |
 | 批次不存在或已经结束 | `409 batch_closed` |
 | 所有字段都相同或已标记为不再提出 | `409 nothing_to_apply` |
-| 自动值已被更晚的自动整理改写 | `409 revert_conflict` |
+| 自动值已被更晚的自动整理改写；外部封面或歌词的行已不在或属于别的操作；它所属的发行已不存在 | `409 revert_conflict` |
+| 外部封面或歌词：本地已有、外部已有、已标记不再提出（`ExternalApplied.Skipped` 给出 `local_present`、`occupied`、`suppressed`） | `409 nothing_to_apply` |
+| 图片不合格（超过 16 MiB、不是四种格式、宽高读不出）；歌词规范化后为空、超过 64 KiB 或没有可显示的行；来源标识含冒号等不合形状的字符 | `400 invalid_input` |
+| 歌词的曲目不存在或不是 `present` | `404 not_found` |
 | 经闸门调用外部源时这个源的开关关着（进程内的错误，没有对应的 HTTP 写入口） | `409 source_disabled` |
 | 来源、依据、范围或游标无效；缺少或非 UUID 的 `Idempotency-Key` | `400 invalid_input` |
 | 批次、标记或发行的 ID 不是 UUID | `400 invalid_id` |
@@ -183,7 +187,8 @@ type Applied struct {
   没有行时取声明的 `DefaultEnabled`（MusicBrainz 为开）。源的清单来自 `app` 装配时注册的声明，不存库。
 - 接口返回的每一项：`enabled` 是这个源自己的开关；`active` 是“后台现在能不能用它”；`inactive_reason` 依次判断
   `curation_disabled`（总开关关着）、`enabler_unavailable`（开启者不是启用状态的管理员）、`source_disabled`，都不是时为 null。
-- **闸门 `curation.Sources`**：后台代码只从它取能力（`ReleaseFinder`、`RecordingFinder`、`ArtistFinder`，参数是源的标识）。
+- **闸门 `curation.Sources`**：后台代码只从它取能力（`ReleaseFinder`、`RecordingFinder`、`ArtistFinder`、`CoverFinder`、`LyricsFinder`，参数是源的标识）。
+  注册的源按顺序是 MusicBrainz、Cover Art Archive、LRCLIB，都默认开。
   取到的是包了一层的实现，每个方法先 `Check`，再用 `sources.WithBackground(ctx, permit)` 调用适配器，`permit` 就是对这个源的 `Check`。
   所以核对发生在调用开始时、读缓存之前、每次出站之前（排队之后与每次重试之前）：调用排队或等待重试期间开关被关掉，之后不再出站。
 - `Check` 在一个事务里读设置（与 `Writer.Apply` 相同的 `loadSettings`，开启者资格由 `identity.IsEnabledAdmin` 判断）：
@@ -238,5 +243,124 @@ type Applied struct {
 | 迁移升级与回退往返 | `TestPostgreSQLMigrationRollbackRoundTrip/0060_curation_sources.sql` |
 | 接口样本：`curation/sources`、`curation/source-updated` | `TestPostgreSQLAPIResponseSamples` 与前端 `api-contract.test.ts` |
 
+子任务 B2 的断言点见第 14.7 节。
+
 视图多了八个连接：目录的四个 EXPLAIN 用例与 `TestPostgreSQLCatalogHTTPPerformance` 是门禁，要设启用参数才会运行
 （`ROOMUSIC_CATALOG_EXPLAIN=1`、`ROOMUSIC_CATALOG_EXPLAIN_OUTPUT`、`ROOMUSIC_CATALOG_HTTP_PERF_OUTPUT`），不设时是跳过而不是通过。
+
+## 14. 外部封面与外部歌词（子任务 B2）
+
+自动整理补的封面与歌词不占本地的位置：各有一张表，读取时本地优先、外部只补空缺，扫描不读写它们。
+写入与撤销是受治理操作；本任务**没有生产调用方**（什么时候取、取哪一个由子任务 C 决定），测试直接调用 `curation.Writer`。
+
+### 14.1 数据模型（迁移 0061）
+
+- **`release_external_artworks`**：主键 `release_id`（一个发行至多一张）；`content_hash`、`mime_type`、`width`、`height`、`storage_key` 与 `release_artworks` 同形；
+  `source`（源的标识，`^[a-z0-9._-]{1,64}$`）、`external_id`（1–128 字节；Cover Art Archive 是 `<外部发行 ID>/<图片编号>`）、
+  `operation_id`（写下它的操作，非空，延迟外键）、`created_at`；`storage_key` 上有索引。图片文件与本地封面在同一个内容寻址目录 `<数据目录>/artwork/`。
+- **`track_external_lyrics`**：主键 `track_id`（一首曲目至多一份）；`lyrics`（规范化后的文本，非空、不超过 65,536 字节）、`content_hash`、`source`、
+  `external_id`（LRCLIB 的记录编号）、`operation_id`、`created_at`。
+- `operations_type_ck` 增加 `release_external_artwork`、`track_external_lyrics`。两类操作的目标都是**发行**
+  （歌词操作的目标是曲目当时所在的发行，曲目记在状态里）；版本号用 `releases.auto_revision`。
+- 不再提出标记（`curation_suppressions`，结构不变）每次撤销写两条——同一张图的另一档缩略图内容不同，只按内容挡不住：
+
+  | 对象 | `target_type` | `subject` | `value_hash` |
+  | --- | --- | --- | --- |
+  | 封面的内容 | `release` | `artwork` | 图片字节的 SHA-256 |
+  | 封面的外部身份 | `release` | `artwork_source` | `source + "\x00" + external_id` 的 SHA-256 |
+  | 歌词的内容 | `track` | `lyrics` | 规范化后文本的 SHA-256 |
+  | 歌词的外部身份 | `track` | `lyrics_source` | `source + "\x00" + external_id` 的 SHA-256 |
+
+- **回退是有损的**：脚本先把 `steward_plan_items.operation_id` 里指向这两类操作及其撤销的引用置空（这个外键立即检查、不级联），
+  再删四种标记与两张表，删撤销记录再删操作，`SET CONSTRAINTS ALL IMMEDIATE` 之后恢复类型约束。已下载的图片文件留在 `artwork/` 里无人引用。
+
+### 14.2 读取
+
+- **封面**：`releasesql` 的连接片段是两个左连接（外部的只在没有本地行时连上），四列各取 `COALESCE(本地, 外部)`；所有摘要（发行、专辑的代表版本、
+  曲目摘要、搜索、最近添加、播放历史、待处理问题、认领建议）因此一致。`artwork.Store.Lookup` 按存储键在两张表里找，图片接口不区分来源。
+  摘要里的 `artwork` 对象**没有来源字段**；哪些是自动补的从操作记录看。扫描反馈的封面指纹只看本地的。
+- **歌词**：`LoadTrackLyrics` 先用本地的；本地没有，或有但解析不出可显示的行时，用外部的，`source` 为 `online`
+  （见[歌词合同](./lyrics-contracts.md)）。“本地有歌词”在读取与写入两处是同一个判断：`catalog.ParseLyrics` 成功。
+- 本地封面或歌词出现后自动改用本地的，消失后回到外部的；外部的行一直留着。
+
+### 14.3 扫描与文件
+
+- 扫描的语句不涉及两张新表：全量重扫（含扫描删除本地封面关联的情形）、改名移动、认领之后外部封面与外部歌词保持。认领不搬它们。
+- `artwork/` 目录现在有两个写者（扫描与自动整理）。“数引用再删文件”与“落盘再写行”靠**存储键的事务级 advisory lock** 互斥
+  （两参数形式，类别是 ASCII 的 `ARTW`，第二个参数是存储键的哈希；永远最后取，在目录写锁与发行行锁之后）：
+  扫描与自动整理在写关联之前取锁并确认文件在；`Store.Discard` 开事务、取锁、数**两张表**的引用，为 0 才删文件。
+- `artwork.Store` 的导出入口：`Describe`（校验并算出键，不落盘）、`Write`／`WriteIfChanged`（在调用方的事务里取锁并落盘）、`Exists`、`Discard`。
+
+### 14.4 写入 `ApplyArtwork`、`ApplyLyrics`
+
+```go
+type ArtworkRequest struct { ReleaseID string; Data []byte; Source Source; ExternalID string; BatchID, Key, RequestID string }
+type LyricsRequest  struct { TrackID string; Text string; Source Source; ExternalID string; BatchID, Key, RequestID string }
+type ExternalApplied struct { OperationID string; Skipped string } // Skipped: local_present | occupied | suppressed
+```
+
+`Source.Kind` 必须是 `source`，`Provider` 按 `^[a-z0-9._-]{1,64}$` 校验（比 `Apply` 严：不允许冒号）。流程与 `Apply`（第 4 节）相同的部分不重复：
+
+1. 事务外只校验，不落盘：封面 `Store.Describe`；歌词 `metadata.NormalizeLyrics` 后 `catalog.ParseLyrics` 必须有可显示的行。
+2. 加锁：封面 `governance.LockAutoRelease`（要求发行可见）；歌词 `governance.LockAutoReleaseOfTrack`——先取目录写锁，再按曲目解析所在的发行
+   （扫描会把曲目改挂到别的发行），再锁发行行。然后核对设置与批次。
+3. 依次判断，命中即以 `409 nothing_to_apply` 结束，不产生记录、不落盘：
+   - `local_present`：发行有本地封面／曲目的本地歌词能解析出可显示的行；
+   - `occupied`：外部表里已有这一行，不论内容是否相同——**存放层面就是只补空缺，要换先撤销**。
+     封面的例外：这一行指向的文件已经不在磁盘上（恢复了数据库备份而没有数据目录）时视同没有，旧行被这次写入替换；旧行的操作此后撤不了，记录保留；
+   - `suppressed`：内容或外部身份的不再提出标记命中。
+4. 封面在事务里取存储键的锁并落盘；插入外部表的行；`auto_revision` 加一。
+5. 记录：前态是 `{"artwork": null}` 或 `{"track_id", "lyrics": null}`（替换了文件丢失的旧行时，前态记旧行的键、哈希、来源与原操作，只作记录）；
+   后态封面记 `{storage_key, content_hash, mime_type, width, height, source, external_id}`，歌词记
+   `{track_id, track_title, lyrics: {content_hash, kind, lines, source, external_id}}`，**不存歌词全文**。
+6. 封面：执行器写了文件而事务没有提交时，返回前 `Discard`。同键重放不进执行器，不落盘。
+
+指纹含类型、发行或曲目、内容哈希、`provider`、`external_id`，不含 `basis`。
+
+### 14.5 撤销与展示
+
+两个 `Kind` 在 `curation` 包（`ExternalArtworkOperations`、`ExternalLyricsOperations`），由 `app` 注册；单条撤销、按批与按来源的 `Reverter`、
+管家的 `revert_operation` 都自动覆盖它们。
+
+- 按**记录的目标发行**加锁，不要求可见；发行行已不存在时 `409 revert_conflict`。
+- 外部表这一行存在且 `operation_id` 是原操作：删除，`auto_revision` 加一，写两条不再提出（`created_by` 是执行撤销的人）；否则 `409 revert_conflict`。
+  不读 `edit_revision` 作判断，之后的人工修改不妨碍撤销；响应的 `revision` 是发行当前的 `edit_revision`。
+- 封面的文件在提交之后清理：`operations.Outcome.AfterCommit`（`Run` 在提交成功后调用一次，重放与失败时不调用）里 `Store.Discard`。清理失败只记日志
+  `curation.artwork.discard_failed`。
+- `Describe` 的 `changes`：
+
+  ```jsonc
+  {"kind": "release_external_artwork", "source": "coverartarchive", "external_id": "…",
+   "artwork": {"resource_id": "<storage_key>", "mime": "image/jpeg", "width": 1200, "height": 1200}}
+  {"kind": "track_external_lyrics", "source": "lrclib", "external_id": "…",
+   "track": {"id": "…", "title": "…"}, "lyrics_kind": "synced", "lines": 42}
+  ```
+
+  `revertible` = 外部表这一行仍属于这条操作。撤销记录用被撤销操作的后态，内容不分前后。`track.title` 是记录里保存的当时的标题。
+  读不懂的状态不报错，`changes` 为 null（一条坏记录不能让整页列表失败）。撤销之后 `artwork.resource_id` 可能已经读不到图片。
+- 撤销预览（管家工具用）：一行，字段名 `artwork` 或 `lyrics`，前是 `{source, external_id}`（歌词另带 `track_title`），后是 null。
+
+### 14.6 已知限制
+
+- 歌词操作记在曲目当时所在的发行上：曲目之后被改挂到别的发行时，按新发行筛选操作记录看不到它。
+- 歌词的不再提出标记按曲目存：`GET /api/v1/admin/curation/suppressions?release_id=` 看不到它（不带筛选时能看到）。
+- 两者都留给整理记录页（子任务 E1）按批次展示。
+- 恢复数据库备份而没有数据目录时，外部封面的行在、文件不在：摘要仍给出 `artwork`，图片接口 404。重新获取由子任务 C 的缺口查询负责
+  （它要把“行在、文件不在”也算作缺口；新的写入会替换旧行）。
+
+### 14.7 必需测试与断言点
+
+| 断言点 | 用例 |
+| --- | --- |
+| 读取优先：只有外部、本地出现、本地被全量扫描删除；各摘要与图片接口 | `TestPostgreSQLExternalArtworkPriority` |
+| 重扫、改名移动、认领之后保持；孤儿清理不删被外部引用的文件 | `TestPostgreSQLExternalArtworkRescan` |
+| 写入的记录、三种跳过、开关与开启者、无效图片与重放不落盘、回滚后的文件清理、文件丢失的旧行被替换 | `TestPostgreSQLExternalArtworkApply` |
+| 单条、按批、按来源撤销；两条不再提出；共享文件不删；人工修改版本号不变 | `TestPostgreSQLExternalArtworkRevert` |
+| 歌词的读取、写入、撤销；`online`；只有元标签的本地歌词 | `TestPostgreSQLExternalLyricsPriority`、`…Apply`、`…Revert` |
+| 并发：同一发行两次写入、写入与撤销、两个发行同一内容一写一撤（用锁制造交叠） | `TestPostgreSQLExternalConcurrent` |
+| 操作记录列表的 `changes` 与 `revertible`、坏记录不让列表失败、管家撤销工具 | 同名前缀的用例 |
+| `AfterCommit` 只在提交成功后调用一次 | `backend/internal/operations` 的集成用例 |
+| 闸门对封面与歌词两种能力 | `TestPostgreSQLCurationSourcesGate` |
+| 迁移升级与回退往返（含方案项的外键） | `TestPostgreSQLMigrationRollbackRoundTrip/0061_external_artwork_lyrics.sql` |
+| 接口样本：`tracks/lyrics-online`、`operations/external-*`、`curation/sources` | `TestPostgreSQLAPIResponseSamples` 与前端 `api-contract.test.ts` |
+

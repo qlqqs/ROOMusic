@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"errors"
-	"net/http"
 	"strings"
 	"time"
 
@@ -13,8 +12,6 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
-var coverArtBaseURL = "https://coverartarchive.org"
-
 var includesByEntity = map[string][]string{
 	"artist":        {"releases", "release-groups", "recordings"},
 	"release":       {"artist-credits", "recordings", "labels", "release-groups"},
@@ -22,15 +19,11 @@ var includesByEntity = map[string][]string{
 	"recording":     {"artist-credits", "releases"},
 }
 
-func musicUserAgent() string {
-	return sources.UserAgent()
-}
-
 func musicError(err error) error {
 	switch {
 	case errors.Is(err, sources.ErrRateLimited):
 		return failure("rate_limited")
-	case errors.Is(err, sources.ErrNotFound), errors.Is(err, sources.ErrUnavailable), errors.Is(err, sources.ErrTryLater):
+	case errors.Is(err, egress.ErrDenied), errors.Is(err, sources.ErrNotFound), errors.Is(err, sources.ErrUnavailable), errors.Is(err, sources.ErrTryLater):
 		return failure("source_unavailable")
 	default:
 		return err
@@ -119,57 +112,15 @@ type Cover struct {
 }
 
 func (s *Service) coverArt(ctx context.Context, mbid string) (covers []Cover, err error) {
-	address := coverArtBaseURL + "/release/" + mbid + "/"
 	started := time.Now()
-	defer func() { s.logRequest(ctx, "cover_art_archive", address, started, len(covers), err) }()
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
-	client, err := s.newClient(egress.Options{Policy: egress.PublicOnly, MaxRedirects: 5, Timeout: requestTimeout})
+	defer func() { s.logRequest(ctx, "cover_art_archive", s.covers.BaseURL(), started, len(covers), err) }()
+	images, err := s.covers.Covers(ctx, sources.CoverTarget{Kind: "release", ID: mbid})
 	if err != nil {
-		return nil, failure("source_unavailable")
+		return nil, musicError(err)
 	}
-	defer client.CloseIdleConnections()
-	redirect := client.CheckRedirect
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if err := redirect(req, via); err != nil {
-			return err
-		}
-		host := strings.ToLower(req.URL.Hostname())
-		// 官方清单接口会跳到 Archive.org 的 index.json；不跟随图片或其他站点。
-		if validatePageURL(req.URL.String()) != nil || !(host == "archive.org" || strings.HasSuffix(host, ".archive.org") || host == "coverartarchive.org") || !strings.HasSuffix(req.URL.Path, "/index.json") {
-			return failure("source_unavailable")
-		}
-		req.Header = make(http.Header)
-		req.Header.Set("Accept", "application/json")
-		req.Header.Set("User-Agent", musicUserAgent())
-		return nil
-	}
-	req, err := request(ctx, http.MethodGet, address, nil, musicUserAgent())
-	if err != nil {
-		return nil, failure("source_unavailable")
-	}
-	response, err := client.Do(req)
-	if err != nil {
-		return nil, failure("source_unavailable")
-	}
-	defer response.Body.Close()
-	if response.StatusCode == http.StatusNotFound {
-		return []Cover{}, nil
-	}
-	var payload struct {
-		Images []struct {
-			Image      string            `json:"image"`
-			Front      bool              `json:"front"`
-			Back       bool              `json:"back"`
-			Thumbnails map[string]string `json:"thumbnails"`
-		} `json:"images"`
-	}
-	if response.StatusCode != http.StatusOK || readJSON(response, &payload) != nil || payload.Images == nil {
-		return nil, failure("source_unavailable")
-	}
-	covers = make([]Cover, 0, len(payload.Images))
-	for _, image := range payload.Images {
-		covers = append(covers, Cover{image.Image, image.Front, image.Back, image.Thumbnails})
+	covers = make([]Cover, 0, len(images))
+	for _, image := range images {
+		covers = append(covers, Cover{URL: image.URL, Front: image.Front, Back: image.Back, Thumbnails: image.Thumbnails})
 	}
 	return covers, nil
 }

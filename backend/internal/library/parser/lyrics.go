@@ -20,40 +20,12 @@ const (
 	LyricsSourceLRCFile        = "lrc_file"
 )
 
-// MaxLyricsBytes 是保存的歌词原文（规范化之后）的上限。
-const MaxLyricsBytes = 64 << 10
-
 // MaxExternalLyricsBytes 是外置歌词解码前的原始字节上限。
 const MaxExternalLyricsBytes = 256 << 10
 
-// maxLyricsFrameTextBytes 是 USLT 帧里歌词文本解码前的上限：规范化后不超过 MaxLyricsBytes 的歌词，原文远小于它。
+// maxLyricsFrameTextBytes 是 USLT 帧里歌词文本解码前的上限：规范化后不超过 metadata.MaxLyricsBytes 的歌词，原文远小于它。
 // 先按它拒绝，避免为一个异常大的帧分配数倍于其大小的临时内存。
-const maxLyricsFrameTextBytes = 4 * MaxLyricsBytes
-
-// NormalizeLyrics 规范化歌词原文：去掉 UTF-8 BOM；`\r\n` 与 `\r` 改为 `\n`；删除 NUL 与除 `\n`、`\t` 外的 C0 控制字符；
-// 去掉首尾空白。不是合法 UTF-8、规范化后为空或超过 MaxLyricsBytes 时返回 false：歌词缺失不影响曲目可用性，所以不记诊断。
-// 它保留换行与行内空白（与曲目标题等字段使用的 metadata.BoundedText 不同），LRC 的行结构要靠它。
-func NormalizeLyrics(raw string) (string, bool) {
-	if !utf8.ValidString(raw) {
-		return "", false
-	}
-	raw = strings.TrimPrefix(raw, "\ufeff")
-	raw = strings.ReplaceAll(raw, "\r\n", "\n")
-	raw = strings.ReplaceAll(raw, "\r", "\n")
-	var builder strings.Builder
-	builder.Grow(len(raw))
-	for _, character := range raw {
-		if character < 0x20 && character != '\n' && character != '\t' {
-			continue
-		}
-		builder.WriteRune(character)
-	}
-	normalized := strings.TrimSpace(builder.String())
-	if normalized == "" || len(normalized) > MaxLyricsBytes {
-		return "", false
-	}
-	return normalized, true
-}
+const maxLyricsFrameTextBytes = 4 * metadata.MaxLyricsBytes
 
 // DecodeExternalLyrics 按 BOM、合法 UTF-8、GB18030 的顺序解码并规范化外置歌词；无效或超限时返回 false。
 func DecodeExternalLyrics(data []byte) (string, bool) {
@@ -64,23 +36,23 @@ func DecodeExternalLyrics(data []byte) (string, bool) {
 		return "", false
 	}
 	if bytes.HasPrefix(data, []byte{0xef, 0xbb, 0xbf}) {
-		return NormalizeLyrics(string(data[3:]))
+		return metadata.NormalizeLyrics(string(data[3:]))
 	}
 	if bytes.HasPrefix(data, []byte{0xff, 0xfe}) || bytes.HasPrefix(data, []byte{0xfe, 0xff}) {
 		decoded, ok := decodeID3Lyrics(1, data)
 		if !ok {
 			return "", false
 		}
-		return NormalizeLyrics(decoded)
+		return metadata.NormalizeLyrics(decoded)
 	}
 	if utf8.Valid(data) {
-		return NormalizeLyrics(string(data))
+		return metadata.NormalizeLyrics(string(data))
 	}
 	decoded, err := simplifiedchinese.GB18030.NewDecoder().Bytes(data)
 	if err != nil || bytes.ContainsRune(decoded, utf8.RuneError) {
 		return "", false
 	}
-	return NormalizeLyrics(string(decoded))
+	return metadata.NormalizeLyrics(string(decoded))
 }
 
 // ApplyExternalLyrics 将已规范化的外置歌词及其署名应用到观察副本，不修改共享的署名切片。
@@ -116,7 +88,7 @@ func setAudioLyrics(observation *AudioObservation, key, value string) bool {
 	if observation.LyricsSource == LyricsSourceVorbisLyrics || (source == LyricsSourceVorbisUnsynced && observation.Lyrics != "") {
 		return true
 	}
-	if lyrics, ok := NormalizeLyrics(value); ok {
+	if lyrics, ok := metadata.NormalizeLyrics(value); ok {
 		observation.Lyrics, observation.LyricsSource = lyrics, source
 	}
 	return true
@@ -127,7 +99,7 @@ func setM4ALyrics(observation *AudioObservation, value, typeCode []byte) {
 	if observation.Lyrics != "" || len(typeCode) < 4 || binary.BigEndian.Uint32(typeCode) != 1 {
 		return
 	}
-	if lyrics, ok := NormalizeLyrics(string(value)); ok {
+	if lyrics, ok := metadata.NormalizeLyrics(string(value)); ok {
 		observation.Lyrics, observation.LyricsSource = lyrics, LyricsSourceMP4
 	}
 }
@@ -170,7 +142,7 @@ func parseID3USLT(frame []byte) (emptyDescriptor bool, lyrics string, ok bool) {
 	if !decodedOK {
 		return false, "", false
 	}
-	lyrics, ok = NormalizeLyrics(decoded)
+	lyrics, ok = metadata.NormalizeLyrics(decoded)
 	emptyDescriptor = len(descriptor) == 0 || (len(descriptor) == 2 && (bytes.Equal(descriptor, []byte{0xff, 0xfe}) || bytes.Equal(descriptor, []byte{0xfe, 0xff})))
 	return emptyDescriptor, lyrics, ok
 }

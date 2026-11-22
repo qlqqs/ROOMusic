@@ -13,6 +13,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
+	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"
@@ -38,13 +39,21 @@ type Service struct {
 	endpointClient EndpointClient
 	logger         *slog.Logger
 	newClient      func(egress.Options) (*http.Client, error)
+	covers         *coverartarchive.Client
 	music          *musicbrainz.Client
 }
 
 // New 装配依赖，不发出请求。
 func New(settings SettingsReader, secrets *secret.Store, endpointClient EndpointClient, logger *slog.Logger) *Service {
-	return &Service{settings: settings, secrets: secrets, endpointClient: endpointClient, logger: logger,
+	s := &Service{settings: settings, secrets: secrets, endpointClient: endpointClient, logger: logger,
 		newClient: egress.NewClient, music: musicbrainz.New(musicbrainz.Options{Logger: logger})}
+	s.covers = coverartarchive.New(coverartarchive.Options{Logger: logger, NewClient: func(opts egress.Options) (*http.Client, error) { return s.newClient(opts) }})
+	return s
+}
+
+func (s *Service) WithCovers(client *coverartarchive.Client) *Service {
+	s.covers = client
+	return s
 }
 
 func (s *Service) WithMusic(client *musicbrainz.Client) *Service {

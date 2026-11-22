@@ -54,7 +54,7 @@ func readEntry(path string) (entry, error) {
 	return e, err
 }
 
-func (c *cache) lookup(ctx context.Context, key string, background bool) (entry, bool, bool) {
+func (c *cache) lookup(ctx context.Context, key string, background, readResponse bool) (entry, bool, bool) {
 	if c.dir == "" {
 		return entry{}, false, false
 	}
@@ -62,6 +62,9 @@ func (c *cache) lookup(ctx context.Context, key string, background bool) (entry,
 	defer c.mu.Unlock()
 	if background && c.now().Before(c.failures[key]) {
 		return entry{}, false, true
+	}
+	if !readResponse {
+		return entry{}, false, false
 	}
 	e, err := readEntry(c.path(key))
 	if err != nil {

@@ -129,3 +129,55 @@ func (g guardedArtist) SearchArtists(ctx context.Context, name string) ([]source
 	}
 	return g.registration.Artists.SearchArtists(ctx, name)
 }
+
+type guardedCover struct{ guardedFinders }
+
+func (s *Sources) CoverFinder(sourceID string) (sources.CoverFinder, bool) {
+	r, ok := s.lookup(sourceID)
+	if !ok || r.Covers == nil || !slices.Contains(r.Declaration.Capabilities, sources.CoverArt) {
+		return nil, false
+	}
+	return guardedCover{guardedFinders{registration: r, gate: s}}, true
+}
+
+func (g guardedCover) Covers(ctx context.Context, target sources.CoverTarget) ([]sources.CoverImage, error) {
+	ctx, err := g.background(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return g.registration.Covers.Covers(ctx, target)
+}
+
+func (g guardedCover) FrontCover(ctx context.Context, target sources.CoverTarget) (sources.CoverFile, error) {
+	ctx, err := g.background(ctx)
+	if err != nil {
+		return sources.CoverFile{}, err
+	}
+	return g.registration.Covers.FrontCover(ctx, target)
+}
+
+type guardedLyrics struct{ guardedFinders }
+
+func (s *Sources) LyricsFinder(sourceID string) (sources.LyricsFinder, bool) {
+	r, ok := s.lookup(sourceID)
+	if !ok || r.Lyrics == nil || !slices.Contains(r.Declaration.Capabilities, sources.LyricsLookup) {
+		return nil, false
+	}
+	return guardedLyrics{guardedFinders{registration: r, gate: s}}, true
+}
+
+func (g guardedLyrics) LyricsFor(ctx context.Context, query sources.LyricsQuery) (sources.Lyrics, error) {
+	ctx, err := g.background(ctx)
+	if err != nil {
+		return sources.Lyrics{}, err
+	}
+	return g.registration.Lyrics.LyricsFor(ctx, query)
+}
+
+func (g guardedLyrics) SearchLyrics(ctx context.Context, query sources.LyricsQuery) ([]sources.Lyrics, error) {
+	ctx, err := g.background(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return g.registration.Lyrics.SearchLyrics(ctx, query)
+}

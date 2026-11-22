@@ -50,8 +50,8 @@ func TestDecodeExternalLyrics(t *testing.T) {
 		{"规范化后为空", []byte("\ufeff\r\n\x00 \t"), "", false},
 		{"恰好 256 KiB", append(bytes.Repeat([]byte{0}, MaxExternalLyricsBytes-1), 'a'), "a", true},
 		{"超过 256 KiB", append(bytes.Repeat([]byte{0}, MaxExternalLyricsBytes), 'a'), "", false},
-		{"规范化后恰好 64 KiB", []byte(strings.Repeat("a", MaxLyricsBytes) + "\r\n\x00"), strings.Repeat("a", MaxLyricsBytes), true},
-		{"规范化后超过 64 KiB", []byte(strings.Repeat("a", MaxLyricsBytes+1)), "", false},
+		{"规范化后恰好 64 KiB", []byte(strings.Repeat("a", metadata.MaxLyricsBytes) + "\r\n\x00"), strings.Repeat("a", metadata.MaxLyricsBytes), true},
+		{"规范化后超过 64 KiB", []byte(strings.Repeat("a", metadata.MaxLyricsBytes+1)), "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, ok := DecodeExternalLyrics(tc.data)

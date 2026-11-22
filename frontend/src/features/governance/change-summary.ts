@@ -15,6 +15,14 @@ export function operationOriginLabel(origin: OperationOriginDTO | null | undefin
   return origin.plan_id === null || origin.plan_id === undefined ? "管家（直接执行）" : "管家（确认）";
 }
 
+// 外部源的显示名：已知的三个内置源写名字，其他的写标识本身（标识来自后端的声明，不是用户输入）。
+const sourceNames: Record<string, string> = { musicbrainz: "MusicBrainz", coverartarchive: "Cover Art Archive", lrclib: "LRCLIB" };
+
+/** 外部源的显示名。 */
+export function sourceName(source: string): string {
+  return sourceNames[source] ?? source;
+}
+
 /** 记录自己的类型：修正、归组、默认版本、核对与认领按它改的东西命名；撤销记录写“撤销”，并说明撤销的是哪一类（记录坏了读不出改动时只写“撤销”）。 */
 export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "changes">): string {
   switch (item.type) {
@@ -30,6 +38,10 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       return "认领";
     case "release_auto_correction":
       return "自动补全发行信息";
+    case "release_external_artwork":
+      return "自动补封面";
+    case "track_external_lyrics":
+      return "自动补歌词";
     case "artist_merge":
       return "合并艺人";
     case "artist_split":
@@ -45,6 +57,8 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       if (item.changes?.kind === "release_issue_review") return "撤销核对";
       if (item.changes?.kind === "release_claim") return "撤销认领";
       if (item.changes?.kind === "release_auto_correction") return "撤销自动补全";
+      if (item.changes?.kind === "release_external_artwork") return "撤销自动补的封面";
+      if (item.changes?.kind === "track_external_lyrics") return "撤销自动补的歌词";
       return "撤销";
   }
 }
@@ -139,6 +153,15 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
     const label = trackCount === null ? reviewableIssueLabels[changes.issue] : `${reviewableIssueLabels[changes.issue]}（${trackCount} 首）`;
     return [`${label}：${to.reviewed ? "标记为已核对" : "取消核对"}`];
   }
+  // 外部封面与外部歌词只在本地没有时补上，撤销就是去掉；本地的封面与歌词不受影响。
+  if (changes.kind === "release_external_artwork") {
+    const what = `${changes.artwork.width}×${changes.artwork.height} 的封面，来自 ${sourceName(changes.source)}`;
+    return [reverse ? `去掉自动补的封面（${what}）` : `补了 ${what}`];
+  }
+  if (changes.kind === "track_external_lyrics") {
+    const what = `${changes.lyrics_kind === "synced" ? "同步歌词" : "歌词"}（${changes.lines} 行），来自 ${sourceName(changes.source)}`;
+    return [reverse ? `去掉给《${changes.track.title}》自动补的${what}` : `给《${changes.track.title}》补了${what}`];
+  }
   if (changes.kind === "release_auto_correction") {
     return changes.fields.map((field) => {
       const [from, to] = reverse ? [field.after, field.before] : [field.before, field.after];
@@ -156,9 +179,14 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
   });
 }
 
-/** 这条记录改了什么。撤销记录的前后状态与它撤销的操作相反，所以同样的写法读起来就是“恢复成了什么”。 */
-export function changeLines(item: Pick<OperationItemDTO, "changes">): string[] {
-  return linesOf(item.changes, false);
+/**
+ * 这条记录改了什么。撤销记录的前后状态与它撤销的操作相反，所以同样的写法读起来就是“恢复成了什么”。
+ * 自动补的封面与歌词例外：它们的撤销记录带的是被撤销的那一份（不分前后），所以按记录的类型写成“去掉”。
+ */
+export function changeLines(item: Pick<OperationItemDTO, "changes"> & Partial<Pick<OperationItemDTO, "type">>): string[] {
+  const kind = item.changes?.kind;
+  const removal = item.type === "revert" && (kind === "release_external_artwork" || kind === "track_external_lyrics");
+  return linesOf(item.changes, removal);
 }
 
 /** 撤销这条记录会把什么改回去：撤销前的确认对话框用它说明影响。 */
@@ -178,6 +206,8 @@ export function notRevertibleReason(item: Pick<OperationItemDTO, "type" | "rever
   if (item.reverted_by !== null) return "已撤销";
   // 自动补全的撤销不看专辑是否可见，也不受之后的人工修改影响：撤不了只可能是同一个字段又被更晚的自动整理改写了。
   if (item.type === "release_auto_correction") return "之后又被自动整理改写";
+  // 外部封面与外部歌词同理：撤不了只可能是它已经不在了（恢复备份后图片文件丢失、被新的一张替换）。
+  if (item.type === "release_external_artwork" || item.type === "track_external_lyrics") return "已被替换";
   // 认领的撤销不要求新版本可见（它的目的就是把修改还给旧版本），所以不写“专辑已不可见”：能不能撤销只看之后有没有修改。
   if (item.type === "release_claim") return "之后又有修改";
   // 目标是发行的记录看发行，目标是专辑的记录看专辑：专辑没有可见版本了，就没有可以撤销的东西。

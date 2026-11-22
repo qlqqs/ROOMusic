@@ -66,7 +66,8 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
   读不到刚提交的撤销记录），所以对同一条记录的并发撤销串行，后到的得到 `already_reverted`。
 - C6 的 `Spec.Origin *Origin` 可选，形状为 `{source:chat|mcp,conversation_id?,plan_id?,mode?,token_id?}`；
   M7 A 增加 `{source:curation,provider_kind,provider,basis}`，同时 `Spec.BatchID` 写入 `operations.batch_id`。
-  执行器可以用 `operations.ActorID(ctx)` 取本次 `Run` 的操作者；`Outcome.ResponseRevision` 非零时作为撤销响应的 `revision`。
+  执行器可以用 `operations.ActorID(ctx)` 取本次 `Run` 的操作者；`Outcome.ResponseRevision` 非零时作为撤销响应的 `revision`；
+  `Outcome.AfterCommit` 非空时，`Run` 在事务成功提交之后调用它一次（同键重放与失败时不调用），用于清理数据库之外的东西（外部封面的文件）。
   只由后端入口构造，不参与指纹；旧 HTTP 调用不传时列为 SQL NULL，行为不变。对话确认写含 plan_id；直接执行不含 plan_id；MCP 含 token_id。
   `operations.Record.Origin`、列表接口和 list_operations 输出 origin（旧记录为 null）。同键重放仍返回原操作，不覆盖原来源。
 - 方案项独立进入 Run；幂等键由后端生成并保存，同项恢复执行复用原键。展示依据 basis 不进入指纹。

@@ -241,6 +241,45 @@ describe("自动整理的记录（M7 A）", () => {
   });
 });
 
+describe("自动补的封面与歌词（M7 B2）", () => {
+  const artwork: Pick<OperationItemDTO, "type" | "changes"> = {
+    type: "release_external_artwork",
+    changes: { kind: "release_external_artwork", source: "coverartarchive", external_id: "release-1/829521842", artwork: { resource_id: "a.jpeg", mime: "image/jpeg", width: 1200, height: 1188 } },
+  };
+  const lyrics: Pick<OperationItemDTO, "type" | "changes"> = {
+    type: "track_external_lyrics",
+    changes: { kind: "track_external_lyrics", source: "lrclib", external_id: "3396226", track: { id: "00000000-0000-4000-8000-0000000000c1", title: "Sample Song" }, lyrics_kind: "synced", lines: 42 },
+  };
+  const plain: Pick<OperationItemDTO, "changes"> = {
+    changes: { kind: "track_external_lyrics", source: "other-source", external_id: "7", track: { id: "00000000-0000-4000-8000-0000000000c2", title: "Other" }, lyrics_kind: "plain", lines: 3 },
+  };
+
+  it("类型名与撤销记录的类型名", () => {
+    expect(operationTypeLabel(artwork)).toBe("自动补封面");
+    expect(operationTypeLabel(lyrics)).toBe("自动补歌词");
+    expect(operationTypeLabel({ type: "revert", changes: artwork.changes })).toBe("撤销自动补的封面");
+    expect(operationTypeLabel({ type: "revert", changes: lyrics.changes })).toBe("撤销自动补的歌词");
+  });
+
+  it("改动一行：封面写尺寸与来源，歌词写曲目、形态、行数与来源；不认识的源写标识本身", () => {
+    expect(changeLines(artwork)).toEqual(["补了 1200×1188 的封面，来自 Cover Art Archive"]);
+    expect(changeLines(lyrics)).toEqual(["给《Sample Song》补了同步歌词（42 行），来自 LRCLIB"]);
+    expect(changeLines(plain)).toEqual(["给《Other》补了歌词（3 行），来自 other-source"]);
+  });
+
+  it("撤销前的说明：去掉自动补的那一份", () => {
+    expect(revertLines(artwork)).toEqual(["去掉自动补的封面（1200×1188 的封面，来自 Cover Art Archive）"]);
+    expect(revertLines(lyrics)).toEqual(["去掉给《Sample Song》自动补的同步歌词（42 行），来自 LRCLIB"]);
+  });
+
+  it("撤不了的原因：已撤销，或已经不是这一份了；不看专辑是否可见", () => {
+    const hidden = { id: "00000000-0000-4000-8000-0000000000a1", title: "Hidden", group_id: "00000000-0000-4000-8000-0000000000a2", visible: false };
+    expect(notRevertibleReason({ type: "release_external_artwork", revertible: false, reverted_by: null, release: hidden, album: null })).toBe("已被替换");
+    expect(notRevertibleReason({ type: "track_external_lyrics", revertible: false, reverted_by: "00000000-0000-4000-8000-0000000000a3", release: hidden, album: null })).toBe("已撤销");
+    expect(notRevertibleReason({ type: "track_external_lyrics", revertible: true, reverted_by: null, release: hidden, album: null })).toBeNull();
+  });
+});
+
 describe("自动整理的记录：后端样本", () => {
   const [revert, written] = decodeOperationPage(sampleBody("operations/auto-list")).items;
   if (revert === undefined || written === undefined) throw new Error("样本里没有自动整理的记录");
@@ -257,5 +296,27 @@ describe("自动整理的记录：后端样本", () => {
     expect(changeLines(revert)).toEqual(["标题：合成自动标题 → Album A（取消自动补全）", "年份：（空） → 1998（取消自动补全）"]);
     expect(notRevertibleReason(written)).toBe("已撤销");
     expect(notRevertibleReason(revert)).toBe("已完成");
+  });
+});
+
+describe("自动补的封面与歌词：后端样本", () => {
+  const [lyricsRevert, artworkRevert, lyrics, artwork] = decodeOperationPage(sampleBody("operations/external-list")).items;
+  if (lyricsRevert === undefined || artworkRevert === undefined || lyrics === undefined || artwork === undefined) throw new Error("样本里没有自动补的封面与歌词");
+
+  it("类型名、来源标签与改动", () => {
+    expect([operationTypeLabel(artwork), operationTypeLabel(lyrics)]).toEqual(["自动补封面", "自动补歌词"]);
+    expect([operationOriginLabel(artwork.origin), operationOriginLabel(lyrics.origin)]).toEqual(["自动整理 · coverartarchive", "自动整理 · lrclib"]);
+    expect(changeLines(artwork)).toEqual(["补了 1×1 的封面，来自 Cover Art Archive"]);
+    expect(changeLines(lyrics)).toEqual(["给《Album A track 1》补了同步歌词（2 行），来自 LRCLIB"]);
+  });
+
+  it("撤销记录带的是被撤销的那一份；四条都不能再撤销，各有原因", () => {
+    expect([operationTypeLabel(artworkRevert), operationTypeLabel(lyricsRevert)]).toEqual(["撤销自动补的封面", "撤销自动补的歌词"]);
+    expect(artworkRevert.changes).toEqual(artwork.changes);
+    expect(lyricsRevert.changes).toEqual(lyrics.changes);
+    expect(changeLines(artworkRevert)).toEqual(["去掉自动补的封面（1×1 的封面，来自 Cover Art Archive）"]);
+    expect(changeLines(lyricsRevert)).toEqual(["去掉给《Album A track 1》自动补的同步歌词（2 行），来自 LRCLIB"]);
+    expect([notRevertibleReason(artwork), notRevertibleReason(lyrics)]).toEqual(["已撤销", "已撤销"]);
+    expect([notRevertibleReason(artworkRevert), notRevertibleReason(lyricsRevert)]).toEqual(["已完成", "已完成"]);
   });
 });

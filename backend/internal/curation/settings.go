@@ -4,15 +4,26 @@ package curation
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/artwork"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
-type Writer struct{ db *sql.DB }
+type Writer struct {
+	db       *sql.DB
+	artworks *artwork.Store
+	logger   *slog.Logger
+}
 
-func NewWriter(db *sql.DB) *Writer { return &Writer{db: db} }
+func NewWriter(db *sql.DB, dataDirectory string, logger *slog.Logger) *Writer {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Writer{db: db, artworks: artwork.NewStore(dataDirectory), logger: logger}
+}
 
 type Enabler struct {
 	ID       string `json:"id"`

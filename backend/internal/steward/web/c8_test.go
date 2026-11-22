@@ -20,6 +20,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/sources"
+	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"
@@ -350,12 +351,10 @@ func TestC8CoverArtRedirectOfficialOnly(t *testing.T) {
 				}
 			}))
 			defer server.Close()
-			old := coverArtBaseURL
-			coverArtBaseURL = "http://coverartarchive.org"
-			defer func() { coverArtBaseURL = old }()
 			s := New(nil, nil, nil, nil)
 			s.newClient = func(o egress.Options) (*http.Client, error) { return c8LocalClient(t, server, o), nil }
-			_, err := s.coverArt(context.Background(), "synthetic")
+			s.WithCovers(coverartarchive.New(coverartarchive.Options{BaseURL: "http://coverartarchive.org", NewClient: s.newClient, ManifestLimiter: sources.NewLimiter(0, nil, nil)}))
+			_, err := s.coverArt(context.Background(), "00000000-0000-4000-8000-000000000001")
 			if tc.ok {
 				if err != nil || hits != 2 {
 					t.Fatalf("错误=%v 次数=%d", err, hits)

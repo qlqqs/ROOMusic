@@ -6,6 +6,7 @@ import { createSessionController, SessionProvider, ViewerScopeProvider } from ".
 import { catalogKeys } from "../../features/catalog/query-keys";
 import { libraryKeys } from "../../features/library/query-keys";
 import { listeningKeys } from "../../features/listening";
+import { playerKeys } from "../../features/player";
 import { useReleaseDataRefresh } from "./use-release-refresh";
 
 const dispose: (() => void)[] = [];
@@ -24,10 +25,14 @@ describe("认领、撤销与归组后的报告缓存", () => {
       catalogKeys.group(generation, "album"),
       catalogKeys.recentlyAdded(generation),
       listeningKeys.recentReleases(generation),
+      // 自动补的歌词被撤销之后，已经读过的歌词要重新读。
+      playerKeys.lyrics(generation, "00000000-0000-4000-8000-00000000000a"),
     ];
     const unaffected = [
       libraryKeys.scanReportPage(generation + 1, "scan-a", 1, 20),
       catalogKeys.recentlyAdded(generation + 1),
+      playerKeys.lyrics(generation + 1, "00000000-0000-4000-8000-00000000000a"),
+      playerKeys.analysis(generation, "00000000-0000-4000-8000-00000000000a"),
       libraryKeys.scan(generation, "scan-a"),
       libraryKeys.diagnostics(generation, "scan-a"),
     ];

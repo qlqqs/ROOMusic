@@ -535,6 +535,8 @@ function invertChanges(changes: OperationChangesDTO): OperationChangesDTO {
   if (changes.kind === "release_claim") return { kind: "release_claim", source: changes.source };
   // 艺人的治理（M5 ⑤）没有撤销，这里不会遇到；原样返回只为让类型完整。
   if (changes.kind === "artist_merge" || changes.kind === "artist_split" || changes.kind === "artist_rename" || changes.kind === "artist_candidate_ignore") return changes;
+  // 外部封面与外部歌词的撤销记录带的是被撤销操作的内容，不分前后。
+  if (changes.kind === "release_external_artwork" || changes.kind === "track_external_lyrics") return changes;
   if (changes.kind === "release_auto_correction") return { kind: "release_auto_correction", fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
   return { kind: "release_correction", fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
 }

@@ -4,10 +4,11 @@
 
 M7 子任务 B1（2026-11）把向外部音乐数据源发请求这件事从管家里分出来：出站客户端迁到平台层，新增外部源的共用部分
 （`backend/internal/sources`）与第一个适配器 MusicBrainz（`backend/internal/sources/musicbrainz`）。管家的两个音乐资料工具与
-后台自动整理共用同一个适配器实例。本任务**没有后台调用方**：匹配与自动写入在子任务 C。
+后台自动整理共用同一个适配器实例。子任务 B2 加了封面与歌词两种能力、请求器的重定向与取字节，以及 Cover Art Archive、LRCLIB 两个适配器
+（第 7、8 节）。B1、B2 都**没有后台调用方**：匹配与自动写入的调度在子任务 C。
 
 新增或修改以下内容时必须阅读并更新本文件：`backend/internal/platform/egress`、`backend/internal/sources` 及其子包、新的外部源、
-能力接口、限速、缓存、重试、外部源的日志。各源的开关、闸门与外部对应的存储在[自动整理合同](./curation-contracts.md)第 11、12 节；
+能力接口、限速、缓存、重试、重定向、外部源的日志。各源的开关、闸门、外部对应与外部封面歌词的存储在[自动整理合同](./curation-contracts.md)第 11、12、14 节；
 管家工具的输出在[管家联网合同](./steward-web-contracts.md)；标签里的外部标识在[扫描标签合同](./library-scan-tags.md)。
 
 决策依据：[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 6、8、10 节。
@@ -19,6 +20,10 @@ M7 子任务 B1（2026-11）把向外部音乐数据源发请求这件事从管�
 | `platform/egress` | 出站 HTTP 客户端与地址策略（原 `steward/egress`，行为不变） | 无 |
 | `sources` | 声明、能力接口与中立类型、调用身份、限速器、文件缓存、带重试的 JSON 请求、日志 | `platform/egress`、`platform/buildinfo` |
 | `sources/musicbrainz` | 实体级读取与查询、三种能力的实现、disc ID | `sources`、`platform/uuid` |
+| `sources/coverartarchive` | 图片清单、选主封面、下载图片字节 | `sources`、`sources/musicbrainz`（只取它的声明，用来共用限速器）、`platform/uuid` |
+| `sources/lrclib` | 歌词的精确查询与候选搜索 | `sources` |
+
+导入 `sources` 及其子包的有 `curation`（闸门）、`steward/web`（MusicBrainz 与 Cover Art Archive）与 `app`（装配）。
 
 `sources` 及其子包**不依赖** `curation`、`steward`、`catalog` 与数据库：它们只管怎样向外部问。“现在能不能问”由 `curation.Sources`
 （闸门）决定。新增一个源就是在 `sources/` 下加一个子包并在 `app` 里注册，不改调用方。
@@ -29,20 +34,26 @@ M7 子任务 B1（2026-11）把向外部音乐数据源发请求这件事从管�
 type Declaration struct {
     ID             string        // ^[a-z0-9._-]{1,64}$；与操作记录 origin.provider 是同一个标识
     Name           string
-    Capabilities   []Capability  // release_lookup | recording_lookup | artist_lookup
+    Capabilities   []Capability  // release_lookup | recording_lookup | artist_lookup | cover_art | lyrics
     DefaultEnabled bool
     MinInterval    time.Duration // 全实例两次出站的最小间隔
 }
 ```
 
-能力是三个窄接口：`ReleaseFinder`（按 ID、条码、厂牌编号、光盘目录、标题艺人曲目数）、`RecordingFinder`（按 ID、ISRC、标题艺人时长）、
-`ArtistFinder`（按 ID、名字）。程序层只面向这些接口与中立类型（`Release`、`Track`、`Recording`、`Artist`、`Credit`、`DiscTOC`、`DiscMatch`）。
+能力是五个窄接口：`ReleaseFinder`（按 ID、条码、厂牌编号、光盘目录、标题艺人曲目数）、`RecordingFinder`（按 ID、ISRC、标题艺人时长）、
+`ArtistFinder`（按 ID、名字）、`CoverFinder`（`Covers` 读图片清单、`FrontCover` 选出主封面并下载）、`LyricsFinder`（`LyricsFor` 精确查询、
+`SearchLyrics` 候选）。程序层只面向这些接口与中立类型（`Release`、`Track`、`Recording`、`Artist`、`Credit`、`DiscTOC`、`DiscMatch`、
+`CoverTarget`、`CoverImage`、`CoverFile`、`LyricsQuery`、`Lyrics`）。
 
 - `Release.Complete` 为真表示来自按 ID 读取，带曲目表；查找与搜索的结果只有每张碟的 `TrackCount`，要曲目表得再按 ID 读取。
 - `DiscMatch.Exact` 为真表示 disc ID 命中；为假是按时长的模糊结果（至多 25 条，不知道是否被截断）。两者的可靠程度差别很大，不能混用。
 - 搜索的 `score` 不进入中立类型：它只是一次结果内的相对排名。
 - 条码与 ISRC 在外部都不唯一，返回的是列表。
-- 指纹识别、封面、歌词的能力接口随子任务 B2、B3 增加。
+- `CoverImage.ReleaseID` 是图片实际所属的外部发行（release group 的清单由它指明来源，合并过的发行由它得到新 ID），清单没给时为空；
+  `ID` 是源里的图片编号，规范成十进制数字串，不是数字时为空（这一项仍然返回，只是不能下载）。
+- `sources` 不校验图片内容：它只保证字节数不超过上限、来自放行的主机。格式与宽高由落库的一方（`catalog/artwork`）校验。
+- `Lyrics` 原样转达外部的记录：同步与纯文本两份文本、纯音乐标志、记录自己的标题、艺人、专辑与时长。取舍（时长筛选、写法差异）不在适配器里。
+- 指纹识别的能力接口随子任务 B3 增加。
 
 ## 4. 调用的两种身份
 
@@ -54,8 +65,8 @@ type Declaration struct {
 | 限速排队 | 优先；排队超过 10 秒返回 `ErrRateLimited` | 让对话先走；一直等到轮到或 ctx 结束 |
 | 503、429、网络错误 | 不重试，`ErrUnavailable` | 按 `Retry-After`（秒数或 HTTP 日期）等待，没有时指数退避加抖动，单次至多 60 秒；至多重试 4 次，之后 `ErrTryLater` |
 | 其他非 200（404 除外）、响应结构不对、地址策略拒绝 | `ErrUnavailable` | `ErrTryLater`，不重试 |
-| 单次请求时限 | 20 秒 | 20 秒 |
-| 响应读取上限 | 2 MiB | 8 MiB |
+| 单次请求时限 | `GetJSON` 20 秒，`GetBytes` 60 秒 | 同左 |
+| 响应读取上限 | `GetJSON` 2 MiB | `GetJSON` 8 MiB；`GetBytes` 由调用方给 |
 | 失败的进程内记忆 | 不读不写，每次都真实尝试 | 用尽重试后记 10 分钟，期间同一请求直接 `ErrTryLater` |
 
 哨兵错误：`ErrNotFound`、`ErrRateLimited`、`ErrUnavailable`、`ErrTryLater`、`ErrInvalidQuery`。
@@ -73,9 +84,16 @@ type Declaration struct {
   **写入发生在适配器确认结构可用之后**。数据目录为空字符串时不缓存（管家包自己构造的默认实例与部分测试装配）。
   命中缓存不占限速许可。启动时与之后每 24 小时清理过期文件。读写失败只记日志，按未命中处理。
   这些文件可以随时删除，不进备份；有结果的缓存有效期内，对话读不到外部更新的编辑。
-- **请求**：`platform/egress` 的 `PublicOnly`，不跟随重定向；`Accept: application/json`；
+- **请求**：`platform/egress` 的 `PublicOnly`；`Accept: application/json`（`GetBytes` 由调用方给）；
   User-Agent 为 `ROOMusic/<构建版本或 dev> ( <buildinfo.ProjectURL> )`，不含实例信息。
   客户端工厂的形状是 `func(egress.Options) (*http.Client, error)`，每次出站调用一次并在用完后关闭空闲连接。
+- **重定向**：默认不跟随。`Options.MaxRedirects > 0` 时跟随，`Options.AllowRedirect(目标地址)` 决定每一跳是否放行。每一跳之前依次检查：
+  egress 自带的协议与次数；目标是 `https`（上一跳本身是 `http` 时允许 `http`，测试用）；不带用户名密码；端口为空或 443；`AllowRedirect` 返回真；
+  后台的放行回调。任何一项不满足，这次调用以所属身份的失败哨兵结束（同时 `errors.Is(err, egress.ErrDenied)` 成立），**不重试、不记失败记忆**。
+  每一跳只带 `Accept` 与 `User-Agent` 两个请求头；`PublicOnly` 对每一跳照常生效；整条跳转链占一个限速许可；缓存键是最初请求的地址；
+  日志里的域名是最初请求的域名。包装 `CheckRedirect` 时复制工厂返回的客户端，不原地修改。
+- **`GetBytes(ctx, address, accept, maxBytes)`**：取二进制响应，不读写响应缓存；限速、调用身份、放行回调、重试、错误与失败记忆的规则与 `GetJSON` 相同
+  （失败记忆同样要求有数据目录）。`Content-Length` 或实际读到的字节超过 `maxBytes` 按“响应结构不对”处理。404 是 `ErrNotFound`。
 - **日志**：出站结束记 `sources.request.finished`（源、域名、耗时、HTTP 状态或固定错误码、第几次尝试）；缓存命中记
   `sources.cache.hit`（源）；缓存读写失败记 `sources.cache.error`。**不记**查询词、URL 路径与查询串、响应内容。
 
@@ -106,21 +124,69 @@ type Declaration struct {
 - 结构校验：按 ID 读取的结果必须有 `id`；带曲目表读取发行时每张碟必须有 `tracks`；列表结果的每一项必须有 `id`。不满足的 200 不进缓存。
 - **没有对真实服务核实的两点**（父任务收尾的真实试用里核对）：条码的 `OR` 写法；`/isrc/` 的返回结构（按服务端源码写）。
 
-## 7. 发给外部的数据
+## 7. Cover Art Archive 适配器（子任务 B2）
 
-MusicBrainz 收到的只有：外部 ID、条码、厂牌与编号、ISRC、标题与艺人的查询词、曲目数、由各轨时长推出的光盘目录。
+声明：`{ID:"coverartarchive", Name:"Cover Art Archive", [cover_art], DefaultEnabled:true, MinInterval:1s}`。基础地址 `https://coverartarchive.org`。
+它的每个端点都是三跳：`coverartarchive.org` 307 → `archive.org` 302 → `*.archive.org` 200（第三跳的主机名不固定）。
+
+适配器有两个请求器：
+
+| 用途 | 限速器 | 重定向的放行范围 | 缓存 |
+| --- | --- | --- | --- |
+| 清单 | **MusicBrainz 的限速器**（`sources.DefaultLimiter(musicbrainz.Declaration())`；`Options.ManifestLimiter` 可注入） | 至多 5 跳；主机是 `coverartarchive.org`、`archive.org` 或 `*.archive.org`，且路径以 `/index.json` 结尾 | 200 存 30 天，404 存 1 天 |
+| 图片 | 本源自己的限速器（`Options.Limiter` 可注入） | 至多 5 跳；主机同上，路径不限 | 不缓存响应；有数据目录时使用失败记忆 |
+
+- `Covers(target)`：`GET <base>/<release|release-group>/<mbid>/`。MBID 校验 UUID 外形并转小写（大写会被服务拒绝），不合法 `ErrInvalidQuery`。
+  结构校验只有一条：顶层 `images` 是数组。`id` 接受数字或字符串；`ReleaseID` 取顶层 `release` 地址的最后一段；`thumbnails` 是 null 时保持 nil。
+  404 是空切片，不是错误。
+- `FrontCover(target)`：只在 `ID` 非空的项里选——`front` 为真的第一张，没有则类型含 `Front` 的第一张，都没有 `ErrNotFound`。
+  清单没给 `ReleaseID` 时：目标是 release 就用目标的 ID，目标是 release group 则 `ErrNotFound`。
+- 下载地址**由适配器自己拼**，不用清单里的地址（旧清单里是 `http://`）：`<base>/release/<ReleaseID>/<ID>-1200`，404 依次试 `-500`、`-250`、
+  不带后缀的原图。每一档上限 16 MiB（与 `catalog/artwork` 的上限相同）。原图的 `Content-Type` 是 `application/pdf` 或内容以 `%PDF` 开头时视为没有。
+  四档都 404 是 `ErrNotFound`；非 404 的失败原样返回，不再试下一档。缩略图恒为 JPEG；1200 档可能尚未生成。
+- **限速的取法**：清单与 MusicBrainz 合计每秒 1 次（父任务的验收要求）。图片的第一跳也经过 MetaBrainz 的网关，所以对这个网关合计每秒 2 次；
+  Cover Art Archive 的文档写明目前没有限速规则，这一点是明确接受的。
+- 管家的 `get_music_metadata` 带 `cover-art` 时调用同一个适配器的 `Covers`（见[管家联网合同](./steward-web-contracts.md)）。
+- 没有对真实服务核实的：合并过的发行、缺失的缩略图、archive.org 一侧的限流返回码（父任务收尾的真实试用里核对）。
+
+## 8. LRCLIB 适配器（子任务 B2）
+
+声明：`{ID:"lrclib", Name:"LRCLIB", [lyrics], DefaultEnabled:true, MinInterval:1s}`（文档的上限是带应用标识的 User-Agent 每分钟约 90 次）。
+基础地址 `https://lrclib.net`，不跟随重定向。
+
+| 方法 | 请求 | 说明 |
+| --- | --- | --- |
+| `LyricsFor` | `/api/get?track_name=&artist_name=`，专辑非空加 `album_name`，时长在 1–3600 秒内加 `duration` | 标题或艺人为空 `ErrInvalidQuery`；404 是 `ErrNotFound`（缓存 1 天）；结构校验：有数字 `id` |
+| `SearchLyrics` | `/api/search?track_name=`，艺人、专辑非空时加 `artist_name`、`album_name` | 标题为空 `ErrInvalidQuery`；至多 20 条；结构校验：顶层是数组、每项有 `id` |
+
+- 外部的精确查询是“规范化后全等”加时长 ±2 秒：只处理 ASCII 标点与大小写，简繁体、全角标点、专辑名的写法差异都会导致查不到。
+  怎样放宽（去掉专辑、改用搜索再按时长筛选）由调用方决定，不在适配器里。
+- 纯音乐的记录 `Instrumental` 为真，两份歌词都是空串。
+
+## 9. 发给外部的数据
+
+| 源 | 发出的内容 |
+| --- | --- |
+| MusicBrainz | 外部 ID、条码、厂牌与编号、ISRC、标题与艺人的查询词、曲目数、由各轨时长推出的光盘目录 |
+| Cover Art Archive | 外部 ID |
+| LRCLIB | 曲目标题、艺人、专辑名、时长 |
+
 不发送音频、文件路径与实例标识。外部返回的内容一律是不可信文本，进入模型之前按管家的规则加来源标记。
 
-## 8. 必需测试与断言点
+## 10. 必需测试与断言点
 
 | 断言点 | 位置 |
 | --- | --- |
 | 限速：间隔、对话优先、对话排队超时、后台等待 | `backend/internal/sources` 的限速器用例 |
-| 缓存：三种有效期、不落盘的失败、目录为空、目录不可写、结构不对的 200 | `backend/internal/sources` 的缓存与请求用例 |
+| 缓存：三种有效期、不落盘的失败、目录为空、目录不可写、结构不对的 200 | `backend/internal/sources/musicbrainz/request_policy_test.go` |
 | 重试与错误：`Retry-After`、退避、上限、后台的断网是“稍后再试”、对话不重试 | 同上 |
+| 重定向：放行；主机、协议降级、端口、带凭据、次数各自被拒且不重试；每跳的请求头；一条链一个许可；两跳之间放行回调拒绝 | `backend/internal/sources` 与 `sources/coverartarchive` 的用例 |
+| `GetBytes`：404、超限、重试、不写响应缓存、失败记忆 | 同上 |
+| Cover Art Archive：清单解析、两种目标、选图、四档回退、PDF、两个限速器各自计数、默认装配与 MusicBrainz 共用同一个限速器 | `backend/internal/sources/coverartarchive` |
+| LRCLIB：两种请求的参数、字段映射、纯音乐、404、429 的重试 | `backend/internal/sources/lrclib` |
 | 十个能力方法的请求形式与解析；disc ID 的基准值 | `backend/internal/sources/musicbrainz` |
 | 管家工具的输出与错误码不变 | `backend/internal/steward/web` 现有用例 |
-| 闸门、源开关接口、外部对应的存储 | 见[自动整理合同](./curation-contracts.md)第 13 节 |
+| 闸门、源开关接口、外部对应的存储、外部封面与歌词的写入与撤销 | 见[自动整理合同](./curation-contracts.md)第 13、14 节 |
 | 包依赖方向 | `TestPackageDependencyDirections` |
 
 自动化测试一律用本地的受控服务，不请求真实的外部源；限速、缓存与重试的等待用注入的时钟。

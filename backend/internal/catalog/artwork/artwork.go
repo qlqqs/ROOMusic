@@ -1,4 +1,4 @@
-// Package artwork 管理 ROOMusic 数据目录下的受管封面：内容寻址的文件加 release_artworks 关联。
+// Package artwork 管理 ROOMusic 数据目录下的受管封面：内容寻址的文件以及本地和外部封面的关联。
 // 它只写数据目录，从不触碰音乐库；封面的发现（音乐根内的文件夹图片）属于扫描边界，不在这里。
 package artwork
 
@@ -15,12 +15,6 @@ import (
 	"path/filepath"
 	"strings"
 )
-
-// Executor 是保存与删除封面关联所需的最小数据库能力。
-type Executor interface {
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
-	QueryRowContext(context.Context, string, ...any) *sql.Row
-}
 
 // Queryer 是读取封面关联所需的最小数据库能力。
 type Queryer interface {
@@ -46,7 +40,8 @@ type Resource struct {
 // 凭客户端已有的校验值直接答复“未修改”，省掉读文件。找不到关联或存储键不安全时返回错误。
 func (s *Store) Lookup(ctx context.Context, database Queryer, resourceID string) (Resource, error) {
 	var key, mime string
-	if err := database.QueryRowContext(ctx, "SELECT storage_key,mime_type FROM release_artworks WHERE storage_key=$1", resourceID).Scan(&key, &mime); err != nil {
+	if err := database.QueryRowContext(ctx, `SELECT storage_key,mime_type FROM release_artworks WHERE storage_key=$1
+ UNION ALL SELECT storage_key,mime_type FROM release_external_artworks WHERE storage_key=$1 LIMIT 1`, resourceID).Scan(&key, &mime); err != nil {
 		return Resource{}, err
 	}
 	if !safeStorageKey(key) {
@@ -81,40 +76,13 @@ func safeStorageKey(key string) bool {
 // Save 校验封面字节并保存为 Release 的受管封面：内容寻址写入数据目录，再写 release_artworks 关联，
 // 关联写入失败时清理刚写入的文件，替换旧封面后清理不再被引用的旧文件。
 // sourceType 记录来源（"embedded" 或 "folder"）；调用方负责取得字节。
-func (s *Store) Save(ctx context.Context, executor Executor, releaseID string, data []byte, sourceType string) error {
-	prepared, err := s.describe(data)
-	if err != nil {
-		return err
-	}
-	var previousKey sql.NullString
-	if err := executor.QueryRowContext(ctx, "SELECT storage_key FROM release_artworks WHERE release_id=$1::uuid", releaseID).Scan(&previousKey); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	if err := s.writePrepared(data, &prepared); err != nil {
-		return err
-	}
-	hash, key, mimeType, width, height, path, wroteManagedFile := prepared.hash, prepared.key, prepared.mimeType, prepared.width, prepared.height, prepared.path, prepared.wroteManagedFile
-	_, err = executor.ExecContext(ctx, `INSERT INTO release_artworks(release_id,content_hash,mime_type,width,height,storage_key,source_type) VALUES($1::uuid,$2,$3,$4,$5,$6,$7) ON CONFLICT(release_id) DO UPDATE SET content_hash=EXCLUDED.content_hash,mime_type=EXCLUDED.mime_type,width=EXCLUDED.width,height=EXCLUDED.height,storage_key=EXCLUDED.storage_key,source_type=EXCLUDED.source_type`, releaseID, hash, mimeType, width, height, key, sourceType)
-	if err != nil {
-		if wroteManagedFile {
-			if cleanupErr := removeUnreferencedArtwork(ctx, executor, path, key); cleanupErr != nil {
-				return errors.Join(err, fmt.Errorf("remove failed artwork: %w", cleanupErr))
-			}
-		}
-		return err
-	}
-	if previousKey.Valid && previousKey.String != key && filepath.Base(previousKey.String) == previousKey.String {
-		if cleanupErr := removeUnreferencedArtwork(ctx, executor, filepath.Join(s.directory, previousKey.String), previousKey.String); cleanupErr != nil {
-			return fmt.Errorf("remove replaced artwork: %w", cleanupErr)
-		}
-	}
-	return nil
+func (s *Store) Save(ctx context.Context, db TxBeginner, releaseID string, data []byte, sourceType string) error {
+	return s.SaveWithFeedback(ctx, db, releaseID, data, sourceType, nil)
 }
 
-type preparedArtwork struct {
-	hash, key, mimeType, path string
-	width, height             int
-	wroteManagedFile          bool
+type Stored struct {
+	Key, Hash, MIMEType string
+	Width, Height       int
 }
 
 // ValidateImage 校验封面源的大小、文件头与尺寸，不访问文件系统或数据库。
@@ -133,106 +101,117 @@ func ValidateImage(data []byte) (string, error) {
 	return mimeType, nil
 }
 
-// describe 只校验字节并确定内容寻址资源，不接触文件或数据库。
-func (s *Store) describe(data []byte) (preparedArtwork, error) {
+// Describe 只校验字节并确定内容寻址资源，不接触文件或数据库。
+func (s *Store) Describe(data []byte) (Stored, error) {
 	mimeType, err := ValidateImage(data)
 	if err != nil {
-		return preparedArtwork{}, err
+		return Stored{}, err
 	}
 	width, height := dimensions(data, mimeType)
 	hash := fmt.Sprintf("%x", sha256.Sum256(data))
 	key := hash + "." + strings.TrimPrefix(strings.TrimPrefix(mimeType, "image/"), "x-")
-	return preparedArtwork{hash: hash, key: key, mimeType: mimeType, path: filepath.Join(s.directory, key), width: width, height: height}, nil
+	return Stored{Key: key, Hash: hash, MIMEType: mimeType, Width: width, Height: height}, nil
 }
 
-// prepare 在取得发行/组锁之前完成校验和受管文件 I/O。
-func (s *Store) prepare(data []byte) (preparedArtwork, error) {
-	prepared, err := s.describe(data)
-	if err != nil {
-		return preparedArtwork{}, err
+func lockStorageKey(ctx context.Context, tx *sql.Tx, key string) error {
+	// ARTW 是内容寻址文件的锁类别，同一键的落盘、绑定与清理互斥。
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1::integer, hashtext($2))`, 0x41525457, key)
+	return err
+}
+
+func (s *Store) Exists(key string) bool {
+	if !safeStorageKey(key) {
+		return false
 	}
-	err = s.writePrepared(data, &prepared)
-	return prepared, err
+	info, err := os.Lstat(filepath.Join(s.directory, key))
+	return err == nil && info.Mode().IsRegular()
 }
 
-func (s *Store) writePrepared(data []byte, prepared *preparedArtwork) error {
-	key := prepared.key
+// Write 确认 Describe 对应的文件存在，并持有键锁直到关联事务结束。
+func (s *Store) Write(ctx context.Context, tx *sql.Tx, data []byte, stored Stored) error {
+	_, err := s.WriteIfChanged(ctx, tx, data, stored)
+	return err
+}
+
+// WriteIfChanged 同时返回是否实际写过文件，供关联失败时清理本次写入。
+func (s *Store) WriteIfChanged(ctx context.Context, tx *sql.Tx, data []byte, stored Stored) (bool, error) {
+	if !safeStorageKey(stored.Key) {
+		return false, errors.New("unsafe artwork storage key")
+	}
+	if err := lockStorageKey(ctx, tx, stored.Key); err != nil {
+		return false, err
+	}
 	artworkDirectory := s.directory
 	if err := os.MkdirAll(artworkDirectory, 0o750); err != nil {
-		return err
+		return false, err
 	}
-	path := filepath.Join(artworkDirectory, key)
+	path := filepath.Join(artworkDirectory, stored.Key)
 	needsWrite := true
 	info, statErr := os.Lstat(path)
 	if statErr == nil {
 		if info.Mode()&os.ModeSymlink == 0 && info.Mode().IsRegular() && info.Size() == int64(len(data)) {
 			existing, readErr := os.ReadFile(path)
 			if readErr != nil {
-				return readErr
+				return false, readErr
 			}
 			needsWrite = !bytes.Equal(existing, data)
 		}
 	} else if !errors.Is(statErr, fs.ErrNotExist) {
-		return statErr
+		return false, statErr
 	}
-	wroteManagedFile := false
 	if needsWrite {
 		temporary, createErr := os.CreateTemp(artworkDirectory, ".artwork-*")
 		if createErr != nil {
-			return createErr
+			return false, createErr
 		}
 		temporaryPath := temporary.Name()
 		defer os.Remove(temporaryPath)
 		if chmodErr := temporary.Chmod(0o640); chmodErr != nil {
 			temporary.Close()
-			return chmodErr
+			return false, chmodErr
 		}
 		if _, writeErr := temporary.Write(data); writeErr != nil {
 			temporary.Close()
-			return writeErr
+			return false, writeErr
 		}
 		if closeErr := temporary.Close(); closeErr != nil {
-			return closeErr
+			return false, closeErr
 		}
 		if renameErr := os.Rename(temporaryPath, path); renameErr != nil {
-			return renameErr
+			return false, renameErr
 		}
-		wroteManagedFile = true
 	}
-	prepared.wroteManagedFile = wroteManagedFile
-	return nil
+	return needsWrite, nil
 }
 
 // Remove 删除 Release 的封面关联；文件在没有其他 Release 引用时一并删除。
-func (s *Store) Remove(ctx context.Context, executor Executor, releaseID string) error {
-	var key sql.NullString
-	err := executor.QueryRowContext(ctx, "DELETE FROM release_artworks WHERE release_id=$1::uuid RETURNING storage_key", releaseID).Scan(&key)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
+func (s *Store) Remove(ctx context.Context, db TxBeginner, releaseID string) error {
+	return s.RemoveWithFeedback(ctx, db, releaseID, nil)
+}
+
+func (s *Store) Discard(ctx context.Context, db TxBeginner, key string) error {
+	if !safeStorageKey(key) {
+		return errors.New("unsafe artwork storage key")
 	}
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return err
 	}
-	if key.Valid && filepath.Base(key.String) == key.String {
-		if cleanupErr := removeUnreferencedArtwork(ctx, executor, filepath.Join(s.directory, key.String), key.String); cleanupErr != nil {
-			return fmt.Errorf("remove released artwork: %w", cleanupErr)
+	defer tx.Rollback()
+	if err := lockStorageKey(ctx, tx, key); err != nil {
+		return err
+	}
+	var references int64
+	if err := tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM release_artworks WHERE storage_key=$1)
+ + (SELECT count(*) FROM release_external_artworks WHERE storage_key=$1)`, key).Scan(&references); err != nil {
+		return err
+	}
+	if references == 0 {
+		if err := os.Remove(filepath.Join(s.directory, key)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
 		}
 	}
-	return nil
-}
-
-func removeUnreferencedArtwork(ctx context.Context, executor Queryer, path, key string) error {
-	var references int
-	if err := executor.QueryRowContext(ctx, "SELECT COUNT(*) FROM release_artworks WHERE storage_key=$1", key).Scan(&references); err != nil {
-		return err
-	}
-	if references != 0 {
-		return nil
-	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	return nil
+	return tx.Commit()
 }
 
 // dimensions 从图片头部读取宽高；格式不受支持或数据被截断时返回 0, 0。

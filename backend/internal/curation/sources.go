@@ -14,6 +14,8 @@ type SourceRegistration struct {
 	Releases    sources.ReleaseFinder
 	Recordings  sources.RecordingFinder
 	Artists     sources.ArtistFinder
+	Covers      sources.CoverFinder
+	Lyrics      sources.LyricsFinder
 }
 
 type SourceSettings struct {
