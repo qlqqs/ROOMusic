@@ -1,0 +1,110 @@
+{
+  "body": {
+    "items": [
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "changes": {
+          "confidence": "high",
+          "external": {
+            "artist": "合成外部艺人",
+            "country": "JP",
+            "date": "2001",
+            "title": "合成外部发行"
+          },
+          "kind": "external_link",
+          "links": [
+            {
+              "external_group_id": "fixture-group",
+              "external_id": "fixture-release",
+              "object_id": "00000000-0000-4000-8000-000000000002",
+              "object_type": "release"
+            },
+            {
+              "external_id": "fixture-group",
+              "object_id": "00000000-0000-4000-8000-000000000003",
+              "object_type": "release_group"
+            }
+          ],
+          "method": "barcode",
+          "source": "musicbrainz"
+        },
+        "created_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "origin": null,
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000003",
+          "id": "00000000-0000-4000-8000-000000000002",
+          "title": "Album A",
+          "visible": true
+        },
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": "00000000-0000-4000-8000-000000000005",
+        "type": "revert"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "batch_id": "00000000-0000-4000-8000-000000000006",
+        "changes": {
+          "confidence": "high",
+          "external": {
+            "artist": "合成外部艺人",
+            "country": "JP",
+            "date": "2001",
+            "title": "合成外部发行"
+          },
+          "kind": "external_link",
+          "links": [
+            {
+              "external_group_id": "fixture-group",
+              "external_id": "fixture-release",
+              "object_id": "00000000-0000-4000-8000-000000000002",
+              "object_type": "release"
+            },
+            {
+              "external_id": "fixture-group",
+              "object_id": "00000000-0000-4000-8000-000000000003",
+              "object_type": "release_group"
+            }
+          ],
+          "method": "barcode",
+          "source": "musicbrainz"
+        },
+        "created_at": "2026-01-01T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000005",
+        "origin": {
+          "basis": "合成条码匹配",
+          "provider": "musicbrainz",
+          "provider_kind": "source",
+          "source": "curation"
+        },
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000003",
+          "id": "00000000-0000-4000-8000-000000000002",
+          "title": "Album A",
+          "visible": true
+        },
+        "reverted_by": "00000000-0000-4000-8000-000000000004",
+        "revertible": false,
+        "reverts": null,
+        "type": "external_link"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 2
+    }
+  },
+  "status": 200
+}
