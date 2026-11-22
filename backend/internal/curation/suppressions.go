@@ -37,13 +37,6 @@ func (w *Writer) SuppressReleaseValue(ctx context.Context, tx *sql.Tx, releaseID
 	return err
 }
 
-func isSuppressed(ctx context.Context, tx *sql.Tx, releaseID, field, hash string) (bool, error) {
-	var found bool
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM curation_suppressions
- WHERE target_type='release' AND target_id=$1::uuid AND subject=$2 AND value_hash=$3)`, releaseID, field, hash).Scan(&found)
-	return found, err
-}
-
 func (w *Writer) Suppressions(ctx context.Context, releaseID string, page, pageSize int) ([]Suppression, int64, error) {
 	filter := ""
 	var args []any
@@ -51,7 +44,9 @@ func (w *Writer) Suppressions(ctx context.Context, releaseID string, page, pageS
 		if !uuid.Valid(releaseID) {
 			return nil, 0, operations.Invalid("invalid_id", "发行标识无效")
 		}
-		filter = " WHERE target_type='release' AND target_id=$1::uuid"
+		filter = ` WHERE (target_type='release' AND target_id=$1::uuid)
+ OR (target_type='release_group' AND target_id=(SELECT group_id FROM releases WHERE id=$1::uuid))
+ OR (target_type='track' AND target_id IN (SELECT t.id FROM tracks t JOIN media m ON m.id=t.medium_id WHERE m.release_id=$1::uuid))`
 		args = append(args, releaseID)
 	}
 	var total int64
@@ -108,11 +103,37 @@ type externalIdentity struct {
 
 type externalSuppression struct {
 	targetType, targetID, subject, contentHash string
-	identity                                   externalIdentity
+	externalIdentity
 }
 
-func (s externalSuppression) identityHash() string {
-	return hashExternalValue(s.identity.Source + "\x00" + s.identity.ExternalID)
+func ExternalIdentitySuppressed(ctx context.Context, q operations.Queryer, targetType, targetID, subject, source, externalID string) (bool, error) {
+	identity := externalIdentity{source, externalID}
+	return suppressionExists(ctx, q, targetType, targetID, subject+"_source", identity.identityHash())
+}
+
+func LinkSuppressed(ctx context.Context, q operations.Queryer, objectType, objectID, source, externalID string) (bool, error) {
+	identity := externalIdentity{source, externalID}
+	return suppressionExists(ctx, q, objectType, objectID, "external_link", identity.identityHash())
+}
+
+func suppressionExists(ctx context.Context, q operations.Queryer, targetType, targetID, subject, hash string) (bool, error) {
+	var found bool
+	err := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM curation_suppressions WHERE target_type=$1 AND target_id=$2 AND subject=$3 AND value_hash=$4)`, targetType, targetID, subject, hash).Scan(&found)
+	return found, err
+}
+
+func insertSuppression(ctx context.Context, tx *sql.Tx, targetType, targetID, subject, hash string, value any, revertID, actorID string) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by)
+ VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(target_type,target_id,subject,value_hash) DO NOTHING`, targetType, targetID, subject, hash, raw, revertID, actorID)
+	return err
+}
+
+func (s externalIdentity) identityHash() string {
+	return hashExternalValue(s.Source + "\x00" + s.ExternalID)
 }
 
 func (s externalSuppression) exists(ctx context.Context, tx *sql.Tx) (bool, error) {

@@ -22,6 +22,7 @@ type Source struct {
 }
 
 type Request struct {
+	OnlyEmpty bool
 	ReleaseID string
 	Fields    map[string]catalog.CorrectionIntent
 	Source    Source
@@ -60,10 +61,14 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
 	if actor == nil {
 		return Applied{}, operations.Conflict("curation_disabled", "自动整理开关已关闭")
 	}
+	fingerprint := map[string]any{"type": operations.TypeReleaseAutoCorrection, "release_id": releaseID, "fields": fields, "provider": source.Provider}
+	if request.OnlyEmpty {
+		fingerprint["only_empty"] = true
+	}
 	spec := operations.Spec{
 		ActorID: *actor, Key: key, Type: operations.TypeReleaseAutoCorrection, BatchID: request.BatchID, RequestID: request.RequestID,
 		Origin:      &operations.Origin{Source: "curation", ProviderKind: source.Kind, Provider: source.Provider, Basis: source.Basis},
-		Fingerprint: operations.Fingerprint(map[string]any{"type": operations.TypeReleaseAutoCorrection, "release_id": releaseID, "fields": fields, "provider": source.Provider}),
+		Fingerprint: operations.Fingerprint(fingerprint),
 	}
 	var applied Applied
 	result, err := operations.Run(ctx, w.db, spec, func(ctx context.Context, tx *sql.Tx, operationID string) (operations.Outcome, error) {
@@ -84,7 +89,7 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
 			}
 		}
 		var write map[string]catalog.CorrectionIntent
-		write, applied, err = filterFields(ctx, tx, releaseID, locked, fields)
+		write, applied, err = filterFields(ctx, tx, releaseID, locked, fields, request.OnlyEmpty)
 		if err != nil {
 			return operations.Outcome{}, err
 		}
@@ -112,7 +117,15 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
 	return applied, nil
 }
 
-func filterFields(ctx context.Context, tx *sql.Tx, releaseID string, locked *governance.LockedAutoRelease, fields map[string]catalog.CorrectionIntent) (map[string]catalog.CorrectionIntent, Applied, error) {
+func filterFields(ctx context.Context, tx *sql.Tx, releaseID string, locked *governance.LockedAutoRelease, fields map[string]catalog.CorrectionIntent, onlyEmpty bool) (map[string]catalog.CorrectionIntent, Applied, error) {
+	var corrections map[string]catalog.CorrectionIntent
+	if onlyEmpty {
+		var err error
+		corrections, err = catalog.LoadCorrectionIntents(ctx, tx, releaseID)
+		if err != nil {
+			return nil, Applied{}, err
+		}
+	}
 	write := make(map[string]catalog.CorrectionIntent, len(fields))
 	result := Applied{Written: []string{}, Skipped: map[string]string{}}
 	for _, field := range catalog.CorrectableFields {
@@ -121,11 +134,19 @@ func filterFields(ctx context.Context, tx *sql.Tx, releaseID string, locked *gov
 		if !ok {
 			continue
 		}
+		if onlyEmpty {
+			_, manual := corrections[name]
+			_, automatic := locked.Current(name)
+			if manual || automatic {
+				result.Skipped[name] = "occupied"
+				continue
+			}
+		}
 		_, hash, err := governance.AutoValueKey(name, intent)
 		if err != nil {
 			return nil, Applied{}, err
 		}
-		suppressed, err := isSuppressed(ctx, tx, releaseID, name, hash)
+		suppressed, err := suppressionExists(ctx, tx, "release", releaseID, name, hash)
 		if err != nil {
 			return nil, Applied{}, err
 		}

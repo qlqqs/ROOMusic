@@ -34,6 +34,7 @@ import (
 
 const (
 	// Type 常量是 operations.operation_type 允许的发行、专辑、艺人治理与撤销类型。
+	TypeExternalLink           = "external_link"
 	TypeReleaseExternalArtwork = "release_external_artwork"
 	TypeTrackExternalLyrics    = "track_external_lyrics"
 	TypeReleaseAutoCorrection  = "release_auto_correction"

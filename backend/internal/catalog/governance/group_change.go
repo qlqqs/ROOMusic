@@ -55,6 +55,11 @@ type groupRecordState struct {
 	GroupTitle string `json:"group_title"`
 }
 
+type groupAfterState struct {
+	groupRecordState
+	Action string `json:"action"`
+}
+
 // lockGroups 按 UUID 顺序锁住这些组行（不存在的组不会出现在结果里），返回存在的组。所有会锁多个组的操作都用同一个顺序，
 // 所以两个涉及同一对组的归组互相等待而不会死锁。
 func lockGroups(ctx context.Context, tx *sql.Tx, groupIDs ...string) (map[string]bool, error) {
@@ -167,7 +172,7 @@ func GroupChangeExecutor(request GroupChangeRequest) operations.Executor {
 			TargetType: operations.TargetRelease, TargetID: request.ReleaseID,
 			ExpectedRevision: locked.revision, ResultRevision: locked.revision + 1,
 			Before: groupRecordState{GroupID: current, GroupTitle: currentTitle},
-			After:  groupRecordState{GroupID: target, GroupTitle: targetTitle},
+			After:  groupAfterState{groupRecordState{GroupID: target, GroupTitle: targetTitle}, request.Action},
 			Response: GroupChangeResult{
 				ReleaseID: strings.ToLower(request.ReleaseID), GroupID: target, PreviousGroupID: current,
 				Revision: locked.revision + 1, OperationID: operationID,

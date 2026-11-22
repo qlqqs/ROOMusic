@@ -30,15 +30,21 @@ func previousLink(row *sql.Row) (*Link, error) {
 	return &l, nil
 }
 
+const insertLinkSQL = `INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence,operation_id)
+ VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,'')::uuid)`
+
+func (l Link) insertArgs() []any {
+	return []any{uuid.New(), l.Source, l.ObjectType, l.ObjectID, l.ExternalID, l.Method, l.Confidence, l.OperationID}
+}
+
 // PutLink 由 PostgreSQL 18 在同一次冲突更新中返回旧行，并发替换时也能得到实际被替换的值。
 func PutLink(ctx context.Context, tx *sql.Tx, l Link) (*Link, error) {
 	return previousLink(tx.QueryRowContext(ctx, `WITH changed AS (
- INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence,operation_id)
- VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,'')::uuid)
+ `+insertLinkSQL+`
  ON CONFLICT(source,object_type,object_id) DO UPDATE SET external_id=excluded.external_id,method=excluded.method,
  confidence=excluded.confidence,operation_id=excluded.operation_id,created_at=now()
  RETURNING OLD.*
- ) SELECT `+linkColumns+` FROM changed WHERE id IS NOT NULL`, uuid.New(), l.Source, l.ObjectType, l.ObjectID, l.ExternalID, l.Method, l.Confidence, l.OperationID))
+ ) SELECT `+linkColumns+` FROM changed WHERE id IS NOT NULL`, l.insertArgs()...))
 }
 
 func RemoveLink(ctx context.Context, tx *sql.Tx, source, objectType, objectID string) (*Link, error) {

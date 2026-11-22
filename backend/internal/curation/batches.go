@@ -56,6 +56,14 @@ func (w *Writer) CloseBatch(ctx context.Context, id string) error {
 	return err
 }
 
+func (w *Writer) CloseOpenBatches(ctx context.Context, tier string) error {
+	if tier != "program" && tier != "model" {
+		return operations.Invalid("invalid_input", "批次层级无效")
+	}
+	_, err := w.db.ExecContext(ctx, `UPDATE curation_batches SET closed_at=now() WHERE tier=$1 AND closed_at IS NULL`, tier)
+	return err
+}
+
 func requireOpenBatch(ctx context.Context, tx *sql.Tx, id string) error {
 	var open bool
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM curation_batches WHERE id=$1::uuid AND closed_at IS NULL FOR SHARE)`, id).Scan(&open)

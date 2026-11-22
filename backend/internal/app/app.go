@@ -154,14 +154,18 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		lyrics.StartCacheCleanup(lifecycle)
 		music.StartCacheCleanup(lifecycle)
 	}
+	scanRunning := func(ctx context.Context) (bool, error) {
+		scan, err := libraryService.ActiveScan(ctx)
+		return scan != nil, err
+	}
 	sourceGate := curation.NewSources(database,
 		curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: music, Recordings: music, Artists: music},
 		curation.SourceRegistration{Declaration: coverartarchive.Declaration(), Covers: covers},
 		curation.SourceRegistration{Declaration: lrclib.Declaration(), Lyrics: lyrics},
-	)
+	).WithScanCheck(scanRunning)
 	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger)
-	operationKinds := []operations.Kind{curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
-		governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
+	operationKinds := []operations.Kind{curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
+		governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.GroupChangeOperations(curationWriter), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}}
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
@@ -169,14 +173,11 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	catalogapi.NewArtistGovernance(database, guard, logger, artistResolutionAdapter{}).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
 	operationsapi.New(database, guard, logger, operationKinds...).Register(mux)
-	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), sourceGate, guard, logger).Register(mux)
+	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), sourceGate, nil, 101, guard, logger).Register(mux)
 	var analysisWorker *playback.AnalysisWorker
 	analysisDone := make(chan struct{})
 	if database != nil && assembly.analysis != nil {
-		analysisWorker = playback.NewAnalysisWorker(database, settings.AllowedLibraryRoots, assembly.analysis, func(ctx context.Context) (bool, error) {
-			scan, err := libraryService.ActiveScan(ctx)
-			return scan != nil, err
-		}, logger)
+		analysisWorker = playback.NewAnalysisWorker(database, settings.AllowedLibraryRoots, assembly.analysis, scanRunning, logger)
 		go func() { defer close(analysisDone); analysisWorker.Run(lifecycle) }()
 	} else {
 		close(analysisDone)

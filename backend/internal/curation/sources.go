@@ -28,12 +28,18 @@ type SourceSettings struct {
 }
 
 type Sources struct {
+	scanCheck  func(context.Context) (bool, error)
 	db         *sql.DB
 	registered []SourceRegistration
 }
 
 func NewSources(db *sql.DB, registrations ...SourceRegistration) *Sources {
 	return &Sources{db: db, registered: slices.Clone(registrations)}
+}
+
+func (s *Sources) WithScanCheck(check func(context.Context) (bool, error)) *Sources {
+	s.scanCheck = check
+	return s
 }
 
 func (s *Sources) lookup(id string) (SourceRegistration, bool) {
@@ -137,6 +143,9 @@ func (s *Sources) Check(ctx context.Context, id string) error {
 	if !settings.Active {
 		return operations.Conflict("curation_disabled", "自动整理开启者已不是启用状态的管理员")
 	}
+	if settings.Paused {
+		return operations.Conflict("curation_paused", "自动整理已暂停")
+	}
 	item, err := sourceState(ctx, tx, r.Declaration, settings)
 	if err != nil {
 		return err
@@ -144,5 +153,17 @@ func (s *Sources) Check(ctx context.Context, id string) error {
 	if !item.Enabled {
 		return operations.Conflict("source_disabled", "外部源开关已关闭")
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if s.scanCheck != nil {
+		running, err := s.scanCheck(ctx)
+		if err != nil {
+			return err
+		}
+		if running {
+			return operations.Conflict("scan_running", "曲库扫描进行中")
+		}
+	}
+	return nil
 }

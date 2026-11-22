@@ -4,6 +4,7 @@ package sources
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -59,6 +60,28 @@ type CoverImage struct {
 	Types         []string
 	URL           string
 	Thumbnails    map[string]string
+}
+
+// FrontImage 优先选择明确标为主封面的图片，其次使用类型为 Front 的第一张。
+func FrontImage(images []CoverImage) CoverImage {
+	var fallback CoverImage
+	for _, image := range images {
+		if image.ID == "" {
+			continue
+		}
+		if image.Front {
+			return image
+		}
+		if fallback.ID == "" {
+			for _, kind := range image.Types {
+				if strings.EqualFold(kind, "Front") {
+					fallback = image
+					break
+				}
+			}
+		}
+	}
+	return fallback
 }
 
 type CoverFile struct {

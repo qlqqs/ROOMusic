@@ -752,7 +752,7 @@ func TestPostgreSQLClaimsAndOtherChangesNeverDeadlock(t *testing.T) {
 	}
 	kinds := map[string]operations.Kind{
 		operations.TypeReleaseIssueReview: IssueReviewOperations(), operations.TypeReleaseCorrection: CorrectionOperations(),
-		operations.TypeReleaseGroupChange: GroupChangeOperations(), operations.TypeReleaseGroupDefault: GroupDefaultOperations(),
+		operations.TypeReleaseGroupChange: GroupChangeOperations(testGroupSuppressions{}), operations.TypeReleaseGroupDefault: GroupDefaultOperations(),
 		operations.TypeReleaseClaim: ClaimOperations(),
 	}
 	run := func(operationType string, request interface{ Fingerprint() string }, executor operations.Executor) error {

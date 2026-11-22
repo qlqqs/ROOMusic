@@ -2,6 +2,7 @@ package governance
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -11,6 +12,12 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
+
+type testGroupSuppressions struct{}
+
+func (testGroupSuppressions) SuppressGroupJoin(context.Context, *sql.Tx, string, string, string, string) error {
+	return nil
+}
 
 func (fixture *correctionFixture) revert(kind operations.Kind, originalID string) (operations.Result, error) {
 	fixture.t.Helper()
@@ -172,7 +179,7 @@ func TestPostgreSQLRevertToNoCorrectionShowsTheCurrentScannedValue(t *testing.T)
 
 func TestPostgreSQLRevertIsRefusedAfterLaterEditsOrWhenTheTargetIsHidden(t *testing.T) {
 	fixture := newCorrectionFixture(t)
-	correction, groupChange := CorrectionOperations(), GroupChangeOperations()
+	correction, groupChange := CorrectionOperations(), GroupChangeOperations(testGroupSuppressions{})
 	alpha, beta := fixture.versionOf("Alpha", 2000), fixture.versionOf("Beta", 2005)
 
 	// 字段修正与归组共用版本号：归组之后不能撤销之前的修正；修正之后不能撤销之前的归组。
@@ -209,7 +216,7 @@ func TestPostgreSQLRevertIsRefusedAfterLaterEditsOrWhenTheTargetIsHidden(t *test
 func TestPostgreSQLRevertOfAGroupChangeMovesTheVersionBack(t *testing.T) {
 	fixture := newCorrectionFixture(t)
 	ctx := context.Background()
-	kind := GroupChangeOperations()
+	kind := GroupChangeOperations(testGroupSuppressions{})
 	first, second := fixture.versionOf("First", 2000), fixture.versionOf("Second", 2005)
 
 	// 归入后撤销：回到原来的组，原组重新可见，目标组恢复成一个版本。
@@ -268,7 +275,7 @@ func TestPostgreSQLRevertOfAGroupChangeMovesTheVersionBack(t *testing.T) {
 func TestPostgreSQLDescribeReportsTargetsChangesAndRevertibility(t *testing.T) {
 	fixture := newCorrectionFixture(t)
 	ctx := context.Background()
-	correctionKind, groupKind := CorrectionOperations(), GroupChangeOperations()
+	correctionKind, groupKind := CorrectionOperations(), GroupChangeOperations(testGroupSuppressions{})
 	alpha, beta := fixture.versionOf("Alpha", 2000), fixture.versionOf("Beta", 2005)
 
 	corrected := fixture.mustCorrect(alpha.releaseID, 1, map[string]CorrectionChange{"title": {Mode: catalog.CorrectionSet, Text: "Alpha (corrected)"}, "year": {Mode: catalog.CorrectionNull}})
@@ -371,7 +378,7 @@ func TestPostgreSQLDescribeReportsTargetsChangesAndRevertibility(t *testing.T) {
 	if empty, err := correctionKind.Describe(ctx, fixture.database, nil); err != nil || len(empty) != 0 {
 		t.Fatalf("Describe(nil) = %v, %v", empty, err)
 	}
-	if !reflect.DeepEqual(CorrectionOperations().Type(), operations.TypeReleaseCorrection) || GroupChangeOperations().Type() != operations.TypeReleaseGroupChange {
+	if !reflect.DeepEqual(CorrectionOperations().Type(), operations.TypeReleaseCorrection) || GroupChangeOperations(testGroupSuppressions{}).Type() != operations.TypeReleaseGroupChange {
 		t.Fatal("the kinds report the wrong operation types")
 	}
 }
