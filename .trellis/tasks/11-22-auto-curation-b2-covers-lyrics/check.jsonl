@@ -1,8 +1,0 @@
-{"file": ".trellis/tasks/11-22-auto-curation-b2-covers-lyrics/research/caa-and-lrclib-api.md", "reason": "核对请求形式、重定向放行范围与错误处理是否符合外部事实"}
-{"file": ".trellis/tasks/11-22-auto-curation-b2-covers-lyrics/research/covers-and-lyrics-current.md", "reason": "核对全部封面读取点与扫描删除路径都被覆盖"}
-{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "核对写入与撤销沿用总开关、开启者、批次与不再提出的规则"}
-{"file": ".trellis/spec/backend/sources-contracts.md", "reason": "核对限速、缓存、重试与日志规则没有被新方法绕过"}
-{"file": ".trellis/spec/backend/steward-web-contracts.md", "reason": "核对管家工具的输出与错误码没有变化"}
-{"file": ".trellis/spec/backend/catalog-rest-verification.md", "reason": "目录读取的 EXPLAIN 与性能门禁的运行方式"}
-{"file": ".trellis/spec/backend/library-scan-verification.md", "reason": "扫描相关改动要求的测试覆盖面"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "接口样本、变异检查与验证记录的要求"}
