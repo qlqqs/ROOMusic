@@ -113,6 +113,14 @@ export const releaseFieldLabels: Readonly<Record<string, string>> = {
   barcode: "条码",
 };
 
+/** correct_track 改了哪些字段：“曲目标题、曲目艺人”（M7 I）。 */
+function correctedTrackFieldsOf(input: unknown): string | undefined {
+  const changes = isRecord(input) ? input["changes"] : undefined;
+  if (!isRecord(changes)) return undefined;
+  const names = Object.keys(changes).map((key) => (key === "title" ? "曲目标题" : key === "artist" ? "曲目艺人" : key));
+  return names.length === 0 ? undefined : names.join("、");
+}
+
 /** correct_release 改了哪些字段：“标题、年份”。 */
 function correctedFieldsOf(input: unknown): string | undefined {
   const changes = isRecord(input) ? input["changes"] : undefined;
@@ -241,6 +249,7 @@ const toolLabels: Readonly<Record<string, ToolLabel>> = {
 
   // ---- 曲库与艺人的治理（C6，管理员）：assistant 模式下先合成方案给用户确认 ----
   correct_release: { label: "修正专辑信息", icon: PenLine, argument: correctedFieldsOf, result: done("已修改"), changes: "catalog" },
+  correct_track: { label: "修正曲目信息", icon: PenLine, argument: correctedTrackFieldsOf, result: done("已修改"), changes: "catalog" },
   change_release_group: { label: "调整归组", icon: Layers, argument: pick("action", groupActions), result: done("已调整"), changes: "catalog" },
   set_default_release: { label: "设定默认版本", icon: Pin, argument: defaultReleaseOf, result: done("已设定"), changes: "catalog" },
   review_release_issue: {

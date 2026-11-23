@@ -6,6 +6,7 @@ export const governanceKeys = {
   all: (generation: number) => viewerQueryKey(generation, "governance"),
   /** 一个发行的修正状态（编辑发行信息的基线）。 */
   corrections: (generation: number, releaseId: string) => viewerQueryKey(generation, "governance", "corrections", releaseId),
+  trackCorrections: (generation: number, trackId: string) => viewerQueryKey(generation, "governance", "track-corrections", trackId),
   /** 操作记录的全部页：撤销与修改后前缀失效。 */
   operations: (generation: number) => viewerQueryKey(generation, "governance", "operations"),
   /** 操作记录的一页：发行与专辑筛选、页码与页大小都在键里。 */

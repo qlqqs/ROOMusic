@@ -16,5 +16,6 @@ export { useCachedTodoCounts } from "./hooks/use-cached-todo-counts";
 export { governanceKeys } from "./query-keys";
 export type { CurationFilter } from "./hooks/use-operations";
 export { operationOriginLabel, sourceName } from "./change-summary";
-export { correctionFieldLabels, displayValue } from "./labels";
+export { correctionFieldLabels, displayValue, trackFieldLabels } from "./labels";
 export type { CorrectableField } from "./api/decoders";
+export { EditTrackDialog } from "./components/edit-track-dialog";

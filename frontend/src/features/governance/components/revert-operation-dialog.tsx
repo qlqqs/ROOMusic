@@ -47,6 +47,8 @@ const titles = {
   release_issue_review: "撤销这次核对？",
   release_claim: "撤销这次认领？",
   release_auto_correction: "撤销这次自动补全？",
+  track_correction: "撤销这次曲目修改？",
+  track_auto_correction: "撤销这次曲目的自动补全？",
   release_external_artwork: "去掉这张自动补的封面？",
   track_external_lyrics: "去掉这份自动补的歌词？",
   external_link: "解除这次外部对应？",

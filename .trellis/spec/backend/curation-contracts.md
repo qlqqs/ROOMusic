@@ -752,3 +752,16 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 | 断言点 | 用例 |
 | --- | --- |
+| `OnlyEmpty` 保留人工和自动值，报告 `occupied`、`suppressed`、`unchanged`，拒绝 `manual_override` 和 `item_stale` | `TestPostgreSQLTrackAutoApply` |
+| 单条撤销恢复自动前值与原写入者，写入曲目字段标记，拒绝撤销被覆盖的操作 | `TestPostgreSQLTrackAutoRevert` |
+| 按批倒序撤销，保留其他批次 | `TestPostgreSQLTrackAutoBatchRevert` |
+| 按来源撤销，恢复其他来源的前值与写入者 | `TestPostgreSQLTrackAutoProviderRevert` |
+| 曲目与发行的人工版本独立，自动写入和撤销递增发行自动版本 | `TestPostgreSQLTrackAutoIndependentRevisions` |
+| 并发只补空缺时仅有一次写入成功并拥有字段 | `TestPostgreSQLTrackAutoConcurrent` |
+| 专辑和单曲从 MusicBrainz 补占位或推断的字段，保留人工值、自动值和不再提出标记 | `TestPostgreSQLCurationProgramTrackFields` |
+| 已匹配发行按现有对应补做一次并保留状态及代次，404 记 `unavailable`，暂时失败保留原状态 | `TestPostgreSQLCurationTrackFieldsBackfillOnce` |
+| 补全艺人后以有效值重查歌词，读取返回在线歌词 | `TestPostgreSQLCurationLyricsUsesEffectiveArtist` |
+| 后台修正写入模型批次的自动层，拒绝批外发行、曲目归属不符和 `clear` | `TestPostgreSQLCurationModelCorrectTrackAutoLayer` |
+| 管家对话修正写入人工层并校验曲目归属 | `TestPostgreSQLStewardCorrectTrackManual` |
+| 例外采纳写人工层，前值变更返回 `exception_stale`，不采纳后程序及模型跳过该字段值 | `TestPostgreSQLCurationExceptionTrackAcceptDecline` |
+| 审查收到发行和曲目目标、曲目版本、扫描值、有效值与外部对应 | `TestPostgreSQLStewardReviewTrackEvidence` |

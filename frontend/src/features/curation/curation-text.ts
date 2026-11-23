@@ -1,4 +1,4 @@
-import { correctionFieldLabels, displayValue, sourceName, type CorrectableField } from "../governance";
+import { correctionFieldLabels, displayValue, sourceName, trackFieldLabels, type CorrectableField } from "../governance";
 import { formatCount } from "../../shared/lib/number";
 import type {
   CurationExceptionDTO,
@@ -113,8 +113,9 @@ const subjectText: Record<string, string> = {
   group_join: "归组",
 };
 
-/** 标记的类别：字段名，或封面、歌词、外部对应、归组。 */
+/** 标记的类别：字段名，或封面、歌词、外部对应、归组；曲目上的标题与艺人（M7 I）写“曲目标题”“曲目艺人”。 */
 export function suppressionSubjectText(item: SuppressionDTO): string {
+  if (item.target_type === "track" && (item.subject === "title" || item.subject === "artist")) return trackFieldLabels[item.subject];
   if (item.subject in correctionFieldLabels) return correctionFieldLabels[item.subject as CorrectableField];
   return subjectText[item.subject] ?? item.subject;
 }
@@ -223,12 +224,18 @@ export function exceptionChangeLines(exception: CurationExceptionDTO): string[] 
         lines.push("归入已有的专辑");
         break;
       default: {
-        const label = change.field in correctionFieldLabels ? correctionFieldLabels[change.field as CorrectableField] : change.field;
+        const label = exception.tool === "correct_track" ? trackFieldLabel(change.field, exception.track?.title) : change.field in correctionFieldLabels ? correctionFieldLabels[change.field as CorrectableField] : change.field;
         lines.push(`${label}：${fieldValueText(change.before)} → ${fieldValueText(change.after)}`);
       }
     }
   }
   return lines;
+}
+
+/** 曲目字段的名字，带曲目名：“《Intro》曲目标题”。 */
+function trackFieldLabel(field: string, title: string | undefined): string {
+  const label = field === "title" || field === "artist" ? trackFieldLabels[field] : field;
+  return title === undefined ? label : `《${title}》${label}`;
 }
 
 /** 匹配的外部对应是新建还是替换现有的。 */

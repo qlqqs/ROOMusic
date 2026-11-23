@@ -3,8 +3,9 @@ import { formatCount } from "../../../shared/lib/number";
 import { StatusTag, VisuallyHidden } from "../../../shared/ui";
 import type { ReleaseMediumDTO, ReleaseTrackDTO } from "../api/decoders";
 import { formatDuration } from "../../../shared/lib/duration";
-import { mediumHeading, totalDuration } from "../format";
+import { mediumHeading, totalDuration, type FieldMarks } from "../format";
 import { ArtistNames } from "./artist-names";
+import { FieldMarkTag, hasFieldMark } from "./field-mark-tag";
 import styles from "./release-media.module.css";
 
 /** 一次定位请求：token 区分不同的到达（同一首曲目在后退、前进时会以新的 token 再来一次）。 */
@@ -119,8 +120,10 @@ const TrackRow = memo(function TrackRow({
   focusToken: string | undefined;
   highlighted: boolean;
 }) {
-  // 作品里的曲目在作品小标题下面，行内只写乐章名。
-  const shownTitle = track.work?.movement ?? track.title;
+  // 作品里的曲目在作品小标题下面，行内只写乐章名；标题被人工修正或自动补全过（M7 I）时写修正后的标题。
+  const marks: FieldMarks = { corrected: track.corrected_fields ?? [], auto: track.auto_fields };
+  const titleMarked = hasFieldMark(marks, "title");
+  const shownTitle = titleMarked ? track.title : (track.work?.movement ?? track.title);
   const title = shownTitle.trim() === "" ? "（无标题）" : shownTitle;
   const artist = track.artist.trim();
   const composers = composersOf(track);
@@ -163,6 +166,7 @@ const TrackRow = memo(function TrackRow({
         {marker === undefined ? null : <VisuallyHidden>{marker}</VisuallyHidden>}
         {selected ? <VisuallyHidden>，已选中</VisuallyHidden> : null}
         {isCue ? <StatusTag>CUE 分轨</StatusTag> : null}
+        {titleMarked ? <FieldMarkTag marks={marks} field="title" /> : null}
       </p>
       {/* 宽版面里 display: contents，两栏直接对齐表头；窄版面里成为标题下一行“艺人 · 作曲”（艺人与专辑艺人相同时不写）。 */}
       <div className={styles.meta}>
@@ -171,6 +175,7 @@ const TrackRow = memo(function TrackRow({
             <>
               <VisuallyHidden>艺人：</VisuallyHidden>
               <ArtistNames text={artist} refs={track.artist_refs} />
+              <FieldMarkTag marks={marks} field="artist" />
             </>
           )}
         </p>

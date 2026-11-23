@@ -1,5 +1,5 @@
 import type { ClaimSummaryDTO, CorrectionIntentDTO, DefaultVersionDTO, FieldValue, OperationChangesDTO, OperationItemDTO, OperationOriginDTO } from "./api/decoders";
-import { correctionFieldLabels, displayValue, reviewableIssueLabels } from "./labels";
+import { correctionFieldLabels, displayValue, reviewableIssueLabels, trackFieldLabels } from "./labels";
 
 /**
  * 操作的来源标签：审查批准后自动执行的写“管家（审查通过）”（C7），管家确认方案后执行的写“管家（确认）”，管家直接执行的写“管家（直接执行）”，
@@ -38,6 +38,10 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       return "认领";
     case "release_auto_correction":
       return "自动补全发行信息";
+    case "track_correction":
+      return "修改曲目信息";
+    case "track_auto_correction":
+      return "自动补全曲目信息";
     case "release_external_artwork":
       return "自动补封面";
     case "track_external_lyrics":
@@ -59,6 +63,8 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       if (item.changes?.kind === "release_issue_review") return "撤销核对";
       if (item.changes?.kind === "release_claim") return "撤销认领";
       if (item.changes?.kind === "release_auto_correction") return "撤销自动补全";
+      if (item.changes?.kind === "track_correction") return "撤销曲目修改";
+      if (item.changes?.kind === "track_auto_correction") return "撤销曲目的自动补全";
       if (item.changes?.kind === "release_external_artwork") return "撤销自动补的封面";
       if (item.changes?.kind === "track_external_lyrics") return "撤销自动补的歌词";
       if (item.changes?.kind === "external_link") return "解除外部对应";
@@ -185,6 +191,22 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
     if (reverse) return [`解除与 ${what} 的对应`, ...(extra === "" ? [] : [`同时去掉${extra}的对应`])];
     return [`对上 ${what}`, `依据${linkMethodLabels[changes.method] ?? changes.method}${extra === "" ? "" : `，同时对上${extra}`}`];
   }
+  // 曲目字段（M7 I）：每行带曲目名，字段名是“曲目标题”“曲目艺人”。
+  if (changes.kind === "track_correction") {
+    return changes.fields.map((field) => {
+      const [from, to] = reverse ? [field.after, field.before] : [field.before, field.after];
+      const note = to.correction === null ? "（恢复为扫描值或自动补全的值）" : "";
+      return `《${changes.track.title}》${trackFieldLabels[field.field]}：${displayValue(from.effective)} → ${displayValue(to.effective)}${note}`;
+    });
+  }
+  if (changes.kind === "track_auto_correction") {
+    return changes.fields.map((field) => {
+      const [from, to] = reverse ? [field.after, field.before] : [field.before, field.after];
+      const label = `《${changes.track.title}》${trackFieldLabels[field.field]}`;
+      if (sameValue(from.effective, to.effective)) return `${label}：自动值 ${from.auto?.value ?? "（无）"} → ${to.auto?.value ?? "（无）"}（人工修正优先，显示不变）`;
+      return `${label}：${displayValue(from.effective)} → ${displayValue(to.effective)}${to.auto === null ? "（取消自动补全）" : ""}`;
+    });
+  }
   if (changes.kind === "release_auto_correction") {
     return changes.fields.map((field) => {
       const [from, to] = reverse ? [field.after, field.before] : [field.before, field.after];
@@ -228,7 +250,9 @@ export function notRevertibleReason(item: Pick<OperationItemDTO, "type" | "rever
   if (item.type === "artist_candidate_ignore") return "不能撤销";
   if (item.reverted_by !== null) return "已撤销";
   // 自动补全的撤销不看专辑是否可见，也不受之后的人工修改影响：撤不了只可能是同一个字段又被更晚的自动整理改写了。
-  if (item.type === "release_auto_correction") return "之后又被自动整理改写";
+  if (item.type === "release_auto_correction" || item.type === "track_auto_correction") return "之后又被自动整理改写";
+  // 曲目的人工修改：撤不了是这首曲目之后又被修改过，或已经不在库里。
+  if (item.type === "track_correction") return "这首曲目之后又被修改过";
   // 外部封面与外部歌词同理：撤不了只可能是它已经不在了（恢复备份后图片文件丢失、被新的一张替换）。
   if (item.type === "release_external_artwork" || item.type === "track_external_lyrics") return "已被替换";
   // 外部对应从不被替换：撤不了只可能是其中某一项已经不在（被别的撤销去掉了）。
