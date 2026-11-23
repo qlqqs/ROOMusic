@@ -74,3 +74,14 @@ D10：管理面板入口与合并对话框（预览、错误）、已并入列�
 ## 回退点
 
 扫描改动（D4）出问题时整体回退派发 1 的 `ingest/` 改动与迁移；无合并的库行为应与改动前一致（A8 是回归闸门）。
+
+## 验证记录（2026-11-23）
+
+本轮实际运行：
+- 后端：`go vet ./...`、`go test ./...` 通过（首次发现 `TestPackageDependencyDirections` 拦下三处越层引用，修正后 `internal/app`、`internal/curation/...`、`internal/catalog/governance/...` 重跑通过）。
+- 全量串行集成（扫描身份规则改动无法局部覆盖，所以扩大到全量）：84 个包 ok，顶层 987 个、子用例 1715 个通过，5 个跳过，0 失败。
+- 测试代理 1：17 个新增用例与 0067 迁移往返通过；7 项变异全部命中（身份分配、增量跳过改回 `m.release_id`，排位改按原碟号，执行器锁组行出现 40P01 死锁，撤销不核对来源版本，自动撤销不查之后的人工结构操作，待认领谓词去掉排除）。
+- 测试代理 2：自动并入的发现、写入、拦截、撤销、例外、审查第 4 版用例通过；6 项变异全部命中；新增样本 `curation/exceptions-merge`、`curation/suppressions-release-merge`。
+- 前端：`typecheck`、`eslint src e2e` 通过；全量 Vitest 4618 通过，2 个失败是已知的负载敏感文件（agent-settings、steward），单独重跑 111 个全部通过；Playwright（albums、governance、default-version、curation、claims、a11y）209 通过，1 个因菜单新增一项而更新断言后通过。
+
+未验证：真实 MusicBrainz 数据下的自动并入（留给父任务 V12）；arm64。

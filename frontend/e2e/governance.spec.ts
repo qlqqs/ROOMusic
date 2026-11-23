@@ -48,9 +48,9 @@ test.describe("编辑发行信息", () => {
     // 播放类的项在前、无组名；管理员的项在“管理”分组里，组标题不是菜单项。
     await more.click();
     const menu = openMenu(page);
-    await expect(menu.getByRole("menuitem")).toHaveText(["下一首播放", "加入队列", "编辑发行信息", "归入其他专辑…"]);
+    await expect(menu.getByRole("menuitem")).toHaveText(["下一首播放", "加入队列", "编辑发行信息", "归入其他专辑…", "并入另一个版本…"]);
     const admin = menu.getByRole("group", { name: "管理" });
-    await expect(admin.getByRole("menuitem")).toHaveText(["编辑发行信息", "归入其他专辑…"]);
+    await expect(admin.getByRole("menuitem")).toHaveText(["编辑发行信息", "归入其他专辑…", "并入另一个版本…"]);
     await expect(menu.getByRole("menuitem", { name: "管理" })).toHaveCount(0);
   });
 
