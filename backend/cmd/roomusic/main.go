@@ -79,6 +79,13 @@ func main() {
 		if analyzer != nil {
 			appOptions = append(appOptions, app.WithAnalysis(analyzer))
 		}
+		fingerprinter, fingerprintErr := app.OpenFingerprinter(applicationContext, settings, logger)
+		if fingerprintErr != nil {
+			logger.Warn("声学指纹启动中止", "event", "playback.fingerprint.unavailable", "reason", "startup_canceled")
+		}
+		if fingerprinter != nil {
+			appOptions = append(appOptions, app.WithFingerprinter(fingerprinter))
+		}
 		backups.Start(applicationContext, database)
 		appOptions = append(appOptions, app.WithBackups(backups))
 		application = app.New(applicationContext, settings, database, frontend, logger, appOptions...)

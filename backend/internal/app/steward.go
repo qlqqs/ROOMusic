@@ -58,8 +58,12 @@ type stewardConfig struct {
 	dsp          *dspsettings.Service
 }
 
+func newInstanceSecrets(dataDirectory string) *secret.Store {
+	return secret.New(filepath.Join(dataDirectory, "steward", "instance.key"))
+}
+
 // registerSteward 在接受请求前恢复会话状态；失败时记录日志并让管家接口返回 503。
-func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sql.DB, guard *identity.Guard, dataDirectory string, logger *slog.Logger, scans *library.Service, kinds []operations.Kind, playback *zones.Service, history *listening.Service, personalLibrary *personal.Service, configurations ...stewardConfig) *runtime.Supervisor {
+func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sql.DB, guard *identity.Guard, secrets *secret.Store, logger *slog.Logger, scans *library.Service, kinds []operations.Kind, playback *zones.Service, history *listening.Service, personalLibrary *personal.Service, configurations ...stewardConfig) *runtime.Supervisor {
 	store := runtime.NewStore(database).WithOperationLookup(func(ctx context.Context, tx *sql.Tx, userID, key string) (runtime.RecordedOperation, error) {
 		result, err := operations.LookupResult(ctx, tx, userID, key)
 		if errors.Is(err, operations.ErrNotFound) {
@@ -85,7 +89,6 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		}
 		logger.Info("管家会话状态已恢复", "event", "steward.recovery.completed", "message", "管家会话状态已恢复", "module", "steward", "conversations", count)
 	}
-	secrets := secret.New(filepath.Join(dataDirectory, "steward", "instance.key"))
 	webService := web.New(store, secrets, func(ctx context.Context, user identity.User) (*http.Client, error) {
 		return stewardapi.OutboundClient(ctx, user, store)
 	}, logger)

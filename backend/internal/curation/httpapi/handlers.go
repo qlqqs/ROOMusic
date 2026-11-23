@@ -32,6 +32,8 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	const base = "/api/v1/admin/curation"
 	mux.HandleFunc("GET "+base+"/sources", h.admin(h.listSources))
 	mux.HandleFunc("PUT "+base+"/sources/{id}", h.admin(h.setSource))
+	mux.HandleFunc("PUT "+base+"/sources/{id}/keys/{name}", h.admin(h.setSourceKey))
+	mux.HandleFunc("DELETE "+base+"/sources/{id}/keys/{name}", h.admin(h.clearSourceKey))
 	mux.HandleFunc("GET "+base+"/progress", h.admin(h.progress))
 	mux.HandleFunc("GET "+base+"/settings", h.admin(h.settings))
 	mux.HandleFunc("PUT "+base+"/settings", h.admin(h.setSettings))
@@ -131,6 +133,29 @@ func (h *Handlers) setSource(w http.ResponseWriter, r *http.Request, actor ident
 		return
 	}
 	item, err := h.sources.SetEnabled(r.Context(), r.PathValue("id"), actor.ID, enabled)
+	h.respond(w, r, item, err)
+}
+
+func (h *Handlers) setSourceKey(w http.ResponseWriter, r *http.Request, actor identity.User) {
+	var body struct {
+		Key string `json:"key"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	item, err := h.sources.SetKey(r.Context(), r.PathValue("id"), r.PathValue("name"), actor.ID, body.Key)
+	h.respondSourceKey(w, r, item, err)
+}
+
+func (h *Handlers) clearSourceKey(w http.ResponseWriter, r *http.Request, actor identity.User) {
+	item, err := h.sources.ClearKey(r.Context(), r.PathValue("id"), r.PathValue("name"), actor.ID)
+	h.respondSourceKey(w, r, item, err)
+}
+
+func (h *Handlers) respondSourceKey(w http.ResponseWriter, r *http.Request, item curation.SourceSettings, err error) {
+	if err == nil {
+		h.logger.InfoContext(r.Context(), "外部源密钥设置已更新", "event", "curation.source.key_changed", "module", "curation", "source", item.ID, "key_name", r.PathValue("name"), "configured", r.Method == http.MethodPut)
+	}
 	h.respond(w, r, item, err)
 }
 

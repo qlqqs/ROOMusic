@@ -8,9 +8,7 @@ import (
 // DecideSingle 先按时长筛选；同一 ISRC 出现多个时长合适的录音时不能靠标题消歧。
 func DecideSingle(e catalog.CurationEvidence, method string, recordings []sources.Recording) MatchResult {
 	result := newMatch("single", method)
-	for _, r := range recordings[:min(10, len(recordings))] {
-		result.Candidates = append(result.Candidates, Candidate{Source: "musicbrainz", ExternalID: r.ID, Method: method, Title: r.Title, Artist: credits(r.Artists), CatalogNumbers: []string{}})
-	}
+	result.Candidates = recordingCandidates(method, recordings)
 	if len(recordings) == 0 {
 		return result
 	}
@@ -44,10 +42,22 @@ func DecideSingle(e catalog.CurationEvidence, method string, recordings []source
 	if _, mismatch := compareISRCs(trackISRCs(t), selected.ISRCs); mismatch {
 		result.Conflicts = append(result.Conflicts, "isrc_mismatch")
 	}
+	if method == "acoustid" && !t.TitlePlaceholder && !sameText(t.Title, selected.Title) {
+		result.Conflicts = append(result.Conflicts, "title_mismatch")
+	}
 	if len(result.Conflicts) > 0 || (method == "isrc" && (t.TitlePlaceholder || !sameText(t.Title, selected.Title))) {
 		return uncertain(result)
 	}
 	result.Status, result.Recording = "matched", selected
 	result.Pairs = []TrackPair{{TrackID: t.ID, RecordingID: selected.ID}}
 	return result
+}
+
+func recordingCandidates(method string, recordings []sources.Recording) []Candidate {
+	rows := recordings[:min(10, len(recordings))]
+	out := make([]Candidate, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Candidate{Source: "musicbrainz", ExternalID: r.ID, Method: method, Title: r.Title, Artist: credits(r.Artists), CatalogNumbers: []string{}})
+	}
+	return out
 }

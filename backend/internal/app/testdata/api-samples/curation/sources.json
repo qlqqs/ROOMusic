@@ -32,6 +32,30 @@
         "id": "lrclib",
         "inactive_reason": "curation_disabled",
         "name": "LRCLIB"
+      },
+      {
+        "active": false,
+        "capabilities": [
+          "fingerprint_lookup"
+        ],
+        "enabled": true,
+        "id": "acoustid",
+        "inactive_reason": "curation_disabled",
+        "keys": [
+          {
+            "configured": false,
+            "last_four": "",
+            "name": "application",
+            "status": "unchecked"
+          },
+          {
+            "configured": false,
+            "last_four": "",
+            "name": "user",
+            "status": "unchecked"
+          }
+        ],
+        "name": "AcoustID"
       }
     ]
   },

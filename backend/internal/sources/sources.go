@@ -11,17 +11,19 @@ import (
 type Capability string
 
 const (
-	ReleaseLookup   Capability = "release_lookup"
-	RecordingLookup Capability = "recording_lookup"
-	ArtistLookup    Capability = "artist_lookup"
-	CoverArt        Capability = "cover_art"
-	LyricsLookup    Capability = "lyrics"
+	ReleaseLookup     Capability = "release_lookup"
+	RecordingLookup   Capability = "recording_lookup"
+	ArtistLookup      Capability = "artist_lookup"
+	CoverArt          Capability = "cover_art"
+	LyricsLookup      Capability = "lyrics"
+	FingerprintLookup Capability = "fingerprint_lookup"
 )
 
 type Declaration struct {
 	ID, Name       string
 	Capabilities   []Capability
 	DefaultEnabled bool
+	Keys           []string
 	MinInterval    time.Duration
 }
 
@@ -93,6 +95,35 @@ type CoverFile struct {
 type LyricsFinder interface {
 	LyricsFor(context.Context, LyricsQuery) (Lyrics, error)
 	SearchLyrics(context.Context, LyricsQuery) ([]Lyrics, error)
+}
+
+type FingerprintFinder interface {
+	LookupFingerprint(context.Context, Fingerprint) ([]FingerprintMatch, error)
+}
+
+type Fingerprint struct {
+	Value           string
+	DurationSeconds int
+}
+
+type FingerprintMatch struct {
+	ID         string
+	Score      float64
+	Recordings []FingerprintRecording
+}
+
+type FingerprintRecording struct {
+	ID, Title  string
+	LengthMS   *int64
+	Artists    []Credit
+	ReleaseIDs []string
+	Releases   []FingerprintRelease
+}
+
+type FingerprintRelease struct {
+	ID, Title, Date, Country string
+	Artists                  []Credit
+	TrackCount, MediumCount  int
 }
 
 type LyricsQuery struct {
@@ -174,7 +205,14 @@ var (
 	ErrUnavailable  = errors.New("source_unavailable")
 	ErrTryLater     = errors.New("try_later")
 	ErrInvalidQuery = errors.New("invalid_query")
+	ErrInvalidKey   = errors.New("invalid_key")
 )
+
+// InvalidKeyError 指明外部源拒绝了哪一项密钥。
+type InvalidKeyError struct{ Name string }
+
+func (e *InvalidKeyError) Error() string { return ErrInvalidKey.Error() + ": " + e.Name }
+func (e *InvalidKeyError) Unwrap() error { return ErrInvalidKey }
 
 type backgroundKey struct{}
 type caller struct{ permit func(context.Context) error }

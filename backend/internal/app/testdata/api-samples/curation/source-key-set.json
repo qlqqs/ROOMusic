@@ -1,0 +1,27 @@
+{
+  "body": {
+    "active": false,
+    "capabilities": [
+      "fingerprint_lookup"
+    ],
+    "enabled": true,
+    "id": "acoustid",
+    "inactive_reason": "fingerprint_unavailable",
+    "keys": [
+      {
+        "configured": true,
+        "last_four": "4321",
+        "name": "application",
+        "status": "unchecked"
+      },
+      {
+        "configured": false,
+        "last_four": "",
+        "name": "user",
+        "status": "unchecked"
+      }
+    ],
+    "name": "AcoustID"
+  },
+  "status": 200
+}

@@ -147,7 +147,7 @@ func newC9Fixture(t *testing.T) *c9Fixture {
 	cfg := stewardConfig{diagnostics: f.diagnostics, backups: f.backups, allowedRoots: []string{music}, audio: audio, progress: progress, dsp: f.dsp}
 	guard := identity.NewGuardWithSameHost(db)
 	base.tokens = token.NewStore(db, guard)
-	registerSteward(ctx, base.mux, db, guard, dir, logger, f.scans, nil, f.zones, nil, nil, cfg)
+	registerSteward(ctx, base.mux, db, guard, newInstanceSecrets(dir), logger, f.scans, nil, f.zones, nil, nil, cfg)
 	identityapi.New(db, guard, nil, logger).Register(base.mux)
 	libraryapi.New(db, guard, f.scans, []string{music}, logger).Register(base.mux)
 	backupapi.New(f.backups, db, guard, ctx).Register(base.mux)

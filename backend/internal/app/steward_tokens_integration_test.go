@@ -93,7 +93,7 @@ func newC3AppFixture(t *testing.T) *c3AppFixture {
 	guard := identity.NewGuardWithSameHost(db)
 	f.tokens = token.NewStore(db, guard)
 	scans := library.NewService(ctx, db, dir, logger)
-	registerSteward(ctx, f.mux, db, guard, dir, logger, scans, nil, nil, nil, nil)
+	registerSteward(ctx, f.mux, db, guard, newInstanceSecrets(dir), logger, scans, nil, nil, nil, nil)
 	identityapi.New(db, guard, nil, logger).Register(f.mux)
 	// 对照注册表使用同一组业务定义，HTTP 一侧必须经过真实 registerSteward 装配。
 	definitions := catalogtools.StewardTools(catalog.NewStore(db), governance.NewStore(db))

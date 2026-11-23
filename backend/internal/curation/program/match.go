@@ -18,15 +18,16 @@ type TrackPair struct {
 }
 
 type MatchResult struct {
-	Mode, Method, Status string
-	Conflicts            []string
-	Candidates           []Candidate
-	Release              *sources.Release
-	Recording            *sources.Recording
-	Pairs                []TrackPair
+	Mode, Method, Status, Fingerprint string
+	Conflicts                         []string
+	Candidates                        []Candidate
+	Release                           *sources.Release
+	Recording                         *sources.Recording
+	Pairs                             []TrackPair
 }
 
 type Candidate struct {
+	Score          float64  `json:"score,omitempty"`
 	Source         string   `json:"source"`
 	ExternalID     string   `json:"external_id"`
 	Method         string   `json:"method"`
@@ -42,7 +43,7 @@ type Candidate struct {
 }
 
 func newMatch(mode, method string) MatchResult {
-	return MatchResult{Mode: mode, Method: method, Status: "no_match", Conflicts: []string{}, Candidates: []Candidate{}}
+	return MatchResult{Mode: mode, Method: method, Status: "no_match", Fingerprint: "not_reached", Conflicts: []string{}, Candidates: []Candidate{}}
 }
 
 func uncertain(result MatchResult, codes ...string) MatchResult {

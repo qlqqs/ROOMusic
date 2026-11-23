@@ -3,6 +3,7 @@ package curation
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"slices"
 
 	"github.com/qlqq/roomusic/backend/internal/operations"
@@ -10,12 +11,14 @@ import (
 )
 
 type SourceRegistration struct {
-	Declaration sources.Declaration
-	Releases    sources.ReleaseFinder
-	Recordings  sources.RecordingFinder
-	Artists     sources.ArtistFinder
-	Covers      sources.CoverFinder
-	Lyrics      sources.LyricsFinder
+	Declaration  sources.Declaration
+	Releases     sources.ReleaseFinder
+	Recordings   sources.RecordingFinder
+	Artists      sources.ArtistFinder
+	Covers       sources.CoverFinder
+	Lyrics       sources.LyricsFinder
+	Fingerprints sources.FingerprintFinder
+	Available    func() bool
 }
 
 type SourceSettings struct {
@@ -24,10 +27,12 @@ type SourceSettings struct {
 	Capabilities   []sources.Capability `json:"capabilities"`
 	Enabled        bool                 `json:"enabled"`
 	Active         bool                 `json:"active"`
+	Keys           []SourceKeySettings  `json:"keys,omitempty"`
 	InactiveReason *string              `json:"inactive_reason"`
 }
 
 type Sources struct {
+	keys       KeyStore
 	scanCheck  func(context.Context) (bool, error)
 	db         *sql.DB
 	registered []SourceRegistration
@@ -53,9 +58,14 @@ func (s *Sources) lookup(id string) (SourceRegistration, bool) {
 
 func unknownSource() error { return operations.NotFound("not_found", "外部源不存在") }
 
-func sourceState(ctx context.Context, tx *sql.Tx, d sources.Declaration, overall Settings) (SourceSettings, error) {
-	item := SourceSettings{ID: d.ID, Name: d.Name, Capabilities: d.Capabilities}
-	err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT enabled FROM curation_source_settings WHERE source=$1),$2::boolean)`, d.ID, d.DefaultEnabled).Scan(&item.Enabled)
+func sourceState(ctx context.Context, tx *sql.Tx, r SourceRegistration, overall Settings) (SourceSettings, error) {
+	d := r.Declaration
+	item := SourceSettings{ID: d.ID, Name: d.Name, Capabilities: d.Capabilities, Enabled: d.DefaultEnabled}
+	err := tx.QueryRowContext(ctx, `SELECT enabled FROM curation_source_settings WHERE source=$1`, d.ID).Scan(&item.Enabled)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return SourceSettings{}, err
+	}
+	item.Keys, err = loadKeySettings(ctx, tx, d)
 	if err != nil {
 		return SourceSettings{}, err
 	}
@@ -67,6 +77,12 @@ func sourceState(ctx context.Context, tx *sql.Tx, d sources.Declaration, overall
 		reason = "enabler_unavailable"
 	case !item.Enabled:
 		reason = "source_disabled"
+	case r.Available != nil && !r.Available():
+		reason = "fingerprint_unavailable"
+	case slices.ContainsFunc(item.Keys, func(k SourceKeySettings) bool { return !k.Configured }):
+		reason = "key_missing"
+	case slices.ContainsFunc(item.Keys, func(k SourceKeySettings) bool { return k.Status == "invalid" }):
+		reason = "key_invalid"
 	default:
 		item.Active = true
 	}
@@ -88,7 +104,7 @@ func (s *Sources) List(ctx context.Context) ([]SourceSettings, error) {
 	}
 	items := make([]SourceSettings, 0, len(s.registered))
 	for _, r := range s.registered {
-		item, err := sourceState(ctx, tx, r.Declaration, settings)
+		item, err := sourceState(ctx, tx, r, settings)
 		if err != nil {
 			return nil, err
 		}
@@ -112,11 +128,15 @@ func (s *Sources) SetEnabled(ctx context.Context, id, actorID string, enabled bo
 	if err != nil {
 		return SourceSettings{}, err
 	}
+	return committedSourceState(ctx, tx, r)
+}
+
+func committedSourceState(ctx context.Context, tx *sql.Tx, r SourceRegistration) (SourceSettings, error) {
 	settings, err := loadSettings(ctx, tx)
 	if err != nil {
 		return SourceSettings{}, err
 	}
-	item, err := sourceState(ctx, tx, r.Declaration, settings)
+	item, err := sourceState(ctx, tx, r, settings)
 	if err != nil {
 		return SourceSettings{}, err
 	}
@@ -146,12 +166,13 @@ func (s *Sources) Check(ctx context.Context, id string) error {
 	if settings.Paused {
 		return operations.Conflict("curation_paused", "自动整理已暂停")
 	}
-	item, err := sourceState(ctx, tx, r.Declaration, settings)
+	item, err := sourceState(ctx, tx, r, settings)
 	if err != nil {
 		return err
 	}
-	if !item.Enabled {
-		return operations.Conflict("source_disabled", "外部源开关已关闭")
+	// 匹配用指纹闸门区分暂时中止与不可用；其余源沿用关闭后直接返回的顺序。
+	if !item.Enabled && !slices.Contains(r.Declaration.Capabilities, sources.FingerprintLookup) {
+		return disabledSource("source_disabled")
 	}
 	if err := tx.Commit(); err != nil {
 		return err
@@ -165,5 +186,21 @@ func (s *Sources) Check(ctx context.Context, id string) error {
 			return operations.Conflict("scan_running", "曲库扫描进行中")
 		}
 	}
+	if item.InactiveReason != nil {
+		return disabledSource(*item.InactiveReason)
+	}
 	return nil
+}
+
+func disabledSource(reason string) error {
+	message := "外部源开关已关闭"
+	switch reason {
+	case "fingerprint_unavailable":
+		message = "声学指纹工具不可用"
+	case "key_missing":
+		message = "尚未填齐外部源密钥"
+	case "key_invalid":
+		message = "外部源密钥无效，请重新填写"
+	}
+	return operations.Conflict("source_disabled", message)
 }

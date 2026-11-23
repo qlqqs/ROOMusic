@@ -37,8 +37,10 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/playback"
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
+	"github.com/qlqq/roomusic/backend/internal/playback/fingerprint"
 	playbackapi "github.com/qlqq/roomusic/backend/internal/playback/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
+	"github.com/qlqq/roomusic/backend/internal/sources/acoustid"
 	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
 	"github.com/qlqq/roomusic/backend/internal/sources/lrclib"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
@@ -64,6 +66,8 @@ type App struct {
 type Option func(*options)
 
 type options struct {
+	fingerprinter      *fingerprint.Fingerprinter
+	acoustid           acoustid.Options
 	diagnosticLogs     *diagnostics.LogRing
 	startedAt          time.Time
 	backups            *backup.Service
@@ -166,10 +170,18 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	assembly.music.DataDirectory, assembly.music.Logger = settings.DataDirectory, logger
 	assembly.covers.DataDirectory, assembly.covers.Logger = settings.DataDirectory, logger
 	assembly.lyrics.DataDirectory, assembly.lyrics.Logger = settings.DataDirectory, logger
+	instanceSecrets := newInstanceSecrets(settings.DataDirectory)
+	var sourceGate *curation.Sources
+	assembly.acoustid.DataDirectory, assembly.acoustid.Logger = settings.DataDirectory, logger
+	assembly.acoustid.Keys = func(ctx context.Context) (map[string]string, error) {
+		return sourceGate.Keys(ctx, "acoustid")
+	}
+	acoustic := acoustid.New(assembly.acoustid)
 	music := musicbrainz.New(assembly.music)
 	covers := coverartarchive.New(assembly.covers)
 	lyrics := lrclib.New(assembly.lyrics)
 	if lifecycle != nil {
+		acoustic.StartCacheCleanup(lifecycle)
 		covers.StartCacheCleanup(lifecycle)
 		lyrics.StartCacheCleanup(lifecycle)
 		music.StartCacheCleanup(lifecycle)
@@ -178,11 +190,15 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		scan, err := libraryService.ActiveScan(ctx)
 		return scan != nil, err
 	}
-	sourceGate := curation.NewSources(database,
+	if assembly.fingerprinter != nil {
+		assembly.program.Fingerprints = programFingerprints{playback.NewFingerprints(database, settings.AllowedLibraryRoots, assembly.fingerprinter, logger)}
+	}
+	sourceGate = curation.NewSources(database,
 		curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: music, Recordings: music, Artists: music},
 		curation.SourceRegistration{Declaration: coverartarchive.Declaration(), Covers: covers},
 		curation.SourceRegistration{Declaration: lrclib.Declaration(), Lyrics: lyrics},
-	).WithScanCheck(scanRunning)
+		curation.SourceRegistration{Declaration: acoustid.Declaration(), Fingerprints: acoustic, Available: func() bool { return assembly.program.Fingerprints != nil }},
+	).WithScanCheck(scanRunning).WithKeyStore(instanceSecrets)
 	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger)
 	operationKinds := []operations.Kind{curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
 		governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.GroupChangeOperations(curationWriter), governance.GroupDefaultOperations(),
@@ -212,7 +228,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		close(analysisDone)
 	}
 	progress := playback.NewAnalysisProgressProvider(database, analysis.Version, analysisWorker)
-	supervisor := registerSteward(lifecycle, mux, database, guard, settings.DataDirectory, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{music: music, covers: covers, diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
+	supervisor := registerSteward(lifecycle, mux, database, guard, instanceSecrets, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{music: music, covers: covers, diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		AnalysisProgress: progress,
 	}).Register(mux)

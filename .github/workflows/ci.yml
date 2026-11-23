@@ -136,6 +136,9 @@ jobs:
           python3 scripts/tests/test_production_init.py
           for script in deploy/production/*.sh; do bash -n "$script"; done
           grep -qF "$(scripts/ffmpeg-pinned.sh --image)" deploy/production/Dockerfile
+          scripts/fpcalc-pinned.sh --pins | while IFS= read -r pin; do
+            grep -qF "$pin" deploy/production/Dockerfile || exit 1
+          done
           grep -qF "golang:$(sed -n 's/^go = "\(.*\)"/\1/p' .mise.toml)-" deploy/production/Dockerfile
           node_version=$(sed -n 's/^node = "\(.*\)"/\1/p' .mise.toml)
           test -n "$node_version"
@@ -153,7 +156,13 @@ jobs:
           done
       - name: Test release checks
         run: python3 scripts/tests/test_release_check.py
-      - name: Run PostgreSQL 18 and pinned ffmpeg integration tests
+      - name: Prepare pinned audio tools
+        run: |
+          ffmpeg_path="$(scripts/ffmpeg-pinned.sh)"
+          fpcalc_path="$(scripts/fpcalc-pinned.sh)"
+          echo "ROOMUSIC_TEST_FFMPEG=$ffmpeg_path" >> "$GITHUB_ENV"
+          echo "ROOMUSIC_TEST_FPCALC=$fpcalc_path" >> "$GITHUB_ENV"
+      - name: Run PostgreSQL 18 and pinned audio integration tests
         env:
           ROOMUSIC_TEST_PG_PASSWORD: ci-placeholder
         run: ./scripts/test-integration.sh
