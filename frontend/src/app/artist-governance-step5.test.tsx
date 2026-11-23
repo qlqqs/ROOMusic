@@ -107,7 +107,7 @@ describe("艺人治理：预览、确认与恢复", () => {
     const context = setup();
     const dialog = await prepareMerge(context);
     expect(dialog.getByRole("status").textContent).toContain(`“待合并艺人”会并入“${context.detail.artist.name}”`);
-    expect(dialog.getByRole("status").textContent).toContain("合并不能撤销，需要时可以再拆开。");
+    expect(dialog.getByRole("status").textContent).toContain("合并之后可以从操作记录撤销。");
     expect(context.api.requestsTo("POST", endpoint("merge"))).toHaveLength(0);
     await context.user.click(dialog.getByRole("button", { name: "合并" }));
     await screen.findByText(/已把“待合并艺人”并入/);
@@ -143,7 +143,7 @@ describe("艺人治理：预览、确认与恢复", () => {
   it("改名确认提示不可撤销；保存后可改回最常见写法，auto 不带旧 name", async () => {
     const context = setup();
     let dialog = await openDialog(context, "修改主名");
-    expect(dialog.getByText("改名不能撤销，需要时可以再改。")).toBeTruthy();
+    expect(dialog.getByText("改名之后可以从操作记录撤销。")).toBeTruthy();
     const name = dialog.getByRole("textbox", { name: "主名" });
     await context.user.clear(name);
     await context.user.type(name, "新的主名");
@@ -355,7 +355,7 @@ describe("候选和操作记录", () => {
     await context.user.click(await screen.findByRole("button", { name: `合并“${pair.left.name}”和“${pair.right.name}”…` }));
     const dialog = within(await screen.findByRole("dialog", { name: "合并为同一位艺人" }));
     expect(checked(dialog.getByRole("radio", { name: `${pair.right.name}${artistMetaText(pair.right)}` }))).toBe(true);
-    expect(dialog.getByRole("status").textContent).toContain("合并不能撤销，需要时可以再拆开。");
+    expect(dialog.getByRole("status").textContent).toContain("合并之后可以从操作记录撤销。");
     await context.user.click(dialog.getByRole("radio", { name: `${pair.left.name}${artistMetaText(pair.left)}` }));
     await waitFor(() => expect(dialog.getByRole<HTMLButtonElement>("button", { name: "合并" }).disabled).toBe(false));
     await context.user.click(dialog.getByRole("button", { name: "合并" }));
@@ -438,9 +438,26 @@ describe("候选和操作记录", () => {
     expect(within(table).getAllByText("拆开艺人").length).toBeGreaterThan(0);
     expect(within(table).getAllByText("合并艺人").length).toBeGreaterThan(0);
     expect(within(table).getAllByText("修改艺人主名").length).toBeGreaterThan(0);
-    expect(within(table).queryByRole("button", { name: /撤销/ })).toBeNull();
+    // M7 G：样本里的合并、改名后面都有更晚的操作，所以不能撤销、写“之后又有修改”；拆分写“需要时可以再合并”。不会落入专辑的默认文案。
     expect(within(table).queryByText("专辑已不可见")).toBeNull();
-    expect(within(table).queryByText("之后又有修改")).toBeNull();
+    for (const item of page.items) if (!item.revertible && item.type === "artist_split") expect(within(table).getAllByText("需要时可以再合并").length).toBeGreaterThan(0);
+  });
+});
+
+describe("艺人操作的撤销（M7 G）", () => {
+  it("操作记录里可以撤销的合并给出“撤销”，确认框写明谁分回，确认后调用撤销接口", async () => {
+    const context = setup();
+    const page = decodeOperationPage(sampleBody("operations/artist-merge-revertible"));
+    context.api.on("GET", "/api/v1/operations", () => jsonResponse(200, page));
+    context.api.on("POST", /^\/api\/v1\/operations\/[^/]+\/revert$/, () => jsonResponse(200, sampleBody("operations/artist-merge-reverted")));
+    renderApp({ path: "/settings/operations" });
+    const table = await screen.findByRole("table", { name: "操作记录" });
+    await userEvent.click(within(table).getByRole("button", { name: /撤销/ }));
+    const dialog = within(await screen.findByRole("dialog", { name: "撤销这次艺人合并？" }));
+    expect(dialog.getByText("“Teresa Teng”从“邓丽君”分回")).toBeTruthy();
+    await userEvent.click(dialog.getByRole("button", { name: "撤销" }));
+    const item = page.items[0];
+    await waitFor(() => expect(context.api.requestsTo("POST", `/api/v1/operations/${item?.id ?? ""}/revert`)).toHaveLength(1));
   });
 });
 

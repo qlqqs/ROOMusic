@@ -247,7 +247,7 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 		}
 		return err
 	}
-	group, err := writeMatch(ctx, m.writer, p, write, &out.OperationIDs)
+	group, err := writeMatch(ctx, m.db, m.writer, p, write, &out.OperationIDs)
 	if err != nil {
 		return MatchApplied{}, err
 	}

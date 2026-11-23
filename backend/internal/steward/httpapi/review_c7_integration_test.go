@@ -296,7 +296,7 @@ func TestPostgreSQLStewardHTTPC7DecisionsProtocolsAndIsolation(t *testing.T) {
 				}
 				assertDone(t, w, reason)
 				p := f.latest(t, "admin", id)
-				if p.Review == nil || p.Review.Status != "completed" || p.Review.PolicyVersion != 2 || len(p.Review.Items) != len(f.calls) {
+				if p.Review == nil || p.Review.Status != "completed" || p.Review.PolicyVersion != runtime.ReviewPolicyVersion || len(p.Review.Items) != len(f.calls) {
 					t.Fatalf("review=%+v body=%s", p.Review, w.Body)
 				}
 				remaining := time.Until(p.Review.ExpiresAt)

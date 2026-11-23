@@ -25,6 +25,8 @@ type RevertOperationDialogProps = {
  * 目标是专辑的记录（默认版本）撤销之后专辑不变，页面继续显示当前版本。
  */
 function revertIntentOf(item: OperationItemDTO, current: ReleaseTarget | undefined): RevertIntent | null {
+  // 艺人的合并、改名、忽略候选（M7 G）：目标是艺人，不跟随页面导航。
+  if (item.artist !== null && item.artist !== undefined) return { kind: "revert", release: { id: item.artist.id, title: item.artist.name }, operationId: item.id, subject: "artist" };
   if (item.release === null && item.album !== null) {
     return { kind: "revert", release: current ?? { id: item.album.id, title: item.album.title }, operationId: item.id, subject: "default", returnGroupId: item.album.id };
   }
@@ -52,6 +54,9 @@ const titles = {
   release_external_artwork: "去掉这张自动补的封面？",
   track_external_lyrics: "去掉这份自动补的歌词？",
   external_link: "解除这次外部对应？",
+  artist_merge: "撤销这次艺人合并？",
+  artist_rename: "撤销这次改名？",
+  artist_candidate_ignore: "撤销这次忽略或恢复提示？",
 } as const;
 
 /**
@@ -99,7 +104,8 @@ export function RevertOperationDialog({ item, current, commands, onClose }: Reve
       {item === null ? null : (
         <>
           <p>
-            撤销 {item.actor.username} 在 {formatDateTime(item.created_at)} 做的“{operationTypeLabel(item)}”。《{(item.release ?? item.album)?.title ?? ""}》会改回：
+            撤销 {item.actor.username} 在 {formatDateTime(item.created_at)} 做的“{operationTypeLabel(item)}”。
+            {item.artist !== null && item.artist !== undefined ? `“${item.artist.name}”` : `《${(item.release ?? item.album)?.title ?? ""}》`}会改回：
           </p>
           <ul className={styles.lines}>
             {revertLines(item).map((line, index) => (

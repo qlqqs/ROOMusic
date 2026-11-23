@@ -17,9 +17,9 @@
   `func(context.Context, tool.Caller, PlanItem) (ReviewEvidenceFacts,error)`。
   runtime 不导入业务包，不查询业务私有表。
 - `catalogtools.ReadReviewTargets(ctx,*catalog.Store,*governance.Store,input)`：只调用现有公开读取方法。
-  `SupportsReviewEvidence(name)` 显式登记 correct_release、change_release_group、set_default_release、review_release_issue、claim_release；
+  `SupportsReviewEvidence(name)` 显式登记 correct_track、correct_release、change_release_group、set_default_release、review_release_issue、claim_release、merge_artists、rename_artist、ignore_artist_candidate；
   未登记工具由 app 返回 `ErrReviewEvidenceUnsupported`，runtime 生成 policy 来源的人工确认结论，不送模型。
-  可见发行使用修正状态、证据与问题读取；认领来源使用 `LoadClaim` 的安全投影；专辑组使用组详情。
+  可见发行使用修正状态、证据与问题读取；认领来源使用 `LoadClaim` 的安全投影；专辑组使用组详情。艺人目标使用 `LoadArtist` 的安全投影。
   app 用公开的 `operations.List(Page:1,PageSize:20)` 补充最近操作数。
 - `ReviewStore.SaveReview(ctx,userID,conversationID,Review)`：在会话锁内保存审查，限定方案归属且 pending。
   `readLatestReview` 按 created_at、id 倒序返回最新记录。
@@ -59,7 +59,7 @@ HTTP 预检及 runtime 占用会话后的检查均要求模式为 steward，否�
 
 ```json
 {"type":"review_started","step":1,"plan_id":"方案 UUID","model":"审查模型"}
-{"type":"review_finished","step":1,"review":{"review_id":"审查 UUID","plan_id":"方案 UUID","model":"审查模型","status":"completed","policy_version":1,"expires_at":"UTC 时间","items":[{"item_id":"项 UUID","decision":"approved","risk":"low","reasons":["证据支持修改"],"source":"model"}]}}
+{"type":"review_finished","step":1,"review":{"review_id":"审查 UUID","plan_id":"方案 UUID","model":"审查模型","status":"completed","policy_version":3,"expires_at":"UTC 时间","items":[{"item_id":"项 UUID","decision":"approved","risk":"low","reasons":["证据支持修改"],"source":"model"}]}}
 ```
 
 status 为 completed 或 unavailable；unavailable 的 items 必须为 `[]`。
@@ -121,7 +121,9 @@ current：字段数组，每项包含 field、value、source；有效字段来�
 fields：本地标签概况，每项包含 field、source、confidence、candidate_count、consistent；candidate_count 是去重候选数，consistent 仅在候选数为 1 时为 true，不发送原始候选文本。
 open_issues：fields、grouping、missing_tracks 的待关注数量；不存在的类别省略；旧版本的问题摘要不可用时使用 unavailable=1。
 专辑组 data：default_release_id、release_ids、release_count、attention_count；release_ids 沿用公开读取的最多 100 个版本，release_count 表示完整数量。
+艺人 data：name、redirected、release_count、track_count。name 包含 value 和 source，source 固定为 catalog_effective_untrusted。release_count 沿用艺人公开摘要的专辑组计数。
 facts.external：source 固定为 program_untrusted_external，data 按发行列出 release_id、links 与 pending。links 仅含 object_type、external_id、method、confidence；pending 仅含 kind、conflicts、candidates，候选仅含 external_id、title、artist、date、country、track_count、method、score。
+facts.external.artists：有艺人目标时列出 artist_id 和 links，没有对应时 links 为空数组。
 facts.recent_operation_count：所有目标的最近一页操作记录条数，最多 20；不含操作正文和操作者。
 preview：source 固定为 backend_preview_untrusted_values，data 是重新调用 Preview 得到的 changes，每项包含 field、before、after。
 所有标签及标题文本仅存在于带来源标记的 data 内；摘要不包含歌词、路径、主对话历史、原始候选文本、用户的页面上下文或主代理的依据说明。
@@ -129,15 +131,15 @@ preview：source 固定为 backend_preview_untrusted_values，data 是重新调�
 
 ### 策略全文
 
-`runtime.ReviewPolicyVersion = 2`。以下与 `runtime.ReviewPolicyRules` 逐字一致：
+`runtime.ReviewPolicyVersion = 3`。以下与 `runtime.ReviewPolicyRules` 逐字一致：
 
 ```text
-策略版本：2。
+策略版本：3。
 后台每步最多提出 20 项修改，超出的 shared 调用返回 too_many_proposals，不进入方案。
 后台转人工确认与未通过审查的项均生成例外，交由管理员处理。
 后台审查不可用时，由调度器有限重试。
 方案总项数超过 20 时，全部未处理项转人工确认，不调用审查模型。
-后端工具登记为不可撤销的项转人工确认，不送审；艺人合并、拆分、改名、忽略候选以及撤销操作属于此类。
+后端工具登记为不可撤销的项转人工确认，不送审；艺人拆分以及撤销操作属于此类。
 没有登记后端证据读取方式的工具转人工确认，不送审。
 审查返回 approved 且 risk=high 的项转人工确认；不可撤销与总项数规则在返回后再次检查。
 审查错误、超时、非唯一 submit_review 调用、schema 不合或项集合不完全一致时，整次审查不可用，未处理项不执行且保持 pending。

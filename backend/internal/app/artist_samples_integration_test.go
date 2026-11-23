@@ -578,7 +578,8 @@ func recordArtistGovernanceSamples(f *artistSamples) {
 	}
 	union := f.get("operations/artist-union-filter", "/api/v1/operations?artist_id="+f.alias+"&release_id="+f.releases[3].releaseID)
 	artistSampleItems(t, union, 3)
-	f.error("artists/errors/not-revertible", "POST", "/api/v1/operations/"+merged["operation_id"].(string)+"/revert", map[string]any{}, 409, "not_revertible")
+	f.error("artists/errors/not-revertible", "POST", "/api/v1/operations/"+restored["operation_id"].(string)+"/revert", nil, 409, "not_revertible")
+	f.error("artists/errors/revert-conflict", "POST", "/api/v1/operations/"+merged["operation_id"].(string)+"/revert", nil, 409, "revert_conflict")
 	mustExec(t, f.app, `UPDATE operations SET after_state='{}'::jsonb WHERE id=$1::uuid`, merged["operation_id"])
 	damaged := artistSampleItems(t, f.get("operations/artist-damaged-state", "/api/v1/operations?artist_id="+f.alias), 2)
 	foundDamaged := false
@@ -594,6 +595,20 @@ func recordArtistGovernanceSamples(f *artistSamples) {
 	if !foundDamaged {
 		t.Fatal("损坏操作被静默丢失")
 	}
+	merge["expected_revision"], merge["source_expected_revision"] = f.revision(f.primary), f.revision(f.alias)
+	mergeResponse := f.call("POST", base+"/merge", merge, &f.admin)
+	if mergeResponse.Code != 200 {
+		t.Fatal(mergeResponse.Body.String())
+	}
+	mergeID := decodeJSONMap(t, mergeResponse)["operation_id"].(string)
+	renameResponse := f.call("PATCH", base+"/name", map[string]any{"expected_revision": f.revision(f.primary), "mode": "set", "name": "邓丽君精选"}, &f.admin)
+	if renameResponse.Code != 200 {
+		t.Fatal(renameResponse.Body.String())
+	}
+	f.record("operations/artist-rename-reverted", "POST", "/api/v1/operations/"+decodeJSONMap(t, renameResponse)["operation_id"].(string)+"/revert", nil, 200)
+	f.get("operations/artist-merge-revertible", "/api/v1/operations?artist_id="+f.alias+"&page_size=1")
+	f.record("operations/artist-merge-reverted", "POST", "/api/v1/operations/"+mergeID+"/revert", nil, 200)
+	f.get("operations/artist-merge-revert-record", "/api/v1/operations?artist_id="+f.alias+"&page_size=1")
 	mustExec(t, f.app, `ALTER TABLE artist_profiles RENAME TO artist_profiles_unavailable`)
 	f.error("artists/errors/database-unavailable", "GET", "/api/v1/artists", nil, 503, "database_unavailable")
 	mustExec(t, f.app, `ALTER TABLE artist_profiles_unavailable RENAME TO artist_profiles`)
@@ -703,15 +718,18 @@ func recordArtistCandidateSamples(t *testing.T, s *apiSampleRecorder) {
 	artistSampleItems(t, decodeJSONMap(t, r), 0)
 	// 相同旧键对再次忽略，新原始写法对必须仍能提示。
 	body := map[string]any{"expected_revision": f.revision(left), "other_artist_id": right, "other_expected_revision": f.revision(right), "key_pairs": candidate["key_pairs"], "ignored": true}
-	if r := f.call("POST", "/api/v1/artists/"+left+"/candidate-ignore", body, &f.admin); r.Code != 200 {
+	r = f.call("POST", "/api/v1/artists/"+left+"/candidate-ignore", body, &f.admin)
+	if r.Code != 200 {
 		t.Fatal(r.Body.String())
 	}
+	ignoreID := decodeJSONMap(t, r)["operation_id"].(string)
 	write("Gamma Example")
 	scan()
 	fresh := artistSampleItems(t, f.get("governance/artist-candidates-new-key-pair", "/api/v1/artist-candidates"), 1)
 	if !strings.Contains(fmt.Sprint(fresh), "Gamma Example") {
 		t.Fatal("新键对仍被旧忽略吞掉")
 	}
+	f.record("operations/artist-candidate-ignore-reverted", "POST", "/api/v1/operations/"+ignoreID+"/revert", nil, 200)
 }
 
 func recordArtistQueueLimit(t *testing.T, s *apiSampleRecorder) {
@@ -847,6 +865,8 @@ governance/artist-candidates governance/artist-candidates-empty governance/artis
 governance/artist-candidates-after-rescan governance/artist-candidates-new-key-pair
 governance/artist-candidates-ignored governance/artist-candidates-ignored-empty artists/errors/invalid-candidate-filter
 governance/artist-merge-not-ready governance/artist-split-not-ready governance/artist-rename-not-ready
+operations/artist-merge-reverted operations/artist-rename-reverted operations/artist-candidate-ignore-reverted
+operations/artist-merge-revertible operations/artist-merge-revert-record artists/errors/revert-conflict
 operations/artists operations/artist-source-filter operations/artist-union-filter operations/artist-damaged-state
 favorites/artists favorites/artists-empty favorites/artist-added favorites/artist-removed favorites/artist-unavailable
 favorites/artists-merged-deduplicated favorites/artists-restored favorites/artists-preparing favorites/artist-lookup

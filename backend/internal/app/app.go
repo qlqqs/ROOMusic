@@ -220,14 +220,16 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 			},
 		},
 	).WithScanCheck(scanRunning).WithKeyStore(instanceSecrets)
-	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger)
+	artistGovernance := governance.NewArtistGovernance(artistResolutionAdapter{})
+	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger).WithArtists(artistGovernance)
 	operationKinds := []operations.Kind{curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
 		governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.TrackCorrectionOperations(), governance.TrackAutoCorrectionOperations(curationWriter), governance.GroupChangeOperations(curationWriter), governance.GroupDefaultOperations(),
-		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}}
+		governance.IssueReviewOperations(), governance.ClaimOperations()}
+	operationKinds = append(operationKinds, governance.ArtistOperations(artistGovernance, curationWriter)...)
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
 	catalogapi.New(database, guard, settings.DataDirectory, logger, catalogapi.WithAnalysisVersion(analysis.Version)).Register(mux)
-	catalogapi.NewArtistGovernance(database, guard, logger, artistResolutionAdapter{}).Register(mux)
+	catalogapi.NewArtistGovernance(database, guard, logger, artistGovernance).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
 	operationsapi.New(database, guard, logger, operationKinds...).Register(mux)
 	var programStatus curation.ProgramStatus

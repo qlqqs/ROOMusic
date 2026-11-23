@@ -22,6 +22,9 @@ type ArtistResolutionRefresher interface {
 type ArtistGovernance struct{ resolution ArtistResolutionRefresher }
 
 func NewArtistGovernance(resolution ArtistResolutionRefresher) *ArtistGovernance {
+	if shared, ok := resolution.(*ArtistGovernance); ok {
+		return shared
+	}
 	return &ArtistGovernance{resolution: resolution}
 }
 
@@ -238,15 +241,19 @@ func (g *ArtistGovernance) refresh(ctx context.Context, tx *sql.Tx, releases []s
 	}
 	// 艺人治理不改发行文本；别名搜索由 profiles 的搜索投影和有效署名联结传播。
 	if len(mapping) > 0 {
-		if g.resolution == nil {
-			return errors.New("artist resolution refresher is required")
-		}
-		if err := g.resolution.RefreshArtistResolution(ctx, tx, mapping); err != nil {
-			return err
-		}
+		return g.RefreshArtistResolution(ctx, tx, mapping)
 	}
 	return nil
 }
+
+// RefreshArtistResolution 使既有接收收藏解析端口的装配入口也能复用同一治理实例。
+func (g *ArtistGovernance) RefreshArtistResolution(ctx context.Context, tx *sql.Tx, mapping map[string]string) error {
+	if g == nil || g.resolution == nil {
+		return errors.New("artist resolution refresher is required")
+	}
+	return g.resolution.RefreshArtistResolution(ctx, tx, mapping)
+}
+
 func incrementArtists(ctx context.Context, tx *sql.Tx, ids []string) error {
 	_, err := tx.ExecContext(ctx, `UPDATE artists SET edit_revision=edit_revision+1 WHERE id=ANY($1::text[]::uuid[])`, ids)
 	return err

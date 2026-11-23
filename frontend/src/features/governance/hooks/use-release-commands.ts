@@ -14,7 +14,7 @@ export type ReleaseTarget = { id: string; title: string };
  * 被撤销的操作是哪一种：成功提示据此说明恢复了什么。group 是从操作记录里撤销的归组调整（记录不区分归入与移出），default 是默认版本的调整，
  * review 是核对与取消核对，claim 是认领（修正、专辑、默认版本与核对一起还给旧版本）。
  */
-export type RevertSubject = "correct" | "join" | "detach" | "group" | "default" | "review" | "claim" | "other";
+export type RevertSubject = "correct" | "join" | "detach" | "group" | "default" | "review" | "claim" | "artist" | "other";
 
 export type ReleaseIntent =
   | { kind: "correct"; release: ReleaseTarget; revision: number; changes: CorrectionChanges; fields: readonly CorrectableField[] }

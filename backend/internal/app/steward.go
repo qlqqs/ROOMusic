@@ -294,8 +294,16 @@ type externalRelease struct {
 	Pending   json.RawMessage `json:"pending"`
 }
 
+type externalArtist struct {
+	ArtistID string       `json:"artist_id"`
+	Links    []reviewLink `json:"links"`
+}
+
 func reviewExternal(ctx context.Context, db *sql.DB, targets []catalogtools.ReviewTarget) (json.RawMessage, error) {
 	data := []externalRelease{}
+	var artists []externalArtist
+	var artistIDs []string
+	artistPositions := map[string]int{}
 	var trackID string
 	for _, target := range targets {
 		if target.Type == "track" {
@@ -304,19 +312,34 @@ func reviewExternal(ctx context.Context, db *sql.DB, targets []catalogtools.Revi
 		}
 	}
 	for _, target := range targets {
-		if target.Type != "release" {
-			continue
+		switch target.Type {
+		case "release":
+			release, err := reviewExternalRelease(ctx, db, target.ID, trackID)
+			if err != nil {
+				return nil, err
+			}
+			data = append(data, release)
+		case "artist":
+			artistPositions[target.ID] = len(artists)
+			artistIDs = append(artistIDs, target.ID)
+			artists = append(artists, externalArtist{ArtistID: target.ID, Links: []reviewLink{}})
 		}
-		release, err := reviewExternalRelease(ctx, db, target.ID, trackID)
+	}
+	if len(artistIDs) != 0 {
+		links, err := curation.LinksOf(ctx, db, "artist", artistIDs)
 		if err != nil {
 			return nil, err
 		}
-		data = append(data, release)
+		for _, link := range links {
+			artist := &artists[artistPositions[link.ObjectID]]
+			artist.Links = append(artist.Links, reviewLink{ObjectType: link.ObjectType, ExternalID: link.ExternalID, Method: link.Method, Confidence: link.Confidence})
+		}
 	}
 	return json.Marshal(struct {
-		Source string            `json:"source"`
-		Data   []externalRelease `json:"data"`
-	}{"program_untrusted_external", data})
+		Source  string            `json:"source"`
+		Data    []externalRelease `json:"data"`
+		Artists []externalArtist  `json:"artists,omitempty"`
+	}{"program_untrusted_external", data, artists})
 }
 
 // 外部证据只保留审查所需的对应与候选字段，具体写入记录和程序原始证据留在本地。

@@ -75,27 +75,31 @@ func writeTrackFields(ctx context.Context, writer *curation.Writer, requests []c
 	return nil
 }
 
-func needsTrackFields(s curation.WorkState, e catalog.CurationEvidence) bool {
-	if s.Subject != "release" || s.Status != "matched" || s.RuleVersion != StoredRuleVersion || s.InputDigest != ReleaseDigest(e) {
-		return false
-	}
-	var result map[string]json.RawMessage
-	if json.Unmarshal(s.Result, &result) != nil || result["track_fields"] != nil {
-		return false
+// 调用方已用 needsWork 核对规则版本和输入摘要。
+func matchBackfills(s curation.WorkState, e catalog.CurationEvidence) (tracks, artists bool) {
+	if s.Status != "matched" {
+		return false, false
 	}
 	if e.CandidateKind == "loose_unknown" {
-		if len(e.Tracks) != 1 {
-			return false
+		if len(e.Tracks) != 1 || e.Tracks[0].ExternalID == "" {
+			return false, false
 		}
 	} else if e.ExternalID == "" {
-		return false
+		return false, false
 	}
-	for _, t := range e.Tracks {
-		if t.ExternalID != "" && (t.TitlePlaceholder || t.TitleInferred || t.ArtistPlaceholder) {
-			return true
+	var result map[string]json.RawMessage
+	if json.Unmarshal(s.Result, &result) != nil {
+		return false, false
+	}
+	if result["track_fields"] == nil {
+		for _, t := range e.Tracks {
+			if t.ExternalID != "" && (t.TitlePlaceholder || t.TitleInferred || t.ArtistPlaceholder) {
+				tracks = true
+				break
+			}
 		}
 	}
-	return false
+	return tracks, result["artist_links"] == nil
 }
 
 func (w *Worker) linkedTracks(ctx context.Context, e catalog.CurationEvidence) (MatchResult, error) {
@@ -127,7 +131,7 @@ func (w *Worker) linkedTracks(ctx context.Context, e catalog.CurationEvidence) (
 	return match, err
 }
 
-func (w *Worker) backfillTrackFields(ctx context.Context, e *catalog.CurationEvidence, s curation.WorkState, states pageStates) error {
+func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence, s curation.WorkState, states pageStates, tracks, artists bool) error {
 	if err := w.ready(ctx); err != nil {
 		return err
 	}
@@ -137,27 +141,63 @@ func (w *Worker) backfillTrackFields(ctx context.Context, e *catalog.CurationEvi
 		}
 		return err
 	}
+	var local catalog.CurationArtistCredits
+	if artists {
+		var err error
+		local, err = catalog.LoadCurationArtistCredits(ctx, w.db, e.ID)
+		if errors.Is(err, catalog.ErrArtistCatalogPreparing) {
+			artists = false
+			if !tracks {
+				return nil
+			}
+		} else if err != nil {
+			return err
+		}
+	}
 	match, err := w.linkedTracks(ctx, *e)
-	status := "none"
+	markers := map[string]string{}
 	switch {
 	case errors.Is(err, sources.ErrNotFound):
-		status = "unavailable"
+		if tracks {
+			markers["track_fields"] = "unavailable"
+		}
+		if artists {
+			markers["artist_links"] = "unavailable"
+		}
 	case failureCode(err) == "source_disabled" || curation.IsSourceUnavailable(err):
 		return nil
 	case err != nil:
 		return err
 	default:
-		requests := planTrackFields(*e, match)
-		if len(requests) > 0 {
-			u := unit{w: w, subject: s.Subject, id: e.ID, generation: s.Generation, fixedGeneration: true, releaseID: e.ID, inputDigest: s.InputDigest, releaseState: s}
-			source := curation.Source{Kind: "source", Provider: "musicbrainz", Basis: "按已有 MusicBrainz 对应补全曲目字段"}
+		u := unit{w: w, subject: s.Subject, id: e.ID, generation: s.Generation, fixedGeneration: true, releaseID: e.ID, inputDigest: s.InputDigest, releaseState: s}
+		source := curation.Source{Kind: "source", Provider: "musicbrainz", Basis: "按已有 MusicBrainz 对应补全"}
+		if artists {
+			links := planArtistLinks(local, *e, match)
+			request := curation.LinkRequest{ReleaseID: e.ID, ExternalSource: "musicbrainz", Source: source}
+			if err := writeArtistLinks(ctx, w.db, w.writer, request, links, u.write); err != nil {
+				if failureCode(err) == "source_disabled" {
+					return nil
+				}
+				return err
+			}
+			markers["artist_links"] = "none"
+			if len(links) > 0 {
+				markers["artist_links"] = "done"
+			}
+		}
+		if tracks {
+			requests := planTrackFields(*e, match)
+			source.Basis = "按已有 MusicBrainz 对应补全曲目字段"
 			if err := writeTrackFields(ctx, w.writer, requests, source, u.write); err != nil {
 				if failureCode(err) == "source_disabled" {
 					return nil
 				}
 				return err
 			}
-			status = "done"
+			markers["track_fields"] = "none"
+			if len(requests) > 0 {
+				markers["track_fields"] = "done"
+			}
 		}
 	}
 	if err := w.sources.Check(ctx, "musicbrainz"); err != nil {
@@ -179,9 +219,9 @@ func (w *Worker) backfillTrackFields(ctx context.Context, e *catalog.CurationEvi
 	if !ok || ReleaseDigest(entry) != s.InputDigest {
 		return errReleaseChanged
 	}
-	err = tx.QueryRowContext(ctx, `UPDATE curation_work_states SET result=result || jsonb_build_object('track_fields',$5::text),updated_at=now()
- WHERE subject='release' AND target_id=$1 AND status='matched' AND generation=$2 AND rule_version=$3 AND input_digest=$4 AND updated_at=$6 AND NOT(result ? 'track_fields')
- RETURNING result,updated_at`, e.ID, s.Generation, s.RuleVersion, s.InputDigest, status, s.UpdatedAt).Scan(&s.Result, &s.UpdatedAt)
+	err = tx.QueryRowContext(ctx, `UPDATE curation_work_states SET result=result || $5::jsonb,updated_at=now()
+ WHERE subject='release' AND target_id=$1 AND status='matched' AND generation=$2 AND rule_version=$3 AND input_digest=$4 AND updated_at=$6
+ RETURNING result,updated_at`, e.ID, s.Generation, s.RuleVersion, s.InputDigest, jsonValue(markers), s.UpdatedAt).Scan(&s.Result, &s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errReleaseChanged
 	}

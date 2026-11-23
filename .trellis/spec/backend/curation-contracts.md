@@ -765,3 +765,56 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | 管家对话修正写入人工层并校验曲目归属 | `TestPostgreSQLStewardCorrectTrackManual` |
 | 例外采纳写人工层，前值变更返回 `exception_stale`，不采纳后程序及模型跳过该字段值 | `TestPostgreSQLCurationExceptionTrackAcceptDecline` |
 | 审查收到发行和曲目目标、曲目版本、扫描值、有效值与外部对应 | `TestPostgreSQLStewardReviewTrackEvidence` |
+
+## 19. G：艺人对应、自动合并与回填
+
+### 19.1 署名取证与对应写入
+
+`catalog.LoadCurationArtistCredits(ctx, q, releaseID)` 按位置返回发行的 `release_artist`、`album_artist` 和各在库曲目的 `track_artist`，每项保留原署名、位置和当前艺人 ID。字段有人工修正（包括设空）时取修正层，其余取扫描层。身份依次按曲目指派、发行指派、全局名字绑定、名字键初始身份路由，再解开一跳重定向。目录准备中返回 `ErrArtistCatalogPreparing`。
+
+程序在有把握的匹配中逐组对位。两个发行角色分别与 `Release.Artists` 对位，曲目经已配对的录音 ID 取外部曲目署名，同一录音在外部发行出现多次时跳过该录音。单曲方式取 `Recording.Artists`。
+
+- 每组本地与外部署名数量相等且至少一位，本地署名按从 1 开始的连续位置对位、身份各异，外部 ID 非空、各异，并排除 Various Artists 和 [unknown] 的公共 MBID。
+- 每位的 `textnorm.Text` 名字相同，或标签列表等长且该位 MBID 与外部署名相同。发行标签取所有在库曲目一致的有序 `mb_album_artist`，曲目取自己的有序 `mb_artist`。任一位无法对上，整组跳过。
+- 同一发行的各组为同一身份给出不同 MBID 时，丢弃该身份的全部对应。例如两首歌给同一位艺人对出不同 MBID，其他艺人的一致对应仍可写入。
+
+`writeMatch` 在普通对应之后、字段补全之前以独立步骤 `artist_links` 调用一次 `Writer.ApplyLinks`。写入参数为 `object_type=artist`、`method=artist_credit`、`confidence=certain`、`Source={Kind:"source", Provider:"musicbrainz"}`。写入事务持 CATP 锁重读非自动层署名，只接受发行内的当前身份，否则返回 `invalid_input`。已有对应沿用 `unchanged`、`occupied`、`suppressed` 判定。撤销沿用外部对应的归属检查和逐项标记。
+
+### 19.2 同一 MusicBrainz 艺人的自动合并
+
+新匹配和回填在对应步骤之后，按本发行涉及的 MBID 反查本地身份，解开一跳重定向后至少有两位才尝试合并。每对使用程序批次及步骤 `artist_merge/<mbid>/<较小本地ID>/<较大本地ID>`。
+
+`Writer.MergeArtists(ctx, ArtistAutoMerge{A, B, ExternalID, Source, BatchID, Key})` 返回操作 ID 和保留的艺人 ID。只接受 MusicBrainz 程序来源。幂等指纹包含操作类型、排序后的艺人对、外部 ID、提供者及规则 `same_mb_artist/1`。执行器获取 CATP 和按 UUID 排序的艺人行锁，检查双方仍是当前身份，保留有效署名条数较多的一方，平局保留 UUID 较小者。写入复用治理的 `mergeLocked`，与人工合并共享意图恢复、投影和收藏刷新。
+
+每方的身份闭包由该艺人及直接重定向到它的全部身份组成。事务以共享锁保护两个闭包的 MusicBrainz 艺人对应，两侧各要有一条对应归属于尚未撤销的 `external_link` 操作，操作后态包含同一来源、对象、外部 ID。两个闭包的全部艺人对应只能指向请求中的唯一 MBID。写入前经 `checkExternalWriter` 核对开启者和批次。
+
+| 条件 | 结果 |
+| --- | --- |
+| 模型来源或无效请求 | `invalid_input` |
+| 任一方已重定向 | `artist_redirected` |
+| 公共 MBID、任一侧缺少记录佐证、闭包内还有其他 MBID | `no_strong_evidence` |
+| 两闭包之间任一方向存在 `artist_merge` 标记 | `nothing_to_apply` |
+| 同一次拆分或撤销合并同时涉及两个闭包，或当前忽略键对按全局名字路由分别归属两侧 | `manual_structure` |
+
+程序遇到 `nothing_to_apply`、`manual_structure`、`no_strong_evidence`、`artist_redirected`、`revision_conflict`、`artist_catalog_not_ready`、`artist_scope_too_large` 时仅跳过当前艺人对，其他错误交回工作循环。
+
+撤销自动合并时，`Writer.SuppressArtistMerge` 与还原身份共用事务。标记写一行，`target_type=artist`、`target_id` 为较小 ID、`subject=artist_merge`，值为另一方的 `{artist_id,name}`，哈希取另一方 ID 的 SHA-256。即使其中一方后来又被并入第三位艺人，该标记也会通过闭包命中。
+
+### 19.3 已匹配发行的回填
+
+程序完成新匹配时记 `result.artist_links="done"`。模型匹配保留空缺标记，交由程序以 MusicBrainz 来源补做；艺人目录准备中也保留补做机会。存量回填要求当前规则版本、输入摘要相符、状态为 `matched`、结果缺少 `artist_links`，且发行已有外部对应（单曲要求唯一在库曲目已有录音对应）。
+
+回填与曲目字段共用一次按既有对应读取的外部发行或录音，沿用原代次。已尝试对应记 `done`，没有可对位项记 `none`，外部 404 记 `unavailable`；源关闭或暂时不可用留待重试。在可重复读事务内复核摘要、代次和工作状态的更新时间后，将标记合入原结果。规则版本与发行匹配次数保持原值。若上一次回填已经提交对应和部分合并，重试时署名可能解析到新身份。出现幂等冲突时，以开启者、原代次步骤键、发行和匹配方法核实已提交的对应步骤，再继续余下的合并。
+
+### 19.4 必需测试与断言点
+
+| 用例 | 必需断言 |
+| --- | --- |
+| `TestAlignCredits`、`TestAlignCreditsTrackLayers`、`TestAlignCreditsConflictingArtist` | 按取证署名对位，整组等长、名字或同位标签吻合、排除公共身份；一位艺人对应多个 MBID 时仍保留其他一致对应。 |
+| `TestPostgreSQLCurationArtistLinks` | 专辑与曲目、单曲的程序对应；忽略自动层、优先人工修正；位置或名字不符时跳过，模型写入被拒。 |
+| `TestPostgreSQLCurationArtistLinksBackfill` | 已匹配发行仅按已有对应读取一次，补写标记，保留规则版本、代次、摘要和匹配次数。 |
+| `TestPostgreSQLCurationExternalLinkArtistRevertSuppresses` | 撤销后同一艺人与外部编号的对应被抑制，另一编号仍可写入。 |
+| `TestPostgreSQLCurationAutoMergeSameMusicBrainzArtist` | 同 MBID 的艺人合并，保留有效署名多的一方，记录程序来源和批次。 |
+| `TestPostgreSQLCurationAutoMergeBlocked` | 闭包标记、人工拆分、忽略行、人工撤销、多个 MBID 和已重定向分别返回约定错误。 |
+| `TestPostgreSQLCurationAutoMergeRevertSuppresses` | 按批撤销写入艺人对标记，后续匹配和人工并入第三位艺人后的回填均保留分开决定。 |
+| `TestPostgreSQLCurationAutoMergeReplay` | 回填结论落库前中断，重启后沿用代次并完成标记，对应与合并各只记录一次。 |

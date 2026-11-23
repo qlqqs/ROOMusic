@@ -146,8 +146,8 @@ func checkC7ReviewOriginAndEvidence(t *testing.T, external bool) {
 		}
 	}
 	if external {
-		if runtime.ReviewPolicyVersion != 2 || p.Review.PolicyVersion != 2 {
-			t.Errorf("审查策略当前=%d 保存=%d，期望 2", runtime.ReviewPolicyVersion, p.Review.PolicyVersion)
+		if p.Review.PolicyVersion != runtime.ReviewPolicyVersion {
+			t.Errorf("审查策略保存=%d，期望 %d", p.Review.PolicyVersion, runtime.ReviewPolicyVersion)
 		}
 		assertC7ExternalReviewEvidence(t, reviewWire, release)
 	}

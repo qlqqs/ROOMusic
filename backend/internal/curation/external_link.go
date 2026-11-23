@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -74,8 +75,11 @@ func (r LinkRequest) normalizedLinks() ([]LinkIntent, error) {
 	for i := range links {
 		l := &links[i]
 		l.ObjectID = strings.ToLower(l.ObjectID)
-		if (l.ObjectType != "release" && l.ObjectType != "track" && l.ObjectType != "release_group") || !uuid.Valid(l.ObjectID) || !validExternalID(l.ExternalID) || (l.ExternalGroupID != "" && (l.ObjectType != "release" || !validExternalID(l.ExternalGroupID))) || seen[l.key()] {
+		if (l.ObjectType != "release" && l.ObjectType != "track" && l.ObjectType != "release_group" && l.ObjectType != "artist") || !uuid.Valid(l.ObjectID) || !validExternalID(l.ExternalID) || (l.ExternalGroupID != "" && (l.ObjectType != "release" || !validExternalID(l.ExternalGroupID))) || seen[l.key()] {
 			return nil, operations.Invalid("invalid_input", "外部对应的对象或编号无效")
+		}
+		if l.ObjectType == "artist" && (r.Source.Kind != "source" || r.Source.Provider != "musicbrainz") {
+			return nil, operations.Invalid("invalid_input", "艺人对应只接受 MusicBrainz 程序来源")
 		}
 		seen[l.key()] = true
 	}
@@ -86,13 +90,38 @@ func (r LinkRequest) normalizedLinks() ([]LinkIntent, error) {
 }
 
 func validateLinkMembers(ctx context.Context, tx *sql.Tx, releaseID string, links []LinkIntent) error {
+	if slices.ContainsFunc(links, func(l LinkIntent) bool { return l.ObjectType == "artist" }) {
+		credits, err := catalog.LoadCurationArtistCredits(ctx, tx, releaseID)
+		if errors.Is(err, catalog.ErrArtistCatalogPreparing) {
+			return operations.Conflict("artist_catalog_not_ready", "艺人资料正在整理，请稍后再试")
+		}
+		if err != nil {
+			return err
+		}
+		members := map[string]bool{}
+		add := func(group []catalog.CurationArtistCredit) {
+			for _, c := range group {
+				members[c.ArtistID] = true
+			}
+		}
+		add(credits.ReleaseArtists)
+		add(credits.AlbumArtists)
+		for _, group := range credits.Tracks {
+			add(group)
+		}
+		for _, l := range links {
+			if l.ObjectType == "artist" && !members[l.ObjectID] {
+				return operations.Invalid("invalid_input", "艺人没有在这个发行署名")
+			}
+		}
+	}
 	raw, err := json.Marshal(links)
 	if err != nil {
 		return err
 	}
 	var valid bool
 	err = tx.QueryRowContext(ctx, `SELECT bool_and(CASE l.object_type
- WHEN 'release' THEN l.object_id=r.id WHEN 'release_group' THEN l.object_id=r.group_id
+ WHEN 'artist' THEN true WHEN 'release' THEN l.object_id=r.id WHEN 'release_group' THEN l.object_id=r.group_id
  WHEN 'track' THEN EXISTS(SELECT 1 FROM tracks t JOIN media m ON m.id=t.medium_id WHERE t.id=l.object_id AND m.release_id=r.id)
  ELSE false END)
  FROM releases r CROSS JOIN jsonb_to_recordset($2::jsonb) AS l(object_type text,object_id uuid) WHERE r.id=$1`, releaseID, raw).Scan(&valid)

@@ -135,7 +135,7 @@ const suppressionDecoder = d.object({
   operation_id: d.nullable(d.uuid()),
   subject: d.string({ min: 1, max: 64, pattern: /^[a-z0-9_]+$/ }),
   target_id: d.uuid(),
-  target_type: d.oneOf(["release", "track", "release_group"] as const),
+  target_type: d.oneOf(["release", "track", "release_group", "artist"] as const),
   value: suppressionValueDecoder,
   value_hash: d.string({ min: 1, max: 128 }),
 });

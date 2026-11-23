@@ -86,6 +86,22 @@ func (u *unit) write(ctx context.Context, step string, write func(batch, key str
 		w.mu.Unlock()
 	}
 	err := write(w.batch.ID, u.key(step))
+	// 同代回填可能已完成对应和部分合并后中断。重算的署名会解析到新身份，
+	// 仅当原步骤确已提交时继续合并，其余幂等冲突仍交给调用方。
+	if failureCode(err) == "idempotency_conflict" && u.fixedGeneration && step == "artist_links" {
+		var completed bool
+		lookupErr := w.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM operations o
+ JOIN curation_settings s ON s.id=1 AND s.enabled_by=o.actor_id
+ WHERE o.idempotency_key=$1 AND o.operation_type='external_link' AND o.target_type='release'
+ AND o.target_id=$2 AND o.after_state->>'method'='artist_credit' AND o.after_state->>'source'='musicbrainz'
+ AND o.origin->>'provider_kind'='source' AND o.origin->>'source'='curation')`, u.key(step), u.releaseID).Scan(&completed)
+		if lookupErr != nil {
+			return lookupErr
+		}
+		if completed {
+			err = nil
+		}
+	}
 	if failureCode(err) == "idempotency_conflict" && !u.fixedGeneration {
 		u.generation++
 		err = write(w.batch.ID, u.key(step))

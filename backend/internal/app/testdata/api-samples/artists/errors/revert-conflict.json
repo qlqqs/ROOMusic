@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "revert_conflict",
+      "message": "这位艺人之后又有修改，不能撤销这一条"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

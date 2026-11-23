@@ -13,7 +13,7 @@ type RenameArtistDialogProps = { open: boolean; artist: RenameTarget; commands: 
 
 /**
  * 修改主名（管理员）：写一个主名，或在已经改过时改回按最常见的写法自动显示。原来的名字仍然能搜到。
- * 名字只去掉首尾空白；和别的艺人同名也可以（不会因此合并）。不能撤销，需要时再改一次。
+ * 名字只去掉首尾空白；和别的艺人同名也可以（不会因此合并）。可以从操作记录撤销（M7 G）。
  */
 export function RenameArtistDialog({ open, artist, commands, onClose }: RenameArtistDialogProps) {
   const titleId = useId();
@@ -78,7 +78,7 @@ function RenameForm({ titleId, headingRef, artist, commands, onClose }: Omit<Ren
         </div>
       ) : null}
       <div className={styles.footer}>
-        <p className={styles.hint}>改名不能撤销，需要时可以再改。</p>
+        <p className={styles.hint}>改名之后可以从操作记录撤销。</p>
         <ArtistDialogFailure state={state} kind="rename" />
         <div className={styles.actions}>
           <Button

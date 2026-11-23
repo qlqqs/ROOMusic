@@ -179,16 +179,26 @@ func linkNeeded(e catalog.CurationEvidence, links []curation.LinkIntent) bool {
 	return false
 }
 
-func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvidence, m MatchResult) (string, error) {
+func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvidence, m MatchResult) (group, artistStatus string, err error) {
 	p, err := planMatch(ctx, w.db, e, m)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	p.tracks = planTrackFields(e, m)
-	return writeMatch(ctx, w.writer, p, u.write, nil)
+	local, err := catalog.LoadCurationArtistCredits(ctx, w.db, e.ID)
+	switch {
+	case err == nil:
+		p.artists = planArtistLinks(local, e, m)
+		artistStatus = "done"
+	case !errors.Is(err, catalog.ErrArtistCatalogPreparing):
+		return "", "", err
+	}
+	group, err = writeMatch(ctx, w.db, w.writer, p, u.write, nil)
+	return group, artistStatus, err
 }
 
 type matchWritePlan struct {
+	artists  []curation.LinkIntent
 	tracks   []curation.TrackRequest
 	evidence catalog.CurationEvidence
 	group    groupPlan
@@ -231,7 +241,7 @@ func planMatch(ctx context.Context, db operations.Queryer, e catalog.CurationEvi
 
 type matchStep func(context.Context, string, func(batch, key string) error) error
 
-func writeMatch(ctx context.Context, writer *curation.Writer, p matchWritePlan, write matchStep, opIDs *[]string) (string, error) {
+func writeMatch(ctx context.Context, db operations.Queryer, writer *curation.Writer, p matchWritePlan, write matchStep, opIDs *[]string) (string, error) {
 	e, plan, request, fields := p.evidence, p.group, p.links, p.fields
 	record := func(id string) {
 		if opIDs != nil && id != "" {
@@ -260,6 +270,9 @@ func writeMatch(ctx context.Context, writer *curation.Writer, p matchWritePlan, 
 		default:
 			plan.result = "linked"
 		}
+	}
+	if err := writeArtistLinks(ctx, db, writer, request, p.artists, write); err != nil {
+		return "", err
 	}
 	if len(fields) > 0 {
 		err := write(ctx, "fields", func(batch, key string) error {

@@ -36,11 +36,18 @@ type reviewCurrentField struct {
 	Value  any    `json:"value"`
 	Source string `json:"source"`
 }
+type reviewArtist struct {
+	Name         map[string]string `json:"name"`
+	Redirected   bool              `json:"redirected"`
+	ReleaseCount int64             `json:"release_count"`
+	TrackCount   int64             `json:"track_count"`
+}
 
 // SupportsReviewEvidence 只登记已有明确目标读取合同的工具。
 func SupportsReviewEvidence(name string) bool {
 	switch name {
-	case "correct_track", "correct_release", "change_release_group", "set_default_release", "review_release_issue", "claim_release":
+	case "correct_track", "correct_release", "change_release_group", "set_default_release", "review_release_issue", "claim_release",
+		"merge_artists", "rename_artist", "ignore_artist_candidate":
 		return true
 	default:
 		return false
@@ -54,6 +61,9 @@ func ReadReviewTargets(ctx context.Context, store *catalog.Store, issues *govern
 		ReleaseID       string `json:"release_id"`
 		SourceReleaseID string `json:"source_release_id"`
 		GroupID         string `json:"group_id"`
+		ArtistID        string `json:"artist_id"`
+		SourceArtistID  string `json:"source_artist_id"`
+		OtherArtistID   string `json:"other_artist_id"`
 	}
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, err
@@ -145,6 +155,25 @@ func ReadReviewTargets(ctx context.Context, store *catalog.Store, issues *govern
 			ReleaseCount     int64    `json:"release_count"`
 			AttentionCount   int64    `json:"attention_count"`
 		}{group.DefaultReleaseID, ids, group.ReleaseCount, group.AttentionCount}})
+	}
+	seenArtists := map[string]bool{}
+	for _, id := range []string{p.ArtistID, p.SourceArtistID, p.OtherArtistID} {
+		id = strings.ToLower(id)
+		if id == "" || seenArtists[id] {
+			continue
+		}
+		seenArtists[id] = true
+		detail, err := store.LoadArtist(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		data := reviewArtist{
+			Name:         map[string]string{"value": detail.Artist.Name, "source": "catalog_effective_untrusted"},
+			Redirected:   detail.RedirectArtistID != nil,
+			ReleaseCount: detail.Artist.AlbumCount,
+			TrackCount:   detail.Artist.TrackCount,
+		}
+		targets = append(targets, ReviewTarget{Type: "artist", ID: detail.Artist.ID, Revision: detail.Revision, Source: "catalog_read_summary", Data: data})
 	}
 	return targets, nil
 }

@@ -209,7 +209,8 @@ MCP 读写令牌直接执行 shared，仍受管理员权限限制；只读令牌
 ## C7 已实现的审查权威
 
 - steward 模式不使用 assistant 的 auto_approved_tools。不可撤销项和超过 20 项的整份方案先转人工，不送审；
-  high 风险批准在返回后降为人工确认。`ReviewPolicyVersion = 1`。
+  high 风险批准在返回后降为人工确认。`ReviewPolicyVersion = 3`。
+- 对话中的艺人合并、改名与忽略候选可以从操作记录撤销。steward 模式下三项都可送审，assistant 模式下可加入免确认名单。艺人拆分需人工确认后才可在 steward 模式执行。
 - 独立调用只提供 submit_review 并强制调用，60 秒超时，不重试；任何错误或结论集合不一致均失败关闭。
 - 审查落库后，执行前重读方案和证据并校验摘要、当前审查与期限；审批不豁免工具鉴权、revision 或业务约束。
 - 审查来源从后端 Caller 注入 operations origin，不从模型参数读取，不改变操作幂等指纹；同键重放保留原来源。

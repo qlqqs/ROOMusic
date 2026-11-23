@@ -72,7 +72,7 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 
 ## 4. 治理与错误矩阵
 
-四Kind：artist_merge、artist_split、artist_rename、artist_candidate_ignore；全部接operations.Run、R4不可Revert，target_type=artist。双方revision、幂等指纹与scope basis须在CATP后重检；100000轨预算与预览计数均取发行级署名展开全部轨、轨级署名的去重并集（含missing），不能只数非空track_id；重放已有成功回执先于准备态判断。按专辑拆分保存发行快照+既有track覆盖，未来同发行新轨跟随，新入组版本不跟随；restore只恢复当前redirect到本人的旧ID。
+四Kind：artist_merge、artist_split、artist_rename、artist_candidate_ignore；全部接 operations.Run，target_type=artist。双方revision、幂等指纹与scope basis须在CATP后重检；100000轨预算与预览计数均取发行级署名展开全部轨、轨级署名的去重并集（含missing），不能只数非空track_id；重放已有成功回执先于准备态判断。按专辑拆分保存发行快照+既有track覆盖，未来同发行新轨跟随，新入组版本不跟随；restore只恢复当前redirect到本人的旧ID。
 
 `operations_artist_targets` 保存主/次艺人目标，GET operations新增artist_id，与release/group取并集再分页。记录显式artist nullable，坏state只使changes=null，不能拖垮整页；旧类型撤销不变。
 
@@ -85,9 +85,28 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 | 同ID合并/重定向ID提交 | 409 same_artist / artist_redirected |
 | revision / 幂等异义 / scope依据变动 | 409 revision_conflict / idempotency_conflict / artist_scope_changed |
 | 超100000轨、1000名字键、10000显式覆盖 | 409 artist_scope_too_large，整个事务回滚 |
-| 无变化/独立撤销 | 400 no_changes / 409 not_revertible |
+| 无变化/撤销拆分或撤销记录 | 400 no_changes / 409 not_revertible |
+| 撤销遇到后续修改或历史状态损坏 / 重复撤销 | 409 revert_conflict / already_reverted |
 | 候选`ignored`不是true/false或重复 | 400 invalid_filter |
 | 真实依赖失败 | 安全503 database_unavailable，不混淆整理专码 |
+
+### 艺人撤销
+
+`ArtistOperations(g *ArtistGovernance, s ArtistSuppressionWriter)` 注册四种操作。合并、改名与忽略候选沿用 `POST /api/v1/operations/{id}/revert`。目录就绪即可处理缺失艺人。拆分保持不可撤销，需要时可以重新合并。
+
+- 合并恢复每条名字绑定的原归属和原操作，原来无行的键回到初始路由。按发行或曲目及名字键恢复作用域覆盖，同时恢复来源艺人和被扁平化身份的原重定向及其操作 ID。来源与目标各递增一次版本，在同一事务内刷新受影响发行的署名、艺人资料、搜索名和按原锚点解析的收藏。
+- 改名恢复原 `display_name` 和 `name_operation_id`，递增版本并刷新署名和艺人资料。恢复自动名称时显示当前派生名。合并和改名撤销后清除四列意图均空的覆盖行。
+- 忽略和恢复提示均可撤销，仅对该操作实际改变的名字键对删除新行或重插带原操作 ID 的忽略行，两位艺人的版本各递增一次。
+- 列表与执行器核对写过的意图及写入者，合并还要求目标仍未重定向。按 `operations_artist_targets` 检查全部涉及的身份，只要有按 `(created_at,id)` 排在其后的生效操作就拒绝。排除撤销和已撤销记录。A→B 后又 B→C 时，先撤 B→C 再撤 A→B，两次撤销各自递增版本。
+- 撤销记录保存写回前和刷新后重读的快照，两边保留原 `changes` 和原操作类型，按全部涉及艺人可查。来源为 `curation` 的合并撤销在同一事务写 `artist_merge` 标记，目标为两个 ID 中较小者，值为另一位的 `{artist_id,name}`。标记写入失败则全部回滚。
+
+| 必需测试 | 断言 |
+| --- | --- |
+| `TestPostgreSQLArtistMergeRevertRestoresIntent`、`TestPostgreSQLArtistMergeRevertAfterRescan` | 原有及隐式绑定、发行与曲目作用域、扁平化身份与写入者、署名、主名、搜索名、收藏解析和合并来源逐项恢复；重扫新轨随路由恢复 |
+| `TestPostgreSQLArtistMergeRevertChainReverseOrder`、`TestPostgreSQLArtistMergeRevertBlockedByLaterDecision`、`TestPostgreSQLArtistRenameRevertChain`、`TestPostgreSQLArtistCandidateIgnoreRevertMixedPairs` | 倒序撤销、后续决定冲突、原显示名及写入者、仅恢复实际改动的忽略对 |
+| `TestPostgreSQLArtistRevertDescribeMatchesExecutor`、`TestPostgreSQLArtistRevertConcurrent`、`TestPostgreSQLArtistRevertCatalogNotReady`、`TestArtistSplitNeverReverts` | 列表和执行一致、并发只生效一次、目录状态和拆分限制 |
+| `TestPostgreSQLMigrationRollbackRoundTrip`（0066）、`TestPostgreSQLArtistRevertUsesInsertOrder` | 升级与回退的操作时间默认值；事务开始顺序倒置时仍拦截后续决定 |
+| `TestStewardArtistToolRevertibility`、`TestPostgreSQLStewardC6ArtistTools`、`TestPostgreSQLStewardReviewArtistTools`、`TestReviewPolicyRulesMatchSpec` | 管家工具登记、对话审查及艺人证据、操作列表撤销、策略文本同步 |
 
 ## 5. 基准与反例
 
@@ -98,7 +117,7 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 
 ## 6. 必需验证
 
-治理幂等/双方revision/冲突/全事务回滚/不可撤销；重扫前后四意图表与revision快照；按专辑作用域、移动、未来新轨/新版本；候选仅两信号、忽略名字键对长期有效；整理期间503/409且播放旧能力可用；回填中断重启、实时写先后交错与原子发布；ready后M3遮盖的新scan身份仍有空profile/搜索名字/本代marker且不捎带无关身份；合并双方收藏去重/取消/恢复旧ID；已忽略候选的列出、恢复、合并后两边都不出现、最近忽略在前与分页（`ArtistIgnoredCandidates*`）；真实handler样本（含`governance/artist-candidates-ignored`、`-ignored-empty`、`artists/errors/invalid-candidate-filter`）；队列10001先全量随机再限10000。
+治理幂等/双方revision/冲突/全事务回滚/拆分不可撤销；重扫前后四意图表与revision快照；按专辑作用域、移动、未来新轨/新版本；候选仅两信号、忽略名字键对长期有效；整理期间503/409且播放旧能力可用；回填中断重启、实时写先后交错与原子发布；ready后M3遮盖的新scan身份仍有空profile/搜索名字/本代marker且不捎带无关身份；合并双方收藏去重/取消/恢复旧ID；已忽略候选的列出、恢复、合并后两边都不出现、最近忽略在前与分页（`ArtistIgnoredCandidates*`）；真实handler样本（含`governance/artist-candidates-ignored`、`-ignored-empty`、`artists/errors/invalid-candidate-filter`）；队列10001先全量随机再限10000。
 
 搜索规模保留100000present+10000missing、10000发行/约8000组、至少20000艺人、2艺人/4credit、20%别名、50000轨倾斜。2026-11-05用户I9/I10取代历史性能门槛：回填以I8正式运行结果判定达标，不再测量或优化；前台仅“周杰伦”“周杰倫”的建议与三栏首屏各5次预热/30次测量，p95≤1秒。单字、深页及10000首队列等只照实记录。保留同一规模夹具供失败定位和仅热门词复测，不以缩小规模或截断候选提速；原始证据仓外。历史300/1000ms、36分钟、CATP p95/p99及前台回填数字保留历史报告，不再作为本轮门槛。正确性、不跳对象、不提前发布及ready/播放可用合同不变，详见S设计§15.2b I9/I10。
 

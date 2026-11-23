@@ -40,6 +40,11 @@ export function SuppressionsSection({ page }: { page: number }) {
             {suppressionTargetText(item)}
             <VisuallyHidden>的操作记录</VisuallyHidden>
           </Link>
+        ) : item.target_type === "artist" ? (
+          // 自动合并艺人的标记（M7 G）：链到这位艺人。
+          <Link to="/artists/$artistId" params={{ artistId: item.target_id }}>
+            {suppressionTargetText(item)}
+          </Link>
         ) : (
           suppressionTargetText(item)
         ),

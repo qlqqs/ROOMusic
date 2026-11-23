@@ -34,6 +34,7 @@ const revertedText: Readonly<Record<RevertSubject, string>> = {
   default: "已撤销默认版本的调整。",
   review: "已撤销这次核对，问题恢复到之前的状态。",
   claim: "已撤销这次认领，修改还给了旧版本。",
+  artist: "已撤销，艺人恢复到这次操作之前的样子。",
   other: "已撤销。",
 };
 

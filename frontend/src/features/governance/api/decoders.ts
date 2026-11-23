@@ -306,7 +306,8 @@ const externalLinkChangesDecoder = d.object({
   external: d.object({ title: d.string(), artist: d.string(), date: d.string(), country: d.string() }),
   links: d.array(
     d.object({
-      object_type: d.oneOf(["release", "release_group", "track"] as const),
+      // 艺人对应（M7 G）：程序层在匹配上的发行里把本地艺人对上外部艺人。
+      object_type: d.oneOf(["release", "release_group", "track", "artist"] as const),
       object_id: d.uuid(),
       external_id: d.string({ min: 1, max: 128 }),
       external_group_id: d.optional(d.string({ min: 1, max: 128 })),

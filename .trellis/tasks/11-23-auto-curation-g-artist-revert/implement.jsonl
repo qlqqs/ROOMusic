@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/11-23-auto-curation-g-artist-revert/research/artist-ops-current.md", "reason": "艺人操作现状、前态与风险（带行号）"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "艺人合并、拆分、改名、忽略的合同"}
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "撤销与操作记录"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "外部对应、程序层与标记"}
+{"file": ".trellis/spec/backend/steward-review-contracts.md", "reason": "审查策略全文与证据字段"}

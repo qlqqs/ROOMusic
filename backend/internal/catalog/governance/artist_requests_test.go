@@ -54,13 +54,11 @@ func TestArtistRequestNormalization(t *testing.T) {
 		t.Fatalf("pairs %+v: %v", p, err)
 	}
 }
-func TestArtistKindsNeverRevert(t *testing.T) {
-	for _, kind := range []operations.Kind{ArtistMergeKind{}, ArtistSplitKind{}, ArtistRenameKind{}, ArtistCandidateIgnoreKind{}} {
-		_, err := kind.Revert(context.Background(), nil, "", operations.Record{})
-		status, code, _ := operations.Problem(err)
-		if status != 409 || code != "not_revertible" {
-			t.Fatalf("%s: %v", kind.Type(), err)
-		}
+func TestArtistSplitNeverReverts(t *testing.T) {
+	_, err := (ArtistSplitKind{}).Revert(context.Background(), nil, "", operations.Record{})
+	status, code, _ := operations.Problem(err)
+	if status != 409 || code != "not_revertible" {
+		t.Fatal(err)
 	}
 }
 func TestArtistDescriptionRejectsDamagedState(t *testing.T) {
