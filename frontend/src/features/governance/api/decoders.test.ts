@@ -300,8 +300,8 @@ describe("decodeOperationPage", () => {
 
   it.each([
     ["缺少 items", without(page, ["items"])],
-    ["未知的记录类型", withValue(page, ["items", 0, "type"], "release_merge")],
-    ["未知的改动类型", withValue(page, ["items", 0, "changes", "kind"], "release_merge")],
+    ["未知的记录类型", withValue(page, ["items", 0, "type"], "release_split")],
+    ["未知的改动类型", withValue(page, ["items", 0, "changes", "kind"], "release_split")],
     ["缺少改动类型", without(page, ["items", 0, "changes", "kind"])],
     ["id 不是 UUID", withValue(page, ["items", 0, "id"], "op-1")],
     ["created_at 不是 RFC 3339", withValue(page, ["items", 0, "created_at"], "昨天")],

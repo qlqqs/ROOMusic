@@ -27,10 +27,12 @@ type LinkIntent struct {
 func (l LinkIntent) key() string { return l.ObjectType + ":" + l.ObjectID }
 
 type ExternalSummary struct {
-	Title   string `json:"title"`
-	Artist  string `json:"artist"`
-	Date    string `json:"date"`
-	Country string `json:"country"`
+	DiscCount  int    `json:"disc_count,omitempty"`
+	TrackCount int    `json:"track_count,omitempty"`
+	Title      string `json:"title"`
+	Artist     string `json:"artist"`
+	Date       string `json:"date"`
+	Country    string `json:"country"`
 }
 type LinkRequest struct {
 	CheckEvidence               func(context.Context, *sql.Tx) error

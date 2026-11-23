@@ -76,6 +76,8 @@ func (r *ExceptionResolver) Accept(ctx context.Context, id, actor, requestID str
 	switch e.Tool {
 	case "correct_release", "correct_track":
 		err = r.acceptCorrection(ctx, e, in, actor, key, requestID)
+	case "merge_releases":
+		err = r.acceptMerge(ctx, e, in, actor, key, requestID)
 	case "resolve_release_match":
 		err = r.acceptMatch(ctx, e, in, actor, key)
 	}
@@ -231,6 +233,44 @@ func classifyChange(err error) error {
 	return err
 }
 
+func (r *ExceptionResolver) acceptMerge(ctx context.Context, e curation.ModelException, in proposal, actor, key, requestID string) error {
+	item, err := r.writer.PendingItem(ctx, e.PendingItemID)
+	if err != nil {
+		return err
+	}
+	if item.Status != "waiting_human" || !strings.EqualFold(item.ID, in.ItemID) {
+		return staleException()
+	}
+	p, err := r.writer.PreviewReleaseMerge(ctx, item)
+	if err == nil {
+		req := curation.ReleaseAutoMerge{ItemID: item.ID, Token: p.Token, ConfirmedBy: actor, ExceptionID: e.ID, Key: key, RequestID: requestID,
+			Source: curation.Source{Kind: "model", Provider: e.Provider, Basis: truncateBasis(in.Basis.Note)},
+			CheckPreview: func(current governance.ReleaseMergePreview) error {
+				return compareChanges(e, program.ReleaseMergeChanges(current.Source, current.Target, current.Token, current.Hidden, current.FavoritesMoved))
+			}}
+		if e.ConversationID != nil {
+			req.ConversationID = *e.ConversationID
+		}
+		_, err = r.writer.MergeReleases(ctx, req)
+	}
+	var f *operations.Failure
+	if errors.As(err, &f) {
+		switch f.Code {
+		case "merge_changed", "release_merged", "merge_chain", "release_too_large", "manual_structure", "no_strong_evidence", "nothing_to_apply":
+			return staleException()
+		}
+	}
+	return classifyChange(err)
+}
+
+func truncateBasis(note string) string {
+	end := min(500, len(note))
+	for end < len(note) && !utf8.RuneStart(note[end]) {
+		end--
+	}
+	return note[:end]
+}
+
 func (r *ExceptionResolver) acceptMatch(ctx context.Context, e curation.ModelException, in proposal, actor, key string) error {
 	item, err := r.writer.PendingItem(ctx, e.PendingItemID)
 	if err != nil {
@@ -243,11 +283,7 @@ func (r *ExceptionResolver) acceptMatch(ctx context.Context, e curation.ModelExc
 	if err != nil {
 		return classifyChange(err)
 	}
-	end := min(500, len(in.Basis.Note))
-	for end < len(in.Basis.Note) && !utf8.RuneStart(in.Basis.Note[end]) {
-		end--
-	}
-	opt := program.ApplyOptions{Key: key, ConfirmedBy: actor, PendingItemID: item.ID, Source: curation.Source{Kind: "model", Provider: e.Provider, Basis: in.Basis.Note[:end]},
+	opt := program.ApplyOptions{Key: key, ConfirmedBy: actor, PendingItemID: item.ID, Source: curation.Source{Kind: "model", Provider: e.Provider, Basis: truncateBasis(in.Basis.Note)},
 		Finish: func(ctx context.Context, tx *sql.Tx, ids []string) error {
 			return curation.FinishException(ctx, tx, e.ID, actor, "accepted", ids)
 		}}
@@ -327,6 +363,11 @@ func (r *ExceptionResolver) Decline(ctx context.Context, id, actor string) (cura
 		return e, err
 	}
 	defer tx.Rollback()
+	if e.Tool == "merge_releases" {
+		if err = governance.LockCatalogWrites(ctx, tx); err != nil {
+			return e, err
+		}
+	}
 	if err = curation.FinishException(ctx, tx, id, actor, "declined", nil); err != nil {
 		return e, err
 	}
@@ -344,6 +385,14 @@ func (r *ExceptionResolver) Decline(ctx context.Context, id, actor string) (cura
 			if err = suppress(ctx, tx, target, name, correctionIntent(name, field), "", actor); err != nil {
 				return e, err
 			}
+		}
+	case e.Tool == "merge_releases":
+		candidate, err := curation.ReleaseMergeCandidate(item)
+		if err != nil {
+			return e, err
+		}
+		if err = r.writer.SuppressReleaseMerge(ctx, tx, item.TargetID, candidate.ReleaseID, "", actor); err != nil {
+			return e, err
 		}
 	case item.Kind == "recording_match":
 		var evidence struct {

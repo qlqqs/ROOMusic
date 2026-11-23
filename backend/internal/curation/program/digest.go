@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/curation"
 )
 
 // 仅接受本包构造的字符串、整数、布尔值及其结构；encoding/json 对 map 的键排序。
@@ -23,7 +24,7 @@ func digest(v any) string {
 }
 
 // ReleaseDigest 使用目录契约的固定顺序（介质、曲目、标识、标记），保留人工设空的存在位。
-func ReleaseDigest(e catalog.CurationEvidence) string { return digest(e) }
+func ReleaseDigest(e catalog.CurationEvidence) string { return curation.ReleaseDigest(e) }
 
 func mediaMarkers(e catalog.CurationEvidence, kind, target, subject string) []catalog.CurationSuppression {
 	var markers []catalog.CurationSuppression

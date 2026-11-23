@@ -646,6 +646,7 @@ func executeClaimPlan(ctx context.Context, tx *sql.Tx, operationID string, snaps
 	result.OperationID = operationID
 	return operations.Outcome{
 		TargetType: operations.TargetRelease, TargetID: targetID,
+		Targets:          releaseTargets(targetID, sourceID),
 		ExpectedRevision: snapshot.Target.Revision, ResultRevision: snapshot.Target.Revision + 1,
 		Before: snapshotRecordState(snapshot), After: after,
 		Response: result,

@@ -372,3 +372,29 @@ describe("自动补的封面与歌词：后端样本", () => {
     expect([notRevertibleReason(artworkRevert), notRevertibleReason(lyricsRevert)]).toEqual(["已完成", "已完成"]);
   });
 });
+
+describe("发行整张并入的记录（M7 H）", () => {
+  const merges = decodeOperationPage(sampleBody("operations/release-merge-reverted")).items;
+  const mergeOf = (type: OperationItemDTO["type"]): OperationItemDTO => {
+    const found = merges.find((item) => item.type === type);
+    if (found === undefined) throw new Error(`样本里没有 ${type}`);
+    return found;
+  };
+
+  it("类型名：人工与自动整理分开写；撤销记录写“撤销合并”", () => {
+    expect(operationTypeLabel(mergeOf("release_merge"))).toBe("合并发行");
+    expect(operationTypeLabel({ type: "release_auto_merge", changes: null })).toBe("自动合并发行");
+    expect(operationTypeLabel(mergeOf("revert"))).toBe("撤销合并");
+  });
+
+  it("改动一行写并进来的版本与碟数；撤销记录与撤销前的确认都写成“恢复为单独的发行”", () => {
+    expect(changeLines(mergeOf("release_merge"))).toEqual(["把《Quartet Disc Two》整张并入（1 碟）"]);
+    expect(changeLines(mergeOf("revert"))).toEqual(["《Quartet Disc Two》恢复为单独的发行（1 碟）"]);
+    expect(revertLines(mergeOf("release_merge"))).toEqual(["《Quartet Disc Two》恢复为单独的发行（1 碟）"]);
+  });
+
+  it("已撤销与撤不了各有原因", () => {
+    expect(notRevertibleReason(mergeOf("release_merge"))).toBe("已撤销");
+    expect(notRevertibleReason({ ...mergeOf("release_merge"), reverted_by: null })).toBe("之后又有改动");
+  });
+});

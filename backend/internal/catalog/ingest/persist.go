@@ -3,7 +3,6 @@ package ingest
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -67,24 +66,21 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 		return "", err
 	}
 
+	var mergeTargetID string
+	var hasMergeSources bool
+	err = tx.QueryRowContext(ctx, `SELECT
+		COALESCE((SELECT target_release_id::text FROM release_merges WHERE source_release_id=$1::uuid),''),
+		EXISTS(SELECT 1 FROM release_merges WHERE target_release_id=$1::uuid)`, releaseID).Scan(&mergeTargetID, &hasMergeSources)
+	if err != nil {
+		return "", err
+	}
 	discs := make([]int, 0, len(candidate.Mediums))
 	for disc := range candidate.Mediums {
 		discs = append(discs, disc)
 	}
 	sort.Ints(discs)
 	for _, disc := range discs {
-		var mediumID string
-		title := candidate.MediumTitles[disc]
-		if title == "" {
-			title = "Medium"
-		}
-		err = tx.QueryRowContext(ctx, "SELECT id::text FROM media WHERE release_id=$1::uuid AND position=$2", releaseID, disc).Scan(&mediumID)
-		if errors.Is(err, sql.ErrNoRows) {
-			mediumID = uuid.New()
-			_, err = tx.ExecContext(ctx, "INSERT INTO media(id,release_id,position,title) VALUES($1::uuid,$2::uuid,$3,$4)", mediumID, releaseID, disc, title)
-		} else if err == nil {
-			_, err = tx.ExecContext(ctx, "UPDATE media SET title=$1 WHERE id=$2::uuid AND title IS DISTINCT FROM $1", title, mediumID)
-		}
+		mediumID, err := persistMedium(ctx, tx, releaseID, mergeTargetID, disc, candidate.MediumTitles[disc])
 		if err != nil {
 			return "", err
 		}
@@ -127,9 +123,24 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 			}
 		}
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM media WHERE release_id=$1::uuid AND NOT EXISTS (
-		SELECT 1 FROM tracks WHERE tracks.medium_id=media.id)`, releaseID); err != nil {
+	// 除本候选的扫描碟，也清掉因来源文件搬进目标目录而刚被腾空的并入碟。
+	if _, err = tx.ExecContext(ctx, `DELETE FROM media m
+		WHERE (m.origin_release_id=$1::uuid OR (m.release_id=$1::uuid AND
+		    (m.origin_release_id IS NULL OR EXISTS (
+		        SELECT 1 FROM scan_observations o WHERE o.scan_run_id=$2::uuid AND o.root_id=$3::uuid
+		            AND o.planned_release_id=$1::uuid AND o.previous_release_id=m.origin_release_id AND NOT o.withheld))))
+		    AND NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.medium_id=m.id)`, releaseID, scanID, rootID); err != nil {
 		return "", err
+	}
+	if mergeTargetID != "" || hasMergeSources {
+		targetID := releaseID
+		if mergeTargetID != "" {
+			targetID = mergeTargetID
+			artistReleaseIDs = append(artistReleaseIDs, targetID)
+		}
+		if err = LayoutMergedMedia(ctx, tx, targetID); err != nil {
+			return "", err
+		}
 	}
 
 	if _, err = tx.ExecContext(ctx, "DELETE FROM release_field_decisions WHERE release_id=$1::uuid", releaseID); err != nil {
@@ -168,6 +179,11 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 	}
 	if err = searchindex.RefreshRelease(ctx, tx, releaseID); err != nil {
 		return "", err
+	}
+	if mergeTargetID != "" {
+		if err = searchindex.RefreshRelease(ctx, tx, mergeTargetID); err != nil {
+			return "", err
+		}
 	}
 	if err = feedback.finishCandidate(ctx, tx, releaseID, trackIDs); err != nil {
 		return "", err

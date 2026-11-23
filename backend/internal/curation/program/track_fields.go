@@ -76,20 +76,20 @@ func writeTrackFields(ctx context.Context, writer *curation.Writer, requests []c
 }
 
 // 调用方已用 needsWork 核对规则版本和输入摘要。
-func matchBackfills(s curation.WorkState, e catalog.CurationEvidence) (tracks, artists bool) {
+func matchBackfills(s curation.WorkState, e catalog.CurationEvidence) (tracks, artists, merges bool) {
 	if s.Status != "matched" {
-		return false, false
+		return false, false, false
 	}
 	if e.CandidateKind == "loose_unknown" {
 		if len(e.Tracks) != 1 || e.Tracks[0].ExternalID == "" {
-			return false, false
+			return false, false, false
 		}
 	} else if e.ExternalID == "" {
-		return false, false
+		return false, false, false
 	}
 	var result map[string]json.RawMessage
 	if json.Unmarshal(s.Result, &result) != nil {
-		return false, false
+		return false, false, false
 	}
 	if result["track_fields"] == nil {
 		for _, t := range e.Tracks {
@@ -99,7 +99,7 @@ func matchBackfills(s curation.WorkState, e catalog.CurationEvidence) (tracks, a
 			}
 		}
 	}
-	return tracks, result["artist_links"] == nil
+	return tracks, result["artist_links"] == nil, e.ExternalID != "" && result["release_merge"] == nil
 }
 
 func (w *Worker) linkedTracks(ctx context.Context, e catalog.CurationEvidence) (MatchResult, error) {
@@ -131,7 +131,7 @@ func (w *Worker) linkedTracks(ctx context.Context, e catalog.CurationEvidence) (
 	return match, err
 }
 
-func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence, s curation.WorkState, states pageStates, tracks, artists bool) error {
+func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence, s curation.WorkState, states pageStates, tracks, artists, merges bool) error {
 	if err := w.ready(ctx); err != nil {
 		return err
 	}
@@ -147,15 +147,25 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		local, err = catalog.LoadCurationArtistCredits(ctx, w.db, e.ID)
 		if errors.Is(err, catalog.ErrArtistCatalogPreparing) {
 			artists = false
-			if !tracks {
+			if !tracks && !merges {
 				return nil
 			}
 		} else if err != nil {
 			return err
 		}
 	}
-	match, err := w.linkedTracks(ctx, *e)
 	markers := map[string]string{}
+	if merges {
+		if err := w.writer.DiscoverReleaseMerges(ctx, e.ExternalID, StoredRuleVersion); err != nil {
+			return err
+		}
+		markers["release_merge"] = "done"
+	}
+	var match MatchResult
+	var err error
+	if tracks || artists {
+		match, err = w.linkedTracks(ctx, *e)
+	}
 	switch {
 	case errors.Is(err, sources.ErrNotFound):
 		if tracks {

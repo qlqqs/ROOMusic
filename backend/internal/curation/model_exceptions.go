@@ -168,8 +168,8 @@ func FinishException(ctx context.Context, tx *sql.Tx, id, actor, decision string
 	}
 	_, err = tx.ExecContext(ctx, `WITH summary AS (
  SELECT bool_or(status IN ('open','accepting')) AS pending,
- bool_or(tool='resolve_release_match' AND status='accepted') AS accepted,
- bool_or(tool='resolve_release_match' AND status='declined') AS declined FROM curation_model_exceptions WHERE pending_item_id=$1)
+ bool_or(tool IN ('resolve_release_match','merge_releases') AND status='accepted') AS accepted,
+ bool_or(tool IN ('resolve_release_match','merge_releases') AND status='declined') AS declined FROM curation_model_exceptions WHERE pending_item_id=$1)
  UPDATE curation_pending_items SET status=CASE WHEN accepted OR declined THEN 'resolved' ELSE 'waiting_model' END,
  resolution=CASE WHEN accepted THEN 'human_accepted' WHEN declined THEN 'human_declined' END,
  resolved_at=CASE WHEN accepted OR declined THEN now() END,

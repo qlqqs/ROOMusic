@@ -14,6 +14,7 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	67: mergedReleaseRollbackFixture,
 	65: `UPDATE tracks SET edit_revision=5 WHERE id='c3000000-0000-4000-8000-000000000065';
  INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
  SELECT id::uuid,'f6400000-0000-4000-8000-000000000000',kind,'release','e6400000-0000-4000-8000-000000000002',gen_random_uuid(),kind,1,2,'{}','{}','{}','fixture'
@@ -430,6 +431,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO curation_model_exceptions(pending_item_id,plan_item_id,tool,input,preview,provider,review_id,review_model,review_decision,review_source)
  VALUES('e6400000-0000-4000-8000-000000000003','f6400000-0000-4000-8000-000000000005','correct_release','{}','{}','synthetic',gen_random_uuid(),'synthetic-review','rejected','model');`)
 			}
+			if m.Version == 67 {
+				rollbackExec(t, db, beforeReleaseMergeMigration)
+			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
@@ -478,6 +482,12 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 					t.Fatalf("0041 新扫描模式夹具：mode=%q err=%v", mode, err)
 				}
 			}
+			if m.Version == 67 {
+				// 降级保留转移后的收藏，其他旧表仍按升级前的快照逐行比对。
+				moved := rollbackSnapshot(t, db)
+				s0.Data["favorite_albums"] = moved.Data["favorite_albums"]
+				s0.Data["personal_favorite_state"] = moved.Data["personal_favorite_state"]
+			}
 			if m.Version == 35 {
 				// 改路径是已提交业务状态，下行只删除新类型收据，不恢复旧路径或版本。
 				// 以回退前的完整目录数据作期望，仍检查下行没有误改任何目录列。
@@ -485,6 +495,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			rollbackApply(t, db, migrationPrefix(available, m.Version-1))
 			s2 := rollbackSnapshot(t, db)
+			if m.Version == 67 {
+				assertMergedDiscRestored(t, db)
+			}
 			if m.Version == 64 {
 				// 快照还会核对新增列、表和索引消失，且旧表的完整数据回到基线。
 				var restored, removed bool

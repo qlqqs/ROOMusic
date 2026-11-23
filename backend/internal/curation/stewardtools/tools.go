@@ -27,6 +27,7 @@ func StewardTools(w *curation.Writer, m *program.ModelMatcher) []tool.Definition
 	a := adapter{w, m}
 	available := func(ctx context.Context, c tool.Caller) bool { return c.Source == tool.SourceCuration }
 	return []tool.Definition{
+		a.backgroundMergeReleases(),
 		{Name: "read_pending_items", Description: "读取本次自动整理领取的待定项、冲突与候选资料", Scope: tool.ScopeRead, Untrusted: true, MinRole: tool.RoleAdmin, Available: available,
 			Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_ids":{"type":"array","items":` + idSchema + `}}}`), Output: json.RawMessage(`{"type":"array","items":{"type":"object"}}`), Handler: a.read},
 		{Name: "resolve_release_match", Description: "按 MusicBrainz 编号核对待定项，建立发行与曲目的对应并补全空缺", Scope: tool.ScopeShared, Revertible: true, MinRole: tool.RoleAdmin, Available: available,

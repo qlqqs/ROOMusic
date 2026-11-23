@@ -14,6 +14,10 @@ export const governanceFailureMessages = {
   already_reverted: "这条操作已经撤销过了，记录已刷新。",
   revert_conflict: "这张专辑之后又被修改过，不能撤销这一条。只有最近一次修改可以撤销。",
   issue_changed: "扫描刚刚改变了这个问题，已重新读取，请看过之后再核对。",
+  release_merged: "其中一个版本已经并入了别的版本，页面已刷新。",
+  merge_chain: "要并入的版本已经有别的版本并入它。请把它们都并到同一个版本，或者先撤销那次合并。",
+  release_too_large: "合起来的碟或曲目太多了，超过了一个发行的上限。",
+  merge_changed: "预览之后又有扫描或修改，已重新读取，请看过新的预览再并入。",
   forbidden: "你没有权限做这个操作。",
 } as const;
 

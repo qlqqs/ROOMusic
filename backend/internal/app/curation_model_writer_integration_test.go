@@ -81,7 +81,7 @@ func TestPostgreSQLCurationWriterModelLinkRevert(t *testing.T) {
 	releaseLink.ExternalGroupID = remote.Group.ID
 	programRequest := curationCLinkRequest(f.a, "", releaseLink)
 	programRequest.Method, programRequest.Confidence = "tag_id", "certain"
-	programRequest.External = curation.ExternalSummary{Title: remote.Title, Artist: "Artist A", Date: remote.Date}
+	programRequest.External = curation.ExternalSummary{Title: remote.Title, Artist: "Artist A", Date: remote.Date, DiscCount: 1, TrackCount: 1}
 	programAfter := curationCChanges(programRequest, []curation.LinkIntent{
 		releaseLink,
 		curationCLink("release_group", f.groupA, remote.Group.ID),

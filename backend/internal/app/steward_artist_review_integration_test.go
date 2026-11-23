@@ -160,7 +160,7 @@ func TestPostgreSQLStewardReviewArtistTools(t *testing.T) {
 			}
 			plan := detail.Plans[0]
 			item := plan.Items[0]
-			if plan.Review.PolicyVersion != 3 || item.OperationID == nil || !item.Revertible {
+			if plan.Review.PolicyVersion != runtime.ReviewPolicyVersion || item.OperationID == nil || !item.Revertible {
 				t.Fatalf("审查或执行结果错误：%+v，%+v", plan.Review, item)
 			}
 			record, err := operations.Load(ctx, f.app.database, *item.OperationID)

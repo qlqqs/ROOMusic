@@ -124,4 +124,5 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 		t.Fatal(err)
 	}
 	record("curation/exceptions-track", "GET", curationBase+"/exceptions", nil)
+	recordReleaseMergeCurationSamples(t, samples)
 }

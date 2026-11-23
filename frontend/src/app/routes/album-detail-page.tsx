@@ -68,6 +68,7 @@ function AdminAlbumActionRow({ context, commands }: { context: ReleaseActionsCon
   const { release, groupId, releaseCount, groupRevision, defaultReleaseId } = context;
   const admin = useReleaseAdminActions({
     release: { id: release.id, title: release.title, revision: release.revision, attentionCount: release.attention_count },
+    mergedReleases: release.merged_releases,
     groupId,
     releaseCount,
     groupRevision,

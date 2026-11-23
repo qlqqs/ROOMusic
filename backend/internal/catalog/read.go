@@ -16,11 +16,11 @@ import (
 
 const (
 	maxArtworkResourceID   = 255
-	maxReleaseMedia        = 256
-	maxReleaseTrackRows    = 10000
+	MaxReleaseMedia        = 256
+	MaxReleaseTrackRows    = 10000
 	maxReleaseCredits      = 100
 	maxTrackCredits        = 100
-	maxReleaseTrackCredits = 10000
+	MaxReleaseTrackCredits = 10000
 	MaxReleaseEvidence     = 100
 	MaxEvidenceSourceRefs  = 100
 	legacyCandidateKind    = "legacy"
@@ -196,7 +196,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		LEFT JOIN track_display_durations dd ON dd.track_id=t.id
 		WHERE m.release_id=$1::uuid
 		ORDER BY m.position,m.id,t.position,t.id
-		LIMIT $2`, releaseID, maxReleaseTrackRows+1)
+		LIMIT $2`, releaseID, MaxReleaseTrackRows+1)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 	rowCount := 0
 	for rows.Next() {
 		rowCount++
-		if rowCount > maxReleaseTrackRows {
+		if rowCount > MaxReleaseTrackRows {
 			return nil, errors.New("release track projection exceeds bound")
 		}
 		var mediumID, mediumTitle, trackID, trackTitle, trackArtist, sourcePath, sourceKind string
@@ -231,7 +231,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		}
 		mediumIndex, exists := mediumIndexes[mediumID]
 		if !exists {
-			if len(media) == maxReleaseMedia {
+			if len(media) == MaxReleaseMedia {
 				return nil, errors.New("release medium projection exceeds bound")
 			}
 			mediumIndex = len(media)
@@ -293,7 +293,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		JOIN media m ON m.id=t.medium_id
 		WHERE m.release_id=$1::uuid
 		ORDER BY m.position,m.id,t.position,t.id,c.position,c.role,c.name
-		LIMIT $2`, releaseID, maxReleaseTrackCredits+1)
+		LIMIT $2`, releaseID, MaxReleaseTrackCredits+1)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +301,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 	creditCounts := make(map[string]int)
 	totalCredits := 0
 	for creditRows.Next() {
-		if totalCredits == maxReleaseTrackCredits {
+		if totalCredits == MaxReleaseTrackCredits {
 			return nil, errors.New("release track credit projection exceeds bound")
 		}
 		var trackID string

@@ -170,6 +170,7 @@ func GroupChangeExecutor(request GroupChangeRequest) operations.Executor {
 		}
 		return operations.Outcome{
 			TargetType: operations.TargetRelease, TargetID: request.ReleaseID,
+			Targets:          releaseTargets(request.ReleaseID),
 			ExpectedRevision: locked.revision, ResultRevision: locked.revision + 1,
 			Before: groupRecordState{GroupID: current, GroupTitle: currentTitle},
 			After:  groupAfterState{groupRecordState{GroupID: target, GroupTitle: targetTitle}, request.Action},

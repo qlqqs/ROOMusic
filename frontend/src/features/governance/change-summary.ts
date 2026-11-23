@@ -36,6 +36,10 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       return "核对问题";
     case "release_claim":
       return "认领";
+    case "release_merge":
+      return "合并发行";
+    case "release_auto_merge":
+      return "自动合并发行";
     case "release_auto_correction":
       return "自动补全发行信息";
     case "track_correction":
@@ -62,6 +66,7 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       if (item.changes?.kind === "release_group_default") return "撤销默认版本调整";
       if (item.changes?.kind === "release_issue_review") return "撤销核对";
       if (item.changes?.kind === "release_claim") return "撤销认领";
+      if (item.changes?.kind === "release_merge" || item.changes?.kind === "release_auto_merge") return "撤销合并";
       if (item.changes?.kind === "release_auto_correction") return "撤销自动补全";
       if (item.changes?.kind === "track_correction") return "撤销曲目修改";
       if (item.changes?.kind === "track_auto_correction") return "撤销曲目的自动补全";
@@ -172,6 +177,11 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
       ...(kept === null ? [] : [`保留这个版本已有的：${kept}`]),
     ];
   }
+  // 发行整张并入（M7 H）：来源的碟接在这个版本后面；撤销时把碟还给来源，来源恢复为单独的发行。
+  if (changes.kind === "release_merge" || changes.kind === "release_auto_merge") {
+    const discs = changes.medium_count === 0 ? "" : `（${changes.medium_count} 碟）`;
+    return reverse ? [`《${changes.source.title}》恢复为单独的发行${discs}`] : [`把《${changes.source.title}》整张并入${discs}`];
+  }
   if (changes.kind === "release_issue_review") {
     const [from, to] = reverse ? [changes.to, changes.from] : [changes.from, changes.to];
     const trackCount = (to.reviewed ? to : from).track_count;
@@ -233,11 +243,12 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
 
 /**
  * 这条记录改了什么。撤销记录的前后状态与它撤销的操作相反，所以同样的写法读起来就是“恢复成了什么”。
- * 自动补的封面、歌词与外部对应例外：它们的撤销记录带的是被撤销的那一份（不分前后），所以按记录的类型写成“去掉”。
+ * 自动补的封面、歌词、外部对应与整张并入例外：它们的撤销记录带的是被撤销的那一份（不分前后），所以按记录的类型写成“去掉”或“恢复”。
  */
 export function changeLines(item: Pick<OperationItemDTO, "changes"> & Partial<Pick<OperationItemDTO, "type">>): string[] {
   const kind = item.changes?.kind;
-  const removal = item.type === "revert" && (kind === "release_external_artwork" || kind === "track_external_lyrics" || kind === "external_link");
+  const removal =
+    item.type === "revert" && (kind === "release_external_artwork" || kind === "track_external_lyrics" || kind === "external_link" || kind === "release_merge" || kind === "release_auto_merge");
   return linesOf(item.changes, removal);
 }
 
@@ -265,6 +276,8 @@ export function notRevertibleReason(item: Pick<OperationItemDTO, "type" | "rever
   if (item.type === "external_link") return "对应已被改动";
   // 认领的撤销不要求新版本可见（它的目的就是把修改还给旧版本），所以不写“专辑已不可见”：能不能撤销只看之后有没有修改。
   if (item.type === "release_claim") return "之后又有修改";
+  // 整张并入：撤不了是被并入的版本之后又被改动，或（自动合并）之后又有人工的归组、认领或合并。
+  if (item.type === "release_merge" || item.type === "release_auto_merge") return "之后又有改动";
   // 目标是发行的记录看发行，目标是专辑的记录看专辑：专辑没有可见版本了，就没有可以撤销的东西。
   const target = item.release ?? item.album;
   if (target === null || !target.visible) return "专辑已不可见";

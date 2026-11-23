@@ -388,6 +388,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 
 	recordDSDFormatSamples(t, application, samples, call, admin)
 	recordTrackCorrectionSamples(t, application, samples, call, admin)
+	recordReleaseMergeSamples(t, application, samples, call, admin)
 
 	recordCurationSamples(t, samples)
 	recordExternalCurationSamples(t, samples)
@@ -985,6 +986,45 @@ func recordClaimSamples(t *testing.T, application *integrationTestApplication, s
 	}
 	samples.record("operations/reverted-claim", call(http.MethodPost, revertPath(claimOperation), nil, admin, key("0605")), http.StatusOK)
 	samples.record("operations/list-claims-reverted", call(http.MethodGet, "/api/v1/operations?release_id="+sourceID+"&page_size=10", nil, admin), http.StatusOK)
+}
+
+// 合并使用独立的合成发行，撤销后从来源发行读取双方的修改记录。
+func recordReleaseMergeSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	rootID := uuid.New()
+	mustExec(t, application, `INSERT INTO library_roots(id,path,status,revision) VALUES($1,$2,'active',1)`, rootID, filepath.Join(application.allowedRoot, "release-merge"))
+	release := func(title string) string {
+		id, _ := insertGroupedRelease(t, application, rootID, groupedRelease{title: title, artist: "Sample Quartet", tracks: []string{"present"}})
+		return id
+	}
+	target, source, other := release("Quartet Disc One"), release("Quartet Disc Two"), release("Other Release")
+	preview := func(a, b string) *httptest.ResponseRecorder {
+		return call(http.MethodGet, "/api/v1/releases/"+a+"/merge-preview?source="+b, nil, admin)
+	}
+	merge := func(token string) *httptest.ResponseRecorder {
+		return call(http.MethodPost, "/api/v1/releases/"+target+"/merge", map[string]string{"source_release_id": source, "token": token}, admin, map[string]string{"Idempotency-Key": uuid.New()})
+	}
+	response := preview(target, source)
+	samples.record("releases/merge-preview", response, http.StatusOK)
+	samples.record("errors/merge-changed", merge(strings.Repeat("0", 64)), http.StatusConflict)
+	samples.record("releases/merged", merge(decodeJSONMap(t, response)["token"].(string)), http.StatusOK)
+	samples.record("errors/release-merged", preview(target, source), http.StatusConflict)
+	samples.record("errors/merge-chain", preview(other, target), http.StatusConflict)
+	var operationID string
+	if err := application.database.QueryRow(`SELECT operation_id FROM release_merges WHERE source_release_id=$1`, source).Scan(&operationID); err != nil {
+		t.Fatal(err)
+	}
+	reverted := call(http.MethodPost, revertPath(operationID), nil, admin, map[string]string{"Idempotency-Key": uuid.New()})
+	if reverted.Code != http.StatusOK {
+		t.Fatalf("撤销合并返回 %d %s", reverted.Code, reverted.Body.String())
+	}
+	samples.record("operations/release-merge-reverted", call(http.MethodGet, "/api/v1/operations?release_id="+source, nil, admin), http.StatusOK)
+	mustExec(t, application, `WITH discs AS (
+		INSERT INTO media(id, release_id, position, title)
+		SELECT gen_random_uuid(), $1, n, 'Medium' FROM generate_series(2,256) n RETURNING id,position)
+		INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,source_kind,observed_at)
+		SELECT gen_random_uuid(),id,1,'Track','Sample Quartet',position,$2,'large/'||position||'.flac','present','physical',now() FROM discs`, target, rootID)
+	samples.record("errors/release-too-large", preview(target, source), http.StatusConflict)
 }
 
 // 样本里的内嵌歌词：同步歌词带元标签、间奏（空行）、同一时间戳的双语两行与一行多个时间戳；纯文本歌词带分段。

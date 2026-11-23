@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowRightLeft, Bookmark, ClipboardCheck, Combine, LoaderCircle, PencilLine, RotateCcw, Split } from "lucide-react";
+import { ArrowRightLeft, Bookmark, ClipboardCheck, Combine, LoaderCircle, Merge, PencilLine, RotateCcw, Split } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { MenuAction } from "../../../shared/ui";
 import { useClaimHints } from "../hooks/use-claims";
@@ -7,12 +7,15 @@ import type { ReleaseCommand, ReleaseCommandResult, ReleaseCommands, ReleaseTarg
 import { DetachAlbumDialog } from "./detach-album-dialog";
 import { EditReleaseDialog } from "./edit-release-dialog";
 import { JoinAlbumDialog } from "./join-album-dialog";
+import { MergeReleaseDialog } from "./merge-release-dialog";
 import { ReleaseCommandNotice } from "./release-command-notice";
 import styles from "./release-admin-actions.module.css";
 
 type ReleaseAdminActionsProps = {
   /** 当前选中的版本；revision 是页面读到的人工修改版本号，归组与撤销用它做预期版本；attentionCount 大于 0 时有“查看问题”。 */
   release: ReleaseTarget & { revision: number; attentionCount: number };
+  /** 整张并入这个版本的其他版本（M7 H，发行详情的 merged_releases）：面板里列出它们，能撤销的带“撤销合并”。 */
+  mergedReleases?: readonly MergedReleaseRef[] | undefined;
   /** 版本现在所在的组，以及这个组里可见的版本数（只有一个版本时没有“移出为独立专辑”与默认版本的按钮）。 */
   groupId: string;
   releaseCount: number;
@@ -21,6 +24,8 @@ type ReleaseAdminActionsProps = {
   defaultReleaseId: string | null;
   commands: ReleaseCommands;
 };
+
+type MergedReleaseRef = { id: string; title: string; operation_id: string; revertible: boolean };
 
 /** 撤销刚刚成功的操作：撤销的目标与撤销之后的提示由命令的结果决定。问题页的核对也用它。 */
 export function undoIntent(command: ReleaseCommand, result: ReleaseCommandResult) {
@@ -36,6 +41,8 @@ export function undoIntent(command: ReleaseCommand, result: ReleaseCommandResult
       return { kind: "revert" as const, release: command.release, operationId: result.result.operation_id, subject: "review" as const };
     case "claim":
       return { kind: "revert" as const, release: command.release, operationId: result.result.operation_id, subject: "claim" as const };
+    case "merge":
+      return { kind: "revert" as const, release: command.release, operationId: result.result.operation.id, subject: "merge" as const };
     case "revert":
       return null;
   }
@@ -47,21 +54,22 @@ const ADMIN_GROUP = "管理";
 /**
  * 专辑详情头部里管理员的操作（只有管理员看到；后端仍独立鉴权）。返回两部分，由页面组合：
  * - actions：放进“更多”菜单“管理”分组的项：编辑发行信息、设为默认版本或改回自动选择（多于一个版本时）、归入其他专辑、
- *   移出为独立专辑（多于一个版本时）、这个版本需要关注时的“查看问题”（打开问题页并选中它）；
- * - panel：放在操作行下方的“可能接替了……”线索、上一次操作的结果提示（成功时可以撤销）与各个对话框。
+ *   移出为独立专辑（多于一个版本时）、并入另一个版本（M7 H）、这个版本需要关注时的“查看问题”（打开问题页并选中它）；
+ * - panel：放在操作行下方的“可能接替了……”线索、已并入的版本（能撤销的带“撤销合并”）、上一次操作的结果提示（成功时可以撤销）与各个对话框。
  * 设定与清除默认版本不弹确认（随时可以撤销，也不丢数据），自动选出的代表版本也可以“设为默认版本”：设定之后，以后归入更早的版本也不会把它挤下去。
  * 命令的状态由页面持有，所以提示在导航到别的专辑组之后仍能显示（只显示这个版本相关的结果）；页面怎么跟到版本现在的位置（换了专辑组，或设定默认版本之后
  * 代表版本变了），由命令 hook 的 onMoved（页面提供）负责。换版本时调用方用 key 让对话框的开合状态重新开始。
  * 菜单项打开对话框时，菜单先把焦点还给“更多”按钮，对话框关闭后焦点回到那里。
  */
-export function useReleaseAdminActions({ release, groupId, releaseCount, groupRevision, defaultReleaseId, commands }: ReleaseAdminActionsProps): { actions: MenuAction[]; panel: ReactNode } {
-  const [dialog, setDialog] = useState<"edit" | "join" | "detach" | null>(null);
+export function useReleaseAdminActions({ release, groupId, releaseCount, groupRevision, defaultReleaseId, commands, mergedReleases = [] }: ReleaseAdminActionsProps): { actions: MenuAction[]; panel: ReactNode } {
+  const [dialog, setDialog] = useState<"edit" | "join" | "detach" | "merge" | null>(null);
   const navigate = useNavigate();
   // 提示只是线索：读取中、失败或没有时什么也不显示，不打扰页面。
   const hints = useClaimHints(release.id).data ?? [];
   const isDefault = release.id === defaultReleaseId;
   const defaultPending = commands.state.status === "pending" && commands.state.command.kind === "default";
-  const open = (next: "edit" | "join" | "detach") => {
+  const revertPending = commands.state.status === "pending" && commands.state.command.kind === "revert";
+  const open = (next: "edit" | "join" | "detach" | "merge") => {
     commands.dismiss();
     setDialog(next);
   };
@@ -85,6 +93,7 @@ export function useReleaseAdminActions({ release, groupId, releaseCount, groupRe
       : []),
     { id: "join", group: ADMIN_GROUP, label: "归入其他专辑…", icon: <Combine size={16} />, onSelect: () => open("join") },
     ...(releaseCount > 1 ? [{ id: "detach", group: ADMIN_GROUP, label: "移出为独立专辑", icon: <Split size={16} />, onSelect: () => open("detach") }] : []),
+    { id: "merge", group: ADMIN_GROUP, label: "并入另一个版本…", icon: <Merge size={16} />, onSelect: () => open("merge") },
     // 导航类菜单项：菜单项是按钮，在 onSelect 里跳转（与用户菜单的“设置”相同）。
     ...(release.attentionCount > 0 ? [{ id: "issues", group: ADMIN_GROUP, label: "查看问题", icon: <ClipboardCheck size={16} />, onSelect: () => void navigate({ to: "/issues", search: { release: release.id } }) }] : []),
   ];
@@ -103,6 +112,32 @@ export function useReleaseAdminActions({ release, groupId, releaseCount, groupRe
           ))}
         </ul>
       )}
+      {mergedReleases.length === 0 ? null : (
+        <ul className={styles.hints} aria-label="已并入这个版本的其他版本">
+          {mergedReleases.map((merged) => (
+            <li key={merged.id} className={styles.hint}>
+              <Merge size={16} aria-hidden="true" className={styles.hintIcon} />
+              <span>已并入《{merged.title}》</span>
+              {merged.revertible ? (
+                <button
+                  type="button"
+                  className={styles.hintLink}
+                  disabled={revertPending}
+                  aria-label={`撤销合并，《${merged.title}》恢复为单独的版本`}
+                  onClick={() => {
+                    commands.dismiss();
+                    commands.submit({ kind: "revert", release, operationId: merged.operation_id, subject: "merge" });
+                  }}
+                >
+                  撤销合并
+                </button>
+              ) : (
+                <span className={styles.hintNote}>之后又有改动，不能撤销</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
       <ReleaseCommandNotice
         state={commands.state}
         releaseId={release.id}
@@ -116,6 +151,7 @@ export function useReleaseAdminActions({ release, groupId, releaseCount, groupRe
       />
       <EditReleaseDialog open={dialog === "edit"} release={release} commands={commands} onClose={close} />
       <JoinAlbumDialog open={dialog === "join"} release={release} currentGroupId={groupId} commands={commands} onClose={close} />
+      <MergeReleaseDialog open={dialog === "merge"} release={release} groupId={groupId} commands={commands} onClose={close} />
       <DetachAlbumDialog release={dialog === "detach" ? release : null} isDefault={isDefault} commands={commands} onClose={close} />
     </div>
   );

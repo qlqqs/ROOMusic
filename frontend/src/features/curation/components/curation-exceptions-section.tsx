@@ -154,7 +154,9 @@ export function CurationExceptionsSection({ page, mine, refresh }: { page: numbe
                 ? decision.exception.tool === "correct_release"
                   ? "按现在的内容重新核对后写入，记为你的人工确认，字段写进人工修正。"
                   : "按现在的内容重新核对后写入，记为你的人工确认；之后可以在操作记录里撤销。"
-                : "以后程序与模型都不再提出这个值；可以在“不再提出”里清除。"}
+                : decision.exception.tool === "merge_releases"
+                  ? "以后不再自动提出合并这两个发行；可以在“不再提出”里清除，也可以在专辑页手动并入。"
+                  : "以后程序与模型都不再提出这个值；可以在“不再提出”里清除。"}
             </p>
           </div>
         )}

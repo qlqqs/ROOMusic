@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "merge_chain",
+      "message": "已有其他发行并入来源发行"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

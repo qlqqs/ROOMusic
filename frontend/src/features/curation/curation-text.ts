@@ -113,6 +113,8 @@ const subjectText: Record<string, string> = {
   group_join: "归组",
   // 自动合并的两位艺人（M7 G）：撤销之后不再自动合并。
   artist_merge: "自动合并艺人",
+  // 自动合并的两个发行（M7 H）：撤销或不采纳之后不再自动提出合并它们。
+  release_merge: "自动合并发行",
 };
 
 /** 标记的类别：字段名，或封面、歌词、外部对应、归组；曲目上的标题与艺人（M7 I）写“曲目标题”“曲目艺人”。 */
@@ -132,6 +134,7 @@ export function suppressionValueText(item: SuppressionDTO): string {
   const value = item.value;
   if (item.subject === "group_join") return "归入另一张专辑";
   if (item.subject === "artist_merge") return typeof value["name"] === "string" ? `与“${value["name"]}”合并` : "与另一位艺人合并";
+  if (item.subject === "release_merge") return typeof value["title"] === "string" ? `与《${value["title"]}》合并` : "与另一个发行合并";
   if (item.subject in correctionFieldLabels) {
     if (value["mode"] === "null") return "留空";
     const raw = value["value"];
@@ -207,6 +210,19 @@ function countOf(value: JsonValue): number {
   return typeof value === "number" ? value : 0;
 }
 
+/** 预览里发行的快照 {id,title,group_id} 的标题；读不出来时是 null。 */
+function releaseTitleOf(value: JsonValue): string | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const title = (value as { readonly [key: string]: JsonValue })["title"];
+  return typeof title === "string" ? title : null;
+}
+
+/** 并入时合并期间不生效的来源内容（hidden 的各项计数）是否有任何一项。 */
+function hasHidden(value: JsonValue): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  return Object.values(value).some((part) => part === true || (typeof part === "number" && part > 0));
+}
+
 /**
  * 例外提出的修改，逐行：字段写“标题：A → B”；匹配另有外部对应（新建或替换）、曲目对应数、专辑对应与归组。
  * 外部对应那一行由调用方带链接显示，这里只给其余各行。值都是不可信文本。
@@ -225,6 +241,18 @@ export function exceptionChangeLines(exception: CurationExceptionDTO): string[] 
         break;
       case "group":
         lines.push("归入已有的专辑");
+        break;
+      // 整张并入（M7 H）：before 是来源，after 是目标；令牌不显示。
+      case "release_merge":
+        lines.push(`把《${releaseTitleOf(change.before) ?? "另一个发行"}》整张并入《${releaseTitleOf(change.after) ?? "这个发行"}》`);
+        break;
+      case "merge_token":
+        break;
+      case "favorites_moved":
+        if (countOf(change.after) > 0) lines.push(`${formatCount(countOf(change.after))} 个专辑收藏转到合并后的专辑`);
+        break;
+      case "hidden":
+        if (hasHidden(change.after)) lines.push("被并入的发行上的修正等内容在合并期间不生效，撤销之后恢复");
         break;
       default: {
         const label = exception.tool === "correct_track" ? trackFieldLabel(change.field, exception.track?.title) : change.field in correctionFieldLabels ? correctionFieldLabels[change.field as CorrectableField] : change.field;

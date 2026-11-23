@@ -102,6 +102,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	}, logger)
 	memories := memory.NewStore(database)
 	registry := tool.NewRegistry()
+	backgroundRegistry := tool.NewRegistry()
 	var supervisor *runtime.Supervisor
 	reads := governance.NewStore(database)
 	definitions := catalogtools.StewardTools(catalog.NewStore(database), reads)
@@ -111,9 +112,6 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	definitions = append(definitions, librarytools.StewardTools(scans)...)
 	if len(configurations) > 0 {
 		configuration = configurations[0]
-		if configuration.writer != nil {
-			definitions = append(definitions, curationtools.StewardTools(configuration.writer, configuration.matcher)...)
-		}
 		if configuration.covers != nil {
 			webService.WithCovers(configuration.covers)
 		}
@@ -134,7 +132,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	definitions = append(definitions, personaltools.StewardTools(personalLibrary)...)
 	definitions = append(definitions, webService.StewardTools()...)
 	definitions = append(definitions, memories.StewardTools()...)
-	for _, definition := range definitions {
+	register := func(registry *tool.Registry, definition tool.Definition) {
 		definition = withBackgroundPolicy(definition, configuration)
 		definition = withCurrentStewardUser(definition, guard, store)
 		if definition.Scope == tool.ScopeShared {
@@ -151,7 +149,18 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 			panic(err)
 		}
 	}
-	runner := runtime.NewRunner(store, registry, logger).WithMemories(memories).WithReviewEvidence(func(ctx context.Context, caller tool.Caller, item runtime.PlanItem) (runtime.ReviewEvidenceFacts, error) {
+	for _, d := range definitions {
+		register(registry, d)
+		if configuration.writer != nil && d.Name != "merge_releases" && backgroundToolAllowed(d.Name) {
+			register(backgroundRegistry, d)
+		}
+	}
+	if configuration.writer != nil {
+		for _, d := range curationtools.StewardTools(configuration.writer, configuration.matcher) {
+			register(backgroundRegistry, d)
+		}
+	}
+	evidence := func(ctx context.Context, caller tool.Caller, item runtime.PlanItem) (runtime.ReviewEvidenceFacts, error) {
 		input, err := reviewTargetInput(ctx, database, item)
 		if err != nil {
 			return runtime.ReviewEvidenceFacts{}, err
@@ -178,10 +187,23 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		if err != nil {
 			return runtime.ReviewEvidenceFacts{}, err
 		}
+		var merge json.RawMessage
+		if item.Tool == "merge_releases" && len(targets) == 2 {
+			facts, err := curation.ReadReleaseMergeEvidence(ctx, database, targets[0].ID, targets[1].ID, nil)
+			if err != nil {
+				return runtime.ReviewEvidenceFacts{}, err
+			}
+			merge, err = json.Marshal(map[string]any{"source": "program_untrusted_external", "data": facts})
+			if err != nil {
+				return runtime.ReviewEvidenceFacts{}, err
+			}
+		}
 		raw, err := json.Marshal(targets)
-		return runtime.ReviewEvidenceFacts{Targets: raw, External: external, RecentOperationCount: len(page.Items)}, err
-	})
-	supervisor = runtime.NewSupervisor(lifecycle, runner, logger)
+		return runtime.ReviewEvidenceFacts{Targets: raw, External: external, ReleaseMerge: merge, RecentOperationCount: len(page.Items)}, err
+	}
+	runner := runtime.NewRunner(store, registry, logger).WithMemories(memories).WithReviewEvidence(evidence)
+	background := runtime.NewRunner(store, backgroundRegistry, logger).WithReviewEvidence(evidence)
+	supervisor = runtime.NewSupervisor(lifecycle, curationRunners{runner, background}, logger)
 	tokens := token.NewStore(database, guard)
 	mux.Handle("/api/v1/mcp", stewardmcp.New(guard, tokens, store, registry, logger))
 	api := stewardapi.New(guard, store, secrets, runner, logger).WithSupervisor(supervisor).WithMemories(memories).WithWeb(webService).WithTokens(tokens).WithCredentialCheck(func(r *http.Request, user identity.User) (bool, error) {
@@ -256,6 +278,25 @@ func withCurrentStewardUser(definition tool.Definition, guard *identity.Guard, s
 // reviewTargetInput 将工具的对象标识投影到目录审查读取入口。
 func reviewTargetInput(ctx context.Context, db *sql.DB, item runtime.PlanItem) (json.RawMessage, error) {
 	switch item.Tool {
+	case "merge_releases":
+		var in struct {
+			ItemID   string `json:"item_id"`
+			TargetID string `json:"target_release_id"`
+			SourceID string `json:"source_release_id"`
+		}
+		if err := json.Unmarshal(item.Input, &in); err != nil {
+			return nil, err
+		}
+		if in.ItemID != "" {
+			err := db.QueryRowContext(ctx, `SELECT target_id,candidates->0->>'release_id' FROM curation_pending_items WHERE id=$1 AND kind='release_merge'`, in.ItemID).Scan(&in.TargetID, &in.SourceID)
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, runtime.ErrReviewUnavailable
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+		return json.Marshal(map[string]string{"release_id": in.TargetID, "merge_source_release_id": in.SourceID})
 	case "resolve_release_match":
 		var input struct {
 			ItemID string `json:"item_id"`
@@ -384,7 +425,7 @@ func reviewExternalRelease(ctx context.Context, db *sql.DB, id, trackID string) 
         'kind',p.kind,'conflicts',p.conflicts,'candidates',(
           SELECT COALESCE(jsonb_agg(jsonb_build_object(
             'external_id',c->'external_id','title',c->'title','artist',c->'artist','date',c->'date',
-            'country',c->'country','track_count',c->'track_count','method',c->'method','score',c->'score')
+            'country',c->'country','track_count',c->'track_count','method',c->'method','score',c->'score') || CASE WHEN p.kind='release_merge' THEN jsonb_build_object('release_id',c->'release_id','disc_count',c->'disc_count') ELSE '{}'::jsonb END
             ORDER BY ord),'[]'::jsonb) FROM jsonb_array_elements(p.candidates) WITH ORDINALITY AS candidate(c,ord)
         )) ORDER BY p.kind,p.id),'[]'::jsonb)
         FROM curation_pending_items p WHERE p.target_id=$1 AND p.status<>'resolved'`, id).Scan(&release.Pending)

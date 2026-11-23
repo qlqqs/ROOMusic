@@ -1,0 +1,41 @@
+{
+  "body": {
+    "favorites_moved": 0,
+    "hidden": {
+      "artist_overrides": 0,
+      "corrections": 0,
+      "default_version": false,
+      "external_artwork": false,
+      "links": 0,
+      "reviews": 0
+    },
+    "media": [
+      {
+        "from_release": "00000000-0000-4000-8000-000000000001",
+        "medium_id": "00000000-0000-4000-8000-000000000002",
+        "position_after": 1,
+        "title": "Medium",
+        "track_count": 1
+      },
+      {
+        "from_release": "00000000-0000-4000-8000-000000000003",
+        "medium_id": "00000000-0000-4000-8000-000000000004",
+        "position_after": 2,
+        "title": "Medium",
+        "track_count": 1
+      }
+    ],
+    "source": {
+      "group_id": "00000000-0000-4000-8000-000000000005",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "title": "Quartet Disc Two"
+    },
+    "target": {
+      "group_id": "00000000-0000-4000-8000-000000000006",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "title": "Quartet Disc One"
+    },
+    "token": "0000000000000000000000000000000000000000000000000000000000000001"
+  },
+  "status": 200
+}

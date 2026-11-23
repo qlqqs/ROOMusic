@@ -818,3 +818,51 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | `TestPostgreSQLCurationAutoMergeBlocked` | 闭包标记、人工拆分、忽略行、人工撤销、多个 MBID 和已重定向分别返回约定错误。 |
 | `TestPostgreSQLCurationAutoMergeRevertSuppresses` | 按批撤销写入艺人对标记，后续匹配和人工并入第三位艺人后的回填均保留分开决定。 |
 | `TestPostgreSQLCurationAutoMergeReplay` | 回填结论落库前中断，重启后沿用代次并完成标记，对应与合并各只记录一次。 |
+
+## 20. H：同一外部发行的整张并入
+
+### 20.1 发现、目标选择和排队
+
+程序匹配与模型匹配都在 `writeMatch` 的对应、补全和归组步骤完成后，以当前 MusicBrainz 发行编号 X 调用 `ObjectsLinkedTo(ctx, tx, "musicbrainz", "release", X)`。追加匹配步骤可能改变发行摘要，因此按全部步骤完成后的库内证据发现。单曲录音匹配没有发行对应。
+
+在可见、未并入且有对应佐证的发行中，比较各自在库曲目最小的 `(disc_number, position)`，取较小的一方为目标。平局按发行 `created_at`、UUID 升序决定。两边各有至少一个已对应的录音，集合互不相交。例：第 1 碟和第 2 碟各对应一组不同录音时，第 1 碟的发行接收第 2 碟。两种音频格式对应相同录音时，跳过这一对。
+
+仅目标创建 `kind=release_merge`、`conflicts=["same_external_release"]` 的待定项。唯一候选保存来源的 `release_id,title,disc_count,track_count`。摘要为有序 JSON 数组 `[目标 ReleaseDigest, 来源 ReleaseDigest, 目标对应操作 ID, 来源对应操作 ID]` 的 SHA-256。三个及以上发行时，同一目标每次只有一条开放项。已有项保留其固定候选；有后续候选时在证据中记 `queued=true`，当前项结束后程序按 X 重新取证排下一条。摘要变化时旧项结束，新项重新领取和审查。
+
+### 20.2 写入、强证据和程序错误
+
+后台工具 `merge_releases` 只接受 `{"item_id":"待定项 UUID","basis":{"note":"依据"}}`，预览从领取项读取两方。专用注册表与对话、MCP 共用权限和运行名额管理。后两者的人工工具合同见[整张发行并入](./release-merge-contracts.md)。
+
+`Writer.MergeReleases(ctx, ReleaseAutoMerge)` 遵循第 17 节开启者、后台会话、领取关系和模型批次合同。锁住目录与双方发行后重读源与目标，核对证据、待定项摘要和治理令牌。模型来源、会话、批次及审查随 `release_auto_merge` 操作保存。成功返回 `{operation_id,release_id}`，同一事务结束本项为 `resolved/model_merged`。其他涉及双方的开放合并项沿用治理的 `resolved/merged`。
+
+| 条件 | 结果 |
+| --- | --- |
+| 缺 MusicBrainz 发行对应、两方的 X 不同，或任何一方缺少佐证 | `no_strong_evidence`。佐证要求当前对应的写入操作为针对该发行的未撤销 `external_link`，后态来源为 MusicBrainz，且 links 包含相同对象和外部编号 |
+| 任一方没有在库录音对应，或两边录音集合相交 | `no_strong_evidence` |
+| 双方有 `release_merge` 不再提出标记 | `nothing_to_apply` |
+| 双方在不同组，其中一方最近生效的归组为人工操作 | `manual_structure` |
+| 已并入、形成链，或超过治理上限 | `release_merged`、`merge_chain`、`release_too_large` |
+| 待定项或摘要变更，或治理令牌过期 | `item_stale` 或 `merge_changed` |
+
+程序遇到前四行的六种业务错误只跳过当前对，其他错误交回工作循环。自动撤销和标记沿用[发行并入的撤销合同](./release-merge-contracts.md)。
+
+### 20.3 审查与例外
+
+第 4 版审查读取双方可见发行摘要、本地碟数和曲目数、MusicBrainz 发行对应、佐证操作 ID、录音数量和交集。外部发行碟数与曲目数取自对应操作后态的 `external.disc_count` 和 `external.track_count`，旧对应缺值显示“不可用”。归组及发行并入缺少生效的对应时由后端直接转人工。执行仍受版本、期限与证据摘要约束。[管家独立审查合同](./steward-review-contracts.md)
+
+未通过或转人工的项按工具输入的 `item_id` 进入例外。管理员采纳时重新计算令牌，在锁内比较原预览、核对强证据，以采纳者为操作者记录模型来源和人工审查决定。操作、例外操作编号及 `resolved/human_accepted` 同时提交。前态变化返回 `exception_stale` 并重新开放例外。不采纳在同一事务写双方的 `release_merge` 标记与例外决定，按第 17 节结束待定项。
+
+### 20.4 存量回填
+
+新发行匹配完成时保存 `result.release_merge="done"`。已匹配发行有既有发行对应、摘要和当前规则相符且结果缺少该键时，复用现有对应执行一次本地发现。在可重复读事务中核对摘要、代次和工作状态更新时间，把标记合入现存结果。单独补做并入发现无需 MusicBrainz 网络请求，保留原规则版本、代次和尝试次数。
+
+### 20.5 必需测试
+
+| 用例 | 必需断言 |
+| --- | --- |
+| `TestPostgreSQLCurationReleaseMergeProposed` | 程序和模型均可发现；碟号、曲序、创建时间、UUID 决定目标；同一对只建一项；存量只回填一次；三方在同一目标排队 |
+| `TestPostgreSQLCurationModelMergeReleases` | 后台工具登记；模型经第 4 版审查写入模型批次和 `release_auto_merge`，待定项 `model_merged`；人工并入结束目标和候选涉及的待定项 |
+| `TestPostgreSQLCurationMergeBlocked` | 录音相交、缺发行对应、缺操作佐证、操作已撤销、标记、人工分组和链式分别返回约定错误 |
+| `TestPostgreSQLCurationMergeRevert` | 按批和按来源撤销均写标记并阻止再发现；后续人工结构操作使自动撤销跳过 |
+| `TestPostgreSQLCurationExceptionMergeAcceptDecline` | 采纳以当前管理员身份执行；前态及令牌变化返回 `exception_stale`；不采纳写标记 |
+| `TestPostgreSQLStewardReviewPolicyV4MergeEvidence` | 第 4 版证据包含双方和录音交集，外部计数取自对应操作后态；旧版批准被拒；缺少对应直接转人工 |

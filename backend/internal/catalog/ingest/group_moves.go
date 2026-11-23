@@ -11,13 +11,13 @@ func EmptiedGroupMoves(ctx context.Context, database queryer, scanID, rootID str
 		JOIN tracks t ON t.id=o.planned_track_id
 		JOIN media m ON m.id=t.medium_id
 		WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND NOT o.withheld
-		  AND m.release_id<>o.previous_release_id
+		  AND COALESCE(m.origin_release_id,m.release_id)<>o.previous_release_id
 		GROUP BY o.previous_release_id, m.release_id
 	), received AS (
 		SELECT old.group_id AS from_group_id, moved.release_id, SUM(moved.track_count) AS track_count
 		FROM moved JOIN releases old ON old.id=moved.previous_release_id
 		WHERE NOT EXISTS (
-			SELECT 1 FROM releases r JOIN media m ON m.release_id=r.id JOIN tracks t ON t.medium_id=m.id
+			SELECT 1 FROM releases r JOIN media m ON COALESCE(m.origin_release_id,m.release_id)=r.id JOIN tracks t ON t.medium_id=m.id
 			WHERE r.group_id=old.group_id
 		)
 		GROUP BY old.group_id, moved.release_id

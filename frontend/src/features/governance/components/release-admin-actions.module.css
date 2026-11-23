@@ -42,3 +42,29 @@
 .hintLink {
   margin-inline-start: var(--space-2);
 }
+
+/* “撤销合并”是行内的文字按钮，样子同线索里的链接。 */
+button.hintLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+button.hintLink:disabled {
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+button.hintLink:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+.hintNote {
+  margin-inline-start: var(--space-2);
+}

@@ -182,3 +182,16 @@ func SuppressExternalLink(ctx context.Context, tx *sql.Tx, objectType, objectID,
 	identity := externalIdentity{source, externalID}
 	return insertSuppression(ctx, tx, objectType, objectID, "external_link", identity.identityHash(), identity, revertID, actorID)
 }
+
+// SuppressReleaseMerge 以较小的发行 ID 为目标，使调换合并方向后仍能命中标记。
+func (w *Writer) SuppressReleaseMerge(ctx context.Context, tx *sql.Tx, targetID, sourceID, revertID, actorID string) error {
+	if sourceID < targetID {
+		targetID, sourceID = sourceID, targetID
+	}
+	var title string
+	if err := tx.QueryRowContext(ctx, `SELECT title FROM release_effective WHERE id=$1::uuid`, sourceID).Scan(&title); err != nil {
+		return err
+	}
+	return insertSuppression(ctx, tx, "release", targetID, "release_merge", hashExternalValue(sourceID),
+		map[string]string{"release_id": sourceID, "title": title}, revertID, actorID)
+}

@@ -13,6 +13,13 @@ func (a adapter) command(name string, raw json.RawMessage) (command, error) {
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return command{}, invalid()
 	}
+	if name == "merge_releases" {
+		c := governance.ReleaseMergeRequest{TargetID: strings.ToLower(p.TargetReleaseID), SourceID: strings.ToLower(p.SourceReleaseID), Token: p.Token}
+		if !uuid.Valid(c.TargetID) || !uuid.Valid(c.SourceID) || c.TargetID == c.SourceID || c.Token == "" {
+			return command{}, invalid()
+		}
+		return command{operations.TypeReleaseMerge, c.Fingerprint(), governance.ReleaseMergeExecutor(c)}, nil
+	}
 	if p.ExpectedRevision < 1 {
 		return command{}, invalid()
 	}

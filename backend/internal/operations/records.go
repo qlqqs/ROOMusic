@@ -140,6 +140,9 @@ func listFilter(params ListParams) (where string, arguments []any) {
 			arguments = append(arguments, target.ID)
 			continue
 		}
+		if target.Type == TargetRelease {
+			clauses = append(clauses, "EXISTS (SELECT 1 FROM operations_release_targets ort WHERE ort.operation_id=o.id AND ort.release_id=$"+strconv.Itoa(len(arguments)+2)+"::uuid)")
+		}
 		clauses = append(clauses, "(o.target_type = $"+strconv.Itoa(len(arguments)+1)+" AND o.target_id = $"+strconv.Itoa(len(arguments)+2)+"::uuid)")
 		arguments = append(arguments, target.Type, target.ID)
 	}

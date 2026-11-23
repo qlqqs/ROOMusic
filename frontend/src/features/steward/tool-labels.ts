@@ -261,6 +261,8 @@ const toolLabels: Readonly<Record<string, ToolLabel>> = {
   },
   preview_release_claim: { label: "预览认领", icon: FileSearch },
   claim_release: { label: "认领修改", icon: FileInput, result: done("已认领"), changes: "catalog" },
+  preview_release_merge: { label: "预览合并发行", icon: FileSearch },
+  merge_releases: { label: "合并发行", icon: Merge, result: done("已合并"), changes: "catalog" },
   merge_artists: { label: "合并艺人", icon: Merge, result: done("已合并"), changes: "artists" },
   preview_artist_split: { label: "预览拆开艺人", icon: FileSearch },
   split_artist: { label: "拆开艺人", icon: Split, result: done("已拆开"), changes: "artists" },
