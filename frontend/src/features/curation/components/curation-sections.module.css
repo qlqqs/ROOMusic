@@ -64,7 +64,53 @@
   gap: var(--space-2) var(--space-4);
 }
 
+/* 没有行尾菜单的源占一个菜单按钮的宽度，让各行的开关对齐。 */
+.menuSpacer {
+  display: block;
+  inline-size: var(--control-height);
+}
+
 .resultList {
   margin: var(--space-1) 0 0;
   padding-inline-start: var(--space-6);
+}
+
+/* 应用密钥：输入框占满剩余宽度，按钮不换行（照管家的模型密钥）。 */
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  width: min(100%, 420px);
+}
+
+.inline > input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.input {
+  width: 100%;
+  min-height: var(--control-height);
+  padding: 6px 10px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  caret-color: var(--color-accent-700);
+  font-size: var(--fs-13);
+}
+
+.input::placeholder {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.input:hover {
+  border-color: var(--color-neutral-800);
+}
+
+.input:focus-visible {
+  border-color: var(--color-accent-700);
+  outline-offset: 0;
 }

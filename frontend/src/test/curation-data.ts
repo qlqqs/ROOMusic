@@ -25,6 +25,8 @@ export type CurationData = {
   suppressions: SuppressionDTO[];
   /** 范围撤销每段的条数（后端是 100；测试调小以覆盖分段）。 */
   revertPageSize: number;
+  /** 服务器上的指纹工具能不能用（不能用时 AcoustID 显示 fingerprint_unavailable）。 */
+  fingerprintAvailable: boolean;
   counter: number;
 };
 
@@ -38,6 +40,18 @@ export function curationDataOf(governance: GovernanceData | null = null): Curati
       { active: false, capabilities: ["release_lookup", "recording_lookup", "artist_lookup"], enabled: true, id: "musicbrainz", inactive_reason: "curation_disabled", name: "MusicBrainz" },
       { active: false, capabilities: ["cover_art"], enabled: true, id: "coverartarchive", inactive_reason: "curation_disabled", name: "Cover Art Archive" },
       { active: false, capabilities: ["lyrics"], enabled: true, id: "lrclib", inactive_reason: "curation_disabled", name: "LRCLIB" },
+      {
+        active: false,
+        capabilities: ["fingerprint_lookup"],
+        enabled: true,
+        id: "acoustid",
+        inactive_reason: "curation_disabled",
+        keys: [
+          { configured: false, last_four: "", name: "application", status: "unchecked" },
+          { configured: false, last_four: "", name: "user", status: "unchecked" },
+        ],
+        name: "AcoustID",
+      },
     ],
     state: null,
     // 默认曲库里没有可整理的发行：现有的管理员概览测试不出现“打开自动整理”的提示。
@@ -46,14 +60,26 @@ export function curationDataOf(governance: GovernanceData | null = null): Curati
     batches: [],
     suppressions: [],
     revertPageSize: 100,
+    fingerprintAvailable: true,
     counter: 0,
   };
 }
 
-function refreshSources(data: CurationData): void {
-  const overall = !data.settings.enabled ? "curation_disabled" : data.settings.active ? null : "enabler_unavailable";
+// 与后端相同的判断顺序：总开关、开启者、源的开关、指纹工具、密钥没填、密钥无效。
+function inactiveReason(data: CurationData, source: CurationSourceDTO): CurationSourceDTO["inactive_reason"] {
+  if (!data.settings.enabled) return "curation_disabled";
+  if (!data.settings.active) return "enabler_unavailable";
+  if (!source.enabled) return "source_disabled";
+  if (source.keys === undefined) return null;
+  if (!data.fingerprintAvailable) return "fingerprint_unavailable";
+  if (source.keys.some((key) => !key.configured)) return "key_missing";
+  return source.keys.some((key) => key.status === "invalid") ? "key_invalid" : null;
+}
+
+/** 测试与替身共用：按当前设置重新推出各源的 active 与 inactive_reason。 */
+export function refreshSources(data: CurationData): void {
   data.sources = data.sources.map((source) => {
-    const reason = overall ?? (source.enabled ? null : "source_disabled");
+    const reason = inactiveReason(data, source);
     return { ...source, active: reason === null, inactive_reason: reason };
   });
 }
@@ -101,6 +127,21 @@ export function respondToSetCurationSource(data: CurationData, id: string, body:
   const index = data.sources.findIndex((source) => source.id === id);
   if (index < 0) return failure(404, "not_found", "外部源不存在");
   data.sources[index] = { ...(data.sources[index] as CurationSourceDTO), enabled };
+  refreshSources(data);
+  return { status: 200, body: data.sources[index] };
+}
+
+/** 填写或清除一个源的某一把密钥：key 为 null 时清除；只返回末四位，状态回到“还没用过”。 */
+export function respondToSetCurationSourceKey(data: CurationData, id: string, name: string, key: string | null): ApiResult {
+  const index = data.sources.findIndex((source) => source.id === id);
+  if (index < 0) return failure(404, "not_found", "外部源不存在");
+  const source = data.sources[index] as CurationSourceDTO;
+  if (source.keys === undefined) return failure(400, "key_not_supported", "这个外部源不需要密钥");
+  if (!source.keys.some((item) => item.name === name)) return failure(404, "not_found", "密钥不存在");
+  if (key !== null && (key.trim() === "" || key.trim().length > 128)) return failure(400, "invalid_input", "密钥无效");
+  const trimmed = key?.trim() ?? "";
+  const keys = source.keys.map((item) => (item.name === name ? { name, configured: key !== null, last_four: [...trimmed].slice(-4).join(""), status: "unchecked" as const } : item));
+  data.sources[index] = { ...source, keys };
   refreshSources(data);
   return { status: 200, body: data.sources[index] };
 }

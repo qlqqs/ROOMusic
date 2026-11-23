@@ -1,5 +1,5 @@
 import { correctionFieldLabels, displayValue, sourceName, type CorrectableField } from "../governance";
-import type { CurationSourceDTO, ProgramState, SourceCapability, SuppressionDTO } from "./api/decoders";
+import type { CurationSourceDTO, ProgramState, SourceCapability, SourceInactiveReason, SuppressionDTO } from "./api/decoders";
 
 /** 后台状态的一句话。 */
 export const programStateText: Record<ProgramState, string> = {
@@ -17,6 +17,7 @@ const capabilityText: Record<SourceCapability, string> = {
   artist_lookup: "艺人",
   cover_art: "封面",
   lyrics: "歌词",
+  fingerprint_lookup: "声学指纹",
 };
 
 /** 一个源能提供什么，如“发行、录音、艺人”。 */
@@ -24,11 +25,36 @@ export function capabilitiesText(source: CurationSourceDTO): string {
   return source.capabilities.map((capability) => capabilityText[capability]).join("、");
 }
 
+/**
+ * 各行自己的不生效原因（总开关关着、开启者不可用写在分组层面，这里返回 null）。
+ * 指纹工具与密钥两条只对 AcoustID 出现。
+ */
+export function sourceInactiveText(reason: SourceInactiveReason | null): string | null {
+  switch (reason) {
+    case "source_disabled":
+      return "已关闭，后台不使用它。";
+    case "fingerprint_unavailable":
+      return "这台服务器缺少指纹工具（fpcalc），暂时不能使用。";
+    case "key_missing":
+      return "填入密钥后可用。";
+    case "key_invalid":
+      return "密钥无效，请重新填写。";
+    default:
+      return null;
+  }
+}
+
+/** 只用来识别、自己不写入任何内容的源（AcoustID）：经它对上的结果记在 MusicBrainz 名下，没有“来自它的改动”可看或可撤。 */
+export function writesOwnChanges(source: CurationSourceDTO): boolean {
+  return source.capabilities.some((capability) => capability !== "fingerprint_lookup");
+}
+
 /** 打开总开关前列出：每个开着的源会收到什么（ADR 0006 第 8 节）。 */
 export const sentToSource: Record<string, string> = {
   musicbrainz: "外部编号、条码、ISRC、厂牌与编号、标题与艺人的查询词、由曲目时长推出的光盘目录",
   coverartarchive: "外部编号",
   lrclib: "曲目标题、艺人、专辑名、时长",
+  acoustid: "由音频算出的声学指纹（不能还原成音频）与时长，以及你填入的应用密钥与用户密钥",
 };
 
 /** 范围撤销里跳过的原因；未知的码给兜底文案，临时性失败提示可以再试。 */

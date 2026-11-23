@@ -95,7 +95,8 @@ function EnableConsent({ sources }: { sources: readonly CurationSourceDTO[] | un
         <ul>
           {enabled.map((source) => (
             <li key={source.id}>
-              <strong>{source.name}</strong>：{sentToSource[source.id] ?? "查询需要的信息"}
+              <strong>{source.name}</strong>
+              {source.keys?.some((key) => !key.configured) === true ? "（填入密钥后）" : ""}：{sentToSource[source.id] ?? "查询需要的信息"}
             </li>
           ))}
         </ul>
