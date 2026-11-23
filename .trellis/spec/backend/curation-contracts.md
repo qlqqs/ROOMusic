@@ -654,6 +654,8 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 先处理已到期的重审会话，使用其待审后台方案。方案已作废或归属已变更则释放待定项。新会话归开启者，按创建时间和 ID 领取最多五个到期且发行可见的项，行锁使用 `SKIP LOCKED`。第一条消息只携带程序产生的项 ID、种类与冲突代码。候选和证据经工具的不可信输出返回。模型批次在首次写入时打开，运行收尾时关闭。
 
+运行返回 `completed`、`step_limit` 或 `token_limit` 时，调度器在收尾前复查每步开始前的条件（含开启者身份），条件已不满足则按 `curation_stopped` 收尾。
+
 | 运行结束原因 | 遗留的处理中项 |
 | --- | --- |
 | `completed`、`step_limit`、`token_limit` | 未处理次数加一，第三次转为 `shelved/unhandled` |
@@ -704,3 +706,16 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 | 断言点 | 用例 |
 | --- | --- |
+| R1 会话类型、模式、开启者、首条消息与五项上限；普通列表隐藏及模式锁定 | `TestPostgreSQLCurationModelStartsCurationConversation`、`TestPostgreSQLStewardCurationConversationHiddenAndLocked` |
+| R2 读取候选、独立审查、模型批次内建立对应、补缺与归组，以及按条和按批撤销 | `TestPostgreSQLCurationModelResolveMatchProgramChain` |
+| R3 同名修正工具按来源落层；拒绝清除、批外发行与人工字段覆盖 | `TestPostgreSQLCurationModelCorrectReleaseAutoLayer` |
+| R4 审查批准、拒绝、转人工后继续；不可用按 5 分钟、30 分钟、2 小时重审，耗尽后延迟 24 小时 | `TestPostgreSQLCurationModelReviewPaths`、`TestPostgreSQLCurationModelReviewUnavailableBackoff` |
+| R5 主动搁置、证据变化重开、连续三次未处理后搁置 | `TestPostgreSQLCurationModelShelveAndReopen`、`TestPostgreSQLCurationModelUnhandledThreeTimes` |
+| R6 启停条件、开启者变更、凭据取消、登出后继续；最后一步暂停后释放领取并保留次数 | `TestPostgreSQLCurationModelStopConditions` |
+| R7 主模型、审查、摘要按日计量，对话用量排除；额度用尽、跨日恢复和不限额 | `TestPostgreSQLCurationModelDailyLimit` |
+| R8 人工采纳、前值冲突、重复决定、拒绝后的字段与对应标记；分步匹配中断后原管理员续做 | `TestPostgreSQLCurationExceptionAcceptDecline` |
+| R9 外部证据来源、后台第 21 项提案和旧版批准的执行守卫 | `TestPostgreSQLStewardReviewPolicyV2Evidence`、`TestBackgroundTwentyFirstSharedCallRejected`、`TestPostgreSQLStewardReviewV1ApprovalRejected` |
+| R10 三个对话占满时仍可启动后台运行，后台名额全实例唯一 | `TestPostgreSQLCurationModelBackgroundSlot`、`TestSupervisorBackgroundSlot` |
+| R11 设置校验、显式 null、模型进度、例外分页和筛选、管理员权限与决定接口错误码 | `TestPostgreSQLCurationModelAPI`、`TestPostgreSQLCurationModelAPIMatchErrors`、`TestPostgreSQLCurationExceptionAcceptDecline` |
+| R12 开启者未配置管家时报告原因，程序层仍可建立对应 | `TestPostgreSQLCurationModelUnconfiguredEnabler` |
+| 重启后释放遗留领取、保留未处理次数、作废后台方案并关闭模型批次 | `TestPostgreSQLCurationModelRestartRecovery` |

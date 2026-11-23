@@ -56,3 +56,13 @@
 ## 规划决定方式
 
 子代理审阅路线（qlqq 已授权子任务规划完直接实现）。规划子代理（Plan）对照代码审阅 D1–D15 并写出技术设计，主代理全部采纳（`design.md` 第 1 节）。
+
+## 验证记录（2026-11-23）
+
+- 派发 1 测试：`go test ./internal/steward/...`；集成 `TestPostgreSQLMigration|TestPostgreSQLStewardCuration|TestPostgreSQLStewardReview|TestPostgreSQLStewardBackground|TestPostgreSQLStewardHTTPC7` 通过（含 0064 往返）。
+- 派发 2 测试：13 个集成用例（匹配器、写入、待定项、例外、用量、设置、后台工具）与单元测试通过；程序层回归 `TestPostgreSQLCuration|TestPostgreSQLB3` 通过。
+- 派发 3 测试：15 个集成用例（R1–R8、R10–R12、重启恢复、例外续做）通过；四项变异各被检出（名额 → `BackgroundSlot`；落层改道 → `CorrectReleaseAutoLayer`；开启者核对 → `StopConditions/enabler_changed`；上限 → `DailyLimit`）。
+- 测试发现并修复的实现缺陷：`curation.loadSettings` 外连接在行锁重查后读到空用户名导致 panic（改为分两次查）；最后一步进行中暂停时按完成计次（收尾时复查停止条件）。
+- 全量：`go vet ./...`、`go test ./...` 通过；整套集成串行一次，2306 项通过，唯一失败 `TestPostgreSQLStewardC6Migration54RoundTrip`（旧迁移往返用例没回退 0064），修正后与 C7、平台迁移往返用例一起重跑通过。
+- 前端：typecheck、`eslint src e2e` 通过；Vitest 全量 4575/4577 左右（与集成同时跑，`steward.test.tsx`、`agent-settings.test.tsx` 已知的负载敏感用例 1–3 个失败，单独运行 110 个全过）；契约测试登记 10 个新样例。
+- 未做：真实模型服务与真实 MusicBrainz 下的后台运行（留给 V12）；界面（E2）。

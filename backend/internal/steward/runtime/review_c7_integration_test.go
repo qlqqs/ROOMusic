@@ -50,6 +50,12 @@ func TestPostgreSQLStewardC7Migration55RoundTrip(t *testing.T) {
 	mustStore(t, err)
 	up, err := migrations.Files.ReadFile("0055_steward_reviews.sql")
 	mustStore(t, err)
+	down64, err := migrations.Files.ReadFile("0064_auto_curation_model.down.sql")
+	mustStore(t, err)
+	up64, err := migrations.Files.ReadFile("0064_auto_curation_model.sql")
+	mustStore(t, err)
+	_, err = db.Exec(string(down64))
+	mustStore(t, err)
 	_, err = db.Exec(string(down))
 	mustStore(t, err)
 	var decision string
@@ -79,6 +85,8 @@ func TestPostgreSQLStewardC7Migration55RoundTrip(t *testing.T) {
 		t.Fatal("往返改变既有数据", diff)
 	}
 	_, err = db.Exec(string(up))
+	mustStore(t, err)
+	_, err = db.Exec(string(up64))
 	mustStore(t, err)
 	detail, err = s.GetConversation(ctx, user, c.ID)
 	mustStore(t, err)

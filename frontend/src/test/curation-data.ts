@@ -36,7 +36,7 @@ const ADMIN = { id: "00000000-0000-4000-8000-000000000002", username: "curator" 
 export function curationDataOf(governance: GovernanceData | null = null): CurationData {
   return {
     governance,
-    settings: { active: false, enabled: false, enabled_at: null, enabled_by: null, inactive_reason: "disabled", paused: false },
+    settings: { active: false, enabled: false, enabled_at: null, enabled_by: null, inactive_reason: "disabled", paused: false, model: "", daily_token_limit: 10_000_000 },
     sources: [
       { active: false, capabilities: ["release_lookup", "recording_lookup", "artist_lookup"], enabled: true, id: "musicbrainz", inactive_reason: "curation_disabled", name: "MusicBrainz" },
       { active: false, capabilities: ["cover_art"], enabled: true, id: "coverartarchive", inactive_reason: "curation_disabled", name: "Cover Art Archive" },
@@ -89,7 +89,7 @@ export function refreshSources(data: CurationData): void {
 
 /** 测试用：直接把设置改成打开（由 curator 在给定时间打开），各源随之生效。 */
 export function enableCuration(data: CurationData, at = "2026-01-02T00:00:00Z"): void {
-  data.settings = { active: true, enabled: true, enabled_at: at, enabled_by: ADMIN, inactive_reason: null, paused: false };
+  data.settings = { ...data.settings, active: true, enabled: true, enabled_at: at, enabled_by: ADMIN, inactive_reason: null, paused: false };
   refreshSources(data);
 }
 
@@ -168,6 +168,14 @@ export function respondToCurationProgress(data: CurationData): ApiResult {
     body: {
       batch: open === undefined ? null : { id: open.id, opened_at: open.openedAt, operations: batchCounts(data, open.id).operations },
       last_pass_finished_at: stateOf(data) === "idle" && data.settings.enabled ? "2026-01-05T00:10:00Z" : null,
+      model: {
+        daily_token_limit: data.settings.daily_token_limit,
+        items: { in_progress: 0, shelved: 0, waiting_human: 0, waiting_model: data.waitingModel },
+        model: data.settings.model,
+        state: !data.settings.enabled ? "disabled" : data.settings.paused ? "paused" : "unavailable",
+        today: { date: "2026-01-05", input_tokens: 0, output_tokens: 0 },
+        unavailable_reason: data.settings.enabled && !data.settings.paused ? "not_configured" : null,
+      },
       pending: { waiting_model: data.waitingModel },
       releases: data.releases,
       rule_version: 101,

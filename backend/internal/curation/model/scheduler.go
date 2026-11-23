@@ -164,6 +164,17 @@ func firstMessage(items []curation.PendingItem) string {
 	return msg.String()
 }
 
+func (s *Scheduler) checkRunConditions(ctx context.Context, actor string) error {
+	progress, enabler, err := s.conditions(ctx)
+	if err != nil {
+		return err
+	}
+	if enabler != actor || progress.State != "idle" {
+		return ErrStopped
+	}
+	return nil
+}
+
 func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, plan string, items []curation.PendingItem, retries int) error {
 	s.mu.Lock()
 	s.running = true
@@ -191,14 +202,7 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		if usageErr != nil {
 			return usageErr
 		}
-		p, id, err := s.conditions(ctx)
-		if err != nil {
-			return err
-		}
-		if id != actor || p.State != "idle" {
-			return ErrStopped
-		}
-		return nil
+		return s.checkRunConditions(ctx, actor)
 	}
 	params.Usage = func(ctx context.Context, in, out int64) {
 		if err := s.writer.AddModelUsage(ctx, s.options.Now(), in, out); err != nil {
@@ -236,7 +240,7 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		var finishErr error
 		if !itemsFinished {
-			finishErr = s.finish(cleanup, conversation, reason, retries, now)
+			finishErr = s.finish(cleanup, actor, conversation, reason, retries, now)
 			itemsFinished = finishErr == nil
 		}
 		if itemsFinished && batch != "" {
@@ -274,7 +278,7 @@ func (s *Scheduler) recordEnd(reason string, now time.Time) {
 	s.mu.Unlock()
 }
 
-func (s *Scheduler) finish(ctx context.Context, id, reason string, retries int, now time.Time) error {
+func (s *Scheduler) finish(ctx context.Context, actor, id, reason string, retries int, now time.Time) error {
 	switch reason {
 	case "review_unavailable":
 		if retries < min(3, len(s.options.ReviewBackoff)) {
@@ -293,7 +297,13 @@ func (s *Scheduler) finish(ctx context.Context, id, reason string, retries int, 
 		next := now.Add(24 * time.Hour)
 		return s.release(ctx, id, false, &next)
 	case "completed", "step_limit", "token_limit":
-		return s.writer.ReleaseClaimed(ctx, id, true, nil)
+		err := s.checkRunConditions(ctx, actor)
+		if err == nil {
+			return s.writer.ReleaseClaimed(ctx, id, true, nil)
+		}
+		if !errors.Is(err, ErrStopped) {
+			return err
+		}
 	case "cancelled", "curation_stopped", "provider_error":
 	default:
 		s.logger.ErrorContext(ctx, "后台模型运行异常结束", "event", "curation.model.run_failed", "conversation_id", id, "reason", reason)
