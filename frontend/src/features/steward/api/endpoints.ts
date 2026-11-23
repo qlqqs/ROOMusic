@@ -8,6 +8,7 @@ import {
   decodeConversation,
   decodeConversationDetail,
   decodeConversationPage,
+  decodeCurationConversationPage,
   decodeConversationPatch,
   decodeCreatedToken,
   decodeDeleted,
@@ -23,6 +24,7 @@ import {
   type ConversationDetailDTO,
   type ConversationDTO,
   type ConversationPageDTO,
+  type CurationConversationPageDTO,
   type ConversationPatchDTO,
   type CreatedTokenDTO,
   type InstanceSettingsDTO,
@@ -84,6 +86,11 @@ export function testSearch(): Promise<ApiResponse<SearchTestDTO>> {
 
 export function fetchConversations(page: number, pageSize: number, signal?: AbortSignal): Promise<ApiResponse<ConversationPageDTO>> {
   return apiRequest({ method: "GET", path: `${conversationsPath}?page=${page}&page_size=${pageSize}`, signal }, decodeConversationPage);
+}
+
+/** 当前管理员名下的自动整理会话（M7 D）：不在普通会话列表里，从整理记录进入；打开、接回与续聊用普通会话的接口。 */
+export function fetchCurationConversations(page: number, pageSize: number, signal?: AbortSignal): Promise<ApiResponse<CurationConversationPageDTO>> {
+  return apiRequest({ method: "GET", path: `/api/v1/admin/curation/conversations?page=${page}&page_size=${pageSize}`, signal }, decodeCurationConversationPage);
 }
 
 /** 新建会话（201），带空白新对话里选的模式：要求已配置；没有幂等键，不自动重试。 */

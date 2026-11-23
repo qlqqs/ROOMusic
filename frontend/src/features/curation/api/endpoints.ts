@@ -3,6 +3,9 @@ import { apiRequest } from "../../../shared/api";
 import {
   decodeCurationBatch,
   decodeCurationBatchPage,
+  decodeCurationExceptionAccepted,
+  decodeCurationExceptionDeclined,
+  decodeCurationExceptionPage,
   decodeCurationProgress,
   decodeCurationSettings,
   decodeCurationSource,
@@ -11,6 +14,8 @@ import {
   decodeSuppressionPage,
   type CurationBatchDTO,
   type CurationBatchPageDTO,
+  type CurationExceptionDTO,
+  type CurationExceptionPageDTO,
   type CurationProgressDTO,
   type CurationSettingsDTO,
   type CurationSourceDTO,
@@ -28,8 +33,11 @@ export function fetchCurationSettings(signal?: AbortSignal): Promise<ApiResponse
   return apiRequest({ method: "GET", path: "/api/v1/admin/curation/settings", signal }, decodeCurationSettings);
 }
 
-/** 改总开关或暂停（至少一项）；总开关从关到开时服务器同时解除暂停。返回改后的设置。 */
-export function updateCurationSettings(change: { enabled?: boolean; paused?: boolean }): Promise<ApiResponse<CurationSettingsDTO>> {
+/**
+ * 改总开关、暂停、整理用的模型或每日 token 上限（至少一项）；总开关从关到开时服务器同时解除暂停。
+ * model 为空串表示用开启者的对话模型；daily_token_limit 为 null 表示不限。返回改后的设置。
+ */
+export function updateCurationSettings(change: { enabled?: boolean; paused?: boolean; model?: string; daily_token_limit?: number | null }): Promise<ApiResponse<CurationSettingsDTO>> {
   return apiRequest({ method: "PUT", path: "/api/v1/admin/curation/settings", body: change }, decodeCurationSettings);
 }
 
@@ -85,4 +93,20 @@ export function fetchSuppressions(page: number, signal?: AbortSignal): Promise<A
 /** 清除一条标记（封面与歌词的一对一起清除）；成功是 204。 */
 export function clearSuppression(id: string): Promise<ApiResponse<null>> {
   return apiRequest({ method: "DELETE", path: `/api/v1/admin/curation/suppressions/${encodeURIComponent(id)}` }, () => null);
+}
+
+/** 例外（M7 D）：status 为 open 时只列待处理的，all 列全部；新的在前。 */
+export function fetchCurationExceptions(status: "open" | "all", page: number, pageSize: number, signal?: AbortSignal): Promise<ApiResponse<CurationExceptionPageDTO>> {
+  const query = new URLSearchParams({ status, page: String(page), page_size: String(pageSize) });
+  return apiRequest({ method: "GET", path: `/api/v1/admin/curation/exceptions?${query.toString()}`, signal }, decodeCurationExceptionPage);
+}
+
+/** 采纳一条例外：服务器按当时的状态重新核对后执行，记为当前管理员的人工确认；前值变了返回 409 exception_stale。 */
+export function acceptCurationException(id: string): Promise<ApiResponse<{ exception: CurationExceptionDTO; operation_ids: string[] }>> {
+  return apiRequest({ method: "POST", path: `/api/v1/admin/curation/exceptions/${encodeURIComponent(id)}/accept` }, decodeCurationExceptionAccepted);
+}
+
+/** 不采纳一条例外：写“不再提出”的标记，之后程序与模型都不再提出同一个值。 */
+export function declineCurationException(id: string): Promise<ApiResponse<{ exception: CurationExceptionDTO }>> {
+  return apiRequest({ method: "POST", path: `/api/v1/admin/curation/exceptions/${encodeURIComponent(id)}/decline` }, decodeCurationExceptionDeclined);
 }

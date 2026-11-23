@@ -13,12 +13,12 @@ import (
 )
 
 // CreatePlan 在同一事务中保存方案并挂起其工具调用。
-func (s *Store) CreatePlan(ctx context.Context, userID, conversationID string, items []PlanItem) (Plan, error) {
+func (s *Store) CreatePlan(ctx context.Context, userID, conversationID string, items []PlanItem, background ...bool) (Plan, error) {
 	digest, err := planDigest(items)
 	if err != nil {
 		return Plan{}, err
 	}
-	plan := Plan{ID: uuid.New(), Digest: digest, ExpiresAt: time.Now().UTC().Add(24 * time.Hour), Items: items, Status: "pending"}
+	plan := Plan{Background: len(background) > 0 && background[0], ID: uuid.New(), Digest: digest, ExpiresAt: time.Now().UTC().Add(24 * time.Hour), Items: items, Status: "pending"}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Plan{}, err
@@ -27,7 +27,7 @@ func (s *Store) CreatePlan(ctx context.Context, userID, conversationID string, i
 	if _, err = lockConversation(ctx, tx, userID, conversationID); err != nil {
 		return Plan{}, err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO steward_plans(id,conversation_id,user_id,digest,expires_at) VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5)`, plan.ID, conversationID, userID, digest, plan.ExpiresAt)
+	_, err = tx.ExecContext(ctx, `INSERT INTO steward_plans(id,conversation_id,user_id,digest,expires_at,background) VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5,$6)`, plan.ID, conversationID, userID, digest, plan.ExpiresAt, plan.Background)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -57,14 +57,14 @@ func readPlans(ctx context.Context, tx *sql.Tx, userID, conversationID string, p
 	if pendingOnly {
 		filter = " AND status='pending'"
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id::text,digest,expires_at,status FROM steward_plans WHERE user_id=$1::uuid AND conversation_id=$2::uuid`+filter+` ORDER BY created_at,id`, userID, conversationID)
+	rows, err := tx.QueryContext(ctx, `SELECT id::text,digest,expires_at,status,background FROM steward_plans WHERE user_id=$1::uuid AND conversation_id=$2::uuid`+filter+` ORDER BY created_at,id`, userID, conversationID)
 	if err != nil {
 		return nil, err
 	}
 	plans := []Plan{}
 	for rows.Next() {
 		var p Plan
-		if err := rows.Scan(&p.ID, &p.Digest, &p.ExpiresAt, &p.Status); err != nil {
+		if err := rows.Scan(&p.ID, &p.Digest, &p.ExpiresAt, &p.Status, &p.Background); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -140,6 +140,19 @@ func (s *Store) DecidePlan(ctx context.Context, userID, conversationID string, d
 	if err != nil {
 		return err
 	}
+	var background bool
+	var planStatus, digest string
+	var expires time.Time
+	err = tx.QueryRowContext(ctx, `SELECT status,digest,expires_at,background FROM steward_plans WHERE id=$1::uuid AND conversation_id=$2::uuid AND user_id=$3::uuid FOR UPDATE`, decision.PlanID, conversationID, userID).Scan(&planStatus, &digest, &expires, &background)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrPlanNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if background {
+		return ErrCurationPlan
+	}
 	if len(decision.AutoApproveTools) > 0 {
 		var mode string
 		if err := tx.QueryRowContext(ctx, `SELECT mode FROM steward_conversations WHERE id=$1::uuid AND user_id=$2::uuid`, conversationID, userID).Scan(&mode); err != nil {
@@ -148,15 +161,6 @@ func (s *Store) DecidePlan(ctx context.Context, userID, conversationID string, d
 		if mode == "steward" {
 			return ErrInvalidInput
 		}
-	}
-	var planStatus, digest string
-	var expires time.Time
-	err = tx.QueryRowContext(ctx, `SELECT status,digest,expires_at FROM steward_plans WHERE id=$1::uuid AND conversation_id=$2::uuid AND user_id=$3::uuid FOR UPDATE`, decision.PlanID, conversationID, userID).Scan(&planStatus, &digest, &expires)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrPlanNotFound
-	}
-	if err != nil {
-		return err
 	}
 	if planStatus == "expired" {
 		return ErrPlanExpired
@@ -316,39 +320,91 @@ func (s *Store) resolvePendingPlans(ctx context.Context, tx *sql.Tx, userID, con
 		if expired {
 			resolvedStatus = "expired"
 		}
-		for _, item := range plan.Items {
-			if item.Result != nil {
-				continue
-			}
-			code := "not_executed"
-			result := ToolCallResult{Status: "failed", Output: errorOutput(code, "方案已作废，工具未执行"), ErrorCode: &code}
-			// 审查执行在结果提交前仍为 pending；失效时先对账，不能把已提交操作说成未执行。
-			if plan.Review != nil {
-				if s.operationLookup == nil {
-					return errors.New("管家未装配操作结果查询")
-				}
-				recorded, err := s.operationLookup(ctx, tx, userID, item.IdempotencyKey)
-				if err != nil {
-					return err
-				}
-				if recorded.Output != nil {
-					bounded := tool.BoundResult(recorded.Output, item.Untrusted)
-					item.Decision, item.OperationID = "accepted", &recorded.ID
-					code = ""
-					result = ToolCallResult{Status: "succeeded", Output: bounded.Output, Truncated: bounded.Truncated}
-				}
-			}
-			input, err := planResultMessage(item, tool.Result{Output: result.Output, Truncated: result.Truncated}, code)
-			if err != nil {
-				return err
-			}
-			if err := finishPlanItem(ctx, tx, userID, conversationID, item, result, input); err != nil {
-				return err
-			}
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE steward_plans SET status=$2,updated_at=clock_timestamp() WHERE id=$1::uuid`, plan.ID, resolvedStatus); err != nil {
+		if err := s.resolvePlan(ctx, tx, userID, conversationID, resolvedStatus, plan); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *Store) resolvePlan(ctx context.Context, tx *sql.Tx, userID, conversationID, status string, plan Plan) error {
+	for _, item := range plan.Items {
+		if item.Result != nil {
+			continue
+		}
+		code := "not_executed"
+		result := ToolCallResult{Status: "failed", Output: errorOutput(code, "方案已作废，工具未执行"), ErrorCode: &code}
+		// 审查执行在结果提交前仍为 pending；失效时先对账，不能把已提交操作说成未执行。
+		if plan.Review != nil {
+			if s.operationLookup == nil {
+				return errors.New("管家未装配操作结果查询")
+			}
+			recorded, err := s.operationLookup(ctx, tx, userID, item.IdempotencyKey)
+			if err != nil {
+				return err
+			}
+			if recorded.Output != nil {
+				bounded := tool.BoundResult(recorded.Output, item.Untrusted)
+				item.Decision, item.OperationID = "accepted", &recorded.ID
+				code = ""
+				result = ToolCallResult{Status: "succeeded", Output: bounded.Output, Truncated: bounded.Truncated}
+			}
+		}
+		input, err := planResultMessage(item, tool.Result{Output: result.Output, Truncated: result.Truncated}, code)
+		if err != nil {
+			return err
+		}
+		if err := finishPlanItem(ctx, tx, userID, conversationID, item, result, input); err != nil {
+			return err
+		}
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE steward_plans SET status=$2,updated_at=clock_timestamp() WHERE id=$1::uuid`, plan.ID, status)
+	return err
+}
+
+// ResolveBackgroundPlans 作废单个会话或启动恢复时全部遗留的后台方案。
+func (s *Store) ResolveBackgroundPlans(ctx context.Context, conversationID, status string) error {
+	if status != "superseded" {
+		return ErrInvalidInput
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT c.user_id::text,c.id::text FROM steward_conversations c
+ WHERE (NULLIF($1,'')::uuid IS NULL OR c.id=NULLIF($1,'')::uuid)
+ AND EXISTS (SELECT 1 FROM steward_plans p WHERE p.conversation_id=c.id AND p.background AND p.status='pending')
+ ORDER BY c.id FOR UPDATE OF c`, conversationID)
+	if err != nil {
+		return err
+	}
+	type owner struct{ userID, id string }
+	var owners []owner
+	for rows.Next() {
+		var c owner
+		if err := rows.Scan(&c.userID, &c.id); err != nil {
+			rows.Close()
+			return err
+		}
+		owners = append(owners, c)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, c := range owners {
+		plans, err := readPlans(ctx, tx, c.userID, c.id, true)
+		if err != nil {
+			return err
+		}
+		for _, plan := range plans {
+			if plan.Background {
+				if err := s.resolvePlan(ctx, tx, c.userID, c.id, status, plan); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return tx.Commit()
 }

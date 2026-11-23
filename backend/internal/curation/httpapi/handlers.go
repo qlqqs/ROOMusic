@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/identity"
@@ -15,6 +16,8 @@ import (
 )
 
 type Handlers struct {
+	model       curation.ModelStatus
+	exceptions  curation.ExceptionResolver
 	program     curation.ProgramStatus
 	ruleVersion int16
 	sources     *curation.Sources
@@ -24,8 +27,8 @@ type Handlers struct {
 	logger      *slog.Logger
 }
 
-func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, program curation.ProgramStatus, ruleVersion int16, guard *identity.Guard, logger *slog.Logger) *Handlers {
-	return &Handlers{sources: sources, writer: writer, reverter: reverter, program: program, ruleVersion: ruleVersion, guard: guard, logger: logger}
+func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, program curation.ProgramStatus, model curation.ModelStatus, exceptions curation.ExceptionResolver, ruleVersion int16, guard *identity.Guard, logger *slog.Logger) *Handlers {
+	return &Handlers{model: model, exceptions: exceptions, sources: sources, writer: writer, reverter: reverter, program: program, ruleVersion: ruleVersion, guard: guard, logger: logger}
 }
 
 func (h *Handlers) Register(mux *http.ServeMux) {
@@ -35,6 +38,9 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT "+base+"/sources/{id}/keys/{name}", h.admin(h.setSourceKey))
 	mux.HandleFunc("DELETE "+base+"/sources/{id}/keys/{name}", h.admin(h.clearSourceKey))
 	mux.HandleFunc("GET "+base+"/progress", h.admin(h.progress))
+	mux.HandleFunc("GET "+base+"/exceptions", h.admin(h.listExceptions))
+	mux.HandleFunc("POST "+base+"/exceptions/{id}/accept", h.admin(h.acceptException))
+	mux.HandleFunc("POST "+base+"/exceptions/{id}/decline", h.admin(h.declineException))
 	mux.HandleFunc("GET "+base+"/settings", h.admin(h.settings))
 	mux.HandleFunc("PUT "+base+"/settings", h.admin(h.setSettings))
 	mux.HandleFunc("GET "+base+"/batches", h.admin(h.batches))
@@ -70,6 +76,9 @@ func (h *Handlers) respond(w http.ResponseWriter, r *http.Request, result any, e
 	if !errors.As(err, &failure) && !errors.Is(err, operations.ErrOperationFailed) {
 		status, code, message = http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用"
 	}
+	if curation.IsSourceUnavailable(err) {
+		status, code, message = http.StatusServiceUnavailable, "source_unavailable", "外部资料源暂不可用"
+	}
 	if status >= 500 {
 		h.logger.ErrorContext(r.Context(), "自动整理请求失败", "request_id", r.Header.Get("X-Request-ID"), "error", err)
 	}
@@ -88,7 +97,15 @@ func decode(w http.ResponseWriter, r *http.Request, body any) bool {
 
 func (h *Handlers) progress(w http.ResponseWriter, r *http.Request, _ identity.User) {
 	p, err := h.writer.Progress(r.Context(), h.ruleVersion, h.program)
-	h.respond(w, r, p, err)
+	if err != nil {
+		h.respond(w, r, nil, err)
+		return
+	}
+	model, err := h.model.ModelStatus(r.Context())
+	h.respond(w, r, struct {
+		curation.Progress
+		Model curation.ModelProgress `json:"model"`
+	}{p, model}, err)
 }
 
 func (h *Handlers) settings(w http.ResponseWriter, r *http.Request, _ identity.User) {
@@ -98,13 +115,25 @@ func (h *Handlers) settings(w http.ResponseWriter, r *http.Request, _ identity.U
 
 func (h *Handlers) setSettings(w http.ResponseWriter, r *http.Request, actor identity.User) {
 	var body struct {
-		Enabled *bool `json:"enabled"`
-		Paused  *bool `json:"paused"`
+		Enabled         *bool           `json:"enabled"`
+		Paused          *bool           `json:"paused"`
+		Model           json.RawMessage `json:"model"`
+		DailyTokenLimit json.RawMessage `json:"daily_token_limit"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	s, err := h.writer.UpdateSettings(r.Context(), actor.ID, body.Enabled, body.Paused)
+	var patch curation.ModelSettingsPatch
+	if body.Model != nil && (json.Unmarshal(body.Model, &patch.Model) != nil || patch.Model == nil || strings.IndexByte(*patch.Model, 0) >= 0) {
+		h.respond(w, r, nil, operations.Invalid("invalid_input", "模型名称无效"))
+		return
+	}
+	patch.SetDailyTokenLimit = body.DailyTokenLimit != nil
+	if patch.SetDailyTokenLimit && json.Unmarshal(body.DailyTokenLimit, &patch.DailyTokenLimit) != nil {
+		h.respond(w, r, nil, operations.Invalid("invalid_input", "每日用量上限无效"))
+		return
+	}
+	s, err := h.writer.UpdateModelSettings(r.Context(), actor.ID, body.Enabled, body.Paused, patch)
 	h.respond(w, r, s, err)
 }
 
@@ -214,4 +243,28 @@ func (h *Handlers) suppressions(w http.ResponseWriter, r *http.Request, _ identi
 
 func (h *Handlers) clearSuppression(w http.ResponseWriter, r *http.Request, _ identity.User) {
 	h.respond(w, r, nil, h.writer.ClearSuppression(r.Context(), r.PathValue("id")))
+}
+
+func (h *Handlers) listExceptions(w http.ResponseWriter, r *http.Request, _ identity.User) {
+	page, size, err := httpserver.ParsePagination(r, 50, 100)
+	if err != nil {
+		h.respond(w, r, nil, operations.Invalid("invalid_input", "分页参数无效"))
+		return
+	}
+	status := r.URL.Query().Get("status")
+	if !r.URL.Query().Has("status") {
+		status = "open"
+	}
+	items, total, err := h.writer.ListExceptions(r.Context(), status, page, size)
+	h.respond(w, r, map[string]any{"items": items, "total": total, "page": page, "page_size": size}, err)
+}
+
+func (h *Handlers) acceptException(w http.ResponseWriter, r *http.Request, actor identity.User) {
+	e, err := h.exceptions.Accept(r.Context(), r.PathValue("id"), actor.ID, r.Header.Get("X-Request-ID"))
+	h.respond(w, r, map[string]any{"exception": e, "operation_ids": e.OperationIDs}, err)
+}
+
+func (h *Handlers) declineException(w http.ResponseWriter, r *http.Request, actor identity.User) {
+	e, err := h.exceptions.Decline(r.Context(), r.PathValue("id"), actor.ID)
+	h.respond(w, r, map[string]any{"exception": e}, err)
 }

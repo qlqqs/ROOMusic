@@ -12,18 +12,26 @@ import (
 )
 
 type JoinRequest struct {
-	ReleaseID, GroupID      string
-	Source                  Source
-	BatchID, Key, RequestID string
+	ExpectedRevision            int64
+	ConfirmedBy, ConversationID string
+	ExternalSource              string
+	ReleaseID, GroupID          string
+	Source                      Source
+	BatchID, Key, RequestID     string
 }
 
 func (w *Writer) JoinGroup(ctx context.Context, request JoinRequest) (governance.GroupChangeResult, error) {
 	id, group := strings.ToLower(request.ReleaseID), strings.ToLower(request.GroupID)
-	if !uuid.Valid(group) || request.Source.Provider != "musicbrainz" {
+	_, sourceErr := musicBrainzSource(request.ExternalSource, request.Source)
+	if !uuid.Valid(group) || sourceErr != nil {
 		return governance.GroupChangeResult{}, operations.Invalid("invalid_input", "目标专辑或归组来源无效")
 	}
-	fingerprint := operations.Fingerprint(map[string]any{"type": operations.TypeReleaseGroupChange, "release_id": id, "action": governance.GroupJoin, "group_id": group, "provider": request.Source.Provider})
-	spec, err := w.sourceSpec(ctx, operations.TypeReleaseGroupChange, id, fingerprint, request.Source, request.BatchID, request.Key, request.RequestID)
+	fp := map[string]any{"type": operations.TypeReleaseGroupChange, "release_id": id, "action": governance.GroupJoin, "group_id": group, "provider": request.Source.Provider}
+	if request.ExpectedRevision != 0 {
+		fp["expected_revision"] = request.ExpectedRevision
+	}
+	fingerprint := operations.Fingerprint(fp)
+	spec, err := w.sourceSpec(ctx, operations.TypeReleaseGroupChange, id, fingerprint, request.Source, request.BatchID, request.Key, request.RequestID, request.ConfirmedBy, request.ConversationID)
 	if err != nil {
 		return governance.GroupChangeResult{}, err
 	}
@@ -32,7 +40,7 @@ func (w *Writer) JoinGroup(ctx context.Context, request JoinRequest) (governance
 		if err != nil {
 			return operations.Outcome{}, err
 		}
-		if err := checkExternalWriter(ctx, tx, spec); err != nil {
+		if err := checkWrite(ctx, tx, spec, request.ConfirmedBy, id, request.ExpectedRevision, release.EditRevision()); err != nil {
 			return operations.Outcome{}, err
 		}
 		if err := checkGroupEvidence(ctx, tx, id, group); err != nil {

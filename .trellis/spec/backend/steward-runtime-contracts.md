@@ -962,6 +962,14 @@ JSON 错误信封只给上表的固定消息；适配器脱敏后的 `Message` �
 
 消息正文、工具输入输出以明文存库。密钥不进入消息、事件与工具输出。
 
+### 后台整理运行
+
+`RunParams.Background` 为后台运行分配全实例唯一名额，已占用返回 `ErrBackgroundBusy`。对话继续使用每用户三个名额。调度器通过 `StartBackground` 提供 `BeforeStep`、`Usage`、`Escalate` 和 `SystemSuffix`，并启用 `SkipMemory`。后台关闭原生搜索，使用开启者的模型端点与个人审查模型。每次主模型步骤与重审前执行 `BeforeStep`，返回 `ErrRunStopped` 时结束原因为 `curation_stopped`。用量回调区分 main、review、summary。后台转人工或拒绝时，`Escalate` 返回持久例外 ID。转人工项取舍记为 `escalated`。
+
+`CancelUser` 和 `CancelMembers` 跳过后台运行。端点或密钥更换时由 `CancelBackground(userID)` 取消开启者的后台运行。每 60 秒的凭据复查发现后台凭据失效时只取消该运行。应用停机取消全部运行。`Run.Wait(ctx)` 返回持久化收尾后的结束原因及错误。
+
+迁移 0064 区分 `kind=chat|curation`。整理会话归开启者、模式固定为 `steward`，单独列出。普通列表、计数和未读只统计 chat。用户在整理会话继续发消息时，该次运行走普通对话入口。修改整理会话模式返回 409 `curation_conversation`，删除仍有处理中项的会话返回 409 `conversation_busy`，通过对话接口决定或重审后台方案返回 409 `curation_plan`。调度与自动层合同见[自动整理合同第 17 节](./curation-contracts.md#17-d模型后台判断)。
+
 ## 8. 出站与密钥
 
 规则与理由见 ADR 0005 第 5、6 节。实现后的具体情况：

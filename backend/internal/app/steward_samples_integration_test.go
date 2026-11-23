@@ -57,7 +57,7 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mux := http.NewServeMux()
-	supervisor := registerSteward(ctx, mux, db, identity.NewGuard(db, false, ""), newInstanceSecrets(dir), logger, library.NewService(ctx, db, dir, logger), nil, nil, nil, nil)
+	supervisor, _ := registerSteward(ctx, mux, db, identity.NewGuard(db, false, ""), newInstanceSecrets(dir), logger, library.NewService(ctx, db, dir, logger), nil, nil, nil, nil)
 	var mode atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/search") {

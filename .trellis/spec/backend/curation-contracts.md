@@ -639,3 +639,83 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | 暂停与扫描时闸门错误照常抛出、不写状态 | `TestPostgreSQLB3FingerprintGatePauseAndScan` |
 | 抽取取源函数后音频分析行为不变 | 现有 `TestFFmpegAnalysis*`、`TestPostgreSQLAnalysis*`、`TestAnalysisWorker*` |
 | 接口样本：`curation/sources`、`curation/source-key-set`、`curation/source-key-cleared`、`errors/curation-key-not-supported` | `TestPostgreSQLAPIResponseSamples` 与前端 `api-contract.test.ts` |
+
+## 17. D：模型后台判断
+
+### 17.1 数据模型与来源
+
+迁移 0064 给自动整理设置增加 `model`、`model_daily_token_limit` 和独立的 `model_updated_at`。只改模型设置时，程序层的变化标记 `updated_at` 保持原值。按服务器本地日期在 `curation_model_usage` 原子累加输入与输出 token。主模型、独立审查与会话摘要均计入，缺少的计数字段作零。
+
+待定项保存会话、领取时间、未处理次数、重审次数、下次尝试时间和搁置原因。证据摘要变化时，程序可将搁置项重新放回 `waiting_model` 并清零未处理次数。`curation_model_exceptions` 以方案项 ID 唯一，保存待定项、工具输入、预览、模型写入者、审查决定与理由、会话和人工决定。删除会话会清空例外的会话引用，例外仍可读取。0064 回退会删除整理会话、例外和按日用量。
+
+### 17.2 调度、停止与收尾
+
+应用在管家恢复完成后启动 `model.Scheduler.Run(ctx)`。调度器先关闭遗留 model 批次，作废遗留后台方案，将处理中的项放回队列并清除领取与重审信息，保留未处理次数。默认每分钟轮询。启动与每步开始前检查开关、开启者仍是有效管理员、暂停、扫描、MusicBrainz 开关、开启者的管家配置和每日额度。每一步还核对开启者身份与启动时相同。
+
+先处理已到期的重审会话，使用其待审后台方案。方案已作废或归属已变更则释放待定项。新会话归开启者，按创建时间和 ID 领取最多五个到期且发行可见的项，行锁使用 `SKIP LOCKED`。第一条消息只携带程序产生的项 ID、种类与冲突代码。候选和证据经工具的不可信输出返回。模型批次在首次写入时打开，运行收尾时关闭。
+
+运行返回 `completed`、`step_limit` 或 `token_limit` 时，调度器在收尾前复查每步开始前的条件（含开启者身份），条件已不满足则按 `curation_stopped` 收尾。
+
+| 运行结束原因 | 遗留的处理中项 |
+| --- | --- |
+| `completed`、`step_limit`、`token_limit` | 未处理次数加一，第三次转为 `shelved/unhandled` |
+| `review_unavailable` | 保留方案，依次延迟 5 分钟、30 分钟和 2 小时重审。第三次重审仍失败则作废方案并延迟 24 小时回队 |
+| `curation_stopped`、`cancelled` | 作废方案、释放领取，保留未处理次数 |
+| `provider_error` | 作废方案、释放领取。调度器从 10 分钟起倍增退避，最长 6 小时 |
+| `internal_error`、意外的 `awaiting_confirmation` | 记录异常、作废方案、释放领取 |
+
+### 17.3 工具、审查与写入
+
+后台来源为 `curation`。注册表在列出与调用时检查白名单。可用的目录工具包括 `get_release`、`get_release_evidence`、`get_album`、`get_track`、`search_library` 以及目录的专辑、艺人、艺人专辑与曲目、发行问题列表。音乐资料查询 `search_music_metadata`、`get_music_metadata` 经 MusicBrainz 后台闸门。其余四种工具如下。
+
+| 工具 | 合同 |
+| --- | --- |
+| `read_pending_items` | 仅读取当前会话领取的项。可传 `item_ids`，结果包含标识、种类、发行、冲突、证据和候选，按不可信数据处理 |
+| `resolve_release_match` | 输入 `item_id`、`external_id` 和 `basis.note`。按 ID 读回发行或录音，核对摘要、曲目配对、已有对应与标记。独立审查批准后经程序写入链建立对应、补缺、按强证据归组，记录匹配结论与 `model_matched` |
+| `correct_release` | 后台只接受本批发行的设值或留空，锁内核对人工版本，已有人工修正返回 `manual_override`，批外返回 `out_of_batch`。后台写自动层。对话与 MCP 沿用人工修正 |
+| `shelve_pending_item` | 输入 `item_id` 与 `reason`，只改变本批待定项状态，记录搁置原因 |
+
+对应的外部源始终是 `musicbrainz`。模型操作的来源为 `curation`，记录会话、审查、`provider_kind=model` 和规范化的模型名（小写、非法字符替换成连字符、最多 64 字节）。依据最多 500 字节，按 UTF-8 边界截断。建立对应使用工具调用的幂等键，补缺与归组按步骤派生键。撤销对应后，以该对应支持的归组按已有归组撤销合同单独处理。
+
+审查策略第 2 版在证据中携带标记为 `program_untrusted_external` 的外部对应与未结束待定项的候选摘要。后台一步第 21 项 shared 提案收到 `too_many_proposals`。没通过与转人工的提案进入持久例外，取舍分别为 `rejected_by_review` 和 `escalated`，模型可继续处理本批其余项。
+
+### 17.4 人工决策
+
+采纳者认领 `open → accepting`，用当前状态重新计算 `preview.changes`。前后值变化返回 `exception_stale` 并重新开放。字段修正经 `CorrectionExecutor` 写人工层，使用当前人工版本，来源包含原审查、会话及 `review_decision=human`。匹配经 `ModelMatcher.Apply` 写对应与自动层，保留模型来源，操作者为采纳者，批次为空。幂等键由例外 ID 和步骤派生。保存 `accepted` 及实际操作 ID。多步匹配在首笔写入前将恢复快照暂存在例外预览的内部字段，接口仅返回公开变化。进程中断后，原采纳者按首笔操作键对账，核对证据摘要与已建立的对应，再以原键续做余下步骤。结论与操作编号在同一事务保存并清除快照。
+
+不采纳字段时按规范化值写不再提出标记。不采纳匹配时按发行或单曲的曲目 ID 写 MusicBrainz 对应标记。标记、`declined` 和待定项收尾在同一事务提交。该项所有例外均有决定后，采纳匹配记 `resolved/human_accepted`。仅拒绝匹配记 `resolved/human_declined`。只有字段例外则回到 `waiting_model`。程序已先解决的项保留程序结论。
+
+### 17.5 管理员 REST 接口与错误码
+
+路径前缀为 `/api/v1/admin/curation`。读写均要求管理员，写接口检查同源。未授权、非管理员、数据库故障分别沿用 401、403、503 合同。
+
+| 方法与路径 | 请求与响应 |
+| --- | --- |
+| `PUT /settings` | `model` 最多 200 字节，空串使用开启者对话模型。`daily_token_limit` 为 1 至 10¹² 的整数或 null，默认 10000000。省略保留原值。GET、PUT 都返回这两项。无效值返回 400 `invalid_input` |
+| `GET /progress` | `model` 段含 `state`、可空 `unavailable_reason`、有效模型、`today.{date,input_tokens,output_tokens}`、`daily_token_limit`、仅统计可见发行的 `items.{waiting_model,in_progress,waiting_human,shelved}` |
+| `GET /exceptions` | `status=open\|all`（默认 open）、`page`、`page_size`（最多 100）。返回 `items,total,page,page_size`。包含发行摘要、输入、变化、审查与决定。参数错误返回 400 `invalid_input` |
+| `POST /exceptions/{id}/accept` | 返回 `{exception,operation_ids}`。前值变化为 409 `exception_stale`，匹配受开关、资料源或当前可写内容限制时为 409 `curation_disabled`、`source_disabled`、`nothing_to_apply`。外部源暂时失败为 503 `source_unavailable` |
+| `POST /exceptions/{id}/decline` | 返回 `{exception}`。两个决定接口均校验 ID 与例外状态，分别可返回 400 `invalid_id`、404 `not_found`、409 `exception_decided` |
+| `GET /conversations` | 本管理员的整理会话，返回 `items,pagination`，每项含 `kind=curation` 与 `item_counts`。详情、事件及续聊使用管家会话接口 |
+
+模型状态为 `idle`、`running`、`waiting_review`、`paused`、`disabled`、`waiting_for_scan`、`limit_reached` 或 `unavailable`。不可用原因区分 `not_configured`、`key_needs_reentry`、`tool_unsupported`、`enabler_unavailable`、`source_disabled` 与 `provider_error`。例如开启者未配置管家时，程序仍可继续匹配，模型状态为 `unavailable/not_configured`。达到每日上限后，新的服务器本地日期使用该日累计量重新判断。
+
+样例登记在 `recordCurationSamples`：`curation/settings-model`、`curation/progress`、`curation/conversations`、`curation/exceptions`、`curation/exception-accepted`、`curation/exception-declined` 以及 `errors/{exception-stale,exception-decided,curation-conversation,curation-plan}`。
+
+### 17.6 必需测试与断言点
+
+| 断言点 | 用例 |
+| --- | --- |
+| R1 会话类型、模式、开启者、首条消息与五项上限；普通列表隐藏及模式锁定 | `TestPostgreSQLCurationModelStartsCurationConversation`、`TestPostgreSQLStewardCurationConversationHiddenAndLocked` |
+| R2 读取候选、独立审查、模型批次内建立对应、补缺与归组，以及按条和按批撤销 | `TestPostgreSQLCurationModelResolveMatchProgramChain` |
+| R3 同名修正工具按来源落层；拒绝清除、批外发行与人工字段覆盖 | `TestPostgreSQLCurationModelCorrectReleaseAutoLayer` |
+| R4 审查批准、拒绝、转人工后继续；不可用按 5 分钟、30 分钟、2 小时重审，耗尽后延迟 24 小时 | `TestPostgreSQLCurationModelReviewPaths`、`TestPostgreSQLCurationModelReviewUnavailableBackoff` |
+| R5 主动搁置、证据变化重开、连续三次未处理后搁置 | `TestPostgreSQLCurationModelShelveAndReopen`、`TestPostgreSQLCurationModelUnhandledThreeTimes` |
+| R6 启停条件、开启者变更、凭据取消、登出后继续；最后一步暂停后释放领取并保留次数 | `TestPostgreSQLCurationModelStopConditions` |
+| R7 主模型、审查、摘要按日计量，对话用量排除；额度用尽、跨日恢复和不限额 | `TestPostgreSQLCurationModelDailyLimit` |
+| R8 人工采纳、前值冲突、重复决定、拒绝后的字段与对应标记；分步匹配中断后原管理员续做 | `TestPostgreSQLCurationExceptionAcceptDecline` |
+| R9 外部证据来源、后台第 21 项提案和旧版批准的执行守卫 | `TestPostgreSQLStewardReviewPolicyV2Evidence`、`TestBackgroundTwentyFirstSharedCallRejected`、`TestPostgreSQLStewardReviewV1ApprovalRejected` |
+| R10 三个对话占满时仍可启动后台运行，后台名额全实例唯一 | `TestPostgreSQLCurationModelBackgroundSlot`、`TestSupervisorBackgroundSlot` |
+| R11 设置校验、显式 null、模型进度、例外分页和筛选、管理员权限与决定接口错误码 | `TestPostgreSQLCurationModelAPI`、`TestPostgreSQLCurationModelAPIMatchErrors`、`TestPostgreSQLCurationExceptionAcceptDecline` |
+| R12 开启者未配置管家时报告原因，程序层仍可建立对应 | `TestPostgreSQLCurationModelUnconfiguredEnabler` |
+| 重启后释放遗留领取、保留未处理次数、作废后台方案并关闭模型批次 | `TestPostgreSQLCurationModelRestartRecovery` |

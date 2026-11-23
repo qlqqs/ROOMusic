@@ -11,6 +11,8 @@ import (
 
 // Conversation 是会话摘要，不包含消息正文。
 type Conversation struct {
+	Kind              string
+	ItemCounts        json.RawMessage
 	LastReadAt        *time.Time
 	LastRunFinishedAt *time.Time
 	Unread            bool
@@ -54,7 +56,7 @@ type ConversationPage struct {
 }
 
 const conversationColumns = `id::text,user_id::text,title,mode,model,status,created_at,updated_at,array_to_json(auto_approved_tools),last_read_at,last_run_finished_at,
- (last_run_finished_at IS NOT NULL AND (last_read_at IS NULL OR last_run_finished_at>last_read_at)) AS unread`
+ (last_run_finished_at IS NOT NULL AND (last_read_at IS NULL OR last_run_finished_at>last_read_at)) AS unread,kind`
 
 // CreateConversation 创建空会话，未指定模式时使用 assistant。
 func (s *Store) CreateConversation(ctx context.Context, userID, title, model string, modes ...string) (Conversation, error) {
@@ -65,21 +67,37 @@ func (s *Store) CreateConversation(ctx context.Context, userID, title, model str
 	if mode != "assistant" && mode != "operator" && mode != "steward" {
 		return Conversation{}, ErrInvalidInput
 	}
+	return s.createConversation(ctx, userID, title, model, mode, "chat")
+}
+
+func (s *Store) CreateCurationConversation(ctx context.Context, userID, title, model string) (Conversation, error) {
+	return s.createConversation(ctx, userID, title, model, "steward", "curation")
+}
+
+func (s *Store) createConversation(ctx context.Context, userID, title, model, mode, kind string) (Conversation, error) {
 	conversation, err := scanConversation(s.db.QueryRowContext(ctx, `INSERT INTO steward_conversations
- (id,user_id,title,mode,model) VALUES ($1::uuid,$2::uuid,$3,$5,$4)
- RETURNING `+conversationColumns, uuid.New(), userID, title, model, mode))
+ (id,user_id,title,mode,model,kind) VALUES ($1::uuid,$2::uuid,$3,$5,$4,$6)
+ RETURNING `+conversationColumns, uuid.New(), userID, title, model, mode, kind))
 	return conversation, storeError("新建管家会话", err)
 }
 
 // ListConversations 按更新时间倒序分页列出当前用户的会话，同一时间按 ID 升序排列。
 func (s *Store) ListConversations(ctx context.Context, userID string, page ConversationPage) ([]Conversation, error) {
+	return s.listConversations(ctx, userID, page, "chat")
+}
+
+func (s *Store) ListCurationConversations(ctx context.Context, userID string, page ConversationPage) ([]Conversation, error) {
+	return s.listConversations(ctx, userID, page, "curation")
+}
+
+func (s *Store) listConversations(ctx context.Context, userID string, page ConversationPage, kind string) ([]Conversation, error) {
 	if page.Number < 1 || page.Size < 1 || page.Size > 100 || int64(page.Number-1) > (1<<63-1)/int64(page.Size) {
 		return nil, ErrInvalidInput
 	}
 	offset := int64(page.Number-1) * int64(page.Size)
 	rows, err := s.db.QueryContext(ctx, `WITH page AS (
  SELECT `+conversationColumns+` FROM steward_conversations
- WHERE user_id=$1::uuid ORDER BY updated_at DESC,id ASC LIMIT $2 OFFSET $3
+ WHERE user_id=$1::uuid AND kind=$4 ORDER BY updated_at DESC,id ASC LIMIT $2 OFFSET $3
 ), pending AS (
  SELECT p.conversation_id,COUNT(*) AS item_count
  FROM steward_plans p JOIN steward_plan_items i ON i.plan_id=p.id
@@ -87,10 +105,17 @@ func (s *Store) ListConversations(ctx context.Context, userID string, page Conve
  WHERE p.user_id=$1::uuid AND p.status='pending' AND p.expires_at>NOW()
  AND i.decision='pending' AND i.result IS NULL
  GROUP BY p.conversation_id
+), curation_counts AS (
+ SELECT i.conversation_id,i.status,COUNT(*) AS n FROM curation_pending_items i
+ JOIN page c ON c.kind='curation' AND i.conversation_id=c.id::uuid
+ GROUP BY i.conversation_id,i.status
+), item_counts AS (
+ SELECT conversation_id,jsonb_object_agg(status,n) AS counts FROM curation_counts GROUP BY conversation_id
 )
- SELECT c.*,COALESCE(p.item_count,0) FROM page c
+ SELECT c.*,COALESCE(p.item_count,0),CASE WHEN c.kind='curation' THEN COALESCE(i.counts,'{}'::jsonb) END FROM page c
+ LEFT JOIN item_counts i ON i.conversation_id=c.id::uuid
  LEFT JOIN pending p ON p.conversation_id=c.id::uuid
- ORDER BY c.updated_at DESC,c.id ASC`, userID, page.Size, offset)
+ ORDER BY c.updated_at DESC,c.id ASC`, userID, page.Size, offset, kind)
 	if err != nil {
 		return nil, storeError("列出管家会话", err)
 	}
@@ -98,10 +123,12 @@ func (s *Store) ListConversations(ctx context.Context, userID string, page Conve
 	conversations := []Conversation{}
 	for rows.Next() {
 		var pendingCount int
-		conversation, err := scanConversation(rows, &pendingCount)
+		var counts []byte
+		conversation, err := scanConversation(rows, &pendingCount, &counts)
 		if err != nil {
 			return nil, storeError("读取管家会话摘要", err)
 		}
+		conversation.ItemCounts = counts
 		conversation.PendingItemCount = pendingCount
 		conversations = append(conversations, conversation)
 	}
@@ -172,6 +199,13 @@ func (s *Store) DeleteConversation(ctx context.Context, userID, conversationID s
 		return err
 	}
 	if status == "running" {
+		return ErrConversationBusy
+	}
+	var processing bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM curation_pending_items WHERE conversation_id=$1::uuid AND status='in_progress')`, conversationID).Scan(&processing); err != nil {
+		return err
+	}
+	if processing {
 		return ErrConversationBusy
 	}
 	err = requireAffected(tx.ExecContext(ctx, `DELETE FROM steward_conversations
@@ -283,6 +317,13 @@ func (s *Store) UpdateConversation(ctx context.Context, userID, conversationID s
 		return Conversation{}, err
 	}
 	if mode != nil {
+		var kind string
+		if err := tx.QueryRowContext(ctx, `SELECT kind FROM steward_conversations WHERE id=$1::uuid`, conversationID).Scan(&kind); err != nil {
+			return Conversation{}, err
+		}
+		if kind == "curation" {
+			return Conversation{}, ErrCurationConversation
+		}
 		if status == "running" {
 			return Conversation{}, ErrConversationBusy
 		}
@@ -308,7 +349,7 @@ func scanConversation(row scanner, extra ...any) (Conversation, error) {
 	var conversation Conversation
 	var approved []byte
 	fields := []any{&conversation.ID, &conversation.UserID, &conversation.Title, &conversation.Mode,
-		&conversation.Model, &conversation.Status, &conversation.CreatedAt, &conversation.UpdatedAt, &approved, &conversation.LastReadAt, &conversation.LastRunFinishedAt, &conversation.Unread}
+		&conversation.Model, &conversation.Status, &conversation.CreatedAt, &conversation.UpdatedAt, &approved, &conversation.LastReadAt, &conversation.LastRunFinishedAt, &conversation.Unread, &conversation.Kind}
 	err := row.Scan(append(fields, extra...)...)
 	if err == nil {
 		err = json.Unmarshal(approved, &conversation.AutoApprovedTools)
@@ -320,8 +361,16 @@ func scanConversation(row scanner, extra ...any) (Conversation, error) {
 
 // CountConversations 返回当前用户的会话总数，供分页响应使用。
 func (s *Store) CountConversations(ctx context.Context, userID string) (int64, error) {
+	return s.countConversations(ctx, userID, "chat")
+}
+
+func (s *Store) CountCurationConversations(ctx context.Context, userID string) (int64, error) {
+	return s.countConversations(ctx, userID, "curation")
+}
+
+func (s *Store) countConversations(ctx context.Context, userID, kind string) (int64, error) {
 	var count int64
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM steward_conversations WHERE user_id=$1::uuid`, userID).Scan(&count)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM steward_conversations WHERE user_id=$1::uuid AND kind=$2`, userID, kind).Scan(&count)
 	return count, storeError("统计管家会话", err)
 }
 
@@ -333,6 +382,6 @@ func (s *Store) MarkConversationRead(ctx context.Context, userID, conversationID
 // CountUnreadConversations 在数据库侧按运行完成时间统计，不逐会话读取。
 func (s *Store) CountUnreadConversations(ctx context.Context, userID string) (int64, error) {
 	var count int64
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM steward_conversations WHERE user_id=$1::uuid AND last_run_finished_at IS NOT NULL AND (last_read_at IS NULL OR last_run_finished_at>last_read_at)`, userID).Scan(&count)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM steward_conversations WHERE user_id=$1::uuid AND kind='chat' AND last_run_finished_at IS NOT NULL AND (last_read_at IS NULL OR last_run_finished_at>last_read_at)`, userID).Scan(&count)
 	return count, storeError("统计未读管家会话", err)
 }

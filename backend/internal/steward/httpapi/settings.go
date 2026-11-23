@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -157,6 +159,7 @@ func (h *Handlers) putSettings(w http.ResponseWriter, r *http.Request, user iden
 	}
 	if cancelRuns {
 		h.supervisor.CancelUser(user.ID)
+		h.supervisor.CancelBackground(user.ID)
 	}
 	h.writeSettings(w, r, user.ID, saved)
 }
@@ -278,28 +281,51 @@ func effectiveSettings(settings runtime.UserSettings) (runtime.UserSettings, pro
 	return settings, support, nil
 }
 
+// ModelUnavailable 的 Reason 可供自动整理进度直接展示。
+type ModelUnavailable struct{ Reason string }
+
+func (e *ModelUnavailable) Error() string { return e.Reason }
+
+var errInvalidModelConfig = errors.New("管家模型设置格式无效")
+
 func (h *Handlers) configured(w http.ResponseWriter, r *http.Request, user identity.User) (runtime.UserSettings, string, bool) {
-	settings, err := h.store.GetUserSettings(r.Context(), user.ID)
-	if err != nil {
+	settings, key, err := h.resolveModelConfig(r.Context(), user.ID)
+	var unavailable *ModelUnavailable
+	switch {
+	case err == nil:
+		return settings, key, true
+	case errors.As(err, &unavailable):
+		if unavailable.Reason == "tool_unsupported" {
+			writeProblem(w, r, providerProblem(provider.ErrorToolUnsupported))
+		} else {
+			writeProblem(w, r, notConfiguredProblem)
+		}
+	case errors.Is(err, errInvalidModelConfig):
+		h.logFailure(r, "internal")
+		writeProblem(w, r, internalProblem)
+	default:
 		h.writeStoreError(w, r, err)
-		return settings, "", false
+	}
+	return settings, "", false
+}
+
+func (h *Handlers) resolveModelConfig(ctx context.Context, userID string) (runtime.UserSettings, string, error) {
+	settings, err := h.store.GetUserSettings(ctx, userID)
+	if err != nil {
+		return settings, "", err
 	}
 	settings, support, err := effectiveSettings(settings)
 	if err != nil {
-		h.logFailure(r, "internal")
-		writeProblem(w, r, internalProblem)
-		return settings, "", false
+		return settings, "", errInvalidModelConfig
 	}
 	if !settings.IsConfigured() {
-		writeProblem(w, r, notConfiguredProblem)
-		return settings, "", false
+		return settings, "", &ModelUnavailable{Reason: "not_configured"}
 	}
 	var key []byte
 	if settings.Key != nil {
-		key, err = h.secrets.Open(user.ID, modelKeyPurpose, settings.Key.Ciphertext)
+		key, err = h.secrets.Open(userID, modelKeyPurpose, settings.Key.Ciphertext)
 		if err != nil {
-			writeProblem(w, r, notConfiguredProblem)
-			return settings, "", false
+			return settings, "", &ModelUnavailable{Reason: "key_needs_reentry"}
 		}
 	}
 	// 默认协议仍为 Chat Completions；自带搜索及其手动覆盖生效时使用 Responses。
@@ -309,9 +335,7 @@ func (h *Handlers) configured(w http.ResponseWriter, r *http.Request, user ident
 		var overrides manualOverrides
 		if settings.Overrides != nil {
 			if err := json.Unmarshal(settings.Overrides, &overrides); err != nil {
-				h.logFailure(r, "internal")
-				writeProblem(w, r, internalProblem)
-				return settings, "", false
+				return settings, "", errInvalidModelConfig
 			}
 		}
 		support = provider.ToolSupportUnconfirmed
@@ -320,10 +344,9 @@ func (h *Handlers) configured(w http.ResponseWriter, r *http.Request, user ident
 		}
 	}
 	if support == provider.ToolSupportUnsupported {
-		writeProblem(w, r, providerProblem(provider.ErrorToolUnsupported))
-		return settings, "", false
+		return settings, "", &ModelUnavailable{Reason: "tool_unsupported"}
 	}
-	return settings, string(key), true
+	return settings, string(key), nil
 }
 
 func parseKey(raw json.RawMessage) (*string, bool, error) {

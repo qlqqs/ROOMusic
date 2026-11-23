@@ -16,6 +16,10 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	governancetools "github.com/qlqq/roomusic/backend/internal/catalog/governance/stewardtools"
 	catalogtools "github.com/qlqq/roomusic/backend/internal/catalog/stewardtools"
+	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/curation/model"
+	"github.com/qlqq/roomusic/backend/internal/curation/program"
+	curationtools "github.com/qlqq/roomusic/backend/internal/curation/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/dspsettings"
 	dsptools "github.com/qlqq/roomusic/backend/internal/dspsettings/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/identity"
@@ -48,6 +52,9 @@ import (
 )
 
 type stewardConfig struct {
+	writer       *curation.Writer
+	sources      *curation.Sources
+	matcher      *program.ModelMatcher
 	music        *musicbrainz.Client
 	covers       *coverartarchive.Client
 	diagnostics  *diagnostics.Service
@@ -63,7 +70,7 @@ func newInstanceSecrets(dataDirectory string) *secret.Store {
 }
 
 // registerSteward 在接受请求前恢复会话状态；失败时记录日志并让管家接口返回 503。
-func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sql.DB, guard *identity.Guard, secrets *secret.Store, logger *slog.Logger, scans *library.Service, kinds []operations.Kind, playback *zones.Service, history *listening.Service, personalLibrary *personal.Service, configurations ...stewardConfig) *runtime.Supervisor {
+func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sql.DB, guard *identity.Guard, secrets *secret.Store, logger *slog.Logger, scans *library.Service, kinds []operations.Kind, playback *zones.Service, history *listening.Service, personalLibrary *personal.Service, configurations ...stewardConfig) (*runtime.Supervisor, model.Launcher) {
 	store := runtime.NewStore(database).WithOperationLookup(func(ctx context.Context, tx *sql.Tx, userID, key string) (runtime.RecordedOperation, error) {
 		result, err := operations.LookupResult(ctx, tx, userID, key)
 		if errors.Is(err, operations.ErrNotFound) {
@@ -84,8 +91,9 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 				mux.HandleFunc(prefix, unavailable)
 				mux.HandleFunc(prefix+"/", unavailable)
 			}
+			mux.HandleFunc("GET /api/v1/admin/curation/conversations", unavailable)
 			mux.HandleFunc("/api/v1/mcp", unavailable)
-			return nil
+			return nil, nil
 		}
 		logger.Info("管家会话状态已恢复", "event", "steward.recovery.completed", "message", "管家会话状态已恢复", "module", "steward", "conversations", count)
 	}
@@ -95,12 +103,17 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	memories := memory.NewStore(database)
 	registry := tool.NewRegistry()
 	var supervisor *runtime.Supervisor
-	definitions := catalogtools.StewardTools(catalog.NewStore(database), governance.NewStore(database))
+	reads := governance.NewStore(database)
+	definitions := catalogtools.StewardTools(catalog.NewStore(database), reads)
+	var configuration stewardConfig
 	definitions = append(definitions, governancetools.StewardTools(database, artistResolutionAdapter{})...)
 	definitions = append(definitions, operationtools.RevertTools(database, kinds...)...)
 	definitions = append(definitions, librarytools.StewardTools(scans)...)
 	if len(configurations) > 0 {
-		configuration := configurations[0]
+		configuration = configurations[0]
+		if configuration.writer != nil {
+			definitions = append(definitions, curationtools.StewardTools(configuration.writer, configuration.matcher)...)
+		}
 		if configuration.covers != nil {
 			webService.WithCovers(configuration.covers)
 		}
@@ -122,6 +135,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	definitions = append(definitions, webService.StewardTools()...)
 	definitions = append(definitions, memories.StewardTools()...)
 	for _, definition := range definitions {
+		definition = withBackgroundPolicy(definition, configuration)
 		definition = withCurrentStewardUser(definition, guard, store)
 		if definition.Scope == tool.ScopeShared {
 			handler := definition.Handler
@@ -138,10 +152,11 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		}
 	}
 	runner := runtime.NewRunner(store, registry, logger).WithMemories(memories).WithReviewEvidence(func(ctx context.Context, caller tool.Caller, item runtime.PlanItem) (runtime.ReviewEvidenceFacts, error) {
-		if !catalogtools.SupportsReviewEvidence(item.Tool) {
-			return runtime.ReviewEvidenceFacts{}, runtime.ErrReviewEvidenceUnsupported
+		input, err := reviewTargetInput(ctx, database, item)
+		if err != nil {
+			return runtime.ReviewEvidenceFacts{}, err
 		}
-		targets, err := catalogtools.ReadReviewTargets(ctx, catalog.NewStore(database), governance.NewStore(database), item.Input)
+		targets, err := catalogtools.ReadReviewTargets(ctx, catalog.NewStore(database), governance.NewStore(database), input)
 		if err != nil {
 			return runtime.ReviewEvidenceFacts{}, err
 		}
@@ -157,13 +172,17 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		if err != nil {
 			return runtime.ReviewEvidenceFacts{}, err
 		}
+		external, err := reviewExternal(ctx, database, targets)
+		if err != nil {
+			return runtime.ReviewEvidenceFacts{}, err
+		}
 		raw, err := json.Marshal(targets)
-		return runtime.ReviewEvidenceFacts{Targets: raw, RecentOperationCount: len(page.Items)}, err
+		return runtime.ReviewEvidenceFacts{Targets: raw, External: external, RecentOperationCount: len(page.Items)}, err
 	})
 	supervisor = runtime.NewSupervisor(lifecycle, runner, logger)
 	tokens := token.NewStore(database, guard)
 	mux.Handle("/api/v1/mcp", stewardmcp.New(guard, tokens, store, registry, logger))
-	stewardapi.New(guard, store, secrets, runner, logger).WithSupervisor(supervisor).WithMemories(memories).WithWeb(webService).WithTokens(tokens).WithCredentialCheck(func(r *http.Request, user identity.User) (bool, error) {
+	api := stewardapi.New(guard, store, secrets, runner, logger).WithSupervisor(supervisor).WithMemories(memories).WithWeb(webService).WithTokens(tokens).WithCredentialCheck(func(r *http.Request, user identity.User) (bool, error) {
 		cookie, err := r.Cookie(identity.SessionCookieName)
 		if err != nil || cookie.Value == "" {
 			return false, nil
@@ -175,8 +194,9 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
  WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
  AND u.disabled_at IS NULL AND u.id=$2::uuid AND u.role=$3)`, identity.HashSessionToken(cookie.Value), user.ID, user.Role).Scan(&valid)
 		return valid, err
-	}).Register(mux)
-	return supervisor
+	})
+	api.Register(mux)
+	return supervisor, backgroundLauncher{api, store}
 }
 
 // withCurrentStewardUser 在预览及实际调用前重读身份，覆盖长对话、确认后执行与 MCP。
@@ -229,4 +249,110 @@ func withCurrentStewardUser(definition tool.Definition, guard *identity.Guard, s
 		}
 	}
 	return definition
+}
+
+// reviewTargetInput 将工具的对象标识投影到目录审查读取入口。
+func reviewTargetInput(ctx context.Context, db *sql.DB, item runtime.PlanItem) (json.RawMessage, error) {
+	switch item.Tool {
+	case "resolve_release_match":
+		var input struct {
+			ItemID string `json:"item_id"`
+		}
+		if err := json.Unmarshal(item.Input, &input); err != nil {
+			return nil, err
+		}
+		var releaseID string
+		err := db.QueryRowContext(ctx, `SELECT target_id::text FROM curation_pending_items WHERE id=$1::uuid AND target_type='release'`, input.ItemID).Scan(&releaseID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, runtime.ErrReviewUnavailable
+		}
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(map[string]string{"release_id": releaseID})
+	default:
+		if !catalogtools.SupportsReviewEvidence(item.Tool) {
+			return nil, runtime.ErrReviewEvidenceUnsupported
+		}
+		return item.Input, nil
+	}
+}
+
+type reviewLink struct {
+	ObjectType string `json:"object_type"`
+	ExternalID string `json:"external_id"`
+	Method     string `json:"method"`
+	Confidence string `json:"confidence"`
+}
+
+type externalRelease struct {
+	ReleaseID string          `json:"release_id"`
+	Links     []reviewLink    `json:"links"`
+	Pending   json.RawMessage `json:"pending"`
+}
+
+func reviewExternal(ctx context.Context, db *sql.DB, targets []catalogtools.ReviewTarget) (json.RawMessage, error) {
+	data := []externalRelease{}
+	for _, target := range targets {
+		if target.Type != "release" {
+			continue
+		}
+		release, err := reviewExternalRelease(ctx, db, target.ID)
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, release)
+	}
+	return json.Marshal(struct {
+		Source string            `json:"source"`
+		Data   []externalRelease `json:"data"`
+	}{"program_untrusted_external", data})
+}
+
+// 外部证据只保留审查所需的对应与候选字段，具体写入记录和程序原始证据留在本地。
+func reviewExternalRelease(ctx context.Context, db *sql.DB, id string) (externalRelease, error) {
+	release := externalRelease{ReleaseID: id, Links: []reviewLink{}}
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
+	if err != nil {
+		return release, err
+	}
+	defer tx.Rollback()
+	var groupID string
+	var tracks []byte
+	err = tx.QueryRowContext(ctx, `SELECT r.group_id::text,ARRAY_TO_JSON(ARRAY(
+        SELECT t.id::text FROM tracks t JOIN media m ON m.id=t.medium_id WHERE m.release_id=r.id ORDER BY t.id))
+        FROM releases r WHERE r.id=$1`, id).Scan(&groupID, &tracks)
+	if err != nil {
+		return release, err
+	}
+	var trackIDs []string
+	if err := json.Unmarshal(tracks, &trackIDs); err != nil {
+		return release, err
+	}
+	for _, group := range []struct {
+		kind string
+		ids  []string
+	}{
+		{"release", []string{id}}, {"release_group", []string{groupID}}, {"track", trackIDs},
+	} {
+		links, err := curation.LinksOf(ctx, tx, group.kind, group.ids)
+		if err != nil {
+			return release, err
+		}
+		for _, link := range links {
+			release.Links = append(release.Links, reviewLink{link.ObjectType, link.ExternalID, link.Method, link.Confidence})
+		}
+	}
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'kind',p.kind,'conflicts',p.conflicts,'candidates',(
+          SELECT COALESCE(jsonb_agg(jsonb_build_object(
+            'external_id',c->'external_id','title',c->'title','artist',c->'artist','date',c->'date',
+            'country',c->'country','track_count',c->'track_count','method',c->'method','score',c->'score')
+            ORDER BY ord),'[]'::jsonb) FROM jsonb_array_elements(p.candidates) WITH ORDINALITY AS candidate(c,ord)
+        )) ORDER BY p.kind,p.id),'[]'::jsonb)
+        FROM curation_pending_items p WHERE p.target_id=$1 AND p.status<>'resolved'`, id).Scan(&release.Pending)
+	if err != nil {
+		return release, err
+	}
+	return release, tx.Commit()
 }

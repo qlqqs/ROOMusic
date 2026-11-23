@@ -1,6 +1,6 @@
 import { decode as d } from "../../../shared/api";
 
-// 自动整理的管理员接口（M7 A、B1、C；合同 backend curation-contracts.md 第 7、11、15 节）。
+// 自动整理的管理员接口（M7 A、B1、C、D；合同 backend curation-contracts.md 第 7、11、15、17 节）。
 // 枚举用 oneOf：后端新增取值时样本契约测试先失败，在这里补上才算确认前端已经知道。
 
 const MAX_PAGE_ITEMS = 100;
@@ -13,8 +13,11 @@ const paginationDecoder = d.object({
 const userRefDecoder = d.object({ id: d.uuid(), username: d.string({ max: 200 }) });
 
 // 总开关：enabled 是开关本身，active 是“现在自动写入会不会被接受”；enabled_at 在从未打开过时为 null，关掉之后保留打开时的值。
+// model 是整理用的模型（空串 = 开启者的对话模型），daily_token_limit 是后台整理每天的 token 上限（null = 不限；M7 D）。
 const settingsDecoder = d.object({
   active: d.boolean(),
+  daily_token_limit: d.nullable(d.integer({ min: 1 })),
+  model: d.string({ max: 200 }),
   enabled: d.boolean(),
   enabled_at: d.nullable(d.timestamp()),
   enabled_by: d.nullable(userRefDecoder),
@@ -53,10 +56,26 @@ export const PROGRAM_STATES = ["running", "waiting_for_scan", "idle", "paused", 
 export type ProgramState = (typeof PROGRAM_STATES)[number];
 
 const count = () => d.integer({ min: 0 });
+
+export const MODEL_STATES = ["idle", "running", "waiting_review", "paused", "disabled", "waiting_for_scan", "limit_reached", "unavailable"] as const;
+export type ModelState = (typeof MODEL_STATES)[number];
+export const MODEL_UNAVAILABLE_REASONS = ["not_configured", "key_needs_reentry", "tool_unsupported", "enabler_unavailable", "source_disabled", "provider_error"] as const;
+export type ModelUnavailableReason = (typeof MODEL_UNAVAILABLE_REASONS)[number];
+
+// 模型层（M7 D）：状态与不可用的原因、今天（服务器时区）的用量与上限、待定项各状态的数目（只算可见发行）。
+const modelProgressDecoder = d.object({
+  daily_token_limit: d.nullable(d.integer({ min: 1 })),
+  items: d.object({ in_progress: count(), shelved: count(), waiting_human: count(), waiting_model: count() }),
+  model: d.string({ max: 200 }),
+  state: d.oneOf(MODEL_STATES),
+  today: d.object({ date: d.string({ pattern: /^\d{4}-\d{2}-\d{2}$/ }), input_tokens: count(), output_tokens: count() }),
+  unavailable_reason: d.nullable(d.oneOf(MODEL_UNAVAILABLE_REASONS)),
+});
 // 后台的进度：releases 只算可见发行；processed 是按当前规则版本处理过的（输入变了、还没重新处理的仍算在内）。
 const progressDecoder = d.object({
   batch: d.nullable(d.object({ id: d.uuid(), opened_at: d.timestamp(), operations: count() })),
   last_pass_finished_at: d.nullable(d.timestamp()),
+  model: modelProgressDecoder,
   pending: d.object({ waiting_model: count() }),
   releases: d.object({ matched: count(), no_match: count(), processed: count(), total: count(), try_later: count(), uncertain: count() }),
   rule_version: d.integer({ min: 1 }),
@@ -122,7 +141,45 @@ const suppressionDecoder = d.object({
 });
 const suppressionPageDecoder = d.object({ items: d.array(suppressionDecoder, { max: MAX_PAGE_ITEMS }), pagination: paginationDecoder });
 
+// 例外（M7 D）：后台审查没通过或转人工的一项提案。input 与 preview 是提出时的工具输入与预览，只按数据显示；
+// 外部来的文字（候选标题等）是不可信文本。status：open 等处理，accepting 是某位管理员正在采纳。
+const unknownJSON: d.Decoder<unknown> = (input) => input;
+const exceptionDecoder = d.object({
+  conversation_id: d.nullable(d.uuid()),
+  created_at: d.timestamp(),
+  decided_at: d.nullable(d.timestamp()),
+  decided_by: d.nullable(d.uuid()),
+  id: d.uuid(),
+  input: unknownJSON,
+  kind: d.oneOf(["release_match", "recording_match"] as const),
+  operation_ids: d.array(d.uuid(), { max: 16 }),
+  pending_item_id: d.uuid(),
+  preview: unknownJSON,
+  release: d.object({ artist: d.string({ max: d.unbounded }), id: d.uuid(), title: d.string({ max: d.unbounded }) }),
+  review: d.object({
+    decision: d.oneOf(["rejected", "needs_human_confirmation"] as const),
+    id: d.uuid(),
+    model: d.string({ max: 200 }),
+    reasons: d.array(d.string({ max: d.unbounded }), { max: 50 }),
+    risk: d.nullable(d.oneOf(["low", "medium", "high"] as const)),
+    source: d.oneOf(["model", "policy"] as const),
+  }),
+  status: d.oneOf(["open", "accepting", "accepted", "declined"] as const),
+  tool: d.oneOf(["resolve_release_match", "correct_release"] as const),
+});
+const exceptionPageDecoder = d.object({
+  items: d.array(exceptionDecoder, { max: MAX_PAGE_ITEMS }),
+  page: d.integer({ min: 1 }),
+  page_size: d.integer({ min: 1, max: MAX_PAGE_ITEMS }),
+  total: d.integer({ min: 0 }),
+});
+const exceptionAcceptedDecoder = d.object({ exception: exceptionDecoder, operation_ids: d.array(d.uuid(), { max: 16 }) });
+const exceptionDeclinedDecoder = d.object({ exception: exceptionDecoder });
+
 export const decodeCurationSettings = d.defineDecoder(settingsDecoder);
+export const decodeCurationExceptionPage = d.defineDecoder(exceptionPageDecoder);
+export const decodeCurationExceptionAccepted = d.defineDecoder(exceptionAcceptedDecoder);
+export const decodeCurationExceptionDeclined = d.defineDecoder(exceptionDeclinedDecoder);
 export const decodeCurationSources = d.defineDecoder(sourcesDecoder);
 export const decodeCurationSource = d.defineDecoder(sourceDecoder);
 export const decodeCurationProgress = d.defineDecoder(progressDecoder);
@@ -135,6 +192,9 @@ export type CurationSettingsDTO = d.Infer<typeof settingsDecoder>;
 export type CurationSourceDTO = d.Infer<typeof sourceDecoder>;
 export type CurationSourcesDTO = d.Infer<typeof sourcesDecoder>;
 export type CurationProgressDTO = d.Infer<typeof progressDecoder>;
+export type CurationModelProgressDTO = d.Infer<typeof modelProgressDecoder>;
+export type CurationExceptionDTO = d.Infer<typeof exceptionDecoder>;
+export type CurationExceptionPageDTO = d.Infer<typeof exceptionPageDecoder>;
 export type CurationBatchDTO = d.Infer<typeof batchDecoder>;
 export type CurationBatchPageDTO = d.Infer<typeof batchPageDecoder>;
 export type ScopeRevertDTO = d.Infer<typeof scopeRevertDecoder>;

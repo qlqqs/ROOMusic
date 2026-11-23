@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "curation_conversation",
+      "message": "自动整理会话的模式不能更改"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

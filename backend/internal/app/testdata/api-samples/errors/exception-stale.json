@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "exception_stale",
+      "message": "例外的预览已变更"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

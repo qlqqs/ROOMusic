@@ -102,7 +102,7 @@ func (s *runState) compactHistory(ctx context.Context, store SummaryStore, histo
 			Model: s.params.Model, System: SummarySystemPrompt, Messages: []provider.Message{textMessage(provider.RoleUser, input).Message}, MaxOutputTokens: summaryOutputTokens,
 		})
 		cancel()
-		s.recordUsage(ctx, usage)
+		s.recordUsage(ctx, UsageSummary, usage)
 		reason = "model_failed"
 	}
 	if err == nil {

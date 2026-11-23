@@ -1,11 +1,13 @@
 package app
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 )
 
 // A-V2：用独立发行与固定用户名录制，保留写入者、撤销关联和批次计数。
@@ -49,4 +51,51 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 	record("curation/batch", "GET", curationBase+"/batches/"+batch, nil)
 	record("curation/settings-paused", "PUT", curationBase+"/settings", map[string]bool{"paused": true})
 	record("curation/progress", "GET", curationBase+"/progress", nil)
+
+	record("curation/settings-model", "PUT", curationBase+"/settings", map[string]any{"model": "sample-model", "daily_token_limit": nil})
+	ctx := t.Context()
+	store := runtime.NewStore(f.application.database)
+	c, err := store.CreateCurationConversation(ctx, f.admin.id, "自动整理合成样例", "sample-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	itemID := uuid.New()
+	mustExec(t, f.application, `INSERT INTO curation_pending_items(id,target_type,target_id,kind,status,rule_version,input_digest,evidence,conversation_id,claimed_at) VALUES($1,'release',$2,'release_match','in_progress',1,'sample','{}',$3,now())`, itemID, f.a, c.ID)
+	record("curation/conversations", "GET", curationBase+"/conversations", nil)
+	makeException := func(after string) string {
+		t.Helper()
+		input, err := json.Marshal(map[string]any{"release_id": f.a, "expected_revision": 1, "basis": map[string]string{"note": "合成候选资料"}, "changes": map[string]any{"title": map[string]string{"mode": "set", "value": after}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		preview, err := json.Marshal(map[string]any{"changes": []map[string]string{{"field": "title", "before": "Album A", "after": after}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		risk := "medium"
+		id, err := f.writer.CreateException(ctx, curation.ModelException{PendingItemID: itemID, PlanItemID: uuid.New(), ConversationID: &c.ID, Tool: "correct_release", Input: input, Preview: preview, Provider: "sample-model",
+			Review: curation.ExceptionReview{ID: uuid.New(), Model: "sample-review", Decision: "needs_human_confirmation", Source: "model", Risk: &risk, Reasons: []string{"发行资料需要人工核对"}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	first := makeException("合成标题甲")
+	record("curation/exceptions", "GET", curationBase+"/exceptions", nil)
+	second := makeException("合成标题乙")
+	base := curationBase + "/exceptions/"
+	record("curation/exception-accepted", "POST", base+first+"/accept", nil)
+	errSample := func(name, path string) {
+		samples.record(name, f.application.request(t, "POST", path, nil, &f.admin, map[string]string{"X-Request-ID": sampleRequestID}), 409)
+	}
+	errSample("errors/exception-stale", base+second+"/accept")
+	record("curation/exception-declined", "POST", base+second+"/decline", nil)
+	errSample("errors/exception-decided", base+second+"/decline")
+	conversationPath := "/api/v1/me/steward/conversations/" + c.ID
+	samples.record("errors/curation-conversation", f.application.request(t, http.MethodPatch, conversationPath, map[string]string{"mode": "operator"}, &f.admin, map[string]string{"X-Request-ID": sampleRequestID}), 409)
+	plan, err := store.CreatePlan(ctx, f.admin.id, c.ID, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errSample("errors/curation-plan", conversationPath+"/plans/"+plan.ID+"/review")
 }

@@ -32,7 +32,11 @@ func (s *runState) executeCalls(ctx context.Context, calls []provider.ToolCall, 
 				caller.SharedExecution = s.sharedDirect(call.Name)
 				if definition, ok := s.definitions[call.Name]; ok && definition.Scope == tool.ScopeShared && !caller.SharedExecution {
 					var preview tool.Preview
-					preview, err = s.registry.PreviewCall(ctx, caller, call.Name, call.Arguments)
+					if s.params.Background && len(pending) >= 20 {
+						err = &tool.Error{Code: "too_many_proposals", Message: "自动整理每步最多提出 20 项修改"}
+					} else {
+						preview, err = s.registry.PreviewCall(ctx, caller, call.Name, call.Arguments)
+					}
 					if err == nil {
 						pending = append(pending, PlanItem{Tool: call.Name, CallID: call.ID, ToolCallID: stored[i].ID, Position: stored[i].Position, Input: call.Arguments, Preview: preview, Revertible: definition.Revertible, IdempotencyKey: stored[i].IdempotencyKey, Untrusted: stored[i].Untrusted})
 						continue
@@ -110,7 +114,7 @@ func (s *runState) executeCalls(ctx context.Context, calls []provider.ToolCall, 
 		if !ok {
 			return messages, stop, ErrInvalidInput
 		}
-		plan, err := plans.CreatePlan(ctx, s.params.Caller.User.ID, s.params.ConversationID, pending)
+		plan, err := plans.CreatePlan(ctx, s.params.Caller.User.ID, s.params.ConversationID, pending, s.params.Background)
 		if err != nil {
 			if ctx.Err() != nil {
 				return messages, EndCancelled, s.cancelPendingCalls(ctx, pending)
@@ -233,9 +237,16 @@ func (s *runState) executePlanItems(ctx context.Context, plans PlanStore, items 
 			if recorded.Output != nil {
 				output = tool.BoundResult(recorded.Output, item.Untrusted)
 				item.Decision, item.OperationID = "accepted", &recorded.ID
+			} else if item.Decision == "escalated" {
+				code = "escalated_to_human"
+				output.Output, _ = json.Marshal(map[string]any{"code": code, "exception_id": item.ExceptionID, "reasons": item.ReviewReasons})
 			} else if item.Decision == "rejected_by_review" {
 				code = "rejected_by_review"
-				output.Output, _ = json.Marshal(map[string]any{"code": code, "reasons": item.ReviewReasons, "review_id": item.ReviewID})
+				result := map[string]any{"code": code, "reasons": item.ReviewReasons, "review_id": item.ReviewID}
+				if item.ExceptionID != "" {
+					result["exception_id"] = item.ExceptionID
+				}
+				output.Output, _ = json.Marshal(result)
 			} else {
 				code = "declined_by_user"
 				output.Output = errorOutput(code, "用户未选择这项修改")

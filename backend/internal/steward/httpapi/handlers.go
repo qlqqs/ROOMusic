@@ -71,6 +71,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	h.route(mux, "POST /api/v1/me/steward/conversations/{id}/cancel", false, h.cancelConversation)
 	h.route(mux, "GET /api/v1/me/steward/conversations/{id}/events", false, h.conversationEvents)
 	h.route(mux, "POST /api/v1/me/steward/conversations/{id}/read", false, h.readConversation)
+	h.route(mux, "GET /api/v1/admin/curation/conversations", true, h.listCurationConversations)
 	h.route(mux, "GET /api/v1/admin/steward/settings", true, h.getInstanceSettings)
 	h.route(mux, "PUT /api/v1/admin/steward/settings", true, h.putInstanceSettings)
 	h.route(mux, "GET /api/v1/admin/steward/egress-allowlist", true, h.listAllowlist)

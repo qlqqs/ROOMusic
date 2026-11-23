@@ -77,6 +77,8 @@ var packageRules = map[string]packageRule{
 	"catalog":                           {imports: []string{"catalog/internal/artistgraph", "catalog/internal/writegate", "catalog/internal/releasesql", "platform/uuid", "catalog/textnorm", "catalog/internal/searchindex"}},
 	"catalog/governance":                {imports: []string{"catalog/textnorm", "catalog/internal/artistgraph", "catalog", "catalog/internal/releasesql", "catalog/metadata", "operations", "platform/uuid", "catalog/internal/searchindex", "catalog/internal/writegate"}},
 	"curation":                          {imports: []string{"sources", "operations", "identity", "catalog", "catalog/artwork", "catalog/metadata", "catalog/governance", "platform/uuid"}},
+	"curation/model":                    {imports: []string{"curation", "curation/program", "catalog", "catalog/governance", "operations", "platform/uuid"}},
+	"curation/stewardtools":             {imports: []string{"curation", "curation/program", "catalog", "catalog/governance", "operations", "platform/uuid", "steward/tool"}},
 	"curation/httpapi":                  {imports: []string{"curation", "identity", "operations", "platform/httpserver"}, http: true},
 	"curation/program":                  {imports: []string{"curation", "catalog", "catalog/metadata", "catalog/textnorm", "operations", "sources", "platform/uuid"}},
 	"operations":                        {imports: []string{"platform/uuid"}},
@@ -123,7 +125,7 @@ var packageRules = map[string]packageRule{
 	"playback/httpapi":                  {imports: []string{"identity", "platform/httpserver", "platform/uuid", "playback"}, http: true},
 	"listening/httpapi":                 {imports: []string{"identity", "listening", "platform/httpserver", "platform/uuid"}, http: true},
 	"app": {imports: []string{
-		"curation", "curation/program", "curation/httpapi", "sources/acoustid", "playback/fingerprint", "sources/musicbrainz", "sources/coverartarchive", "sources/lrclib",
+		"curation", "curation/program", "curation/httpapi", "curation/model", "curation/stewardtools", "steward/provider", "sources", "sources/acoustid", "playback/fingerprint", "sources/musicbrainz", "sources/coverartarchive", "sources/lrclib",
 		"platform/diagnostics", "platform/diagnostics/stewardtools", "backup/stewardtools", "identity/stewardtools", "playback/stewardtools", "dspsettings/stewardtools",
 		"zones/stewardtools", "listening/stewardtools", "personal/stewardtools",
 		"catalog/stewardtools", "catalog/governance/stewardtools", "library/stewardtools", "operations", "operations/stewardtools",

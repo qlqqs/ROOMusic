@@ -58,6 +58,7 @@ function rowStatusOf(entry: PlanEntry, item: PlanItemDTO, decision: ReviewDecisi
   if (step?.status === "succeeded") return { tone: "done", label: "已执行", detail: null, operationId: operationIdOf(step.output) ?? item.operation_id ?? null };
   if (step?.status === "failed") return { tone: "no", label: "没有执行", detail: toolFailureOf(step.errorCode), operationId: null };
   // 审查前为送审的调用发过 tool_started：被拒绝或转人工的项在拿到工具结果、方案事件之前仍是进行中，以审查结论为准。
+  if (item.decision === "escalated") return { tone: "ask", label: "转给管理员", detail: toolFailureOf("escalated_to_human"), operationId: null };
   if (item.decision === "rejected_by_review" || decision === "rejected") return { tone: "no", label: "没有执行", detail: toolFailureOf("rejected_by_review"), operationId: null };
   if (decision === "needs_human_confirmation" && open) return { tone: "ask", label: "等你确认", ...none };
   if (step?.status === "running") return { tone: "pending", label: "正在执行", ...none };

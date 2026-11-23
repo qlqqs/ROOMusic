@@ -13,10 +13,12 @@ import (
 )
 
 type conversationResponse struct {
-	Unread            bool       `json:"unread"`
-	RunStatus         string     `json:"run_status"`
-	LastReadAt        *time.Time `json:"last_read_at"`
-	LastRunFinishedAt *time.Time `json:"last_run_finished_at"`
+	Kind              string          `json:"kind"`
+	ItemCounts        json.RawMessage `json:"item_counts,omitempty"`
+	Unread            bool            `json:"unread"`
+	RunStatus         string          `json:"run_status"`
+	LastReadAt        *time.Time      `json:"last_read_at"`
+	LastRunFinishedAt *time.Time      `json:"last_run_finished_at"`
 	// ID 是资源标识。
 	ID string `json:"id"`
 	// Title 是会话标题。
@@ -38,22 +40,34 @@ func conversationView(c runtime.Conversation) conversationResponse {
 	if state != "running" && c.PendingItemCount > 0 {
 		state = "awaiting_confirmation"
 	}
-	return conversationResponse{Unread: c.Unread, RunStatus: state, LastReadAt: c.LastReadAt, LastRunFinishedAt: c.LastRunFinishedAt,
+	return conversationResponse{Kind: c.Kind, ItemCounts: c.ItemCounts, Unread: c.Unread, RunStatus: state, LastReadAt: c.LastReadAt, LastRunFinishedAt: c.LastRunFinishedAt,
 		ID: c.ID, Title: c.Title, Mode: c.Mode, Model: c.Model, Status: c.Status, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
 }
 
 func (h *Handlers) listConversations(w http.ResponseWriter, r *http.Request, user identity.User) {
+	h.conversationPage(w, r, user, false)
+}
+
+func (h *Handlers) listCurationConversations(w http.ResponseWriter, r *http.Request, user identity.User) {
+	h.conversationPage(w, r, user, true)
+}
+
+func (h *Handlers) conversationPage(w http.ResponseWriter, r *http.Request, user identity.User, curation bool) {
+	list, count := h.store.ListConversations, h.store.CountConversations
+	if curation {
+		list, count = h.store.ListCurationConversations, h.store.CountCurationConversations
+	}
 	page, size, err := httpserver.ParsePagination(r, 20, 100)
 	if err != nil {
 		httpserver.WriteError(w, r, 400, "invalid_pagination", "分页参数无效")
 		return
 	}
-	conversations, err := h.store.ListConversations(r.Context(), user.ID, runtime.ConversationPage{Number: page, Size: size})
+	conversations, err := list(r.Context(), user.ID, runtime.ConversationPage{Number: page, Size: size})
 	if err != nil {
 		h.writeStoreError(w, r, err)
 		return
 	}
-	total, err := h.store.CountConversations(r.Context(), user.ID)
+	total, err := count(r.Context(), user.ID)
 	if err != nil {
 		h.writeStoreError(w, r, err)
 		return

@@ -1,6 +1,7 @@
 {
   "body": {
     "active": true,
+    "daily_token_limit": 10000000,
     "enabled": true,
     "enabled_at": "2026-01-01T00:00:00Z",
     "enabled_by": {
@@ -8,6 +9,7 @@
       "username": "curator"
     },
     "inactive_reason": null,
+    "model": "",
     "paused": true
   },
   "status": 200

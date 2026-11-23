@@ -1,0 +1,30 @@
+{
+  "body": {
+    "items": [
+      {
+        "created_at": "2026-01-01T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000001",
+        "item_counts": {
+          "in_progress": 1
+        },
+        "kind": "curation",
+        "last_read_at": null,
+        "last_run_finished_at": null,
+        "mode": "steward",
+        "model": "sample-model",
+        "pending_item_count": 0,
+        "run_status": "idle",
+        "status": "idle",
+        "title": "自动整理合成样例",
+        "unread": false,
+        "updated_at": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 1
+    }
+  },
+  "status": 200
+}

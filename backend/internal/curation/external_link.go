@@ -32,12 +32,16 @@ type ExternalSummary struct {
 	Country string `json:"country"`
 }
 type LinkRequest struct {
-	ReleaseID               string
-	Links                   []LinkIntent
-	Source                  Source
-	Method, Confidence      string
-	External                ExternalSummary
-	BatchID, Key, RequestID string
+	CheckEvidence               func(context.Context, *sql.Tx) error
+	ExpectedRevision            int64
+	ConfirmedBy, ConversationID string
+	ExternalSource              string
+	ReleaseID                   string
+	Links                       []LinkIntent
+	Source                      Source
+	Method, Confidence          string
+	External                    ExternalSummary
+	BatchID, Key, RequestID     string
 }
 type LinkApplied struct {
 	OperationID string            `json:"operation_id"`
@@ -46,6 +50,7 @@ type LinkApplied struct {
 }
 
 type linkState struct {
+	Provider   string          `json:"provider,omitempty"`
 	Source     string          `json:"source"`
 	Method     string          `json:"method"`
 	Confidence string          `json:"confidence"`
@@ -126,13 +131,21 @@ func addUnoccupiedLink(ctx context.Context, tx *sql.Tx, l Link) (string, error) 
 }
 
 func (w *Writer) ApplyLinks(ctx context.Context, request LinkRequest) (LinkApplied, error) {
+	external, err := musicBrainzSource(request.ExternalSource, request.Source)
+	if err != nil {
+		return LinkApplied{}, err
+	}
 	links, err := request.normalizedLinks()
 	if err != nil {
 		return LinkApplied{}, err
 	}
 	id := strings.ToLower(request.ReleaseID)
-	fingerprint := operations.Fingerprint(map[string]any{"type": operations.TypeExternalLink, "release_id": id, "links": links, "provider": request.Source.Provider, "method": request.Method})
-	spec, err := w.sourceSpec(ctx, operations.TypeExternalLink, id, fingerprint, request.Source, request.BatchID, request.Key, request.RequestID)
+	fp := map[string]any{"type": operations.TypeExternalLink, "release_id": id, "links": links, "provider": request.Source.Provider, "method": request.Method}
+	if request.ExpectedRevision != 0 {
+		fp["expected_revision"] = request.ExpectedRevision
+	}
+	fingerprint := operations.Fingerprint(fp)
+	spec, err := w.sourceSpec(ctx, operations.TypeExternalLink, id, fingerprint, request.Source, request.BatchID, request.Key, request.RequestID, request.ConfirmedBy, request.ConversationID)
 	if err != nil {
 		return LinkApplied{}, err
 	}
@@ -142,19 +155,27 @@ func (w *Writer) ApplyLinks(ctx context.Context, request LinkRequest) (LinkAppli
 		if err != nil {
 			return operations.Outcome{}, err
 		}
-		if err := checkExternalWriter(ctx, tx, spec); err != nil {
+		if err := checkWrite(ctx, tx, spec, request.ConfirmedBy, id, request.ExpectedRevision, release.EditRevision()); err != nil {
 			return operations.Outcome{}, err
+		}
+		if request.CheckEvidence != nil {
+			if err := request.CheckEvidence(ctx, tx); err != nil {
+				return operations.Outcome{}, err
+			}
 		}
 		if err := validateLinkMembers(ctx, tx, id, links); err != nil {
 			return operations.Outcome{}, err
 		}
 		for _, intent := range links {
-			l := Link{Source: request.Source.Provider, ObjectType: intent.ObjectType, ObjectID: intent.ObjectID, ExternalID: intent.ExternalID, Method: request.Method, Confidence: request.Confidence, OperationID: operationID}
+			l := Link{Source: external, ObjectType: intent.ObjectType, ObjectID: intent.ObjectID, ExternalID: intent.ExternalID, Method: request.Method, Confidence: request.Confidence, OperationID: operationID}
 			skip, err := addUnoccupiedLink(ctx, tx, l)
 			if err != nil {
 				return operations.Outcome{}, err
 			}
 			if skip != "" {
+				if request.Source.Kind == "model" && skip != "unchanged" {
+					return operations.Outcome{}, operations.Conflict(skip, "外部对应已有其他目标或已标记不再提出")
+				}
 				applied.Skipped[intent.key()] = skip
 				continue
 			}
@@ -163,7 +184,10 @@ func (w *Writer) ApplyLinks(ctx context.Context, request LinkRequest) (LinkAppli
 		if len(applied.Written) == 0 {
 			return operations.Outcome{}, operations.Conflict("nothing_to_apply", "没有需要建立的对应")
 		}
-		after := linkState{request.Source.Provider, request.Method, request.Confidence, request.External, applied.Written}
+		after := linkState{Source: external, Method: request.Method, Confidence: request.Confidence, External: request.External, Links: applied.Written}
+		if request.ExternalSource != "" {
+			after.Provider = request.Source.Provider
+		}
 		out, err := externalOutcome(ctx, release, map[string]any{}, after)
 		applied.OperationID = operationID
 		out.Response = applied

@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/11-23-auto-curation-d-model/research/steward-current.md", "reason": "管家运行时、审查、待定项现状与冲突约束（带行号）"}
+{"file": ".trellis/spec/backend/agent-and-operation-guidelines.md", "reason": "模式、审查权威与“后台自动整理”合同起点"}
+{"file": ".trellis/spec/backend/steward-runtime-contracts.md", "reason": "运行、取消、并发、SSE 与存储合同"}
+{"file": ".trellis/spec/backend/steward-review-contracts.md", "reason": "审查调用、证据、策略全文与执行绑定"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "自动层写入、外部对应、待定项、程序循环（§4、§15、§16）"}
+{"file": "docs/architecture/adr/0006-auto-curation-and-sources.md", "reason": "第 9、10 节：模型层后台运行与停止条件"}

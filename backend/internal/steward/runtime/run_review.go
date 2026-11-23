@@ -75,6 +75,7 @@ func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Messag
 	if reviewErr == nil && len(eligible) > 0 {
 		var returned []ReviewItem
 		returned, review.Usage, reviewErr = callReview(ctx, s.params.Provider, model, eligible, evidence)
+		s.reportUsage(ctx, UsageReview, review.Usage)
 		for _, item := range returned {
 			results[item.ItemID] = item
 		}
@@ -134,7 +135,7 @@ func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Messag
 		return nil, "", err
 	}
 	for _, result := range review.Items {
-		if result.Decision == "needs_human_confirmation" {
+		if !s.params.Background && result.Decision == "needs_human_confirmation" {
 			continue
 		}
 		if ctx.Err() != nil {
@@ -167,6 +168,18 @@ func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Messag
 			item.Decision = "accepted"
 		} else {
 			item.Decision = "rejected_by_review"
+			if s.params.Background {
+				if result.Decision == "needs_human_confirmation" {
+					item.Decision = "escalated"
+				}
+				if s.params.Escalate == nil {
+					return nil, "", ErrInvalidInput
+				}
+				item.ExceptionID, err = s.params.Escalate(ctx, item, review, result)
+				if err != nil {
+					return nil, "", err
+				}
+			}
 		}
 		item.ReviewID = review.ID
 		item.ReviewDecision = result.Decision

@@ -1,4 +1,4 @@
-import { decodeCurationBatch, decodeCurationBatchPage, decodeCurationProgress, decodeCurationSettings, decodeCurationSource, decodeCurationSources, decodeScopeRevert, decodeSuppressionPage } from "../features/curation/api/decoders";
+import { decodeCurationBatch, decodeCurationBatchPage, decodeCurationExceptionAccepted, decodeCurationExceptionDeclined, decodeCurationExceptionPage, decodeCurationProgress, decodeCurationSettings, decodeCurationSource, decodeCurationSources, decodeScopeRevert, decodeSuppressionPage } from "../features/curation/api/decoders";
 import {
   decodeAllowlist,
   decodeAllowlistEntry,
@@ -6,6 +6,7 @@ import {
   decodeConversation,
   decodeConversationDetail,
   decodeConversationPage,
+  decodeCurationConversationPage,
   decodeConversationPatch,
   decodeCreatedToken,
   decodeDeleted,
@@ -532,6 +533,11 @@ const successContracts: Record<string, Contract> = {
   "curation/batch": { status: 200, decode: decodeCurationBatch },
   "curation/scope-reverted": { status: 200, decode: decodeScopeRevert },
   "curation/suppressions": { status: 200, decode: decodeSuppressionPage },
+  "curation/settings-model": { status: 200, decode: decodeCurationSettings },
+  "curation/exceptions": { status: 200, decode: decodeCurationExceptionPage },
+  "curation/exception-accepted": { status: 200, decode: decodeCurationExceptionAccepted },
+  "curation/exception-declined": { status: 200, decode: decodeCurationExceptionDeclined },
+  "curation/conversations": { status: 200, decode: decodeCurationConversationPage },
   "operations/link-reverted": { status: 200, decode: decodeRevertResult },
   "group-changes/joined": { status: 200, decode: decodeGroupChangeResult },
   "group-changes/detached": { status: 200, decode: decodeGroupChangeResult },
@@ -682,6 +688,10 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/backup-deletions-invalid": { status: 400, code: "invalid_input" },
   "errors/backup-retention-invalid": { status: 400, code: "invalid_input" },
   "errors/curation-key-not-supported": { status: 400, code: "key_not_supported" },
+  "errors/exception-stale": { status: 409, code: "exception_stale" },
+  "errors/exception-decided": { status: 409, code: "exception_decided" },
+  "errors/curation-conversation": { status: 409, code: "curation_conversation" },
+  "errors/curation-plan": { status: 409, code: "curation_plan" },
   "artists/adjudication/albums-any-preparing": { status: 503, code: "artist_catalog_preparing" },
   "artists/adjudication/albums-empty-participation": { status: 400, code: "invalid_artist_participation" },
   "artists/adjudication/albums-invalid-pagination": { status: 400, code: "invalid_pagination" },

@@ -13,6 +13,7 @@ import (
 )
 
 var (
+	ErrCurationPlan       = errors.New("后台整理方案由自动整理处理")
 	ErrPlanNotFound       = errors.New("方案不存在或已处理")
 	ErrPlanExpired        = errors.New("方案已过期")
 	ErrPlanDigestMismatch = errors.New("方案摘要不一致")
@@ -20,16 +21,18 @@ var (
 
 // Plan 是前端确认卡片与持久化方案的共同投影。
 type Plan struct {
-	Review    *Review    `json:"review"`
-	ID        string     `json:"plan_id"`
-	Digest    string     `json:"digest"`
-	ExpiresAt time.Time  `json:"expires_at"`
-	Items     []PlanItem `json:"items"`
-	Status    string     `json:"status"`
+	Background bool       `json:"-"`
+	Review     *Review    `json:"review"`
+	ID         string     `json:"plan_id"`
+	Digest     string     `json:"digest"`
+	ExpiresAt  time.Time  `json:"expires_at"`
+	Items      []PlanItem `json:"items"`
+	Status     string     `json:"status"`
 }
 
 // PlanItem 中执行输入与幂等键只保留在后端。
 type PlanItem struct {
+	ExceptionID    string          `json:"-"`
 	ReviewID       string          `json:"-"`
 	ReviewDecision string          `json:"-"`
 	ReviewReasons  []string        `json:"-"`
@@ -62,7 +65,7 @@ type PlanDecision struct {
 
 // PlanStore 扩展运行存储，方案与工具结果均在所属会话锁内持久化。
 type PlanStore interface {
-	CreatePlan(context.Context, string, string, []PlanItem) (Plan, error)
+	CreatePlan(context.Context, string, string, []PlanItem, ...bool) (Plan, error)
 	DecidePlan(context.Context, string, string, PlanDecision) error
 	PendingExecutions(context.Context, string, string) ([]PlanItem, error)
 	FinishPlanItem(context.Context, string, string, PlanItem, ToolCallResult, MessageInput) error
@@ -108,12 +111,19 @@ func projectItem(item *PlanItem) {
 
 // CheckPlanDecision 在模型配置准备之前检查方案快照；取舍事务会在锁内再次检查。
 func CheckPlanDecision(detail ConversationDetail, decision PlanDecision) error {
-	if detail.Conversation.Mode == "steward" && len(decision.AutoApproveTools) > 0 {
-		return ErrInvalidInput
-	}
+	return checkPlanDecision(detail, decision, false)
+}
+
+func checkPlanDecision(detail ConversationDetail, decision PlanDecision, background bool) error {
 	for _, plan := range detail.Plans {
 		if plan.ID != decision.PlanID {
 			continue
+		}
+		if plan.Background != background {
+			return ErrCurationPlan
+		}
+		if detail.Conversation.Mode == "steward" && len(decision.AutoApproveTools) > 0 {
+			return ErrInvalidInput
 		}
 		if plan.Status == "expired" {
 			return ErrPlanExpired

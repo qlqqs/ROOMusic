@@ -131,6 +131,16 @@ I、G、H 只依赖地基，可以在里程碑一、二进行期间穿插；表�
   每日上限的达到与次日恢复；开启者被停用、清除密钥、关开关后的停止；对话里的 `steward` 模式行为除证据外不变；
   权限与审批矩阵做变异检查。
 
+- 完成后留给后续子任务的（D 的交付记录）：
+  - E2：接口都已就绪（`curation-contracts.md` 第 17.5 节），前端解码器与端点已写好、界面未做：设置的 `model`、`daily_token_limit`（`updateCurationSettings`），
+    进度的 `model` 段（状态、不可用原因、今日用量、上限、各状态项数），例外列表与采纳、不采纳（`fetchCurationExceptions`、`acceptCurationException`、`declineCurationException`），
+    自动整理会话列表（`fetchCurationConversations`，打开、接回、续聊用管家现有会话页；会话的 `kind=curation`、模式锁定）。
+    例外的 `input`、`preview` 是原始工具输入与预览，`preview.changes` 是前后值；采纳 409 `exception_stale` 时要提示“内容变了，请重新看”。“日”按服务器时区。
+    运行结束原因新增 `curation_stopped`、方案项取舍新增 `escalated`，管家会话页已有文案。
+  - I、G、H：后台工具白名单在 `app/curation_model.go`；新开放的写工具要加进白名单，字段类按 `Source=="curation"` 改道写自动层（照 `correct_release` 的 `AutoCorrectRelease`），
+    结构类工具（归组、发行合并拆分）开放给后台时，要在审查策略里加上“证据里没有生效的外部对应就转人工”这条（ADR 第 9 节；D 没有开放这类工具，`ReviewPolicyRules` 里还没有这条），策略版本随之升到 3。例外表的 `tool` 约束只允许 `resolve_release_match`、`correct_release`，新工具要随迁移放开。
+  - V12：真实试用时看后台运行的每批用量、例外比例与 `shelved/unhandled` 数；同模型审查时设置里的提示（U11）。
+
 ### E2 例外与用量界面
 
 - 范围：例外列表与采纳、不采纳；当天用量、上限设置、排队项数；自动整理会话的入口。

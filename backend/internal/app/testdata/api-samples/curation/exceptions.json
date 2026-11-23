@@ -1,0 +1,59 @@
+{
+  "body": {
+    "items": [
+      {
+        "conversation_id": "00000000-0000-4000-8000-000000000001",
+        "created_at": "2026-01-01T00:00:00Z",
+        "decided_at": null,
+        "decided_by": null,
+        "id": "00000000-0000-4000-8000-000000000002",
+        "input": {
+          "basis": {
+            "note": "合成候选资料"
+          },
+          "changes": {
+            "title": {
+              "mode": "set",
+              "value": "合成标题甲"
+            }
+          },
+          "expected_revision": 1,
+          "release_id": "00000000-0000-4000-8000-000000000003"
+        },
+        "kind": "release_match",
+        "operation_ids": [],
+        "pending_item_id": "00000000-0000-4000-8000-000000000004",
+        "preview": {
+          "changes": [
+            {
+              "after": "合成标题甲",
+              "before": "Album A",
+              "field": "title"
+            }
+          ]
+        },
+        "release": {
+          "artist": "Artist A",
+          "id": "00000000-0000-4000-8000-000000000003",
+          "title": "Album A"
+        },
+        "review": {
+          "decision": "needs_human_confirmation",
+          "id": "00000000-0000-4000-8000-000000000005",
+          "model": "sample-review",
+          "reasons": [
+            "发行资料需要人工核对"
+          ],
+          "risk": "medium",
+          "source": "model"
+        },
+        "status": "open",
+        "tool": "correct_release"
+      }
+    ],
+    "page": 1,
+    "page_size": 50,
+    "total": 1
+  },
+  "status": 200
+}
