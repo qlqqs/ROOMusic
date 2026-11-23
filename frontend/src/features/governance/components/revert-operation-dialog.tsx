@@ -36,6 +36,7 @@ function revertIntentOf(item: OperationItemDTO, current: ReleaseTarget | undefin
     return { kind: "revert", release, operationId: item.id, subject: "group", returnGroupId: item.changes.from.group_id };
   }
   if (item.changes?.kind === "release_issue_review") return { kind: "revert", release, operationId: item.id, subject: "review" };
+  if (item.changes?.kind === "release_merge" || item.changes?.kind === "release_auto_merge") return { kind: "revert", release, operationId: item.id, subject: "merge" };
   if (item.changes?.kind === "release_claim") {
     return { kind: "revert", release, operationId: item.id, subject: "claim", returnGroupId: item.changes.previous_group_id };
   }
@@ -48,6 +49,8 @@ const titles = {
   release_group_default: "撤销这次默认版本调整？",
   release_issue_review: "撤销这次核对？",
   release_claim: "撤销这次认领？",
+  release_merge: "撤销这次合并？",
+  release_auto_merge: "撤销这次自动合并？",
   release_auto_correction: "撤销这次自动补全？",
   track_correction: "撤销这次曲目修改？",
   track_auto_correction: "撤销这次曲目的自动补全？",

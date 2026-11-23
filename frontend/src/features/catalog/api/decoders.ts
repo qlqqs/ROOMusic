@@ -13,6 +13,7 @@ const MAX_EVIDENCE_CANDIDATES = 20;
 const MAX_EVIDENCE_SOURCE_REFS = 100;
 const MAX_EVIDENCE_TEXT = 500; // 证据里的值、候选、原因码与来源引用，后端按 500 字节截断
 const MAX_CORRECTED_FIELDS = 16; // 有人工修正的字段名；后端目前可修正 8 个字段，留出余量
+const MAX_MERGED_RELEASES = 256; // 并入一个发行的其他发行；每个至少一碟，不会超过发行的碟数上限
 const MAX_COMPARED_FORMATS = 32; // 版本对比里一个版本的不同音频参数组合（maxComparedFormats）
 
 // 别的 feature（歌单卡片的封面拼图）经这个模块复用同一个封面摘要解码器。
@@ -254,6 +255,8 @@ const releaseDetailDecoder = d.object({
   corrected_fields: d.array(d.string({ min: 1, max: 64 }), { max: MAX_CORRECTED_FIELDS }),
   // 显示的值来自自动整理的字段：没有人工修正、有自动值（包括自动设空）；没有时后端省略这个键（M7 E1）。
   auto_fields: d.optional(d.array(d.string({ min: 1, max: 64 }), { max: MAX_CORRECTED_FIELDS })),
+  // 整张并入这个发行的其他发行（M7 H）：只有管理员的响应带这个键；revertible 为 false 时（之后有人工的结构操作，或来源被改过）不能撤销。
+  merged_releases: d.optional(d.array(d.object({ id: d.uuid(), title: d.string(), operation_id: d.uuid(), revertible: d.boolean() }), { max: MAX_MERGED_RELEASES })),
 });
 
 // 管理员证据里的来源引用必须是有界的安全相对路径：绝对路径、盘符、`file://`、反斜杠与上级目录一律拒绝。

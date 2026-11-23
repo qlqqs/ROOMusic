@@ -152,7 +152,8 @@ const exceptionDecoder = d.object({
   decided_by: d.nullable(d.uuid()),
   id: d.uuid(),
   input: suppressionValueDecoder,
-  kind: d.oneOf(["release_match", "recording_match"] as const),
+  // release_merge（M7 H）：两个本地发行对上同一个外部发行，模型提出整张并入。
+  kind: d.oneOf(["release_match", "recording_match", "release_merge"] as const),
   operation_ids: d.array(d.uuid(), { max: 16 }),
   pending_item_id: d.uuid(),
   preview: d.object({ changes: d.array(exceptionChangeDecoder, { max: 100 }) }),
@@ -166,7 +167,7 @@ const exceptionDecoder = d.object({
     source: d.oneOf(["model", "policy"] as const),
   }),
   status: d.oneOf(["open", "accepting", "accepted", "declined"] as const),
-  tool: d.oneOf(["resolve_release_match", "correct_release", "correct_track"] as const),
+  tool: d.oneOf(["resolve_release_match", "correct_release", "correct_track", "merge_releases"] as const),
   // 曲目字段的提案（M7 I）带曲目（提出时的有效标题）。
   track: d.optional(d.object({ id: d.uuid(), title: d.string({ max: d.unbounded }) })),
 });

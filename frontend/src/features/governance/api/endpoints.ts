@@ -21,6 +21,8 @@ import {
   decodeGroupDefaultResult,
   decodeIssuePage,
   decodeIssueReviewResult,
+  decodeMergePreview,
+  decodeMergeResult,
   decodeOperationPage,
   decodeReleaseIssues,
   decodeRevertResult,
@@ -36,6 +38,8 @@ import {
   type ClaimPageDTO,
   type ClaimPreviewDTO,
   type ClaimResultDTO,
+  type MergePreviewDTO,
+  type MergeResultDTO,
   type CorrectableField,
   type CorrectionResultDTO,
   type CorrectionStateDTO,
@@ -228,6 +232,20 @@ export function claimRelease(releaseId: string, body: ClaimBody, idempotencyKey:
     },
     decodeClaimResult,
   );
+}
+
+/**
+ * 发行整张并入的预览（M7 H，仅管理员）：把 sourceId 整张并入 releaseId 之后的碟序、合并期间不显示的内容与收藏的去向，以及提交时要带回的令牌。
+ * 已并入别处 409 release_merged，来源已有别的发行并入 409 merge_chain，任一不存在或不可见 404，合起来超过上限 409 release_too_large。
+ */
+export function fetchMergePreview(releaseId: string, sourceId: string, signal?: AbortSignal): Promise<ApiResponse<MergePreviewDTO>> {
+  const query = new URLSearchParams({ source: sourceId });
+  return apiRequest({ method: "GET", path: `/api/v1/releases/${releaseId}/merge-preview?${query}`, signal }, decodeMergePreview);
+}
+
+/** 把 sourceId 整张并入 releaseId：带预览令牌，预览之后有扫描或修改返回 409 merge_changed。要求幂等键与同源请求。 */
+export function mergeRelease(releaseId: string, sourceId: string, token: string, idempotencyKey: string): Promise<ApiResponse<MergeResultDTO>> {
+  return apiRequest({ method: "POST", path: `/api/v1/releases/${releaseId}/merge`, body: { source_release_id: sourceId, token }, idempotencyKey }, decodeMergeResult);
 }
 
 // ---- 艺人的治理（M5 ⑤，管理员）----

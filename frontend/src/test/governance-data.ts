@@ -562,6 +562,8 @@ function invertChanges(changes: OperationChangesDTO): OperationChangesDTO {
   if (changes.kind === "artist_merge" || changes.kind === "artist_split" || changes.kind === "artist_rename" || changes.kind === "artist_candidate_ignore") return changes;
   // 外部封面、外部歌词与外部对应的撤销记录带的是被撤销操作的内容，不分前后。
   if (changes.kind === "release_external_artwork" || changes.kind === "track_external_lyrics" || changes.kind === "external_link") return changes;
+  // 整张并入的撤销记录同样带被撤销那次合并的内容（M7 H）。
+  if (changes.kind === "release_merge" || changes.kind === "release_auto_merge") return changes;
   if (changes.kind === "release_auto_correction") return { kind: "release_auto_correction", fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
   if (changes.kind === "track_correction") return { kind: "track_correction", track: changes.track, fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
   if (changes.kind === "track_auto_correction") return { kind: "track_auto_correction", track: changes.track, fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };

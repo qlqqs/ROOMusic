@@ -3,8 +3,8 @@ import { useCallback, useMemo } from "react";
 import { failureOf, isOutcomeUncertain, type ApiFailure } from "../../../shared/api";
 import { newIdempotencyKey } from "../../../shared/lib/ids";
 import { useViewerScope } from "../../auth";
-import type { ClaimResultDTO, CorrectableField, CorrectionResultDTO, GroupChangeResultDTO, GroupDefaultResultDTO, IssueReviewResultDTO, RevertResultDTO, ReviewableIssue } from "../api/decoders";
-import { changeReleaseGroup, claimRelease, correctRelease, reviewReleaseIssue, revertOperation, setGroupDefault, type CorrectionChanges } from "../api/endpoints";
+import type { ClaimResultDTO, CorrectableField, CorrectionResultDTO, GroupChangeResultDTO, GroupDefaultResultDTO, IssueReviewResultDTO, MergeResultDTO, RevertResultDTO, ReviewableIssue } from "../api/decoders";
+import { changeReleaseGroup, claimRelease, correctRelease, mergeRelease, reviewReleaseIssue, revertOperation, setGroupDefault, type CorrectionChanges } from "../api/endpoints";
 import { governanceKeys } from "../query-keys";
 
 /** 命令作用的发行：id 用来发请求，title 只用来写提示文字。 */
@@ -12,9 +12,9 @@ export type ReleaseTarget = { id: string; title: string };
 
 /**
  * 被撤销的操作是哪一种：成功提示据此说明恢复了什么。group 是从操作记录里撤销的归组调整（记录不区分归入与移出），default 是默认版本的调整，
- * review 是核对与取消核对，claim 是认领（修正、专辑、默认版本与核对一起还给旧版本）。
+ * review 是核对与取消核对，claim 是认领（修正、专辑、默认版本与核对一起还给旧版本），merge 是发行的整张并入（被并入的版本恢复为单独的发行）。
  */
-export type RevertSubject = "correct" | "join" | "detach" | "group" | "default" | "review" | "claim" | "artist" | "other";
+export type RevertSubject = "correct" | "join" | "detach" | "group" | "default" | "review" | "claim" | "merge" | "artist" | "other";
 
 export type ReleaseIntent =
   | { kind: "correct"; release: ReleaseTarget; revision: number; changes: CorrectionChanges; fields: readonly CorrectableField[] }
@@ -55,6 +55,16 @@ export type ReleaseIntent =
       preview: string;
     }
   | {
+      /**
+       * 把 source 整张并入 release（M7 H）：source 的碟接在后面，source 不再单独出现。token 是预览令牌：预览之后有扫描或修改，
+       * 后端返回 409 merge_changed，页面重新读取预览。
+       */
+      kind: "merge";
+      release: ReleaseTarget;
+      source: ReleaseTarget;
+      token: string;
+    }
+  | {
       kind: "revert";
       release: ReleaseTarget;
       operationId: string;
@@ -79,6 +89,7 @@ export type ReleaseCommandResult =
   | { kind: "default"; result: GroupDefaultResultDTO }
   | { kind: "review"; result: IssueReviewResultDTO }
   | { kind: "claim"; result: ClaimResultDTO }
+  | { kind: "merge"; result: MergeResultDTO }
   | { kind: "revert"; result: RevertResultDTO };
 
 export type ReleaseCommandState =
@@ -106,7 +117,7 @@ type ReleaseCommandsOptions = {
 };
 
 /**
- * 管理员对发行与专辑的写操作：修正字段、归入其他专辑、移出为独立专辑、设定或清除默认版本、核对问题、认领与撤销。悲观更新：只在后端确认并刷新相关查询之后才算完成，
+ * 管理员对发行与专辑的写操作：修正字段、归入其他专辑、移出为独立专辑、设定或清除默认版本、核对问题、认领、整张并入与撤销。悲观更新：只在后端确认并刷新相关查询之后才算完成，
  * 不做乐观修改；无论成败（包括 409 冲突与结果不确定）都刷新，让界面显示的是服务器当前的状态。
  * 同一时刻只有一个命令；写操作从不自动重试，重试由用户显式触发。
  */
@@ -142,6 +153,10 @@ export function useReleaseCommands({ refresh, onMoved }: ReleaseCommandsOptions)
         case "claim": {
           const { data } = await claimRelease(command.release.id, { expectedRevision: command.revision, sourceId: command.source.id, sourceRevision: command.sourceRevision, preview: command.preview }, command.key);
           return { kind: "claim", result: data };
+        }
+        case "merge": {
+          const { data } = await mergeRelease(command.release.id, command.source.id, command.token, command.key);
+          return { kind: "merge", result: data };
         }
         case "revert": {
           const { data } = await revertOperation(command.operationId, command.key);

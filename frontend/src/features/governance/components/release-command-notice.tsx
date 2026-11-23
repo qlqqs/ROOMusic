@@ -34,6 +34,7 @@ const revertedText: Readonly<Record<RevertSubject, string>> = {
   default: "已撤销默认版本的调整。",
   review: "已撤销这次核对，问题恢复到之前的状态。",
   claim: "已撤销这次认领，修改还给了旧版本。",
+  merge: "已撤销合并，被并入的版本恢复为单独的发行。",
   artist: "已撤销，艺人恢复到这次操作之前的样子。",
   other: "已撤销。",
 };
@@ -52,6 +53,8 @@ function successText(command: ReleaseCommand, result: ReleaseCommandResult): str
         : "已把这个版本设为默认版本。";
     case "claim":
       return claimResultText(command.kind === "claim" ? command.source.title : "", command.release.title, result.result);
+    case "merge":
+      return `已把《${command.kind === "merge" ? command.source.title : ""}》并入这个版本。`;
     case "review": {
       const label = reviewableIssueLabels[result.result.issue];
       return result.result.reviewed ? `已把“${label}”标记为已核对。` : `已取消“${label}”的核对。`;
@@ -134,6 +137,13 @@ export function ReleaseCommandNotice({ state, releaseId, hideFailure, onUndo, on
     return (
       <Notice tone="warning" title="这个旧版本现在不需要认领" action={dismiss}>
         可能它的文件回来了，或者已经认领过了。
+      </Notice>
+    );
+  }
+  if (!state.uncertain && state.command.kind === "revert" && state.command.subject === "merge" && isHttpFailure(state.failure, 409, "revert_conflict")) {
+    return (
+      <Notice tone="warning" title="这次合并现在不能撤销" action={dismiss}>
+        被并入的版本之后又被改动过，或者合并之后又有人工的归组、认领或合并。
       </Notice>
     );
   }

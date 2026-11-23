@@ -103,7 +103,7 @@ describe("设定默认版本：入口与权限", () => {
     const context = setup();
     renderApp({ path: `/albums/${context.single.id}` });
     await screen.findByRole("heading", { level: 1, name: "Solo Preludes" });
-    expect(await albumAdminActions(userEvent.setup())).toEqual(["编辑发行信息", "归入其他专辑…"]);
+    expect(await albumAdminActions(userEvent.setup())).toEqual(["编辑发行信息", "归入其他专辑…", "并入另一个版本…"]);
   });
 });
 

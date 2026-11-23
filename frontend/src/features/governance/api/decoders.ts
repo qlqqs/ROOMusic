@@ -222,6 +222,8 @@ const OPERATION_TYPES = [
   "release_group_default",
   "release_issue_review",
   "release_claim",
+  "release_merge",
+  "release_auto_merge",
   "release_auto_correction",
   "release_external_artwork",
   "track_external_lyrics",
@@ -355,6 +357,12 @@ const claimChangesDecoder = d.object({
   skipped: d.optional(claimSummaryDecoder),
 });
 
+// 发行整张并入（M7 H）：来源是被并入的发行（当时的标题），medium_count 是并进来的碟数；人工与自动整理的形状相同。
+// 撤销记录带同样的内容（撤销就是把这些碟还给来源）。
+const mergeChangesShape = { source: d.object({ id: d.uuid(), title: d.string() }), medium_count: d.integer({ min: 0 }) };
+const releaseMergeChangesDecoder = d.object({ kind: d.literal("release_merge"), ...mergeChangesShape });
+const releaseAutoMergeChangesDecoder = d.object({ kind: d.literal("release_auto_merge"), ...mergeChangesShape });
+
 // 艺人的治理（M5 ⑤，都不能撤销：合并的反向是拆开，改名的反向是再改名）。名字是当时的快照。
 const artistSnapshotDecoder = d.object({ id: d.uuid(), name: d.string() });
 const artistScopeCounts = { name_count: d.integer({ min: 0 }), release_count: d.integer({ min: 0 }), track_count: d.integer({ min: 0 }) };
@@ -385,7 +393,9 @@ type OperationChanges =
   | d.Infer<typeof groupChangesDecoder>
   | d.Infer<typeof defaultChangesDecoder>
   | d.Infer<typeof issueReviewChangesDecoder>
-  | d.Infer<typeof claimChangesDecoder>;
+  | d.Infer<typeof claimChangesDecoder>
+  | d.Infer<typeof releaseMergeChangesDecoder>
+  | d.Infer<typeof releaseAutoMergeChangesDecoder>;
 // 按 kind 选择解码器；未知的 kind 整体拒绝（后端新增操作类型时，样本契约测试先失败，在这里补上才算确认前端已经知道）。
 const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   const kind = typeof input === "object" && input !== null && "kind" in input ? input.kind : undefined;
@@ -400,6 +410,8 @@ const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   if (kind === "release_group_default") return defaultChangesDecoder(input, path);
   if (kind === "release_issue_review") return issueReviewChangesDecoder(input, path);
   if (kind === "release_claim") return claimChangesDecoder(input, path);
+  if (kind === "release_merge") return releaseMergeChangesDecoder(input, path);
+  if (kind === "release_auto_merge") return releaseAutoMergeChangesDecoder(input, path);
   if (kind === "artist_merge") return artistMergeChangesDecoder(input, path);
   if (kind === "artist_split") return artistSplitChangesDecoder(input, path);
   if (kind === "artist_rename") return artistRenameChangesDecoder(input, path);
@@ -455,6 +467,30 @@ const revertResultDecoder = d.object({
   target_id: d.uuid(),
   revision: d.integer({ min: 1 }),
 });
+
+// 发行整张并入的预览（M7 H，管理员）：并入后目标的全部碟（含并进来的，position_after 是并入后的碟号）、合并期间不显示的来源上的内容、
+// 会转到目标专辑的专辑收藏数，以及提交时要带回的令牌。上限与后端一致（发行详情最多 256 碟）。
+const MAX_MERGE_MEDIA = 256;
+const mergeReleaseRefDecoder = d.object({ id: d.uuid(), title: d.string(), group_id: d.uuid() });
+const mergePreviewDecoder = d.object({
+  target: mergeReleaseRefDecoder,
+  source: mergeReleaseRefDecoder,
+  media: d.array(
+    d.object({ medium_id: d.uuid(), from_release: d.uuid(), title: d.string(), position_after: d.integer({ min: 1 }), track_count: d.integer({ min: 0 }) }),
+    { max: MAX_MERGE_MEDIA },
+  ),
+  hidden: d.object({
+    corrections: d.integer({ min: 0 }),
+    reviews: d.integer({ min: 0 }),
+    default_version: d.boolean(),
+    external_artwork: d.boolean(),
+    links: d.integer({ min: 0 }),
+    artist_overrides: d.integer({ min: 0 }),
+  }),
+  favorites_moved: d.integer({ min: 0 }),
+  token: d.string({ min: 1, max: 128 }),
+});
+const mergeResultDecoder = d.object({ operation: d.object({ id: d.uuid() }), release: mergeReleaseRefDecoder });
 
 // 待认领（M4 第三项，管理员）：已不可见、但留有人工修改的旧版本。上限与后端一致（backend/internal/catalog/claim_read.go）。
 const MAX_CLAIM_PAGE_ITEMS = 100;
@@ -715,6 +751,10 @@ export const decodeClaimDetail = d.defineDecoder(claimDetailDecoder);
 export const decodeClaimHints = d.defineDecoder(claimHintsDecoder);
 export const decodeClaimPreview = d.defineDecoder(claimPreviewDecoder);
 export const decodeClaimResult = d.defineDecoder(claimResultDecoder);
+export const decodeMergePreview = d.defineDecoder(mergePreviewDecoder);
+export const decodeMergeResult = d.defineDecoder(mergeResultDecoder);
+export type MergePreviewDTO = d.Infer<typeof mergePreviewDecoder>;
+export type MergeResultDTO = d.Infer<typeof mergeResultDecoder>;
 
 export type CorrectionIntentDTO = d.Infer<typeof correctionDecoder>;
 export type CorrectionFieldDTO = d.Infer<typeof correctionFieldDecoder>;
