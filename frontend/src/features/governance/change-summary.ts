@@ -109,7 +109,7 @@ function autoText(auto: CorrectionIntentDTO | null): string {
 }
 
 // 匹配依据的中文名：程序层的六种依据；以后新增的（如模型判断）按标识原样显示。
-const linkMethodLabels: Record<string, string> = { tag_id: "标签里的编号", barcode: "条码", catalog_number: "厂牌编号", isrc: "ISRC", disc_id: "光盘目录", acoustid: "声学指纹" };
+const linkMethodLabels: Record<string, string> = { tag_id: "标签里的编号", barcode: "条码", catalog_number: "厂牌编号", isrc: "ISRC", disc_id: "光盘目录", acoustid: "声学指纹", model: "模型判断" };
 
 /** 外部发行的一行说明：《标题》— 艺人（年份 · 地区），空的部分不写。 */
 function externalReleaseText(external: { title: string; artist: string; date: string; country: string }): string {

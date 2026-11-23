@@ -48,6 +48,9 @@ const createMessages: Readonly<Record<string, string>> = {
   provider_no_tool_support: "当前模型不支持调用工具，请换一个模型。",
   steward_disabled: "管理员暂时关闭了成员使用管家。",
   conversation_busy: "这个对话正在回答或有等你确认的方案，现在不能切换模式。",
+  // M7 D：自动整理的会话模式固定，后台方案由后台自己处理。
+  curation_conversation: "自动整理的对话固定用“审查后执行”，不能切换模式。",
+  curation_plan: "这是后台自动整理的方案，由后台处理；需要你决定的项在“自动整理”页的例外里。",
 };
 
 const noticeTitles = {
@@ -116,7 +119,9 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
   const reviews = useReviewSnapshot();
   const planOpen = plans.some((entry) => entry.phase === "pending" || entry.phase === "submitting");
   const mode: StewardMode = conversationId === null ? (dock.newMode ?? "assistant") : (detail.data?.mode ?? "assistant");
-  const modeLocked = running || elsewhere || planOpen || creating || patch.isPending;
+  // 自动整理的会话（M7 D）：模式固定为 steward，后台的方案只读（需要人决定的项已成为例外）。
+  const curation = conversationId !== null && detail.data?.kind === "curation";
+  const modeLocked = running || elsewhere || planOpen || creating || patch.isPending || curation;
 
   async function send() {
     const text = draft.trim();
@@ -262,8 +267,8 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
                 reviewState={reviewState}
                 items={turn.items}
                 baseSequence={view.lastSequence}
-                busy={running || elsewhere}
-                resumable={view.canContinue && view.unfinishedPlans.has(planId)}
+                busy={running || elsewhere || curation}
+                resumable={!curation && view.canContinue && view.unfinishedPlans.has(planId)}
                 onContinue={continueRun}
                 name={name}
                 conversationModel={conversationModel}
@@ -278,8 +283,8 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
               entry={placed.entry}
               items={turn.items}
               baseSequence={view.lastSequence}
-              busy={running || elsewhere}
-              resumable={view.canContinue && view.unfinishedPlans.has(placed.entry.plan.plan_id)}
+              busy={running || elsewhere || curation}
+              resumable={!curation && view.canContinue && view.unfinishedPlans.has(placed.entry.plan.plan_id)}
               onContinue={continueRun}
               name={name}
               autoApprove={mode === "assistant"}
@@ -313,7 +318,9 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
           onStop={() => conversationId !== null && stopRun(conversationId)}
           note={detached ? "没能接上这次回答的进度，可以刷新页面查看最新的结果。" : undefined}
           hint={
-            planOpen
+            curation
+              ? "这是后台自动整理的对话；你在这里发的消息按你本人的对话处理，改动写进人工修正"
+              : planOpen
               ? "发新消息会作废上面的方案"
               : view.unfinishedPlans.size > 0 && view.canContinue
                 ? "发新消息不会执行方案里剩下的项"
@@ -325,7 +332,7 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
           context={<ContextChips page={shownContext.page} playback={shownContext.playback} onDismiss={dismissContext} />}
           tools={
             <>
-            <ModeMenu current={mode} disabled={modeLocked} onSelect={selectMode} />
+            {curation ? null : <ModeMenu current={mode} disabled={modeLocked} onSelect={selectMode} />}
             <ModelMenu
               current={currentModel}
               defaultModel={effectiveModelOf(settings)}

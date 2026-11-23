@@ -13,7 +13,7 @@ export function processedRatio(progress: CurationProgressDTO): number {
 }
 
 /**
- * “进度”卡片：后台的状态、已处理与总数（进度条的数值来自服务器）、各类结果的计数、拿不准的待定项与当前批次。
+ * “进度”卡片：后台的状态、已处理与总数（进度条的数值来自服务器）、各类结果的计数与当前批次；拿不准的待定项写在“模型判断”里。
  * 从未打开过时收成一行；后台工作时每 10 秒刷新（见 progressRefetchInterval）。
  */
 export function CurationProgressSection({ settings }: { settings: CurationSettingsDTO | undefined }) {
@@ -72,11 +72,6 @@ function ProgressRows({ progress }: { progress: CurationProgressDTO }) {
           {releases.try_later > 0 ? ` · 稍后再试 ${formatCount(releases.try_later)}` : ""}
         </span>
       </SettingRow>
-      {progress.pending.waiting_model > 0 ? (
-        <SettingRow label="待定" description="程序拿不准的，暂时留着；以后由模型判断或交给你处理。" plainLabel>
-          <span className={styles.value}>{formatCount(progress.pending.waiting_model)} 项</span>
-        </SettingRow>
-      ) : null}
       {progress.batch === null ? null : (
         <SettingRow label="当前批次" plainLabel>
           <span className={styles.value}>

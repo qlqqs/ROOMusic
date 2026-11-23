@@ -60,3 +60,14 @@ export function useStewardEntry(): { available: boolean; name: string; unread: n
 export function isStewardDisabled(error: unknown): boolean {
   return isHttpFailure(failureOf(error), 403, "steward_disabled");
 }
+
+/**
+ * 本人的对话模型与审查模型（自动整理的设置里用：整理用的模型为空时用对话模型；审查模型与它相同时提示另选一个，U11）。
+ * 没读到设置或管家被关闭时是 undefined；审查模型为空表示与对话同一个模型。
+ */
+export function useStewardModels(): { model: string; reviewModel: string } | undefined {
+  const settings = useStewardSettings().data;
+  if (settings === undefined) return undefined;
+  const model = effectiveModelOf(settings);
+  return { model, reviewModel: settings.review_model === undefined || settings.review_model === "" ? model : settings.review_model };
+}

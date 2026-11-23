@@ -46,6 +46,10 @@ import {
   respondToSetCurationSource,
   respondToSetCurationSourceKey,
   respondToSuppressions,
+  respondToCurationExceptions,
+  respondToAcceptException,
+  respondToDeclineException,
+  respondToCurationConversations,
   respondToUpdateCurationSettings,
   type CurationData,
 } from "../../src/test/curation-data";
@@ -529,6 +533,13 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     if (key === "GET /api/v1/admin/curation/suppressions") return guarded(method, path, true, () => respondToSuppressions(mock.curation, search));
     const curationMarker = /^\/api\/v1\/admin\/curation\/suppressions\/([^/]+)$/.exec(path);
     if (curationMarker !== null && method === "DELETE") return guarded(method, path, true, () => respondToClearSuppression(mock.curation, curationMarker[1] ?? ""));
+    if (key === "GET /api/v1/admin/curation/exceptions") return guarded(method, path, true, () => respondToCurationExceptions(mock.curation, search));
+    const curationException = /^\/api\/v1\/admin\/curation\/exceptions\/([^/]+)\/(accept|decline)$/.exec(path);
+    if (curationException !== null && method === "POST") {
+      const id = curationException[1] ?? "";
+      return guarded(method, path, true, () => (curationException[2] === "accept" ? respondToAcceptException(mock.curation, id) : respondToDeclineException(mock.curation, id)));
+    }
+    if (key === "GET /api/v1/admin/curation/conversations") return guarded(method, path, true, () => respondToCurationConversations(mock.curation, search));
     if (key === "GET /api/v1/operations") return guarded(method, path, true, () => respondToOperations(mock.governance, search));
     const operationRevert = /^\/api\/v1\/operations\/([^/]+)\/revert$/.exec(path);
     if (operationRevert !== null && method === "POST") {

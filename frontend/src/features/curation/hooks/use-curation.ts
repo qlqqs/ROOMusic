@@ -1,10 +1,15 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { failureOf, isHttpFailure } from "../../../shared/api";
 import { useViewerScope } from "../../auth";
+import { governanceKeys } from "../../governance";
 import type { CurationProgressDTO, CurationSettingsDTO, CurationSourceDTO, CurationSourcesDTO } from "../api/decoders";
 import {
+  acceptCurationException,
   clearSuppression,
+  declineCurationException,
   fetchCurationBatches,
+  fetchCurationConversations,
+  fetchCurationExceptions,
   fetchCurationProgress,
   fetchCurationSettings,
   fetchCurationSources,
@@ -25,8 +30,11 @@ export function useCurationSettings() {
   });
 }
 
+/** 设置里可以改的几项（至少一项）：总开关、暂停、整理用的模型（空串 = 对话模型）、每日 token 上限（null = 不限）。 */
+export type CurationSettingsChange = { enabled?: boolean; paused?: boolean; model?: string; daily_token_limit?: number | null };
+
 /**
- * 改总开关或暂停：成功后写回设置；外部源的“能不能用”与后台进度都跟着变，让它们重新读取。
+ * 改设置：成功后写回设置；外部源的“能不能用”与后台进度（含模型层）都跟着变，让它们重新读取。
  * 同一页上连续切换按顺序发送（同一个 mutation scope）；失败时缓存不动，界面回到服务器的值。
  */
 export function useUpdateCurationSettings() {
@@ -34,7 +42,7 @@ export function useUpdateCurationSettings() {
   const scope = useViewerScope();
   return useMutation({
     scope: { id: "curation-settings" },
-    mutationFn: (change: { enabled?: boolean; paused?: boolean }) => updateCurationSettings(change),
+    mutationFn: (change: CurationSettingsChange) => updateCurationSettings(change),
     onSuccess: async (response) => {
       if (!scope.isCurrent()) return;
       const key = curationKeys.settings(scope.generation);
@@ -97,6 +105,8 @@ export function useSetCurationSourceKey() {
 export function progressRefetchInterval(progress: CurationProgressDTO | undefined, settings: CurationSettingsDTO | undefined): number | false {
   if (progress === undefined) return false;
   if (progress.state === "running" || progress.state === "waiting_for_scan") return 10_000;
+  // 模型层在跑或等重新审查时也 10 秒（M7 D）。
+  if (progress.model.state === "running" || progress.model.state === "waiting_review") return 10_000;
   if (settings !== undefined) {
     const shouldRun = settings.enabled && settings.active && !settings.paused;
     if (shouldRun && (progress.state === "disabled" || progress.state === "paused")) return 10_000;
@@ -156,5 +166,75 @@ export function useClearSuppression() {
     onSettled: () => {
       if (scope.isCurrent()) void queryClient.invalidateQueries({ queryKey: curationKeys.suppressions(scope.generation) });
     },
+  });
+}
+
+/** 待处理的例外的一页（M7 D）。 */
+export function useCurationExceptions(page: number) {
+  const { generation } = useViewerScope();
+  return useQuery({
+    queryKey: curationKeys.exceptionPage(generation, page),
+    queryFn: ({ signal }) => fetchCurationExceptions("open", page, EXCEPTION_PAGE_SIZE, signal),
+    select: (response) => response.data,
+    placeholderData: keepPreviousData,
+    staleTime: 0,
+  });
+}
+
+/** 例外列表一页的条数。 */
+export const EXCEPTION_PAGE_SIZE = 20;
+
+/** 模型判断一组里列出的最近几个自动整理会话。 */
+export const RECENT_CONVERSATION_COUNT = 3;
+
+/** 当前管理员名下最近的自动整理会话（M7 D）。 */
+export function useCurationConversations() {
+  const { generation } = useViewerScope();
+  return useQuery({
+    queryKey: curationKeys.conversations(generation),
+    queryFn: ({ signal }) => fetchCurationConversations(1, RECENT_CONVERSATION_COUNT, signal),
+    select: (response) => response.data,
+    staleTime: 0,
+  });
+}
+
+/**
+ * 采纳与不采纳之后：例外、进度、批次、会话与操作记录都重新读取（不采纳还多了“不再提出”的标记，在 curation 之下一并失效）。
+ * 例外停在“正在采纳”（多步匹配写了一部分时外部源暂时失败）时不刷新列表，让同一个人在原来的确认框里重试续做。
+ */
+function useAfterExceptionDecision() {
+  const queryClient = useQueryClient();
+  const scope = useViewerScope();
+  return () => {
+    if (!scope.isCurrent()) return;
+    void queryClient.invalidateQueries({ queryKey: curationKeys.all(scope.generation) });
+    void queryClient.invalidateQueries({ queryKey: governanceKeys.all(scope.generation) });
+  };
+}
+
+/** 503 source_unavailable：外部源暂时不可用，例外可能停在“正在采纳”，保留确认框重试，不刷新列表。 */
+export function isRetryableAcceptFailure(error: unknown): boolean {
+  return isHttpFailure(failureOf(error), 503, "source_unavailable");
+}
+
+/** 采纳一条例外；refresh 让目录与详情跟着更新（由 app 提供）。 */
+export function useAcceptException(refresh: () => void) {
+  const after = useAfterExceptionDecision();
+  return useMutation({
+    mutationFn: (id: string) => acceptCurationException(id),
+    onSuccess: () => refresh(),
+    onSettled: (_data, error) => {
+      if (error !== null && isRetryableAcceptFailure(error)) return;
+      after();
+    },
+  });
+}
+
+/** 不采纳一条例外。 */
+export function useDeclineException() {
+  const after = useAfterExceptionDecision();
+  return useMutation({
+    mutationFn: (id: string) => declineCurationException(id),
+    onSettled: () => after(),
   });
 }

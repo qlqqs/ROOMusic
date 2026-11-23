@@ -141,20 +141,21 @@ const suppressionDecoder = d.object({
 });
 const suppressionPageDecoder = d.object({ items: d.array(suppressionDecoder, { max: MAX_PAGE_ITEMS }), pagination: paginationDecoder });
 
-// 例外（M7 D）：后台审查没通过或转人工的一项提案。input 与 preview 是提出时的工具输入与预览，只按数据显示；
-// 外部来的文字（候选标题等）是不可信文本。status：open 等处理，accepting 是某位管理员正在采纳。
-const unknownJSON: d.Decoder<unknown> = (input) => input;
+// 例外（M7 D）：后台审查没通过或转人工的一项提案。input 是提出时的工具输入（只取已知的键），preview.changes 是各项的前值与后值；
+// 外部来的文字（候选标题、外部编号、审查理由）都是不可信文本。status：open 等处理，accepting 是某位管理员正在采纳（中断后由他续做）。
+const jsonDecoder: d.Decoder<JsonValue> = (input, path) => jsonValue(input, path, 0);
+const exceptionChangeDecoder = d.object({ after: jsonDecoder, before: jsonDecoder, field: d.string({ min: 1, max: 64 }) });
 const exceptionDecoder = d.object({
   conversation_id: d.nullable(d.uuid()),
   created_at: d.timestamp(),
   decided_at: d.nullable(d.timestamp()),
   decided_by: d.nullable(d.uuid()),
   id: d.uuid(),
-  input: unknownJSON,
+  input: suppressionValueDecoder,
   kind: d.oneOf(["release_match", "recording_match"] as const),
   operation_ids: d.array(d.uuid(), { max: 16 }),
   pending_item_id: d.uuid(),
-  preview: unknownJSON,
+  preview: d.object({ changes: d.array(exceptionChangeDecoder, { max: 100 }) }),
   release: d.object({ artist: d.string({ max: d.unbounded }), id: d.uuid(), title: d.string({ max: d.unbounded }) }),
   review: d.object({
     decision: d.oneOf(["rejected", "needs_human_confirmation"] as const),
@@ -176,10 +177,27 @@ const exceptionPageDecoder = d.object({
 const exceptionAcceptedDecoder = d.object({ exception: exceptionDecoder, operation_ids: d.array(d.uuid(), { max: 16 }) });
 const exceptionDeclinedDecoder = d.object({ exception: exceptionDecoder });
 
+// 自动整理的会话（M7 D）：归当前管理员、模式固定 steward；打开、接回与续聊用管家的会话接口。item_counts 是这个会话领取过的待定项按状态的数目（没有的状态不出现）。
+const itemCount = () => d.optional(count());
+const curationConversationDecoder = d.object({
+  created_at: d.timestamp(),
+  id: d.uuid(),
+  item_counts: d.object({ in_progress: itemCount(), resolved: itemCount(), shelved: itemCount(), waiting_human: itemCount(), waiting_model: itemCount() }),
+  kind: d.literal("curation"),
+  last_read_at: d.nullable(d.timestamp()),
+  last_run_finished_at: d.nullable(d.timestamp()),
+  mode: d.literal("steward"),
+  model: d.string(),
+  pending_item_count: count(),
+  run_status: d.oneOf(["idle", "running", "awaiting_confirmation"] as const),
+  status: d.oneOf(["idle", "running"] as const),
+  title: d.string(),
+  unread: d.boolean(),
+  updated_at: d.timestamp(),
+});
+const curationConversationPageDecoder = d.object({ items: d.array(curationConversationDecoder, { max: MAX_PAGE_ITEMS }), pagination: paginationDecoder });
+
 export const decodeCurationSettings = d.defineDecoder(settingsDecoder);
-export const decodeCurationExceptionPage = d.defineDecoder(exceptionPageDecoder);
-export const decodeCurationExceptionAccepted = d.defineDecoder(exceptionAcceptedDecoder);
-export const decodeCurationExceptionDeclined = d.defineDecoder(exceptionDeclinedDecoder);
 export const decodeCurationSources = d.defineDecoder(sourcesDecoder);
 export const decodeCurationSource = d.defineDecoder(sourceDecoder);
 export const decodeCurationProgress = d.defineDecoder(progressDecoder);
@@ -187,6 +205,10 @@ export const decodeCurationBatch = d.defineDecoder(batchDecoder);
 export const decodeCurationBatchPage = d.defineDecoder(batchPageDecoder);
 export const decodeScopeRevert = d.defineDecoder(scopeRevertDecoder);
 export const decodeSuppressionPage = d.defineDecoder(suppressionPageDecoder);
+export const decodeCurationExceptionPage = d.defineDecoder(exceptionPageDecoder);
+export const decodeCurationExceptionAccepted = d.defineDecoder(exceptionAcceptedDecoder);
+export const decodeCurationExceptionDeclined = d.defineDecoder(exceptionDeclinedDecoder);
+export const decodeCurationConversationPage = d.defineDecoder(curationConversationPageDecoder);
 
 export type CurationSettingsDTO = d.Infer<typeof settingsDecoder>;
 export type CurationSourceDTO = d.Infer<typeof sourceDecoder>;
@@ -195,6 +217,10 @@ export type CurationProgressDTO = d.Infer<typeof progressDecoder>;
 export type CurationModelProgressDTO = d.Infer<typeof modelProgressDecoder>;
 export type CurationExceptionDTO = d.Infer<typeof exceptionDecoder>;
 export type CurationExceptionPageDTO = d.Infer<typeof exceptionPageDecoder>;
+export type CurationExceptionChangeDTO = d.Infer<typeof exceptionChangeDecoder>;
+export type CurationConversationDTO = d.Infer<typeof curationConversationDecoder>;
+export type CurationConversationPageDTO = d.Infer<typeof curationConversationPageDecoder>;
+export type { JsonValue };
 export type CurationBatchDTO = d.Infer<typeof batchDecoder>;
 export type CurationBatchPageDTO = d.Infer<typeof batchPageDecoder>;
 export type ScopeRevertDTO = d.Infer<typeof scopeRevertDecoder>;

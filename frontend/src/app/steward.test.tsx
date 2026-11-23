@@ -1143,6 +1143,27 @@ describe("修改方案", () => {
   });
 });
 
+describe("自动整理的会话（M7 D）", () => {
+  it("标“自动整理”，没有模式菜单、Shift+Tab 不切换；不在会话列表里，打开后不记进面板", async () => {
+    const { api } = setup({
+      settings: settingsOf({ display_name: "小蓝", review_model: "" }),
+      conversations: [conversationOf(id, { title: "自动整理 01-05", mode: "steward", kind: "curation", messages: persistedRun("后台的第一条", "判断完了") }), conversationOf(other, { title: "自己的对话" })],
+    });
+    renderApp({ path: `/steward/${id}` });
+    expect(await screen.findByText("自动整理", { selector: "span" })).toBeTruthy();
+    const conversation = within(await screen.findByRole("region", { name: "对话" }));
+    const input = await conversation.findByRole("textbox", { name: "回复小蓝" });
+    expect(conversation.queryByRole("button", { name: /^模式：/ })).toBeNull();
+    expect(conversation.getByText("这是后台自动整理的对话；你在这里发的消息按你本人的对话处理，改动写进人工修正")).toBeTruthy();
+    await userEvent.click(input);
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(api.requestsTo("PATCH", `/api/v1/me/steward/conversations/${id}`)).toHaveLength(0);
+    const list = await screen.findAllByRole("link", { name: /自己的对话/ });
+    expect(list.length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: /自动整理 01-05/ })).toBeNull();
+  });
+});
+
 describe("模式", () => {
   const modeButton = (scope: ReturnType<typeof within>) => scope.getByRole("button", { name: /^模式：/ });
 

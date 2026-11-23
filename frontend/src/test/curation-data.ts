@@ -1,4 +1,7 @@
 import type {
+  CurationConversationDTO,
+  CurationExceptionDTO,
+  CurationModelProgressDTO,
   CurationProgressDTO,
   CurationSettingsDTO,
   CurationSourceDTO,
@@ -20,7 +23,6 @@ export type CurationData = {
   /** 后台的内存状态（服务器的 state）；为 null 时按设置推出（开着 → idle 或 paused，关着 → disabled）。 */
   state: ProgramState | null;
   releases: CurationProgressDTO["releases"];
-  waitingModel: number;
   batches: { id: string; openedAt: string; closedAt: string | null }[];
   suppressions: SuppressionDTO[];
   /** 范围撤销每段的条数（后端是 100；测试调小以覆盖分段）。 */
@@ -28,6 +30,17 @@ export type CurationData = {
   /** 服务器上的指纹工具能不能用（不能用时 AcoustID 显示 fingerprint_unavailable）。 */
   fingerprintAvailable: boolean;
   bundledKeyRejected: boolean;
+  /** 模型层（M7 D）：状态为 null 时按设置推出（关着 disabled、暂停 paused，否则 idle）；今天的用量、各状态的项数。 */
+  model: {
+    state: CurationModelProgressDTO["state"] | null;
+    unavailableReason: CurationModelProgressDTO["unavailable_reason"];
+    effectiveModel: string;
+    today: { input_tokens: number; output_tokens: number };
+    items: CurationModelProgressDTO["items"];
+  };
+  /** 例外（新的在前）与当前管理员名下的自动整理会话。 */
+  exceptions: CurationExceptionDTO[];
+  conversations: CurationConversationDTO[];
   counter: number;
 };
 
@@ -57,12 +70,14 @@ export function curationDataOf(governance: GovernanceData | null = null): Curati
     state: null,
     // 默认曲库里没有可整理的发行：现有的管理员概览测试不出现“打开自动整理”的提示。
     releases: { total: 0, processed: 0, matched: 0, uncertain: 0, no_match: 0, try_later: 0 },
-    waitingModel: 0,
     batches: [],
     suppressions: [],
     revertPageSize: 100,
     fingerprintAvailable: true,
     bundledKeyRejected: false,
+    model: { state: null, unavailableReason: null, effectiveModel: "", today: { input_tokens: 0, output_tokens: 0 }, items: { in_progress: 0, shelved: 0, waiting_human: 0, waiting_model: 0 } },
+    exceptions: [],
+    conversations: [],
     counter: 0,
   };
 }
@@ -98,11 +113,18 @@ export function respondToCurationSettings(data: CurationData): ApiResult {
 }
 
 export function respondToUpdateCurationSettings(data: CurationData, body: unknown): ApiResult {
-  const change = typeof body === "object" && body !== null ? (body as { enabled?: unknown; paused?: unknown }) : {};
+  const change = typeof body === "object" && body !== null ? (body as { enabled?: unknown; paused?: unknown; model?: unknown; daily_token_limit?: unknown }) : {};
   const enabled = typeof change.enabled === "boolean" ? change.enabled : undefined;
   const paused = typeof change.paused === "boolean" ? change.paused : undefined;
-  if (enabled === undefined && paused === undefined) return failure(400, "invalid_input", "至少要改一项设置");
+  const model = typeof change.model === "string" ? change.model : undefined;
+  const hasLimit = "daily_token_limit" in change;
+  const limit = change.daily_token_limit;
+  if (hasLimit && limit !== null && !(typeof limit === "number" && Number.isInteger(limit) && limit >= 1 && limit <= 1e12)) return failure(400, "invalid_input", "每日上限无效");
+  if (model !== undefined && new TextEncoder().encode(model).length > 200) return failure(400, "invalid_input", "模型名太长");
+  if (enabled === undefined && paused === undefined && model === undefined && !hasLimit) return failure(400, "invalid_input", "至少要改一项设置");
   const settings = { ...data.settings };
+  if (model !== undefined) settings.model = model;
+  if (hasLimit) settings.daily_token_limit = limit as number | null;
   if (enabled !== undefined) {
     if (enabled && !settings.enabled) {
       settings.enabled_by = ADMIN;
@@ -168,15 +190,8 @@ export function respondToCurationProgress(data: CurationData): ApiResult {
     body: {
       batch: open === undefined ? null : { id: open.id, opened_at: open.openedAt, operations: batchCounts(data, open.id).operations },
       last_pass_finished_at: stateOf(data) === "idle" && data.settings.enabled ? "2026-01-05T00:10:00Z" : null,
-      model: {
-        daily_token_limit: data.settings.daily_token_limit,
-        items: { in_progress: 0, shelved: 0, waiting_human: 0, waiting_model: data.waitingModel },
-        model: data.settings.model,
-        state: !data.settings.enabled ? "disabled" : data.settings.paused ? "paused" : "unavailable",
-        today: { date: "2026-01-05", input_tokens: 0, output_tokens: 0 },
-        unavailable_reason: data.settings.enabled && !data.settings.paused ? "not_configured" : null,
-      },
-      pending: { waiting_model: data.waitingModel },
+      model: modelProgressOf(data),
+      pending: { waiting_model: data.model.items.waiting_model },
       releases: data.releases,
       rule_version: 101,
       state: stateOf(data),
@@ -271,4 +286,79 @@ export function respondToClearSuppression(data: CurationData, id: string): ApiRe
 /** 测试用：加一条标记。 */
 export function seedSuppression(data: CurationData, item: Omit<SuppressionDTO, "value_hash" | "created_by"> & { value_hash?: string }): void {
   data.suppressions.push({ ...item, value_hash: item.value_hash ?? "0".repeat(63) + String(data.suppressions.length + 1), created_by: ADMIN.id });
+}
+
+function modelProgressOf(data: CurationData): CurationModelProgressDTO {
+  const state = data.model.state ?? (!data.settings.enabled ? "disabled" : data.settings.paused ? "paused" : "idle");
+  return {
+    daily_token_limit: data.settings.daily_token_limit,
+    items: data.model.items,
+    model: state === "idle" || state === "running" ? data.settings.model || data.model.effectiveModel : "",
+    state,
+    today: { date: "2026-01-05", ...data.model.today },
+    unavailable_reason: state === "unavailable" ? data.model.unavailableReason : null,
+  };
+}
+
+/** 测试用：一条待处理的例外（字段修正或匹配）。 */
+export function seedException(data: CurationData, patch: Partial<CurationExceptionDTO> = {}): CurationExceptionDTO {
+  data.counter += 1;
+  const n = String(data.counter).padStart(12, "0");
+  const exception: CurationExceptionDTO = {
+    conversation_id: `00000000-0000-4000-9000-${n}`,
+    created_at: "2026-01-05T08:00:00Z",
+    decided_at: null,
+    decided_by: null,
+    id: `00000000-0000-4000-a000-${n}`,
+    input: { release_id: `00000000-0000-4000-b000-${n}`, changes: { title: { mode: "set", value: "新标题" } }, expected_revision: 1, basis: { note: "外部资料" } },
+    kind: "release_match",
+    operation_ids: [],
+    pending_item_id: `00000000-0000-4000-c000-${n}`,
+    preview: { changes: [{ field: "title", before: "旧标题", after: "新标题" }] },
+    release: { id: `00000000-0000-4000-b000-${n}`, title: "旧标题", artist: "合成艺人" },
+    review: { decision: "needs_human_confirmation", id: `00000000-0000-4000-d000-${n}`, model: "review-model", reasons: ["标题需要人工核对"], risk: "medium", source: "model" },
+    status: "open",
+    tool: "correct_release",
+    ...patch,
+  };
+  data.exceptions.unshift(exception);
+  data.model.items = { ...data.model.items, waiting_human: data.model.items.waiting_human + 1 };
+  return exception;
+}
+
+export function respondToCurationExceptions(data: CurationData, search: URLSearchParams): ApiResult {
+  const status = search.get("status") ?? "open";
+  const page = Number(search.get("page") ?? "1");
+  const pageSize = Number(search.get("page_size") ?? "50");
+  const rows = data.exceptions.filter((item) => status === "all" || item.status === "open");
+  return { status: 200, body: { items: rows.slice((page - 1) * pageSize, page * pageSize), page, page_size: pageSize, total: rows.length } };
+}
+
+function decide(data: CurationData, id: string, status: "accepted" | "declined"): { decided: CurationExceptionDTO } | { error: ApiResult } {
+  const index = data.exceptions.findIndex((item) => item.id === id);
+  const current = data.exceptions[index];
+  if (current === undefined) return { error: failure(404, "not_found", "例外不存在") };
+  if (current.status !== "open") return { error: failure(409, "exception_decided", "例外已经有了结论") };
+  data.counter += 1;
+  const operation = `00000000-0000-4000-e000-${String(data.counter).padStart(12, "0")}`;
+  const decided: CurationExceptionDTO = { ...current, status, decided_by: ADMIN.id, decided_at: "2026-01-05T09:00:00Z", operation_ids: status === "accepted" ? [operation] : [] };
+  data.exceptions[index] = decided;
+  data.model.items = { ...data.model.items, waiting_human: Math.max(0, data.model.items.waiting_human - 1) };
+  return { decided };
+}
+
+export function respondToAcceptException(data: CurationData, id: string): ApiResult {
+  const result = decide(data, id, "accepted");
+  return "error" in result ? result.error : { status: 200, body: { exception: result.decided, operation_ids: result.decided.operation_ids } };
+}
+
+export function respondToDeclineException(data: CurationData, id: string): ApiResult {
+  const result = decide(data, id, "declined");
+  return "error" in result ? result.error : { status: 200, body: { exception: result.decided } };
+}
+
+export function respondToCurationConversations(data: CurationData, search: URLSearchParams): ApiResult {
+  const page = Number(search.get("page") ?? "1");
+  const pageSize = Number(search.get("page_size") ?? "20");
+  return { status: 200, body: { items: data.conversations.slice((page - 1) * pageSize, page * pageSize), pagination: { page, page_size: pageSize, total: data.conversations.length } } };
 }

@@ -3,6 +3,7 @@ import { apiRequest } from "../../../shared/api";
 import {
   decodeCurationBatch,
   decodeCurationBatchPage,
+  decodeCurationConversationPage,
   decodeCurationExceptionAccepted,
   decodeCurationExceptionDeclined,
   decodeCurationExceptionPage,
@@ -14,6 +15,7 @@ import {
   decodeSuppressionPage,
   type CurationBatchDTO,
   type CurationBatchPageDTO,
+  type CurationConversationPageDTO,
   type CurationExceptionDTO,
   type CurationExceptionPageDTO,
   type CurationProgressDTO,
@@ -109,4 +111,9 @@ export function acceptCurationException(id: string): Promise<ApiResponse<{ excep
 /** 不采纳一条例外：写“不再提出”的标记，之后程序与模型都不再提出同一个值。 */
 export function declineCurationException(id: string): Promise<ApiResponse<{ exception: CurationExceptionDTO }>> {
   return apiRequest({ method: "POST", path: `/api/v1/admin/curation/exceptions/${encodeURIComponent(id)}/decline` }, decodeCurationExceptionDeclined);
+}
+
+/** 当前管理员名下的自动整理会话（M7 D），新的在前；不在普通会话列表里，打开、接回与续聊用管家的会话页。 */
+export function fetchCurationConversations(page: number, pageSize: number, signal?: AbortSignal): Promise<ApiResponse<CurationConversationPageDTO>> {
+  return apiRequest({ method: "GET", path: `/api/v1/admin/curation/conversations?page=${page}&page_size=${pageSize}`, signal }, decodeCurationConversationPage);
 }

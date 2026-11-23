@@ -1,4 +1,4 @@
-import { decodeCurationBatch, decodeCurationBatchPage, decodeCurationExceptionAccepted, decodeCurationExceptionDeclined, decodeCurationExceptionPage, decodeCurationProgress, decodeCurationSettings, decodeCurationSource, decodeCurationSources, decodeScopeRevert, decodeSuppressionPage } from "../features/curation/api/decoders";
+import { decodeCurationBatch, decodeCurationBatchPage, decodeCurationConversationPage, decodeCurationExceptionAccepted, decodeCurationExceptionDeclined, decodeCurationExceptionPage, decodeCurationProgress, decodeCurationSettings, decodeCurationSource, decodeCurationSources, decodeScopeRevert, decodeSuppressionPage } from "../features/curation/api/decoders";
 import {
   decodeAllowlist,
   decodeAllowlistEntry,
@@ -6,7 +6,6 @@ import {
   decodeConversation,
   decodeConversationDetail,
   decodeConversationPage,
-  decodeCurationConversationPage,
   decodeConversationPatch,
   decodeCreatedToken,
   decodeDeleted,

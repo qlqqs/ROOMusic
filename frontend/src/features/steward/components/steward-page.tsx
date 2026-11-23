@@ -3,7 +3,7 @@ import { Menu, Plus, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePageTitle } from "../../../shared/lib/use-page-title";
 import { useMediaQuery } from "../../../shared/lib/use-media-query";
-import { Button, EmptyState, FailureNotice, MenuButton, Skeleton } from "../../../shared/ui";
+import { Button, EmptyState, FailureNotice, MenuButton, Skeleton, StatusTag } from "../../../shared/ui";
 import { getDockState, setDockConversation, startBlankConversation, useDockState } from "../dock-store";
 import { isMissingConversation, useConversation, useConversations } from "../hooks/use-conversations";
 import { useRuns } from "../hooks/use-run";
@@ -33,7 +33,8 @@ export function StewardPage({ conversationId }: { conversationId: string | null 
   const [showList, setShowList] = useState(false);
   usePageTitle(name);
 
-  const loaded = conversationId !== null && detail.data !== undefined;
+  // 自动整理的会话（M7 D）不在对话列表里，不记进面板，免得之后打开管家跳到它。
+  const loaded = conversationId !== null && detail.data !== undefined && detail.data.kind !== "curation";
   // 重读时才发现不存在（别处删了）也算：缓存里可能还有旧数据。
   const missing = conversationId !== null && isMissingConversation(detail.error);
   useEffect(() => {
@@ -150,6 +151,7 @@ function ConversationHeader({
     <header className={styles.head}>
       {narrow ? <Button variant="icon" icon={<Menu size={20} />} label="全部对话" onClick={onShowList} /> : null}
       <h1 className={styles.title}>{title === "" ? name : title}</h1>
+      {data?.kind === "curation" ? <StatusTag tone="neutral">自动整理</StatusTag> : null}
       {narrow ? <Button variant="icon" icon={<Plus size={20} />} label="新对话" onClick={onNew} /> : null}
       {!narrow && data !== undefined ? (
         <MenuButton label="对话选项" icon={<Settings size={18} />} iconOnly actions={actionsFor(data, runs.has(data.id) || data.status === "running")} />

@@ -1,5 +1,16 @@
 import { correctionFieldLabels, displayValue, sourceName, type CorrectableField } from "../governance";
-import type { CurationSourceDTO, ProgramState, SourceCapability, SourceInactiveReason, SuppressionDTO } from "./api/decoders";
+import { formatCount } from "../../shared/lib/number";
+import type {
+  CurationExceptionDTO,
+  CurationSourceDTO,
+  JsonValue,
+  ModelState,
+  ModelUnavailableReason,
+  ProgramState,
+  SourceCapability,
+  SourceInactiveReason,
+  SuppressionDTO,
+} from "./api/decoders";
 
 /** 后台状态的一句话。 */
 export const programStateText: Record<ProgramState, string> = {
@@ -128,3 +139,119 @@ export function suppressionValueText(item: SuppressionDTO): string {
   const external = typeof value["external_id"] === "string" ? value["external_id"] : null;
   return [source, external].filter((part) => part !== null).join(" · ") || "—";
 }
+
+// ---- 模型判断（M7 D）----
+
+/** 模型层状态的一句话。 */
+export const modelStateText: Record<ModelState, string> = {
+  idle: "空闲，等程序拿不准的项",
+  running: "正在判断",
+  waiting_review: "等审查恢复后重新审查",
+  paused: "已暂停",
+  disabled: "未打开",
+  waiting_for_scan: "等扫描结束后继续",
+  limit_reached: "今天的用量到了上限，明天继续",
+  unavailable: "暂时不能判断",
+};
+
+/** 模型层不可用的原因；mine 表示当前管理员就是开启者（原因说的是他自己的设置）。 */
+export function modelUnavailableText(reason: ModelUnavailableReason, mine: boolean): string {
+  switch (reason) {
+    case "not_configured":
+      return mine ? "你还没有配置管家的模型接口。" : "开启者还没有配置管家的模型接口。";
+    case "key_needs_reentry":
+      return mine ? "模型接口的密钥需要重新填写。" : "开启者的模型接口密钥需要重新填写。";
+    case "tool_unsupported":
+      return mine ? "当前模型不支持工具调用，换一个支持的模型。" : "开启者配置的模型不支持工具调用。";
+    case "enabler_unavailable":
+      return "开启者已经不是启用的管理员，重新打开总开关后由你接手。";
+    case "source_disabled":
+      return "MusicBrainz 已关闭，模型判断要用它查资料。";
+    case "provider_error":
+      return "模型接口最近出错了，过一会儿自动再试。";
+  }
+}
+
+/** 需要开启者去 Agent 设置里处理的原因。 */
+export function needsAgentSettings(reason: ModelUnavailableReason | null): boolean {
+  return reason === "not_configured" || reason === "key_needs_reentry" || reason === "tool_unsupported";
+}
+
+/** token 数：整万写“n 万”，否则写原数。 */
+export function tokenText(tokens: number): string {
+  return tokens % 10_000 === 0 && tokens >= 10_000 ? `${formatCount(tokens / 10_000)} 万` : formatCount(tokens);
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** 例外里匹配的外部编号与它在 MusicBrainz 上的地址（编号不是 UUID 时没有地址）；外部编号是不可信文本。 */
+export function exceptionExternal(exception: CurationExceptionDTO): { id: string; url: string | null } | null {
+  if (exception.tool !== "resolve_release_match") return null;
+  const raw = exception.input["external_id"];
+  if (typeof raw !== "string") return null;
+  const kind = exception.kind === "recording_match" ? "recording" : "release";
+  return { id: raw, url: UUID.test(raw) ? `https://musicbrainz.org/${kind}/${raw.toLowerCase()}` : null };
+}
+
+function fieldValueText(value: JsonValue): string {
+  if (value === null || typeof value === "string" || typeof value === "number") return displayValue(value);
+  if (Array.isArray(value) && value.every((part) => typeof part === "string")) return displayValue(value as string[]);
+  return "—";
+}
+
+function countOf(value: JsonValue): number {
+  return typeof value === "number" ? value : 0;
+}
+
+/**
+ * 例外提出的修改，逐行：字段写“标题：A → B”；匹配另有外部对应（新建或替换）、曲目对应数、专辑对应与归组。
+ * 外部对应那一行由调用方带链接显示，这里只给其余各行。值都是不可信文本。
+ */
+export function exceptionChangeLines(exception: CurationExceptionDTO): string[] {
+  const lines: string[] = [];
+  for (const change of exception.preview.changes) {
+    switch (change.field) {
+      case "external_link":
+        break;
+      case "track_links":
+        lines.push(`曲目对应：${formatCount(countOf(change.before))} → ${formatCount(countOf(change.after))} 首`);
+        break;
+      case "group_external_link":
+        lines.push("建立专辑的外部对应");
+        break;
+      case "group":
+        lines.push("归入已有的专辑");
+        break;
+      default: {
+        const label = change.field in correctionFieldLabels ? correctionFieldLabels[change.field as CorrectableField] : change.field;
+        lines.push(`${label}：${fieldValueText(change.before)} → ${fieldValueText(change.after)}`);
+      }
+    }
+  }
+  return lines;
+}
+
+/** 匹配的外部对应是新建还是替换现有的。 */
+export function exceptionLinkVerb(exception: CurationExceptionDTO): string {
+  const change = exception.preview.changes.find((item) => item.field === "external_link");
+  return change !== undefined && change.before !== null && change.before !== "" ? "改为对应" : "对应到";
+}
+
+/** 审查的结论：没通过；转给你确认（按规则转的另写明）。 */
+export function exceptionReviewText(exception: CurationExceptionDTO): string {
+  if (exception.review.decision === "rejected") return "审查没通过";
+  return exception.review.source === "policy" ? "按规则转给你确认" : "审查转给你确认";
+}
+
+export const riskText: Record<"low" | "medium" | "high", string> = { low: "低", medium: "中", high: "高" };
+
+/** 采纳与不采纳的错误文案（其余按通用文案）。 */
+export const EXCEPTION_MESSAGES: Readonly<Record<string, string>> = {
+  exception_stale: "提出之后内容变了，这一项没有执行。可以查看过程，或等模型重新判断。",
+  exception_decided: "这一项已经被处理了。",
+  not_found: "这一项已经被处理了。",
+  curation_disabled: "自动整理关着、暂停中或正在扫描，现在不能采纳匹配。",
+  source_disabled: "MusicBrainz 已关闭，现在不能采纳匹配。",
+  nothing_to_apply: "要写的内容都已经在了，或被标记为不再提出。",
+  source_unavailable: "外部资料暂时取不到，没有完成。可以稍后在这里重试，已写入的部分会接着做完。",
+};

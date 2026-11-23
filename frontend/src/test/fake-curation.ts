@@ -1,4 +1,4 @@
-import { curationDataOf, respondToClearSuppression, respondToCurationBatch, respondToCurationBatches, respondToCurationProgress, respondToCurationSettings, respondToCurationSources, respondToScopeRevert, respondToSetCurationSource, respondToSetCurationSourceKey, respondToSuppressions, respondToUpdateCurationSettings, type CurationData } from "./curation-data";
+import { curationDataOf, respondToAcceptException, respondToClearSuppression, respondToCurationConversations, respondToCurationExceptions, respondToDeclineException, respondToCurationBatch, respondToCurationBatches, respondToCurationProgress, respondToCurationSettings, respondToCurationSources, respondToScopeRevert, respondToSetCurationSource, respondToSetCurationSourceKey, respondToSuppressions, respondToUpdateCurationSettings, type CurationData } from "./curation-data";
 import { failure } from "./catalog-data";
 import type { FakeApi } from "./fake-api";
 import type { GovernanceData } from "./governance-data";
@@ -33,5 +33,9 @@ export function installCurationApi(api: FakeApi, governance: GovernanceData | nu
   api.on("POST", `${base}/reverts`, (request) => answer(respondToScopeRevert(data, request.headers.get("Idempotency-Key"), request.body)));
   api.on("GET", `${base}/suppressions`, (request) => answer(respondToSuppressions(data, searchOf(request.path))));
   api.on("DELETE", /^\/api\/v1\/admin\/curation\/suppressions\/[^/]+$/, (request) => answer(respondToClearSuppression(data, idFrom(request.path, /\/suppressions\/([^/]+)$/))));
+  api.on("GET", `${base}/exceptions`, (request) => answer(respondToCurationExceptions(data, searchOf(request.path))));
+  api.on("POST", /^\/api\/v1\/admin\/curation\/exceptions\/[^/]+\/accept$/, (request) => answer(respondToAcceptException(data, idFrom(request.path, /\/exceptions\/([^/]+)\/accept$/))));
+  api.on("POST", /^\/api\/v1\/admin\/curation\/exceptions\/[^/]+\/decline$/, (request) => answer(respondToDeclineException(data, idFrom(request.path, /\/exceptions\/([^/]+)\/decline$/))));
+  api.on("GET", `${base}/conversations`, (request) => answer(respondToCurationConversations(data, searchOf(request.path))));
   return data;
 }
