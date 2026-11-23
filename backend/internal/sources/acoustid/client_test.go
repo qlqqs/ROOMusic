@@ -1,15 +1,18 @@
 package acoustid
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -213,5 +216,110 @@ func TestLookupFingerprintErrors(t *testing.T) {
 				t.Fatalf("紧接着查询错误=%v 出站=%d，期望成功且出站两次", err, outbound.Load())
 			}
 		})
+	}
+}
+
+func setBundledClientKey(t *testing.T, key string) {
+	t.Helper()
+	previous := bundledClientKey
+	bundledClientKey = key
+	bundledKeyRejected.Store(false)
+	t.Cleanup(func() {
+		bundledClientKey = previous
+		bundledKeyRejected.Store(false)
+	})
+}
+
+func TestLookupFingerprintBundledKeyForm(t *testing.T) {
+	const bundledKey = "fixtureBundledClient"
+	const userKey = "fixture-user"
+	setBundledClientKey(t, bundledKey)
+	if got := Declaration().Keys; !reflect.DeepEqual(got, []string{"user"}) {
+		t.Fatalf("声明的密钥=%v，期望只有 user", got)
+	}
+	for _, tc := range []struct {
+		name string
+		keys map[string]string
+	}{
+		{"with_admin_application", map[string]string{"user": userKey, "application": "fixture-app"}},
+		{"user_only", map[string]string{"user": userKey}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var outbound atomic.Int32
+			opts := lookupOptions(t, func(w http.ResponseWriter, r *http.Request) {
+				outbound.Add(1)
+				form := lookupForm(t, r)
+				if form.Get("client") != bundledKey || form.Get("user") != userKey {
+					t.Error("表单未使用内置应用密钥与管理员的用户密钥")
+				}
+				io.WriteString(w, emptyLookup)
+			})
+			opts.Keys = func(context.Context) (map[string]string, error) { return tc.keys, nil }
+			fp := sources.Fingerprint{Value: "bundled-form", DurationSeconds: 20}
+			if _, err := New(opts).LookupFingerprint(t.Context(), fp); err != nil || outbound.Load() != 1 {
+				t.Fatalf("查询错误=%v，出站=%d，期望成功出站一次", err, outbound.Load())
+			}
+		})
+	}
+}
+
+func TestLookupFingerprintBundledKeyRejection(t *testing.T) {
+	const bundledKey = "fixtureBundledClient"
+	const rejectionEvent = `"event":"sources.acoustid.bundled_key_rejected"`
+	for _, tc := range []struct {
+		name     string
+		key      string
+		wantLogs int
+	}{
+		{"bundled", bundledKey, 1},
+		{"unbundled", "", 0},
+	} {
+		for _, code := range []int{4, 17} {
+			t.Run(fmt.Sprintf("%s/%d", tc.name, code), func(t *testing.T) {
+				setBundledClientKey(t, tc.key)
+				var logs bytes.Buffer
+				var outbound atomic.Int32
+				opts := lookupOptions(t, func(w http.ResponseWriter, _ *http.Request) {
+					outbound.Add(1)
+					w.WriteHeader(http.StatusBadRequest)
+					fmt.Fprintf(w, `{"status":"error","error":{"code":%d}}`, code)
+				})
+				opts.Logger = slog.New(slog.NewJSONHandler(&logs, nil))
+				clients := []*Client{New(opts), New(opts)}
+				if clients[0].BundledKeyRejected() {
+					t.Fatal("首次查询前已标记内置密钥被拒")
+				}
+				ctx := sources.WithBackground(t.Context())
+				fp := sources.Fingerprint{Value: "bundled-rejection", DurationSeconds: 20}
+				// 两个客户端共享进程内的拒绝标记和日志去重。
+				for i, client := range clients {
+					attempt := i + 1
+					_, err := client.LookupFingerprint(ctx, fp)
+					var invalid *sources.InvalidKeyError
+					if !errors.Is(err, sources.ErrInvalidKey) || !errors.As(err, &invalid) || invalid.Name != "application" {
+						t.Fatalf("第 %d 次查询错误=%v，期望应用密钥无效", attempt, err)
+					}
+					if int(outbound.Load()) != attempt {
+						t.Errorf("第 %d 次查询后累计出站=%d", attempt, outbound.Load())
+					}
+					if got := client.BundledKeyRejected(); got != (tc.key != "") {
+						t.Errorf("第 %d 次查询后内置密钥被拒标记=%t", attempt, got)
+					}
+					if count := strings.Count(logs.String(), rejectionEvent); count != tc.wantLogs {
+						t.Errorf("第 %d 次查询后累计拒绝日志=%d，期望 %d", attempt, count, tc.wantLogs)
+					}
+				}
+				for _, line := range strings.Split(logs.String(), "\n") {
+					if strings.Contains(line, rejectionEvent) && !strings.Contains(line, `"level":"ERROR"`) {
+						t.Error("内置密钥被拒日志的级别应为 ERROR")
+					}
+				}
+				for _, key := range []string{bundledKey, "fixture-app", "fixture-user"} {
+					if strings.Contains(logs.String(), key) {
+						t.Error("日志包含合成密钥原文")
+					}
+				}
+			})
+		}
 	}
 }

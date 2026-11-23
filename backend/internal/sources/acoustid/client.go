@@ -12,15 +12,23 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
+var bundledClientKey string
+var bundledKeyRejected atomic.Bool
+
 func Declaration() sources.Declaration {
+	keys := []string{"user"}
+	if bundledClientKey == "" {
+		keys = []string{"application", "user"}
+	}
 	return sources.Declaration{
 		ID: "acoustid", Name: "AcoustID", Capabilities: []sources.Capability{sources.FingerprintLookup},
-		DefaultEnabled: true, Keys: []string{"application", "user"}, MinInterval: 334 * time.Millisecond,
+		DefaultEnabled: true, Keys: keys, MinInterval: 334 * time.Millisecond,
 	}
 }
 
@@ -35,9 +43,11 @@ type Options struct {
 }
 
 type Client struct {
-	address  string
-	requests *sources.Requester
-	keys     func(context.Context) (map[string]string, error)
+	address          string
+	requests         *sources.Requester
+	keys             func(context.Context) (map[string]string, error)
+	logger           *slog.Logger
+	bundledClientKey string
 }
 
 func New(opts Options) *Client {
@@ -45,12 +55,26 @@ func New(opts Options) *Client {
 	if base == "" {
 		base = "https://api.acoustid.org"
 	}
-	return &Client{address: base + "/v2/lookup", keys: opts.Keys, requests: sources.NewRequester(Declaration(), sources.Options{
+	logger := opts.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	requests := sources.NewRequester(Declaration(), sources.Options{
 		DataDirectory: opts.DataDirectory, Logger: opts.Logger, NewClient: opts.NewClient, Limiter: opts.Limiter, Now: opts.Now, After: opts.After,
-	})}
+	})
+	return &Client{
+		address:          base + "/v2/lookup",
+		requests:         requests,
+		keys:             opts.Keys,
+		logger:           logger,
+		bundledClientKey: bundledClientKey,
+	}
 }
 
 func (c *Client) StartCacheCleanup(ctx context.Context) { c.requests.StartCacheCleanup(ctx) }
+
+// BundledKeyRejected 报告本进程的内置应用密钥是否被 AcoustID 拒绝过。
+func (c *Client) BundledKeyRejected() bool { return bundledKeyRejected.Load() }
 
 func (c *Client) LookupFingerprint(ctx context.Context, fp sources.Fingerprint) ([]sources.FingerprintMatch, error) {
 	if fp.Value == "" || fp.DurationSeconds < 1 || fp.DurationSeconds > 32767 {
@@ -58,21 +82,26 @@ func (c *Client) LookupFingerprint(ctx context.Context, fp sources.Fingerprint) 
 	}
 	duration := strconv.Itoa(fp.DurationSeconds)
 	form := func(ctx context.Context) (url.Values, error) {
-		if c.keys == nil {
-			return nil, &sources.InvalidKeyError{Name: "application"}
+		var keys map[string]string
+		if c.keys != nil {
+			var err error
+			keys, err = c.keys(ctx)
+			if err != nil {
+				return nil, err
+			}
 		}
-		keys, err := c.keys(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if keys["application"] == "" {
-			return nil, &sources.InvalidKeyError{Name: "application"}
+		clientKey := c.bundledClientKey
+		if clientKey == "" {
+			clientKey = keys["application"]
+			if clientKey == "" {
+				return nil, &sources.InvalidKeyError{Name: "application"}
+			}
 		}
 		if keys["user"] == "" {
 			return nil, &sources.InvalidKeyError{Name: "user"}
 		}
 		return url.Values{
-			"client": {keys["application"]}, "user": {keys["user"]},
+			"client": {clientKey}, "user": {keys["user"]},
 			"duration": {duration}, "fingerprint": {fp.Value},
 			"meta": {"recordings releases"}, "format": {"json"},
 		}, nil
@@ -88,6 +117,10 @@ func (c *Client) LookupFingerprint(ctx context.Context, fp sources.Fingerprint) 
 		if data.Status == "error" && parseErr == nil {
 			switch data.Error.Code {
 			case 4, 17:
+				if c.bundledClientKey != "" && bundledKeyRejected.CompareAndSwap(false, true) {
+					message := "AcoustID 拒绝了 ROOMusic 内置的应用密钥"
+					c.logger.ErrorContext(ctx, message, "event", "sources.acoustid.bundled_key_rejected", "module", "sources", "message", message)
+				}
 				return false, false, &sources.InvalidKeyError{Name: "application"}
 			case 6:
 				return false, false, &sources.InvalidKeyError{Name: "user"}

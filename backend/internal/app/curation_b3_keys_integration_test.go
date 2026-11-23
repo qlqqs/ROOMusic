@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/acoustid"
@@ -133,6 +134,111 @@ func b3StoredKey(t *testing.T, app *integrationTestApplication, name string) b3K
 		t.Fatal(err)
 	}
 	return row
+}
+
+type b3FingerprintFinderFunc func(context.Context, sources.Fingerprint) ([]sources.FingerprintMatch, error)
+
+func (f b3FingerprintFinderFunc) LookupFingerprint(ctx context.Context, fp sources.Fingerprint) ([]sources.FingerprintMatch, error) {
+	return f(ctx, fp)
+}
+
+func TestPostgreSQLB3AcoustIDBundledKeyGate(t *testing.T) {
+	const sourceID = "acoustid"
+	app := newIntegrationTestApplication(t)
+	admin := app.createUser(t, "admin")
+	b3Enable(t, app, admin)
+	ctx := t.Context()
+	store := newInstanceSecrets(app.dataDirectory)
+
+	declaration := sources.Declaration{
+		ID: sourceID, Name: "AcoustID", DefaultEnabled: true,
+		Capabilities: []sources.Capability{sources.FingerprintLookup}, Keys: []string{"user"},
+	}
+	legacy := declaration
+	legacy.Keys = []string{"application", "user"}
+	legacyGate := curation.NewSources(app.database, curation.SourceRegistration{Declaration: legacy}).WithKeyStore(store)
+	if _, err := legacyGate.SetKey(ctx, sourceID, "application", admin.id, b3AppKey); err != nil {
+		t.Fatal(err)
+	}
+	applicationBefore := b3StoredKey(t, app, "application")
+
+	var unavailable string
+	var gate *curation.Sources
+	gate = curation.NewSources(app.database, curation.SourceRegistration{
+		Declaration: declaration,
+		Fingerprints: b3FingerprintFinderFunc(func(ctx context.Context, _ sources.Fingerprint) ([]sources.FingerprintMatch, error) {
+			// 用 finder 收到的上下文读取密钥，让闸门记录本次用到的密文。
+			keys, err := gate.Keys(ctx, sourceID)
+			if err != nil {
+				return nil, err
+			}
+			if !reflect.DeepEqual(keys, map[string]string{"user": b3UserKey}) {
+				t.Error("指纹查询应只读到合成用户密钥")
+			}
+			return nil, &sources.InvalidKeyError{Name: "application"}
+		}),
+		Unavailable: func() string { return unavailable },
+	}).WithKeyStore(store)
+	settings := func() curation.SourceSettings {
+		t.Helper()
+		items, err := gate.List(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 1 || items[0].ID != sourceID {
+			t.Fatalf("源列表=%+v，期望只有 AcoustID", items)
+		}
+		return items[0]
+	}
+	item := settings()
+	b3Reason(t, item, "key_missing")
+	if want := []curation.SourceKeySettings{{Name: "user", Status: "unchecked"}}; !reflect.DeepEqual(item.Keys, want) {
+		t.Fatalf("未填写时密钥列表=%+v，期望 %+v", item.Keys, want)
+	}
+
+	item, err := gate.SetKey(ctx, sourceID, "user", admin.id, b3UserKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b3Reason(t, item, "")
+	wantKeys := []curation.SourceKeySettings{{Name: "user", Configured: true, LastFour: "8675", Status: "unchecked"}}
+	if !reflect.DeepEqual(item.Keys, wantKeys) {
+		t.Fatalf("填写后密钥列表=%+v，期望 %+v", item.Keys, wantKeys)
+	}
+	if err := gate.Check(ctx, sourceID); err != nil {
+		t.Fatalf("填写用户密钥后闸门返回 %v", err)
+	}
+	if _, err := gate.ClearKey(ctx, sourceID, "application", admin.id); err == nil {
+		t.Fatal("清除旧应用密钥成功，期望 404 not_found")
+	} else if status, code, _ := operations.Problem(err); status != http.StatusNotFound || code != "not_found" {
+		t.Fatalf("清除旧应用密钥返回 %d %s，期望 404 not_found", status, code)
+	}
+
+	finder, ok := gate.FingerprintFinder(sourceID)
+	if !ok {
+		t.Fatal("指纹源未注册")
+	}
+	_, err = finder.LookupFingerprint(ctx, sources.Fingerprint{Value: "bundled-gate", DurationSeconds: 20})
+	var invalid *sources.InvalidKeyError
+	if !errors.As(err, &invalid) || invalid.Name != "application" {
+		t.Fatalf("指纹查询错误=%v，期望应用密钥无效", err)
+	}
+	item = settings()
+	b3Reason(t, item, "")
+	if !reflect.DeepEqual(item.Keys, wantKeys) {
+		t.Errorf("拒绝应用密钥后密钥列表=%+v，期望 %+v", item.Keys, wantKeys)
+	}
+	if got := b3StoredKey(t, app, "application"); !reflect.DeepEqual(got, applicationBefore) {
+		t.Error("旧应用密钥行发生变化")
+	}
+
+	unavailable = "bundled_key_rejected"
+	b3Reason(t, settings(), unavailable)
+	if err := gate.Check(ctx, sourceID); err == nil {
+		t.Fatal("内置密钥被拒后闸门仍放行，期望 409 source_disabled")
+	} else if status, code, _ := operations.Problem(err); status != http.StatusConflict || code != "source_disabled" {
+		t.Errorf("内置密钥被拒后闸门返回 %d %s，期望 409 source_disabled", status, code)
+	}
 }
 
 func TestPostgreSQLB3AcoustIDKeyAPI(t *testing.T) {

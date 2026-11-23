@@ -18,7 +18,7 @@ type SourceRegistration struct {
 	Covers       sources.CoverFinder
 	Lyrics       sources.LyricsFinder
 	Fingerprints sources.FingerprintFinder
-	Available    func() bool
+	Unavailable  func() string
 }
 
 type SourceSettings struct {
@@ -77,16 +77,19 @@ func sourceState(ctx context.Context, tx *sql.Tx, r SourceRegistration, overall 
 		reason = "enabler_unavailable"
 	case !item.Enabled:
 		reason = "source_disabled"
-	case r.Available != nil && !r.Available():
-		reason = "fingerprint_unavailable"
-	case slices.ContainsFunc(item.Keys, func(k SourceKeySettings) bool { return !k.Configured }):
-		reason = "key_missing"
-	case slices.ContainsFunc(item.Keys, func(k SourceKeySettings) bool { return k.Status == "invalid" }):
-		reason = "key_invalid"
-	default:
-		item.Active = true
+	case r.Unavailable != nil:
+		reason = r.Unavailable()
 	}
-	if reason != "" {
+	if reason == "" {
+		switch {
+		case slices.ContainsFunc(item.Keys, func(k SourceKeySettings) bool { return !k.Configured }):
+			reason = "key_missing"
+		case slices.ContainsFunc(item.Keys, func(k SourceKeySettings) bool { return k.Status == "invalid" }):
+			reason = "key_invalid"
+		}
+	}
+	item.Active = reason == ""
+	if !item.Active {
 		item.InactiveReason = &reason
 	}
 	return item, nil

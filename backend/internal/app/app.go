@@ -197,7 +197,19 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: music, Recordings: music, Artists: music},
 		curation.SourceRegistration{Declaration: coverartarchive.Declaration(), Covers: covers},
 		curation.SourceRegistration{Declaration: lrclib.Declaration(), Lyrics: lyrics},
-		curation.SourceRegistration{Declaration: acoustid.Declaration(), Fingerprints: acoustic, Available: func() bool { return assembly.program.Fingerprints != nil }},
+		curation.SourceRegistration{
+			Declaration: acoustid.Declaration(), Fingerprints: acoustic,
+			Unavailable: func() string {
+				switch {
+				case assembly.program.Fingerprints == nil:
+					return "fingerprint_unavailable"
+				case acoustic.BundledKeyRejected():
+					return "bundled_key_rejected"
+				default:
+					return ""
+				}
+			},
+		},
 	).WithScanCheck(scanRunning).WithKeyStore(instanceSecrets)
 	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger)
 	operationKinds := []operations.Kind{curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
