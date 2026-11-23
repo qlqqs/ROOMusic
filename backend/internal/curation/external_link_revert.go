@@ -57,8 +57,7 @@ func (externalLinkKind) Revert(ctx context.Context, tx *sql.Tx, operationID stri
 		if _, err := RemoveLink(ctx, tx, s.Source, l.ObjectType, l.ObjectID); err != nil {
 			return operations.Outcome{}, err
 		}
-		identity := externalIdentity{s.Source, l.ExternalID}
-		if err := insertSuppression(ctx, tx, l.ObjectType, l.ObjectID, "external_link", identity.identityHash(), identity, operationID, operations.ActorID(ctx)); err != nil {
+		if err := SuppressExternalLink(ctx, tx, l.ObjectType, l.ObjectID, s.Source, l.ExternalID, operationID, operations.ActorID(ctx)); err != nil {
 			return operations.Outcome{}, err
 		}
 	}

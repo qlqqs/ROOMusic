@@ -2,10 +2,9 @@ package program
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
+
 	"fmt"
-	"strings"
+
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
@@ -23,12 +22,8 @@ type unit struct {
 
 // 以目标 UUID 为命名空间，名称中的字段顺序固定。
 func (u *unit) key(step string) string {
-	namespace, _ := hex.DecodeString(strings.ReplaceAll(u.id, "-", ""))
 	name := fmt.Sprintf("roomusic/curation/%s/%d/%d/%s", u.subject, StoredRuleVersion, u.generation, step)
-	h := sha1.Sum(append(namespace, name...))
-	h[6] = h[6]&0x0f | 0x50
-	h[8] = h[8]&0x3f | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", h[:4], h[4:6], h[6:8], h[8:10], h[10:16])
+	return curation.DerivedKey(u.id, name)
 }
 
 func (w *Worker) closeBatch(ctx context.Context) error {

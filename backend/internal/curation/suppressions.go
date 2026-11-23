@@ -148,7 +148,7 @@ func insertSuppression(ctx context.Context, tx *sql.Tx, targetType, targetID, su
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by)
- VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(target_type,target_id,subject,value_hash) DO NOTHING`, targetType, targetID, subject, hash, raw, revertID, actorID)
+ VALUES($1,$2,$3,$4,$5,NULLIF($6,'')::uuid,$7) ON CONFLICT(target_type,target_id,subject,value_hash) DO NOTHING`, targetType, targetID, subject, hash, raw, revertID, actorID)
 	return err
 }
 
@@ -173,4 +173,9 @@ func (s externalSuppression) insert(ctx context.Context, tx *sql.Tx, value any, 
  VALUES($1,$2::uuid,$3,$4,$5::jsonb,$6::uuid,$7::uuid),($1,$2::uuid,$8,$9,$5::jsonb,$6::uuid,$7::uuid)
  ON CONFLICT(target_type,target_id,subject,value_hash) DO NOTHING`, s.targetType, s.targetID, s.subject, s.contentHash, string(raw), revertID, operations.ActorID(ctx), s.subject+"_source", s.identityHash())
 	return err
+}
+
+func SuppressExternalLink(ctx context.Context, tx *sql.Tx, objectType, objectID, source, externalID, revertID, actorID string) error {
+	identity := externalIdentity{source, externalID}
+	return insertSuppression(ctx, tx, objectType, objectID, "external_link", identity.identityHash(), identity, revertID, actorID)
 }

@@ -22,13 +22,15 @@ type Source struct {
 }
 
 type Request struct {
-	OnlyEmpty bool
-	ReleaseID string
-	Fields    map[string]catalog.CorrectionIntent
-	Source    Source
-	BatchID   string
-	Key       string
-	RequestID string
+	ExpectedRevision            int64
+	ConfirmedBy, ConversationID string
+	OnlyEmpty                   bool
+	ReleaseID                   string
+	Fields                      map[string]catalog.CorrectionIntent
+	Source                      Source
+	BatchID                     string
+	Key                         string
+	RequestID                   string
 }
 
 type Applied struct {
@@ -54,20 +56,20 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
 		return Applied{}, err
 	}
 	releaseID := strings.ToLower(request.ReleaseID)
-	var actor *string
-	if err := w.db.QueryRowContext(ctx, "SELECT enabled_by::text FROM curation_settings WHERE id=1").Scan(&actor); err != nil {
+	actor, err := w.writerActor(ctx, request.BatchID, request.ConfirmedBy, request.ConversationID)
+	if err != nil {
 		return Applied{}, err
 	}
-	if actor == nil {
-		return Applied{}, operations.Conflict("curation_disabled", "自动整理开关已关闭")
-	}
 	fingerprint := map[string]any{"type": operations.TypeReleaseAutoCorrection, "release_id": releaseID, "fields": fields, "provider": source.Provider}
+	if request.ExpectedRevision != 0 {
+		fingerprint["expected_revision"] = request.ExpectedRevision
+	}
 	if request.OnlyEmpty {
 		fingerprint["only_empty"] = true
 	}
 	spec := operations.Spec{
-		ActorID: *actor, Key: key, Type: operations.TypeReleaseAutoCorrection, BatchID: request.BatchID, RequestID: request.RequestID,
-		Origin:      &operations.Origin{Source: "curation", ProviderKind: source.Kind, Provider: source.Provider, Basis: source.Basis},
+		ActorID: actor, Key: key, Type: operations.TypeReleaseAutoCorrection, BatchID: request.BatchID, RequestID: request.RequestID,
+		Origin:      &operations.Origin{ConversationID: request.ConversationID, Source: "curation", ProviderKind: source.Kind, Provider: source.Provider, Basis: source.Basis},
 		Fingerprint: operations.Fingerprint(fingerprint),
 	}
 	var applied Applied
@@ -76,16 +78,18 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
 		if err != nil {
 			return operations.Outcome{}, err
 		}
-		enabler, err := activeEnabler(ctx, tx)
-		if err != nil {
+		if err := checkWrite(ctx, tx, spec, request.ConfirmedBy, releaseID, request.ExpectedRevision, locked.EditRevision()); err != nil {
 			return operations.Outcome{}, err
 		}
-		if enabler != *actor {
-			return operations.Outcome{}, operations.Conflict("curation_disabled", "自动整理开启者已变更，请重试")
-		}
-		if request.BatchID != "" {
-			if err := requireOpenBatch(ctx, tx, request.BatchID); err != nil {
+		if request.ExpectedRevision != 0 && request.Source.Kind == "model" {
+			manual, err := catalog.LoadCorrectionIntents(ctx, tx, releaseID)
+			if err != nil {
 				return operations.Outcome{}, err
+			}
+			for field := range fields {
+				if _, ok := manual[field]; ok {
+					return operations.Outcome{}, operations.Conflict("manual_override", "字段已有人工修正")
+				}
 			}
 		}
 		var write map[string]catalog.CorrectionIntent

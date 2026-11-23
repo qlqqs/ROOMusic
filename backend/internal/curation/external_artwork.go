@@ -34,30 +34,27 @@ func (w *Writer) externalSpec(ctx context.Context, kind, targetField, targetID, 
 		return operations.Spec{}, operations.Invalid("invalid_input", "外部编号无效")
 	}
 	fingerprint := operations.Fingerprint(map[string]any{"type": kind, targetField: targetID, "content_hash": hash, "provider": source.Provider, "external_id": externalID})
-	return w.sourceSpec(ctx, kind, targetID, fingerprint, source, batchID, key, requestID)
+	return w.sourceSpec(ctx, kind, targetID, fingerprint, source, batchID, key, requestID, "", "")
 }
 
 func validExternalID(id string) bool {
 	return len(id) > 0 && len(id) <= 128 && utf8.ValidString(id) && !strings.ContainsRune(id, 0)
 }
 
-func (w *Writer) sourceSpec(ctx context.Context, kind, targetID, fingerprint string, source Source, batchID, key, requestID string) (operations.Spec, error) {
+func (w *Writer) sourceSpec(ctx context.Context, kind, targetID, fingerprint string, source Source, batchID, key, requestID, confirmedBy, conversation string) (operations.Spec, error) {
 	key, ok := operations.NormalizeKey(key)
 	if !ok || !uuid.Valid(targetID) || (batchID != "" && !uuid.Valid(batchID)) {
 		return operations.Spec{}, operations.Invalid("invalid_input", "目标、批次或幂等键无效")
 	}
-	if source.Kind != "source" || !externalProviderPattern.MatchString(source.Provider) || len(source.Basis) > 500 || !utf8.ValidString(source.Basis) || strings.ContainsRune(source.Basis, 0) {
+	if (source.Kind != "source" && source.Kind != "model") || !externalProviderPattern.MatchString(source.Provider) || len(source.Basis) > 500 || !utf8.ValidString(source.Basis) || strings.ContainsRune(source.Basis, 0) {
 		return operations.Spec{}, operations.Invalid("invalid_input", "来源或依据无效")
 	}
-	var actor *string
-	if err := w.db.QueryRowContext(ctx, "SELECT enabled_by::text FROM curation_settings WHERE id=1").Scan(&actor); err != nil {
+	actor, err := w.writerActor(ctx, batchID, confirmedBy, conversation)
+	if err != nil {
 		return operations.Spec{}, err
 	}
-	if actor == nil {
-		return operations.Spec{}, operations.Conflict("curation_disabled", "自动整理开关已关闭")
-	}
-	return operations.Spec{Type: kind, ActorID: *actor, Key: key, BatchID: batchID, RequestID: requestID,
-		Origin:      &operations.Origin{Source: "curation", ProviderKind: source.Kind, Provider: source.Provider, Basis: source.Basis},
+	return operations.Spec{Type: kind, ActorID: actor, Key: key, BatchID: batchID, RequestID: requestID,
+		Origin:      &operations.Origin{ConversationID: conversation, Source: "curation", ProviderKind: source.Kind, Provider: source.Provider, Basis: source.Basis},
 		Fingerprint: fingerprint}, nil
 }
 
