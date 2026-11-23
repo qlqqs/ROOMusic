@@ -54,6 +54,10 @@ func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Messag
 		if ctx.Err() != nil {
 			return nil, EndCancelled, nil
 		}
+		if errors.Is(err, errStructuralEvidence) {
+			results[item.ID] = ReviewItem{ItemID: item.ID, Decision: "needs_human_confirmation", Risk: "high", Reasons: []string{err.Error()}, Source: "policy"}
+			continue
+		}
 		if errors.Is(err, ErrReviewEvidenceUnsupported) {
 			results[item.ID] = ReviewItem{ItemID: item.ID, Decision: "needs_human_confirmation", Risk: "high", Reasons: []string{"工具未登记后端证据读取方式，需要人工确认"}, Source: "policy"}
 			continue
@@ -266,7 +270,7 @@ func (s *runState) checkReviewSnapshot(ctx context.Context, original Plan, revie
 	actual, err := s.reviewEvidence(ctx, fresh)
 	if err != nil {
 		var failure *tool.Error
-		if errors.Is(err, ErrReviewEvidenceUnsupported) || (errors.As(err, &failure) && !databaseUnavailable(err)) {
+		if errors.Is(err, errStructuralEvidence) || errors.Is(err, ErrReviewEvidenceUnsupported) || (errors.As(err, &failure) && !databaseUnavailable(err)) {
 			return ErrReviewUnavailable
 		}
 		return err

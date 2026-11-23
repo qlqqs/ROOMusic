@@ -219,6 +219,10 @@ func planMatch(ctx context.Context, db operations.Queryer, e catalog.CurationEvi
 			return matchWritePlan{}, err
 		}
 		request.External = curation.ExternalSummary{Title: summaryText(r.Title), Artist: summaryText(credits(r.Artists)), Date: summaryText(r.Date), Country: summaryText(r.Country)}
+		request.External.DiscCount = len(r.Media)
+		for _, disc := range r.Media {
+			request.External.TrackCount += max(disc.TrackCount, len(disc.Tracks))
+		}
 		basis = fmt.Sprintf("MusicBrainz 发行 %s，依据%s", r.ID, methodNames[m.Method])
 		request.Links = append(request.Links, curation.LinkIntent{ObjectType: "release", ObjectID: e.ID, ExternalID: r.ID, ExternalGroupID: r.Group.ID})
 		if plan.link {
@@ -287,6 +291,19 @@ func writeMatch(ctx context.Context, db operations.Queryer, writer *curation.Wri
 	if err := writeTrackFields(ctx, writer, p.tracks, request.Source, write); err != nil {
 		return "", err
 	}
+	group, err := writeMatchGroup(ctx, writer, e, plan, request, write, record)
+	if err != nil {
+		return "", err
+	}
+	for _, link := range request.Links {
+		if link.ObjectType == "release" {
+			return group, writer.DiscoverReleaseMerges(ctx, link.ExternalID, StoredRuleVersion)
+		}
+	}
+	return group, nil
+}
+
+func writeMatchGroup(ctx context.Context, writer *curation.Writer, e catalog.CurationEvidence, plan groupPlan, request curation.LinkRequest, write matchStep, record func(string)) (string, error) {
 	if plan.joinID == "" {
 		return plan.result, nil
 	}

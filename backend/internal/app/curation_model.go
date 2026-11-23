@@ -100,11 +100,21 @@ func (l backgroundLauncher) Start(ctx context.Context, p model.RunParams) (model
 	return backgroundRun{run}, nil
 }
 
+// 两个入口的同名工具各自保留严格的参数合同，共用 Supervisor 的名额与取消机制。
+type curationRunners struct{ interactive, background *runtime.Runner }
+
+func (r curationRunners) Run(ctx context.Context, p runtime.RunParams, sink runtime.EventSink) error {
+	if p.Background {
+		return r.background.Run(ctx, p, sink)
+	}
+	return r.interactive.Run(ctx, p, sink)
+}
+
 func backgroundToolAllowed(name string) bool {
 	switch name {
 	case "get_release", "get_release_evidence", "get_album", "get_track", "search_library",
 		"list_albums", "list_artists", "list_artist_albums", "list_artist_tracks", "list_release_issues",
-		"search_music_metadata", "get_music_metadata", "read_pending_items", "resolve_release_match", "shelve_pending_item", "correct_release", "correct_track":
+		"search_music_metadata", "get_music_metadata", "read_pending_items", "resolve_release_match", "shelve_pending_item", "merge_releases", "correct_release", "correct_track":
 		return true
 	}
 	return false

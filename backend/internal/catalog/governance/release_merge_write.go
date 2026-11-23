@@ -65,6 +65,15 @@ func releaseTargets(ids ...string) []operations.Target {
 
 // ReleaseMergeExecutor 在发行与收藏状态锁内复算预览，原碟身份和收藏前态随操作一起提交。
 func ReleaseMergeExecutor(request ReleaseMergeRequest) operations.Executor {
+	return releaseMergeExecutor(request, nil)
+}
+
+// CurationReleaseMergeExecutor 在确认当前结构后、移动碟之前核对整理证据。
+func CurationReleaseMergeExecutor(request ReleaseMergeRequest, check func(context.Context, *sql.Tx, ReleaseMergePreview) error) operations.Executor {
+	return releaseMergeExecutor(request, check)
+}
+
+func releaseMergeExecutor(request ReleaseMergeRequest, check func(context.Context, *sql.Tx, ReleaseMergePreview) error) operations.Executor {
 	return func(ctx context.Context, tx *sql.Tx, opID string) (operations.Outcome, error) {
 		var empty operations.Outcome
 		target, source := strings.ToLower(request.TargetID), strings.ToLower(request.SourceID)
@@ -79,6 +88,11 @@ func ReleaseMergeExecutor(request ReleaseMergeRequest) operations.Executor {
 			return empty, err
 		}
 		plan := buildMergePlan(s)
+		if check != nil {
+			if err := check(ctx, tx, plan); err != nil {
+				return empty, err
+			}
+		}
 		if request.Token != plan.Token {
 			return empty, operations.Conflict("merge_changed", "预览后发行内容已变化，请重新预览")
 		}

@@ -56,14 +56,14 @@ B 的内容被整张替换后，新曲目可形成单独发行。访问已并入
 
 | 断言点 | 用例名 |
 | --- | --- |
-| 合并前后 A 的标题与曲目身份，B 的详情、列表、搜索、艺人、认领与曲目位置 | |
-| 双方全量、增量、来源增删曲目、一次新增两碟、同根目录改名均保留身份 | |
-| 目标增碟与并入碟号冲突，两多碟来源的先后顺序与原碟号跳号 | |
-| 按扫描归属判旧组腾空，实际接收收藏的组按显示归属 | |
-| 撤销还原碟、精确收藏快照、修正、核对、默认版本与发行艺人覆盖 | |
-| 来源文件搬进目标目录，空来源仍能撤销；整张换内容则保留新发行 | |
-| 按顺序命中七项校验、三个上限，失败无副作用；幂等重放 | |
-| B 的版本变化，自动合并之后的有效人工结构操作与已撤销操作，两种撤销规则与标记失败回滚 | |
-| B 的修改记录可见合并与撤销，接口样本与工具数 | |
-| 并发扫描、认领、归组和收藏下按共同锁序写入 | |
-| 0067 带并入碟、操作和收藏回退再升级，碟号复原 | |
+| 合并前后 A 的标题与曲目身份，B 的详情、列表、搜索、艺人、认领与曲目位置 | `TestPostgreSQLReleaseMergeManual`、`TestPostgreSQLReleaseMergeDetailAPI` |
+| 双方全量、增量、来源增删曲目、一次新增两碟、同根目录改名均保留身份 | `TestPostgreSQLReleaseMergeRescanKeeps` |
+| 目标增碟与并入碟号冲突，两多碟来源的先后顺序与原碟号跳号 | `TestPostgreSQLReleaseMergeTargetGainsDisc`、`TestPostgreSQLLayoutMergedMedia` |
+| 按扫描归属判旧组腾空，实际接收收藏的组按显示归属 | `TestPostgreSQLReleaseMergeGroupMoves` |
+| 撤销还原碟、精确收藏快照、修正、核对、默认版本与发行艺人覆盖 | `TestPostgreSQLReleaseMergeRevert`、`TestPostgreSQLReleaseMergeRevertFavorites`、`TestPostgreSQLReleaseMergeArtistOverrides` |
+| 来源文件搬进目标目录，空来源仍能撤销；整张换内容则保留新发行 | `TestPostgreSQLReleaseMergeFilesMovedTogether`、`TestPostgreSQLReleaseMergeFilesMovedTogetherOtherMajorities`、`TestPostgreSQLReleaseMergeSourceReplaced` |
+| 按顺序命中七项校验、三个上限，失败无副作用；幂等重放 | `TestPostgreSQLReleaseMergeGuards`、`TestPostgreSQLReleaseMergeGuardsAfterScan`、`TestPostgreSQLReleaseMergeManual` |
+| B 的版本变化，自动合并之后的有效人工结构操作与已撤销操作，两种撤销规则与标记失败回滚 | `TestPostgreSQLReleaseMergeRevertGuards`、`TestPostgreSQLReleaseMergeRescanKeeps` |
+| B 的修改记录可见合并与撤销，接口样本与工具数 | `TestPostgreSQLReleaseMergeRevert`、`TestPostgreSQLAPIResponseSamples`、`TestC6RealRegistryToolCounts`、`TestPostgreSQLMCPRealRegistryProtocolsAndIsolation` |
+| 并发扫描、认领、归组和收藏下按共同锁序写入 | `TestPostgreSQLReleaseMergeConcurrent`、`TestPostgreSQLReleaseMergeConcurrentFavorites` |
+| 0067 带并入碟、操作和收藏回退再升级，碟号复原 | `TestPostgreSQLMigrationRollbackRoundTrip/0067_release_merges.sql` |

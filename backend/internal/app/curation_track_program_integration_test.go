@@ -151,7 +151,7 @@ func TestPostgreSQLCurationTrackFieldsBackfillOnce(t *testing.T) {
 			}
 			var result map[string]any
 			requireCurationOK(t, json.Unmarshal(after.Result, &result))
-			want := map[string]any{"mode": "album", "method": "barcode", "conflicts": []any{}, "track_fields": tc.marker}
+			want := map[string]any{"mode": "album", "method": "barcode", "conflicts": []any{}, "track_fields": tc.marker, "release_merge": "done"}
 			if after.Status != before.Status || after.Generation != before.Generation || after.Attempts != before.Attempts ||
 				after.RuleVersion != before.RuleVersion || after.InputDigest != before.InputDigest || !reflect.DeepEqual(result, want) {
 				t.Fatalf("补做结果 %+v，状态之前 %+v，之后 %+v", result, before, after)

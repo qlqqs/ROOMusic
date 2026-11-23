@@ -47,7 +47,7 @@ type reviewArtist struct {
 func SupportsReviewEvidence(name string) bool {
 	switch name {
 	case "correct_track", "correct_release", "change_release_group", "set_default_release", "review_release_issue", "claim_release",
-		"merge_artists", "rename_artist", "ignore_artist_candidate":
+		"merge_releases", "merge_artists", "rename_artist", "ignore_artist_candidate":
 		return true
 	default:
 		return false
@@ -57,20 +57,21 @@ func SupportsReviewEvidence(name string) bool {
 // ReadReviewTargets 只调用现有公开读取方法；不返回原始标签候选、路径、歌词或核对人。
 func ReadReviewTargets(ctx context.Context, store *catalog.Store, issues *governance.Store, raw json.RawMessage) ([]ReviewTarget, error) {
 	var p struct {
-		TrackID         string `json:"track_id"`
-		ReleaseID       string `json:"release_id"`
-		SourceReleaseID string `json:"source_release_id"`
-		GroupID         string `json:"group_id"`
-		ArtistID        string `json:"artist_id"`
-		SourceArtistID  string `json:"source_artist_id"`
-		OtherArtistID   string `json:"other_artist_id"`
+		TrackID              string `json:"track_id"`
+		ReleaseID            string `json:"release_id"`
+		SourceReleaseID      string `json:"source_release_id"`
+		MergeSourceReleaseID string `json:"merge_source_release_id"`
+		GroupID              string `json:"group_id"`
+		ArtistID             string `json:"artist_id"`
+		SourceArtistID       string `json:"source_artist_id"`
+		OtherArtistID        string `json:"other_artist_id"`
 	}
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, err
 	}
 	targets := []ReviewTarget{}
 	seen := map[string]bool{}
-	for _, id := range []string{p.ReleaseID, p.SourceReleaseID} {
+	for _, id := range []string{p.ReleaseID, p.SourceReleaseID, p.MergeSourceReleaseID} {
 		id = strings.ToLower(id)
 		if id == "" || seen[id] {
 			continue

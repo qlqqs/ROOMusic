@@ -263,9 +263,9 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	now := w.opts.Now()
 	ordinary := needsWork(subject, state, digest, now, false)
 	if subject == "release" && !ordinary {
-		tracks, artists := matchBackfills(state, input)
-		if tracks || artists {
-			return w.backfillMatch(ctx, e, state, states, tracks, artists)
+		tracks, artists, merges := matchBackfills(state, input)
+		if tracks || artists || merges {
+			return w.backfillMatch(ctx, e, state, states, tracks, artists, merges)
 		}
 	}
 	if !ordinary && !needsWork(subject, state, digest, now, states.fingerprintAvailable) {
@@ -449,11 +449,15 @@ func releaseResult(out outcome) []byte {
 		ExternalGroupID string   `json:"external_group_id,omitempty"`
 		Conflicts       []string `json:"conflicts"`
 		Group           string   `json:"group,omitempty"`
+		ReleaseMerge    string   `json:"release_merge,omitempty"`
 		ArtistLinks     string   `json:"artist_links,omitempty"`
 		TrackFields     string   `json:"track_fields,omitempty"`
 	}{Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks}
 	if m.Release != nil {
 		r.ExternalID, r.ExternalGroupID = m.Release.ID, m.Release.Group.ID
+		if out.status == "matched" {
+			r.ReleaseMerge = "done"
+		}
 	}
 	if m.Recording != nil {
 		r.ExternalID = m.Recording.ID
