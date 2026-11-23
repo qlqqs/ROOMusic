@@ -14,6 +14,28 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	65: `UPDATE tracks SET edit_revision=5 WHERE id='c3000000-0000-4000-8000-000000000065';
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
+ SELECT id::uuid,'f6400000-0000-4000-8000-000000000000',kind,'release','e6400000-0000-4000-8000-000000000002',gen_random_uuid(),kind,1,2,'{}','{}','{}','fixture'
+ FROM (VALUES ('d6500000-0000-4000-8000-000000000001','track_correction'),('d6500000-0000-4000-8000-000000000002','track_auto_correction')) AS fixture(id,kind);
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id,reverts_operation_id)
+ SELECT undo::uuid,actor_id,'revert',target_type,target_id,gen_random_uuid(),'undo',2,3,'{}','{}','{}','fixture',id
+ FROM operations JOIN (VALUES ('d6500000-0000-4000-8000-000000000001','d6500000-0000-4000-8000-000000000003'),
+ ('d6500000-0000-4000-8000-000000000002','d6500000-0000-4000-8000-000000000004')) AS fixture(original,undo) ON id=original::uuid;
+ INSERT INTO track_corrections(track_id,field,mode,text_value,operation_id)
+ VALUES('c3000000-0000-4000-8000-000000000065','title','set','人工标题','d6500000-0000-4000-8000-000000000001');
+ INSERT INTO track_auto_values(track_id,field,mode,text_value,operation_id)
+ VALUES('c3000000-0000-4000-8000-000000000065','artist','set','自动艺人','d6500000-0000-4000-8000-000000000002');
+ INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by)
+ SELECT 'track','c3000000-0000-4000-8000-000000000065',subject,repeat('a',64),'{}',op::uuid,'f6400000-0000-4000-8000-000000000000'
+ FROM (VALUES ('title','d6500000-0000-4000-8000-000000000003'),('artist','d6500000-0000-4000-8000-000000000004')) AS fixture(subject,op);
+ INSERT INTO artist_credits(id,track_id,role,name_id,position,layer)
+ SELECT gen_random_uuid(),'c3000000-0000-4000-8000-000000000065','track_artist','a2000000-0000-4000-8000-000000000001',1,layer
+ FROM (VALUES ('correction'),('auto')) AS fixture(layer);
+ UPDATE steward_plan_items SET operation_id='d6500000-0000-4000-8000-000000000002' WHERE id='f6400000-0000-4000-8000-000000000005';
+ UPDATE steward_plan_items SET operation_id='d6500000-0000-4000-8000-000000000003' WHERE id='f6500000-0000-4000-8000-000000000005';
+ INSERT INTO curation_model_exceptions(pending_item_id,plan_item_id,tool,input,preview,provider,review_id,review_model,review_decision,review_source)
+ VALUES('e6400000-0000-4000-8000-000000000004','f6500000-0000-4000-8000-000000000005','correct_track','{}','{}','synthetic',gen_random_uuid(),'synthetic-review','rejected','model');`,
 	64: `UPDATE steward_plan_items SET decision='escalated' WHERE id='f6400000-0000-4000-8000-000000000005';
  INSERT INTO steward_conversations(id,user_id,title,model,mode,kind)
  VALUES('f6400000-0000-4000-8000-000000000006','f6400000-0000-4000-8000-000000000000','自动整理','synthetic','steward','curation');
@@ -360,7 +382,7 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence)
  VALUES('e6200000-0000-4000-8000-000000000003','musicbrainz','release_group','e6200000-0000-4000-8000-000000000001','existing-group','barcode','high');`)
 			}
-			if m.Version == 64 {
+			if m.Version == 64 || m.Version == 65 {
 				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role)
  VALUES('f6400000-0000-4000-8000-000000000000','curation-rollback','synthetic','admin');
  INSERT INTO steward_conversations(id,user_id,title,model,mode)
@@ -382,6 +404,32 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  VALUES('e6400000-0000-4000-8000-000000000003','release','e6400000-0000-4000-8000-000000000002','release_match','waiting_model',1,repeat('a',64),'{}'),
  ('e6400000-0000-4000-8000-000000000004','release','e6400000-0000-4000-8000-000000000002','recording_match','waiting_model',1,repeat('b',64),'{}');`)
 			}
+			if m.Version == 65 {
+				// 基线含需要保留的旧操作、旧标记、旧署名和工作状态，由快照逐行比较。
+				rollbackExec(t, db, `INSERT INTO library_roots(id,path) VALUES('c6000000-0000-4000-8000-000000000065','/synthetic/track-rollback');
+ INSERT INTO media(id,release_id,position) VALUES('c2000000-0000-4000-8000-000000000065','e6400000-0000-4000-8000-000000000002',1);
+ INSERT INTO tracks(id,medium_id,position,title,artist,source_root_id,relative_path,observed_at) VALUES
+ ('c3000000-0000-4000-8000-000000000065','c2000000-0000-4000-8000-000000000065',1,'扫描标题','扫描艺人','c6000000-0000-4000-8000-000000000065','track.flac',now());
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
+ VALUES('d6500000-0000-4000-8000-000000000005','f6400000-0000-4000-8000-000000000000','release_correction','release','e6400000-0000-4000-8000-000000000002',gen_random_uuid(),'release',1,2,'{}','{}','{}','fixture');
+ INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by) VALUES
+ ('track','c3000000-0000-4000-8000-000000000065','lyrics',repeat('a',64),'{}',NULL,'f6400000-0000-4000-8000-000000000000'),
+ ('release','e6400000-0000-4000-8000-000000000002','title',repeat('a',64),'{}','d6500000-0000-4000-8000-000000000005','f6400000-0000-4000-8000-000000000000');
+ INSERT INTO artist_credits(id,track_id,role,name_id,position,layer) VALUES
+ (gen_random_uuid(),'c3000000-0000-4000-8000-000000000065','track_artist','a2000000-0000-4000-8000-000000000001',1,'scan'),
+ (gen_random_uuid(),'c3000000-0000-4000-8000-000000000065','composer','a2000000-0000-4000-8000-000000000001',1,'correction');
+ INSERT INTO artist_credits(id,release_id,role,name_id,position,layer)
+ VALUES(gen_random_uuid(),'e6400000-0000-4000-8000-000000000002','album_artist','a2000000-0000-4000-8000-000000000001',1,'auto');
+ INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status,result)
+ VALUES('release','e6400000-0000-4000-8000-000000000002',1,repeat('a',64),'matched','{"track_fields":true}');
+ INSERT INTO steward_tool_calls(id,message_id,position,tool_name,input,status)
+ VALUES('f6500000-0000-4000-8000-000000000003','f6400000-0000-4000-8000-000000000002',1,'revert_operation','{}','failed');
+ INSERT INTO steward_plan_items(id,plan_id,tool_call_id,position,tool_name,input,preview,revertible,idempotency_key,decision)
+ SELECT 'f6500000-0000-4000-8000-000000000005','f6400000-0000-4000-8000-000000000004',id,position,tool_name,'{}','{}',true,idempotency_key,'declined'
+ FROM steward_tool_calls WHERE id='f6500000-0000-4000-8000-000000000003';
+ INSERT INTO curation_model_exceptions(pending_item_id,plan_item_id,tool,input,preview,provider,review_id,review_model,review_decision,review_source)
+ VALUES('e6400000-0000-4000-8000-000000000003','f6400000-0000-4000-8000-000000000005','correct_release','{}','{}','synthetic',gen_random_uuid(),'synthetic-review','rejected','model');`)
+			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
@@ -391,6 +439,14 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			if fixture != "" {
 				rollbackExec(t, db, fixture)
+			}
+			if m.Version == 65 {
+				var title, artist string
+				var revision int64
+				err := db.QueryRow(`SELECT title,artist,edit_revision FROM track_effective WHERE id='c3000000-0000-4000-8000-000000000065'`).Scan(&title, &artist, &revision)
+				if err != nil || title != "人工标题" || artist != "自动艺人" || revision != 5 {
+					t.Fatalf("0065 升级夹具的有效值：title=%q artist=%q revision=%d err=%v", title, artist, revision, err)
+				}
 			}
 			if m.Version == 56 {
 				var valid bool
