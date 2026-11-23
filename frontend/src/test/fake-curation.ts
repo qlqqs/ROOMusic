@@ -1,4 +1,5 @@
-import { curationDataOf, respondToClearSuppression, respondToCurationBatch, respondToCurationBatches, respondToCurationProgress, respondToCurationSettings, respondToCurationSources, respondToScopeRevert, respondToSetCurationSource, respondToSuppressions, respondToUpdateCurationSettings, type CurationData } from "./curation-data";
+import { curationDataOf, respondToClearSuppression, respondToCurationBatch, respondToCurationBatches, respondToCurationProgress, respondToCurationSettings, respondToCurationSources, respondToScopeRevert, respondToSetCurationSource, respondToSetCurationSourceKey, respondToSuppressions, respondToUpdateCurationSettings, type CurationData } from "./curation-data";
+import { failure } from "./catalog-data";
 import type { FakeApi } from "./fake-api";
 import type { GovernanceData } from "./governance-data";
 import { jsonResponse } from "./http";
@@ -18,6 +19,14 @@ export function installCurationApi(api: FakeApi, governance: GovernanceData | nu
   api.on("PUT", `${base}/settings`, (request) => answer(respondToUpdateCurationSettings(data, request.body)));
   api.on("GET", `${base}/sources`, () => answer(respondToCurationSources(data)));
   api.on("PUT", /^\/api\/v1\/admin\/curation\/sources\/[^/]+$/, (request) => answer(respondToSetCurationSource(data, idFrom(request.path, /\/sources\/([^/]+)$/), request.body)));
+  const keyPath = /^\/api\/v1\/admin\/curation\/sources\/([^/]+)\/keys\/([^/]+)$/;
+  const keyName = (path: string) => decodeURIComponent(keyPath.exec(path.split("?")[0] ?? path)?.[2] ?? "");
+  api.on("PUT", keyPath, (request) => {
+    const body = request.body as { key?: unknown } | null;
+    if (typeof body?.key !== "string") return answer(failure(400, "invalid_input", "请求体无效"));
+    return answer(respondToSetCurationSourceKey(data, idFrom(request.path, keyPath), keyName(request.path), body.key));
+  });
+  api.on("DELETE", keyPath, (request) => answer(respondToSetCurationSourceKey(data, idFrom(request.path, keyPath), keyName(request.path), null)));
   api.on("GET", `${base}/progress`, () => answer(respondToCurationProgress(data)));
   api.on("GET", `${base}/batches`, (request) => answer(respondToCurationBatches(data, searchOf(request.path))));
   api.on("GET", /^\/api\/v1\/admin\/curation\/batches\/[^/]+$/, (request) => answer(respondToCurationBatch(data, idFrom(request.path, /\/batches\/([^/]+)$/))));

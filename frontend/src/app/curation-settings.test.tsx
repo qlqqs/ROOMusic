@@ -3,11 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { OperationChangesDTO } from "../features/governance/api/decoders";
 import { albumGroup } from "../test/catalog-data";
-import { enableCuration, seedBatch, seedSuppression, type CurationData } from "../test/curation-data";
+import { enableCuration, refreshSources, seedBatch, seedSuppression, type CurationData } from "../test/curation-data";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
 import { installCatalogApi } from "../test/fake-catalog";
 import { installCurationApi } from "../test/fake-curation";
 import { installGovernanceApi } from "../test/fake-governance";
+import { jsonResponse } from "../test/http";
 import { seedAutoOperation, type GovernanceData } from "../test/governance-data";
 import { renderApp } from "../test/render-app";
 
@@ -182,6 +183,109 @@ describe("外部源", () => {
     await waitFor(() => expect(history.location.pathname).toBe("/settings/operations"));
     expect(history.location.search).toContain("provider=musicbrainz");
     expect(await screen.findByText("只显示来自 MusicBrainz 的自动整理的记录。")).toBeTruthy();
+  });
+});
+
+describe("AcoustID 与两把密钥", () => {
+  const acoustid = (curation: CurationData) => curation.sources.find((source) => source.id === "acoustid");
+  const keyRow = (sources: HTMLElement, label: string) => within(sources).getByRole("form", { name: `AcoustID 的${label}` });
+
+  it("确认框写明 AcoustID 收到什么，密钥没填全时注明“填入密钥后”", async () => {
+    setup();
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    await user.click(await screen.findByRole("switch", { name: "自动整理" }));
+    const dialog = await screen.findByRole("dialog", { name: "打开自动整理？" });
+    const item = within(dialog).getByText("AcoustID").closest("li");
+    expect(item?.textContent).toBe("AcoustID（填入密钥后）：由音频算出的声学指纹（不能还原成音频）与时长，以及你填入的应用密钥与用户密钥");
+  });
+
+  it("两把密钥分别填写、更换与清除：只显示末四位；都填了才可用；AcoustID 没有“来自它的改动”的菜单", async () => {
+    const { api, curation } = setup();
+    enableCuration(curation);
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const sources = await group("外部源");
+    expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；填入密钥后可用。")).toBeTruthy();
+    expect(within(sources).queryByRole("button", { name: "AcoustID 的更多操作" })).toBeNull();
+    expect(within(sources).getByRole("link", { name: "注册一个应用" }).getAttribute("href")).toBe("https://acoustid.org/new-application");
+    expect(within(sources).getByRole("link", { name: "这个页面" }).getAttribute("href")).toBe("https://acoustid.org/api-key");
+
+    const application = keyRow(sources, "应用密钥");
+    const save = within(application).getByRole("button", { name: "保存" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    await user.type(within(application).getByLabelText("应用密钥"), "  abcdEFGH1234  ");
+    await user.click(save);
+    await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/sources/acoustid/keys/application")[0]?.body).toEqual({ key: "abcdEFGH1234" }));
+    expect(await within(sources).findByText("已保存，末四位 1234")).toBeTruthy();
+    // 只填了一把仍不可用。
+    expect(within(sources).getByText("声学指纹；对上的结果记在 MusicBrainz 名下；填入密钥后可用。")).toBeTruthy();
+
+    await user.type(within(keyRow(sources, "用户密钥")).getByLabelText("用户密钥"), "userKEY9876");
+    await user.click(within(keyRow(sources, "用户密钥")).getByRole("button", { name: "保存" }));
+    expect(await within(sources).findByText("已保存，末四位 9876")).toBeTruthy();
+    expect(within(sources).getByText("声学指纹；对上的结果记在 MusicBrainz 名下")).toBeTruthy();
+    expect(within(sources).queryByRole("form")).toBeNull();
+
+    const [replaceApplication] = within(sources).getAllByRole("button", { name: "更换" });
+    if (replaceApplication === undefined) throw new Error("缺少更换按钮");
+    await user.click(replaceApplication);
+    expect(keyRow(sources, "应用密钥")).toBeTruthy();
+    await user.click(within(sources).getByRole("button", { name: "取消" }));
+    expect(within(sources).getByText("已保存，末四位 1234")).toBeTruthy();
+
+    const [, clearUser] = within(sources).getAllByRole("button", { name: "清除" });
+    if (clearUser === undefined) throw new Error("缺少清除按钮");
+    await user.click(clearUser);
+    await waitFor(() => expect(api.requestsTo("DELETE", "/api/v1/admin/curation/sources/acoustid/keys/user")).toHaveLength(1));
+    expect(await within(sources).findByLabelText("用户密钥")).toBeTruthy();
+    expect(within(sources).getByText("已保存，末四位 1234")).toBeTruthy();
+    expect(within(sources).getByText("声学指纹；对上的结果记在 MusicBrainz 名下；填入密钥后可用。")).toBeTruthy();
+  });
+
+  it("某一把无效、指纹工具不可用时写出原因；关掉 AcoustID 后密钥的行不出现", async () => {
+    const { curation } = setup();
+    enableCuration(curation);
+    const source = acoustid(curation);
+    if (source === undefined) throw new Error("缺少 AcoustID");
+    source.keys = [
+      { configured: true, last_four: "wxyz", name: "application", status: "valid" },
+      { configured: true, last_four: "u123", name: "user", status: "invalid" },
+    ];
+    refreshSources(curation);
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const sources = await group("外部源");
+    expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；密钥无效，请重新填写。")).toBeTruthy();
+    expect(within(sources).getAllByText(/AcoustID 说这把密钥无效/)).toHaveLength(1);
+    expect(within(sources).getByText("已保存，末四位 u123")).toBeTruthy();
+
+    await user.click(within(sources).getByRole("switch", { name: "AcoustID" }));
+    await waitFor(() => expect(within(sources).queryByText("已保存，末四位 wxyz")).toBeNull());
+    expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；已关闭，后台不使用它。")).toBeTruthy();
+  });
+
+  it("服务器缺少指纹工具时说明不能使用", async () => {
+    const { curation } = setup();
+    enableCuration(curation);
+    curation.fingerprintAvailable = false;
+    refreshSources(curation);
+    renderApp({ path: "/settings/curation" });
+    const sources = await group("外部源");
+    expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；这台服务器缺少指纹工具（fpcalc），暂时不能使用。")).toBeTruthy();
+  });
+
+  it("保存失败时就近提示是哪一把，输入框保留", async () => {
+    const { api, curation } = setup();
+    enableCuration(curation);
+    api.on("PUT", "/api/v1/admin/curation/sources/acoustid/keys/user", () => jsonResponse(400, { error: { code: "invalid_input", message: "密钥无效" }, request_id: "r1" }));
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const sources = await group("外部源");
+    await user.type(await within(sources).findByLabelText("用户密钥"), "bad key");
+    await user.click(within(keyRow(sources, "用户密钥")).getByRole("button", { name: "保存" }));
+    expect(await within(sources).findByText("用户密钥没有保存")).toBeTruthy();
+    expect((within(sources).getByLabelText("用户密钥") as HTMLInputElement).value).toBe("bad key");
   });
 });
 

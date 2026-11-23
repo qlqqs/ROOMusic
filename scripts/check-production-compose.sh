@@ -47,6 +47,7 @@ compose required.env config --format json | jq -e '
   ((.volumes // {}) | length) == 0 and
   ([.services[].volumes[] | .type == "bind"] | all) and
   .services.app.depends_on.postgres.condition == "service_healthy" and
+  .services.app.environment.ROOMUSIC_FPCALC_PATH == "/usr/local/bin/fpcalc" and
   .services.app.environment.ROOMUSIC_DB_PASSWORD_FILE == "/run/secrets/postgres_password" and
   .services.postgres.environment.POSTGRES_PASSWORD_FILE == "/run/secrets/postgres_password" and
   (.services.app.ports | length) == 1 and

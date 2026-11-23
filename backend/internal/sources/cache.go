@@ -31,8 +31,8 @@ type cache struct {
 	nextSweep   time.Time
 }
 
-func cacheKey(address string) string {
-	key := sha256.Sum256([]byte("GET " + address))
+func cacheKey(input string) string {
+	key := sha256.Sum256([]byte(input))
 	return hex.EncodeToString(key[:])
 }
 

@@ -17,15 +17,18 @@ import (
 
 const pageSize = 100
 
-type pageStates struct{ releases, artworks, lyrics map[string]curation.WorkState }
+type pageStates struct {
+	releases, artworks, lyrics map[string]curation.WorkState
+	fingerprintAvailable       bool
+}
 
-func (w *Worker) walk(ctx context.Context, lyrics bool, priority func() error) error {
+func (w *Worker) walk(ctx context.Context, lyrics bool, priority func() error, fingerprintAvailable bool) error {
 	var after *catalog.CurationCursor
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		next, err := w.page(ctx, after, lyrics, priority)
+		next, err := w.page(ctx, after, lyrics, priority, fingerprintAvailable)
 		if failureCode(err) == "scan_running" {
 			if err := w.closeBatch(ctx); err != nil {
 				return err
@@ -43,7 +46,7 @@ func (w *Worker) walk(ctx context.Context, lyrics bool, priority func() error) e
 	}
 }
 
-func (w *Worker) page(ctx context.Context, after *catalog.CurationCursor, lyrics bool, priority func() error) (*catalog.CurationCursor, error) {
+func (w *Worker) page(ctx context.Context, after *catalog.CurationCursor, lyrics bool, priority func() error, fingerprintAvailable bool) (*catalog.CurationCursor, error) {
 	if err := w.ready(ctx); err != nil {
 		return nil, err
 	}
@@ -60,7 +63,7 @@ func (w *Worker) page(ctx context.Context, after *catalog.CurationCursor, lyrics
 	if err != nil {
 		return nil, err
 	}
-	var states pageStates
+	states := pageStates{fingerprintAvailable: fingerprintAvailable}
 	states.releases, err = curation.LoadWorkStates(ctx, w.db, "release", ids)
 	if err != nil {
 		return nil, err
@@ -126,9 +129,44 @@ func subjectDigest(subject string, e catalog.CurationEvidence, id string) string
 	}
 }
 
-func needsWork(state curation.WorkState, digest string, now time.Time) bool {
-	return digest != "" && (state.RuleVersion != StoredRuleVersion || state.InputDigest != digest ||
-		state.Status == "try_later" && state.NextAttemptAt != nil && !now.Before(*state.NextAttemptAt))
+func needsWork(subject string, state curation.WorkState, digest string, now time.Time, fingerprintAvailable bool) bool {
+	if digest == "" {
+		return false
+	}
+	if state.RuleVersion != StoredRuleVersion || state.InputDigest != digest || state.Status == "try_later" && state.NextAttemptAt != nil && !now.Before(*state.NextAttemptAt) {
+		return true
+	}
+	if !fingerprintAvailable || subject != "release" || (state.Status != "no_match" && state.Status != "uncertain") {
+		return false
+	}
+	var last struct {
+		Fingerprint *string  `json:"fingerprint"`
+		Method      string   `json:"method"`
+		Conflicts   []string `json:"conflicts"`
+	}
+	if json.Unmarshal(state.Result, &last) != nil {
+		return false
+	}
+	if last.Fingerprint != nil {
+		return *last.Fingerprint == "unavailable"
+	}
+	return (last.Method == "" || last.Method == "search") && !slices.Contains(last.Conflicts, "track_count")
+}
+
+func (w *Worker) fingerprintStep(ctx context.Context) (*FingerprintStep, error) {
+	if err := w.sources.Check(ctx, "acoustid"); err != nil {
+		switch failureCode(err) {
+		case "not_found", "source_disabled":
+			return nil, nil
+		default:
+			return nil, err
+		}
+	}
+	f, ok := w.sources.FingerprintFinder("acoustid")
+	if !ok || w.opts.Fingerprints == nil {
+		return nil, nil
+	}
+	return &FingerprintStep{Finder: f, Prints: w.opts.Fingerprints}, nil
 }
 
 func subjectSource(subject string) string {
@@ -161,7 +199,7 @@ type outcome struct {
 	match         MatchResult
 }
 
-func (w *Worker) evaluate(ctx context.Context, u *unit, e catalog.CurationEvidence) (out outcome, err error) {
+func (w *Worker) evaluate(ctx context.Context, u *unit, e catalog.CurationEvidence, fingerprintRequired bool) (out outcome, err error) {
 	switch u.subject {
 	case "artwork":
 		out.status, err = w.applyArtwork(ctx, u, e)
@@ -181,7 +219,15 @@ func (w *Worker) evaluate(ctx context.Context, u *unit, e catalog.CurationEviden
 		if !hasRecordings || !hasReleases {
 			return out, operations.Conflict("source_disabled", "发行或录音查询能力未启用")
 		}
-		out.match, err = Match(ctx, e, r, f)
+		var step *FingerprintStep
+		step, err = w.fingerprintStep(ctx)
+		if err != nil {
+			return out, err
+		}
+		if fingerprintRequired && step == nil {
+			return out, operations.Conflict("source_disabled", "声学指纹查询当前不可用")
+		}
+		out.match, err = MatchWithFingerprint(ctx, e, r, f, step)
 		if err == nil && out.match.Status == "matched" {
 			out.group, err = w.applyMatch(ctx, u, e, out.match)
 		}
@@ -202,7 +248,9 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	}
 	input := subjectEvidence(subject, *e, states.releases[e.ID])
 	digest := subjectDigest(subject, input, id)
-	if !needsWork(state, digest, w.opts.Now()) {
+	now := w.opts.Now()
+	ordinary := needsWork(subject, state, digest, now, false)
+	if !ordinary && !needsWork(subject, state, digest, now, states.fingerprintAvailable) {
 		return nil
 	}
 	if err := w.ready(ctx); err != nil {
@@ -212,7 +260,7 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 		return err
 	}
 	u := unit{w: w, subject: subject, id: id, generation: state.Generation + 1, releaseID: e.ID, inputDigest: digest, releaseState: states.releases[e.ID]}
-	out, err := w.evaluate(ctx, &u, input)
+	out, err := w.evaluate(ctx, &u, input, !ordinary)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -233,6 +281,10 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	}
 	if retry || out.status == "try_later" {
 		delay := min(24*time.Hour, 10*time.Minute<<min(state.RetryCount, 8))
+		var local *fingerprintRetry
+		if errors.As(err, &local) {
+			delay = max(delay, local.delay)
+		}
 		next := w.opts.Now().Add(delay)
 		state.Status, state.NextAttemptAt, state.RetryCount = "try_later", &next, state.RetryCount+1
 		if out.status == "try_later" {
@@ -374,11 +426,12 @@ func releaseResult(out outcome) []byte {
 	r := struct {
 		Mode            string   `json:"mode"`
 		Method          string   `json:"method"`
+		Fingerprint     string   `json:"fingerprint"`
 		ExternalID      string   `json:"external_id,omitempty"`
 		ExternalGroupID string   `json:"external_group_id,omitempty"`
 		Conflicts       []string `json:"conflicts"`
 		Group           string   `json:"group,omitempty"`
-	}{Mode: m.Mode, Method: m.Method, Conflicts: m.Conflicts, Group: out.group}
+	}{Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group}
 	if m.Release != nil {
 		r.ExternalID, r.ExternalGroupID = m.Release.ID, m.Release.Group.ID
 	}

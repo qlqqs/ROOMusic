@@ -35,6 +35,7 @@ type Server struct {
 	PublicURL           string
 	// FFmpegPath 是 ffmpeg 可执行文件的绝对路径；空表示在 PATH 中查找。找不到或自检不过时渲染不可用，应用照常启动。
 	FFmpegPath    string
+	FPCalcPath    string
 	AudioAnalysis bool
 	ScanWorkers   int
 }
@@ -56,6 +57,10 @@ func Load() (Server, error) {
 	if ffmpegPath != "" && !filepath.IsAbs(ffmpegPath) {
 		return Server{}, fmt.Errorf("ROOMUSIC_FFMPEG_PATH must be an absolute path")
 	}
+	fpcalcPath := strings.TrimSpace(os.Getenv("ROOMUSIC_FPCALC_PATH"))
+	if fpcalcPath != "" && !filepath.IsAbs(fpcalcPath) {
+		return Server{}, fmt.Errorf("ROOMUSIC_FPCALC_PATH must be an absolute path")
+	}
 	databaseURL, err := DatabaseURL()
 	if err != nil {
 		return Server{}, err
@@ -72,7 +77,7 @@ func Load() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
-	config := Server{ScanWorkers: scanWorkers, AudioAnalysis: audioAnalysis, Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath}
+	config := Server{ScanWorkers: scanWorkers, AudioAnalysis: audioAnalysis, Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, FPCalcPath: fpcalcPath}
 	for _, configuredRoot := range strings.Split(os.Getenv("ROOMUSIC_ALLOWED_LIBRARY_ROOTS"), ",") {
 		if root := strings.TrimSpace(configuredRoot); root != "" {
 			config.AllowedLibraryRoots = append(config.AllowedLibraryRoots, root)

@@ -22,16 +22,29 @@ const settingsDecoder = d.object({
   paused: d.boolean(),
 });
 
-export const SOURCE_CAPABILITIES = ["release_lookup", "recording_lookup", "artist_lookup", "cover_art", "lyrics"] as const;
+export const SOURCE_CAPABILITIES = ["release_lookup", "recording_lookup", "artist_lookup", "cover_art", "lyrics", "fingerprint_lookup"] as const;
 export type SourceCapability = (typeof SOURCE_CAPABILITIES)[number];
 
-// 一个外部源：enabled 是它自己的开关，active 是“后台现在能不能用它”，不能用时 inactive_reason 依次是总开关、开启者、源自己的开关。
+export const SOURCE_INACTIVE_REASONS = ["curation_disabled", "enabler_unavailable", "source_disabled", "fingerprint_unavailable", "key_missing", "key_invalid"] as const;
+export type SourceInactiveReason = (typeof SOURCE_INACTIVE_REASONS)[number];
+
+// 需要密钥的源（AcoustID：应用密钥与用户密钥）才有 keys，按声明顺序每把一项：只给出有没有、末四位与服务端用过之后的结论（unchecked 是还没用过）。
+const sourceKeyDecoder = d.object({
+  configured: d.boolean(),
+  last_four: d.string({ max: 4 }),
+  name: d.string({ min: 1, max: 32, pattern: /^[a-z_]+$/ }),
+  status: d.oneOf(["unchecked", "valid", "invalid"] as const),
+});
+
+// 一个外部源：enabled 是它自己的开关，active 是“后台现在能不能用它”；不能用时 inactive_reason 依次是总开关、开启者、源自己的开关、
+// 指纹工具、有密钥没填、有密钥无效。
 const sourceDecoder = d.object({
   active: d.boolean(),
   capabilities: d.array(d.oneOf(SOURCE_CAPABILITIES), { min: 1, max: SOURCE_CAPABILITIES.length }),
   enabled: d.boolean(),
   id: d.string({ min: 1, max: 64, pattern: /^[a-z0-9._-]+$/ }),
-  inactive_reason: d.nullable(d.oneOf(["curation_disabled", "enabler_unavailable", "source_disabled"] as const)),
+  inactive_reason: d.nullable(d.oneOf(SOURCE_INACTIVE_REASONS)),
+  keys: d.optional(d.array(sourceKeyDecoder, { min: 1, max: 8 })),
   name: d.string({ min: 1, max: 200 }),
 });
 const sourcesDecoder = d.object({ items: d.array(sourceDecoder, { max: 50 }) });

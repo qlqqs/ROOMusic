@@ -7,6 +7,7 @@ import { loadApiSample, sampleBody } from "../../src/test/api-samples";
 import {
   albumGroups,
   catalogDataOf,
+  failure,
   respondToGroupComparison,
   respondToGroupDetail,
   respondToGroupList,
@@ -43,6 +44,7 @@ import {
   respondToCurationSources,
   respondToScopeRevert,
   respondToSetCurationSource,
+  respondToSetCurationSourceKey,
   respondToSuppressions,
   respondToUpdateCurationSettings,
   type CurationData,
@@ -511,6 +513,14 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     if (key === "GET /api/v1/admin/curation/sources") return guarded(method, path, true, () => respondToCurationSources(mock.curation));
     const curationSource = /^\/api\/v1\/admin\/curation\/sources\/([^/]+)$/.exec(path);
     if (curationSource !== null && method === "PUT") return guarded(method, path, true, () => respondToSetCurationSource(mock.curation, decodeURIComponent(curationSource[1] ?? ""), body));
+    const curationSourceKey = /^\/api\/v1\/admin\/curation\/sources\/([^/]+)\/keys\/([^/]+)$/.exec(path);
+    if (curationSourceKey !== null && (method === "PUT" || method === "DELETE")) {
+      const sourceId = decodeURIComponent(curationSourceKey[1] ?? "");
+      const keyName = decodeURIComponent(curationSourceKey[2] ?? "");
+      const sent = method === "PUT" && typeof body === "object" && body !== null ? (body as { key?: unknown }).key : null;
+      if (method === "PUT" && typeof sent !== "string") return guarded(method, path, true, () => failure(400, "invalid_input", "请求体无效"));
+      return guarded(method, path, true, () => respondToSetCurationSourceKey(mock.curation, sourceId, keyName, method === "PUT" ? (sent as string) : null));
+    }
     if (key === "GET /api/v1/admin/curation/progress") return guarded(method, path, true, () => respondToCurationProgress(mock.curation));
     if (key === "GET /api/v1/admin/curation/batches") return guarded(method, path, true, () => respondToCurationBatches(mock.curation, search));
     const curationBatch = /^\/api\/v1\/admin\/curation\/batches\/([^/]+)$/.exec(path);

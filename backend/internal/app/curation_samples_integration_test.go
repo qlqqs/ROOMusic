@@ -1,6 +1,7 @@
 package app
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
@@ -24,6 +25,13 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 	record("curation/sources", "GET", curationBase+"/sources", nil)
 	record("curation/settings-enabled", "PUT", curationBase+"/settings", map[string]bool{"enabled": true})
 	record("curation/source-updated", "PUT", curationBase+"/sources/musicbrainz", map[string]bool{"enabled": false})
+	const sampleKey = "synthetic-application-key-4321"
+	samples.forbid(sampleKey)
+	keyPath := curationBase + "/sources/acoustid/keys/application"
+	record("curation/source-key-set", http.MethodPut, keyPath, map[string]string{"key": sampleKey})
+	record("curation/source-key-cleared", http.MethodDelete, keyPath, nil)
+	samples.record("errors/curation-key-not-supported", f.application.request(t, http.MethodPut,
+		curationBase+"/sources/musicbrainz/keys/application", map[string]string{"key": sampleKey}, &f.admin, map[string]string{"X-Request-ID": sampleRequestID}), http.StatusBadRequest)
 	batch := f.batch(t, "program")
 	op := f.apply(t, f.a, "fixture-catalog", batch, map[string]any{"title": "合成自动标题", "year": nil})
 	record("corrections/get-auto", "GET", "/api/v1/releases/"+f.a+"/corrections", nil)

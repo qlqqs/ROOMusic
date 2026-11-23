@@ -1,6 +1,8 @@
 package sources
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -112,23 +114,54 @@ type response struct {
 	retryAfter  string
 }
 
+type requestSpec struct {
+	method, address, accept string
+	cacheInput              string
+	limit                   int64
+	timeout                 time.Duration
+	form                    func(context.Context) (url.Values, error)
+	decode                  func(int, []byte) (empty, retry bool, err error)
+}
+
+func jsonLimit(ctx context.Context) int64 {
+	if _, background := ctx.Value(backgroundKey{}).(caller); background {
+		return 8 << 20
+	}
+	return 2 << 20
+}
+
 // GetJSON 只在 decode 确认结构可用后缓存响应。decode 的两个返回值依次表示空结果和结构有效。
 func (r *Requester) GetJSON(ctx context.Context, address string, decode func([]byte) (empty, valid bool)) error {
-	limit := int64(2 << 20)
-	if _, background := ctx.Value(backgroundKey{}).(caller); background {
-		limit = 8 << 20
+	spec := requestSpec{method: http.MethodGet, address: address, accept: "application/json", limit: jsonLimit(ctx), timeout: 20 * time.Second}
+	spec.decode = func(status int, body []byte) (bool, bool, error) {
+		if status == http.StatusNotFound {
+			return true, false, ErrNotFound
+		}
+		if status == http.StatusOK && body != nil {
+			if empty, valid := decode(body); valid {
+				return empty, false, nil
+			}
+		}
+		return false, false, ErrUnavailable
 	}
-	_, err := r.get(ctx, address, "application/json", limit, 20*time.Second, decode)
+	_, err := r.do(ctx, spec)
+	return err
+}
+
+// PostForm 在每次出站前重新取表单并压缩。cacheInput 只含决定查询结果的参数。
+// decode 接收包括非 200 在内的 HTTP 响应，区分应重试的失败、终止错误和可缓存的结果。
+func (r *Requester) PostForm(ctx context.Context, address, cacheInput string, form func(context.Context) (url.Values, error), decode func(int, []byte) (empty, retry bool, err error)) error {
+	_, err := r.do(ctx, requestSpec{method: http.MethodPost, address: address, accept: "application/json", cacheInput: cacheInput, limit: jsonLimit(ctx), timeout: 20 * time.Second, form: form, decode: decode})
 	return err
 }
 
 // GetBytes 读取大小受限的二进制响应，只使用后台失败记忆。
 func (r *Requester) GetBytes(ctx context.Context, address, accept string, maxBytes int64) ([]byte, string, error) {
-	res, err := r.get(ctx, address, accept, maxBytes, 60*time.Second, nil)
+	res, err := r.do(ctx, requestSpec{method: http.MethodGet, address: address, accept: accept, limit: maxBytes, timeout: 60 * time.Second})
 	return res.body, res.contentType, err
 }
 
-func (r *Requester) get(ctx context.Context, address, accept string, limit int64, timeout time.Duration, decode func([]byte) (bool, bool)) (response, error) {
+func (r *Requester) do(ctx context.Context, spec requestSpec) (response, error) {
 	c, background := ctx.Value(backgroundKey{}).(caller)
 	if err := c.check(ctx); err != nil {
 		return response{}, err
@@ -137,37 +170,44 @@ func (r *Requester) get(ctx context.Context, address, accept string, limit int64
 	if background {
 		failure = ErrTryLater
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+	request, err := http.NewRequestWithContext(ctx, spec.method, spec.address, nil)
 	if err != nil {
 		return response{}, failure
 	}
 	request.URL.RawQuery = request.URL.Query().Encode()
 	request.URL.Fragment = ""
 	request.URL.Host = strings.ToLower(request.URL.Host)
-	request.Header.Set("Accept", accept)
+	request.Header.Set("Accept", spec.accept)
 	request.Header.Set("User-Agent", UserAgent())
-	key := cacheKey(request.URL.String())
-	e, hit, failed := r.cache.lookup(ctx, key, background, decode != nil)
+	keyInput := spec.method + " " + request.URL.String()
+	if spec.method == http.MethodPost {
+		keyInput += "\x00" + spec.cacheInput
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.Header.Set("Content-Encoding", "gzip")
+	}
+	key := cacheKey(keyInput)
+	e, hit, failed := r.cache.lookup(ctx, key, background, spec.decode != nil)
 	if failed {
 		r.hit(ctx)
 		return response{}, ErrTryLater
 	}
 	if hit {
-		if e.Status == http.StatusNotFound {
+		if e.Status == http.StatusNotFound && spec.method == http.MethodGet {
 			r.hit(ctx)
 			return response{}, ErrNotFound
 		}
-		if int64(len(e.Body)) > limit {
+		if int64(len(e.Body)) > spec.limit {
 			return response{}, failure
 		}
-		if _, valid := decode([]byte(e.Body)); valid {
+		_, _, err := spec.decode(e.Status, []byte(e.Body))
+		if err == nil || errors.Is(err, ErrNotFound) {
 			r.hit(ctx)
-			return response{}, nil
+			return response{}, err
 		}
 		r.cache.warning(ctx)
 	}
 	for attempt := 1; ; attempt++ {
-		res, err := r.attempt(ctx, c, background, request, attempt, limit, timeout)
+		res, err := r.attempt(ctx, c, background, request, attempt, spec)
 		if err != nil {
 			return response{}, err
 		}
@@ -177,25 +217,24 @@ func (r *Requester) get(ctx context.Context, address, accept string, limit int64
 		if err := ctx.Err(); err != nil {
 			return response{}, err
 		}
-		switch res.status {
-		case http.StatusOK:
-			if res.body != nil {
-				if decode == nil {
-					return res, nil
-				}
-				if empty, valid := decode(res.body); valid {
+		if res.status != 0 && !(res.body == nil && res.retry) {
+			empty, retry, err := spec.interpret(res)
+			if ctx.Err() != nil {
+				return response{}, ctx.Err()
+			}
+			if err == nil || errors.Is(err, ErrNotFound) {
+				if spec.decode != nil && res.body != nil {
 					r.cache.store(ctx, key, res.status, res.body, empty, background)
-					return response{}, nil
 				}
+				if err != nil {
+					return response{}, err
+				}
+				return res, nil
 			}
-		case http.StatusNotFound:
-			if decode != nil && res.body != nil {
-				r.cache.store(ctx, key, res.status, res.body, true, background)
+			if !errors.Is(err, ErrUnavailable) && !retry {
+				return response{}, err
 			}
-			return response{}, ErrNotFound
-		}
-		if err := ctx.Err(); err != nil {
-			return response{}, err
+			res.retry = res.retry || retry
 		}
 		if !background || !res.retry {
 			return response{}, failure
@@ -210,6 +249,19 @@ func (r *Requester) get(ctx context.Context, address, accept string, limit int64
 		case <-r.after(retryDelay(res.retryAfter, r.cache.now(), attempt)):
 		}
 	}
+}
+
+func (spec requestSpec) interpret(res response) (empty, retry bool, err error) {
+	if spec.decode != nil {
+		return spec.decode(res.status, res.body)
+	}
+	if res.status == http.StatusOK && res.body != nil {
+		return false, false, nil
+	}
+	if res.status == http.StatusNotFound {
+		return true, false, ErrNotFound
+	}
+	return false, false, ErrUnavailable
 }
 
 func (r *Requester) hit(ctx context.Context) {
@@ -231,11 +283,11 @@ func retryDelay(header string, now time.Time, attempt int) time.Duration {
 	return min(maximum, base+time.Duration(rand.Int64N(int64(base)/2)))
 }
 
-func (r *Requester) attempt(ctx context.Context, c caller, background bool, request *http.Request, attempt int, limit int64, timeout time.Duration) (response, error) {
+func (r *Requester) attempt(ctx context.Context, c caller, background bool, request *http.Request, attempt int, spec requestSpec) (response, error) {
 	if err := r.limiter.acquire(ctx, background); err != nil {
 		return response{}, err
 	}
-	baseClient, err := r.newClient(egress.Options{Policy: egress.PublicOnly, Timeout: timeout, MaxRedirects: r.maxRedirects})
+	baseClient, err := r.newClient(egress.Options{Policy: egress.PublicOnly, Timeout: spec.timeout, MaxRedirects: r.maxRedirects})
 	if err != nil {
 		r.limiter.release(false)
 		return response{}, nil
@@ -264,12 +316,18 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 		r.limiter.release(false)
 		return response{}, err
 	}
-	requestCtx, cancel := context.WithTimeout(ctx, timeout)
+	requestCtx, cancel := context.WithTimeout(ctx, spec.timeout)
 	defer cancel()
 	req := request.WithContext(requestCtx)
+	if spec.form != nil {
+		if err := prepareForm(req, spec.form); err != nil {
+			r.limiter.release(false)
+			return response{}, err
+		}
+	}
 	started := time.Now()
 	r.limiter.release(true)
-	res := fetch(&client, req, limit)
+	res := fetch(&client, req, spec.limit)
 	if logger := r.cache.logger; logger != nil {
 		attrs := []any{"event", "sources.request.finished", "module", "sources", "message", "外部源请求结束", "source", r.cache.source, "domain", req.URL.Hostname(), "duration_ms", time.Since(started).Milliseconds(), "attempt", attempt}
 		if res.status != 0 {
@@ -283,6 +341,24 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 		return response{}, permitErr
 	}
 	return res, nil
+}
+
+func prepareForm(req *http.Request, form func(context.Context) (url.Values, error)) error {
+	values, err := form(req.Context())
+	if err != nil {
+		return err
+	}
+	var body bytes.Buffer
+	writer := gzip.NewWriter(&body)
+	if _, err := io.WriteString(writer, values.Encode()); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	req.Body = io.NopCloser(&body)
+	req.ContentLength = int64(body.Len())
+	return nil
 }
 
 func (r *Requester) checkRedirect(target *url.URL, via []*http.Request) error {
@@ -312,8 +388,8 @@ func fetch(client *http.Client, req *http.Request, limit int64) response {
 	}
 	defer resp.Body.Close()
 	res := response{status: resp.StatusCode, contentType: resp.Header.Get("Content-Type"), retryAfter: resp.Header.Get("Retry-After")}
-	switch resp.StatusCode {
-	case http.StatusOK, http.StatusNotFound:
+	res.retry = resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable
+	if req.Method == http.MethodPost || resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotFound {
 		if resp.ContentLength > limit {
 			return res
 		}
@@ -326,8 +402,6 @@ func fetch(client *http.Client, req *http.Request, limit int64) response {
 		} else if resp.StatusCode == http.StatusOK {
 			res.retry = true
 		}
-	case http.StatusTooManyRequests, http.StatusServiceUnavailable:
-		res.retry = true
 	}
 	return res
 }

@@ -26,6 +26,14 @@ RUN test -f cmd/roomusic/web/dist/index.html \
 
 FROM mwader/static-ffmpeg@sha256:11a44711684c0b9f754c047dcd64235b8b52deab251bd0e0a86f22faa160749c AS ffmpeg
 
+FROM alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db9275e198ad AS fpcalc
+ARG TARGETARCH
+ADD --checksum=sha256:c968ad4a0821592a79b158fb2e1f46cbe0a22a0a1dbc0743c67d68e75d15d2bb https://github.com/acoustid/chromaprint/releases/download/v1.6.2/chromaprint-fpcalc-1.6.2-linux-x86_64.tar.gz /amd64.tar.gz
+ADD --checksum=sha256:3aa1498126ed272d805bc9d081c77965c9e1e1a0891bb112c13b56ef2ad47bad https://github.com/acoustid/chromaprint/releases/download/v1.6.2/chromaprint-fpcalc-1.6.2-linux-arm64.tar.gz /arm64.tar.gz
+RUN mkdir /out \
+ && tar -xzf "/${TARGETARCH}.tar.gz" -C /out --strip-components=1 \
+ && /out/fpcalc -version | grep -q '^fpcalc version 1\.6\.2 ('
+
 FROM alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db9275e198ad AS app
 RUN apk add --no-cache ca-certificates postgresql18-client \
  && pg_dump --version | grep -q '^pg_dump (PostgreSQL) 18\.' \
@@ -33,6 +41,7 @@ RUN apk add --no-cache ca-certificates postgresql18-client \
  && mkdir -p /app /data /backups && chown roomusic:roomusic /data /backups && chmod 0700 /backups
 COPY --from=build /out/roomusic /app/roomusic
 COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
+COPY --from=fpcalc /out/fpcalc /usr/local/bin/fpcalc
 COPY --chmod=0755 deploy/production/entrypoint.sh /app/entrypoint.sh
 USER 1000:1000
 WORKDIR /app

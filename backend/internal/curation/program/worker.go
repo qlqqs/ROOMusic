@@ -20,6 +20,7 @@ const (
 )
 
 type Options struct {
+	Fingerprints                                 Fingerprints
 	Now                                          func() time.Time
 	After                                        func(time.Duration) <-chan time.Time
 	PollInterval, ScanInterval, FullPassInterval time.Duration
@@ -192,8 +193,12 @@ func (w *Worker) runPasses(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	step, err := w.fingerprintStep(ctx)
+	if err != nil {
+		return err
+	}
 	w.setState("running")
-	if err := w.walk(ctx, false, nil); err != nil {
+	if err := w.walk(ctx, false, nil, step != nil); err != nil {
 		return err
 	}
 	if err := w.closeBatch(ctx); err != nil {
@@ -229,7 +234,7 @@ func (w *Worker) runPasses(ctx context.Context) error {
 		}
 		return nil
 	}
-	if err := w.walk(ctx, true, checkPriority); err != nil {
+	if err := w.walk(ctx, true, checkPriority, false); err != nil {
 		return err
 	}
 	if err := w.closeBatch(ctx); err != nil {

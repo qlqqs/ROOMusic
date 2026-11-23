@@ -43,6 +43,12 @@ export function setCurationSource(id: string, enabled: boolean): Promise<ApiResp
   return apiRequest({ method: "PUT", path: `/api/v1/admin/curation/sources/${encodeURIComponent(id)}`, body: { enabled } }, decodeCurationSource);
 }
 
+/** 填写或更换一个源的某一把密钥（key 为 null 时清除）；返回这个源的新状态。 */
+export function setCurationSourceKey(id: string, name: string, key: string | null): Promise<ApiResponse<CurationSourceDTO>> {
+  const path = `/api/v1/admin/curation/sources/${encodeURIComponent(id)}/keys/${encodeURIComponent(name)}` as const;
+  return apiRequest(key === null ? { method: "DELETE", path } : { method: "PUT", path, body: { key } }, decodeCurationSource);
+}
+
 /** 后台循环的状态与进度。 */
 export function fetchCurationProgress(signal?: AbortSignal): Promise<ApiResponse<CurationProgressDTO>> {
   return apiRequest({ method: "GET", path: "/api/v1/admin/curation/progress", signal }, decodeCurationProgress);

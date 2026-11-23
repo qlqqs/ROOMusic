@@ -32,10 +32,13 @@ export ROOMUSIC_TEST_DATABASE_URL="postgres://${ROOMUSIC_TEST_PG_USER}:${ROOMUSI
 if [[ -z "${ROOMUSIC_TEST_FFMPEG:-}" ]]; then
   ROOMUSIC_TEST_FFMPEG="$("$ROOT_DIR/scripts/ffmpeg-pinned.sh")"
 fi
+if [[ -z "${ROOMUSIC_TEST_FPCALC:-}" ]]; then
+  ROOMUSIC_TEST_FPCALC="$("$ROOT_DIR/scripts/fpcalc-pinned.sh")"
+fi
 if [[ -z "${ROOMUSIC_TEST_PG_BIN_DIR:-}" ]]; then
   ROOMUSIC_TEST_PG_BIN_DIR="$("$ROOT_DIR/scripts/pg-client-pinned.sh")"
 fi
-export ROOMUSIC_TEST_FFMPEG ROOMUSIC_TEST_PG_BIN_DIR
+export ROOMUSIC_TEST_FFMPEG ROOMUSIC_TEST_FPCALC ROOMUSIC_TEST_PG_BIN_DIR
 
 cleanup() {
   local result=$?

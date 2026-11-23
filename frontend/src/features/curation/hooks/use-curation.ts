@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { failureOf, isHttpFailure } from "../../../shared/api";
 import { useViewerScope } from "../../auth";
-import type { CurationProgressDTO, CurationSettingsDTO, CurationSourcesDTO } from "../api/decoders";
+import type { CurationProgressDTO, CurationSettingsDTO, CurationSourceDTO, CurationSourcesDTO } from "../api/decoders";
 import {
   clearSuppression,
   fetchCurationBatches,
@@ -10,6 +10,7 @@ import {
   fetchCurationSources,
   fetchSuppressions,
   setCurationSource,
+  setCurationSourceKey,
   updateCurationSettings,
 } from "../api/endpoints";
 import { curationKeys } from "../query-keys";
@@ -55,21 +56,37 @@ export function useCurationSources() {
   });
 }
 
-/** 改一个源的开关：把返回的那一项写回列表。 */
-export function useSetCurationSource() {
+/** 把接口返回的一个源写回列表（开关与密钥的修改共用）。 */
+function useWriteBackSource() {
   const queryClient = useQueryClient();
   const scope = useViewerScope();
+  return async (source: CurationSourceDTO) => {
+    if (!scope.isCurrent()) return;
+    const key = curationKeys.sources(scope.generation);
+    await queryClient.cancelQueries({ queryKey: key });
+    queryClient.setQueryData<{ status: number; data: CurationSourcesDTO }>(key, (current) =>
+      current === undefined ? current : { ...current, data: { items: current.data.items.map((item) => (item.id === source.id ? source : item)) } },
+    );
+  };
+}
+
+/** 改一个源的开关：把返回的那一项写回列表。 */
+export function useSetCurationSource() {
+  const writeBack = useWriteBackSource();
   return useMutation({
     scope: { id: "curation-sources" },
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => setCurationSource(id, enabled),
-    onSuccess: async (response) => {
-      if (!scope.isCurrent()) return;
-      const key = curationKeys.sources(scope.generation);
-      await queryClient.cancelQueries({ queryKey: key });
-      queryClient.setQueryData<{ status: number; data: CurationSourcesDTO }>(key, (current) =>
-        current === undefined ? current : { ...current, data: { items: current.data.items.map((item) => (item.id === response.data.id ? response.data : item)) } },
-      );
-    },
+    onSuccess: (response) => writeBack(response.data),
+  });
+}
+
+/** 填写、更换（key 是新密钥）或清除（key 为 null）一个源的某一把密钥：把返回的那一项写回列表。 */
+export function useSetCurationSourceKey() {
+  const writeBack = useWriteBackSource();
+  return useMutation({
+    scope: { id: "curation-sources" },
+    mutationFn: ({ id, name, key }: { id: string; name: string; key: string | null }) => setCurationSourceKey(id, name, key),
+    onSuccess: (response) => writeBack(response.data),
   });
 }
 

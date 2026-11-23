@@ -194,7 +194,7 @@ func TestPostgreSQLCurationSourcesSettings(t *testing.T) {
 		t.Helper()
 		var list struct{ Items []curation.SourceSettings }
 		getJSON(t, f.application, &f.admin, path, &list)
-		if len(list.Items) != 3 {
+		if len(list.Items) != 4 { // MusicBrainz、Cover Art Archive、LRCLIB、AcoustID（B3）
 			t.Fatal(list)
 		}
 		item := list.Items[0]
@@ -322,9 +322,9 @@ func TestPostgreSQLCurationSourcesCoverAndLyricsGate(t *testing.T) {
 	t.Run("global_disabled_by_default", func(t *testing.T) {
 		var list struct{ Items []curation.SourceSettings }
 		getJSON(t, f.application, &f.admin, curationBase+"/sources", &list)
-		wantIDs := []string{"musicbrainz", "coverartarchive", "lrclib"}
+		wantIDs := []string{"musicbrainz", "coverartarchive", "lrclib", "acoustid"}
 		if len(list.Items) != len(wantIDs) {
-			t.Fatalf("源列表 %#v，期望三个源 %v", list.Items, wantIDs)
+			t.Fatalf("源列表 %#v，期望四个源 %v", list.Items, wantIDs)
 		}
 		for i, id := range wantIDs {
 			item := list.Items[i]

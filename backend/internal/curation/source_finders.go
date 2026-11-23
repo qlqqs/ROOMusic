@@ -2,6 +2,7 @@ package curation
 
 import (
 	"context"
+	"errors"
 	"slices"
 
 	"github.com/qlqq/roomusic/backend/internal/sources"
@@ -180,4 +181,46 @@ func (g guardedLyrics) SearchLyrics(ctx context.Context, query sources.LyricsQue
 		return nil, err
 	}
 	return g.registration.Lyrics.SearchLyrics(ctx, query)
+}
+
+type guardedFingerprint struct{ guardedFinders }
+
+func (s *Sources) FingerprintFinder(sourceID string) (sources.FingerprintFinder, bool) {
+	r, ok := s.lookup(sourceID)
+	if !ok || r.Fingerprints == nil || !slices.Contains(r.Declaration.Capabilities, sources.FingerprintLookup) {
+		return nil, false
+	}
+	return guardedFingerprint{guardedFinders{registration: r, gate: s}}, true
+}
+
+func (g guardedFingerprint) LookupFingerprint(ctx context.Context, fp sources.Fingerprint) ([]sources.FingerprintMatch, error) {
+	ctx, err := g.background(ctx)
+	if err != nil {
+		return nil, err
+	}
+	used := make(map[string]keyUse)
+	rows, err := g.registration.Fingerprints.LookupFingerprint(context.WithValue(ctx, keyUseContext{}, used), fp)
+	var invalid *sources.InvalidKeyError
+	status := "valid"
+	if errors.As(err, &invalid) {
+		status = "invalid"
+	} else if err != nil {
+		return rows, err
+	}
+	var names []string
+	var ciphertexts [][]byte
+	for _, name := range g.registration.Declaration.Keys {
+		key, ok := used[name]
+		if !ok || (invalid != nil && invalid.Name != name) || (invalid == nil && key.status != "unchecked") {
+			continue
+		}
+		names = append(names, name)
+		ciphertexts = append(ciphertexts, key.ciphertext)
+	}
+	if len(names) > 0 {
+		if writeErr := g.gate.markKeys(ctx, g.registration.Declaration.ID, names, ciphertexts, status); writeErr != nil {
+			return nil, writeErr
+		}
+	}
+	return rows, err
 }

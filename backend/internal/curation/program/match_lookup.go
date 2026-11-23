@@ -3,7 +3,6 @@ package program
 import (
 	"context"
 	"errors"
-	"slices"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/sources"
@@ -19,10 +18,11 @@ func found[T any](value T, err error) (T, error) {
 }
 
 type releaseList struct {
-	items      []sources.Release
-	codes      []string
-	hit        bool
-	unverified bool
+	items        []sources.Release
+	codes        []string
+	hit          bool
+	unverified   bool
+	recordingIDs map[string]map[string]bool
 }
 
 func uniqueReleases(rows []sources.Release) []sources.Release {
@@ -94,11 +94,15 @@ func sampleISRCs(e catalog.CurationEvidence) [][]string {
 			rows = append(rows, ids)
 		}
 	}
+	return sampleFour(rows)
+}
+
+func sampleFour[T any](rows []T) []T {
 	if len(rows) <= 4 {
 		return rows
 	}
 	last := len(rows) - 1
-	return [][]string{rows[0], rows[(last+1)/3], rows[(2*last+1)/3], rows[last]}
+	return []T{rows[0], rows[(last+1)/3], rows[(2*last+1)/3], rows[last]}
 }
 
 func isrcCandidates(ctx context.Context, f sources.RecordingFinder, e catalog.CurationEvidence) (releaseList, error) {
@@ -205,10 +209,14 @@ func fullCandidates(ctx context.Context, f sources.ReleaseFinder, e catalog.Cura
 	if len(full) == 0 {
 		return uncertain(result), nil
 	}
-	return DecideAlbum(e, method, uniqueReleases(full)), nil
+	decided := decideAlbum(e, method, uniqueReleases(full), list.recordingIDs)
+	if method == "acoustid" {
+		decided.Candidates = result.Candidates
+	}
+	return decided, nil
 }
 
-func matchAlbum(ctx context.Context, e catalog.CurationEvidence, f sources.ReleaseFinder, rf sources.RecordingFinder) (MatchResult, error) {
+func albumIdentifiers(ctx context.Context, e catalog.CurationEvidence, f sources.ReleaseFinder, rf sources.RecordingFinder) (MatchResult, error) {
 	ids := tags(e.Tracks, "mb_release")
 	if len(ids) > 1 {
 		return DecideAlbum(e, "tag_id", nil), nil
@@ -253,6 +261,10 @@ func matchAlbum(ctx context.Context, e catalog.CurationEvidence, f sources.Relea
 	if list.hit {
 		return fullCandidates(ctx, f, e, "disc_id", list)
 	}
+	return MatchResult{}, nil
+}
+
+func searchAlbum(ctx context.Context, e catalog.CurationEvidence, f sources.ReleaseFinder) (MatchResult, error) {
 	if !e.TitlePlaceholder && !e.ArtistPlaceholder && e.Title != "" && albumArtist(e) != "" {
 		items, err := found(f.SearchReleases(ctx, sources.ReleaseQuery{Title: e.Title, Artist: albumArtist(e), TrackCount: len(e.Tracks)}))
 		if err != nil {
@@ -263,7 +275,7 @@ func matchAlbum(ctx context.Context, e catalog.CurationEvidence, f sources.Relea
 	return newMatch("album", ""), nil
 }
 
-func matchSingle(ctx context.Context, e catalog.CurationEvidence, f sources.RecordingFinder) (MatchResult, error) {
+func singleIdentifiers(ctx context.Context, e catalog.CurationEvidence, f sources.RecordingFinder) (MatchResult, error) {
 	if len(e.Tracks) != 1 {
 		return uncertain(newMatch("single", ""), "track_count"), nil
 	}
@@ -294,6 +306,11 @@ func matchSingle(ctx context.Context, e catalog.CurationEvidence, f sources.Reco
 	if len(rows) > 0 {
 		return DecideSingle(e, "isrc", rows), nil
 	}
+	return MatchResult{}, nil
+}
+
+func searchSingle(ctx context.Context, e catalog.CurationEvidence, f sources.RecordingFinder) (MatchResult, error) {
+	t := e.Tracks[0]
 	if !t.TitlePlaceholder && !t.ArtistPlaceholder && t.Title != "" && t.Artist != "" {
 		query := sources.RecordingQuery{Title: t.Title, Artist: t.Artist}
 		if t.DurationSeconds > 0 {
@@ -311,37 +328,71 @@ func matchSingle(ctx context.Context, e catalog.CurationEvidence, f sources.Reco
 
 // Match 按可靠程度查询，遇到首个命中就返回该步的判定。工作者传入闸门提供的能力。
 func Match(ctx context.Context, e catalog.CurationEvidence, f sources.ReleaseFinder, rf sources.RecordingFinder) (MatchResult, error) {
+	return MatchWithFingerprint(ctx, e, f, rf, nil)
+}
+
+// MatchWithFingerprint 在标识查询与文字搜索之间按需核对音频。
+func MatchWithFingerprint(ctx context.Context, e catalog.CurationEvidence, f sources.ReleaseFinder, rf sources.RecordingFinder, fp *FingerprintStep) (MatchResult, error) {
 	if err := ctx.Err(); err != nil {
 		return MatchResult{}, err
 	}
 	mode := "album"
-	titlePlaceholder, artistPlaceholder := e.TitlePlaceholder, e.ArtistPlaceholder
 	if e.CandidateKind == "loose_unknown" {
 		mode = "single"
-		if len(e.Tracks) == 1 {
-			titlePlaceholder, artistPlaceholder = e.Tracks[0].TitlePlaceholder, e.Tracks[0].ArtistPlaceholder
+	}
+	insufficient := insufficientEvidence(e)
+	var result MatchResult
+	var err error
+	if !insufficient {
+		if mode == "single" {
+			result, err = singleIdentifiers(ctx, e, rf)
+		} else {
+			result, err = albumIdentifiers(ctx, e, f, rf)
+		}
+		if result.Status != "" || err != nil {
+			return result, err
 		}
 	}
-	if titlePlaceholder && artistPlaceholder && len(e.Barcodes) == 0 && e.CatalogNumber == "" && len(DiscTOCs(e)) == 0 {
-		hasID := slices.ContainsFunc(e.Tracks, func(t catalog.CurationTrack) bool {
-			if len(trackISRCs(t)) > 0 {
-				return true
-			}
-			for _, ids := range t.Identifiers {
-				if len(ids) > 0 {
-					return true
-				}
-			}
+	state := "unavailable"
+	if fp != nil {
+		if mode == "single" && len(e.Tracks) != 1 {
+			return uncertain(newMatch(mode, ""), "track_count"), nil
+		}
+		result, state, err = fp.match(ctx, mode, e, f, rf)
+		if result.Status != "" || err != nil {
+			result.Fingerprint = state
+			return result, err
+		}
+	}
+	if insufficient {
+		result = newMatch(mode, "")
+		result.Conflicts = append(result.Conflicts, "insufficient_evidence")
+	} else if mode == "single" {
+		result, err = searchSingle(ctx, e, rf)
+	} else {
+		result, err = searchAlbum(ctx, e, f)
+	}
+	result.Fingerprint = state
+	return result, err
+}
+
+func insufficientEvidence(e catalog.CurationEvidence) bool {
+	titlePlaceholder, artistPlaceholder := e.TitlePlaceholder, e.ArtistPlaceholder
+	if e.CandidateKind == "loose_unknown" && len(e.Tracks) == 1 {
+		titlePlaceholder, artistPlaceholder = e.Tracks[0].TitlePlaceholder, e.Tracks[0].ArtistPlaceholder
+	}
+	if !titlePlaceholder || !artistPlaceholder || len(e.Barcodes) > 0 || e.CatalogNumber != "" || len(DiscTOCs(e)) > 0 {
+		return false
+	}
+	for _, t := range e.Tracks {
+		if len(trackISRCs(t)) > 0 {
 			return false
-		})
-		if !hasID {
-			r := newMatch(mode, "")
-			r.Conflicts = append(r.Conflicts, "insufficient_evidence")
-			return r, nil
+		}
+		for _, ids := range t.Identifiers {
+			if len(ids) > 0 {
+				return false
+			}
 		}
 	}
-	if mode == "single" {
-		return matchSingle(ctx, e, rf)
-	}
-	return matchAlbum(ctx, e, f, rf)
+	return true
 }

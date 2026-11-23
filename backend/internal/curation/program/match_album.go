@@ -15,7 +15,7 @@ type comparison struct {
 	pairs                                                        []TrackPair
 	conflicts                                                    []string
 	countEqual, durationsOK, titleMatch, artistMatch, labelMatch bool
-	isrcAgree                                                    int
+	isrcAgree, acoustidAgree                                     int
 }
 
 func (c *comparison) conflict(code string) {
@@ -37,6 +37,8 @@ func (c comparison) passes(method string) bool {
 		return c.countEqual && (c.labelMatch || c.durationsOK)
 	case "isrc":
 		return c.countEqual && c.isrcAgree > 0
+	case "acoustid":
+		return c.countEqual && c.durationsOK && c.acoustidAgree > 0
 	case "disc_id":
 		return c.countEqual && (c.titleMatch || c.artistMatch)
 	}
@@ -63,7 +65,7 @@ func (c *comparison) compareRelease(e catalog.CurationEvidence, method string, r
 	compareArtist := !e.ArtistPlaceholder && localArtist != "" && artist != ""
 	c.titleMatch = compareTitle && localTitle == title
 	c.artistMatch = compareArtist && localArtist == artist
-	if (method == "barcode" || method == "catalog_number" || method == "isrc") && compareTitle && compareArtist && !c.titleMatch && !c.artistMatch {
+	if (method == "barcode" || method == "catalog_number" || method == "isrc" || method == "acoustid") && compareTitle && compareArtist && !c.titleMatch && !c.artistMatch {
 		c.conflict("title_artist_mismatch")
 	}
 	if remote := barcodeKey(r.Barcode); remote != "" {
@@ -125,7 +127,7 @@ func (c *comparison) compareTracks(e catalog.CurationEvidence, method string, re
 	discs := discPositions(e)
 	media := slices.Clone(release.Media)
 	slices.SortFunc(media, func(a, b sources.Medium) int { return cmp.Compare(a.Position, b.Position) })
-	if len(discs) > 1 && len(discs) != len(media) {
+	if (len(discs) > 1 || method == "acoustid") && len(discs) != len(media) {
 		c.conflict("media_count_mismatch")
 	}
 	localCounts := map[int]int{}
@@ -237,6 +239,10 @@ func compareISRCs(local, remote []string) (agree, mismatch bool) {
 
 // DecideAlbum 对本步骤的完整发行逐一核对；search 只保留候选。
 func DecideAlbum(e catalog.CurationEvidence, method string, releases []sources.Release) MatchResult {
+	return decideAlbum(e, method, releases, nil)
+}
+
+func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.Release, recordingIDs map[string]map[string]bool) MatchResult {
 	result := newMatch("album", method)
 	result.Candidates = releaseCandidates(method, releases)
 	if method == "tag_id" && len(tags(e.Tracks, "mb_release")) > 1 {
@@ -260,6 +266,17 @@ func DecideAlbum(e catalog.CurationEvidence, method string, releases []sources.R
 		var c comparison
 		c.compareRelease(e, method, *r)
 		c.compareTracks(e, method, *r)
+		if method == "acoustid" {
+			for _, pair := range c.pairs {
+				if ids := recordingIDs[pair.TrackID]; ids != nil {
+					if ids[pair.RecordingID] {
+						c.acoustidAgree++
+					} else {
+						c.conflict("acoustid_mismatch")
+					}
+				}
+			}
+		}
 		if c.passes(method) {
 			passed++
 			winner, pairs = r, c.pairs

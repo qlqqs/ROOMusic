@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "key_not_supported",
+      "message": "这个外部源不使用密钥"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

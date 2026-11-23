@@ -154,7 +154,7 @@ func (w *AnalysisWorker) Run(ctx context.Context) {
 }
 
 func (w *AnalysisWorker) analyze(ctx context.Context, candidate catalog.TrackAnalysisCandidate) (catalog.TrackAnalysisResult, error) {
-	file, err := w.openSource(ctx, candidate)
+	file, err := openAnalysisSource(ctx, w.database, w.roots, candidate)
 	if err != nil {
 		if errors.Is(err, errAnalysisDatabase) {
 			return catalog.TrackAnalysisResult{}, err
@@ -183,15 +183,15 @@ func (w *AnalysisWorker) analyze(ctx context.Context, candidate catalog.TrackAna
 		DurationMS: result.DurationMS, LeadingSilenceMS: result.LeadingSilenceMS, TrailingSilenceMS: result.TrailingSilenceMS, Waveform: result.Waveform}, nil
 }
 
-func (w *AnalysisWorker) openSource(ctx context.Context, catalogCandidate catalog.TrackAnalysisCandidate) (*os.File, error) {
-	location, err := library.LoadRootLocation(ctx, w.database, catalogCandidate.RootID)
+func openAnalysisSource(ctx context.Context, database catalog.Queryer, roots []string, catalogCandidate catalog.TrackAnalysisCandidate) (*os.File, error) {
+	location, err := library.LoadRootLocation(ctx, database, catalogCandidate.RootID)
 	if errors.Is(err, library.ErrRootNotFound) || (err == nil && !location.Active) {
 		return nil, fmt.Errorf("%w: root unavailable", errAnalysisSourceUnavailable)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: load root: %w", errAnalysisDatabase, err)
 	}
-	rootPath, err := library.ValidatePath(location.Path, w.roots)
+	rootPath, err := library.ValidatePath(location.Path, roots)
 	if err != nil || rootPath != location.Path {
 		return nil, fmt.Errorf("%w: root is outside allowed roots", errAnalysisSourceUnavailable)
 	}

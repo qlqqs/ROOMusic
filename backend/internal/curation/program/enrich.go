@@ -21,7 +21,7 @@ import (
 )
 
 var methodNames = map[string]string{
-	"tag_id": "标签标识", "barcode": "条码", "catalog_number": "唱片编号", "isrc": "ISRC", "disc_id": "光盘目录",
+	"tag_id": "标签标识", "barcode": "条码", "catalog_number": "唱片编号", "isrc": "ISRC", "disc_id": "光盘目录", "acoustid": "声学指纹",
 }
 
 func hasMarker(markers []catalog.CurationSuppression, objectType, objectID, subject, raw string) bool {

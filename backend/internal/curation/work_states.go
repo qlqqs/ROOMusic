@@ -32,7 +32,7 @@ func LoadProgramChanges(ctx context.Context, q operations.Queryer, now time.Time
 	err := q.QueryRowContext(ctx, `SELECT
  (SELECT max(finished_at) FROM scan_runs),
  (SELECT updated_at FROM curation_settings WHERE id=1),
- (SELECT max(updated_at) FROM curation_source_settings),
+ GREATEST((SELECT max(updated_at) FROM curation_source_settings), (SELECT max(updated_at) FROM curation_source_keys)),
  (SELECT max(created_at) FROM curation_suppressions),
  (SELECT max(created_at) FROM operations),
  (SELECT o.created_at FROM operations o WHERE NOT EXISTS

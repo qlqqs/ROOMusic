@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/11-23-auto-curation-b3-acoustid/research/verification.md", "reason": "fpcalc 来源与摘要、管道输入、AcoustID 接口与错误码、仓库锚点"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "源开关与闸门（第 11 节）、程序层判定与重做（第 15 节）"}
+{"file": ".trellis/spec/backend/sources-contracts.md", "reason": "外部源的声明、限速、缓存、请求与适配器写法"}
+{"file": ".trellis/spec/backend/audio-analysis-contracts.md", "reason": "取源、CUE 区间、DSD 与 ffmpeg 调用的约定"}
+{"file": ".trellis/spec/backend/deployment-environment-contracts.md", "reason": "镜像、固定的 ffmpeg、环境变量与发布检查"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移与约束写法"}

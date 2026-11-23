@@ -19,6 +19,14 @@
 - 服务端渲染需要 ffmpeg：生产镜像构建时从固定摘要镜像复制，开发由部署者安装（项目不单独分发二进制）；`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）。
   找不到或自检失败时应用照常启动、记 `playback.render.unavailable`，格式表为空、起播得 `503 renderer_unavailable`。`ROOMUSIC_MEDIA_CACHE_MAX_MIB` 已不再读取。
   `scripts/ffmpeg-pinned.sh` 取出按摘要固定的 ffmpeg 7.1.1，测试、CI 与推荐部署共用。详见[服务端渲染合同](./playback-render-contracts.md) §11。
+- 声学指纹需要 `fpcalc`（M7 B3）：固定 chromaprint 上游官方的静态构建 1.6.2（`linux-x86_64`、`linux-arm64` 两个压缩包，按 sha256 核对）。
+  生产镜像的 `fpcalc` 阶段在**目标架构**上（不用 `--platform=$BUILDPLATFORM`）用 `ADD --checksum` 取两包、按 `TARGETARCH` 解开、核对 `fpcalc version 1.6.2`，
+  运行镜像放在 `/usr/local/bin/fpcalc`（约 5.4 MB），`compose.prod.yaml` 设 `ROOMUSIC_FPCALC_PATH`（绝对路径，空则在 `PATH` 中查找）。
+  `scripts/fpcalc-pinned.sh` 下载并缓存到 `${XDG_CACHE_HOME:-$HOME/.cache}/roomusic/fpcalc-1.6.2/`，核对 sha256 与版本后打印路径；`--pins` 打印两架构的地址与摘要，CI 逐行在 Dockerfile 里核对。
+  启动时与 ffmpeg 一起自检（合成 PCM 走一遍管道）；通过记 `playback.fingerprint.ready`（带 fpcalc 版本），不通过只记 `playback.fingerprint.unavailable`，AcoustID 显示 `fingerprint_unavailable`，其余功能不受影响。
+  指纹只在自动整理走到这一步时按需计算，与 `ROOMUSIC_AUDIO_ANALYSIS` 无关（关掉分析时指纹仍会解码音频的前 120 秒）。
+  许可：上游二进制未修改，LGPL 2.1；内含 `acoustid/ffmpeg-build` v8.0-1 的纯音频 FFmpeg 8.0 静态库（不带 `--enable-gpl`）。源码：
+  `https://github.com/acoustid/chromaprint/tree/v1.6.2`、`https://github.com/acoustid/ffmpeg-build/tree/v8.0-1`。
 - 开发 Compose 项目名 `roomusic-compose-dev`，只有 PostgreSQL；`scripts/dev.sh` 确保 PostgreSQL 后在宿主机运行 Go 和 Vite。
   后端启动后 10 秒内退出时按 1、2、4…秒退避重启（上限 30 秒），文件变更或运行满 10 秒后退避归零。开发的 `mise run env-*` 显式使用 `--env-file .env.dev`。
 - 端口：应用端口（Vite、Go 后端）绑 `0.0.0.0`，开发与测试的 PostgreSQL 只绑 `127.0.0.1`。
@@ -56,7 +64,7 @@
   `scripts/check-production-compose.sh`（假值、只解析不启动：必填中文提示、服务与端口、默认与自定义备份目录、无数据卷、无初始化服务及依赖、固定容器名参数、override 子网），
   运行 `python3 scripts/tests/test_production_init.py`（合成配置，替换 id/chown 验证权限调用，其余文件操作与配置解析真实执行），
   检查 ffmpeg、Go 与 PostgreSQL 客户端主版本一致性（CI 不构建镜像），运行 `python3 scripts/tests/test_release_check.py`，
-  并运行 `./scripts/test-integration.sh`（时限 15 分钟，job 30 分钟）；后者先经 `scripts/ffmpeg-pinned.sh` 取出固定版本 ffmpeg（取不到即失败，
+  并运行 `./scripts/test-integration.sh`（时限 15 分钟，job 30 分钟）；后者先经 `scripts/ffmpeg-pinned.sh`、`scripts/fpcalc-pinned.sh` 取出固定版本的 ffmpeg 与 fpcalc（`ROOMUSIC_TEST_FFMPEG`、`ROOMUSIC_TEST_FPCALC`；取不到即失败，
   派生用例不得静默跳过），真实启动 PostgreSQL 18 并运行 `TestPostgreSQL|TestFFmpeg`，结束时清理专用容器和数据卷。
   真实播放 job 运行 `./scripts/playback-e2e.sh`，同样经该脚本取得同一个 ffmpeg。
 - **API 响应样本**：集成测试 `TestPostgreSQLAPIResponseSamples`（`backend/internal/app/api_samples_integration_test.go`）
