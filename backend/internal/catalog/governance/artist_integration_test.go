@@ -184,7 +184,7 @@ func TestPostgreSQLArtistMergeRestoreAndDurableIntent(t *testing.T) {
 		t.Fatalf("source artist records %+v %v", list, err)
 	}
 	description, err := (ArtistMergeKind{}).Describe(context.Background(), f.database, []operations.Record{list.Items[0]})
-	if err != nil || description[first.OperationID].Changes == nil || description[first.OperationID].Revertible {
+	if err != nil || description[first.OperationID].Changes == nil || !description[first.OperationID].Revertible {
 		t.Fatalf("description %+v %v", description, err)
 	}
 	f.ready(false)
@@ -549,7 +549,7 @@ func TestPostgreSQLArtistCandidateIgnoreRescanAndRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 	d, err := (ArtistCandidateIgnoreKind{}).Describe(context.Background(), f.database, []operations.Record{record})
-	if err != nil || d[record.ID].Changes == nil || d[record.ID].Revertible {
+	if err != nil || d[record.ID].Changes == nil || !d[record.ID].Revertible {
 		t.Fatal("ignore description", err)
 	}
 	ignored = false

@@ -221,13 +221,15 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		},
 	).WithScanCheck(scanRunning).WithKeyStore(instanceSecrets)
 	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger)
+	artistGovernance := governance.NewArtistGovernance(artistResolutionAdapter{})
 	operationKinds := []operations.Kind{curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
 		governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.TrackCorrectionOperations(), governance.TrackAutoCorrectionOperations(curationWriter), governance.GroupChangeOperations(curationWriter), governance.GroupDefaultOperations(),
-		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}}
+		governance.IssueReviewOperations(), governance.ClaimOperations()}
+	operationKinds = append(operationKinds, governance.ArtistOperations(artistGovernance, artistMergeSuppressions{})...)
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
 	catalogapi.New(database, guard, settings.DataDirectory, logger, catalogapi.WithAnalysisVersion(analysis.Version)).Register(mux)
-	catalogapi.NewArtistGovernance(database, guard, logger, artistResolutionAdapter{}).Register(mux)
+	catalogapi.NewArtistGovernance(database, guard, logger, artistGovernance).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
 	operationsapi.New(database, guard, logger, operationKinds...).Register(mux)
 	var programStatus curation.ProgramStatus
@@ -384,4 +386,16 @@ func (app *App) ShutdownSteward(ctx context.Context) error {
 		return nil
 	}
 	return app.steward.Shutdown(ctx)
+}
+
+type artistMergeSuppressions struct{}
+
+func (artistMergeSuppressions) SuppressArtistMerge(ctx context.Context, tx *sql.Tx, targetID, sourceID, revertID, actorID string) error {
+	first, second := min(targetID, sourceID), max(targetID, sourceID)
+	_, err := tx.ExecContext(ctx, `INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by)
+ SELECT 'artist',$1,'artist_merge',encode(sha256(convert_to($2,'UTF8')),'hex'),
+   jsonb_build_object('artist_id',a.id,'name',COALESCE(p.effective_display_name,a.initial_name)),$3,$4
+ FROM artists a LEFT JOIN artist_profiles p ON p.artist_id=a.id WHERE a.id=$2::uuid
+ ON CONFLICT(target_type,target_id,subject,value_hash) DO NOTHING`, first, second, revertID, actorID)
+	return err
 }

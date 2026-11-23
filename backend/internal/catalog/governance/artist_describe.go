@@ -141,9 +141,17 @@ func describeArtistRecords(ctx context.Context, q operations.Queryer, records []
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	plans := map[string]*artistRevertPlan{}
 	for _, record := range records {
 		d := out[record.ID]
 		if info, ok := infos[strings.ToLower(record.TargetID)]; ok {
+			if info.Name != "" {
+				if change, ok := d.Changes.(*artistChangeDescription); ok {
+					if plan := decodeArtistRevert(record, change); plan != nil {
+						plans[record.ID] = plan
+					}
+				}
+			}
 			if info.Name == "" {
 				info.Name = historical[record.ID]
 				if info.Name == "" {
@@ -154,52 +162,40 @@ func describeArtistRecords(ctx context.Context, q operations.Queryer, records []
 		}
 		out[record.ID] = d
 	}
+	candidates, err := artistRevertible(ctx, q, plans)
+	if err != nil {
+		return nil, err
+	}
+	for id := range candidates {
+		d := out[id]
+		d.Revertible = true
+		out[id] = d
+	}
 	return out, nil
 }
-func artistNotRevertible() (operations.Outcome, error) {
-	return operations.Outcome{}, operations.Conflict("not_revertible", "请通过拆开、合并或再次改名恢复")
+
+// ArtistOperations 为艺人操作装配收藏解析和自动合并标记写入能力。
+func ArtistOperations(g *ArtistGovernance, s ArtistSuppressionWriter) []operations.Kind {
+	k := artistReverter{governance: g, suppressions: s}
+	return []operations.Kind{ArtistMergeKind{k}, ArtistSplitKind{}, ArtistRenameKind{k}, ArtistCandidateIgnoreKind{k}}
 }
 
-// ArtistMergeKind 不提供独立撤销；恢复通过正常的反向命令完成。
-type ArtistMergeKind struct{}
-
-func (ArtistMergeKind) Type() string { return operations.TypeArtistMerge }
-func (ArtistMergeKind) Revert(context.Context, *sql.Tx, string, operations.Record) (operations.Outcome, error) {
-	return artistNotRevertible()
-}
-func (ArtistMergeKind) Describe(ctx context.Context, q operations.Queryer, r []operations.Record) (map[string]operations.Description, error) {
-	return describeArtistRecords(ctx, q, r)
-}
-
-// ArtistSplitKind 不提供独立撤销；恢复通过正常的反向命令完成。
+type ArtistMergeKind struct{ artistReverter }
 type ArtistSplitKind struct{}
+type ArtistRenameKind struct{ artistReverter }
+type ArtistCandidateIgnoreKind struct{ artistReverter }
 
-func (ArtistSplitKind) Type() string { return operations.TypeArtistSplit }
-func (ArtistSplitKind) Revert(context.Context, *sql.Tx, string, operations.Record) (operations.Outcome, error) {
-	return artistNotRevertible()
-}
-func (ArtistSplitKind) Describe(ctx context.Context, q operations.Queryer, r []operations.Record) (map[string]operations.Description, error) {
-	return describeArtistRecords(ctx, q, r)
-}
-
-// ArtistRenameKind 不提供独立撤销；恢复通过正常的反向命令完成。
-type ArtistRenameKind struct{}
-
-func (ArtistRenameKind) Type() string { return operations.TypeArtistRename }
-func (ArtistRenameKind) Revert(context.Context, *sql.Tx, string, operations.Record) (operations.Outcome, error) {
-	return artistNotRevertible()
-}
-func (ArtistRenameKind) Describe(ctx context.Context, q operations.Queryer, r []operations.Record) (map[string]operations.Description, error) {
-	return describeArtistRecords(ctx, q, r)
-}
-
-// ArtistCandidateIgnoreKind 不提供独立撤销；恢复通过正常的反向命令完成。
-type ArtistCandidateIgnoreKind struct{}
-
+func (ArtistMergeKind) Type() string           { return operations.TypeArtistMerge }
+func (ArtistSplitKind) Type() string           { return operations.TypeArtistSplit }
+func (ArtistRenameKind) Type() string          { return operations.TypeArtistRename }
 func (ArtistCandidateIgnoreKind) Type() string { return operations.TypeArtistCandidateIgnore }
-func (ArtistCandidateIgnoreKind) Revert(context.Context, *sql.Tx, string, operations.Record) (operations.Outcome, error) {
-	return artistNotRevertible()
+
+func (ArtistSplitKind) Revert(context.Context, *sql.Tx, string, operations.Record) (operations.Outcome, error) {
+	return operations.Outcome{}, operations.Conflict("not_revertible", "艺人拆分不能撤销，需要时可以再合并")
 }
-func (ArtistCandidateIgnoreKind) Describe(ctx context.Context, q operations.Queryer, r []operations.Record) (map[string]operations.Description, error) {
-	return describeArtistRecords(ctx, q, r)
+func (ArtistSplitKind) Describe(ctx context.Context, q operations.Queryer, records []operations.Record) (map[string]operations.Description, error) {
+	return describeArtistRecords(ctx, q, records)
+}
+func (artistReverter) Describe(ctx context.Context, q operations.Queryer, records []operations.Record) (map[string]operations.Description, error) {
+	return describeArtistRecords(ctx, q, records)
 }
