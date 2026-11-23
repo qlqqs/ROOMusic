@@ -1,10 +1,12 @@
 {
   "body": {
     "active": false,
+    "daily_token_limit": 10000000,
     "enabled": false,
     "enabled_at": null,
     "enabled_by": null,
     "inactive_reason": "disabled",
+    "model": "",
     "paused": false
   },
   "status": 200

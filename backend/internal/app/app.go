@@ -18,6 +18,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	curationapi "github.com/qlqq/roomusic/backend/internal/curation/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/curation/model"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/dspsettings"
 	dspsettingsapi "github.com/qlqq/roomusic/backend/internal/dspsettings/httpapi"
@@ -58,6 +59,7 @@ type App struct {
 	catalogDone       <-chan struct{}
 	analysisDone      <-chan struct{}
 	programDone       <-chan struct{}
+	modelDone         <-chan struct{}
 	scanSchedulerDone <-chan struct{}
 	zonesDone         <-chan struct{}
 }
@@ -78,6 +80,8 @@ type options struct {
 	// 测试直接插入旧目录夹具时暂停后台，搜索测试再显式回填。
 	pauseCatalogMaintenance bool
 	disableProgram          bool
+	disableModel            bool
+	model                   model.Options
 	program                 program.Options
 	music                   musicbrainz.Options
 	covers                  coverartarchive.Options
@@ -87,6 +91,11 @@ type options struct {
 // WithCurationProgram 控制后台循环并注入时钟与轮询间隔。
 func WithCurationProgram(enabled bool, opts program.Options) Option {
 	return func(o *options) { o.disableProgram = !enabled; o.program = opts }
+}
+
+// WithCurationModel 控制后台模型调度并注入时钟与退避间隔。
+func WithCurationModel(enabled bool, opts model.Options) Option {
+	return func(o *options) { o.disableModel = !enabled; o.model = opts }
 }
 
 // WithCurationSources 为三个外部源注入地址、客户端工厂与限速器。
@@ -230,7 +239,6 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	} else {
 		close(programDone)
 	}
-	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), sourceGate, programStatus, program.StoredRuleVersion, guard, logger).Register(mux)
 	var analysisWorker *playback.AnalysisWorker
 	analysisDone := make(chan struct{})
 	if database != nil && assembly.analysis != nil {
@@ -240,7 +248,17 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		close(analysisDone)
 	}
 	progress := playback.NewAnalysisProgressProvider(database, analysis.Version, analysisWorker)
-	supervisor := registerSteward(lifecycle, mux, database, guard, instanceSecrets, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{music: music, covers: covers, diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
+	matcher := program.NewModelMatcher(database, curationWriter, sourceGate)
+	supervisor, launcher := registerSteward(lifecycle, mux, database, guard, instanceSecrets, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{writer: curationWriter, sources: sourceGate, matcher: matcher, music: music, covers: covers, diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
+	scheduler := model.NewScheduler(database, curationWriter, sourceGate, launcher, logger, assembly.model)
+	modelDone := make(chan struct{})
+	if database != nil && launcher != nil && !assembly.disableModel {
+		go func() { defer close(modelDone); scheduler.Run(lifecycle) }()
+	} else {
+		close(modelDone)
+	}
+	resolver := model.NewExceptionResolver(database, curationWriter, matcher)
+	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), sourceGate, programStatus, scheduler, resolver, program.StoredRuleVersion, guard, logger).Register(mux)
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		AnalysisProgress: progress,
 	}).Register(mux)
@@ -269,7 +287,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 			supervisor.CancelUser(userID)
 		}
 	}).Register(mux)
-	return &App{steward: supervisor, mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, programDone: programDone, scanSchedulerDone: scanSchedulerDone, zonesDone: zonesDone}
+	return &App{steward: supervisor, mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, programDone: programDone, modelDone: modelDone, scanSchedulerDone: scanSchedulerDone, zonesDone: zonesDone}
 }
 
 // InitializeCatalog 在允许扫描与治理写入前短事务登记目标版本，不发现对象或等待回填。
@@ -311,10 +329,15 @@ func (application *App) WaitForAnalysis(ctx context.Context) error {
 	}
 }
 
-// WaitForCurationProgram 等待程序层停止使用数据库与外部源。
+// WaitForCurationProgram 等待程序层和模型层释放数据库与外部源。
 func (application *App) WaitForCurationProgram(ctx context.Context) error {
 	select {
 	case <-application.programDone:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case <-application.modelDone:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

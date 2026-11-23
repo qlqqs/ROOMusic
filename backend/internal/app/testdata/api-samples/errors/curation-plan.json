@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "curation_plan",
+      "message": "后台方案由自动整理处理"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

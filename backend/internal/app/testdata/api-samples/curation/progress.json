@@ -2,6 +2,23 @@
   "body": {
     "batch": null,
     "last_pass_finished_at": null,
+    "model": {
+      "daily_token_limit": 10000000,
+      "items": {
+        "in_progress": 0,
+        "shelved": 0,
+        "waiting_human": 0,
+        "waiting_model": 0
+      },
+      "model": "",
+      "state": "paused",
+      "today": {
+        "date": "2026-01-02",
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "unavailable_reason": null
+    },
     "pending": {
       "waiting_model": 0
     },

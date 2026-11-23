@@ -17,6 +17,9 @@ import (
 	governancetools "github.com/qlqq/roomusic/backend/internal/catalog/governance/stewardtools"
 	catalogtools "github.com/qlqq/roomusic/backend/internal/catalog/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/curation/model"
+	"github.com/qlqq/roomusic/backend/internal/curation/program"
+	curationtools "github.com/qlqq/roomusic/backend/internal/curation/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/dspsettings"
 	dsptools "github.com/qlqq/roomusic/backend/internal/dspsettings/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/identity"
@@ -49,6 +52,9 @@ import (
 )
 
 type stewardConfig struct {
+	writer       *curation.Writer
+	sources      *curation.Sources
+	matcher      *program.ModelMatcher
 	music        *musicbrainz.Client
 	covers       *coverartarchive.Client
 	diagnostics  *diagnostics.Service
@@ -64,7 +70,7 @@ func newInstanceSecrets(dataDirectory string) *secret.Store {
 }
 
 // registerSteward 在接受请求前恢复会话状态；失败时记录日志并让管家接口返回 503。
-func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sql.DB, guard *identity.Guard, secrets *secret.Store, logger *slog.Logger, scans *library.Service, kinds []operations.Kind, playback *zones.Service, history *listening.Service, personalLibrary *personal.Service, configurations ...stewardConfig) *runtime.Supervisor {
+func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sql.DB, guard *identity.Guard, secrets *secret.Store, logger *slog.Logger, scans *library.Service, kinds []operations.Kind, playback *zones.Service, history *listening.Service, personalLibrary *personal.Service, configurations ...stewardConfig) (*runtime.Supervisor, model.Launcher) {
 	store := runtime.NewStore(database).WithOperationLookup(func(ctx context.Context, tx *sql.Tx, userID, key string) (runtime.RecordedOperation, error) {
 		result, err := operations.LookupResult(ctx, tx, userID, key)
 		if errors.Is(err, operations.ErrNotFound) {
@@ -87,7 +93,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 			}
 			mux.HandleFunc("GET /api/v1/admin/curation/conversations", unavailable)
 			mux.HandleFunc("/api/v1/mcp", unavailable)
-			return nil
+			return nil, nil
 		}
 		logger.Info("管家会话状态已恢复", "event", "steward.recovery.completed", "message", "管家会话状态已恢复", "module", "steward", "conversations", count)
 	}
@@ -97,12 +103,17 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	memories := memory.NewStore(database)
 	registry := tool.NewRegistry()
 	var supervisor *runtime.Supervisor
-	definitions := catalogtools.StewardTools(catalog.NewStore(database), governance.NewStore(database))
+	reads := governance.NewStore(database)
+	definitions := catalogtools.StewardTools(catalog.NewStore(database), reads)
+	var configuration stewardConfig
 	definitions = append(definitions, governancetools.StewardTools(database, artistResolutionAdapter{})...)
 	definitions = append(definitions, operationtools.RevertTools(database, kinds...)...)
 	definitions = append(definitions, librarytools.StewardTools(scans)...)
 	if len(configurations) > 0 {
-		configuration := configurations[0]
+		configuration = configurations[0]
+		if configuration.writer != nil {
+			definitions = append(definitions, curationtools.StewardTools(configuration.writer, configuration.matcher)...)
+		}
 		if configuration.covers != nil {
 			webService.WithCovers(configuration.covers)
 		}
@@ -124,6 +135,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	definitions = append(definitions, webService.StewardTools()...)
 	definitions = append(definitions, memories.StewardTools()...)
 	for _, definition := range definitions {
+		definition = withBackgroundPolicy(definition, configuration)
 		definition = withCurrentStewardUser(definition, guard, store)
 		if definition.Scope == tool.ScopeShared {
 			handler := definition.Handler
@@ -170,7 +182,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	supervisor = runtime.NewSupervisor(lifecycle, runner, logger)
 	tokens := token.NewStore(database, guard)
 	mux.Handle("/api/v1/mcp", stewardmcp.New(guard, tokens, store, registry, logger))
-	stewardapi.New(guard, store, secrets, runner, logger).WithSupervisor(supervisor).WithMemories(memories).WithWeb(webService).WithTokens(tokens).WithCredentialCheck(func(r *http.Request, user identity.User) (bool, error) {
+	api := stewardapi.New(guard, store, secrets, runner, logger).WithSupervisor(supervisor).WithMemories(memories).WithWeb(webService).WithTokens(tokens).WithCredentialCheck(func(r *http.Request, user identity.User) (bool, error) {
 		cookie, err := r.Cookie(identity.SessionCookieName)
 		if err != nil || cookie.Value == "" {
 			return false, nil
@@ -182,8 +194,9 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
  WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
  AND u.disabled_at IS NULL AND u.id=$2::uuid AND u.role=$3)`, identity.HashSessionToken(cookie.Value), user.ID, user.Role).Scan(&valid)
 		return valid, err
-	}).Register(mux)
-	return supervisor
+	})
+	api.Register(mux)
+	return supervisor, backgroundLauncher{api, store}
 }
 
 // withCurrentStewardUser 在预览及实际调用前重读身份，覆盖长对话、确认后执行与 MCP。
