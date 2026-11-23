@@ -120,6 +120,7 @@ func (h *Handlers) probe(w http.ResponseWriter, r *http.Request, user identity.U
 	}
 	if cancelRuns {
 		h.supervisor.CancelUser(user.ID)
+		h.supervisor.CancelBackground(user.ID)
 	}
 	h.writeSettings(w, r, user.ID, saved)
 }

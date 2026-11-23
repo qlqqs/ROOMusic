@@ -130,24 +130,9 @@ func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identit
 	if !ok {
 		return
 	}
-	client, err := h.outboundClient(r.Context(), user)
+	model, closeClient, err := h.openModel(r.Context(), user, settings, key)
 	if err != nil {
-		h.writeStoreError(w, r, err)
-		return
-	}
-	handedOff := false
-	defer func() {
-		if !handedOff {
-			client.CloseIdleConnections()
-		}
-	}()
-	if err := preflight(r.Context(), client, settings.Endpoint); err != nil {
-		writeProblem(w, r, outboundProblem(err))
-		return
-	}
-	model, err := modelProvider(client, settings.Endpoint, key, settings.Protocol)
-	if err != nil {
-		writeProblem(w, r, outboundProblem(err))
+		h.writeSettingsError(w, r, err)
 		return
 	}
 	modelName := detail.Conversation.Model
@@ -155,16 +140,16 @@ func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identit
 		modelName = settings.Model
 	}
 	run, err := h.supervisor.Start(r.Context(), runtime.RunParams{
-		Finished: client.CloseIdleConnections,
+		Finished: closeClient,
 		Check:    h.runCredentialCheck(r, user, settings), Caller: tool.Caller{User: user, Source: "chat", RequestID: r.Header.Get("X-Request-ID")},
 		ReviewPlanID: reviewPlanID, ReviewModel: settings.ReviewModel, Decision: decision, ConversationID: id, Text: text, Context: messageContext, Continue: continuation, DisplayName: settings.DisplayName,
 		Provider: model, Model: modelName, Protocol: provider.Protocol(settings.Protocol), Endpoint: settings.Endpoint,
 		NativeSearch: settings.SearchSource == "native" && effectiveNativeSearch(settings, settingsUpdate(settings)) == provider.NativeSearchSupported})
 	if err != nil {
+		closeClient()
 		h.writeStoreError(w, r, err)
 		return
 	}
-	handedOff = true
 	h.streamSubscription(w, r, run.Subscribe(0))
 }
 
@@ -195,15 +180,19 @@ func (h *Handlers) runCredentialCheck(request *http.Request, user identity.User,
 				return runtime.ErrRunInvalidated
 			}
 		}
-		current, err := h.store.GetUserSettings(ctx, user.ID)
-		if err != nil {
-			return err
-		}
-		if current.Endpoint != expected.Endpoint || !sameModelKey(current.Key, expected.Key) {
-			return runtime.ErrRunInvalidated
-		}
-		return nil
+		return h.checkModelKey(ctx, user.ID, expected)
 	}
+}
+
+func (h *Handlers) checkModelKey(ctx context.Context, userID string, expected runtime.UserSettings) error {
+	current, err := h.store.GetUserSettings(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if current.Endpoint != expected.Endpoint || !sameModelKey(current.Key, expected.Key) {
+		return runtime.ErrRunInvalidated
+	}
+	return nil
 }
 
 func sameModelKey(a, b *runtime.EncryptedKey) bool {

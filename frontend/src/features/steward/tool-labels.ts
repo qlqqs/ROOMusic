@@ -401,6 +401,9 @@ const failurePhrases: Readonly<Record<string, string>> = {
   // C7：被审查拒绝的项；审查不可用时没有执行的项。
   rejected_by_review:"审查没有通过",
   review_unavailable: "审查不可用",
+  // M7 D：自动整理里审查转人工的项（记为例外，等管理员处理）；一步里提出的修改超过 20 项。
+  escalated_to_human: "转给管理员处理",
+  too_many_proposals: "这一步提出的修改太多",
   queue_full: "队列已满",
   volume_fixed: "这个设备的音量不能调",
   playlist_limit_reached: "歌单数量已到上限",

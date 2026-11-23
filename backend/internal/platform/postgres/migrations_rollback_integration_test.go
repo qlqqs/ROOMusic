@@ -14,6 +14,23 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	64: `UPDATE steward_plan_items SET decision='escalated' WHERE id='f6400000-0000-4000-8000-000000000005';
+ INSERT INTO steward_conversations(id,user_id,title,model,mode,kind)
+ VALUES('f6400000-0000-4000-8000-000000000006','f6400000-0000-4000-8000-000000000000','自动整理','synthetic','steward','curation');
+ INSERT INTO steward_messages(id,conversation_id,sequence,role,content)
+ VALUES('f6400000-0000-4000-8000-000000000007','f6400000-0000-4000-8000-000000000006',1,'assistant','{}');
+ INSERT INTO steward_plans(id,conversation_id,user_id,digest,expires_at,background)
+ VALUES('f6400000-0000-4000-8000-000000000008','f6400000-0000-4000-8000-000000000006',
+ 'f6400000-0000-4000-8000-000000000000','curation',now()+interval '1 day',true);
+ UPDATE curation_pending_items SET status='in_progress',claimed_at=now(),attempts=1,review_retries=1,next_attempt_at=now(),
+ conversation_id='f6400000-0000-4000-8000-000000000006' WHERE id='e6400000-0000-4000-8000-000000000003';
+ UPDATE curation_pending_items SET status='waiting_human',conversation_id='f6400000-0000-4000-8000-000000000006'
+ WHERE id='e6400000-0000-4000-8000-000000000004';
+ INSERT INTO curation_model_exceptions(pending_item_id,plan_item_id,tool,input,preview,provider,review_id,review_model,review_decision,review_source,conversation_id)
+ VALUES('e6400000-0000-4000-8000-000000000004','f6400000-0000-4000-8000-000000000005','correct_release','{}','{}',
+ 'synthetic',gen_random_uuid(),'synthetic-review','needs_human_confirmation','model','f6400000-0000-4000-8000-000000000006');
+ INSERT INTO curation_model_usage(day,input_tokens,output_tokens) VALUES('2026-11-23',23,7);
+ UPDATE curation_settings SET model='synthetic-model',model_daily_token_limit=NULL,model_updated_at=now() WHERE id=1;`,
 	62: `INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
  SELECT id::uuid,'f6200000-0000-4000-8000-000000000000','external_link','release','e6200000-0000-4000-8000-000000000002',
  gen_random_uuid(),'external_link',revision,revision+1,'{}','{}','{}','fixture'
@@ -343,6 +360,28 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence)
  VALUES('e6200000-0000-4000-8000-000000000003','musicbrainz','release_group','e6200000-0000-4000-8000-000000000001','existing-group','barcode','high');`)
 			}
+			if m.Version == 64 {
+				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role)
+ VALUES('f6400000-0000-4000-8000-000000000000','curation-rollback','synthetic','admin');
+ INSERT INTO steward_conversations(id,user_id,title,model,mode)
+ VALUES('f6400000-0000-4000-8000-000000000001','f6400000-0000-4000-8000-000000000000','保留的对话','synthetic','steward');
+ INSERT INTO steward_messages(id,conversation_id,sequence,role,content)
+ VALUES('f6400000-0000-4000-8000-000000000002','f6400000-0000-4000-8000-000000000001',1,'assistant','{}');
+ INSERT INTO steward_tool_calls(id,message_id,position,tool_name,input,status)
+ VALUES('f6400000-0000-4000-8000-000000000003','f6400000-0000-4000-8000-000000000002',0,'correct_release','{}','failed');
+ INSERT INTO steward_plans(id,conversation_id,user_id,digest,expires_at)
+ VALUES('f6400000-0000-4000-8000-000000000004','f6400000-0000-4000-8000-000000000001',
+ 'f6400000-0000-4000-8000-000000000000','chat',now()+interval '1 day');
+ INSERT INTO steward_plan_items(id,plan_id,tool_call_id,position,tool_name,input,preview,revertible,idempotency_key,decision)
+ SELECT 'f6400000-0000-4000-8000-000000000005','f6400000-0000-4000-8000-000000000004',id,position,tool_name,'{}','{}',true,idempotency_key,'declined'
+ FROM steward_tool_calls WHERE id='f6400000-0000-4000-8000-000000000003';
+ INSERT INTO release_groups(id) VALUES('e6400000-0000-4000-8000-000000000001');
+ INSERT INTO releases(id,group_id,title,artist)
+ VALUES('e6400000-0000-4000-8000-000000000002','e6400000-0000-4000-8000-000000000001','整理迁移测试发行','测试艺人');
+ INSERT INTO curation_pending_items(id,target_type,target_id,kind,status,rule_version,input_digest,evidence)
+ VALUES('e6400000-0000-4000-8000-000000000003','release','e6400000-0000-4000-8000-000000000002','release_match','waiting_model',1,repeat('a',64),'{}'),
+ ('e6400000-0000-4000-8000-000000000004','release','e6400000-0000-4000-8000-000000000002','recording_match','waiting_model',1,repeat('b',64),'{}');`)
+			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
@@ -390,6 +429,20 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			rollbackApply(t, db, migrationPrefix(available, m.Version-1))
 			s2 := rollbackSnapshot(t, db)
+			if m.Version == 64 {
+				// 快照还会核对新增列、表和索引消失，且旧表的完整数据回到基线。
+				var restored, removed bool
+				err := db.QueryRow(`SELECT
+ (SELECT decision='declined' FROM steward_plan_items WHERE id='f6400000-0000-4000-8000-000000000005')
+ AND (SELECT count(*)=2 FROM curation_pending_items WHERE status='waiting_model' AND target_id='e6400000-0000-4000-8000-000000000002'),
+ NOT EXISTS (SELECT 1 FROM steward_conversations WHERE id='f6400000-0000-4000-8000-000000000006')
+ AND NOT EXISTS (SELECT 1 FROM steward_messages WHERE id='f6400000-0000-4000-8000-000000000007')
+ AND NOT EXISTS (SELECT 1 FROM steward_plans WHERE id='f6400000-0000-4000-8000-000000000008')
+ AND to_regclass('curation_model_exceptions') IS NULL AND to_regclass('curation_model_usage') IS NULL`).Scan(&restored, &removed)
+				if err != nil || !restored || !removed {
+					t.Fatalf("0064 下行未转换旧行或删除后台数据：restored=%v removed=%v err=%v", restored, removed, err)
+				}
+			}
 			if m.Version == 50 {
 				var cleared bool
 				if err := db.QueryRow(`SELECT lyrics IS NULL AND lyrics_source IS NULL FROM tracks WHERE id='c3000000-0000-4000-8000-000000000050'`).Scan(&cleared); err != nil || !cleared {

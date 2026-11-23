@@ -18,6 +18,8 @@ const (
 )
 
 var (
+	ErrBackgroundBusy   = errors.New("已有后台整理正在运行")
+	ErrRunStopped       = errors.New("已停止自动整理")
 	ErrRunLimit         = errors.New("同时运行的会话已达上限")
 	ErrSupervisorClosed = errors.New("管家正在关闭")
 	ErrRunInvalidated   = errors.New("运行凭据已变化")
@@ -48,6 +50,9 @@ type Run struct {
 	ConversationID string
 	userID         string
 	member         bool
+	background     bool
+	end            RunEnd
+	err            error
 	cancel         context.CancelFunc
 	done           chan struct{}
 	finished       bool
@@ -90,17 +95,24 @@ func (s *Supervisor) Start(request context.Context, params RunParams) (*Run, err
 	}
 	count := 0
 	for _, run := range s.runs {
-		if !run.finished && run.userID == params.Caller.User.ID {
+		if run.finished {
+			continue
+		}
+		if params.Background && run.background {
+			s.mu.Unlock()
+			return nil, ErrBackgroundBusy
+		}
+		if !run.background && run.userID == params.Caller.User.ID {
 			count++
 		}
 	}
-	if count >= MaxUserRuns {
+	if !params.Background && count >= MaxUserRuns {
 		s.mu.Unlock()
 		return nil, ErrRunLimit
 	}
 	ctx, cancel := context.WithCancel(context.WithoutCancel(request))
 	stopLifecycle := context.AfterFunc(s.ctx, cancel)
-	run := &Run{supervisor: s, ConversationID: params.ConversationID, userID: params.Caller.User.ID, member: params.Caller.User.Role != "admin", cancel: cancel, done: make(chan struct{}), subscribers: make(map[*Subscription]struct{})}
+	run := &Run{supervisor: s, ConversationID: params.ConversationID, userID: params.Caller.User.ID, background: params.Background, member: params.Caller.User.Role != "admin", cancel: cancel, done: make(chan struct{}), subscribers: make(map[*Subscription]struct{})}
 	s.runs[params.ConversationID] = run
 	s.wg.Add(1)
 	s.mu.Unlock()
@@ -135,7 +147,11 @@ func (s *Supervisor) Start(request context.Context, params RunParams) (*Run, err
 						err := params.Check(checkCtx)
 						stop()
 						if errors.Is(err, ErrRunInvalidated) {
-							s.CancelUser(run.userID)
+							if run.background {
+								run.cancel()
+							} else {
+								s.CancelUser(run.userID)
+							}
 							return
 						}
 					}
@@ -199,6 +215,10 @@ func (s *Supervisor) Start(request context.Context, params RunParams) (*Run, err
 			close(sub.events)
 			delete(run.subscribers, sub)
 		}
+		if terminal != nil && terminal.End != nil {
+			run.end = *terminal.End
+		}
+		run.err = err
 		close(run.done)
 		run.mu.Unlock()
 		if !preflightFailed {
@@ -302,11 +322,30 @@ func (s *Supervisor) Cancel(conversationID string) bool {
 	run.cancel()
 	return true
 }
+
+// Wait 等待本次运行持久化收尾；等待者的取消不影响运行。
+func (run *Run) Wait(ctx context.Context) (RunEnd, error) {
+	select {
+	case <-run.done:
+		return run.end, run.err
+	case <-ctx.Done():
+		return RunEnd{}, ctx.Err()
+	}
+}
+
+func (s *Supervisor) CancelBackground(userID string) {
+	s.cancelUserRuns(userID, true)
+}
+
 func (s *Supervisor) CancelUser(userID string) {
+	s.cancelUserRuns(userID, false)
+}
+
+func (s *Supervisor) cancelUserRuns(userID string, background bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, run := range s.runs {
-		if run.userID == userID && !run.finished {
+		if run.background == background && run.userID == userID && !run.finished {
 			run.cancel()
 		}
 	}
@@ -315,7 +354,7 @@ func (s *Supervisor) CancelMembers() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, run := range s.runs {
-		if run.member && !run.finished {
+		if !run.background && run.member && !run.finished {
 			run.cancel()
 		}
 	}

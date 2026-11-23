@@ -55,6 +55,10 @@ func storeProblem(err error) problem {
 		return problem{409, "plan_digest_mismatch", "方案内容已变化"}
 	case errors.Is(err, runtime.ErrNotFound):
 		return problem{404, "not_found", "会话或放行项不存在"}
+	case errors.Is(err, runtime.ErrCurationConversation):
+		return problem{409, "curation_conversation", "自动整理会话的模式不能更改"}
+	case errors.Is(err, runtime.ErrCurationPlan):
+		return problem{409, "curation_plan", "后台方案由自动整理处理"}
 	case errors.Is(err, runtime.ErrConversationBusy):
 		return busyProblem
 	case errors.Is(err, runtime.ErrNothingToContinue):

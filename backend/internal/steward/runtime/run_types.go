@@ -23,8 +23,23 @@ func NewRunner(store RunStore, registry *tool.Registry, logger *slog.Logger) *Ru
 	return &Runner{store: store, registry: registry, logger: logger}
 }
 
+// UsageKind 区分共享每日额度的三种模型请求。
+type UsageKind string
+
+const (
+	UsageMain    UsageKind = "main"
+	UsageReview  UsageKind = "review"
+	UsageSummary UsageKind = "summary"
+)
+
 // RunParams 是入口已取得的调用者身份、会话及模型配置，不包含端点密钥。
 type RunParams struct {
+	Background   bool
+	BeforeStep   func(context.Context) error
+	Usage        func(context.Context, UsageKind, provider.Usage)
+	SkipMemory   bool
+	SystemSuffix string
+	Escalate     func(context.Context, PlanItem, Review, ReviewItem) (string, error)
 	// Check 在运行开始及后台凭据复查时执行。
 	Check func(context.Context) error
 	// Finished 释放运行独占的出站资源。
@@ -82,6 +97,7 @@ const (
 type EndReason string
 
 const (
+	EndCurationStopped      EndReason = "curation_stopped"
 	EndReviewUnavailable    EndReason = "review_unavailable"
 	EndAwaitingConfirmation EndReason = "awaiting_confirmation"
 	// EndInternalError 表示运行发生内部异常。

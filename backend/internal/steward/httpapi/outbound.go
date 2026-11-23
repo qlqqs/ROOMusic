@@ -61,3 +61,21 @@ func modelProvider(client *http.Client, endpoint, key, protocol string) (provide
 	}
 	return provider.NewOpenAI(client, endpoint, key)
 }
+
+// openModel 对两个运行入口使用同一出站策略；成功后由运行负责释放连接。
+func (h *Handlers) openModel(ctx context.Context, user identity.User, settings runtime.UserSettings, key string) (provider.Provider, func(), error) {
+	client, err := h.outboundClient(ctx, user)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := preflight(ctx, client, settings.Endpoint); err != nil {
+		client.CloseIdleConnections()
+		return nil, nil, &settingsOutboundError{err}
+	}
+	model, err := modelProvider(client, settings.Endpoint, key, settings.Protocol)
+	if err != nil {
+		client.CloseIdleConnections()
+		return nil, nil, &settingsOutboundError{err}
+	}
+	return model, client.CloseIdleConnections, nil
+}

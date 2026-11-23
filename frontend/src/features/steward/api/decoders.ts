@@ -112,6 +112,8 @@ const conversationShape = {
   id: d.uuid(),
   title: d.string(),
   mode: d.oneOf(stewardModes),
+  /** 会话的类型（M7 D）：chat 是用户自己的对话，curation 是自动整理的后台会话（模式固定 steward，不出现在对话列表）；旧后端没有，按 chat。 */
+  kind: d.optional(d.oneOf(["chat", "curation"] as const)),
   /** 会话自己的模型；空字符串表示发消息时用设置里当时的模型。 */
   model: d.string(),
   status: d.oneOf(["idle", "running"] as const),
@@ -285,8 +287,9 @@ const planItemDecoder = d.object({
   changes: d.array(planChangeDecoder, { max: d.unbounded }),
   revertible: d.boolean(),
   basis: d.optional(d.nullable(planBasisDecoder)),
-  /** 这一项的取舍：用户确认（accepted、declined），或被审查拒绝（rejected_by_review，C7）；审查批准并执行的项也是 accepted。 */
-  decision: d.optional(d.oneOf(["pending", "accepted", "declined", "rejected_by_review"] as const)),
+  /** 这一项的取舍：用户确认（accepted、declined），或被审查拒绝（rejected_by_review，C7）；审查批准并执行的项也是 accepted；
+   * 自动整理的后台运行里审查转人工的项记为 escalated，成为待管理员处理的例外（M7 D）。 */
+  decision: d.optional(d.oneOf(["pending", "accepted", "declined", "rejected_by_review", "escalated"] as const)),
   /** 执行结果（会话详情的 plans 里，有结果才有）；这里只看有没有，不解释内容。 */
   result: d.optional(json),
   /** 执行留下的操作记录（会话详情的 plans 里）。 */
@@ -338,8 +341,9 @@ export const decodeMarkedRead = d.defineDecoder(d.object({ read: d.literal(true)
 
 // ---- 运行流的事件（合同第 5 节）----
 
-// awaiting_confirmation（C6）：这一步有等用户确认的方案，运行停在这里；review_unavailable（C7）：审查不可用，方案没有执行、仍在等待。
-export const endReasons = ["completed", "awaiting_confirmation", "review_unavailable", "step_limit", "token_limit", "cancelled", "provider_error", "internal_error"] as const;
+// awaiting_confirmation（C6）：这一步有等用户确认的方案，运行停在这里；review_unavailable（C7）：审查不可用，方案没有执行、仍在等待；
+// curation_stopped（M7 D）：自动整理的后台运行因开关、暂停、开启者或用量上限在一步之后停下。
+export const endReasons = ["completed", "awaiting_confirmation", "review_unavailable", "step_limit", "token_limit", "cancelled", "provider_error", "internal_error", "curation_stopped"] as const;
 export type EndReason = (typeof endReasons)[number];
 
 const runEndDecoder = d.object({

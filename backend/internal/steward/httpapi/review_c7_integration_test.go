@@ -296,7 +296,7 @@ func TestPostgreSQLStewardHTTPC7DecisionsProtocolsAndIsolation(t *testing.T) {
 				}
 				assertDone(t, w, reason)
 				p := f.latest(t, "admin", id)
-				if p.Review == nil || p.Review.Status != "completed" || p.Review.PolicyVersion != 1 || len(p.Review.Items) != len(f.calls) {
+				if p.Review == nil || p.Review.Status != "completed" || p.Review.PolicyVersion != 2 || len(p.Review.Items) != len(f.calls) {
 					t.Fatalf("review=%+v body=%s", p.Review, w.Body)
 				}
 				remaining := time.Until(p.Review.ExpiresAt)
@@ -713,7 +713,7 @@ func TestPostgreSQLStewardHTTPC7SnapshotBinding(t *testing.T) {
 				case "review_expired":
 					_, err = f.db.Exec(`UPDATE steward_reviews SET expires_at=now()-interval '1 second' WHERE id=$1`, review.ID)
 				case "policy_version":
-					_, err = f.db.Exec(`UPDATE steward_reviews SET policy_version=2 WHERE id=$1`, review.ID)
+					_, err = f.db.Exec(`UPDATE steward_reviews SET policy_version=1 WHERE id=$1`, review.ID)
 				case "review_decision":
 					_, err = f.db.Exec(`UPDATE steward_reviews SET items=jsonb_set(items,'{0,decision}','"rejected"') WHERE id=$1`, review.ID)
 				}

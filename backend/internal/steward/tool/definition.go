@@ -45,6 +45,9 @@ const (
 // SourceChat 表示由聊天入口发起调用。
 const SourceChat = "chat"
 
+// SourceCuration 表示由自动整理后台运行发起调用。
+const SourceCuration = "curation"
+
 // SourceMCP 表示由 MCP 入口发起调用。
 const SourceMCP = "mcp"
 

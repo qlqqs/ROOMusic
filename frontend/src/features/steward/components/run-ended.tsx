@@ -58,6 +58,8 @@ function noteOf(ended: Ended, hasSteps: boolean): Note | null {
           return null;
         case "cancelled":
           return { tone: "calm", title: "已停止" };
+        case "curation_stopped":
+          return { tone: "calm", title: "自动整理停下了", detail: "总开关关闭、暂停、开启者变动或今天的用量到了上限，后台在这一步之后停下；条件恢复后会接着处理。" };
         case "step_limit":
           return { tone: "warning", title: "查询步数用完了，回答还没有完成", detail: "一次回答最多请求模型 24 次。", action: "continue" };
         case "token_limit":

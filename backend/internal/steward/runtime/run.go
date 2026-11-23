@@ -115,9 +115,12 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 	if err != nil {
 		return err
 	}
+	if params.Background && detail.Conversation.Mode != "steward" {
+		return ErrReviewNotApplicable
+	}
 	state.conversation = detail.Conversation
 	state.summary = detail.Summary
-	if r.memories != nil {
+	if r.memories != nil && !params.SkipMemory {
 		remembered, readErr := r.memories.List(ctx, userID)
 		if readErr != nil {
 			state.logger.WarnContext(ctx, "管家记忆暂不可用", "event", "steward.memory.unavailable", "message", "管家记忆暂不可用")
@@ -148,12 +151,16 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 		if selected == nil {
 			return ErrPlanNotFound
 		}
-		if err := CheckPlanDecision(detail, PlanDecision{PlanID: selected.ID, Digest: selected.Digest}); err != nil && !errors.Is(err, ErrConversationBusy) {
+		if err := checkPlanDecision(detail, PlanDecision{PlanID: selected.ID, Digest: selected.Digest}, params.Background); err != nil && !errors.Is(err, ErrConversationBusy) {
 			return err
 		}
 		if params.Started != nil {
 			params.Started()
 			state.params.Started = nil
+		}
+		end, err = state.beforeStep(ctx)
+		if err != nil || end.Reason != "" {
+			return err
 		}
 		state.step = 1
 		_, stop, reviewErr := state.reviewPlan(ctx, *selected)
@@ -264,6 +271,20 @@ func (s *runState) prepare(ctx context.Context) ([]provider.Message, error) {
 	return s.prepareHistory(ctx, detail.Messages)
 }
 
+func (s *runState) beforeStep(ctx context.Context) (RunEnd, error) {
+	if ctx.Err() != nil {
+		return RunEnd{Reason: EndCancelled}, nil
+	}
+	if s.params.BeforeStep != nil {
+		err := s.params.BeforeStep(ctx)
+		if errors.Is(err, ErrRunStopped) {
+			return RunEnd{Reason: EndCurationStopped}, nil
+		}
+		return RunEnd{}, err
+	}
+	return RunEnd{}, nil
+}
+
 func (s *runState) run(ctx context.Context) (RunEnd, error) {
 	messages, err := s.prepare(ctx)
 	if err != nil {
@@ -281,16 +302,16 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 		}
 	}
 	for s.step < maxSteps {
+		if end, err := s.beforeStep(ctx); err != nil || end.Reason != "" {
+			return end, err
+		}
 		if s.inputTokens+s.outputTokens >= maxRunTokens {
 			return RunEnd{Reason: EndTokenLimit}, nil
 		}
-		if ctx.Err() != nil {
-			return RunEnd{Reason: EndCancelled}, nil
-		}
 		s.step++
-		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: systemPromptWithMode(s.params.DisplayName, s.conversation.Mode) + s.memoryBlock,
+		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: systemPromptWithMode(s.params.DisplayName, s.conversation.Mode) + s.params.SystemSuffix + s.memoryBlock,
 			Messages: messages, Tools: definitions, MaxOutputTokens: maxOutputTokens, NativeSearch: s.params.NativeSearch})
-		s.recordUsage(ctx, step.usage)
+		s.recordUsage(ctx, UsageMain, step.usage)
 		if err != nil {
 			// 中断时只保存已生成的文本，不留下没有结果的半截工具请求。
 			var blocks []provider.ContentBlock
@@ -444,10 +465,11 @@ func (s *runState) readModel(ctx context.Context, request provider.Request) (ste
 	}
 }
 
-func (s *runState) recordUsage(ctx context.Context, usage provider.Usage) {
+func (s *runState) recordUsage(ctx context.Context, kind UsageKind, usage provider.Usage) {
 	if usage.InputTokens == nil && usage.OutputTokens == nil {
 		return
 	}
+	s.reportUsage(ctx, kind, usage)
 	// Provider 的事件是累计快照；每步只统计最后一份，任一计数缺失都不估算。
 	if usage.InputTokens != nil && usage.OutputTokens != nil {
 		s.inputTokens += *usage.InputTokens
@@ -457,6 +479,22 @@ func (s *runState) recordUsage(ctx context.Context, usage provider.Usage) {
 	s.logger.InfoContext(ctx, "管家模型用量", "event", "steward.model.usage", "message", "管家模型用量",
 		"step", s.step, "input_tokens", usage.InputTokens, "output_tokens", usage.OutputTokens)
 	s.sink(Event{Type: EventUsage, Step: s.step, Usage: &usage})
+}
+
+// 日用量按已知的一侧累加，主对话的 SSE 仍保留未知计数。
+func (s *runState) reportUsage(ctx context.Context, kind UsageKind, usage provider.Usage) {
+	if s.params.Usage == nil || (usage.InputTokens == nil && usage.OutputTokens == nil) {
+		return
+	}
+	if usage.InputTokens == nil {
+		usage.InputTokens = new(int64)
+	}
+	if usage.OutputTokens == nil {
+		usage.OutputTokens = new(int64)
+	}
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeTimeout)
+	defer cancel()
+	s.params.Usage(cleanup, kind, usage)
 }
 
 func modelFailure(ctx context.Context, err error) RunEnd {
