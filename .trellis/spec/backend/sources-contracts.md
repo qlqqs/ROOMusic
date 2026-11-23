@@ -34,9 +34,10 @@ M7 子任务 B1（2026-11）把向外部音乐数据源发请求这件事从管�
 type Declaration struct {
     ID             string        // ^[a-z0-9._-]{1,64}$；与操作记录 origin.provider 是同一个标识
     Name           string
-    Capabilities   []Capability  // release_lookup | recording_lookup | artist_lookup | cover_art | lyrics
+    Capabilities   []Capability  // release_lookup | recording_lookup | artist_lookup | cover_art | lyrics | fingerprint_lookup
     DefaultEnabled bool
     MinInterval    time.Duration // 全实例两次出站的最小间隔
+    Keys           []string      // 需要管理员填写的密钥名（有序）；AcoustID 为 application、user，其余源为空（B3）
 }
 ```
 
@@ -53,7 +54,10 @@ type Declaration struct {
   `ID` 是源里的图片编号，规范成十进制数字串，不是数字时为空（这一项仍然返回，只是不能下载）。
 - `sources` 不校验图片内容：它只保证字节数不超过上限、来自放行的主机。格式与宽高由落库的一方（`catalog/artwork`）校验。
 - `Lyrics` 原样转达外部的记录：同步与纯文本两份文本、纯音乐标志、记录自己的标题、艺人、专辑与时长。取舍（时长筛选、写法差异）不在适配器里。
-- 指纹识别的能力接口随子任务 B3 增加。
+- 指纹识别（B3）：`FingerprintFinder.LookupFingerprint(ctx, Fingerprint{Value, DurationSeconds})` 返回 `[]FingerprintMatch{ID, Score, Recordings}`；
+  `FingerprintRecording` 带 `ID`、`Title`、`LengthMS`、`Artists`、`ReleaseIDs` 与 `Releases`（`FingerprintRelease{ID, Title, Date, Country, Artists, TrackCount, MediumCount}`，
+  后两项外部没给时为 0）。录音可能是外部已合并掉的旧 ID，调用方要用 MusicBrainz 按 ID 读回正式数据再判定。
+- 密钥错误：`*InvalidKeyError{Name}`，`errors.Is(err, ErrInvalidKey)` 成立；`Name` 指出是哪一把（闸门只把那一把标为无效）。
 
 ## 4. 调用的两种身份
 
@@ -69,7 +73,7 @@ type Declaration struct {
 | 响应读取上限 | `GetJSON` 2 MiB | `GetJSON` 8 MiB；`GetBytes` 由调用方给 |
 | 失败的进程内记忆 | 不读不写，每次都真实尝试 | 用尽重试后记 10 分钟，期间同一请求直接 `ErrTryLater` |
 
-哨兵错误：`ErrNotFound`、`ErrRateLimited`、`ErrUnavailable`、`ErrTryLater`、`ErrInvalidQuery`。
+哨兵错误：`ErrNotFound`、`ErrRateLimited`、`ErrUnavailable`、`ErrTryLater`、`ErrInvalidQuery`、`ErrInvalidKey`（B3，不重试、不缓存、不记失败记忆）。
 
 **哪些算“没匹配上”**：只有 `ErrNotFound` 与成功返回的空结果。后台调用不会得到 `ErrUnavailable`；断网、外部繁忙、响应异常一律是
 `ErrTryLater`，调用方不得把它记成一次失败的尝试。ctx 取消与放行回调的拒绝原样返回，不记入任何缓存。
@@ -94,6 +98,11 @@ type Declaration struct {
   日志里的域名是最初请求的域名。包装 `CheckRedirect` 时复制工厂返回的客户端，不原地修改。
 - **`GetBytes(ctx, address, accept, maxBytes)`**：取二进制响应，不读写响应缓存；限速、调用身份、放行回调、重试、错误与失败记忆的规则与 `GetJSON` 相同
   （失败记忆同样要求有数据目录）。`Content-Length` 或实际读到的字节超过 `maxBytes` 按“响应结构不对”处理。404 是 `ErrNotFound`。
+- **`PostForm(ctx, address, cacheInput, form, decode)`**（B3）：POST、`application/x-www-form-urlencoded`、`Content-Encoding: gzip`；
+  `form` 在每次出站前（含每次重试）调用一次重新取表单（密钥在这里读，换了密钥的重试用新值），请求体每次重新压缩。
+  缓存键是 `POST ` 加规范化 URL、NUL、`cacheInput`：`cacheInput` 只含决定结果的参数（AcoustID 是时长与指纹，**不含密钥**）。
+  `decode(status, body)` 收到包括非 200 在内的响应，返回 `(empty, retry, err)`：`err == nil` 才写缓存（有效期规则同 `GetJSON`）；`retry` 为真按后台的重试规则退避；
+  其余错误原样返回。GET 的缓存键不变（`GET ` 加规范化 URL），已有缓存文件继续有效。
 - **日志**：出站结束记 `sources.request.finished`（源、域名、耗时、HTTP 状态或固定错误码、第几次尝试）；缓存命中记
   `sources.cache.hit`（源）；缓存读写失败记 `sources.cache.error`。**不记**查询词、URL 路径与查询串、响应内容。
 
@@ -163,6 +172,19 @@ type Declaration struct {
   怎样放宽（去掉专辑、改用搜索再按时长筛选）由调用方决定，不在适配器里。
 - 纯音乐的记录 `Instrumental` 为真，两份歌词都是空串。
 
+## 8a. AcoustID 适配器（子任务 B3）
+
+声明：`{ID:"acoustid", Name:"AcoustID", [fingerprint_lookup], DefaultEnabled:true, MinInterval:334ms, Keys:[application, user]}`。
+条款：每秒不超过 3 次；仅限非商业免费；每个应用注册自己的应用密钥；2027-01-01 起在 acoustid.org 注册的应用查询还必须带用户密钥（上游 2026-11-19 公告），
+所以两把都由管理员填写，仓库不内置任何密钥。基础地址 `https://api.acoustid.org`，不跟随重定向。
+
+- 请求：`PostForm` 到 `/v2/lookup`，表单恰好六项：`client`（应用密钥）、`user`（用户密钥）、`duration`（整首时长，整数秒）、`fingerprint`、
+  `meta=recordings releases`、`format=json`。`Options.Keys(ctx)` 每次出站前取两把密钥。
+- 映射：只接受 `status=ok`；去掉没有录音的结果；录音按 ID 去重，取最高分；发行带回曲目数与碟数。
+- 错误：HTTP 429 或码 14、HTTP 503 或码 13、码 5 → 退避重试，用尽 `ErrTryLater`；码 3、8 → `ErrInvalidQuery`（空结果）；
+  码 4、17 → `InvalidKeyError{Name:"application"}`；码 6 → `InvalidKeyError{Name:"user"}`；其余 → `ErrTryLater`。
+- 密钥状态的回写（`unchecked`→`valid`、某一把→`invalid`）由闸门做，见[自动整理合同](./curation-contracts.md)第 16 节；缓存命中不验证密钥。
+
 ## 9. 发给外部的数据
 
 | 源 | 发出的内容 |
@@ -170,6 +192,7 @@ type Declaration struct {
 | MusicBrainz | 外部 ID、条码、厂牌与编号、ISRC、标题与艺人的查询词、曲目数、由各轨时长推出的光盘目录 |
 | Cover Art Archive | 外部 ID |
 | LRCLIB | 曲目标题、艺人、专辑名、时长 |
+| AcoustID | 由音频本地算出的声学指纹、整首时长，以及管理员填入的应用密钥（标识这个实例注册的应用）与用户密钥（标识管理员在 AcoustID 的账号） |
 
 不发送音频、文件路径与实例标识。外部返回的内容一律是不可信文本，进入模型之前按管家的规则加来源标记。
 
@@ -184,6 +207,8 @@ type Declaration struct {
 | `GetBytes`：404、超限、重试、不写响应缓存、失败记忆 | 同上 |
 | Cover Art Archive：清单解析、两种目标、选图、四档回退、PDF、两个限速器各自计数、默认装配与 MusicBrainz 共用同一个限速器 | `backend/internal/sources/coverartarchive` |
 | LRCLIB：两种请求的参数、字段映射、纯音乐、404、429 的重试 | `backend/internal/sources/lrclib` |
+| AcoustID：六项表单与 gzip、间隔、各错误码的分类、两把密钥各自无效、不缓存密钥错误、缓存键不含密钥、映射与去重 | `backend/internal/sources/acoustid`（见自动整理合同 16.7） |
+| `PostForm`：经 AcoustID 的用例覆盖（重试、非 200 的分类、缓存）；GET 缓存键不变由现有 MusicBrainz 缓存用例覆盖 | `backend/internal/sources/acoustid`、`sources/musicbrainz` |
 | 十个能力方法的请求形式与解析；disc ID 的基准值 | `backend/internal/sources/musicbrainz` |
 | 管家工具的输出与错误码不变 | `backend/internal/steward/web` 现有用例 |
 | 闸门、源开关接口、外部对应的存储、外部封面与歌词的写入与撤销 | 见[自动整理合同](./curation-contracts.md)第 13、14 节 |

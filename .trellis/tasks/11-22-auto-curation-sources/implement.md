@@ -99,7 +99,7 @@ I、G、H 只依赖地基，可以在里程碑一、二进行期间穿插；表�
   - D：待定项表与五种状态已建，C 只写 `waiting_model` 与 `resolved`；强证据读 `external_link` 记录的后态，D 写的对应也要带 `external_group_id`。
   - G：艺人的外部对应与同一外部艺人的合并、按外部 ID 反查艺人时解析重定向都留在 G 接入 C 的流程。
   - I：曲目到录音的对应已建（配对可靠时），曲目标题与艺人的补全在 I 接入。
-  - B3：声学指纹接在第 5、6 步之间，规则版本加一。
+  - B3：声学指纹接在第 5、6 步之间，规则版本加一。（B3 实施时改为不加规则版本，按“指纹这一步是否被跳过”精确重开，见 B3 的交付记录。）
 
 ### E1 整理记录与设置界面（第一版）
 
@@ -115,6 +115,12 @@ I、G、H 只依赖地基，可以在里程碑一、二进行期间穿插；表�
 - 规划时先核实：Alpine 的 `chromaprint` 包是否带命令行工具；AcoustID 当前的限速与使用条款。
 - 验证：受控服务；没有 Chromaprint 或没填密钥时源显示未启用且其余功能正常；指纹只在音频内容变化后重算；
   部署改动验证 Compose 配置与容器启动流程。
+- 完成后留给后续子任务的（B3 的交付记录）：
+  - D：AcoustID 带来的待定项方法是 `acoustid`，候选带 `score`（各曲目最高分之间的最小值）；新冲突代码 `acoustid_mismatch`、`acoustid_spread`、`acoustid_sparse`、`title_mismatch`。
+    外部已合并的旧录音 ID 可能误报 `acoustid_mismatch`，模型判断时可用 MusicBrainz 按 ID 读回核对。
+  - E2：AcoustID 需要两把密钥（应用密钥、用户密钥，上游 2027-01-01 起强制），界面已在 E1 的外部源一组里；`key_invalid` 时只标出错的那一把。
+  - I：单曲方式经 AcoustID 对上的录音已有正式的 MusicBrainz 数据，曲目标题与艺人的补全可直接用。
+  - V12：真实试用时统计 AcoustID 的命中、`ambiguous` 与 `too_many` 的比例。
 
 ### D 模型后台判断
 

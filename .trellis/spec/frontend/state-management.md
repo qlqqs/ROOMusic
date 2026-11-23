@@ -56,7 +56,7 @@ request.
 - 默认选项集中在 `app/runtime.ts`：`staleTime` 30 秒，窗口重新聚焦时刷新已过期的数据；读取只对网络失败与 503 自动重试，
   最多 2 次（`shouldRetryQuery`），4xx 与无效响应不重试；写操作从不自动重试。
 - 自动整理的进度（M7 E1）：后台工作或等扫描时每 10 秒；设置与进度还没对上（后台最长一分钟才发现开关变化）时也 10 秒直到对上；开着且已处理完时 60 秒；
-  未打开、已暂停且停下、没有运行时不轮询（`progressRefetchInterval`）。改总开关或暂停之后写回设置并让外部源与进度失效；范围撤销完成后让 curation 与 governance 全部失效并调 app 的刷新。
+  未打开、已暂停且停下、没有运行时不轮询（`progressRefetchInterval`）。改总开关或暂停之后写回设置并让外部源与进度失效；改一个源的开关或应用密钥时，把返回的那一项写回外部源列表（`useSetCurationSource`、`useSetCurationSourceKey` 共用写回）；范围撤销完成后让 curation 与 governance 全部失效并调 app 的刷新。
   批次与“不再提出”列表 `staleTime: 0`（单条撤销可能发生在操作记录页）。
 - 轮询只发生在有意义的时候：扫描详情运行中（含取消请求中）每 2 秒一次，到终态即停止并让活动扫描与扫描记录查询失效；活动扫描只在
   确有扫描时每 5 秒刷新，没有活动扫描时不轮询。页面不可见时暂停（沿用 Query 默认的 `refetchIntervalInBackground: false`），

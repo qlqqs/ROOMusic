@@ -192,7 +192,7 @@ type Applied struct {
 - 接口返回的每一项：`enabled` 是这个源自己的开关；`active` 是“后台现在能不能用它”；`inactive_reason` 依次判断
   `curation_disabled`（总开关关着）、`enabler_unavailable`（开启者不是启用状态的管理员）、`source_disabled`，都不是时为 null。
 - **闸门 `curation.Sources`**：后台代码只从它取能力（`ReleaseFinder`、`RecordingFinder`、`ArtistFinder`、`CoverFinder`、`LyricsFinder`，参数是源的标识）。
-  注册的源按顺序是 MusicBrainz、Cover Art Archive、LRCLIB，都默认开。
+  注册的源按顺序是 MusicBrainz、Cover Art Archive、LRCLIB、AcoustID（B3），都默认开；AcoustID 还要指纹工具可用、两把密钥都填了才生效（第 16 节）。
   取到的是包了一层的实现，每个方法先 `Check`，再用 `sources.WithBackground(ctx, permit)` 调用适配器，`permit` 就是对这个源的 `Check`。
   所以核对发生在调用开始时、读缓存之前、每次出站之前（排队之后与每次重试之前）：调用排队或等待重试期间开关被关掉，之后不再出站。
 - `Check` 在一个事务里读设置（与 `Writer.Apply` 相同的 `loadSettings`，开启者资格由 `identity.IsEnabledAdmin` 判断）：
@@ -471,7 +471,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 15.7 已知限制
 
-- 艺人的外部对应与同一外部艺人的自动合并在子任务 G；曲目标题与艺人的补全在子任务 I；声学指纹在子任务 B3；待定项的处理在 D，界面在 E1、E2。
+- 艺人的外部对应与同一外部艺人的自动合并在子任务 G；曲目标题与艺人的补全在子任务 I；声学指纹见第 16 节（子任务 B3）；待定项的处理在 D，界面在 E1、E2。
 - 撤销外部对应不连带撤销它带来的字段、封面与归组（各自独立可撤；按批撤销能一次撤完）。
 - 分轨抓取不重建光盘目录；音译或翻译了的专辑因 `title_artist_mismatch` 交给模型。
 
@@ -502,3 +502,137 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | 接口样本：`curation/settings-paused`、`curation/progress`、`operations/link-list`、`operations/link-reverted` | `TestPostgreSQLAPIResponseSamples` 与前端 `api-contract.test.ts` |
 
 判定规则、代次与“仍是这条操作写的”等关键逻辑做了变异检查（每条相反证据、数量与时长佐证、条码的第二项佐证、歌词容差、命中即定、代次、强证据三项、人工结构、`OnlyEmpty`）。
+
+## 16. 声学指纹与 AcoustID（子任务 B3）
+
+子任务 B3 把 AcoustID 接进第 15 节的匹配：没有条码、编号、ISRC，标签又差的单曲与专辑可以靠音频本身对上 MusicBrainz。
+推导与取舍在本机归档的任务设计 `11-23-auto-curation-b3-acoustid/design.md`（第八节优先）；外部源一侧见[外部源合同](./sources-contracts.md) 8a 节，部署见[部署合同](./deployment-environment-contracts.md)。
+
+### 16.1 数据模型（迁移 0063）
+
+- **`track_acoustic_fingerprints`**：主键 `track_id`（随曲目删除）；`pipeline_version`；有效性键 `content_fingerprint`、`source_size`、`source_modified_at`、`cue_index_frames`、`cue_end_frames`；
+  `status`（`done | failed`）、`fingerprint`、`duration_seconds`、`failure_category`（`too_short | decode_failed | timeout`）、`attempts`、`computed_at`。
+  放在数据库而不是数据目录（ADR 0006 决策记录“B3 说明”）：只为走到指纹这一步的曲目按需计算。
+- **`curation_source_keys`**：主键 `(source, name)`；`ciphertext`、`last_four`、`status`（`unchecked | valid | invalid`）、`updated_by`、`updated_at`。清除即删行。
+- 回退删除两张表。
+
+### 16.2 指纹的计算与缓存
+
+- 只在匹配走到指纹这一步时按需计算，按曲目缓存。缓存行的 `pipeline_version` 与有效性键和曲目当前值逐项相同才有效；音频不变不重算。
+- 取源与音频分析相同（允许的根、大小与修改时间核对、CUE 区间、DSD 转 PCM）；ffmpeg 以 `file:/dev/fd/3` 读打开的句柄（可定位），
+  解码前 120 秒为 11025 Hz 单声道 s16le，经管道交给 `fpcalc -format s16le -rate 11025 -channels 1 -length 120 -json -`。单首时限 60 秒。
+- 发给 AcoustID 的时长是整首时长（CUE 虚拟轨是区间长度；最后一首没有结束帧时取曲目时长），不是解码的 120 秒。
+- 三种结果：
+  - 算出；
+  - 永久算不出：`too_short`（精确时长 < 10 秒，比较时不取整），或缓存里的失败还没到重试时间；
+  - 暂时算不出：取源失败、文件变了、时长未知。暂时的结果不写缓存。
+- `decode_failed`、`timeout` 照音频分析的规则重试：24 小时后，至多 3 次。
+- `catalog.CurationEvidence`、`catalog.CurationTrack` 与曲目查询的标识种类**没有新增任何字段**：发行摘要是整个证据结构的哈希，加字段会让全库重做。
+  指纹按曲目 ID 经 `program.Fingerprints` 取，由 `app` 把 `playback.Fingerprints` 适配进来。
+
+### 16.3 密钥与源的状态
+
+- `SourceSettings.keys`：只有声明了密钥的源才有（其余省略，现有输出不变），形状为 `[{name, configured, last_four, status}]`，按声明顺序每把一项。
+- `inactive_reason` 依次判断：
+  1. `curation_disabled`
+  2. `enabler_unavailable`
+  3. `source_disabled`
+  4. `fingerprint_unavailable`：指纹工具自检没通过
+  5. `key_missing`：有一把没填
+  6. `key_invalid`：都填了，有一把无效
+- 加密用唯一的实例密钥存储（`app` 里只建一个，交给管家与闸门），绑定 `instance` 与 `curation.source_key.<源>.<名>`；解密失败当作无效。
+  `curation` 只依赖一个 `Seal`/`Open` 小接口，不导入 `steward/secret`。
+- **回写**：
+  - 真正出站成功时，把这次用到的、仍是同一密文的 `unchecked` 改成 `valid`；缓存命中不算。
+  - `InvalidKeyError{Name}` 只把那一把、并且仍是这次密文的标为 `invalid`（compare-and-set，换上的新密钥不会被旧请求标坏）。
+  - 回写只改 `status`，**不改 `updated_at`**；`updated_at` 进入变化标记，改了会让进行中的一轮重来。
+  - 填写与清除会推进变化标记；清除只删行时，同一事务里更新源设置的时间。
+- 闸门 `Check("acoustid")` 在三种原因时返回 `409 source_disabled`；暂停、扫描与数据库错误照常返回各自的错误。
+
+| 接口 | 说明 |
+| --- | --- |
+| `PUT /api/v1/admin/curation/sources/{id}/keys/{name}` | `{key}`，去掉首尾空白后 1–128 个可打印 ASCII，否则 `400 invalid_input` → 这个源的 `SourceSettings` |
+| `DELETE /api/v1/admin/curation/sources/{id}/keys/{name}` | → 这个源的 `SourceSettings` |
+
+管理员与同源检查同其他源接口。新错误码 `400 key_not_supported`（源没有密钥）；未知源或未声明的密钥名 `404 not_found`。密钥的变更不进操作记录。
+
+### 16.4 匹配的新一步
+
+**可用性**：工作者用 `Check("acoustid")` 判断。只有 `not_found`（没注册）与 `source_disabled` 算不可用，其余错误照常往上抛。可用时向 `MatchWithFingerprint` 传入指纹步骤，
+`Match` 的签名不变（等于不带指纹）。结果多一个 `fingerprint` 字段，写进工作状态的 `result`：
+
+| 值 | 含义 |
+| --- | --- |
+| `used` | 走到了这一步，并且 AcoustID 可用 |
+| `unavailable` | 走到了这一步，但 AcoustID 不可用；途中遇到 `ErrInvalidKey` 或 `source_disabled` 也是这个值，并且照常往下走到搜索 |
+| `not_reached` | 前面某一步命中，或者因为别的原因提前返回 |
+
+**专辑方式**（第 6 步 `acoustid`，在 `disc_id` 与 `search` 之间）：
+
+1. 抽样：与 ISRC 相同的位置，在全部曲目里取至多 4 首。算出的不到一半：如果有暂时原因，整个发行记 `try_later`；否则这一步不算命中。
+2. 逐首查询，只要分数 ≥ 0.9 的录音，得到每首的录音集合 R_t。
+3. 去掉曲目数或碟数与本地不符的发行（两个值都给了才比较），再在有结果的曲目之间求发行交集。
+   - 抽样 ≥ 2 首却只有 1 首有结果 → `acoustid_sparse`；
+   - 交集为空 → `acoustid_spread`；
+   - 交集多于 3 个 → `too_many`。
+4. 按 ID 读回完整发行后核对，通过 = `count_equal` ∧ `durations_ok` ∧ 每首有结果的抽样曲目配对到的录音 ∈ R_t。
+   - 配对到的录音不在 R_t 里 → `acoustid_mismatch`；
+   - 其余相反证据同第 2–4 步，`title_artist_mismatch` 也适用。
+5. 候选用 AcoustID 返回的发行信息生成，并带 `score`（`omitempty`；其他方法的候选不带）：各有结果曲目里出现在这个发行上的录音最高分，再取这些曲目之间的最小值。
+
+**单曲方式**（在 `isrc` 与 `search` 之间）：
+
+- 分数 ≥ 0.9 的录音按时长筛选。剩下多于 3 个 → `too_many`；不多于 3 个时，逐个用 MusicBrainz 的 `RecordingByID` 读回正式数据，再交给 `DecideSingle`。
+- 标题不是占位，并且与录音标题松比较不相等 → `title_mismatch`。
+
+**信息不足**：指纹可用时不再提前返回；但指纹这一步没命中时，仍记 `no_match` + `insufficient_evidence`，不建待定项。
+
+依据文案 `acoustid` 是“声学指纹”。
+
+### 16.5 重新处理（规则版本不变，仍是 1）
+
+`needsWork` 对 `release` 主题多一个条件，必须同时满足：
+
+- 本轮 AcoustID 可用（一轮开始时判断一次）；
+- 状态是 `no_match` 或 `uncertain`；
+- 满足下面两条之一：
+  - `result.fingerprint == "unavailable"`；
+  - 没有这个字段（B3 之前写的），`method` 是空或 `search`，并且 `conflicts` 里没有 `track_count`。
+
+**只因为这一条才被重开的发行**，在处理前再判断一次可用性：不可用就跳过，不写状态。
+
+结果：
+
+- 没填密钥的实例升级后，一个发行也不重做。
+- 填齐密钥后，只重做那些“走到了指纹这一步却因为它不可用而跳过”的发行，每个一次。
+- 已对上的发行、在前面各步就拿不准的发行，以及封面与歌词，都不受影响。
+
+### 16.6 已知限制
+
+- 专辑方式里，外部已合并掉的旧录音 ID 可能误报 `acoustid_mismatch`，结果只是拿不准，交给模型。
+- 同一首歌在 MusicBrainz 里常有重复录音，单曲方式会出现较多 `ambiguous`。
+- 同一张专辑的多个版本，在曲目数与碟数都相同时会是 `too_many` 或 `ambiguous`。
+- 真实的匹配比例要到 V12 的真实试用才知道。
+- arm64 的 fpcalc 只在发布流水线的构建阶段验证（构建时核对版本）。
+
+### 16.7 必需测试与断言点
+
+| 断言点 | 用例 |
+| --- | --- |
+| 适配器：POST、gzip、六项表单、映射、去重、发行的曲目数与碟数、缓存命中、换任一把密钥仍命中 | `sources/acoustid` 的 `TestLookupFingerprintRequestMappingAndCache` |
+| 全实例间隔 ≥ 334 ms；429/14、503/13 的退避与用尽；码 4、17、6 各自命名、不缓存；码 3、8 是空结果 | `TestLookupFingerprintGlobalInterval`、`TestLookupFingerprintBackoff`、`TestLookupFingerprintErrors` |
+| 专辑方式每条通过与不通过（抽样不足、暂时失败、sparse、spread、too_many、曲目数与碟数筛选、mismatch、title_artist_mismatch、ambiguous） | `program` 的 `TestB3FingerprintAlbumRules` |
+| 单曲方式（读回正式录音、分数、too_many、ambiguous、时长、title_mismatch、占位标题） | `TestB3FingerprintSingleRules` |
+| 信息不足、`fingerprint` 三种取值、途中密钥失效或源关闭时回退到搜索 | `TestB3FingerprintReachAndFallback` |
+| 不带指纹时与 B3 之前逐字段相同 | `TestB3MatchWithoutFingerprint`（同一组期望在 `main` 上也通过） |
+| 三个摘要的基准哈希与 `main` 相同 | `TestB3DigestBaseline` |
+| `needsWork` 的 32 种组合与旧状态的推断 | `TestB3FingerprintNeedsWork` |
+| 密钥接口（403、两种 400、两种 404、顺序、原因顺序、脱敏、密文用途、清除删行、变化标记） | `TestPostgreSQLB3AcoustIDKeyAPI` |
+| 回写：出站成功才 `valid`、时间不变、码 6 只标用户密钥、缓存命中不验证、compare-and-set | `TestPostgreSQLB3AcoustIDKeyWriteback` |
+| 真实 ffmpeg 与 fpcalc：整轨与 CUE、缓存、内容指纹与 CUE 帧与版本变化后重算、短轨边界、解码失败的冷却与上限 | `TestPostgreSQLB3AcousticFingerprintCache` |
+| 经 `app` 装配的一轮：占位专辑对上、补字段、待定候选带分数、两种无效密钥各自标记并回退搜索 | `TestPostgreSQLB3AcoustIDProgram` |
+| 指纹工具缺失或自检失败时其余三源、匹配、封面、歌词不受影响 | `TestPostgreSQLB3FingerprintToolUnavailable` |
+| 升级：没有密钥或不全时零重做；齐备后只重开该重开的、一次；其余代次与媒体状态不变 | `TestPostgreSQLB3LegacyWorkReopenedOnce` |
+| 暂停与扫描时闸门错误照常抛出、不写状态 | `TestPostgreSQLB3FingerprintGatePauseAndScan` |
+| 抽取取源函数后音频分析行为不变 | 现有 `TestFFmpegAnalysis*`、`TestPostgreSQLAnalysis*`、`TestAnalysisWorker*` |
+| 接口样本：`curation/sources`、`curation/source-key-set`、`curation/source-key-cleared`、`errors/curation-key-not-supported` | `TestPostgreSQLAPIResponseSamples` 与前端 `api-contract.test.ts` |
