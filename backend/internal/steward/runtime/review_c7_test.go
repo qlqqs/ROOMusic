@@ -1,16 +1,24 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/steward/provider"
+	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
+
+const c7ReviewOpaqueContent = "synthetic-c7-encrypted-reasoning"
 
 func TestC7ReviewRejectsInvalidResults(t *testing.T) {
 	item := `{"item_id":"a","decision":"approved","risk":"low","reasons":["证据充分"]}`
@@ -77,6 +85,7 @@ func (s *c7ReviewStream) Next() (provider.Event, error) {
 func (s *c7ReviewStream) Close() error { s.closed = true; return s.closeErr }
 
 func TestC7ReviewCallStrictStreamAndDeadline(t *testing.T) {
+	want := []ReviewItem{{ItemID: "a", Decision: "approved", Risk: "low", Reasons: []string{"证据充分"}, Source: "model"}}
 	for _, name := range []string{"valid", "text", "opaque", "wrong_tool", "multiple_calls", "no_call", "wrong_finish", "output_limit", "content_filter", "nil_finish", "nil_call", "nil_usage", "truncated", "close_error", "stream_error"} {
 		t.Run(name, func(t *testing.T) {
 			call := modelCall("submit_review", `{"items":[{"item_id":"a","decision":"approved","risk":"low","reasons":["证据充分"]}]}`)
@@ -86,7 +95,9 @@ func TestC7ReviewCallStrictStreamAndDeadline(t *testing.T) {
 			case "text":
 				events = append([]provider.Event{{Type: provider.EventText, Text: "批准"}}, events...)
 			case "opaque":
-				events = append([]provider.Event{{Type: provider.EventOpaque}}, events...)
+				block := provider.OpaqueBlock{Protocol: provider.ProtocolResponses, Data: json.RawMessage(`{"type":"reasoning","encrypted_content":"` + c7ReviewOpaqueContent + `"}`)}
+				events[2].ProviderBlocks = []provider.OpaqueBlock{block}
+				events = append([]provider.Event{{Type: provider.EventOpaque, Opaque: &block}}, events...)
 			case "wrong_tool":
 				events[0] = modelCall("other", `{}`)
 			case "multiple_calls":
@@ -127,8 +138,8 @@ func TestC7ReviewCallStrictStreamAndDeadline(t *testing.T) {
 				return stream, nil
 			})
 			results, usage, err := callReview(context.Background(), p, "review-model", []PlanItem{{ID: "a", Tool: "correct_release", Revertible: true}}, nil)
-			if name == "valid" || name == "wrong_finish" {
-				if err != nil || len(results) != 1 || usage.InputTokens == nil || *usage.InputTokens != 12 {
+			if name == "valid" || name == "opaque" || name == "wrong_finish" {
+				if err != nil || !reflect.DeepEqual(results, want) || usage.InputTokens == nil || *usage.InputTokens != 12 {
 					t.Fatal(results, usage, err)
 				}
 			} else if err == nil {
@@ -138,6 +149,73 @@ func TestC7ReviewCallStrictStreamAndDeadline(t *testing.T) {
 				t.Errorf("hits=%d closed=%v", hits, stream.closed)
 			}
 		})
+	}
+}
+
+func TestC7ReviewResponsesReasoningIsDiscarded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/responses" {
+			t.Errorf("Responses 请求为 %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, `event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"`+c7ReviewOpaqueContent+`"}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"submit_review","status":"completed","arguments":"{\"items\":[{\"item_id\":\"item-1\",\"decision\":\"needs_human_confirmation\",\"risk\":\"high\",\"reasons\":[\"需要人工核对\"]}]}"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":12,"output_tokens":4}}}
+
+`)
+	}))
+	defer server.Close()
+	p, err := provider.NewResponses(server.Client(), server.URL, "synthetic-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	params := runParams(p)
+	params.Caller.User.Role = "admin"
+	params.ReviewModel = "gpt-6.2-sol"
+	store := &backgroundRunStore{}
+	plan, err := store.CreatePlan(ctx, params.Caller.User.ID, params.ConversationID, []PlanItem{{
+		Tool: "synthetic_change", Input: json.RawMessage(`{}`), Revertible: true,
+	}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	runner := NewRunner(store, backgroundSharedRegistry(t), logger).WithReviewEvidence(func(context.Context, tool.Caller, PlanItem) (ReviewEvidenceFacts, error) {
+		return ReviewEvidenceFacts{Targets: json.RawMessage(`[]`)}, nil
+	})
+	var events []Event
+	state := runState{Runner: runner, params: params, logger: logger, sink: func(e Event) { events = append(events, e) }}
+	_, end, err := state.reviewPlan(ctx, plan)
+	saved := store.detail.Plans[0].Review
+	want := []ReviewItem{{ItemID: plan.Items[0].ID, Decision: "needs_human_confirmation", Risk: "high", Reasons: []string{"需要人工核对"}, Source: "model"}}
+	if err != nil || end != EndAwaitingConfirmation || saved == nil || saved.Status != "completed" || !reflect.DeepEqual(saved.Items, want) {
+		t.Fatalf("审查结果=%+v，结束原因=%s，错误=%v", saved, end, err)
+	}
+	if len(events) != 3 || events[1].Type != EventReviewFinished || !reflect.DeepEqual(events[1].Review, saved) {
+		t.Fatalf("审查事件=%+v", events)
+	}
+	for _, output := range []struct {
+		name  string
+		value any
+	}{{"保存的审查", saved}, {"事件", events}} {
+		raw, err := json.Marshal(output.value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(raw, []byte(c7ReviewOpaqueContent)) {
+			t.Errorf("%s泄漏不透明块内容", output.name)
+		}
+	}
+	if !strings.Contains(logs.String(), "steward.review.finished") || strings.Contains(logs.String(), c7ReviewOpaqueContent) {
+		t.Error("审查结束日志缺失或泄漏不透明块内容")
 	}
 }
 

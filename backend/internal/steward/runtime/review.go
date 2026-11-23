@@ -283,7 +283,10 @@ func callReview(ctx context.Context, p provider.Provider, model string, items []
 			return nil, usage, err
 		}
 		switch event.Type {
-		case provider.EventText, provider.EventOpaque, provider.EventSearch, provider.EventCitations:
+		case provider.EventOpaque:
+			// 推理模型可在提交审查前输出不透明块，直接丢弃并继续读取。
+			continue
+		case provider.EventText, provider.EventSearch, provider.EventCitations:
 			return nil, usage, ErrReviewUnavailable
 		case provider.EventUsage:
 			if event.Usage == nil {
