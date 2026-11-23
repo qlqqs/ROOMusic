@@ -68,6 +68,9 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       if (item.changes?.kind === "release_external_artwork") return "撤销自动补的封面";
       if (item.changes?.kind === "track_external_lyrics") return "撤销自动补的歌词";
       if (item.changes?.kind === "external_link") return "解除外部对应";
+      if (item.changes?.kind === "artist_merge") return "撤销合并艺人";
+      if (item.changes?.kind === "artist_rename") return "撤销修改主名";
+      if (item.changes?.kind === "artist_candidate_ignore") return item.changes.ignored ? "撤销忽略提示" : "撤销恢复提示";
       return "撤销";
   }
 }
@@ -131,9 +134,10 @@ function sameValue(a: FieldValue | null, b: FieldValue | null): boolean {
 
 function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[] {
   if (changes === null) return ["无法显示改动内容"];
-  // 艺人的治理不能撤销（reverse 用不到）：合并写“‘甲’并入‘乙’”，拆开写拆出到谁，改名写“主名：前 → 后”（改回自动时注明）。
+  // 艺人的治理：合并写“‘甲’并入‘乙’”，拆开写拆出到谁，改名写“主名：前 → 后”（改回自动时注明）；撤销（M7 G）时反过来写。
   if (changes.kind === "artist_merge") {
     const scope = artistScopeText(changes);
+    if (reverse) return [`“${changes.source.name}”从“${changes.target.name}”分回`, ...(scope === "" ? [] : [`涉及 ${scope}`])];
     return [`“${changes.source.name}”并入“${changes.target.name}”`, ...(scope === "" ? [] : [`涉及 ${scope}`])];
   }
   if (changes.kind === "artist_split") {
@@ -142,11 +146,13 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
     return [`从“${changes.source.name}”${how}“${changes.target.name}”`, ...(scope === "" ? [] : [`涉及 ${scope}`])];
   }
   if (changes.kind === "artist_rename") {
+    if (reverse) return [`主名：${changes.to.name} → ${changes.from.name}`];
     const note = changes.to.source === "auto" ? "（按最常见的写法）" : "";
     return [`主名：${changes.from.name} → ${changes.to.name}${note}`];
   }
   if (changes.kind === "artist_candidate_ignore") {
-    return [changes.ignored ? `不再提示与“${changes.other_artist.name}”重复` : `恢复与“${changes.other_artist.name}”重复的提示`];
+    const ignored = reverse ? !changes.ignored : changes.ignored;
+    return [ignored ? `不再提示与“${changes.other_artist.name}”重复` : `恢复与“${changes.other_artist.name}”重复的提示`];
   }
   if (changes.kind === "release_group_change") {
     return reverse ? [`从《${changes.to.group_title}》移回《${changes.from.group_title}》`] : [`从《${changes.from.group_title}》移到《${changes.to.group_title}》`];
@@ -185,8 +191,9 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
   if (changes.kind === "external_link") {
     const source = sourceName(changes.source);
     const tracks = changes.links.filter((link) => link.object_type === "track").length;
+    const artists = changes.links.filter((link) => link.object_type === "artist").length;
     const album = changes.links.some((link) => link.object_type === "release_group");
-    const extra = [album ? "专辑" : null, tracks === 0 ? null : `${tracks} 首曲目`].filter((part) => part !== null).join("、");
+    const extra = [album ? "专辑" : null, tracks === 0 ? null : `${tracks} 首曲目`, artists === 0 ? null : `${artists} 位艺人`].filter((part) => part !== null).join("、");
     const what = `${source}：${externalReleaseText(changes.external)}`;
     if (reverse) return [`解除与 ${what} 的对应`, ...(extra === "" ? [] : [`同时去掉${extra}的对应`])];
     return [`对上 ${what}`, `依据${linkMethodLabels[changes.method] ?? changes.method}${extra === "" ? "" : `，同时对上${extra}`}`];
@@ -243,12 +250,11 @@ export function revertLines(item: Pick<OperationItemDTO, "changes">): string[] {
 export function notRevertibleReason(item: Pick<OperationItemDTO, "type" | "revertible" | "reverted_by" | "release" | "album">): string | null {
   if (item.revertible) return null;
   if (item.type === "revert") return "已完成";
-  // 艺人的治理没有撤销：用相反的操作恢复（合并后拆开、拆开后合并、改名后再改名）。
-  if (item.type === "artist_merge") return "需要时可以拆开";
+  // 拆分不可撤销（M7 G）：它就是纠正错误合并的手段，需要时再合并。
   if (item.type === "artist_split") return "需要时可以再合并";
-  if (item.type === "artist_rename") return "需要时可以再改名";
-  if (item.type === "artist_candidate_ignore") return "不能撤销";
   if (item.reverted_by !== null) return "已撤销";
+  // 合并、改名、忽略候选可以撤销（M7 G）：撤不了是这位艺人之后又有修改（倒序撤销更晚的那些之后就能撤）。
+  if (item.type === "artist_merge" || item.type === "artist_rename" || item.type === "artist_candidate_ignore") return "之后又有修改";
   // 自动补全的撤销不看专辑是否可见，也不受之后的人工修改影响：撤不了只可能是同一个字段又被更晚的自动整理改写了。
   if (item.type === "release_auto_correction" || item.type === "track_auto_correction") return "之后又被自动整理改写";
   // 曲目的人工修改：撤不了是这首曲目之后又被修改过，或已经不在库里。

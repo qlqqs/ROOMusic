@@ -100,6 +100,14 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 - 列表与执行器核对写过的意图及写入者，合并还要求目标仍未重定向。按 `operations_artist_targets` 检查全部涉及的身份，只要有按 `(created_at,id)` 排在其后的生效操作就拒绝。排除撤销和已撤销记录。A→B 后又 B→C 时，先撤 B→C 再撤 A→B，两次撤销各自递增版本。
 - 撤销记录保存写回前和刷新后重读的快照，两边保留原 `changes` 和原操作类型，按全部涉及艺人可查。来源为 `curation` 的合并撤销在同一事务写 `artist_merge` 标记，目标为两个 ID 中较小者，值为另一位的 `{artist_id,name}`。标记写入失败则全部回滚。
 
+| 必需测试 | 断言 |
+| --- | --- |
+| `TestPostgreSQLArtistMergeRevertRestoresIntent`、`TestPostgreSQLArtistMergeRevertAfterRescan` | 原有及隐式绑定、发行与曲目作用域、扁平化身份与写入者、署名、主名、搜索名、收藏解析和合并来源逐项恢复；重扫新轨随路由恢复 |
+| `TestPostgreSQLArtistMergeRevertChainReverseOrder`、`TestPostgreSQLArtistMergeRevertBlockedByLaterDecision`、`TestPostgreSQLArtistRenameRevertChain`、`TestPostgreSQLArtistCandidateIgnoreRevertMixedPairs` | 倒序撤销、后续决定冲突、原显示名及写入者、仅恢复实际改动的忽略对 |
+| `TestPostgreSQLArtistRevertDescribeMatchesExecutor`、`TestPostgreSQLArtistRevertConcurrent`、`TestPostgreSQLArtistRevertCatalogNotReady`、`TestArtistSplitNeverReverts` | 列表和执行一致、并发只生效一次、目录状态和拆分限制 |
+| `TestPostgreSQLMigrationRollbackRoundTrip`（0066）、`TestPostgreSQLArtistRevertUsesInsertOrder` | 升级与回退的操作时间默认值；事务开始顺序倒置时仍拦截后续决定 |
+| `TestStewardArtistToolRevertibility`、`TestPostgreSQLStewardC6ArtistTools`、`TestPostgreSQLStewardReviewArtistTools`、`TestReviewPolicyRulesMatchSpec` | 管家工具登记、对话审查及艺人证据、操作列表撤销、策略文本同步 |
+
 ## 5. 基准与反例
 
 - 周杰伦/周杰倫同规范化键；Jay Chou是明确种子别名，管理员拆开后扫描不重种。

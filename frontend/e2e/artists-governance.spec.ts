@@ -18,7 +18,7 @@ test("艺人稳定性：纯键盘合并、I1 一键拆回旧身份，旧链接�
   await page.keyboard.type(seed.source.name);
   await page.keyboard.press("Enter");
   await artistKeyActivate(page, merge.getByRole("radio", { name: new RegExp(seed.source.name) }), "Space");
-  await expect(merge.getByRole("status")).toContainText("合并不能撤销，需要时可以再拆开。");
+  await expect(merge.getByRole("status")).toContainText("合并之后可以从操作记录撤销。");
   await artistKeyActivate(page, merge.getByRole("button", { name: "合并", exact: true }));
   await expect(merge).toBeHidden();
   await expect(page.getByText(`已把“${seed.source.name}”并入“${seed.artist.name}”。`, { exact: true })).toBeVisible();

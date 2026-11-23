@@ -7,8 +7,8 @@ import type { ArtistCommands, ArtistTarget } from "../hooks/use-artist-commands"
 import { ArtistDialogFailure } from "./artist-command-notice";
 import styles from "./artist-dialog.module.css";
 
-/** 合并后不能撤销：只用一句话说清楚，以及反向的办法。 */
-export const MERGE_IRREVERSIBLE_TEXT = "合并不能撤销，需要时可以再拆开。";
+/** 合并之后可以从操作记录撤销（M7 G）；之后又有修改时要先撤销更晚的那些。 */
+export const MERGE_IRREVERSIBLE_TEXT = "合并之后可以从操作记录撤销。";
 
 type MergeTarget = ArtistTarget & { revision: number };
 
@@ -60,7 +60,7 @@ function SearchResults({ query, target, selectedId, disabled, onSelect }: { quer
 type MergeArtistDialogProps = { open: boolean; target: MergeTarget; commands: ArtistCommands; onClose: () => void };
 
 /**
- * 合并艺人（管理员，在艺人页上）：搜到另一位并入当前艺人，对方的名字变成别名。确认前说明谁并入谁，并用一句话说明不能撤销。
+ * 合并艺人（管理员，在艺人页上）：搜到另一位并入当前艺人，对方的名字变成别名。确认前说明谁并入谁，并说明可以从操作记录撤销。
  * 409 时对话框保持打开并说明；结果不确定时主按钮变成用同一个幂等键“重试合并”。
  */
 export function MergeArtistDialog({ open, target, commands, onClose }: MergeArtistDialogProps) {

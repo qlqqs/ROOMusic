@@ -16,19 +16,20 @@ const id = upperId.toLowerCase();
 
 describe("艺人操作记录摘要", () => {
   it.each([
-    ["artist_merge", "合并艺人", "需要时可以拆开"],
+    // M7 G：合并、改名与忽略可以撤销，样本里不能撤销时是之后又有修改；拆分仍不可撤销。
+    ["artist_merge", "合并艺人", "之后又有修改"],
     ["artist_split", "拆开艺人", "需要时可以再合并"],
-    ["artist_rename", "修改艺人主名", "需要时可以再改名"],
-    ["artist_candidate_ignore", "忽略重复艺人提示", "不能撤销"],
-  ] as const)("%s 明确自己的类型与反向办法，不假称专辑不可见或发生后续修改", (type, label, reason) => {
+    ["artist_rename", "修改艺人主名", "之后又有修改"],
+    ["artist_candidate_ignore", "忽略重复艺人提示", "之后又有修改"],
+  ] as const)("%s 明确自己的类型与不能撤销的原因，不假称专辑不可见", (type, label, reason) => {
     // 真实 operations/artists 样本没有忽略记录；按公开 DTO 显式登记该类型，不声称后端样本覆盖。
     const item: OperationItemDTO = type === "artist_candidate_ignore"
       ? { ...recordOf("artist_merge"), type, changes: { kind: "artist_candidate_ignore", other_artist: { id, name: "另一位" }, ignored: true } }
       : recordOf(type);
     expect(operationTypeLabel(item)).toBe(label);
-    expect(item.revertible).toBe(false);
-    expect(notRevertibleReason(item)).toBe(reason);
-    expect(notRevertibleReason({ ...item, release: null, album: null })).toBe(reason);
+    const blocked = { ...item, revertible: false, reverted_by: null };
+    expect(notRevertibleReason(blocked)).toBe(reason);
+    expect(notRevertibleReason({ ...blocked, release: null, album: null })).toBe(reason);
   });
 
   it("合并摘要使用当时快照的双方名字和完整范围，不被当前主名覆盖", () => {

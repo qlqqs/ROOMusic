@@ -99,7 +99,7 @@ export function skippedSummary(skipped: readonly { code: string }[]): string[] {
   return [...counts].map(([reason, n]) => `${reason} ${n} 条`);
 }
 
-const targetText: Record<SuppressionDTO["target_type"], string> = { release: "发行", track: "曲目", release_group: "专辑" };
+const targetText: Record<SuppressionDTO["target_type"], string> = { release: "发行", track: "曲目", release_group: "专辑", artist: "艺人" };
 
 /** 标记的对象类型。 */
 export function suppressionTargetText(item: SuppressionDTO): string {
@@ -111,6 +111,8 @@ const subjectText: Record<string, string> = {
   lyrics: "歌词",
   external_link: "外部对应",
   group_join: "归组",
+  // 自动合并的两位艺人（M7 G）：撤销之后不再自动合并。
+  artist_merge: "自动合并艺人",
 };
 
 /** 标记的类别：字段名，或封面、歌词、外部对应、归组；曲目上的标题与艺人（M7 I）写“曲目标题”“曲目艺人”。 */
@@ -129,6 +131,7 @@ export function isPairedIdentityMarker(item: SuppressionDTO): boolean {
 export function suppressionValueText(item: SuppressionDTO): string {
   const value = item.value;
   if (item.subject === "group_join") return "归入另一张专辑";
+  if (item.subject === "artist_merge") return typeof value["name"] === "string" ? `与“${value["name"]}”合并` : "与另一位艺人合并";
   if (item.subject in correctionFieldLabels) {
     if (value["mode"] === "null") return "留空";
     const raw = value["value"];

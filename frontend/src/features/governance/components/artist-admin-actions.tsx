@@ -22,7 +22,7 @@ const ADMIN_GROUP = "管理";
  * 艺人页头部里管理员的操作（只有管理员看到；后端仍独立鉴权），与专辑页的 useReleaseAdminActions 同一种组合方式。返回两部分，由页面组合：
  * - actions：放进“更多”菜单“管理”分组的项：合并艺人…、拆开…、修改主名…、操作记录（这位艺人的记录）；
  * - panel：放在操作行下方的上一次操作的结果提示与各个对话框。
- * 这些操作不能撤销（反向操作就是恢复的办法），确认前各用一句话说明。命令的状态由页面持有。
+ * 合并、改名与忽略候选可以从操作记录撤销，拆开不能（再合并就是恢复的办法），确认前各用一句话说明。命令的状态由页面持有。
  * 菜单项打开对话框时，菜单先把焦点还给“更多”按钮，对话框关闭后焦点回到那里。
  */
 export function useArtistAdminActions({ artist, commands }: ArtistAdminActionsProps): { actions: MenuAction[]; panel: ReactNode } {
