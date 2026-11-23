@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
-	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
 )
 
 // DiscoverReleaseMerges 与扫描、并入事务共用目录写锁，避免并发匹配把两个方向分别入队。
@@ -18,7 +17,7 @@ func (w *Writer) DiscoverReleaseMerges(ctx context.Context, external string, ver
 		return err
 	}
 	defer tx.Rollback()
-	if err = ingest.LockProjectionWrites(ctx, tx); err != nil {
+	if err = governance.LockCatalogWrites(ctx, tx); err != nil {
 		return err
 	}
 	if err = w.discoverReleaseMerges(ctx, tx, external, version); err != nil {

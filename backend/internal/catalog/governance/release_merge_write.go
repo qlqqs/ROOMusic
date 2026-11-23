@@ -37,6 +37,11 @@ type mergeRecordState struct {
 	Favorites []albumfavorites.MergedAlbumFavorite `json:"favorites,omitempty"`
 }
 
+// LockCatalogWrites 取得目录写锁（与扫描写入同一把），供不直接依赖扫描包的调用方在并入相关的事务里使用。
+func LockCatalogWrites(ctx context.Context, tx *sql.Tx) error {
+	return ingest.LockProjectionWrites(ctx, tx)
+}
+
 func lockMergeReleases(ctx context.Context, tx *sql.Tx, target, source string) error {
 	if err := ingest.LockProjectionWrites(ctx, tx); err != nil {
 		return err

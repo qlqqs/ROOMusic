@@ -13,7 +13,6 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
-	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/operations"
@@ -247,7 +246,7 @@ func (r *ExceptionResolver) acceptMerge(ctx context.Context, e curation.ModelExc
 		req := curation.ReleaseAutoMerge{ItemID: item.ID, Token: p.Token, ConfirmedBy: actor, ExceptionID: e.ID, Key: key, RequestID: requestID,
 			Source: curation.Source{Kind: "model", Provider: e.Provider, Basis: truncateBasis(in.Basis.Note)},
 			CheckPreview: func(current governance.ReleaseMergePreview) error {
-				return compareChanges(e, program.ReleaseMergeChanges(current))
+				return compareChanges(e, program.ReleaseMergeChanges(current.Source, current.Target, current.Token, current.Hidden, current.FavoritesMoved))
 			}}
 		if e.ConversationID != nil {
 			req.ConversationID = *e.ConversationID
@@ -365,7 +364,7 @@ func (r *ExceptionResolver) Decline(ctx context.Context, id, actor string) (cura
 	}
 	defer tx.Rollback()
 	if e.Tool == "merge_releases" {
-		if err = ingest.LockProjectionWrites(ctx, tx); err != nil {
+		if err = governance.LockCatalogWrites(ctx, tx); err != nil {
 			return e, err
 		}
 	}
