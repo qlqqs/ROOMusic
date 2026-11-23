@@ -118,7 +118,7 @@ I、G、H 只依赖地基，可以在里程碑一、二进行期间穿插；表�
 - 完成后留给后续子任务的（B3 的交付记录）：
   - D：AcoustID 带来的待定项方法是 `acoustid`，候选带 `score`（各曲目最高分之间的最小值）；新冲突代码 `acoustid_mismatch`、`acoustid_spread`、`acoustid_sparse`、`title_mismatch`。
     外部已合并的旧录音 ID 可能误报 `acoustid_mismatch`，模型判断时可用 MusicBrainz 按 ID 读回核对。
-  - E2：AcoustID 需要两把密钥（应用密钥、用户密钥，上游 2027-01-01 起强制），界面已在 E1 的外部源一组里；`key_invalid` 时只标出错的那一把。
+  - E2：AcoustID 的密钥界面已在 E1 的外部源一组里；发布镜像内置应用密钥（B3 补充），管理员只填用户密钥（上游 2027-01-01 起强制），自行构建的没有内置时是两把；`key_invalid` 时只标出错的那一把，内置密钥被拒时原因是 `bundled_key_rejected`。
   - I：单曲方式经 AcoustID 对上的录音已有正式的 MusicBrainz 数据，曲目标题与艺人的补全可直接用。
   - V12：真实试用时统计 AcoustID 的命中、`ambiguous` 与 `too_many` 的比例。
 
