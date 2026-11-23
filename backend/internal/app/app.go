@@ -220,12 +220,12 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 			},
 		},
 	).WithScanCheck(scanRunning).WithKeyStore(instanceSecrets)
-	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger)
 	artistGovernance := governance.NewArtistGovernance(artistResolutionAdapter{})
+	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger).WithArtists(artistGovernance)
 	operationKinds := []operations.Kind{curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
 		governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.TrackCorrectionOperations(), governance.TrackAutoCorrectionOperations(curationWriter), governance.GroupChangeOperations(curationWriter), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations()}
-	operationKinds = append(operationKinds, governance.ArtistOperations(artistGovernance, artistMergeSuppressions{})...)
+	operationKinds = append(operationKinds, governance.ArtistOperations(artistGovernance, curationWriter)...)
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
 	catalogapi.New(database, guard, settings.DataDirectory, logger, catalogapi.WithAnalysisVersion(analysis.Version)).Register(mux)
@@ -386,16 +386,4 @@ func (app *App) ShutdownSteward(ctx context.Context) error {
 		return nil
 	}
 	return app.steward.Shutdown(ctx)
-}
-
-type artistMergeSuppressions struct{}
-
-func (artistMergeSuppressions) SuppressArtistMerge(ctx context.Context, tx *sql.Tx, targetID, sourceID, revertID, actorID string) error {
-	first, second := min(targetID, sourceID), max(targetID, sourceID)
-	_, err := tx.ExecContext(ctx, `INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by)
- SELECT 'artist',$1,'artist_merge',encode(sha256(convert_to($2,'UTF8')),'hex'),
-   jsonb_build_object('artist_id',a.id,'name',COALESCE(p.effective_display_name,a.initial_name)),$3,$4
- FROM artists a LEFT JOIN artist_profiles p ON p.artist_id=a.id WHERE a.id=$2::uuid
- ON CONFLICT(target_type,target_id,subject,value_hash) DO NOTHING`, first, second, revertID, actorID)
-	return err
 }

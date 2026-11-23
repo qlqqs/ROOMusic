@@ -146,3 +146,36 @@ func (g *ArtistGovernance) mergeLocked(ctx context.Context, tx *sql.Tx, operatio
 	return operations.Outcome{TargetType: operations.TargetArtist, TargetID: target.ID, Targets: artistTargets(oldIDs...), ExpectedRevision: target.Revision, ResultRevision: target.Revision + 1, Before: before, After: after,
 		Response: map[string]any{"operation_id": operationID, "artist_id": target.ID, "revision": target.Revision + 1, "source": map[string]any{"id": source.ID, "revision": source.Revision + 1, "redirect_artist_id": target.ID}}}, nil
 }
+
+// CurationMergeExecutor 持目录锁确定保留的身份，再核对本次合并的外部证据。
+func (g *ArtistGovernance) CurationMergeExecutor(a, b string, check func(context.Context, *sql.Tx) error) operations.Executor {
+	return func(ctx context.Context, tx *sql.Tx, operationID string) (operations.Outcome, error) {
+		if err := lockArtistCatalog(ctx, tx); err != nil {
+			return operations.Outcome{}, err
+		}
+		if a == b {
+			return operations.Outcome{}, operations.Conflict("same_artist", "不能合并同一位艺人")
+		}
+		ids, err := lockArtists(ctx, tx, a, b)
+		if err != nil {
+			return operations.Outcome{}, err
+		}
+		if ids[a].RedirectArtistID != nil || ids[b].RedirectArtistID != nil {
+			return operations.Outcome{}, operations.Conflict("artist_redirected", "艺人已合并，请刷新后再试")
+		}
+		var target string
+		err = tx.QueryRowContext(ctx, `SELECT a.id::text FROM artists a WHERE a.id IN ($1,$2)
+ ORDER BY (SELECT count(*) FROM artist_effective_credits c WHERE c.artist_id=a.id) DESC,a.id LIMIT 1`, a, b).Scan(&target)
+		if err != nil {
+			return operations.Outcome{}, err
+		}
+		source := a
+		if target == a {
+			source = b
+		}
+		if err := check(ctx, tx); err != nil {
+			return operations.Outcome{}, err
+		}
+		return g.mergeLocked(ctx, tx, operationID, ids[target], ids[source])
+	}
+}

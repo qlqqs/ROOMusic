@@ -206,8 +206,8 @@ func subjectEvidence(subject string, e catalog.CurationEvidence, state curation.
 }
 
 type outcome struct {
-	status, group, trackFields string
-	match                      MatchResult
+	status, group, trackFields, artistLinks string
+	match                                   MatchResult
 }
 
 func (w *Worker) evaluate(ctx context.Context, u *unit, e catalog.CurationEvidence, fingerprintRequired bool) (out outcome, err error) {
@@ -240,7 +240,7 @@ func (w *Worker) evaluate(ctx context.Context, u *unit, e catalog.CurationEviden
 		}
 		out.match, err = MatchWithFingerprint(ctx, e, r, f, step)
 		if err == nil && out.match.Status == "matched" {
-			out.group, err = w.applyMatch(ctx, u, e, out.match)
+			out.group, out.artistLinks, err = w.applyMatch(ctx, u, e, out.match)
 			out.trackFields = "done"
 		}
 		out.status = out.match.Status
@@ -262,8 +262,11 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	digest := subjectDigest(subject, input, id)
 	now := w.opts.Now()
 	ordinary := needsWork(subject, state, digest, now, false)
-	if subject == "release" && !ordinary && needsTrackFields(state, input) {
-		return w.backfillTrackFields(ctx, e, state, states)
+	if subject == "release" && !ordinary {
+		tracks, artists := matchBackfills(state, input)
+		if tracks || artists {
+			return w.backfillMatch(ctx, e, state, states, tracks, artists)
+		}
 	}
 	if !ordinary && !needsWork(subject, state, digest, now, states.fingerprintAvailable) {
 		return nil
@@ -446,8 +449,9 @@ func releaseResult(out outcome) []byte {
 		ExternalGroupID string   `json:"external_group_id,omitempty"`
 		Conflicts       []string `json:"conflicts"`
 		Group           string   `json:"group,omitempty"`
+		ArtistLinks     string   `json:"artist_links,omitempty"`
 		TrackFields     string   `json:"track_fields,omitempty"`
-	}{Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group, TrackFields: out.trackFields}
+	}{Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks}
 	if m.Release != nil {
 		r.ExternalID, r.ExternalGroupID = m.Release.ID, m.Release.Group.ID
 	}
