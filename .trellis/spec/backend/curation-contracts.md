@@ -646,7 +646,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 迁移 0064 给自动整理设置增加 `model`、`model_daily_token_limit` 和独立的 `model_updated_at`。只改模型设置时，程序层的变化标记 `updated_at` 保持原值。按服务器本地日期在 `curation_model_usage` 原子累加输入与输出 token。主模型、独立审查与会话摘要均计入，缺少的计数字段作零。
 
-待定项保存会话、领取时间、未处理次数、重审次数、下次尝试时间和搁置原因。证据摘要变化时，程序可将搁置项重新放回 `waiting_model` 并清零未处理次数。`curation_model_exceptions` 以方案项 ID 唯一，保存待定项、工具输入、预览、模型写入者、审查决定与理由、会话和人工决定。删除会话会清空例外的会话引用，例外仍可读取。0064 回退会删除整理会话、例外和按日用量。
+待定项保存会话、领取时间、未处理次数、重审次数、下次尝试时间和搁置原因。证据摘要变化时，程序可将搁置项重新放回 `waiting_model` 并清零未处理次数。程序重判时，领取中（`in_progress`）的项也刷新摘要、规则版本、证据、候选与冲突，领取关系、会话与各计数不变；否则工作状态记下新摘要后不会再重判，模型每次都得到 `item_stale`（V12 发现：建项后同轮补歌词即触发）。`waiting_human` 不随重判更新。`curation_model_exceptions` 以方案项 ID 唯一，保存待定项、工具输入、预览、模型写入者、审查决定与理由、会话和人工决定。删除会话会清空例外的会话引用，例外仍可读取。0064 回退会删除整理会话、例外和按日用量。
 
 ### 17.2 调度、停止与收尾
 
@@ -713,6 +713,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | R5 主动搁置、证据变化重开、连续三次未处理后搁置 | `TestPostgreSQLCurationModelShelveAndReopen`、`TestPostgreSQLCurationModelUnhandledThreeTimes` |
 | R6 启停条件、开启者变更、凭据取消、登出后继续；最后一步暂停后释放领取并保留次数 | `TestPostgreSQLCurationModelStopConditions` |
 | R7 主模型、审查、摘要按日计量，对话用量排除；额度用尽、跨日恢复和不限额 | `TestPostgreSQLCurationModelDailyLimit` |
+| 领取中的待定项随程序重判刷新摘要与证据、保留领取；其他状态的既有行为；领取后补歌词再匹配不是 `item_stale` | `TestPostgreSQLCurationPendingUpsert`、`TestPostgreSQLCurationModelPlanAfterClaimRefresh` |
 | R8 人工采纳、前值冲突、重复决定、拒绝后的字段与对应标记；分步匹配中断后原管理员续做 | `TestPostgreSQLCurationExceptionAcceptDecline` |
 | R9 外部证据来源、后台第 21 项提案和旧版批准的执行守卫 | `TestPostgreSQLStewardReviewPolicyV2Evidence`、`TestBackgroundTwentyFirstSharedCallRejected`、`TestPostgreSQLStewardReviewV1ApprovalRejected` |
 | R10 三个对话占满时仍可启动后台运行，后台名额全实例唯一 | `TestPostgreSQLCurationModelBackgroundSlot`、`TestSupervisorBackgroundSlot` |
