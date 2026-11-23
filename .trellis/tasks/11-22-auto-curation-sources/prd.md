@@ -142,18 +142,18 @@
 
 用合成曲库验收，曲库覆盖 U7 列出的各种形态；外部源在自动化测试里用受控的本地服务代替，不请求真实服务。
 
-- [ ] V1 总开关关闭时，后端不向任何外部源发请求，也不发起后台的模型调用。
-- [ ] V2 打开开关、不配置模型：扫描后不需要任何人工操作，能匹配上的发行补上了封面、歌词和空的字段，建立了外部对应；每一项在整理记录里有来源与依据。
-- [ ] V3 人工修正过的字段，自动整理给出不同的值时，显示的仍是人工的值；清除人工修正后显示自动层的值；再清除自动层后显示扫描值。
-- [ ] V4 按批撤销后，这一批改过的字段、封面、歌词回到这一批之前的状态；这一批之后有人工修改的发行同样能撤。
-- [ ] V5 撤销过的自动修改，在之后的整理里不会再次出现；重扫不清掉自动层、外部封面、外部歌词和外部对应。
-- [ ] V6 配置模型后：程序拿不准的项由模型提出修改，审查通过的自动执行；审查转人工或没通过的出现在例外队列，采纳后执行，不采纳后不再提出。
-- [ ] V7 审查不可用时什么都不执行；当天用量达到上限后不再发起模型调用，次日继续；管理员被停用、清除密钥或关掉开关后后台停止。
-- [ ] V8 MusicBrainz（含封面清单）的请求全实例不超过每秒 1 次；某个源关闭后不再向它发请求。
-- [ ] V9 自动的专辑归组、艺人合并、发行合并只在有强证据时发生，每一项都能撤销并回到操作前原样。
-- [ ] V10 曲目标题与曲目艺人：人工可改、自动可写、人工优先、可撤销；流媒体下载的单曲（没有条码与编号）能靠 ISRC 或声学指纹匹配并补全。
-- [ ] V11 音乐目录以只读方式挂载时全部功能可用，源文件的内容与修改时间不变。
-- [ ] V12 真实环境试用一次：真实的 MusicBrainz、Cover Art Archive、LRCLIB、AcoustID 与一个真实模型端点，对合成曲库跑完一轮，记录匹配比例、token 消耗与发现的问题。
+- [x] V1 总开关关闭时，后端不向任何外部源发请求，也不发起后台的模型调用。（`TestPostgreSQLCurationSourcesGate`、`TestPostgreSQLCurationProgramGates`、`TestPostgreSQLCurationDisabledBeforeFirstEnable`）
+- [x] V2 打开开关、不配置模型：扫描后不需要任何人工操作，能匹配上的发行补上了封面、歌词和空的字段，建立了外部对应；每一项在整理记录里有来源与依据。（`TestPostgreSQLCurationProgramEndToEnd`、`TestPostgreSQLCurationScannedAlbumProvenance`）
+- [x] V3 人工修正过的字段，自动整理给出不同的值时，显示的仍是人工的值；清除人工修正后显示自动层的值；再清除自动层后显示扫描值。（`TestPostgreSQLCurationFieldPriority`）
+- [x] V4 按批撤销后，这一批改过的字段、封面、歌词回到这一批之前的状态；这一批之后有人工修改的发行同样能撤。（`TestPostgreSQLCurationBatchRevert`、`TestPostgreSQLExternalScopeRevert`、`TestPostgreSQLCurationBatchRevertKeepsManualEdit`）
+- [x] V5 撤销过的自动修改，在之后的整理里不会再次出现；重扫不清掉自动层、外部封面、外部歌词和外部对应。（`TestPostgreSQLCurationSuppression`、`TestPostgreSQLCurationRescan`、`TestPostgreSQLExternalArtworkRescan`、`TestPostgreSQLCurationTrackAutoSurvivesRescan`）
+- [x] V6 配置模型后：程序拿不准的项由模型提出修改，审查通过的自动执行；审查转人工或没通过的出现在例外队列，采纳后执行，不采纳后不再提出。（`TestPostgreSQLCurationModelReviewPaths`、`TestPostgreSQLCurationExceptionAcceptDecline`、`TestPostgreSQLCurationExceptionMergeAcceptDecline`）
+- [x] V7 审查不可用时什么都不执行；当天用量达到上限后不再发起模型调用，次日继续；管理员被停用、清除密钥或关掉开关后后台停止。（`TestPostgreSQLCurationModelReviewUnavailableBackoff`、`TestPostgreSQLCurationUnavailableReviewPreservesWrites`、`TestPostgreSQLCurationModelDailyLimit`、`TestPostgreSQLCurationModelStopConditions`）
+- [x] V8 MusicBrainz（含封面清单）的请求全实例不超过每秒 1 次；某个源关闭后不再向它发请求。（`TestSharedOutboundInterval`、`TestCoverArtLimiters`、`TestPostgreSQLCurationProgramSourceSwitches`）
+- [x] V9 自动的专辑归组、艺人合并、发行合并只在有强证据时发生，每一项都能撤销并回到操作前原样。（`TestPostgreSQLCurationCJoinGroup`、`TestPostgreSQLCurationAutoMergeRevertSuppresses`、`TestPostgreSQLArtistMergeRevertRestoresIntent`、`TestPostgreSQLCurationMergeRevert`、`TestPostgreSQLReleaseMergeRevert`）
+- [x] V10 曲目标题与曲目艺人：人工可改、自动可写、人工优先、可撤销；流媒体下载的单曲（没有条码与编号）能靠 ISRC 或声学指纹匹配并补全。（`TestPostgreSQLTrackAutoApply`、`TestPostgreSQLTrackCorrectionAPI`、`TestPostgreSQLCurationStreamingSingleEnrichment`（ISRC 只在标题相等时直接匹配，标题是占位时交给模型，按 C 的合同））
+- [x] V11 音乐目录以只读方式挂载时全部功能可用，源文件的内容与修改时间不变。（`TestPostgreSQLCurationReadOnlyMusicTree`）
+- [ ] V12 真实环境试用一次：真实的 MusicBrainz、Cover Art Archive、LRCLIB、AcoustID 与一个真实模型端点，对合成曲库跑完一轮，记录匹配比例、token 消耗与发现的问题。（未执行：需要 AcoustID 应用密钥与真实模型端点，步骤与记录表见 `v12-trial.md`）
 
 ## 本任务取代的既有决定
 
