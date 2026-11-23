@@ -92,14 +92,18 @@ type PendingItem struct {
 }
 
 func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
-	_, err := q.ExecContext(ctx, `INSERT INTO curation_pending_items(target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts)
+	_, err := q.ExecContext(ctx, `INSERT INTO curation_pending_items AS p(target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts)
  VALUES('release',$1,$2,'waiting_model',$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'))
  ON CONFLICT(target_type,target_id,kind) WHERE status <> 'resolved' DO UPDATE SET rule_version=excluded.rule_version,input_digest=excluded.input_digest,
- evidence=excluded.evidence,candidates=excluded.candidates,conflicts=excluded.conflicts,updated_at=now(),status='waiting_model',
- attempts=CASE WHEN curation_pending_items.status='shelved' THEN 0 ELSE curation_pending_items.attempts END,
- shelved_reason=NULL, conversation_id=NULL, claimed_at=NULL,review_retries=0,
- next_attempt_at=CASE WHEN curation_pending_items.status='waiting_model' THEN curation_pending_items.next_attempt_at END
- WHERE curation_pending_items.status='waiting_model' OR (curation_pending_items.status='shelved' AND curation_pending_items.input_digest<>excluded.input_digest)`, item.TargetID, item.Kind, item.RuleVersion, item.InputDigest, item.Evidence, item.Candidates, item.Conflicts)
+ evidence=excluded.evidence,candidates=excluded.candidates,conflicts=excluded.conflicts,updated_at=now(),
+ status=CASE WHEN p.status='shelved' THEN 'waiting_model' ELSE p.status END,
+ attempts=CASE WHEN p.status='shelved' THEN 0 ELSE p.attempts END,
+ shelved_reason=CASE WHEN p.status='in_progress' THEN p.shelved_reason END,
+ conversation_id=CASE WHEN p.status='in_progress' THEN p.conversation_id END,
+ claimed_at=CASE WHEN p.status='in_progress' THEN p.claimed_at END,
+ review_retries=CASE WHEN p.status='in_progress' THEN p.review_retries ELSE 0 END,
+ next_attempt_at=CASE WHEN p.status IN ('waiting_model','in_progress') THEN p.next_attempt_at END
+ WHERE p.status IN ('waiting_model','in_progress') OR (p.status='shelved' AND p.input_digest<>excluded.input_digest)`, item.TargetID, item.Kind, item.RuleVersion, item.InputDigest, item.Evidence, item.Candidates, item.Conflicts)
 	return err
 }
 
