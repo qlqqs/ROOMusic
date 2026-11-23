@@ -65,6 +65,8 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/catalog/status", handlers.catalogStatus)
 	mux.HandleFunc("GET /api/v1/releases", handlers.listReleases)
 	mux.HandleFunc("GET /api/v1/releases/{id}/evidence", handlers.releaseEvidence)
+	mux.HandleFunc("GET /api/v1/tracks/{id}/corrections", handlers.trackCorrections)
+	mux.HandleFunc("PATCH /api/v1/tracks/{id}/corrections", handlers.correctTrack)
 	mux.HandleFunc("GET /api/v1/releases/{id}/corrections", handlers.releaseCorrections)
 	mux.HandleFunc("PATCH /api/v1/releases/{id}/corrections", handlers.correctRelease)
 	mux.HandleFunc("POST /api/v1/releases/{id}/group", handlers.changeReleaseGroup)

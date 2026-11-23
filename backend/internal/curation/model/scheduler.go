@@ -219,7 +219,7 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 			return "", err
 		}
 		for _, p := range items {
-			if (e.Tool == "resolve_release_match" && strings.EqualFold(target.ItemID, p.ID)) || (e.Tool == "correct_release" && strings.EqualFold(target.ReleaseID, p.TargetID)) {
+			if (e.Tool == "resolve_release_match" && strings.EqualFold(target.ItemID, p.ID)) || ((e.Tool == "correct_release" || e.Tool == "correct_track") && strings.EqualFold(target.ReleaseID, p.TargetID)) {
 				e.PendingItemID, e.ConversationID, e.Provider = p.ID, &conversation, model
 				return s.writer.CreateException(ctx, e)
 			}

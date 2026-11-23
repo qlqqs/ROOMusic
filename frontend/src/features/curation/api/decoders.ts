@@ -166,7 +166,9 @@ const exceptionDecoder = d.object({
     source: d.oneOf(["model", "policy"] as const),
   }),
   status: d.oneOf(["open", "accepting", "accepted", "declined"] as const),
-  tool: d.oneOf(["resolve_release_match", "correct_release"] as const),
+  tool: d.oneOf(["resolve_release_match", "correct_release", "correct_track"] as const),
+  // 曲目字段的提案（M7 I）带曲目（提出时的有效标题）。
+  track: d.optional(d.object({ id: d.uuid(), title: d.string({ max: d.unbounded }) })),
 });
 const exceptionPageDecoder = d.object({
   items: d.array(exceptionDecoder, { max: MAX_PAGE_ITEMS }),

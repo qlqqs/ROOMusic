@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/11-23-auto-curation-i-track-fields/research/track-fields-current.md", "reason": "读取处、发行级修正的实现路径与风险（带行号）"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "§3 发行修正、§4 自动层、§15–17"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移与视图约定"}
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "发行修正的人工层合同（照它做曲目）"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "署名事实与有效署名"}

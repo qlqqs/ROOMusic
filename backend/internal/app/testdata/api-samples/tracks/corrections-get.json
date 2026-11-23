@@ -1,0 +1,26 @@
+{
+  "body": {
+    "fields": [
+      {
+        "auto": null,
+        "correction": null,
+        "effective_value": "01",
+        "field": "title",
+        "scan_value": "01",
+        "uncertain": true
+      },
+      {
+        "auto": null,
+        "correction": null,
+        "effective_value": "未知艺术家",
+        "field": "artist",
+        "scan_value": "未知艺术家",
+        "uncertain": true
+      }
+    ],
+    "release_id": "00000000-0000-4000-8000-000000000001",
+    "revision": 1,
+    "track_id": "00000000-0000-4000-8000-000000000002"
+  },
+  "status": 200
+}

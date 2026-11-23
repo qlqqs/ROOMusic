@@ -27,14 +27,17 @@ type Suppression struct {
 }
 
 func (w *Writer) SuppressReleaseValue(ctx context.Context, tx *sql.Tx, releaseID, field string, value catalog.CorrectionIntent, revertID, actorID string) error {
+	return suppressField(ctx, tx, "release", releaseID, field, value, revertID, actorID)
+}
+func (w *Writer) SuppressTrackValue(ctx context.Context, tx *sql.Tx, trackID, field string, value catalog.CorrectionIntent, revertID, actorID string) error {
+	return suppressField(ctx, tx, "track", trackID, field, value, revertID, actorID)
+}
+func suppressField(ctx context.Context, tx *sql.Tx, target, id, field string, value catalog.CorrectionIntent, revertID, actorID string) error {
 	raw, hash, err := governance.AutoValueKey(field, value)
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by)
- VALUES('release',$1::uuid,$2,$3,$4::jsonb,NULLIF($5,'')::uuid,$6::uuid)
- ON CONFLICT(target_type,target_id,subject,value_hash) DO NOTHING`, releaseID, field, hash, string(raw), revertID, actorID)
-	return err
+	return insertSuppression(ctx, tx, target, id, field, hash, raw, revertID, actorID)
 }
 
 func (w *Writer) Suppressions(ctx context.Context, releaseID string, page, pageSize int) ([]Suppression, int64, error) {

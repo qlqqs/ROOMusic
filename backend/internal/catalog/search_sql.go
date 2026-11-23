@@ -51,7 +51,7 @@ func newSearchPlan(query, kind, mode string, generation int64) searchPlan {
 		 UNION ALL
 		 SELECT t.id,NULL::uuid,t.id,f.field,NULL::text,f.original_value,
 		 CASE WHEN f.original_value ILIKE $1 ESCAPE '~' THEN 0 WHEN f.original_value ILIKE $1 || '%' ESCAPE '~' THEN 1 ELSE 2 END
-		 FROM tracks t CROSS JOIN LATERAL (VALUES ` + trackFields + `) f(field,original_value)
+		 FROM track_effective t CROSS JOIN LATERAL (VALUES ` + trackFields + `) f(field,original_value)
 		 WHERE t.source_status='present' AND f.original_value ILIKE '%' || $1 || '%' ESCAPE '~'
 		)`
 	}
@@ -174,7 +174,7 @@ func (p searchPlan) pageSQL(attention bool) string {
 	var titleSubject, titleField, legacyOrder string
 	switch p.kind {
 	case "tracks":
-		query += `JOIN tracks t ON t.id=b.entity_id `
+		query += `JOIN track_effective t ON t.id=b.entity_id `
 		titleSubject, titleField = `title_value.track_id=t.id`, "track_title"
 		legacyOrder = `LOWER(t.title),LOWER(t.artist),t.id`
 	case "releases":

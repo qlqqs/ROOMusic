@@ -223,3 +223,15 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 app注入 `RefreshArtistResolution(ctx,tx,mapping)`；治理不得直接访问personal表。艺人新写未ready为409 artist_catalog_not_ready，既有成功幂等重放仍返回原结果。修正/清除/撤销、claim双方、归组在原CATP事务中刷新艺人有效署名与搜索，扫描不改四张人工意图表或edit_revision。新HTTP与schema验证必须覆盖准备态、revision/幂等、scope冲突、部分写失败回滚和不可撤销。
 
 I1 来源读取仍遵循[艺人合同](./artist-contracts.md)，不改治理记录或 revision。
+
+## 曲目修正（人工层）
+
+管理员通过 `GET /api/v1/tracks/{id}/corrections` 读取一首在库曲目的 `track_id`、当前 `release_id`、曲目人工版本 `revision` 和 `fields`。字段按 `title`、`artist` 排列，每项含 `field`、`scan_value`、`correction`、`auto`、`effective_value`、`uncertain`。后者取扫描观察的推断标记。没有意图时对应层返回 JSON null。管理员校验先于 UUID 校验，曲目缺失或不存在返回 404。
+
+同一路径的 PATCH 沿用发行修正的同源、管理员、UUID、幂等键和请求体检查顺序。请求提供正整数 `expected_revision` 与 `changes`。两个字段都接受 `set` 和 `clear`。文本经发行修正的规范化后必须非空，限 4096 字节。`null` 或未知字段返回 `400 invalid_correction`，所有意图都与原来相同返回 `400 no_changes`。例如清除已有标题修正会立即显示当前自动值，缺少自动值时显示扫描值。
+
+`operations.Run` 在幂等锁内取得 CATP，再锁曲目当前所属发行与曲目。版本过期返回 `409 revision_conflict`。成功时单独递增 `tracks.edit_revision`，返回最新状态与 `operation_id`。同键同义重放原响应。标题与艺人修正都在事务内刷新曲目搜索，艺人修正同时刷新所属发行的署名。发行详情的曲目用可选 `corrected_fields`、`auto_fields` 标明各字段当前生效的层。
+
+操作类型 `track_correction` 以当时所属发行为目标，前后快照含 `track_id`、`track_title`、改动字段的意图与当时的有效值。列表按曲目的在库状态与当前曲目版本判断能否撤销。撤销恢复之前的人工意图，并递增曲目版本。曲目已缺失或后续人工版本变化时返回 `409 revert_conflict`。同发行另一首曲目的编辑可以独立撤销。曲目移到另一发行后，撤销记录属于它当前的发行，原记录保留原目标。同路径替换文件产生新曲目 ID，原修正随原曲目保留。
+
+验证应覆盖设值、清除、同键重放、过期写入、跨曲目版本独立、撤销后读取当前下层值，以及重扫后保留人工意图。未修正时，已有目录与操作记录接口样本应逐字相同。

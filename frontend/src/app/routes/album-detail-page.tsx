@@ -1,8 +1,8 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Info, MoreHorizontal } from "lucide-react";
-import { useCallback, useMemo, type ReactNode } from "react";
+import { Info, MoreHorizontal, PencilLine } from "lucide-react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { AlbumDetailView, type AlbumSearch, type ReleaseActionsContext, type ReleaseDetailDTO, type ReleaseTrackDTO } from "../../features/catalog";
-import { ReleaseHistory, useReleaseAdminActions, useReleaseCommands, type ReleaseCommands } from "../../features/governance";
+import { EditTrackDialog, ReleaseHistory, useReleaseAdminActions, useReleaseCommands, type ReleaseCommands } from "../../features/governance";
 import { AddToPlaylistButton, FavoriteButton, FavoriteStatusScope } from "../../features/personal";
 import { playerTrackOf, playerTracksOf, TrackLoudness, useAlbumPlayback, useCurrentTrackMarker, usePlayerSelector } from "../../features/player";
 import { useViewerScope } from "../../features/auth";
@@ -84,11 +84,12 @@ const renderTrackFacts = (trackId: string) => <TrackLoudness trackId={trackId} /
  * 专辑页的一行：“从这首开始播放”放整张里能播放的曲目、从这一首起；其余与各页相同（心形、“更多”），
  * 菜单（含右键）最后多一项“曲目信息”：选中这一行并把焦点移到右栏的曲目信息。
  */
-function AlbumTrackActions({ release, track, groupId, showInfo }: { release: ReleaseDetailDTO; track: ReleaseTrackDTO; groupId: string; showInfo: () => void }) {
+function AlbumTrackActions({ release, track, groupId, showInfo, onEdit }: { release: ReleaseDetailDTO; track: ReleaseTrackDTO; groupId: string; showInfo: () => void; onEdit: ((track: ReleaseTrackDTO) => void) | undefined }) {
   const item = playerTrackOf(release, track, groupId);
+  const info: MenuAction = { id: "info", label: "曲目信息", icon: <Info size={16} />, onSelect: showInfo };
   return (
     <TrackActions
-      extraActions={[{ id: "info", label: "曲目信息", icon: <Info size={16} />, onSelect: showInfo }]}
+      extraActions={onEdit === undefined ? [info] : [{ id: "correct", label: "修正曲目信息…", icon: <PencilLine size={16} />, onSelect: () => onEdit(track) }, info]}
       track={item}
       present
       playPlacement="lead"
@@ -150,16 +151,27 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
       ),
     [commands],
   );
-  const renderTrackActions = useCallback((track: ReleaseTrackDTO, release: ReleaseDetailDTO, showInfo: () => void) => <AlbumTrackActions key={track.id} release={release} track={track} groupId={groupId} showInfo={showInfo} />, [groupId]);
+  // 管理员在曲目行的菜单里修正曲目标题与曲目艺人（M7 I）。
+  const [editingTrack, setEditingTrack] = useState<ReleaseTrackDTO | null>(null);
+  const onEditTrack = isAdmin ? setEditingTrack : undefined;
+  const renderTrackActions = useCallback(
+    (track: ReleaseTrackDTO, release: ReleaseDetailDTO, showInfo: () => void) => <AlbumTrackActions key={track.id} release={release} track={track} groupId={groupId} showInfo={showInfo} onEdit={onEditTrack} />,
+    [groupId, onEditTrack],
+  );
   const renderAdminSections = useCallback(
     ({ release, groupId: currentGroupId }: { release: ReleaseDetailDTO; groupId: string }) => (
       <ReleaseHistory key={`history-${release.id}`} release={{ id: release.id, title: release.title }} groupId={currentGroupId} commands={historyCommands} />
     ),
     [historyCommands],
   );
-  return <AlbumDetailView {...props} isAdmin={isAdmin}
-    currentTrackId={marker.trackId} currentTrackLabel={marker.label} currentTrackPlaying={marker.playing} albumPlaying={albumPlaying}
-    renderReleaseScope={renderReleaseScope}
-    renderReleaseActions={renderReleaseActions} renderTrackActions={renderTrackActions} renderTrackFacts={renderTrackFacts}
-    {...(isAdmin ? { renderAdminSections } : {})} />;
+  return (
+    <>
+      <AlbumDetailView {...props} isAdmin={isAdmin}
+        currentTrackId={marker.trackId} currentTrackLabel={marker.label} currentTrackPlaying={marker.playing} albumPlaying={albumPlaying}
+        renderReleaseScope={renderReleaseScope}
+        renderReleaseActions={renderReleaseActions} renderTrackActions={renderTrackActions} renderTrackFacts={renderTrackFacts}
+        {...(isAdmin ? { renderAdminSections } : {})} />
+      {editingTrack === null ? null : <EditTrackDialog trackId={editingTrack.id} trackTitle={editingTrack.title} refresh={refresh} onClose={() => setEditingTrack(null)} />}
+    </>
+  );
 }

@@ -1,0 +1,70 @@
+{
+  "body": {
+    "items": [
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "changes": {
+          "fields": [
+            {
+              "after": {
+                "correction": {
+                  "mode": "set",
+                  "value": "合成前奏曲"
+                },
+                "effective": "合成前奏曲"
+              },
+              "before": {
+                "correction": null,
+                "effective": "01"
+              },
+              "field": "title"
+            },
+            {
+              "after": {
+                "correction": {
+                  "mode": "set",
+                  "value": "合成演奏者"
+                },
+                "effective": "合成演奏者"
+              },
+              "before": {
+                "correction": null,
+                "effective": "未知艺术家"
+              },
+              "field": "artist"
+            }
+          ],
+          "kind": "track_correction",
+          "track": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "合成前奏曲"
+          }
+        },
+        "created_at": "2026-01-01T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "origin": null,
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000004",
+          "id": "00000000-0000-4000-8000-000000000005",
+          "title": "dsf",
+          "visible": true
+        },
+        "reverted_by": null,
+        "revertible": true,
+        "reverts": null,
+        "type": "track_correction"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 1
+    }
+  },
+  "status": 200
+}

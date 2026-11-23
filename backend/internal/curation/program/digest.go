@@ -53,5 +53,5 @@ func LyricsDigest(e catalog.CurationEvidence, t catalog.CurationTrack) string {
 		Duration                           int
 		ArtistPlaceholder, Local, External bool
 		Markers                            []catalog.CurationSuppression
-	}{t.Title, t.Artist, album, t.DurationSeconds, t.ArtistPlaceholder, t.LocalLyrics, t.ExternalLyrics, mediaMarkers(e, "track", t.ID, "lyrics")})
+	}{t.EffectiveTitle, t.EffectiveArtist, album, t.DurationSeconds, lyricsArtistPlaceholder(t), t.LocalLyrics, t.ExternalLyrics, mediaMarkers(e, "track", t.ID, "lyrics")})
 }

@@ -23,7 +23,12 @@ type ExceptionRelease struct {
 	Title  string `json:"title"`
 	Artist string `json:"artist"`
 }
+type ExceptionTrack struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
 type ModelException struct {
+	Track          *ExceptionTrack  `json:"track,omitempty"`
 	ID             string           `json:"id"`
 	PendingItemID  string           `json:"pending_item_id"`
 	PlanItemID     string           `json:"-"`
@@ -73,15 +78,19 @@ func (w *Writer) CreateException(ctx context.Context, e ModelException) (string,
 
 const exceptionSelect = `SELECT x.id,x.pending_item_id,x.plan_item_id,x.provider,x.tool,x.input,(x.preview-'confirmation_snapshot'),x.review_id,x.review_model,
  x.review_decision,x.review_source,x.risk,x.reasons,x.conversation_id,p.kind,r.id,r.title,r.artist,x.status,x.decided_by,
- x.decided_at,to_json(x.operation_ids),x.created_at FROM curation_model_exceptions x JOIN curation_pending_items p ON p.id=x.pending_item_id
- JOIN release_effective r ON r.id=p.target_id`
+ x.decided_at,to_json(x.operation_ids),x.created_at,t.id,t.title FROM curation_model_exceptions x JOIN curation_pending_items p ON p.id=x.pending_item_id
+ JOIN release_effective r ON r.id=p.target_id LEFT JOIN track_effective t ON x.tool='correct_track' AND t.id=(x.input->>'track_id')::uuid`
 
 func scanException(row interface{ Scan(...any) error }) (ModelException, error) {
 	var e ModelException
+	var trackID, title *string
 	var reasons, ops []byte
-	err := row.Scan(&e.ID, &e.PendingItemID, &e.PlanItemID, &e.Provider, &e.Tool, &e.Input, &e.Preview, &e.Review.ID, &e.Review.Model, &e.Review.Decision, &e.Review.Source, &e.Review.Risk, &reasons, &e.ConversationID, &e.Kind, &e.Release.ID, &e.Release.Title, &e.Release.Artist, &e.Status, &e.DecidedBy, &e.DecidedAt, &ops, &e.CreatedAt)
+	err := row.Scan(&e.ID, &e.PendingItemID, &e.PlanItemID, &e.Provider, &e.Tool, &e.Input, &e.Preview, &e.Review.ID, &e.Review.Model, &e.Review.Decision, &e.Review.Source, &e.Review.Risk, &reasons, &e.ConversationID, &e.Kind, &e.Release.ID, &e.Release.Title, &e.Release.Artist, &e.Status, &e.DecidedBy, &e.DecidedAt, &ops, &e.CreatedAt, &trackID, &title)
 	if err != nil {
 		return e, err
+	}
+	if trackID != nil {
+		e.Track = &ExceptionTrack{ID: *trackID, Title: *title}
 	}
 	if err = json.Unmarshal(reasons, &e.Review.Reasons); err != nil {
 		return e, err

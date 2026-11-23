@@ -563,6 +563,8 @@ function invertChanges(changes: OperationChangesDTO): OperationChangesDTO {
   // 外部封面、外部歌词与外部对应的撤销记录带的是被撤销操作的内容，不分前后。
   if (changes.kind === "release_external_artwork" || changes.kind === "track_external_lyrics" || changes.kind === "external_link") return changes;
   if (changes.kind === "release_auto_correction") return { kind: "release_auto_correction", fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
+  if (changes.kind === "track_correction") return { kind: "track_correction", track: changes.track, fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
+  if (changes.kind === "track_auto_correction") return { kind: "track_auto_correction", track: changes.track, fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
   return { kind: "release_correction", fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
 }
 

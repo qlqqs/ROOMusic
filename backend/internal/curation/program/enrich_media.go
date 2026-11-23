@@ -101,7 +101,32 @@ func (w *Worker) applyArtwork(ctx context.Context, u *unit, e catalog.CurationEv
 }
 
 func lyricsGap(t catalog.CurationTrack) bool {
-	return !t.LocalLyrics && !t.ExternalLyrics && looseKey(t.Title) != "" && !t.ArtistPlaceholder && looseKey(t.Artist) != "" && t.DurationSeconds > 0
+	return !t.LocalLyrics && !t.ExternalLyrics && looseKey(t.EffectiveTitle) != "" && !lyricsArtistPlaceholder(t) && looseKey(t.EffectiveArtist) != "" && t.DurationSeconds > 0
+}
+
+func lyricsArtistPlaceholder(t catalog.CurationTrack) bool {
+	return t.ArtistPlaceholder && t.EffectiveArtist == t.Artist
+}
+
+// 有效艺人和扫描占位恰好同名时，批量确认是否已有自动行。
+func automaticTrackArtists(ctx context.Context, q catalog.Queryer, ids []string) (map[string]bool, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := q.QueryContext(ctx, `SELECT track_id FROM track_auto_values WHERE field='artist' AND track_id=ANY($1::uuid[])`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		result[id] = true
+	}
+	return result, rows.Err()
 }
 
 var artistSeparator = regexp.MustCompile(`\b(?:feat|ft)\.|[&/、,;×]`)
@@ -139,7 +164,7 @@ func usableLyrics(body string) (string, bool) {
 
 func candidateLyrics(t catalog.CurationTrack, item sources.Lyrics) (lyricsChoice, bool) {
 	if item.Instrumental || item.ID == "" || !(item.DurationSeconds > 0 && math.Abs(float64(t.DurationSeconds)-item.DurationSeconds) <= 2) ||
-		!sameText(t.Title, item.Title) || !lyricsArtistMatches(t.Artist, item.Artist) {
+		!sameText(t.EffectiveTitle, item.Title) || !lyricsArtistMatches(t.EffectiveArtist, item.Artist) {
 		return lyricsChoice{}, false
 	}
 	plain, hasPlain := usableLyrics(item.Plain)
@@ -185,7 +210,7 @@ func (w *Worker) applyLyrics(ctx context.Context, u *unit, e catalog.CurationEvi
 	if !ok {
 		return "", operations.Conflict("source_disabled", "歌词源不可用")
 	}
-	query := sources.LyricsQuery{Title: t.Title, Artist: t.Artist, DurationSeconds: t.DurationSeconds}
+	query := sources.LyricsQuery{Title: t.EffectiveTitle, Artist: t.EffectiveArtist, DurationSeconds: t.DurationSeconds}
 	if !e.TitlePlaceholder {
 		query.Album = e.Title
 	}
@@ -195,7 +220,7 @@ func (w *Worker) applyLyrics(ctx context.Context, u *unit, e catalog.CurationEvi
 	}
 	choice, accepted := candidateLyrics(t, exact)
 	if err != nil || !accepted {
-		items, err := finder.SearchLyrics(ctx, sources.LyricsQuery{Title: t.Title, Artist: t.Artist})
+		items, err := finder.SearchLyrics(ctx, sources.LyricsQuery{Title: t.EffectiveTitle, Artist: t.EffectiveArtist})
 		if mediaMiss(err) {
 			return "no_match", nil
 		}

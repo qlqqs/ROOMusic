@@ -28,7 +28,8 @@
     "11-23-auto-curation-b3-acoustid",
     "11-23-auto-curation-d-model",
     "11-23-auto-curation-b3-bundled-key",
-    "11-23-auto-curation-e2-exceptions-ui"
+    "11-23-auto-curation-e2-exceptions-ui",
+    "11-23-auto-curation-i-track-fields"
   ],
   "parent": null,
   "relatedFiles": [],

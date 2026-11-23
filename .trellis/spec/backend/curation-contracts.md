@@ -666,7 +666,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 17.3 工具、审查与写入
 
-后台来源为 `curation`。注册表在列出与调用时检查白名单。可用的目录工具包括 `get_release`、`get_release_evidence`、`get_album`、`get_track`、`search_library` 以及目录的专辑、艺人、艺人专辑与曲目、发行问题列表。音乐资料查询 `search_music_metadata`、`get_music_metadata` 经 MusicBrainz 后台闸门。其余四种工具如下。
+后台来源为 `curation`。注册表在列出与调用时检查白名单。可用的目录工具包括 `get_release`、`get_release_evidence`、`get_album`、`get_track`、`search_library` 以及目录的专辑、艺人、艺人专辑与曲目、发行问题列表。音乐资料查询 `search_music_metadata`、`get_music_metadata` 经 MusicBrainz 后台闸门。下表列出 D 引入的四种工具，I 新增的 `correct_track` 见第 18.3 节。
 
 | 工具 | 合同 |
 | --- | --- |
@@ -719,3 +719,49 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | R11 设置校验、显式 null、模型进度、例外分页和筛选、管理员权限与决定接口错误码 | `TestPostgreSQLCurationModelAPI`、`TestPostgreSQLCurationModelAPIMatchErrors`、`TestPostgreSQLCurationExceptionAcceptDecline` |
 | R12 开启者未配置管家时报告原因，程序层仍可建立对应 | `TestPostgreSQLCurationModelUnconfiguredEnabler` |
 | 重启后释放遗留领取、保留未处理次数、作废后台方案并关闭模型批次 | `TestPostgreSQLCurationModelRestartRecovery` |
+
+## 18. I：曲目字段的自动层、程序补全与模型例外
+
+### 18.1 写入与撤销
+
+`Writer.ApplyTrack(ctx, TrackRequest) (Applied, error)` 接受曲目标识、可选的所属发行、来源、批次、幂等键及第 4 节的写入上下文。`Fields` 至少含一项，仅接受 `title`、`artist` 的 `set` 意图。文本沿用人工修正的规范化与 4096 字节限制。指纹包含类型、曲目标识、规范化的字段、provider，以及传入的非零预期版本和为真的 `OnlyEmpty`。
+
+事务按幂等锁、目录写锁、发行行、曲目行的顺序加锁。曲目必须在库。指定发行时在锁内核对归属，变更返回 `409 item_stale`。预期版本与曲目人工版本不同返回 `409 revision_conflict`。开启者、批次和后台领取关系沿用第 4、17 节。带版本的模型请求触及人工字段时整条返回 `409 manual_override`。其余请求逐字段过滤，`OnlyEmpty` 遇到人工行或自动行记 `occupied`，命中同一曲目、字段和值的标记记 `suppressed`，相同自动值记 `unchanged`。全部跳过时返回 `409 nothing_to_apply` 和各字段原因。
+
+写入 `track_auto_values` 后递增所属发行的 `auto_revision`，刷新曲目搜索，改艺人时同时刷新发行署名。操作类型为 `track_auto_correction`，目标是发行，前后态带曲目标识、当时的有效曲名，以及逐字段的自动值、写入者和有效值。操作列表的 `changes.track` 包含 `id,title`。
+
+撤销允许曲目已离库。逐格核对原操作仍拥有全部字段，再整体恢复前态及原写入者，原先没有自动值的格子删除。任何一格被覆盖或移除均返回 `409 revert_conflict`。成功时在同一事务为每个被撤值写入 `target_type=track` 的“不再提出”标记，响应的 `revision` 为曲目当前人工版本。单条、按批和按来源撤销共用此规则。曲目改挂其他发行后，原记录保留当时的发行，撤销记录归当前发行。
+
+### 18.2 程序匹配与存量补做
+
+只有程序层的已匹配发行执行曲目补全。在发行字段之后、归组之前，按配对的录音 ID 从 MusicBrainz 发行曲目或单曲录音取得标题、署名。同一录音在发行中出现多次且取值冲突时跳过。标题占位或由文件名、默认值推出时可以补，艺人占位时可以补。先过滤空值、超长值和已标记的意图，再按曲目用 `OnlyEmpty=true` 写入，每步幂等键由本代次的 `track_fields/<track_id>` 派生。程序完成匹配后记 `result.track_fields="done"`。模型匹配和匹配例外采纳保留原预览及结果格式。
+
+存量补做要求发行工作状态为 `matched`、规则版本和输入摘要相符、结果尚无 `track_fields`，且有待补曲目和已有外部对应。一次按已有对应读发行或录音，用已保存的曲目对应配对。补做沿用原代次，在可重复读事务内重新核对发行证据、工作状态和代次，合并结果字段。执行补全记 `done`，没有候选字段记 `none`，外部 404 记 `unavailable`。暂时不可用或源关闭时保留原状态，下轮仍可补做。
+
+曲目自动值不进入发行匹配摘要。歌词空缺、外部查询、候选核对、歌词摘要和写入操作的曲名快照使用有效值。补上艺人可触发这首曲目的歌词重查，无修正时沿用原摘要。
+
+### 18.3 工具、审查与例外
+
+`correct_track` 使用 `release_id, track_id, expected_revision, changes, basis`。在库曲目的版本由 `get_track.revision` 提供。对话和 MCP 的 `set`、`clear` 走人工执行器，清除人工行后取自动值或扫描值，归属不符返回 `404 not_found`。后台只允许本批发行的曲目，预览和执行都核对版本、人工优先及不再提出标记，实际写入使用模型来源和模型批次。批外发行返回 `out_of_batch`，后台清除返回 `invalid_correction`。
+
+审查证据包含发行和曲目目标、曲目版本、所属发行、扫描值和有效字段，以及外部对应。沿用现有审查策略版本。后台按发行定位待定项；曲目例外额外返回 `track: {id,title}`。采纳时锁定曲目，核对发行与待定项，重新计算预览，差异返回 `exception_stale`。相符时按当前曲目版本写人工层并在同一事务完成例外。不采纳时逐字段为曲目和值写入“不再提出”标记。
+
+样本见 `operations/track-auto-list`、`operations/track-auto-reverted`、`curation/exceptions-track`。
+
+### 18.4 必需测试与断言点
+
+| 断言点 | 用例 |
+| --- | --- |
+| `OnlyEmpty` 保留人工和自动值，报告 `occupied`、`suppressed`、`unchanged`，拒绝 `manual_override` 和 `item_stale` | `TestPostgreSQLTrackAutoApply` |
+| 单条撤销恢复自动前值与原写入者，写入曲目字段标记，拒绝撤销被覆盖的操作 | `TestPostgreSQLTrackAutoRevert` |
+| 按批倒序撤销，保留其他批次 | `TestPostgreSQLTrackAutoBatchRevert` |
+| 按来源撤销，恢复其他来源的前值与写入者 | `TestPostgreSQLTrackAutoProviderRevert` |
+| 曲目与发行的人工版本独立，自动写入和撤销递增发行自动版本 | `TestPostgreSQLTrackAutoIndependentRevisions` |
+| 并发只补空缺时仅有一次写入成功并拥有字段 | `TestPostgreSQLTrackAutoConcurrent` |
+| 专辑和单曲从 MusicBrainz 补占位或推断的字段，保留人工值、自动值和不再提出标记 | `TestPostgreSQLCurationProgramTrackFields` |
+| 已匹配发行按现有对应补做一次并保留状态及代次，404 记 `unavailable`，暂时失败保留原状态 | `TestPostgreSQLCurationTrackFieldsBackfillOnce` |
+| 补全艺人后以有效值重查歌词，读取返回在线歌词 | `TestPostgreSQLCurationLyricsUsesEffectiveArtist` |
+| 后台修正写入模型批次的自动层，拒绝批外发行、曲目归属不符和 `clear` | `TestPostgreSQLCurationModelCorrectTrackAutoLayer` |
+| 管家对话修正写入人工层并校验曲目归属 | `TestPostgreSQLStewardCorrectTrackManual` |
+| 例外采纳写人工层，前值变更返回 `exception_stale`，不采纳后程序及模型跳过该字段值 | `TestPostgreSQLCurationExceptionTrackAcceptDecline` |
+| 审查收到发行和曲目目标、曲目版本、扫描值、有效值与外部对应 | `TestPostgreSQLStewardReviewTrackEvidence` |

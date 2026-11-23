@@ -120,12 +120,12 @@ func TestArtistReleaseWorkloadSQLScopesInputsAndIncludesMissing(t *testing.T) {
 			t.Fatal("工作量必须包含missing且从当前发行的轨索引入口估计")
 		}
 	}
-	for _, source := range []string{"track_observations", "artist_tag_evidence", "track_credits", "release_corrections"} {
+	for _, source := range []string{"track_observations", "artist_tag_evidence", "track_credits", "release_corrections", "track_corrections", "track_auto_values"} {
 		if !strings.Contains(artistReleaseNameInputsSQL, source) {
 			t.Fatalf("漏计原输入来源：%s", source)
 		}
 	}
-	if strings.Count(artistReleaseNameInputsSQL, "track_id=t.id") != 3 || !strings.Contains(artistReleaseNameInputsSQL, "LIMIT $2") {
+	if strings.Count(artistReleaseNameInputsSQL, "track_id=t.id") != 5 || !strings.Contains(artistReleaseNameInputsSQL, "LIMIT $2") {
 		t.Fatal("署名估计没有局部索引入口或有界原输入读取")
 	}
 }

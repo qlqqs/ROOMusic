@@ -92,7 +92,7 @@ func StewardTools(store *catalog.Store, issues *governance.Store) []tool.Definit
 		definition("get_release", "查看发行版本及曲目时使用，id 是版本 UUID。返回版本详情、署名、证据摘要及 media；pagination 对所有介质的曲目统一分页，空介质不返回。不含歌词正文。"+pageDescription,
 			tool.RoleMember, idProperty+","+pageProperties, `"id"`, releaseReader(store)),
 		definition("get_track", "查看单首曲目时使用，id 是曲目 UUID。返回安全曲目摘要及 detail（曲序、音频事实、作品、署名和文件名）；缺失曲目的 detail 为 null。不读取歌词，不分页。",
-			tool.RoleMember, idProperty, `"id"`, trackReader(store)),
+			tool.RoleMember, idProperty, `"id"`, trackReader(store, issues)),
 		definition("list_artists", "浏览艺人时使用。返回艺人摘要与参与专辑、曲目计数；可按 q、role、initial 筛选，initial 为 A–Z、kana 或 #；sort 默认为 name，也可为 album_count。"+pageDescription,
 			tool.RoleMember, artistListProperties(), "",
 			func(ctx context.Context, p input) (any, error) {

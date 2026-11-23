@@ -15,6 +15,8 @@ import {
   decodeClaimResult,
   decodeCorrectionResult,
   decodeCorrectionState,
+  decodeTrackCorrectionResult,
+  decodeTrackCorrectionState,
   decodeGroupChangeResult,
   decodeGroupDefaultResult,
   decodeIssuePage,
@@ -37,6 +39,8 @@ import {
   type CorrectableField,
   type CorrectionResultDTO,
   type CorrectionStateDTO,
+  type TrackCorrectionResultDTO,
+  type TrackCorrectionStateDTO,
   type GroupChangeResultDTO,
   type GroupDefaultResultDTO,
   type IssuePageDTO,
@@ -318,4 +322,25 @@ export function fetchArtistCandidates(params: { page: number; pageSize: number; 
   const query = new URLSearchParams({ page: String(params.page), page_size: String(params.pageSize) });
   if (params.ignored) query.set("ignored", "true");
   return apiRequest({ method: "GET", path: `/api/v1/artist-candidates?${query}`, signal: params.signal }, decodeArtistCandidatePage);
+}
+
+/** 一个曲目字段的修改：set 写人工修正，clear 去掉人工修正（显示回到自动补全的值或扫描值）。两个字段都不能留空。 */
+export type TrackCorrectionChange = { mode: "set"; value: string } | { mode: "clear" };
+
+/** 修正曲目信息用的状态（M7 I，仅管理员）：这首曲目自己的人工修改版本号与曲目标题、曲目艺人两个字段。 */
+export function fetchTrackCorrections(trackId: string, signal?: AbortSignal): Promise<ApiResponse<TrackCorrectionStateDTO>> {
+  return apiRequest({ method: "GET", path: `/api/v1/tracks/${trackId}/corrections`, signal }, decodeTrackCorrectionState);
+}
+
+/** 修正曲目标题或曲目艺人：带读取时的版本号，曲目在此期间被修改过时返回 409 revision_conflict。 */
+export function correctTrack(
+  trackId: string,
+  expectedRevision: number,
+  changes: Partial<Record<"title" | "artist", TrackCorrectionChange>>,
+  idempotencyKey: string,
+): Promise<ApiResponse<TrackCorrectionResultDTO>> {
+  return apiRequest(
+    { method: "PATCH", path: `/api/v1/tracks/${trackId}/corrections`, body: { expected_revision: expectedRevision, changes }, idempotencyKey },
+    decodeTrackCorrectionResult,
+  );
 }

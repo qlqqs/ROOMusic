@@ -3,10 +3,12 @@ package stewardtools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
+	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
@@ -21,6 +23,32 @@ func (a adapter) preview(ctx context.Context, name string, raw json.RawMessage) 
 		result.Changes = append(result.Changes, tool.Change{Field: field, Before: before, After: after})
 	}
 	switch name {
+	case "correct_track":
+		state, err := a.reads.LoadTrackCorrectionState(ctx, p.TrackID)
+		if errors.Is(err, catalog.ErrTrackNotFound) || err == nil && state.ReleaseID != p.ReleaseID {
+			return result, operations.NotFound("not_found", "曲目不存在")
+		}
+		if err != nil {
+			return result, err
+		}
+		changes, err := governance.ParseTrackCorrectionChanges(p.Changes)
+		if err != nil {
+			return result, err
+		}
+		for _, field := range state.Fields {
+			if field.Field == "title" {
+				result.Target = field.EffectiveValue.(string)
+			}
+			change, ok := changes[field.Field]
+			if !ok {
+				continue
+			}
+			var after any = change.Text
+			if change.Mode == catalog.CorrectionClear {
+				after = field.ValueAfterClear()
+			}
+			add(field.Field, field.EffectiveValue, after)
+		}
 	case "correct_release":
 		state, err := a.reads.LoadCorrectionState(ctx, p.ReleaseID)
 		if err != nil {
@@ -192,6 +220,6 @@ func (a adapter) preview(ctx context.Context, name string, raw json.RawMessage) 
 			}
 		}
 	}
-	result.Summary = map[string]string{"correct_release": "修正元数据", "change_release_group": "调整版本归组", "set_default_release": "设置默认版本", "review_release_issue": "更新问题核对", "claim_release": "认领旧版本修改", "merge_artists": "合并艺人", "split_artist": "拆分艺人", "rename_artist": "修改艺人主名", "ignore_artist_candidate": "更新候选提示"}[name] + "：" + result.Target
+	result.Summary = map[string]string{"correct_track": "修正曲目信息", "correct_release": "修正元数据", "change_release_group": "调整版本归组", "set_default_release": "设置默认版本", "review_release_issue": "更新问题核对", "claim_release": "认领旧版本修改", "merge_artists": "合并艺人", "split_artist": "拆分艺人", "rename_artist": "修改艺人主名", "ignore_artist_candidate": "更新候选提示"}[name] + "：" + result.Target
 	return result, nil
 }

@@ -143,7 +143,7 @@ func writeTrackChunk(ctx context.Context, tx *sql.Tx, s State, ids []string, mar
 func loadTrackValues(ctx context.Context, tx *sql.Tx, ids []string) (map[string][]value, error) {
 	values := make(map[string][]value, len(ids))
 	rows, err := tx.QueryContext(ctx, `SELECT id::text,title,artist,COALESCE(work_title,''),COALESCE(work_catalog,'')
- FROM tracks WHERE id=ANY($1::uuid[]) ORDER BY id`, ids)
+ FROM track_effective WHERE id=ANY($1::uuid[]) ORDER BY id`, ids)
 	if err != nil {
 		return nil, err
 	}

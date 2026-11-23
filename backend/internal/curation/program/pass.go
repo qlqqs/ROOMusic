@@ -68,12 +68,20 @@ func (w *Worker) page(ctx context.Context, after *catalog.CurationCursor, lyrics
 	if err != nil {
 		return nil, err
 	}
+	var sameArtistOverrides map[string]bool
 	if lyrics {
-		var tracks []string
+		var tracks, ambiguous []string
 		for _, e := range entries {
 			for _, t := range e.Tracks {
 				tracks = append(tracks, t.ID)
+				if lyricsArtistPlaceholder(t) && !t.LocalLyrics && !t.ExternalLyrics && t.DurationSeconds > 0 {
+					ambiguous = append(ambiguous, t.ID)
+				}
 			}
+		}
+		sameArtistOverrides, err = automaticTrackArtists(ctx, w.db, ambiguous)
+		if err != nil {
+			return nil, err
 		}
 		states.lyrics, err = curation.LoadWorkStates(ctx, w.db, "lyrics", tracks)
 	} else {
@@ -91,6 +99,9 @@ func (w *Worker) page(ctx context.Context, after *catalog.CurationCursor, lyrics
 			for _, t := range e.Tracks {
 				if err := priority(); err != nil {
 					return nil, err
+				}
+				if sameArtistOverrides[t.ID] {
+					t.ArtistPlaceholder = false
 				}
 				if !lyricsGap(t) {
 					continue
@@ -195,8 +206,8 @@ func subjectEvidence(subject string, e catalog.CurationEvidence, state curation.
 }
 
 type outcome struct {
-	status, group string
-	match         MatchResult
+	status, group, trackFields string
+	match                      MatchResult
 }
 
 func (w *Worker) evaluate(ctx context.Context, u *unit, e catalog.CurationEvidence, fingerprintRequired bool) (out outcome, err error) {
@@ -230,6 +241,7 @@ func (w *Worker) evaluate(ctx context.Context, u *unit, e catalog.CurationEviden
 		out.match, err = MatchWithFingerprint(ctx, e, r, f, step)
 		if err == nil && out.match.Status == "matched" {
 			out.group, err = w.applyMatch(ctx, u, e, out.match)
+			out.trackFields = "done"
 		}
 		out.status = out.match.Status
 	}
@@ -250,6 +262,9 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	digest := subjectDigest(subject, input, id)
 	now := w.opts.Now()
 	ordinary := needsWork(subject, state, digest, now, false)
+	if subject == "release" && !ordinary && needsTrackFields(state, input) {
+		return w.backfillTrackFields(ctx, e, state, states)
+	}
 	if !ordinary && !needsWork(subject, state, digest, now, states.fingerprintAvailable) {
 		return nil
 	}
@@ -431,7 +446,8 @@ func releaseResult(out outcome) []byte {
 		ExternalGroupID string   `json:"external_group_id,omitempty"`
 		Conflicts       []string `json:"conflicts"`
 		Group           string   `json:"group,omitempty"`
-	}{Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group}
+		TrackFields     string   `json:"track_fields,omitempty"`
+	}{Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group, TrackFields: out.trackFields}
 	if m.Release != nil {
 		r.ExternalID, r.ExternalGroupID = m.Release.ID, m.Release.Group.ID
 	}

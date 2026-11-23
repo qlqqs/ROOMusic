@@ -3,10 +3,12 @@ package curation
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/operations"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
@@ -45,7 +47,24 @@ func IsMissingSourceMatch(err error) bool {
 
 // CheckModelCorrection 在形成待审提案前使用与写入相同的版本、人工优先及不再提出规则。
 func (w *Writer) CheckModelCorrection(ctx context.Context, id string, revision int64, changes map[string]catalog.CorrectionIntent) error {
-	fields, err := governance.NormalizeAutoFields(changes)
+	return w.checkModelFields(ctx, id, "", false, revision, changes)
+}
+
+func (w *Writer) CheckModelTrackCorrection(ctx context.Context, releaseID, trackID string, revision int64, changes map[string]catalog.CorrectionIntent) error {
+	if !uuid.Valid(trackID) {
+		return operations.Invalid("invalid_input", "曲目标识无效")
+	}
+	return w.checkModelFields(ctx, releaseID, trackID, true, revision, changes)
+}
+
+func (w *Writer) checkModelFields(ctx context.Context, releaseID, trackID string, track bool, revision int64, changes map[string]catalog.CorrectionIntent) error {
+	normalize := governance.NormalizeAutoFields
+	target, id, definitions := "release", releaseID, catalog.CorrectableFields
+	if track {
+		normalize = governance.NormalizeTrackAutoFields
+		target, id, definitions = "track", trackID, catalog.TrackCorrectableFields
+	}
+	fields, err := normalize(changes)
 	if err != nil {
 		return err
 	}
@@ -54,14 +73,26 @@ func (w *Writer) CheckModelCorrection(ctx context.Context, id string, revision i
 		return err
 	}
 	defer tx.Rollback()
-	locked, err := governance.LockAutoRelease(ctx, tx, id)
+	var locked autoFieldTarget
+	if track {
+		t, err := governance.LockAutoTrack(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if !strings.EqualFold(t.ReleaseID(), releaseID) {
+			return operations.Conflict("item_stale", "曲目所属发行已变更")
+		}
+		locked = t
+	} else {
+		locked, err = governance.LockAutoRelease(ctx, tx, id)
+	}
 	if err != nil {
 		return err
 	}
 	if revision != locked.EditRevision() {
-		return operations.Conflict("revision_conflict", "发行修正版本已变更")
+		return operations.Conflict("revision_conflict", "版本已变更")
 	}
-	manual, err := catalog.LoadCorrectionIntents(ctx, tx, id)
+	manual, err := loadManualFields(ctx, tx, target, id)
 	if err != nil {
 		return err
 	}
@@ -70,7 +101,7 @@ func (w *Writer) CheckModelCorrection(ctx context.Context, id string, revision i
 			return operations.Conflict("manual_override", "字段已有人工修正")
 		}
 	}
-	written, result, err := filterFields(ctx, tx, id, locked, fields, false)
+	written, result, err := filterAutoFields(ctx, tx, target, id, definitions, locked, fields, false)
 	if err != nil {
 		return err
 	}

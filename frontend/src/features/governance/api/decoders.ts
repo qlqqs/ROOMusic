@@ -54,6 +54,27 @@ const correctionStateShape = {
 };
 
 const correctionStateDecoder = d.object(correctionStateShape);
+
+// 曲目字段修正（M7 I）：曲目标题与曲目艺人，各自的人工修改版本号（不占发行的版本号）；两个字段都必填，修正只有 set。
+export const TRACK_CORRECTABLE_FIELDS = ["title", "artist"] as const;
+export type TrackCorrectableField = (typeof TRACK_CORRECTABLE_FIELDS)[number];
+const trackTextDecoder = d.string({ max: MAX_FIELD_TEXT });
+const trackCorrectionFieldDecoder = d.object({
+  field: d.oneOf(TRACK_CORRECTABLE_FIELDS),
+  scan_value: d.nullable(trackTextDecoder),
+  correction: d.nullable(d.object({ mode: d.literal("set"), value: trackTextDecoder })),
+  auto: d.nullable(d.object({ mode: d.literal("set"), value: trackTextDecoder, operation_id: d.uuid(), provider_kind: d.oneOf(["source", "model"] as const), provider: d.string({ min: 1, max: MAX_PROVIDER }) })),
+  effective_value: d.nullable(trackTextDecoder),
+  uncertain: d.boolean(),
+});
+const trackCorrectionStateShape = {
+  track_id: d.uuid(),
+  release_id: d.uuid(),
+  revision: d.integer({ min: 1 }),
+  fields: d.array(trackCorrectionFieldDecoder, { max: TRACK_CORRECTABLE_FIELDS.length }),
+};
+const trackCorrectionStateDecoder = d.object(trackCorrectionStateShape);
+const trackCorrectionResultDecoder = d.object({ ...trackCorrectionStateShape, operation_id: d.uuid() });
 // 修正成功的响应：与读取相同的状态，加上这次操作的 ID（撤销用）。
 const correctionResultDecoder = d.object({ ...correctionStateShape, operation_id: d.uuid() });
 
@@ -205,6 +226,8 @@ const OPERATION_TYPES = [
   "release_external_artwork",
   "track_external_lyrics",
   "external_link",
+  "track_correction",
+  "track_auto_correction",
   "revert",
   "artist_merge",
   "artist_split",
@@ -237,6 +260,20 @@ const autoCorrectionChangesDecoder = d.object({
     d.object({ field: d.oneOf(CORRECTABLE_FIELDS), before: autoFieldStateDecoder, after: autoFieldStateDecoder }),
     { max: CORRECTABLE_FIELDS.length },
   ),
+});
+// 曲目字段的人工修正与自动补全（M7 I）：形状同发行的两种，另带曲目（当前的有效标题）；字段只有曲目标题与曲目艺人。
+const trackRefDecoder = d.object({ id: d.uuid(), title: d.string() });
+const trackFieldStateDecoder = d.object({ correction: d.nullable(d.object({ mode: d.literal("set"), value: trackTextDecoder })), effective: d.nullable(trackTextDecoder) });
+const trackCorrectionChangesDecoder = d.object({
+  kind: d.literal("track_correction"),
+  track: trackRefDecoder,
+  fields: d.array(d.object({ field: d.oneOf(TRACK_CORRECTABLE_FIELDS), before: trackFieldStateDecoder, after: trackFieldStateDecoder }), { max: TRACK_CORRECTABLE_FIELDS.length }),
+});
+const trackAutoFieldStateDecoder = d.object({ auto: d.nullable(d.object({ mode: d.literal("set"), value: trackTextDecoder, operation_id: d.uuid() })), effective: d.nullable(trackTextDecoder) });
+const trackAutoCorrectionChangesDecoder = d.object({
+  kind: d.literal("track_auto_correction"),
+  track: trackRefDecoder,
+  fields: d.array(d.object({ field: d.oneOf(TRACK_CORRECTABLE_FIELDS), before: trackAutoFieldStateDecoder, after: trackAutoFieldStateDecoder }), { max: TRACK_CORRECTABLE_FIELDS.length }),
 });
 // 自动整理补的外部封面与外部歌词（M7 B2）：本地没有时才写入，一个发行一张、一首曲目一份；撤销就是去掉它。
 // 来源是外部源的标识，外部编号按不可信文本显示。封面的 resource_id 在撤销之后可能已经读不到图片。
@@ -339,6 +376,8 @@ type OperationChanges =
   | d.Infer<typeof artistIgnoreChangesDecoder>
   | d.Infer<typeof correctionChangesDecoder>
   | d.Infer<typeof autoCorrectionChangesDecoder>
+  | d.Infer<typeof trackCorrectionChangesDecoder>
+  | d.Infer<typeof trackAutoCorrectionChangesDecoder>
   | d.Infer<typeof externalArtworkChangesDecoder>
   | d.Infer<typeof externalLyricsChangesDecoder>
   | d.Infer<typeof externalLinkChangesDecoder>
@@ -351,6 +390,8 @@ const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   const kind = typeof input === "object" && input !== null && "kind" in input ? input.kind : undefined;
   if (kind === "release_correction") return correctionChangesDecoder(input, path);
   if (kind === "release_auto_correction") return autoCorrectionChangesDecoder(input, path);
+  if (kind === "track_correction") return trackCorrectionChangesDecoder(input, path);
+  if (kind === "track_auto_correction") return trackAutoCorrectionChangesDecoder(input, path);
   if (kind === "release_external_artwork") return externalArtworkChangesDecoder(input, path);
   if (kind === "track_external_lyrics") return externalLyricsChangesDecoder(input, path);
   if (kind === "external_link") return externalLinkChangesDecoder(input, path);
@@ -658,6 +699,8 @@ export type ArtistCandidateDTO = d.Infer<typeof artistCandidateDecoder>;
 export type ArtistCandidatePageDTO = d.Infer<typeof artistCandidatePageDecoder>;
 
 export const decodeCorrectionState = d.defineDecoder(correctionStateDecoder);
+export const decodeTrackCorrectionState = d.defineDecoder(trackCorrectionStateDecoder);
+export const decodeTrackCorrectionResult = d.defineDecoder(trackCorrectionResultDecoder);
 export const decodeCorrectionResult = d.defineDecoder(correctionResultDecoder);
 export const decodeGroupChangeResult = d.defineDecoder(groupChangeResultDecoder);
 export const decodeGroupDefaultResult = d.defineDecoder(groupDefaultResultDecoder);
@@ -675,6 +718,8 @@ export const decodeClaimResult = d.defineDecoder(claimResultDecoder);
 export type CorrectionIntentDTO = d.Infer<typeof correctionDecoder>;
 export type CorrectionFieldDTO = d.Infer<typeof correctionFieldDecoder>;
 export type CorrectionStateDTO = d.Infer<typeof correctionStateDecoder>;
+export type TrackCorrectionStateDTO = d.Infer<typeof trackCorrectionStateDecoder>;
+export type TrackCorrectionResultDTO = d.Infer<typeof trackCorrectionResultDecoder>;
 export type CorrectionResultDTO = d.Infer<typeof correctionResultDecoder>;
 export type GroupChangeResultDTO = d.Infer<typeof groupChangeResultDecoder>;
 export type GroupDefaultResultDTO = d.Infer<typeof groupDefaultResultDecoder>;

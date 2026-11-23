@@ -21,12 +21,12 @@ type creditFact struct {
 	Layer     string  `json:"layer"`
 }
 
-// refreshFacts 重建当前扫描事实与专辑艺人的自动层、修正层，返回本次新建身份；不触碰任何艺人治理表。
+// refreshFacts 重建当前扫描事实与发行和曲目艺人的自动层、修正层，返回本次新建身份；不触碰任何艺人治理表。
 func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, error) {
 	resolver := nameResolver{tx: tx, names: map[string]string{}}
 	facts := []creditFact{}
 	// 同一曲目同人同角色的多种细分只建一条事实，避免同批 upsert 重复命中。
-	seenTrackCredits := make(map[[3]string]bool)
+	seenTrackCredits := make(map[[4]string]bool)
 	add := func(releaseID, trackID, role, raw, layer string) error {
 		if !nonempty(raw) {
 			return nil
@@ -37,7 +37,7 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 		}
 		for i, name := range names {
 			if trackID != "" {
-				key := [3]string{trackID, role, name}
+				key := [4]string{trackID, role, name, layer}
 				if seenTrackCredits[key] {
 					continue
 				}
@@ -103,24 +103,26 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 			}
 		}
 	}
-	rows, err = tx.QueryContext(ctx, `SELECT t.id::text,t.artist,o.value,(o.inferred AND o.source_kind <> 'filename_fallback'),
+	rows, err = tx.QueryContext(ctx, `SELECT t.id::text,t.artist,COALESCE(tc.text_value,''),COALESCE(ta.text_value,''),o.value,(o.inferred AND o.source_kind <> 'filename_fallback'),
  COALESCE((SELECT jsonb_agg(e.raw_value ORDER BY e.occurrence_index,e.tag_key) FROM artist_tag_evidence e WHERE e.track_id=t.id AND e.role='track_artist'),'[]'::jsonb),
  COALESCE((SELECT jsonb_agg(jsonb_build_object('role',c.role,'name',c.name) ORDER BY c.role,c.position,c.id) FROM track_credits c WHERE c.track_id=t.id),'[]'::jsonb)
  FROM tracks t JOIN media m ON m.id=t.medium_id LEFT JOIN track_observations o ON o.track_id=t.id AND o.field_name='artist'
+ LEFT JOIN track_corrections tc ON tc.track_id=t.id AND tc.field='artist'
+ LEFT JOIN track_auto_values ta ON ta.track_id=t.id AND ta.field='artist'
  WHERE m.release_id=ANY($1::uuid[]) ORDER BY t.id`, ids)
 	if err != nil {
 		return nil, err
 	}
 	type track struct {
-		id, artist        string
-		raw               sql.NullString
-		inferred          sql.NullBool
-		evidence, credits []byte
+		id, artist, correction, automatic string
+		raw                               sql.NullString
+		inferred                          sql.NullBool
+		evidence, credits                 []byte
 	}
 	var tracks []track
 	for rows.Next() {
 		var t track
-		if err = rows.Scan(&t.id, &t.artist, &t.raw, &t.inferred, &t.evidence, &t.credits); err != nil {
+		if err = rows.Scan(&t.id, &t.artist, &t.correction, &t.automatic, &t.raw, &t.inferred, &t.evidence, &t.credits); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -159,6 +161,12 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 			if display != t.artist {
 				changes = append(changes, trackArtistChange{t.id, display})
 			}
+		}
+		if err = add("", t.id, "track_artist", t.correction, "correction"); err != nil {
+			return nil, err
+		}
+		if err = add("", t.id, "track_artist", t.automatic, "auto"); err != nil {
+			return nil, err
 		}
 		for _, c := range credits {
 			if err = add("", t.id, c.Role, c.Name, "scan"); err != nil {

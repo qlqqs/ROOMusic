@@ -185,6 +185,9 @@ const trackDecoder = d.object({
   credits: d.array(creditDecoder, { max: MAX_TRACK_CREDITS }),
   // 古典作品：同一发行里相邻且 index 相同的曲目属于同一作品；movement 为 null 时行内显示曲目标题。
   work: d.nullable(workDecoder),
+  // 曲目标题、曲目艺人（M7 I）被人工修正或自动补全了哪些；没有时后端省略。
+  corrected_fields: d.optional(d.array(d.oneOf(["title", "artist"] as const), { max: 2 })),
+  auto_fields: d.optional(d.array(d.oneOf(["title", "artist"] as const), { max: 2 })),
 });
 
 const mediumDecoder = d.object({

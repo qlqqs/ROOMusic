@@ -1,0 +1,65 @@
+{
+  "body": {
+    "items": [
+      {
+        "conversation_id": "00000000-0000-4000-8000-000000000001",
+        "created_at": "2026-01-01T00:00:00Z",
+        "decided_at": null,
+        "decided_by": null,
+        "id": "00000000-0000-4000-8000-000000000002",
+        "input": {
+          "basis": {
+            "note": "合成曲目资料",
+            "source": "external"
+          },
+          "changes": {
+            "title": {
+              "mode": "set",
+              "value": "待核对曲名"
+            }
+          },
+          "expected_revision": 1,
+          "release_id": "00000000-0000-4000-8000-000000000003",
+          "track_id": "00000000-0000-4000-8000-000000000004"
+        },
+        "kind": "release_match",
+        "operation_ids": [],
+        "pending_item_id": "00000000-0000-4000-8000-000000000005",
+        "preview": {
+          "changes": [
+            {
+              "after": "待核对曲名",
+              "before": "Album A track 1",
+              "field": "title"
+            }
+          ]
+        },
+        "release": {
+          "artist": "Artist A",
+          "id": "00000000-0000-4000-8000-000000000003",
+          "title": "合成标题甲"
+        },
+        "review": {
+          "decision": "needs_human_confirmation",
+          "id": "00000000-0000-4000-8000-000000000006",
+          "model": "sample-review",
+          "reasons": [
+            "曲名需要人工核对"
+          ],
+          "risk": null,
+          "source": "model"
+        },
+        "status": "open",
+        "tool": "correct_track",
+        "track": {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "title": "Album A track 1"
+        }
+      }
+    ],
+    "page": 1,
+    "page_size": 50,
+    "total": 1
+  },
+  "status": 200
+}

@@ -44,6 +44,8 @@ type CurationSuppression struct {
 }
 
 type CurationTrack struct {
+	EffectiveTitle, EffectiveArtist     string `json:"-"`
+	TitleInferred                       bool   `json:"-"`
 	ID, Title, Artist                   string
 	TitlePlaceholder, ArtistPlaceholder bool
 	Disc, DiscNumber, Position          int
@@ -221,10 +223,12 @@ func (e *CurationEvidence) setCurationBarcodes(barcode string, fromCue bool) {
 	}
 }
 
-const curationTrackSQL = `SELECT m.release_id::text,t.id::text,t.title,t.artist,m.position,t.disc_number,t.position,
- COALESCE(p.inferred,false),COALESCE(ao.source_kind='default_fallback',false)
-     OR (ao.id IS NULL AND t.artist='未知艺术家'),
- COALESCE(tt.source_kind='default_fallback',false),
+const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_value,t.title),COALESCE(ca.text_value,t.artist),
+ COALESCE(ct.text_value,atitle.text_value,t.title),COALESCE(ca.text_value,aa.text_value,t.artist),
+ COALESCE(tt.source_kind IN ('filename_fallback','default_fallback'),false),m.position,t.disc_number,t.position,
+ COALESCE(p.inferred,false),ca.track_id IS NULL AND (COALESCE(ao.source_kind='default_fallback',false)
+     OR (ao.id IS NULL AND t.artist='未知艺术家')),
+ ct.track_id IS NULL AND COALESCE(tt.source_kind='default_fallback',false),
  COALESCE(round((CASE WHEN dd.duration_seconds>0 AND dd.duration_seconds<'Infinity'::float8
      THEN dd.duration_seconds END)::numeric),0)::bigint,
  t.source_kind,t.source_root_id::text,COALESCE(t.cue_sheet_path,''),COALESCE(t.cue_parent_relative_path,''),COALESCE(t.cue_isrc,''),
@@ -234,6 +238,10 @@ const curationTrackSQL = `SELECT m.release_id::text,t.id::text,t.title,t.artist,
      WHERE track_id=t.id AND kind IN ('mb_release','mb_release_group','mb_recording','mb_track','mb_artist','mb_album_artist','mb_disc','isrc')
      GROUP BY kind) tags),'{}'::jsonb)
  FROM media m JOIN tracks t ON t.medium_id=m.id AND t.source_status='present'
+ LEFT JOIN track_corrections ct ON ct.track_id=t.id AND ct.field='title'
+ LEFT JOIN track_corrections ca ON ca.track_id=t.id AND ca.field='artist'
+ LEFT JOIN track_auto_values atitle ON atitle.track_id=t.id AND atitle.field='title'
+ LEFT JOIN track_auto_values aa ON aa.track_id=t.id AND aa.field='artist'
  LEFT JOIN track_display_durations dd ON dd.track_id=t.id
  LEFT JOIN track_observations p ON p.track_id=t.id AND p.field_name='track_number'
  LEFT JOIN track_observations ao ON ao.track_id=t.id AND ao.field_name='artist'
@@ -253,7 +261,7 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 		var releaseID string
 		var lyrics sql.NullString
 		var identifiers []byte
-		if err := rows.Scan(&releaseID, &t.ID, &t.Title, &t.Artist, &t.Disc, &t.DiscNumber, &t.Position, &t.PositionInferred,
+		if err := rows.Scan(&releaseID, &t.ID, &t.Title, &t.Artist, &t.EffectiveTitle, &t.EffectiveArtist, &t.TitleInferred, &t.Disc, &t.DiscNumber, &t.Position, &t.PositionInferred,
 			&t.ArtistPlaceholder, &t.TitlePlaceholder, &t.DurationSeconds, &t.SourceKind, &t.SourceRootID, &t.CueSheetPath, &t.ParentFile, &t.CueISRC,
 			&t.CueIndexFrames, &t.CueEndFrames, &lyrics, &t.ExternalLyrics, &t.ExternalID, &identifiers); err != nil {
 			return err

@@ -104,7 +104,7 @@ func backgroundToolAllowed(name string) bool {
 	switch name {
 	case "get_release", "get_release_evidence", "get_album", "get_track", "search_library",
 		"list_albums", "list_artists", "list_artist_albums", "list_artist_tracks", "list_release_issues",
-		"search_music_metadata", "get_music_metadata", "read_pending_items", "resolve_release_match", "shelve_pending_item", "correct_release":
+		"search_music_metadata", "get_music_metadata", "read_pending_items", "resolve_release_match", "shelve_pending_item", "correct_release", "correct_track":
 		return true
 	}
 	return false
@@ -122,8 +122,13 @@ func withBackgroundPolicy(d tool.Definition, c stewardConfig) tool.Definition {
 	}
 	handler := d.Handler
 	switch name {
-	case "correct_release":
+	case "correct_release", "correct_track":
 		auto := curationtools.AutoCorrectRelease(c.writer)
+		check := checkBackgroundCorrection
+		if name == "correct_track" {
+			auto = curationtools.AutoCorrectTrack(c.writer)
+			check = checkBackgroundTrackCorrection
+		}
 		d.Handler = func(ctx context.Context, caller tool.Caller, raw json.RawMessage) (json.RawMessage, error) {
 			if caller.Source == tool.SourceCuration {
 				return auto(ctx, caller, raw)
@@ -133,7 +138,7 @@ func withBackgroundPolicy(d tool.Definition, c stewardConfig) tool.Definition {
 		preview := d.Preview
 		d.Preview = func(ctx context.Context, caller tool.Caller, raw json.RawMessage) (tool.Preview, error) {
 			if caller.Source == tool.SourceCuration {
-				if err := checkBackgroundCorrection(ctx, c.writer, caller, raw); err != nil {
+				if err := check(ctx, c.writer, caller, raw); err != nil {
 					return tool.Preview{}, err
 				}
 			}
@@ -160,6 +165,14 @@ func withBackgroundPolicy(d tool.Definition, c stewardConfig) tool.Definition {
 
 // 预览先核对写入边界，避免把批外发行或不能写入自动层的值送入审查与人工例外。
 func checkBackgroundCorrection(ctx context.Context, w *curation.Writer, caller tool.Caller, raw json.RawMessage) error {
+	return checkBackgroundFields(ctx, w, caller, raw, false)
+}
+
+func checkBackgroundTrackCorrection(ctx context.Context, w *curation.Writer, caller tool.Caller, raw json.RawMessage) error {
+	return checkBackgroundFields(ctx, w, caller, raw, true)
+}
+
+func checkBackgroundFields(ctx context.Context, w *curation.Writer, caller tool.Caller, raw json.RawMessage, track bool) error {
 	run, ok := curation.ModelRunFrom(ctx)
 	if !ok || run.ActorID != caller.User.ID || run.ConversationID != caller.ConversationID {
 		return &tool.Error{Code: tool.CodePermissionDenied, Message: "需要后台整理会话"}
@@ -172,6 +185,7 @@ func checkBackgroundCorrection(ctx context.Context, w *curation.Writer, caller t
 		return &tool.Error{Code: tool.CodePermissionDenied, Message: "自动整理开启者已变更"}
 	}
 	var in struct {
+		TrackID          string                              `json:"track_id"`
 		ReleaseID        string                              `json:"release_id"`
 		ExpectedRevision int64                               `json:"expected_revision"`
 		Changes          map[string]catalog.CorrectionIntent `json:"changes"`
@@ -187,7 +201,11 @@ func checkBackgroundCorrection(ctx context.Context, w *curation.Writer, caller t
 		if !strings.EqualFold(item.TargetID, in.ReleaseID) {
 			continue
 		}
-		err = w.CheckModelCorrection(ctx, item.TargetID, in.ExpectedRevision, in.Changes)
+		if track {
+			err = w.CheckModelTrackCorrection(ctx, item.TargetID, in.TrackID, in.ExpectedRevision, in.Changes)
+		} else {
+			err = w.CheckModelCorrection(ctx, item.TargetID, in.ExpectedRevision, in.Changes)
+		}
 		var f *operations.Failure
 		if errors.As(err, &f) {
 			return &tool.Error{Code: tool.ErrorCode(f.Code), Message: f.Message}

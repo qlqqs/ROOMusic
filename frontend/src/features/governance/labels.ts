@@ -32,3 +32,6 @@ export function displayValue(value: FieldValue | null): string {
   const text = Array.isArray(value) ? formatGenres(value) : value === null ? "" : String(value);
   return text === "" ? "（空）" : text;
 }
+
+/** 曲目字段（M7 I）的中文名。 */
+export const trackFieldLabels: Readonly<Record<"title" | "artist", string>> = { title: "曲目标题", artist: "曲目艺人" };

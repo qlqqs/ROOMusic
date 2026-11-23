@@ -37,7 +37,7 @@ func TestPostgreSQLRecentAdditionsExplain(t *testing.T) {
 		t.Skip("仅按需执行规模 EXPLAIN；设置 ROOMUSIC_CATALOG_EXPLAIN_OUTPUT 保存报告")
 	}
 	f := newPlacementFixture(t)
-	auxiliary := []string{"release_corrections", "release_field_decisions", "release_grouping_evidence", "release_issue_reviews", "release_artworks"}
+	auxiliary := []string{"release_corrections", "track_corrections", "track_auto_values", "release_field_decisions", "release_grouping_evidence", "release_issue_reviews", "release_artworks"}
 	for _, table := range auxiliary {
 		f.exec("ALTER TABLE " + table + " SET (autovacuum_enabled=false)")
 	}

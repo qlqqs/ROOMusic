@@ -162,7 +162,9 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		}
 		filters := make([]operations.Target, 0, len(targets))
 		for _, target := range targets {
-			filters = append(filters, operations.Target{Type: target.Type, ID: target.ID})
+			if target.Type != "track" {
+				filters = append(filters, operations.Target{Type: target.Type, ID: target.ID})
+			}
 		}
 		if len(filters) == 0 {
 			return runtime.ReviewEvidenceFacts{}, runtime.ErrReviewUnavailable
@@ -280,6 +282,7 @@ func reviewTargetInput(ctx context.Context, db *sql.DB, item runtime.PlanItem) (
 
 type reviewLink struct {
 	ObjectType string `json:"object_type"`
+	TrackID    string `json:"track_id,omitempty"`
 	ExternalID string `json:"external_id"`
 	Method     string `json:"method"`
 	Confidence string `json:"confidence"`
@@ -293,11 +296,18 @@ type externalRelease struct {
 
 func reviewExternal(ctx context.Context, db *sql.DB, targets []catalogtools.ReviewTarget) (json.RawMessage, error) {
 	data := []externalRelease{}
+	var trackID string
+	for _, target := range targets {
+		if target.Type == "track" {
+			trackID = target.ID
+			break
+		}
+	}
 	for _, target := range targets {
 		if target.Type != "release" {
 			continue
 		}
-		release, err := reviewExternalRelease(ctx, db, target.ID)
+		release, err := reviewExternalRelease(ctx, db, target.ID, trackID)
 		if err != nil {
 			return nil, err
 		}
@@ -310,7 +320,7 @@ func reviewExternal(ctx context.Context, db *sql.DB, targets []catalogtools.Revi
 }
 
 // 外部证据只保留审查所需的对应与候选字段，具体写入记录和程序原始证据留在本地。
-func reviewExternalRelease(ctx context.Context, db *sql.DB, id string) (externalRelease, error) {
+func reviewExternalRelease(ctx context.Context, db *sql.DB, id, trackID string) (externalRelease, error) {
 	release := externalRelease{ReleaseID: id, Links: []reviewLink{}}
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true, Isolation: sql.LevelRepeatableRead})
 	if err != nil {
@@ -340,7 +350,11 @@ func reviewExternalRelease(ctx context.Context, db *sql.DB, id string) (external
 			return release, err
 		}
 		for _, link := range links {
-			release.Links = append(release.Links, reviewLink{link.ObjectType, link.ExternalID, link.Method, link.Confidence})
+			entry := reviewLink{ObjectType: link.ObjectType, ExternalID: link.ExternalID, Method: link.Method, Confidence: link.Confidence}
+			if link.ObjectType == "track" && link.ObjectID == trackID {
+				entry.TrackID = trackID
+			}
+			release.Links = append(release.Links, entry)
 		}
 	}
 	err = tx.QueryRowContext(ctx, `SELECT COALESCE(jsonb_agg(jsonb_build_object(

@@ -32,7 +32,7 @@ const (
 		OR COALESCE(releases.album_artist, '') ILIKE '%' || $1 || '%' ESCAPE '~'
 		OR EXISTS (
 			SELECT 1 FROM media search_media
-			JOIN tracks search_track ON search_track.medium_id = search_media.id
+			JOIN track_effective search_track ON search_track.medium_id = search_media.id
 			WHERE search_media.release_id = releases.id
 			  AND search_track.source_status = 'present'
 			  AND search_track.title ILIKE '%' || $1 || '%' ESCAPE '~'
@@ -192,7 +192,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		t.cue_index_frames,t.cue_end_frames,NULLIF(BTRIM(t.cue_isrc),''),`+releasesql.TrackArtistRefsProjection+`,
 		t.work_index,t.work_title,t.movement_title
 		FROM media m
-		JOIN tracks t ON t.medium_id=m.id AND t.source_status='present'
+		JOIN track_effective t ON t.medium_id=m.id AND t.source_status='present'
 		LEFT JOIN track_display_durations dd ON dd.track_id=t.id
 		WHERE m.release_id=$1::uuid
 		ORDER BY m.position,m.id,t.position,t.id
@@ -330,6 +330,20 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 	}
 	if err := creditRows.Err(); err != nil {
 		return nil, err
+	}
+	trackIDs := make([]string, 0, len(trackLocations))
+	for id := range trackLocations {
+		trackIDs = append(trackIDs, id)
+	}
+	names, err := loadTrackFieldNames(ctx, s.database, trackIDs)
+	if err != nil {
+		return nil, err
+	}
+	for id, marks := range names {
+		location := trackLocations[id]
+		track := &media[location.medium].Tracks[location.track]
+		track.CorrectedFields = marks.corrected
+		track.AutoFields = marks.automatic
 	}
 	return media, nil
 }

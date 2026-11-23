@@ -379,6 +379,45 @@ describe("专辑详情：曲目选中与信息", () => {
   });
 });
 
+describe("专辑详情：修正曲目信息（M7 I）", () => {
+  it("管理员在曲目菜单里修正曲目标题：只提交改了的字段，带曲目自己的版本号；成员没有这一项", async () => {
+    const album = symphonies({ medium_count: 1, track_count: 2 });
+    const { api } = setup({ groups: [album] });
+    api.on("GET", /^\/api\/v1\/tracks\/[^/]+\/corrections$/, () => sampleResponse("tracks/corrections-get"));
+    api.on("PATCH", /^\/api\/v1\/tracks\/[^/]+\/corrections$/, () => sampleResponse("tracks/corrections-patched"));
+    renderApp({ path: `/albums/${album.id}` });
+    await screen.findByText("Track 01");
+    const [row] = trackRows();
+    if (row === undefined) throw new Error("缺少曲目行");
+    await userEvent.click(within(row).getByRole("button", { name: "更多操作" }));
+    await userEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "修正曲目信息…" }));
+    const dialog = await screen.findByRole("dialog", { name: /修正曲目信息/ });
+    const title = await within(dialog).findByRole("group", { name: /曲目标题/ });
+    expect(within(title).getByText("扫描结果不确定")).toBeTruthy();
+    await userEvent.click(within(title).getByRole("radio", { name: "自定义" }));
+    const input = within(title).getByRole("textbox", { name: "曲目标题（自定义）" });
+    await userEvent.clear(input);
+    await userEvent.click(within(dialog).getByRole("button", { name: "保存修改" }));
+    expect(within(dialog).getByText("曲目标题不能留空。")).toBeTruthy();
+    await userEvent.type(input, "前奏曲");
+    expect(within(dialog).getByText("将修改：曲目标题。")).toBeTruthy();
+    await userEvent.click(within(dialog).getByRole("button", { name: "保存修改" }));
+    await waitFor(() => expect(api.requestsTo("PATCH", /\/api\/v1\/tracks\/[^/]+\/corrections$/)[0]?.body).toEqual({ expected_revision: 1, changes: { title: { mode: "set", value: "前奏曲" } } }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("成员的曲目菜单里没有修正曲目信息", async () => {
+    const album = symphonies({ medium_count: 1, track_count: 1 });
+    setup({ role: "user", groups: [album] });
+    renderApp({ path: `/albums/${album.id}` });
+    await screen.findByText("Track 01");
+    const [row] = trackRows();
+    if (row === undefined) throw new Error("缺少曲目行");
+    await userEvent.click(within(row).getByRole("button", { name: "更多操作" }));
+    expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: "修正曲目信息…" })).toBeNull();
+  });
+});
+
 describe("专辑详情：封面", () => {
   it("有封面：详情页的图片有替代文字并立即加载；失败后显示说明，重新加载换一张新图片", async () => {
     const album = symphonies();

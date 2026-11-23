@@ -40,7 +40,7 @@ type reviewCurrentField struct {
 // SupportsReviewEvidence 只登记已有明确目标读取合同的工具。
 func SupportsReviewEvidence(name string) bool {
 	switch name {
-	case "correct_release", "change_release_group", "set_default_release", "review_release_issue", "claim_release":
+	case "correct_track", "correct_release", "change_release_group", "set_default_release", "review_release_issue", "claim_release":
 		return true
 	default:
 		return false
@@ -50,6 +50,7 @@ func SupportsReviewEvidence(name string) bool {
 // ReadReviewTargets 只调用现有公开读取方法；不返回原始标签候选、路径、歌词或核对人。
 func ReadReviewTargets(ctx context.Context, store *catalog.Store, issues *governance.Store, raw json.RawMessage) ([]ReviewTarget, error) {
 	var p struct {
+		TrackID         string `json:"track_id"`
 		ReleaseID       string `json:"release_id"`
 		SourceReleaseID string `json:"source_release_id"`
 		GroupID         string `json:"group_id"`
@@ -118,6 +119,16 @@ func ReadReviewTargets(ctx context.Context, store *catalog.Store, issues *govern
 			data.OpenIssues["missing_tracks"] = current.MissingTracks.Count
 		}
 		targets = append(targets, ReviewTarget{Type: "release", ID: id, Revision: state.Revision, Source: "catalog_read_summary", Data: data})
+	}
+	if p.TrackID != "" {
+		state, err := issues.LoadTrackCorrectionState(ctx, p.TrackID)
+		if err != nil {
+			return nil, err
+		}
+		if !strings.EqualFold(p.ReleaseID, state.ReleaseID) {
+			return nil, catalog.ErrTrackNotFound
+		}
+		targets = append(targets, ReviewTarget{Type: "track", ID: state.TrackID, Revision: state.Revision, Source: "catalog_read_summary", Data: map[string]any{"release_id": state.ReleaseID, "fields": state.Fields, "source": "catalog_effective_untrusted"}})
 	}
 	if p.GroupID != "" {
 		group, err := store.LoadReleaseGroup(ctx, strings.ToLower(p.GroupID))
