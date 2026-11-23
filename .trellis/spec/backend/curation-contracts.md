@@ -805,3 +805,16 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 程序完成新匹配时记 `result.artist_links="done"`。模型匹配保留空缺标记，交由程序以 MusicBrainz 来源补做；艺人目录准备中也保留补做机会。存量回填要求当前规则版本、输入摘要相符、状态为 `matched`、结果缺少 `artist_links`，且发行已有外部对应（单曲要求唯一在库曲目已有录音对应）。
 
 回填与曲目字段共用一次按既有对应读取的外部发行或录音，沿用原代次。已尝试对应记 `done`，没有可对位项记 `none`，外部 404 记 `unavailable`；源关闭或暂时不可用留待重试。在可重复读事务内复核摘要、代次和工作状态的更新时间后，将标记合入原结果。规则版本与发行匹配次数保持原值。若上一次回填已经提交对应和部分合并，重试时署名可能解析到新身份。出现幂等冲突时，以开启者、原代次步骤键、发行和匹配方法核实已提交的对应步骤，再继续余下的合并。
+
+### 19.4 必需测试与断言点
+
+| 用例 | 必需断言 |
+| --- | --- |
+| `TestAlignCredits`、`TestAlignCreditsTrackLayers`、`TestAlignCreditsConflictingArtist` | 按取证署名对位，整组等长、名字或同位标签吻合、排除公共身份；一位艺人对应多个 MBID 时仍保留其他一致对应。 |
+| `TestPostgreSQLCurationArtistLinks` | 专辑与曲目、单曲的程序对应；忽略自动层、优先人工修正；位置或名字不符时跳过，模型写入被拒。 |
+| `TestPostgreSQLCurationArtistLinksBackfill` | 已匹配发行仅按已有对应读取一次，补写标记，保留规则版本、代次、摘要和匹配次数。 |
+| `TestPostgreSQLCurationExternalLinkArtistRevertSuppresses` | 撤销后同一艺人与外部编号的对应被抑制，另一编号仍可写入。 |
+| `TestPostgreSQLCurationAutoMergeSameMusicBrainzArtist` | 同 MBID 的艺人合并，保留有效署名多的一方，记录程序来源和批次。 |
+| `TestPostgreSQLCurationAutoMergeBlocked` | 闭包标记、人工拆分、忽略行、人工撤销、多个 MBID 和已重定向分别返回约定错误。 |
+| `TestPostgreSQLCurationAutoMergeRevertSuppresses` | 按批撤销写入艺人对标记，后续匹配和人工并入第三位艺人后的回填均保留分开决定。 |
+| `TestPostgreSQLCurationAutoMergeReplay` | 回填结论落库前中断，重启后沿用代次并完成标记，对应与合并各只记录一次。 |
