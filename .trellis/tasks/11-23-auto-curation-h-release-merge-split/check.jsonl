@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/11-23-auto-curation-h-release-merge-split/research/release-merge-split.md", "reason": "扫描身份、失败用例、挂在发行上的状态、强证据数据（带行号）"}
+{"file": ".trellis/spec/backend/library-scan-pipeline.md", "reason": "扫描身份规则与写入"}
+{"file": ".trellis/spec/backend/library-scan-incremental.md", "reason": "增量跳过条件"}
+{"file": ".trellis/spec/backend/claim-contracts.md", "reason": "认领的加锁、预览令牌、撤销样板"}
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "撤销与操作记录"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "程序层、待定项、模型工具、例外与标记"}
+{"file": ".trellis/spec/backend/steward-review-contracts.md", "reason": "审查策略与证据字段"}

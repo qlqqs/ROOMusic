@@ -30,7 +30,8 @@
     "11-23-auto-curation-b3-bundled-key",
     "11-23-auto-curation-e2-exceptions-ui",
     "11-23-auto-curation-i-track-fields",
-    "11-23-auto-curation-g-artist-revert"
+    "11-23-auto-curation-g-artist-revert",
+    "11-23-auto-curation-h-release-merge-split"
   ],
   "parent": null,
   "relatedFiles": [],
