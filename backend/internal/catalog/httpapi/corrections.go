@@ -14,12 +14,20 @@ import (
 
 // releaseIDFromPath 校验路由里的发行 ID 并规范成小写，使指纹和记录不受大小写影响；无效时写出 400 并返回 false。
 func releaseIDFromPath(responseWriter http.ResponseWriter, request *http.Request) (string, bool) {
-	releaseID := request.PathValue("id")
-	if !uuid.Valid(releaseID) {
-		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_id", "发行版本标识无效")
+	return correctionIDFromPath(responseWriter, request, "发行版本标识无效")
+}
+
+func trackIDFromPath(responseWriter http.ResponseWriter, request *http.Request) (string, bool) {
+	return correctionIDFromPath(responseWriter, request, "曲目标识无效")
+}
+
+func correctionIDFromPath(responseWriter http.ResponseWriter, request *http.Request, invalidMessage string) (string, bool) {
+	id := request.PathValue("id")
+	if !uuid.Valid(id) {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_id", invalidMessage)
 		return "", false
 	}
-	return strings.ToLower(releaseID), true
+	return strings.ToLower(id), true
 }
 
 // writeOperationError 把 operations.Run 或执行器的错误写成统一的错误信封；500 与 503 在这里记录日志，响应不含内部细节。
@@ -42,7 +50,25 @@ func (handlers *Handlers) releaseCorrections(responseWriter http.ResponseWriter,
 		return
 	}
 	state, err := handlers.governance.LoadCorrectionState(request.Context(), releaseID)
+	writeCorrectionState(responseWriter, request, state, err)
+}
+
+func (handlers *Handlers) trackCorrections(responseWriter http.ResponseWriter, request *http.Request) {
+	if _, ok := handlers.guard.RequireAdmin(responseWriter, request); !ok {
+		return
+	}
+	id, ok := trackIDFromPath(responseWriter, request)
+	if !ok {
+		return
+	}
+	state, err := handlers.governance.LoadTrackCorrectionState(request.Context(), id)
+	writeCorrectionState(responseWriter, request, state, err)
+}
+
+func writeCorrectionState(responseWriter http.ResponseWriter, request *http.Request, state any, err error) {
 	switch {
+	case errors.Is(err, catalog.ErrTrackNotFound):
+		httpserver.WriteError(responseWriter, request, http.StatusNotFound, "not_found", "曲目不存在")
 	case errors.Is(err, catalog.ErrReleaseNotFound):
 		httpserver.WriteError(responseWriter, request, http.StatusNotFound, "not_found", "发行版本不存在")
 	case errors.Is(err, catalog.ErrQuery):
@@ -58,6 +84,14 @@ func (handlers *Handlers) releaseCorrections(responseWriter http.ResponseWriter,
 // （set、null 或 clear）；检查顺序是同源 403、401/403、400（ID、幂等键、请求体）、之后由 operations.Run 在
 // 同一个事务里完成幂等、版本核对、写修正、写操作记录。成功返回新的修正状态加 operation_id，同键同义重放返回同一份响应。
 func (handlers *Handlers) correctRelease(responseWriter http.ResponseWriter, request *http.Request) {
+	handlers.patchCorrection(responseWriter, request, false)
+}
+
+func (handlers *Handlers) correctTrack(responseWriter http.ResponseWriter, request *http.Request) {
+	handlers.patchCorrection(responseWriter, request, true)
+}
+
+func (handlers *Handlers) patchCorrection(responseWriter http.ResponseWriter, request *http.Request, track bool) {
 	if !handlers.guard.RequireSameOrigin(responseWriter, request) {
 		return
 	}
@@ -65,7 +99,13 @@ func (handlers *Handlers) correctRelease(responseWriter http.ResponseWriter, req
 	if !ok {
 		return
 	}
-	releaseID, ok := releaseIDFromPath(responseWriter, request)
+	parseID := releaseIDFromPath
+	parseChanges := governance.ParseCorrectionChanges
+	if track {
+		parseID = trackIDFromPath
+		parseChanges = governance.ParseTrackCorrectionChanges
+	}
+	id, ok := parseID(responseWriter, request)
 	if !ok {
 		return
 	}
@@ -85,16 +125,23 @@ func (handlers *Handlers) correctRelease(responseWriter http.ResponseWriter, req
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", "版本号无效")
 		return
 	}
-	changes, err := governance.ParseCorrectionChanges(body.Changes)
+	changes, err := parseChanges(body.Changes)
 	if err != nil {
 		handlers.writeOperationError(responseWriter, request, err)
 		return
 	}
-	correction := governance.CorrectionRequest{ReleaseID: releaseID, ExpectedRevision: body.ExpectedRevision, Changes: changes}
-	result, err := operations.Run(request.Context(), handlers.database, operations.Spec{
-		ActorID: actor.ID, Type: operations.TypeReleaseCorrection, Key: key,
-		Fingerprint: correction.Fingerprint(), RequestID: request.Header.Get("X-Request-ID"),
-	}, governance.CorrectionExecutor(correction))
+	spec := operations.Spec{ActorID: actor.ID, Key: key, RequestID: request.Header.Get("X-Request-ID")}
+	var execute operations.Executor
+	if track {
+		correction := governance.TrackCorrectionRequest{TrackID: id, ExpectedRevision: body.ExpectedRevision, Changes: changes}
+		spec.Type, spec.Fingerprint = governance.TypeTrackCorrection, correction.Fingerprint()
+		execute = governance.TrackCorrectionExecutor(correction)
+	} else {
+		correction := governance.CorrectionRequest{ReleaseID: id, ExpectedRevision: body.ExpectedRevision, Changes: changes}
+		spec.Type, spec.Fingerprint = operations.TypeReleaseCorrection, correction.Fingerprint()
+		execute = governance.CorrectionExecutor(correction)
+	}
+	result, err := operations.Run(request.Context(), handlers.database, spec, execute)
 	if err != nil {
 		handlers.writeOperationError(responseWriter, request, err)
 		return

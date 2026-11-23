@@ -136,7 +136,7 @@ func loadValues(ctx context.Context, tx *sql.Tx, kind, id string) ([]value, erro
 	}
 	var title, artist, workTitle, workCatalog string
 	err := tx.QueryRowContext(ctx, `SELECT title,artist,COALESCE(work_title,''),COALESCE(work_catalog,'')
-   FROM tracks WHERE id=$1::uuid`, id).Scan(&title, &artist, &workTitle, &workCatalog)
+   FROM track_effective WHERE id=$1::uuid`, id).Scan(&title, &artist, &workTitle, &workCatalog)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

@@ -1,0 +1,33 @@
+{
+  "body": {
+    "fields": [
+      {
+        "auto": null,
+        "correction": {
+          "mode": "set",
+          "value": "合成前奏曲"
+        },
+        "effective_value": "合成前奏曲",
+        "field": "title",
+        "scan_value": "01",
+        "uncertain": true
+      },
+      {
+        "auto": null,
+        "correction": {
+          "mode": "set",
+          "value": "合成演奏者"
+        },
+        "effective_value": "合成演奏者",
+        "field": "artist",
+        "scan_value": "未知艺术家",
+        "uncertain": true
+      }
+    ],
+    "operation_id": "00000000-0000-4000-8000-000000000001",
+    "release_id": "00000000-0000-4000-8000-000000000002",
+    "revision": 2,
+    "track_id": "00000000-0000-4000-8000-000000000003"
+  },
+  "status": 200
+}

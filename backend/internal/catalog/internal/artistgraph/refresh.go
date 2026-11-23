@@ -83,6 +83,10 @@ func refreshEffective(ctx context.Context, tx *sql.Tx, ids []string) error {
  UNION ALL
  SELECT c.id,c.release_id,c.track_id,c.role,c.name_id,c.position,m.release_id
  FROM media m JOIN tracks t ON t.medium_id=m.id JOIN artist_credits c ON c.track_id=t.id WHERE m.release_id=ANY($1::uuid[])
+ AND (c.role <> 'track_artist' OR c.layer = CASE
+   WHEN EXISTS(SELECT 1 FROM track_corrections tc WHERE tc.track_id=t.id AND tc.field='artist') THEN 'correction'
+   WHEN EXISTS(SELECT 1 FROM track_auto_values ta WHERE ta.track_id=t.id AND ta.field='artist') THEN 'auto'
+   ELSE 'scan' END)
  ) INSERT INTO artist_effective_credits(credit_id,release_id,track_id,role,name_id,artist_id,position)
  SELECT c.id,c.release_id,c.track_id,c.role,c.name_id,COALESCE(o.redirect_artist_id,route.artist_id),c.position
  FROM scoped c JOIN artist_names n ON n.id=c.name_id JOIN artist_name_keys k ON k.id=n.key_id

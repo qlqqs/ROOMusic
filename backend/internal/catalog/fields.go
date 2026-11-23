@@ -73,44 +73,56 @@ func LoadCorrectionIntents(ctx context.Context, database Queryer, releaseID stri
 	return intents, rows.Err()
 }
 
-type releaseFieldNames struct {
+type fieldNames struct {
 	corrected []string
 	automatic []string
 }
 
 // loadReleaseFieldNames 批量读取两个来源的字段名，按 CorrectableFields 排序，人工修正优先。
-func loadReleaseFieldNames(ctx context.Context, database Queryer, releaseIDs []string) (map[string]releaseFieldNames, error) {
-	rows, err := database.QueryContext(ctx, `SELECT release_id::text, field, true FROM release_corrections
+func loadReleaseFieldNames(ctx context.Context, database Queryer, releaseIDs []string) (map[string]fieldNames, error) {
+	return loadFieldNames(ctx, database, releaseIDs, CorrectableFields, `SELECT release_id::text, field, true FROM release_corrections
 		WHERE release_id=ANY($1::text[]::uuid[])
 		UNION ALL
 		SELECT release_id::text, field, false FROM release_auto_values
-		WHERE release_id=ANY($1::text[]::uuid[])`, releaseIDs)
+		WHERE release_id=ANY($1::text[]::uuid[])`)
+}
+
+func loadTrackFieldNames(ctx context.Context, database Queryer, ids []string) (map[string]fieldNames, error) {
+	return loadFieldNames(ctx, database, ids, TrackCorrectableFields, `SELECT track_id::text, field, true FROM track_corrections
+		WHERE track_id=ANY($1::text[]::uuid[])
+		UNION ALL
+		SELECT track_id::text, field, false FROM track_auto_values
+		WHERE track_id=ANY($1::text[]::uuid[])`)
+}
+
+func loadFieldNames(ctx context.Context, database Queryer, ids []string, order []CorrectableField, query string) (map[string]fieldNames, error) {
+	rows, err := database.QueryContext(ctx, query, ids)
 	if err != nil {
-		return nil, fmt.Errorf("%w: load release field names: %w", ErrQuery, err)
+		return nil, fmt.Errorf("%w: load field names: %w", ErrQuery, err)
 	}
 	defer rows.Close()
-	fieldsByRelease := make(map[string]map[string]bool, len(releaseIDs))
+	fieldsByID := make(map[string]map[string]bool, len(ids))
 	for rows.Next() {
-		var releaseID, field string
+		var id, field string
 		var corrected bool
-		if err := rows.Scan(&releaseID, &field, &corrected); err != nil {
+		if err := rows.Scan(&id, &field, &corrected); err != nil {
 			return nil, err
 		}
-		fields := fieldsByRelease[releaseID]
+		fields := fieldsByID[id]
 		if fields == nil {
-			fields = make(map[string]bool, len(CorrectableFields))
-			fieldsByRelease[releaseID] = fields
+			fields = make(map[string]bool, len(order))
+			fieldsByID[id] = fields
 		}
 		fields[field] = fields[field] || corrected
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	namesByRelease := make(map[string]releaseFieldNames, len(releaseIDs))
-	for _, releaseID := range releaseIDs {
-		fields := fieldsByRelease[releaseID]
-		names := releaseFieldNames{corrected: []string{}}
-		for _, field := range CorrectableFields {
+	namesByID := make(map[string]fieldNames, len(ids))
+	for _, id := range ids {
+		fields := fieldsByID[id]
+		names := fieldNames{corrected: []string{}}
+		for _, field := range order {
 			switch corrected, present := fields[field.Name]; {
 			case corrected:
 				names.corrected = append(names.corrected, field.Name)
@@ -118,9 +130,9 @@ func loadReleaseFieldNames(ctx context.Context, database Queryer, releaseIDs []s
 				names.automatic = append(names.automatic, field.Name)
 			}
 		}
-		namesByRelease[releaseID] = names
+		namesByID[id] = names
 	}
-	return namesByRelease, nil
+	return namesByID, nil
 }
 
 func decodeIntent(name, mode string, text, listJSON sql.NullString, year sql.NullInt64) (CorrectionIntent, error) {
@@ -178,6 +190,49 @@ func LoadAutoValues(ctx context.Context, database Queryer, releaseID string) (ma
 		}
 		value.Value = intent.Value
 		values[name] = value
+	}
+	return values, rows.Err()
+}
+
+var TrackCorrectableFields = []CorrectableField{
+	{Name: "title", Label: "曲目标题", Required: true},
+	{Name: "artist", Label: "曲目艺人", Required: true},
+}
+
+func LoadTrackCorrectionIntents(ctx context.Context, database Queryer, trackID string) (map[string]CorrectionIntent, error) {
+	rows, err := database.QueryContext(ctx, `SELECT field, mode, text_value FROM track_corrections WHERE track_id=$1::uuid`, trackID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	intents := map[string]CorrectionIntent{}
+	for rows.Next() {
+		var field, mode, text string
+		if err := rows.Scan(&field, &mode, &text); err != nil {
+			return nil, err
+		}
+		intents[field] = CorrectionIntent{Mode: mode, Value: text}
+	}
+	return intents, rows.Err()
+}
+
+func LoadTrackAutoValues(ctx context.Context, database Queryer, trackID string) (map[string]AutoValue, error) {
+	rows, err := database.QueryContext(ctx, `SELECT a.field, a.mode, a.text_value, a.operation_id::text,
+		o.origin->>'provider_kind', o.origin->>'provider'
+		FROM track_auto_values a JOIN operations o ON o.id=a.operation_id WHERE a.track_id=$1::uuid`, trackID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	values := map[string]AutoValue{}
+	for rows.Next() {
+		var field, text string
+		var value AutoValue
+		if err := rows.Scan(&field, &value.Mode, &text, &value.OperationID, &value.ProviderKind, &value.Provider); err != nil {
+			return nil, err
+		}
+		value.Value = text
+		values[field] = value
 	}
 	return values, rows.Err()
 }

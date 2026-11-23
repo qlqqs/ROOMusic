@@ -19,9 +19,13 @@ func (correctionKind) PreviewRevert(ctx context.Context, q operations.Queryer, r
 	if err != nil {
 		return nil, err
 	}
+	return previewCorrectionFields(state.Fields, before.Fields), nil
+}
+
+func previewCorrectionFields(fields []CorrectionField, intents map[string]*catalog.CorrectionIntent) []operations.PreviewChange {
 	changes := []operations.PreviewChange{}
-	for _, field := range state.Fields {
-		intent, changed := before.Fields[field.Field]
+	for _, field := range fields {
+		intent, changed := intents[field.Field]
 		if !changed {
 			continue
 		}
@@ -34,7 +38,7 @@ func (correctionKind) PreviewRevert(ctx context.Context, q operations.Queryer, r
 		}
 		changes = append(changes, operations.PreviewChange{Field: field.Field, Before: field.EffectiveValue, After: after})
 	}
-	return changes, nil
+	return changes
 }
 
 // PreviewRevert 只投影认领撤销会恢复的人工意图，不外发内部记录引用。

@@ -50,7 +50,7 @@ func (s *Store) LoadTrackPlacements(ctx context.Context, trackIDs []string) (map
 
 	type trackRow struct{ id, title, releaseID string }
 	rows, err := s.database.QueryContext(ctx, `SELECT tracks.id::text, tracks.title, media.release_id::text
-		FROM tracks JOIN media ON media.id = tracks.medium_id
+		FROM track_effective tracks JOIN media ON media.id = tracks.medium_id
 		WHERE tracks.id = ANY($1::text[]::uuid[]) AND tracks.source_status = 'present'`, ids)
 	if err != nil {
 		return nil, fmt.Errorf("load track placements: %w", err)

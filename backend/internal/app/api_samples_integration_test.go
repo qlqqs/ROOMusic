@@ -387,6 +387,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordRootRelocateSamples(t, application, samples, call, admin, rootB)
 
 	recordDSDFormatSamples(t, application, samples, call, admin)
+	recordTrackCorrectionSamples(t, application, samples, call, admin)
 
 	recordCurationSamples(t, samples)
 	recordExternalCurationSamples(t, samples)
@@ -784,6 +785,25 @@ func recordCorrectionSamples(t *testing.T, application *integrationTestApplicati
 	samples.record("errors/revision-conflict-release", call(http.MethodPatch, path, map[string]any{"expected_revision": 1, "changes": map[string]any{
 		"genre": map[string]any{"mode": "set", "value": []string{"Romantic", "Classical"}},
 	}}, admin, key("0104")), http.StatusConflict)
+}
+
+func recordTrackCorrectionSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	var trackID, releaseID string
+	if err := application.database.QueryRow(`SELECT t.id,m.release_id FROM tracks t JOIN media m ON m.id=t.medium_id
+		WHERE t.source_status='present' AND t.codec='dsf'`).Scan(&trackID, &releaseID); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/tracks/" + trackID + "/corrections"
+	samples.record("tracks/corrections-get", call(http.MethodGet, path, nil, admin), http.StatusOK)
+	body := map[string]any{"expected_revision": 1, "changes": map[string]any{
+		"title":  map[string]string{"mode": "set", "value": "合成前奏曲"},
+		"artist": map[string]string{"mode": "set", "value": "合成演奏者"},
+	}}
+	samples.record("tracks/corrections-patched", call(http.MethodPatch, path, body, admin, idempotencyHeader(uuid.New())), http.StatusOK)
+	samples.record("releases/get-track-corrected", call(http.MethodGet, "/api/v1/releases/"+releaseID, nil, admin), http.StatusOK)
+	samples.record("operations/track-correction-list", call(http.MethodGet, "/api/v1/operations?release_id="+releaseID, nil, admin), http.StatusOK)
+	samples.record("errors/track-revision-conflict", call(http.MethodPatch, path, body, admin, idempotencyHeader(uuid.New())), http.StatusConflict)
 }
 
 // recordGroupChangeSamples 记录人工归组接口：把合成的 CUE 专辑归入单曲专辑所在的组、再移出为独立专辑的成功响应，

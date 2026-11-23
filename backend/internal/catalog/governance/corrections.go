@@ -31,7 +31,11 @@ const (
 )
 
 func correctableFieldNamed(name string) (catalog.CorrectableField, bool) {
-	for _, field := range catalog.CorrectableFields {
+	return findCorrectionField(catalog.CorrectableFields, name)
+}
+
+func findCorrectionField(fields []catalog.CorrectableField, name string) (catalog.CorrectableField, bool) {
+	for _, field := range fields {
 		if field.Name == name {
 			return field, true
 		}
@@ -62,9 +66,17 @@ func invalidCorrection(format string, arguments ...any) *operations.Failure {
 // （文本去掉首尾空白并折叠内部空白后不能为空、不含控制字符、不超过 4096 字节；年份是 1 到 9999 的整数）；
 // null 只用于可以留空的字段；clear 不带值。任何一项无效都整体拒绝，返回 invalid_correction。
 func ParseCorrectionChanges(raw map[string]RawCorrectionChange) (map[string]CorrectionChange, error) {
+	return parseCorrectionChanges(raw, catalog.CorrectableFields)
+}
+
+func ParseTrackCorrectionChanges(raw map[string]RawCorrectionChange) (map[string]CorrectionChange, error) {
+	return parseCorrectionChanges(raw, catalog.TrackCorrectableFields)
+}
+
+func parseCorrectionChanges(raw map[string]RawCorrectionChange, fields []catalog.CorrectableField) (map[string]CorrectionChange, error) {
 	changes := make(map[string]CorrectionChange, len(raw))
 	for name, item := range raw {
-		field, known := correctableFieldNamed(name)
+		field, known := findCorrectionField(fields, name)
 		if !known {
 			return nil, invalidCorrection("不能修正这个字段")
 		}

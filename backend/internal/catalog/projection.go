@@ -35,6 +35,8 @@ type ReleaseTrackWork struct {
 }
 
 type ReleaseTrack struct {
+	CorrectedFields []string          `json:"corrected_fields,omitempty"`
+	AutoFields      []string          `json:"auto_fields,omitempty"`
 	ID              string            `json:"id"`
 	Title           string            `json:"title"`
 	Artist          string            `json:"artist"`

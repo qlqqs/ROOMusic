@@ -107,7 +107,7 @@ func TestPostgreSQLTrackCollectionStatsExplain(t *testing.T) {
 		t.Fatalf("诊断需要数据库默认 jit=on，不主动修改会话或全局设置: jit=%q", baselineJIT)
 	}
 	t.Logf("PostgreSQL=%s; tracks=%d releases=%d groups=%d missing=%d; 每发行10轨; 首次/热测不清缓存; output=%s", version, tracks, releases, groups, missing, output)
-	auxiliary := []string{"release_artworks", "release_corrections", "release_issue_reviews", "release_field_decisions", "release_grouping_evidence"}
+	auxiliary := []string{"release_artworks", "release_corrections", "track_corrections", "track_auto_values", "release_issue_reviews", "release_field_decisions", "release_grouping_evidence"}
 	for _, stage := range []string{"default-stats", "analyzed"} {
 		for _, table := range auxiliary {
 			if stage == "analyzed" {
