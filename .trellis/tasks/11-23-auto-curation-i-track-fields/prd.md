@@ -39,3 +39,14 @@
 ## 规划决定方式
 
 子代理审阅路线（qlqq 已授权子任务规划完直接实现）。规划子代理（Plan）对照代码审阅 I1–I9：6 项必须改、4 项建议，主代理全部采纳；审阅留下的产品取舍（文件名推出的标题算空缺）由主代理定为“算”。见 `design.md` 第 1 节。
+
+## 验证记录（2026-11-23）
+
+- 派发 1 测试：7 个集成用例（视图列一致、有效值读取、人工修正接口与撤销、重扫保留、署名、搜索）与 0065 往返通过；四项变异各被检出。
+- 派发 2 测试：17 个测试入口（自动层、程序补全与补做、歌词用有效艺人、模型工具、例外、审查证据）通过；四项变异各被检出。
+- 现有 API 样本逐字不变（两次派发各录制核对一次）；新增样本 8 个，前端契约登记。
+- 全量：`go vet ./...`、`go test ./...` 通过；整套集成串行一次 2357 项通过、1 项失败（MCP 工具数 55→56，新增 `correct_track` 的预期变化），更新期望后 `TestPostgreSQLMCPRealRegistryProtocolsAndIsolation`（8 个子用例）与 `TestC6RealRegistryToolCounts` 重跑通过。
+- 前端：typecheck、eslint 通过；Vitest 全量 4594 通过、2 个负载敏感用例失败（与集成同时跑；单独运行 124/124 通过）；Playwright curation 7、albums 23 通过。
+- 中途两个 Codex 代理遇上游接口 502 中断，恢复后从中断处续做，实现文件经核对与提交一致。
+- EXPLAIN 门禁（`ROOMUSIC_CATALOG_EXPLAIN=1`）：PersonalCatalog、PersonalCatalogLargeRelease、TrackCollectionStats、PersonalOrderRebalance 通过；RecentAdditions 需要另一个开关、与曲目视图无关，跳过。
+- 未做：真实曲库与真实 MusicBrainz 下的补全（V12）。

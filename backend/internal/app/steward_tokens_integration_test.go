@@ -149,11 +149,20 @@ func TestPostgreSQLMCPRealRegistryProtocolsAndIsolation(t *testing.T) {
 	server := httptest.NewServer(f.mux)
 	defer server.Close()
 	for _, version := range []string{"2026-07-28", "2025-11-25"} {
-		for _, role := range []string{"admin", "user"} {
-			t.Run(version+"/"+role, func(t *testing.T) {
+		for _, tc := range []struct {
+			role  string
+			scope token.Scope
+		}{
+			{"admin", token.ScopeRead},
+			{"admin", token.ScopeReadWrite},
+			{"user", token.ScopeRead},
+			{"user", token.ScopeReadWrite},
+		} {
+			role, scope := tc.role, tc.scope
+			t.Run(version+"/"+role+"/"+string(scope), func(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
-				_, plain, err := f.tokens.Issue(ctx, f.users[role].ID, token.IssueInput{Name: "合成协议测试", Scope: token.ScopeRead})
+				_, plain, err := f.tokens.Issue(ctx, f.users[role].ID, token.IssueInput{Name: "合成协议测试", Scope: scope})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -172,18 +181,23 @@ func TestPostgreSQLMCPRealRegistryProtocolsAndIsolation(t *testing.T) {
 				}
 				caller := tool.Caller{User: f.users[role], Source: tool.SourceChat}
 				all := f.registry.List(caller)
+				if role == "admin" && len(all) != 56 {
+					t.Fatalf("实际登记工具数=%d，期望 56", len(all))
+				}
+				readWrite := scope == token.ScopeReadWrite
 				var want []tool.Definition
 				for _, d := range all {
-					if d.Scope == tool.ScopeRead || d.Scope == tool.ScopePersonal && d.ReadOnly {
+					if d.Scope == tool.ScopeRead || (d.Scope == tool.ScopePersonal && d.ReadOnly) ||
+						(readWrite && (d.Scope == tool.ScopePersonal || d.Scope == tool.ScopeShared)) {
 						want = append(want, d)
 					}
-				}
-				if role == "admin" && len(all) != 55 {
-					t.Fatalf("实际登记工具数=%d，期望 55", len(all))
 				}
 				names := map[string]bool{}
 				for _, definition := range listed.Tools {
 					names[definition.Name] = true
+				}
+				if wantVisible := role == "admin" && readWrite; names["correct_track"] != wantVisible {
+					t.Errorf("correct_track 可见=%t，期望 %t", names["correct_track"], wantVisible)
 				}
 				if len(listed.Tools) != len(want) {
 					t.Fatalf("可见工具数=%d，注册表=%d", len(listed.Tools), len(want))
