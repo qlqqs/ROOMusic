@@ -43,6 +43,8 @@ type input struct {
 	Issue            string                                    `json:"issue"`
 	BasisToken       string                                    `json:"basis_token"`
 	SourceReleaseID  string                                    `json:"source_release_id"`
+	TargetReleaseID  string                                    `json:"target_release_id"`
+	Token            string                                    `json:"token"`
 	SourceRevision   int64                                     `json:"source_revision"`
 	Preview          string                                    `json:"preview"`
 }
@@ -51,6 +53,7 @@ type input struct {
 func StewardTools(db *sql.DB, resolution governance.ArtistResolutionRefresher) []tool.Definition {
 	a := adapter{db, governance.NewStore(db), catalog.NewStore(db), governance.NewArtistGovernance(resolution)}
 	release := `"release_id":` + idSchema + `,"expected_revision":` + revisionSchema
+	mergePair := `"target_release_id":` + idSchema + `,"source_release_id":` + idSchema
 	artist := `"artist_id":` + idSchema + `,"expected_revision":` + revisionSchema
 	changes := map[string]any{}
 	for _, name := range []string{"title", "album_artist", "year", "genre", "label", "catalog_number", "edition", "barcode"} {
@@ -66,12 +69,14 @@ func StewardTools(db *sql.DB, resolution governance.ArtistResolutionRefresher) [
 		a.write("set_default_release", "设置专辑默认版本；release_id 为 null 时恢复自动选择，expected_revision 是组版本号。", `"group_id":`+idSchema+`,"expected_revision":`+revisionSchema+`,"release_id":{}`, `"group_id","expected_revision","release_id"`, true),
 		a.write("review_release_issue", "核对或取消核对问题。review 必须提供 get_release_issues 返回的 basis 令牌到 basis_token；unreview 不提供令牌。", release+`,"issue":{"type":"string"},"action":{"type":"string","enum":["review","unreview"]},"basis_token":{"type":"string"}`, `"release_id","expected_revision","issue","action"`, true),
 		a.write("claim_release", "把旧版本人工修改认领到当前版本。先用 preview_release_claim 取得 preview 令牌和双方 revision。", release+`,"source_release_id":`+idSchema+`,"source_revision":`+revisionSchema+`,"preview":{"type":"string","minLength":1}`, `"release_id","expected_revision","source_release_id","source_revision","preview"`, true),
+		a.write("merge_releases", "把来源发行的全部碟并入目标发行。先用 preview_release_merge 展示碟序、隐藏项目和收藏去向，取得用户确认后传回 token。", mergePair+`,"token":{"type":"string","minLength":1}`, `"target_release_id","source_release_id","token"`, true),
 		a.write("merge_artists", "把 source_artist_id 并入 artist_id，提供双方版本号。可以从操作记录撤销。", artist+`,"source_artist_id":`+idSchema+`,"source_expected_revision":`+revisionSchema, `"artist_id","expected_revision","source_artist_id","source_expected_revision"`, true),
 		a.write("split_artist", "按别名或专辑拆分艺人；先预览，把返回的 basis 令牌放入 basis_token。target=new 新建或 restore 恢复。不可撤销。", artist+`,`+scopeProperties+`,"basis_token":{"type":"string","minLength":64,"maxLength":64},"target":{"type":"object","additionalProperties":false,"required":["kind"],"properties":{"kind":{"type":"string","enum":["new","restore"]},"display_name":{"type":"string"},"artist_id":`+idSchema+`,"expected_revision":`+revisionSchema+`}}`, `"artist_id","expected_revision","mode","name_key_ids","basis_token","target"`, false),
 		a.write("rename_artist", "修改艺人主名；mode=set 时提供 name，auto 时省略 name。可以从操作记录撤销。", artist+`,"mode":{"type":"string","enum":["set","auto"]},"name":{"type":"string"}`, `"artist_id","expected_revision","mode"`, true),
 		a.write("ignore_artist_candidate", "忽略或恢复艺人候选提示，提供双方版本号和明确的名字键对。可以从操作记录撤销。", artist+`,"other_artist_id":`+idSchema+`,"other_expected_revision":`+revisionSchema+`,"ignored":{"type":"boolean"},"key_pairs":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["left_key_id","right_key_id"],"properties":{"left_key_id":`+idSchema+`,"right_key_id":`+idSchema+`}}}`, `"artist_id","expected_revision","other_artist_id","other_expected_revision","ignored","key_pairs"`, true),
 	}
 	definitions = append(definitions,
+		a.read("preview_release_merge", "预览两个发行整张并入后的碟序、隐藏项目与收藏转移数，返回确认时需要的 token。", mergePair, `"target_release_id","source_release_id"`),
 		a.read("preview_release_claim", "只读预览旧版本认领到新版本，返回迁移条目、preview 令牌和双方 revision。", `"release_id":`+idSchema+`,"source_release_id":`+idSchema, `"release_id","source_release_id"`),
 		a.read("preview_artist_split", "只读预览艺人拆分范围，返回 basis 令牌；写工具使用 basis_token 传回。", `"artist_id":`+idSchema+`,`+scopeProperties, `"artist_id","mode","name_key_ids"`))
 	return definitions
@@ -100,6 +105,18 @@ func (a adapter) write(name, description, properties, required string, reversibl
 			if err != nil {
 				return nil, failure(err)
 			}
+			if name == "merge_releases" {
+				// 管家用顶层 operation_id 将已确认的方案项关联到操作记录。
+				var response struct {
+					OperationID string                     `json:"operation_id"`
+					Release     governance.MergeReleaseRef `json:"release"`
+				}
+				if err := json.Unmarshal(result.Response, &response); err != nil {
+					return nil, err
+				}
+				response.OperationID = result.OperationID
+				return json.Marshal(response)
+			}
 			return result.Response, nil
 		}}
 }
@@ -111,12 +128,15 @@ func (a adapter) read(name, description, properties, required string) tool.Defin
 		}
 		var result any
 		var err error
-		if name == "preview_release_claim" {
+		switch name {
+		case "preview_release_merge":
+			result, err = a.reads.PreviewReleaseMerge(ctx, strings.ToLower(p.TargetReleaseID), strings.ToLower(p.SourceReleaseID))
+		case "preview_release_claim":
 			if !uuid.Valid(p.ReleaseID) || !uuid.Valid(p.SourceReleaseID) || strings.EqualFold(p.ReleaseID, p.SourceReleaseID) {
 				return nil, invalid()
 			}
 			result, err = a.reads.PreviewClaim(ctx, strings.ToLower(p.SourceReleaseID), strings.ToLower(p.ReleaseID))
-		} else {
+		case "preview_artist_split":
 			if !uuid.Valid(p.ArtistID) {
 				return nil, invalid()
 			}

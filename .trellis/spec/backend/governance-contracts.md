@@ -61,7 +61,7 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 - 错误经 `operations.Problem(err)` 映射：`*Failure` 按类别 400/404/409；连接类错误（上下文取消、网络、PostgreSQL `08`/`53`/`57`/`58`）为
   `ErrUnavailable` → `503 database_unavailable`（结果不确定，用**同一个键**重试即可对账）；其余（约束、触发器）为 `ErrOperationFailed` → `500 operation_failed`。
   500 与 503 在 handler 记日志，响应不含内部细节。
-- `Kind` 接口（每种操作类型一个，由拥有业务表的包实现并经 `app` 注册；目前是修正、归组、默认版本、核对与认领五种）：`Type()`、`Revert(ctx, tx, operationID, original)`、
+- `Kind` 接口（每种操作类型一个，由拥有业务表的包实现并经 `app` 注册）：`Type()`、`Revert(ctx, tx, operationID, original)`、
   `Describe(ctx, db, records)`（批量补充列表展示：目标当前状态——发行目标给 `Release`、专辑目标给 `Album`——、改动摘要、`Revertible`）。`RevertExecutor(kind, originalID)` 负责通用部分：
   先**单独一条语句** `SELECT … FOR UPDATE` 锁住原记录，再读取它（READ COMMITTED 下带连接的 `FOR UPDATE` 只重检被锁的行，连接来的行仍取自语句快照，
   读不到刚提交的撤销记录），所以对同一条记录的并发撤销串行，后到的得到 `already_reverted`。
@@ -237,3 +237,7 @@ I1 来源读取仍遵循[艺人合同](./artist-contracts.md)，不改治理记�
 操作类型 `track_correction` 以当时所属发行为目标，前后快照含 `track_id`、`track_title`、改动字段的意图与当时的有效值。列表按曲目的在库状态与当前曲目版本判断能否撤销。撤销恢复之前的人工意图，并递增曲目版本。曲目已缺失或后续人工版本变化时返回 `409 revert_conflict`。同发行另一首曲目的编辑可以独立撤销。曲目移到另一发行后，撤销记录属于它当前的发行，原记录保留原目标。同路径替换文件产生新曲目 ID，原修正随原曲目保留。
 
 验证应覆盖设值、清除、同键重放、过期写入、跨曲目版本独立、撤销后读取当前下层值，以及重扫后保留人工意图。未修正时，已有目录与操作记录接口样本应逐字相同。
+
+## 整张发行并入
+
+`release_merge` 记录人工、对话、MCP 与管理员采纳的合并，`release_auto_merge` 记录自动合并。主目标为接收发行，合并与撤销均以 `operations_release_targets` 关联双方。列表的 `changes` 给出来源与碟数，自动合并另核对之后的人工结构操作。见[发行合并合同](./release-merge-contracts.md)。

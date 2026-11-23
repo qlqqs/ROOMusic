@@ -25,7 +25,7 @@ import (
 	"hash/fnv"
 	"io"
 	"net"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -43,6 +43,8 @@ const (
 	TypeReleaseGroupDefault    = "release_group_default"
 	TypeReleaseIssueReview     = "release_issue_review"
 	TypeReleaseClaim           = "release_claim"
+	TypeReleaseMerge           = "release_merge"
+	TypeReleaseAutoMerge       = "release_auto_merge"
 	TypeRevert                 = "revert"
 	TypeArtistMerge            = "artist_merge"
 	TypeArtistSplit            = "artist_split"
@@ -280,8 +282,8 @@ func Run(ctx context.Context, database *sql.DB, spec Spec, execute Executor) (Re
 		}
 		return Result{}, classify("insert operation record", err)
 	}
-	if err := insertArtistTargets(ctx, tx, operationID, outcome); err != nil {
-		return Result{}, classify("insert artist targets", err)
+	if err := insertOperationTargets(ctx, tx, operationID, outcome); err != nil {
+		return Result{}, classify("insert operation targets", err)
 	}
 	if err = tx.Commit(); err != nil {
 		return Result{}, classify("commit", err)
@@ -334,29 +336,32 @@ func isConnectionError(err error) bool {
 		errors.Is(err, driver.ErrBadConn) || errors.Is(err, sql.ErrConnDone)
 }
 
-// insertArtistTargets 只持久化执行器提供的身份引用，不查询其他能力的私有表。
-func insertArtistTargets(ctx context.Context, tx *sql.Tx, operationID string, outcome Outcome) error {
-	targets := append([]Target{{Type: outcome.TargetType, ID: outcome.TargetID}}, outcome.Targets...)
-	seen := map[string]bool{}
-	ids := make([]string, 0, len(targets))
-	for _, target := range targets {
-		if target.Type != TargetArtist {
-			continue
+// 执行器列出涉及的发行。艺人操作还自动关联其主目标。
+func insertOperationTargets(ctx context.Context, tx *sql.Tx, operationID string, outcome Outcome) error {
+	targets := outcome.Targets
+	if outcome.TargetType == TargetArtist {
+		targets = append([]Target{{Type: TargetArtist, ID: outcome.TargetID}}, targets...)
+	}
+	for _, relation := range []struct{ kind, insert string }{
+		{TargetArtist, `INSERT INTO operations_artist_targets(operation_id,artist_id) SELECT $1::uuid, unnest($2::text[]::uuid[])`},
+		{TargetRelease, `INSERT INTO operations_release_targets(operation_id,release_id) SELECT $1::uuid, unnest($2::text[]::uuid[])`},
+	} {
+		var ids []string
+		for _, target := range targets {
+			if target.Type == relation.kind {
+				id := strings.ToLower(target.ID)
+				if !uuid.Valid(id) {
+					return fmt.Errorf("invalid %s operation target", relation.kind)
+				}
+				ids = append(ids, id)
+			}
 		}
-		id := strings.ToLower(target.ID)
-		if !uuid.Valid(id) {
-			return errors.New("invalid artist operation target")
-		}
-		if !seen[id] {
-			seen[id] = true
-			ids = append(ids, id)
+		if len(ids) > 0 {
+			slices.Sort(ids)
+			if _, err := tx.ExecContext(ctx, relation.insert, operationID, slices.Compact(ids)); err != nil {
+				return err
+			}
 		}
 	}
-	if len(ids) == 0 {
-		return nil
-	}
-	sort.Strings(ids)
-	_, err := tx.ExecContext(ctx, `INSERT INTO operations_artist_targets(operation_id,artist_id)
- SELECT $1::uuid, unnest($2::text[]::uuid[])`, operationID, ids)
-	return err
+	return nil
 }

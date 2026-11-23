@@ -74,6 +74,8 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/releases/{id}/issue-review", handlers.reviewReleaseIssue)
 	mux.HandleFunc("GET /api/v1/releases/{id}/claim-preview", handlers.claimPreview)
 	mux.HandleFunc("POST /api/v1/releases/{id}/claim", handlers.claimRelease)
+	mux.HandleFunc("GET /api/v1/releases/{id}/merge-preview", handlers.releaseMergePreview)
+	mux.HandleFunc("POST /api/v1/releases/{id}/merge", handlers.mergeReleases)
 	mux.HandleFunc("GET /api/v1/releases/{id}/claim-hints", handlers.releaseClaimHints)
 	mux.HandleFunc("GET /api/v1/release-claims", handlers.listReleaseClaims)
 	mux.HandleFunc("GET /api/v1/release-claims/{id}", handlers.releaseClaim)
@@ -162,7 +164,8 @@ func (handlers *Handlers) listReleases(responseWriter http.ResponseWriter, reque
 }
 
 func (handlers *Handlers) releaseDetail(responseWriter http.ResponseWriter, request *http.Request) {
-	if _, err := handlers.guard.Authenticate(request); err != nil {
+	user, err := handlers.guard.Authenticate(request)
+	if err != nil {
 		handlers.guard.WriteUnauthenticated(responseWriter, request)
 		return
 	}
@@ -212,10 +215,20 @@ func (handlers *Handlers) releaseDetail(responseWriter http.ResponseWriter, requ
 		Revision:        header.Revision,
 		CorrectedFields: header.CorrectedFields,
 	}
-	httpserver.WriteJSON(responseWriter, http.StatusOK, struct {
+	response := struct {
 		catalog.ReleaseDetail
-		AutoFields []string `json:"auto_fields,omitempty"`
-	}{ReleaseDetail: detail, AutoFields: header.AutoFields})
+		AutoFields     []string                    `json:"auto_fields,omitempty"`
+		MergedReleases *[]governance.MergedRelease `json:"merged_releases,omitempty"`
+	}{ReleaseDetail: detail, AutoFields: header.AutoFields}
+	if user.Role == "admin" {
+		merged, err := handlers.governance.LoadMergedReleases(request.Context(), releaseID)
+		if err != nil {
+			httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_error", "无法读取已并入的发行版本")
+			return
+		}
+		response.MergedReleases = &merged
+	}
+	httpserver.WriteJSON(responseWriter, http.StatusOK, response)
 }
 
 func (handlers *Handlers) writeReleaseLoadError(responseWriter http.ResponseWriter, request *http.Request, err error) {

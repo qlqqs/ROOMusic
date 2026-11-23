@@ -120,7 +120,7 @@ func PlanStagedRoot(ctx context.Context, database StagingDB, scanID, rootID stri
 		return plan, err
 	}
 	// 候选写入前保存沿用曲目的原发行，供本根保存完成后计算被腾空组的收藏接收方。
-	if _, err := database.ExecContext(ctx, `UPDATE scan_observations o SET previous_release_id=m.release_id
+	if _, err := database.ExecContext(ctx, `UPDATE scan_observations o SET previous_release_id=COALESCE(m.origin_release_id,m.release_id)
 		FROM tracks t JOIN media m ON m.id=t.medium_id
 		WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND NOT o.withheld AND o.planned_track_id=t.id`, scanID, rootID); err != nil {
 		return plan, err
@@ -436,11 +436,11 @@ func allocateReleases(ctx context.Context, database StagingDB, scanID, rootID st
 		), totals AS (
 			SELECT candidate_key, COUNT(*) AS total FROM candidate_rows GROUP BY candidate_key
 		), candidate_overlaps AS (
-			SELECT c.candidate_key, m.release_id, COUNT(*) AS overlap
+			SELECT c.candidate_key, COALESCE(m.origin_release_id,m.release_id) AS release_id, COUNT(*) AS overlap
 			FROM candidate_rows c
 			JOIN tracks t ON t.id=c.planned_track_id
 			JOIN media m ON m.id=t.medium_id
-			GROUP BY c.candidate_key, m.release_id
+			GROUP BY c.candidate_key, COALESCE(m.origin_release_id,m.release_id)
 		), preferences AS (
 			SELECT o.candidate_key, o.release_id, o.overlap, COALESCE(r.candidate_anchor=o.candidate_key, FALSE) AS stays
 			FROM candidate_overlaps o

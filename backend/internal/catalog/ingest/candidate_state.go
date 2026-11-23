@@ -40,7 +40,7 @@ func CandidateUnchanged(ctx context.Context, database queryer, scanID, rootID, c
 			(o.planned_track_id IS NOT NULL AND o.matched_track_id IS NOT NULL
 			 AND o.planned_track_id=o.matched_track_id AND NOT o.content_changed
 			 AND o.planned_release_id=s.release_id
-			 AND t.source_status='present' AND m.release_id=s.release_id
+			 AND t.source_status='present' AND COALESCE(m.origin_release_id,m.release_id)=s.release_id
 			 AND t.source_size IS NOT NULL AND t.source_modified_at IS NOT NULL
 			 AND (o.content_fingerprint IS NULL OR t.content_fingerprint IS NOT NULL)) IS TRUE AS unchanged
 		FROM scan_observations o

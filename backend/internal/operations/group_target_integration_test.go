@@ -114,7 +114,7 @@ func TestPostgreSQLReleaseGroupColumnsAndOperationConstraints(t *testing.T) {
 		t.Fatalf("an issue-review record targeting a release: %v", err)
 	}
 	for name, testCase := range map[string]struct{ operationType, targetType, constraint string }{
-		"unknown type":        {"release_merge", TargetReleaseGroup, "operations_type_ck"},
+		"unknown type":        {"unknown_operation", TargetReleaseGroup, "operations_type_ck"},
 		"unknown target type": {TypeReleaseGroupDefault, "track", "operations_target_type_ck"},
 	} {
 		if err := insertRecord(testCase.operationType, testCase.targetType); violatedConstraint(err) != testCase.constraint {

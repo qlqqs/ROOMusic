@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "merge_changed",
+      "message": "预览后发行内容已变化，请重新预览"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

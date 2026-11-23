@@ -29,6 +29,7 @@ const (
 // 组里“有别的发行”不看可见与否：扫描从不把新发行放进已有的组，所以组里有别的发行只可能来自人工归组，
 // 而且同一张专辑的两个版本都被替换之后，先认领一个，另一个仍能认领回这张专辑。
 const releaseClaimablePredicate = `(NOT ` + releasesql.ReleaseVisiblePredicate + `
+	AND NOT EXISTS (SELECT 1 FROM release_merges WHERE source_release_id = releases.id)
 	AND (
 		EXISTS (SELECT 1 FROM release_corrections claim_correction WHERE claim_correction.release_id = releases.id)
 		OR EXISTS (SELECT 1 FROM releases claim_sibling WHERE claim_sibling.group_id = releases.group_id AND claim_sibling.id <> releases.id)

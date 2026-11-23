@@ -181,8 +181,8 @@ func TestPostgreSQLMCPRealRegistryProtocolsAndIsolation(t *testing.T) {
 				}
 				caller := tool.Caller{User: f.users[role], Source: tool.SourceChat}
 				all := f.registry.List(caller)
-				if role == "admin" && len(all) != 56 {
-					t.Fatalf("实际登记工具数=%d，期望 56", len(all))
+				if role == "admin" && len(all) != 58 {
+					t.Fatalf("实际登记工具数=%d，期望 58", len(all))
 				}
 				readWrite := scope == token.ScopeReadWrite
 				var want []tool.Definition

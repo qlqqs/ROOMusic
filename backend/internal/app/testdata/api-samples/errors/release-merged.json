@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "release_merged",
+      "message": "发行已经并入其他发行"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "release_too_large",
+      "message": "并入后超过发行的碟、曲目或曲目署名上限"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

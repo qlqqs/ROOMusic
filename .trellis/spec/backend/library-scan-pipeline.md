@@ -81,7 +81,7 @@
   的候选保持原状。每次候选写入替换 current decisions、grouping evidence、credits 和 track observations，不按重扫次数追加。
 - **Release 身份**（阶段 I）：候选已规划沿用的曲目中严格过半当前属于同一个既有 Release 时沿用它；多个候选争同一个
   Release 时重叠多者得，平局时候选键等于该 Release 当前锚点者（留在原位置的一方）优先，再按候选键升序；落选或无倾向的
-  候选写入时新建 Release；普通候选另建 ReleaseGroup，`format_split` 新版本按下述同组规则选组。`candidate_anchor` 只记录最近一次的位置，不参与查找、不要求唯一。因此改名、
+  候选写入时新建 Release；普通候选另建 ReleaseGroup，`format_split` 新版本按下述同组规则选组。`candidate_anchor` 只记录最近一次的位置，不参与查找、不要求唯一。0067 起，计算重叠和暂存 `previous_release_id` 均以碟的扫描归属 `COALESCE(m.origin_release_id,m.release_id)` 为准。并入来源的候选继续写原发行的扫描字段，按原碟号查建挂在目标上的碟。写完按扫描归属清空碟、重排目标碟序并刷新显示发行的搜索与艺人投影。收藏的接收发行按显示归属 `m.release_id` 决定。详见[发行合并合同](./release-merge-contracts.md)。因此改名、
   移动、增删少量文件、最小来源变化都不换 Release ID；新增文件多于原有（如 2 轨加 3 轨）或整体被替换时新建 Release。
 - 身份规划的诊断写入 `scan_diagnostics`（沿用每次扫描最多 100 条的上限，安全相对路径，无绝对路径）：
   `identity_ambiguous`、`content_replaced`、`identity_deferred`、`fingerprint_failure`；每个 root 规划结束记一条聚合
@@ -103,7 +103,7 @@
 
 - 迁移 `0037_scan_observation_previous_release.sql` 增加暂存列 `previous_release_id UUID`，无外键/索引，down 删除列；回退测试表使用版本 37。`StageObservation` 冲突更新清空该列，身份规划在 `allocateReleases` 后按沿用曲目保存原发行。
 - 本根保存后、已规划且未取消时用原连接开短事务：`ingest.LockProjectionWrites`（CATP）→ `ingest.EmptiedGroupMoves(ctx,db,scanID,rootID)` → 注入的 `AlbumFavoriteMover` → 提交；nil mover 不执行，空映射直接提交。
-- 按实际移动计算：原组所有发行均无任何曲目（包括 missing）才转移；按原组汇总各接收 Release 的移入数，最多者胜，平局按接收发行 created_at、ID 升序。仅转专辑收藏，不搬修正/认领/默认/歌单/历史，不删旧组/发行。
+- 按实际移动计算：按碟的扫描归属确认移动，原组所有发行均无任何扫描归属曲目（包括 missing）才转移；按原组汇总各接收 Release 的移入数，最多者胜，平局按接收发行 created_at、ID 升序。仅转专辑收藏，不搬修正/认领/默认/歌单/历史，不删旧组/发行。
 - `SetAlbumFavoriteMover` 由 app 注入 `personalService.MoveAlbumFavorites`；收藏去重、保留时间与名称、revision 规则见[个人合同](./personal-contracts.md)。失败回滚转移事务，只记 Warn `library.scan.favorite_transfer_failed`（仅扫描 ID），不影响扫描完整性或已保存候选。写完根后、转移前取消不补偿，下次扫描也不会重放已经消失的移动证据。
 
 ### 并发解析（⑤）

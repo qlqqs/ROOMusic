@@ -116,6 +116,19 @@ func (a adapter) preview(ctx context.Context, name string, raw json.RawMessage) 
 			}
 			add(field, item.To, after)
 		}
+	case "merge_releases":
+		merge, err := a.reads.PreviewReleaseMerge(ctx, strings.ToLower(p.TargetReleaseID), strings.ToLower(p.SourceReleaseID))
+		if err != nil {
+			return result, err
+		}
+		if merge.Token != p.Token {
+			return result, operations.Conflict("merge_changed", "合并预览已变化，请重新预览")
+		}
+		result.Target = merge.Target.Title
+		add("source", merge.Source, merge.Target)
+		add("media", nil, merge.Media)
+		add("hidden", nil, merge.Hidden)
+		add("favorites_moved", 0, merge.FavoritesMoved)
 	case "change_release_group", "review_release_issue":
 		issues, err := a.reads.LoadReleaseIssues(ctx, p.ReleaseID)
 		if err != nil {
@@ -220,6 +233,6 @@ func (a adapter) preview(ctx context.Context, name string, raw json.RawMessage) 
 			}
 		}
 	}
-	result.Summary = map[string]string{"correct_track": "修正曲目信息", "correct_release": "修正元数据", "change_release_group": "调整版本归组", "set_default_release": "设置默认版本", "review_release_issue": "更新问题核对", "claim_release": "认领旧版本修改", "merge_artists": "合并艺人", "split_artist": "拆分艺人", "rename_artist": "修改艺人主名", "ignore_artist_candidate": "更新候选提示"}[name] + "：" + result.Target
+	result.Summary = map[string]string{"correct_track": "修正曲目信息", "correct_release": "修正元数据", "change_release_group": "调整版本归组", "set_default_release": "设置默认版本", "review_release_issue": "更新问题核对", "claim_release": "认领旧版本修改", "merge_releases": "合并发行", "merge_artists": "合并艺人", "split_artist": "拆分艺人", "rename_artist": "修改艺人主名", "ignore_artist_candidate": "更新候选提示"}[name] + "：" + result.Target
 	return result, nil
 }
