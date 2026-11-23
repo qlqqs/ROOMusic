@@ -107,6 +107,15 @@ jobs:
           labels: |
             org.opencontainers.image.title=ROOMusic
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+      - name: Require AcoustID client key for publishing
+        if: needs.prepare.outputs.publish == 'true'
+        env:
+          ACOUSTID_CLIENT_KEY: ${{ secrets.ACOUSTID_CLIENT_KEY }}
+        run: |
+          if [[ -z "$ACOUSTID_CLIENT_KEY" ]]; then
+            echo "::error::发布镜像前必须设置仓库 secret ACOUSTID_CLIENT_KEY"
+            exit 1
+          fi
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v7
@@ -117,6 +126,7 @@ jobs:
           build-args: |
             ROOMUSIC_VERSION=${{ needs.prepare.outputs.version }}
             ROOMUSIC_COMMIT=${{ github.sha }}
+          secrets: acoustid_client=${{ secrets.ACOUSTID_CLIENT_KEY }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=${{ needs.prepare.outputs.publish }}
       - name: Export digest

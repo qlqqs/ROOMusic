@@ -197,7 +197,7 @@ describe("AcoustID 与两把密钥", () => {
     await user.click(await screen.findByRole("switch", { name: "自动整理" }));
     const dialog = await screen.findByRole("dialog", { name: "打开自动整理？" });
     const item = within(dialog).getByText("AcoustID").closest("li");
-    expect(item?.textContent).toBe("AcoustID（填入密钥后）：由音频算出的声学指纹（不能还原成音频）与时长，以及你填入的应用密钥与用户密钥");
+    expect(item?.textContent).toBe("AcoustID（填入密钥后）：由音频算出的声学指纹（不能还原成音频）与时长，以及应用密钥与你填入的用户密钥");
   });
 
   it("两把密钥分别填写、更换与清除：只显示末四位；都填了才可用；AcoustID 没有“来自它的改动”的菜单", async () => {
@@ -243,6 +243,27 @@ describe("AcoustID 与两把密钥", () => {
     expect(within(sources).getByText("声学指纹；对上的结果记在 MusicBrainz 名下；填入密钥后可用。")).toBeTruthy();
   });
 
+  it("镜像内置应用密钥时只有用户密钥一行，填上就可用", async () => {
+    const { api, curation } = setup();
+    enableCuration(curation);
+    const source = acoustid(curation);
+    if (source?.keys === undefined) throw new Error("缺少 AcoustID 的密钥");
+    source.keys = source.keys.filter((key) => key.name === "user");
+    refreshSources(curation);
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const sources = await group("外部源");
+    expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；填入密钥后可用。")).toBeTruthy();
+    expect(within(sources).queryByRole("form", { name: "AcoustID 的应用密钥" })).toBeNull();
+    expect(within(sources).queryByRole("link", { name: "注册一个应用" })).toBeNull();
+
+    await user.type(within(keyRow(sources, "用户密钥")).getByLabelText("用户密钥"), "userKEY9876");
+    await user.click(within(keyRow(sources, "用户密钥")).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/sources/acoustid/keys/user")[0]?.body).toEqual({ key: "userKEY9876" }));
+    expect(await within(sources).findByText("已保存，末四位 9876")).toBeTruthy();
+    expect(within(sources).getByText("声学指纹；对上的结果记在 MusicBrainz 名下")).toBeTruthy();
+  });
+
   it("某一把无效、指纹工具不可用时写出原因；关掉 AcoustID 后密钥的行不出现", async () => {
     const { curation } = setup();
     enableCuration(curation);
@@ -273,6 +294,16 @@ describe("AcoustID 与两把密钥", () => {
     renderApp({ path: "/settings/curation" });
     const sources = await group("外部源");
     expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；这台服务器缺少指纹工具（fpcalc），暂时不能使用。")).toBeTruthy();
+  });
+
+  it("内置的应用密钥被拒时说明升级后恢复", async () => {
+    const { curation } = setup();
+    enableCuration(curation);
+    curation.bundledKeyRejected = true;
+    refreshSources(curation);
+    renderApp({ path: "/settings/curation" });
+    const sources = await group("外部源");
+    expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；ROOMusic 内置的应用密钥被 AcoustID 拒绝了，升级到新版本后恢复。")).toBeTruthy();
   });
 
   it("保存失败时就近提示是哪一把，输入框保留", async () => {

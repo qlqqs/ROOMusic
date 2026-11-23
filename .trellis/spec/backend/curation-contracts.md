@@ -192,7 +192,7 @@ type Applied struct {
 - 接口返回的每一项：`enabled` 是这个源自己的开关；`active` 是“后台现在能不能用它”；`inactive_reason` 依次判断
   `curation_disabled`（总开关关着）、`enabler_unavailable`（开启者不是启用状态的管理员）、`source_disabled`，都不是时为 null。
 - **闸门 `curation.Sources`**：后台代码只从它取能力（`ReleaseFinder`、`RecordingFinder`、`ArtistFinder`、`CoverFinder`、`LyricsFinder`，参数是源的标识）。
-  注册的源按顺序是 MusicBrainz、Cover Art Archive、LRCLIB、AcoustID（B3），都默认开；AcoustID 还要指纹工具可用、两把密钥都填了才生效（第 16 节）。
+  注册的源按顺序是 MusicBrainz、Cover Art Archive、LRCLIB、AcoustID（B3），都默认开；AcoustID 还要指纹工具可用、声明的密钥都填了才生效（发布镜像只有用户密钥一把，第 16 节）。
   取到的是包了一层的实现，每个方法先 `Check`，再用 `sources.WithBackground(ctx, permit)` 调用适配器，`permit` 就是对这个源的 `Check`。
   所以核对发生在调用开始时、读缓存之前、每次出站之前（排队之后与每次重试之前）：调用排队或等待重试期间开关被关掉，之后不再出站。
 - `Check` 在一个事务里读设置（与 `Writer.Apply` 相同的 `loadSettings`，开启者资格由 `identity.IsEnabledAdmin` 判断）：
@@ -538,8 +538,10 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
   2. `enabler_unavailable`
   3. `source_disabled`
   4. `fingerprint_unavailable`：指纹工具自检没通过
-  5. `key_missing`：有一把没填
-  6. `key_invalid`：都填了，有一把无效
+  5. `bundled_key_rejected`：内置的应用密钥本进程内被 AcoustID 拒过（B3 补充）
+  6. `key_missing`：有一把没填
+  7. `key_invalid`：都填了，有一把无效
+- 第 4、5 条由 `SourceRegistration.Unavailable func() string` 给出（空串表示可用；`app` 装配 AcoustID 时按指纹工具与 `BundledKeyRejected()` 返回）。
 - 加密用唯一的实例密钥存储（`app` 里只建一个，交给管家与闸门），绑定 `instance` 与 `curation.source_key.<源>.<名>`；解密失败当作无效。
   `curation` 只依赖一个 `Seal`/`Open` 小接口，不导入 `steward/secret`。
 - **回写**：
@@ -547,7 +549,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
   - `InvalidKeyError{Name}` 只把那一把、并且仍是这次密文的标为 `invalid`（compare-and-set，换上的新密钥不会被旧请求标坏）。
   - 回写只改 `status`，**不改 `updated_at`**；`updated_at` 进入变化标记，改了会让进行中的一轮重来。
   - 填写与清除会推进变化标记；清除只删行时，同一事务里更新源设置的时间。
-- 闸门 `Check("acoustid")` 在三种原因时返回 `409 source_disabled`；暂停、扫描与数据库错误照常返回各自的错误。
+- 闸门 `Check("acoustid")` 在这几种原因时返回 `409 source_disabled`；暂停、扫描与数据库错误照常返回各自的错误。
 
 | 接口 | 说明 |
 | --- | --- |
@@ -628,6 +630,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | 三个摘要的基准哈希与 `main` 相同 | `TestB3DigestBaseline` |
 | `needsWork` 的 32 种组合与旧状态的推断 | `TestB3FingerprintNeedsWork` |
 | 密钥接口（403、两种 400、两种 404、顺序、原因顺序、脱敏、密文用途、清除删行、变化标记） | `TestPostgreSQLB3AcoustIDKeyAPI` |
+| 内置应用密钥（B3 补充）：声明只有 user、表单用内置值、被拒只记一次日志并置标记；闸门只列 user、旧 application 行隐藏且清除 404、被拒不标 user、原因 `bundled_key_rejected` | `sources/acoustid` 的 `TestLookupFingerprintBundledKeyForm`、`TestLookupFingerprintBundledKeyRejection`；`TestPostgreSQLB3AcoustIDBundledKeyGate` |
 | 回写：出站成功才 `valid`、时间不变、码 6 只标用户密钥、缓存命中不验证、compare-and-set | `TestPostgreSQLB3AcoustIDKeyWriteback` |
 | 真实 ffmpeg 与 fpcalc：整轨与 CUE、缓存、内容指纹与 CUE 帧与版本变化后重算、短轨边界、解码失败的冷却与上限 | `TestPostgreSQLB3AcousticFingerprintCache` |
 | 经 `app` 装配的一轮：占位专辑对上、补字段、待定候选带分数、两种无效密钥各自标记并回退搜索 | `TestPostgreSQLB3AcoustIDProgram` |

@@ -37,7 +37,7 @@ type Declaration struct {
     Capabilities   []Capability  // release_lookup | recording_lookup | artist_lookup | cover_art | lyrics | fingerprint_lookup
     DefaultEnabled bool
     MinInterval    time.Duration // 全实例两次出站的最小间隔
-    Keys           []string      // 需要管理员填写的密钥名（有序）；AcoustID 为 application、user，其余源为空（B3）
+    Keys           []string      // 需要管理员填写的密钥名（有序）；AcoustID 在发布镜像里为 user，没有内置应用密钥的构建为 application、user，其余源为空（B3、B3 补充）
 }
 ```
 
@@ -174,15 +174,22 @@ type Declaration struct {
 
 ## 8a. AcoustID 适配器（子任务 B3）
 
-声明：`{ID:"acoustid", Name:"AcoustID", [fingerprint_lookup], DefaultEnabled:true, MinInterval:334ms, Keys:[application, user]}`。
-条款：每秒不超过 3 次；仅限非商业免费；每个应用注册自己的应用密钥；2027-01-01 起在 acoustid.org 注册的应用查询还必须带用户密钥（上游 2026-11-19 公告），
-所以两把都由管理员填写，仓库不内置任何密钥。基础地址 `https://api.acoustid.org`，不跟随重定向。
+声明：`{ID:"acoustid", Name:"AcoustID", [fingerprint_lookup], DefaultEnabled:true, MinInterval:334ms, Keys:[user]}`；没有内置应用密钥的构建为 `Keys:[application, user]`。
+条款：每秒不超过 3 次；仅限非商业免费；每个应用注册自己的应用密钥；2027-01-01 起在 acoustid.org 注册的应用查询还必须带用户密钥（上游 2026-11-19 公告）。
+按上游推荐的做法（B3 补充）：ROOMusic 作为一个应用注册，发布镜像内置这个应用的密钥，管理员只填自己的用户密钥。基础地址 `https://api.acoustid.org`，不跟随重定向。
+
+- **内置应用密钥**：未初始化的包级 `var bundledClientKey string`，由链接参数 `-X …/sources/acoustid.bundledClientKey=` 注入（见[部署环境合同](./deployment-environment-contracts.md)）；
+  仓库与测试构建里为空，即“没有内置”。有内置时表单的 `client` 用它，不读管理员的应用密钥；库里早先存的 `application` 一行保留、不读不显示，
+  `DELETE …/keys/application` 返回 404，换回没有内置的构建时照旧生效。
+- **内置密钥被拒**（有内置时码 4、17）：管理员无法修复。客户端在本进程内记下（`BundledKeyRejected()`），只在第一次记 error 级日志
+  `sources.acoustid.bundled_key_rejected`（不含密钥），这次仍返回 `InvalidKeyError{Name:"application"}`；闸门不标任何一把（`application` 不在声明里），
+  源随之以 `bundled_key_rejected` 不生效，直到换上新镜像重启。
 
 - 请求：`PostForm` 到 `/v2/lookup`，表单恰好六项：`client`（应用密钥）、`user`（用户密钥）、`duration`（整首时长，整数秒）、`fingerprint`、
-  `meta=recordings releases`、`format=json`。`Options.Keys(ctx)` 每次出站前取两把密钥。
+  `meta=recordings releases`、`format=json`。`Options.Keys(ctx)` 每次出站前取声明里的密钥。
 - 映射：只接受 `status=ok`；去掉没有录音的结果；录音按 ID 去重，取最高分；发行带回曲目数与碟数。
 - 错误：HTTP 429 或码 14、HTTP 503 或码 13、码 5 → 退避重试，用尽 `ErrTryLater`；码 3、8 → `ErrInvalidQuery`（空结果）；
-  码 4、17 → `InvalidKeyError{Name:"application"}`；码 6 → `InvalidKeyError{Name:"user"}`；其余 → `ErrTryLater`。
+  码 4、17 → `InvalidKeyError{Name:"application"}`（有内置时另见上文）；码 6 → `InvalidKeyError{Name:"user"}`；其余 → `ErrTryLater`。
 - 密钥状态的回写（`unchecked`→`valid`、某一把→`invalid`）由闸门做，见[自动整理合同](./curation-contracts.md)第 16 节；缓存命中不验证密钥。
 
 ## 9. 发给外部的数据
@@ -192,7 +199,7 @@ type Declaration struct {
 | MusicBrainz | 外部 ID、条码、厂牌与编号、ISRC、标题与艺人的查询词、曲目数、由各轨时长推出的光盘目录 |
 | Cover Art Archive | 外部 ID |
 | LRCLIB | 曲目标题、艺人、专辑名、时长 |
-| AcoustID | 由音频本地算出的声学指纹、整首时长，以及管理员填入的应用密钥（标识这个实例注册的应用）与用户密钥（标识管理员在 AcoustID 的账号） |
+| AcoustID | 由音频本地算出的声学指纹、整首时长，以及应用密钥（发布镜像里是 ROOMusic 内置的，标识这个应用；没有内置的构建是管理员填入的）与管理员填入的用户密钥（标识管理员在 AcoustID 的账号） |
 
 不发送音频、文件路径与实例标识。外部返回的内容一律是不可信文本，进入模型之前按管家的规则加来源标记。
 

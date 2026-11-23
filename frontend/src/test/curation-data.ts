@@ -27,6 +27,7 @@ export type CurationData = {
   revertPageSize: number;
   /** 服务器上的指纹工具能不能用（不能用时 AcoustID 显示 fingerprint_unavailable）。 */
   fingerprintAvailable: boolean;
+  bundledKeyRejected: boolean;
   counter: number;
 };
 
@@ -61,17 +62,19 @@ export function curationDataOf(governance: GovernanceData | null = null): Curati
     suppressions: [],
     revertPageSize: 100,
     fingerprintAvailable: true,
+    bundledKeyRejected: false,
     counter: 0,
   };
 }
 
-// 与后端相同的判断顺序：总开关、开启者、源的开关、指纹工具、密钥没填、密钥无效。
+// 与后端相同的判断顺序：总开关、开启者、源的开关、指纹工具、内置应用密钥被拒、密钥没填、密钥无效。
 function inactiveReason(data: CurationData, source: CurationSourceDTO): CurationSourceDTO["inactive_reason"] {
   if (!data.settings.enabled) return "curation_disabled";
   if (!data.settings.active) return "enabler_unavailable";
   if (!source.enabled) return "source_disabled";
   if (source.keys === undefined) return null;
   if (!data.fingerprintAvailable) return "fingerprint_unavailable";
+  if (data.bundledKeyRejected) return "bundled_key_rejected";
   if (source.keys.some((key) => !key.configured)) return "key_missing";
   return source.keys.some((key) => key.status === "invalid") ? "key_invalid" : null;
 }

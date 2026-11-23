@@ -27,7 +27,7 @@ export function capabilitiesText(source: CurationSourceDTO): string {
 
 /**
  * 各行自己的不生效原因（总开关关着、开启者不可用写在分组层面，这里返回 null）。
- * 指纹工具与密钥两条只对 AcoustID 出现。
+ * 指纹工具、内置应用密钥与密钥几条只对 AcoustID 出现。
  */
 export function sourceInactiveText(reason: SourceInactiveReason | null): string | null {
   switch (reason) {
@@ -35,6 +35,8 @@ export function sourceInactiveText(reason: SourceInactiveReason | null): string 
       return "已关闭，后台不使用它。";
     case "fingerprint_unavailable":
       return "这台服务器缺少指纹工具（fpcalc），暂时不能使用。";
+    case "bundled_key_rejected":
+      return "ROOMusic 内置的应用密钥被 AcoustID 拒绝了，升级到新版本后恢复。";
     case "key_missing":
       return "填入密钥后可用。";
     case "key_invalid":
@@ -54,7 +56,7 @@ export const sentToSource: Record<string, string> = {
   musicbrainz: "外部编号、条码、ISRC、厂牌与编号、标题与艺人的查询词、由曲目时长推出的光盘目录",
   coverartarchive: "外部编号",
   lrclib: "曲目标题、艺人、专辑名、时长",
-  acoustid: "由音频算出的声学指纹（不能还原成音频）与时长，以及你填入的应用密钥与用户密钥",
+  acoustid: "由音频算出的声学指纹（不能还原成音频）与时长，以及应用密钥与你填入的用户密钥",
 };
 
 /** 范围撤销里跳过的原因；未知的码给兜底文案，临时性失败提示可以再试。 */

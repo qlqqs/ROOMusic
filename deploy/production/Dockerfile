@@ -18,10 +18,18 @@ COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
 COPY --from=web /src/backend/cmd/roomusic/web/dist cmd/roomusic/web/dist
-RUN test -f cmd/roomusic/web/dist/index.html \
+# 可选的 AcoustID 应用密钥（发布流水线传入，去掉空白后只许字母数字）；secret 内容不参与构建缓存键，本地先不带 secret 构建、再带 secret 时需使用 --no-cache。
+RUN --mount=type=secret,id=acoustid_client \
+    acoustid_ldflags= \
+ && if [ -s /run/secrets/acoustid_client ]; then \
+        key=$(tr -d '[:space:]' < /run/secrets/acoustid_client); \
+        case "$key" in *[!A-Za-z0-9]*) echo 'AcoustID 应用密钥只能包含字母和数字' >&2; exit 1;; esac; \
+        acoustid_ldflags=" -X github.com/qlqq/roomusic/backend/internal/sources/acoustid.bundledClientKey=${key}"; \
+    fi \
+ && test -f cmd/roomusic/web/dist/index.html \
  && go test ./cmd/roomusic/ -run TestEmbeddedAssetsAreContentHashed \
  && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath \
-    -ldflags="-s -w -X github.com/qlqq/roomusic/backend/internal/platform/buildinfo.version=${ROOMUSIC_VERSION} -X github.com/qlqq/roomusic/backend/internal/platform/buildinfo.commit=${ROOMUSIC_COMMIT}" \
+    -ldflags="-s -w -X github.com/qlqq/roomusic/backend/internal/platform/buildinfo.version=${ROOMUSIC_VERSION} -X github.com/qlqq/roomusic/backend/internal/platform/buildinfo.commit=${ROOMUSIC_COMMIT}${acoustid_ldflags}" \
     -o /out/roomusic ./cmd/roomusic
 
 FROM mwader/static-ffmpeg@sha256:11a44711684c0b9f754c047dcd64235b8b52deab251bd0e0a86f22faa160749c AS ffmpeg

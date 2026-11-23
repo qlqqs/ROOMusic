@@ -36,7 +36,7 @@ function KeyDescription({ sourceKey }: { sourceKey: SourceKey }) {
   );
 }
 
-/** 一把密钥的名称（应用密钥、用户密钥）。 */
+/** 一把密钥的名称（用户密钥；没有内置应用密钥的构建还有应用密钥）。 */
 export function keyLabel(name: string): string {
   return keyGuides[name]?.label ?? name;
 }

@@ -25,10 +25,10 @@ const settingsDecoder = d.object({
 export const SOURCE_CAPABILITIES = ["release_lookup", "recording_lookup", "artist_lookup", "cover_art", "lyrics", "fingerprint_lookup"] as const;
 export type SourceCapability = (typeof SOURCE_CAPABILITIES)[number];
 
-export const SOURCE_INACTIVE_REASONS = ["curation_disabled", "enabler_unavailable", "source_disabled", "fingerprint_unavailable", "key_missing", "key_invalid"] as const;
+export const SOURCE_INACTIVE_REASONS = ["curation_disabled", "enabler_unavailable", "source_disabled", "fingerprint_unavailable", "bundled_key_rejected", "key_missing", "key_invalid"] as const;
 export type SourceInactiveReason = (typeof SOURCE_INACTIVE_REASONS)[number];
 
-// 需要密钥的源（AcoustID：应用密钥与用户密钥）才有 keys，按声明顺序每把一项：只给出有没有、末四位与服务端用过之后的结论（unchecked 是还没用过）。
+// 需要密钥的源（AcoustID：发布镜像内置应用密钥时只有用户密钥，自行构建的没有内置时是应用密钥与用户密钥）才有 keys，按声明顺序每把一项：只给出有没有、末四位与服务端用过之后的结论（unchecked 是还没用过）。
 const sourceKeyDecoder = d.object({
   configured: d.boolean(),
   last_four: d.string({ max: 4 }),

@@ -31,7 +31,7 @@ function sourceDescription(source: CurationSourceDTO): string {
 /**
  * “外部源”卡片：每个源一行，写它提供什么，开关即改即存；各行只写自己不生效的原因（总开关等共同原因写在分组层面）。
  * 行尾菜单：查看来自这个源的自动修改（操作记录按来源筛选）、撤销来自它的全部自动修改（分段撤销，见 ScopeRevertDialog）；
- * 只用来识别、自己不写入的源（AcoustID）没有这个菜单。需要密钥的源开着时，下面每把密钥一行（AcoustID 是应用密钥与用户密钥）。
+ * 只用来识别、自己不写入的源（AcoustID）没有这个菜单。需要密钥的源开着时，下面每把密钥一行（AcoustID 在发布镜像里只有用户密钥，没有内置应用密钥的构建另有应用密钥）。
  */
 export function CurationSourcesSection({ settings, refresh }: { settings: CurationSettingsDTO | undefined; refresh: () => void }) {
   const sources = useCurationSources();

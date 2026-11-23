@@ -116,7 +116,7 @@ M6 之后另有 `11-20-steward-responses-default`（管家探测优先选用 Res
 | 4 | B2 | 外部封面与歌词：Cover Art Archive、LRCLIB、存放与本地优先的读取、写入与撤销 | B1 | 已完成（2026-11-22，`11-22-auto-curation-b2-covers-lyrics`，`c1daf591`；没有生产调用方，取封面与歌词的调度在 C） |
 | 5 | C | 程序自动整理：后台匹配、把握规则、补空缺、待定项 | A、B1、B2 | 已完成（2026-11-22，`11-22-auto-curation-c-program`，`b96d8ea3`；打开总开关后自动补全，界面在 E1） |
 | 6 | E1 | 整理记录与设置界面（第一版） | C | 已完成（2026-11-22，`11-22-auto-curation-e1-ui`，`740c2b5a`；里程碑一完成） |
-| 7 | B3 | AcoustID 与声学指纹（生产镜像增加 Chromaprint） | C | 已完成（2026-11-23，`11-23-auto-curation-b3-acoustid`，`6fab56ba`；镜像带固定的静态 fpcalc，AcoustID 需要管理员填应用密钥与用户密钥） |
+| 7 | B3 | AcoustID 与声学指纹（生产镜像增加 Chromaprint） | C | 已完成（2026-11-23，`11-23-auto-curation-b3-acoustid`，`6fab56ba`；镜像带固定的静态 fpcalc，发布镜像内置 ROOMusic 的 AcoustID 应用密钥，管理员只填用户密钥，B3 补充 `11-23-auto-curation-b3-bundled-key`） |
 | 8 | D | 模型后台判断：后台调度的运行、审查策略第 2 版、例外、每日上限 | C | 未创建 |
 | 9 | E2 | 例外与用量界面 | D | 未创建 |
 | 10 | I | 曲目级字段修正：曲目标题与曲目艺人 | A | 未创建 |
