@@ -35,7 +35,7 @@ func TestC6RealRegistryToolCounts(t *testing.T) {
 			shared++
 		}
 	}
-	if len(defs) != 49 || shared != 10 {
-		t.Fatalf("工具总数=%d shared=%d，期望 49 / 10", len(defs), shared)
+	if len(defs) != 50 || shared != 11 {
+		t.Fatalf("工具总数=%d shared=%d，期望 50 / 11", len(defs), shared)
 	}
 }

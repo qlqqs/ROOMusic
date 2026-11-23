@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
@@ -98,4 +99,29 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 		t.Fatal(err)
 	}
 	errSample("errors/curation-plan", conversationPath+"/plans/"+plan.ID+"/review")
+
+	var trackID, title string
+	if err := f.application.database.QueryRowContext(ctx, `SELECT t.id,t.title FROM track_effective t JOIN media m ON m.id=t.medium_id WHERE m.release_id=$1 ORDER BY m.position,t.position LIMIT 1`, f.a).Scan(&trackID, &title); err != nil {
+		t.Fatal(err)
+	}
+	applied, err := f.writer.ApplyTrack(ctx, curation.TrackRequest{TrackID: trackID, ReleaseID: f.a, Key: uuid.New(), Fields: map[string]catalog.CorrectionIntent{"title": autoIntent("合成曲目自动标题")}, Source: curation.Source{Kind: "source", Provider: "track-sample", Basis: "合成录音对应"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	record("operations/track-auto-list", "GET", "/api/v1/operations?provider=track-sample", nil)
+	record("operations/track-auto-reverted", "POST", revertPath(applied.OperationID), nil)
+	mustExec(t, f.application, `UPDATE curation_pending_items SET status='in_progress',conversation_id=$2,claimed_at=now() WHERE id=$1`, itemID, c.ID)
+	input, err := json.Marshal(map[string]any{"release_id": f.a, "track_id": trackID, "expected_revision": 1, "changes": map[string]any{"title": setChange("待核对曲名")}, "basis": map[string]string{"source": "external", "note": "合成曲目资料"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := json.Marshal(map[string]any{"changes": []map[string]string{{"field": "title", "before": title, "after": "待核对曲名"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.writer.CreateException(ctx, curation.ModelException{PendingItemID: itemID, PlanItemID: uuid.New(), ConversationID: &c.ID, Tool: "correct_track", Input: input, Preview: preview, Provider: "sample-model", Review: curation.ExceptionReview{ID: uuid.New(), Model: "sample-review", Decision: "needs_human_confirmation", Source: "model", Reasons: []string{"曲名需要人工核对"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	record("curation/exceptions-track", "GET", curationBase+"/exceptions", nil)
 }

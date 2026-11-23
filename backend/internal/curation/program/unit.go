@@ -18,6 +18,7 @@ type unit struct {
 	releaseID, inputDigest string
 	releaseState           curation.WorkState
 	checked                bool
+	fixedGeneration        bool
 }
 
 // 以目标 UUID 为命名空间，名称中的字段顺序固定。
@@ -85,7 +86,7 @@ func (u *unit) write(ctx context.Context, step string, write func(batch, key str
 		w.mu.Unlock()
 	}
 	err := write(w.batch.ID, u.key(step))
-	if failureCode(err) == "idempotency_conflict" {
+	if failureCode(err) == "idempotency_conflict" && !u.fixedGeneration {
 		u.generation++
 		err = write(w.batch.ID, u.key(step))
 	}

@@ -30,6 +30,10 @@ type TrackCorrectionResult struct {
 
 // 在同一条查询中读两个字段的版本、来源与有效值，避免并发修改产生混合状态。
 func (s *Store) LoadTrackCorrectionState(ctx context.Context, trackID string) (TrackCorrectionState, error) {
+	return s.loadTrackCorrectionState(ctx, trackID, true)
+}
+
+func (s *Store) loadTrackCorrectionState(ctx context.Context, trackID string, present bool) (TrackCorrectionState, error) {
 	rows, err := s.database.QueryContext(ctx, `SELECT t.id::text, m.release_id::text, t.edit_revision,
 		f.field, f.scan_value, f.effective, COALESCE(obs.inferred,false),
 		c.text_value, a.text_value, a.operation_id::text, o.origin->>'provider_kind', o.origin->>'provider'
@@ -39,7 +43,7 @@ func (s *Store) LoadTrackCorrectionState(ctx context.Context, trackID string) (T
 		LEFT JOIN track_corrections c ON c.track_id=t.id AND c.field=f.field
 		LEFT JOIN track_auto_values a ON a.track_id=t.id AND a.field=f.field
 		LEFT JOIN operations o ON o.id=a.operation_id
-		WHERE t.id=$1::uuid AND t.source_status='present' ORDER BY f.position`, trackID)
+		WHERE t.id=$1::uuid AND (NOT $2 OR t.source_status='present') ORDER BY f.position`, trackID, present)
 	if err != nil {
 		return TrackCorrectionState{}, fmt.Errorf("%w: load track corrections: %w", catalog.ErrQuery, err)
 	}

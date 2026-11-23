@@ -184,10 +184,12 @@ func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvid
 	if err != nil {
 		return "", err
 	}
+	p.tracks = planTrackFields(e, m)
 	return writeMatch(ctx, w.writer, p, u.write, nil)
 }
 
 type matchWritePlan struct {
+	tracks   []curation.TrackRequest
 	evidence catalog.CurationEvidence
 	group    groupPlan
 	links    curation.LinkRequest
@@ -224,7 +226,7 @@ func planMatch(ctx context.Context, db operations.Queryer, e catalog.CurationEvi
 			request.Links = append(request.Links, curation.LinkIntent{ObjectType: "track", ObjectID: pair.TrackID, ExternalID: pair.RecordingID})
 		}
 	}
-	return matchWritePlan{e, plan, request, fields}, nil
+	return matchWritePlan{evidence: e, group: plan, links: request, fields: fields}, nil
 }
 
 type matchStep func(context.Context, string, func(batch, key string) error) error
@@ -268,6 +270,9 @@ func writeMatch(ctx context.Context, writer *curation.Writer, p matchWritePlan, 
 		if err != nil {
 			return "", err
 		}
+	}
+	if err := writeTrackFields(ctx, writer, p.tracks, request.Source, write); err != nil {
+		return "", err
 	}
 	if plan.joinID == "" {
 		return plan.result, nil

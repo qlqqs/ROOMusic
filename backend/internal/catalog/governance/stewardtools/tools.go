@@ -33,6 +33,7 @@ type command struct {
 }
 
 type input struct {
+	TrackID          string                                    `json:"track_id"`
 	ReleaseID        string                                    `json:"release_id"`
 	GroupID          string                                    `json:"group_id"`
 	ArtistID         string                                    `json:"artist_id"`
@@ -56,7 +57,10 @@ func StewardTools(db *sql.DB, resolution governance.ArtistResolutionRefresher) [
 		changes[name] = map[string]any{"type": "object", "additionalProperties": false, "required": []string{"mode"}, "properties": map[string]any{"mode": map[string]any{"type": "string", "enum": []string{"set", "null", "clear"}}, "value": map[string]any{}}}
 	}
 	changeSchema, _ := json.Marshal(map[string]any{"type": "object", "additionalProperties": false, "properties": changes})
+	const trackChange = `{"type":"object","additionalProperties":false,"required":["mode"],"properties":{"mode":{"type":"string","enum":["set","clear"]},"value":{"type":"string"}}}`
+	trackChanges := `,"changes":{"type":"object","additionalProperties":false,"properties":{"title":` + trackChange + `,"artist":` + trackChange + `}}`
 	definitions := []tool.Definition{
+		a.write("correct_track", "修正曲目标题或艺人。set 需提供 value，clear 清除人工修正。expected_revision 来自 get_track。", release+`,"track_id":`+idSchema+trackChanges, `"release_id","track_id","expected_revision","changes"`, true),
 		a.write("correct_release", "修正专辑字段。changes 中每个字段使用 set/value、null 或 clear；revision 来自 get_release。", release+`,"changes":`+string(changeSchema), `"release_id","expected_revision","changes"`, true),
 		a.write("change_release_group", "调整版本归组。action=join 时提供 group_id；detach 时不提供 group_id。", release+`,"action":{"type":"string","enum":["join","detach"]},"group_id":`+idSchema, `"release_id","expected_revision","action"`, true),
 		a.write("set_default_release", "设置专辑默认版本；release_id 为 null 时恢复自动选择，expected_revision 是组版本号。", `"group_id":`+idSchema+`,"expected_revision":`+revisionSchema+`,"release_id":{}`, `"group_id","expected_revision","release_id"`, true),

@@ -11,6 +11,8 @@ func TestB3DigestBaseline(t *testing.T) {
 	evidence.ExternalID = "release-id"
 	evidence.ArtworkFile = true
 	evidence.Tracks[0].Artist = "独奏"
+	evidence.Tracks[0].EffectiveTitle = evidence.Tracks[0].Title
+	evidence.Tracks[0].EffectiveArtist = evidence.Tracks[0].Artist
 	evidence.Tracks[0].Identifiers["isrc"] = []string{"USABC2300001"}
 	evidence.Suppressions = []catalog.CurationSuppression{
 		{TargetType: "release", TargetID: evidence.ID, Subject: "artwork_source", ValueHash: "cover"},

@@ -31,6 +31,7 @@ func NewExceptionResolver(db *sql.DB, writer *curation.Writer, matcher *program.
 }
 
 type proposal struct {
+	TrackID    string                                    `json:"track_id"`
 	ItemID     string                                    `json:"item_id"`
 	ReleaseID  string                                    `json:"release_id"`
 	ExternalID string                                    `json:"external_id"`
@@ -73,7 +74,7 @@ func (r *ExceptionResolver) Accept(ctx context.Context, id, actor, requestID str
 	key := curation.DerivedKey(e.ID, "accept")
 	ctx = operations.WithReviewOrigin(ctx, e.Review.ID, "human")
 	switch e.Tool {
-	case "correct_release":
+	case "correct_release", "correct_track":
 		err = r.acceptCorrection(ctx, e, in, actor, key, requestID)
 	case "resolve_release_match":
 		err = r.acceptMatch(ctx, e, in, actor, key)
@@ -141,7 +142,16 @@ func (r *ExceptionResolver) acceptCorrection(ctx context.Context, e curation.Mod
 	if item.Status != "waiting_human" || !strings.EqualFold(in.ReleaseID, item.TargetID) {
 		return staleException()
 	}
-	fields, err := governance.ParseCorrectionChanges(in.Changes)
+	parse := governance.ParseCorrectionChanges
+	kind := operations.TypeReleaseCorrection
+	if e.Tool == "correct_track" {
+		if !uuid.Valid(in.TrackID) {
+			return staleException()
+		}
+		parse = governance.ParseTrackCorrectionChanges
+		kind = governance.TypeTrackCorrection
+	}
+	fields, err := parse(in.Changes)
 	if err != nil {
 		return err
 	}
@@ -149,22 +159,39 @@ func (r *ExceptionResolver) acceptCorrection(ctx context.Context, e curation.Mod
 	if e.ConversationID != nil {
 		origin.ConversationID = *e.ConversationID
 	}
-	spec := operations.Spec{Type: operations.TypeReleaseCorrection, ActorID: actor, Key: key, RequestID: requestID,
+	spec := operations.Spec{Type: kind, ActorID: actor, Key: key, RequestID: requestID,
 		Fingerprint: operations.Fingerprint(map[string]any{"exception_id": e.ID, "release_id": item.TargetID, "changes": fields}), Origin: &origin}
 	_, err = operations.Run(ctx, r.db, spec, func(ctx context.Context, tx *sql.Tx, id string) (operations.Outcome, error) {
 		// 扫描与自动层写入也会改变有效前值；在目录写锁内重新预览并执行。
-		if _, err := governance.LockAutoRelease(ctx, tx, item.TargetID); err != nil {
-			return operations.Outcome{}, err
+		var currentFields []governance.CorrectionField
+		var execute operations.Executor
+		if e.Tool == "correct_track" {
+			track, err := governance.LockAutoTrack(ctx, tx, in.TrackID)
+			if err != nil {
+				return operations.Outcome{}, err
+			}
+			if track.ReleaseID() != item.TargetID {
+				return operations.Outcome{}, staleException()
+			}
+			currentFields = track.State().Fields
+			execute = governance.TrackCorrectionExecutor(governance.TrackCorrectionRequest{TrackID: in.TrackID, ReleaseID: item.TargetID, ExpectedRevision: track.EditRevision(), Changes: fields})
+		} else {
+			if _, err := governance.LockAutoRelease(ctx, tx, item.TargetID); err != nil {
+				return operations.Outcome{}, err
+			}
+
+			state, err := governance.NewStore(tx).LoadCorrectionState(ctx, item.TargetID)
+			if err != nil {
+				return operations.Outcome{}, err
+			}
+			currentFields = state.Fields
+			execute = governance.CorrectionExecutor(governance.CorrectionRequest{ReleaseID: item.TargetID, ExpectedRevision: state.Revision, Changes: fields})
 		}
 		if err := curation.CheckMatchItem(ctx, tx, item, "", true); err != nil {
 			return operations.Outcome{}, err
 		}
-		state, err := governance.NewStore(tx).LoadCorrectionState(ctx, item.TargetID)
-		if err != nil {
-			return operations.Outcome{}, err
-		}
 		var changes []program.MatchChange
-		for _, field := range state.Fields {
+		for _, field := range currentFields {
 			change, ok := fields[field.Field]
 			if !ok {
 				continue
@@ -177,8 +204,7 @@ func (r *ExceptionResolver) acceptCorrection(ctx context.Context, e curation.Mod
 		if err = compareChanges(e, changes); err != nil {
 			return operations.Outcome{}, err
 		}
-		request := governance.CorrectionRequest{ReleaseID: item.TargetID, ExpectedRevision: state.Revision, Changes: fields}
-		out, err := governance.CorrectionExecutor(request)(ctx, tx, id)
+		out, err := execute(ctx, tx, id)
 		if err != nil {
 			return out, err
 		}
@@ -305,13 +331,17 @@ func (r *ExceptionResolver) Decline(ctx context.Context, id, actor string) (cura
 		return e, err
 	}
 	switch {
-	case e.Tool == "correct_release":
-		fields, err := governance.ParseCorrectionChanges(in.Changes)
+	case e.Tool == "correct_release" || e.Tool == "correct_track":
+		parse, suppress, target := governance.ParseCorrectionChanges, r.writer.SuppressReleaseValue, item.TargetID
+		if e.Tool == "correct_track" {
+			parse, suppress, target = governance.ParseTrackCorrectionChanges, r.writer.SuppressTrackValue, in.TrackID
+		}
+		fields, err := parse(in.Changes)
 		if err != nil {
 			return e, err
 		}
 		for name, field := range fields {
-			if err = r.writer.SuppressReleaseValue(ctx, tx, item.TargetID, name, correctionIntent(name, field), "", actor); err != nil {
+			if err = suppress(ctx, tx, target, name, correctionIntent(name, field), "", actor); err != nil {
 				return e, err
 			}
 		}

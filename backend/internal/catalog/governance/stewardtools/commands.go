@@ -25,6 +25,16 @@ func (a adapter) command(name string, raw json.RawMessage) (command, error) {
 		}
 	}
 	switch name {
+	case "correct_track":
+		if !uuid.Valid(p.TrackID) || len(p.Changes) == 0 {
+			return command{}, invalid()
+		}
+		changes, err := governance.ParseTrackCorrectionChanges(p.Changes)
+		if err != nil {
+			return command{}, err
+		}
+		c := governance.TrackCorrectionRequest{ReleaseID: p.ReleaseID, TrackID: strings.ToLower(p.TrackID), ExpectedRevision: p.ExpectedRevision, Changes: changes}
+		return command{governance.TypeTrackCorrection, c.Fingerprint(), governance.TrackCorrectionExecutor(c)}, nil
 	case "correct_release":
 		changes, err := governance.ParseCorrectionChanges(p.Changes)
 		if err != nil {

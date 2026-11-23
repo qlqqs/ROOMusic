@@ -69,7 +69,7 @@ func (w *Writer) writerActor(ctx context.Context, batch, confirmed, conversation
 
 func checkWrite(ctx context.Context, tx *sql.Tx, spec operations.Spec, confirmed, releaseID string, expected, current int64) error {
 	if expected != 0 && expected != current {
-		return operations.Conflict("revision_conflict", "发行修正版本已变更")
+		return operations.Conflict("revision_conflict", "版本已变更")
 	}
 	if confirmed == "" {
 		if err := checkExternalWriter(ctx, tx, spec); err != nil {

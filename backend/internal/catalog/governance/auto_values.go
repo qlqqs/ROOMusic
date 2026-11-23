@@ -17,6 +17,14 @@ import (
 
 // NormalizeAutoFields 供调用方在计算指纹、过滤以及写入之前统一规范化字段。
 func NormalizeAutoFields(fields map[string]catalog.CorrectionIntent) (map[string]catalog.CorrectionIntent, error) {
+	return normalizeAutoFields(fields, catalog.CorrectableFields)
+}
+
+func NormalizeTrackAutoFields(fields map[string]catalog.CorrectionIntent) (map[string]catalog.CorrectionIntent, error) {
+	return normalizeAutoFields(fields, catalog.TrackCorrectableFields)
+}
+
+func normalizeAutoFields(fields map[string]catalog.CorrectionIntent, definitions []catalog.CorrectableField) (map[string]catalog.CorrectionIntent, error) {
 	if len(fields) == 0 {
 		return nil, invalidCorrection("至少需要一个自动整理字段")
 	}
@@ -31,13 +39,13 @@ func NormalizeAutoFields(fields map[string]catalog.CorrectionIntent) (map[string
 		}
 		raw[name] = RawCorrectionChange{Mode: intent.Mode, Value: value}
 	}
-	changes, err := ParseCorrectionChanges(raw)
+	changes, err := parseCorrectionChanges(raw, definitions)
 	if err != nil {
 		return nil, err
 	}
 	intents := make(map[string]catalog.CorrectionIntent, len(changes))
 	for name, change := range changes {
-		field, _ := correctableFieldNamed(name)
+		field, _ := findCorrectionField(definitions, name)
 		intents[name] = *nextIntent(field, change)
 	}
 	return intents, nil

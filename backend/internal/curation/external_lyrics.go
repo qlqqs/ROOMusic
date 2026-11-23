@@ -65,7 +65,7 @@ func (w *Writer) ApplyLyrics(ctx context.Context, request LyricsRequest) (Extern
 		var local sql.NullString
 		var occupied bool
 		if err := tx.QueryRowContext(ctx, `SELECT t.title,t.lyrics,e.track_id IS NOT NULL
-   FROM tracks t LEFT JOIN track_external_lyrics e ON e.track_id=t.id WHERE t.id=$1::uuid`, id).Scan(&title, &local, &occupied); err != nil {
+   FROM track_effective t LEFT JOIN track_external_lyrics e ON e.track_id=t.id WHERE t.id=$1::uuid`, id).Scan(&title, &local, &occupied); err != nil {
 			return operations.Outcome{}, err
 		}
 		if _, valid := catalog.ParseLyrics(local.String); valid {

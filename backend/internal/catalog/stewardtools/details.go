@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 )
 
 func pageBounds(p input, length int) (int, int) {
@@ -82,7 +83,7 @@ func pageMedia(media []catalog.ReleaseMedium, p input) ([]catalog.ReleaseMedium,
 	return result, total
 }
 
-func trackReader(store *catalog.Store) func(context.Context, input) (any, error) {
+func trackReader(store *catalog.Store, issues *governance.Store) func(context.Context, input) (any, error) {
 	return func(ctx context.Context, p input) (any, error) {
 		summaries, err := store.LoadTrackSummaries(ctx, []string{p.ID})
 		if err != nil {
@@ -93,7 +94,13 @@ func trackReader(store *catalog.Store) func(context.Context, input) (any, error)
 			return nil, catalog.ErrTrackNotFound
 		}
 		var detail *catalog.ReleaseTrack
+		var revision int64
 		if summary.Present {
+			state, err := issues.LoadTrackCorrectionState(ctx, p.ID)
+			if err != nil {
+				return nil, err
+			}
+			revision = state.Revision
 			media, err := store.LoadReleaseMedia(ctx, summary.Release.ID)
 			if err != nil {
 				return nil, err
@@ -109,8 +116,9 @@ func trackReader(store *catalog.Store) func(context.Context, input) (any, error)
 		// ReleaseTrack 的 Source 已由读取层投影为文件名；两种 DTO 都没有歌词字段。
 		return struct {
 			catalog.TrackSummary
-			Detail *catalog.ReleaseTrack `json:"detail"`
-		}{summary, detail}, nil
+			Revision int64                 `json:"revision,omitempty"`
+			Detail   *catalog.ReleaseTrack `json:"detail"`
+		}{summary, revision, detail}, nil
 	}
 }
 

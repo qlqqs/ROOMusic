@@ -9,7 +9,9 @@ import (
 
 func TestSubjectDigests(t *testing.T) {
 	all := func(e catalog.CurationEvidence) [3]string {
-		return [3]string{ReleaseDigest(e), ArtworkDigest(e), LyricsDigest(e, e.Tracks[0])}
+		track := e.Tracks[0]
+		track.EffectiveTitle, track.EffectiveArtist = track.Title, track.Artist
+		return [3]string{ReleaseDigest(e), ArtworkDigest(e), LyricsDigest(e, track)}
 	}
 	original, _ := pairedAlbum(1)
 	base := all(original)
@@ -94,7 +96,7 @@ func TestSubjectDigests(t *testing.T) {
 }
 
 func TestLyricsAcceptance(t *testing.T) {
-	track := catalog.CurationTrack{Title: "臺灣Ａ！", Artist: "樂團 feat. Guest", DurationSeconds: 100}
+	track := catalog.CurationTrack{EffectiveTitle: "臺灣Ａ！", EffectiveArtist: "樂團 feat. Guest", DurationSeconds: 100}
 	base := sources.Lyrics{ID: "1", Title: "台湾A", Artist: "乐团 & 合作人", Plain: "第一行", DurationSeconds: 100}
 	for _, name := range []string{"normalized", "minus_two", "plus_two", "over", "under", "unknown", "wrong_title", "wrong_artist", "instrumental", "empty", "different", "deduplicated_synced"} {
 		t.Run(name, func(t *testing.T) {

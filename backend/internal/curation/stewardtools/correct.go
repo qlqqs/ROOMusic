@@ -11,9 +11,18 @@ import (
 )
 
 func AutoCorrectRelease(writer *curation.Writer) tool.Handler {
+	return autoCorrect(writer, false)
+}
+
+func AutoCorrectTrack(writer *curation.Writer) tool.Handler {
+	return autoCorrect(writer, true)
+}
+
+func autoCorrect(writer *curation.Writer, track bool) tool.Handler {
 	a := adapter{writer: writer}
 	return func(ctx context.Context, c tool.Caller, raw json.RawMessage) (json.RawMessage, error) {
 		var in struct {
+			TrackID          string                                    `json:"track_id"`
 			ReleaseID        string                                    `json:"release_id"`
 			ExpectedRevision int64                                     `json:"expected_revision"`
 			Changes          map[string]governance.RawCorrectionChange `json:"changes"`
@@ -30,7 +39,11 @@ func AutoCorrectRelease(writer *curation.Writer) tool.Handler {
 		if err != nil {
 			return nil, err
 		}
-		changes, err := governance.ParseCorrectionChanges(in.Changes)
+		parse := governance.ParseCorrectionChanges
+		if track {
+			parse = governance.ParseTrackCorrectionChanges
+		}
+		changes, err := parse(in.Changes)
 		if err != nil {
 			return nil, toolError(err)
 		}
@@ -57,7 +70,13 @@ func AutoCorrectRelease(writer *curation.Writer) tool.Handler {
 		if err != nil {
 			return nil, toolError(err)
 		}
-		result, err := writer.Apply(ctx, curation.Request{ReleaseID: item.TargetID, Fields: fields, Source: modelSource(run, in.Basis.Note), BatchID: batch, Key: c.IdempotencyKey, RequestID: c.RequestID, ExpectedRevision: in.ExpectedRevision, ConversationID: run.ConversationID})
+		source := modelSource(run, in.Basis.Note)
+		var result curation.Applied
+		if track {
+			result, err = writer.ApplyTrack(ctx, curation.TrackRequest{TrackID: in.TrackID, ReleaseID: item.TargetID, Fields: fields, Source: source, BatchID: batch, Key: c.IdempotencyKey, RequestID: c.RequestID, ExpectedRevision: in.ExpectedRevision, ConversationID: run.ConversationID})
+		} else {
+			result, err = writer.Apply(ctx, curation.Request{ReleaseID: item.TargetID, Fields: fields, Source: source, BatchID: batch, Key: c.IdempotencyKey, RequestID: c.RequestID, ExpectedRevision: in.ExpectedRevision, ConversationID: run.ConversationID})
+		}
 		if err != nil {
 			return nil, toolError(err)
 		}

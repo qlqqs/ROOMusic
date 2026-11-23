@@ -42,8 +42,32 @@ type Applied struct {
 var providerPattern = regexp.MustCompile(`^[a-z0-9._:-]{1,64}$`)
 
 func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
+	return w.applyFields(ctx, request, "", false)
+}
+
+type TrackRequest struct {
+	TrackID, ReleaseID          string
+	ExpectedRevision            int64
+	ConfirmedBy, ConversationID string
+	OnlyEmpty                   bool
+	Fields                      map[string]catalog.CorrectionIntent
+	Source                      Source
+	BatchID, Key, RequestID     string
+}
+
+func (w *Writer) ApplyTrack(ctx context.Context, r TrackRequest) (Applied, error) {
+	return w.applyFields(ctx, Request{ReleaseID: r.ReleaseID, ExpectedRevision: r.ExpectedRevision, ConfirmedBy: r.ConfirmedBy, ConversationID: r.ConversationID, OnlyEmpty: r.OnlyEmpty, Fields: r.Fields, Source: r.Source, BatchID: r.BatchID, Key: r.Key, RequestID: r.RequestID}, strings.ToLower(r.TrackID), true)
+}
+
+type autoFieldTarget interface {
+	Current(string) (catalog.AutoValue, bool)
+	EditRevision() int64
+	Write(context.Context, string, map[string]catalog.CorrectionIntent) (operations.Outcome, error)
+}
+
+func (w *Writer) applyFields(ctx context.Context, request Request, trackID string, track bool) (Applied, error) {
 	key, ok := operations.NormalizeKey(request.Key)
-	if !ok || !uuid.Valid(request.ReleaseID) || (request.BatchID != "" && !uuid.Valid(request.BatchID)) {
+	if !ok || (track && !uuid.Valid(trackID)) || ((!track || request.ReleaseID != "") && !uuid.Valid(request.ReleaseID)) || (request.BatchID != "" && !uuid.Valid(request.BatchID)) {
 		return Applied{}, operations.Invalid("invalid_input", "发行、批次或幂等键无效")
 	}
 	source := request.Source
@@ -51,7 +75,15 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
 		len(source.Basis) > 500 || !utf8.ValidString(source.Basis) || strings.ContainsRune(source.Basis, '\x00') {
 		return Applied{}, operations.Invalid("invalid_input", "自动整理来源或依据无效")
 	}
-	fields, err := governance.NormalizeAutoFields(request.Fields)
+	normalize := governance.NormalizeAutoFields
+	kind, target, idField, id := operations.TypeReleaseAutoCorrection, "release", "release_id", strings.ToLower(request.ReleaseID)
+	definitions := catalog.CorrectableFields
+	if track {
+		normalize = governance.NormalizeTrackAutoFields
+		kind, target, idField, id = governance.TypeTrackAutoCorrection, "track", "track_id", trackID
+		definitions = catalog.TrackCorrectableFields
+	}
+	fields, err := normalize(request.Fields)
 	if err != nil {
 		return Applied{}, err
 	}
@@ -60,7 +92,7 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
 	if err != nil {
 		return Applied{}, err
 	}
-	fingerprint := map[string]any{"type": operations.TypeReleaseAutoCorrection, "release_id": releaseID, "fields": fields, "provider": source.Provider}
+	fingerprint := map[string]any{"type": kind, idField: id, "fields": fields, "provider": source.Provider}
 	if request.ExpectedRevision != 0 {
 		fingerprint["expected_revision"] = request.ExpectedRevision
 	}
@@ -68,13 +100,27 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
 		fingerprint["only_empty"] = true
 	}
 	spec := operations.Spec{
-		ActorID: actor, Key: key, Type: operations.TypeReleaseAutoCorrection, BatchID: request.BatchID, RequestID: request.RequestID,
+		ActorID: actor, Key: key, Type: kind, BatchID: request.BatchID, RequestID: request.RequestID,
 		Origin:      &operations.Origin{ConversationID: request.ConversationID, Source: "curation", ProviderKind: source.Kind, Provider: source.Provider, Basis: source.Basis},
 		Fingerprint: operations.Fingerprint(fingerprint),
 	}
 	var applied Applied
 	result, err := operations.Run(ctx, w.db, spec, func(ctx context.Context, tx *sql.Tx, operationID string) (operations.Outcome, error) {
-		locked, err := governance.LockAutoRelease(ctx, tx, releaseID)
+		var locked autoFieldTarget
+		var err error
+		if track {
+			var t *governance.LockedAutoTrack
+			t, err = governance.LockAutoTrack(ctx, tx, id)
+			if err == nil {
+				if releaseID != "" && releaseID != t.ReleaseID() {
+					return operations.Outcome{}, operations.Conflict("item_stale", "曲目所属发行已变更")
+				}
+				releaseID = t.ReleaseID()
+				locked = t
+			}
+		} else {
+			locked, err = governance.LockAutoRelease(ctx, tx, releaseID)
+		}
 		if err != nil {
 			return operations.Outcome{}, err
 		}
@@ -82,7 +128,7 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
 			return operations.Outcome{}, err
 		}
 		if request.ExpectedRevision != 0 && request.Source.Kind == "model" {
-			manual, err := catalog.LoadCorrectionIntents(ctx, tx, releaseID)
+			manual, err := loadManualFields(ctx, tx, target, id)
 			if err != nil {
 				return operations.Outcome{}, err
 			}
@@ -93,7 +139,7 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
 			}
 		}
 		var write map[string]catalog.CorrectionIntent
-		write, applied, err = filterFields(ctx, tx, releaseID, locked, fields, request.OnlyEmpty)
+		write, applied, err = filterAutoFields(ctx, tx, target, id, definitions, locked, fields, request.OnlyEmpty)
 		if err != nil {
 			return operations.Outcome{}, err
 		}
@@ -121,18 +167,25 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
 	return applied, nil
 }
 
-func filterFields(ctx context.Context, tx *sql.Tx, releaseID string, locked *governance.LockedAutoRelease, fields map[string]catalog.CorrectionIntent, onlyEmpty bool) (map[string]catalog.CorrectionIntent, Applied, error) {
+func loadManualFields(ctx context.Context, tx *sql.Tx, target, id string) (map[string]catalog.CorrectionIntent, error) {
+	if target == "track" {
+		return catalog.LoadTrackCorrectionIntents(ctx, tx, id)
+	}
+	return catalog.LoadCorrectionIntents(ctx, tx, id)
+}
+
+func filterAutoFields(ctx context.Context, tx *sql.Tx, target, id string, definitions []catalog.CorrectableField, locked autoFieldTarget, fields map[string]catalog.CorrectionIntent, onlyEmpty bool) (map[string]catalog.CorrectionIntent, Applied, error) {
 	var corrections map[string]catalog.CorrectionIntent
 	if onlyEmpty {
 		var err error
-		corrections, err = catalog.LoadCorrectionIntents(ctx, tx, releaseID)
+		corrections, err = loadManualFields(ctx, tx, target, id)
 		if err != nil {
 			return nil, Applied{}, err
 		}
 	}
 	write := make(map[string]catalog.CorrectionIntent, len(fields))
 	result := Applied{Written: []string{}, Skipped: map[string]string{}}
-	for _, field := range catalog.CorrectableFields {
+	for _, field := range definitions {
 		name := field.Name
 		intent, ok := fields[name]
 		if !ok {
@@ -150,7 +203,7 @@ func filterFields(ctx context.Context, tx *sql.Tx, releaseID string, locked *gov
 		if err != nil {
 			return nil, Applied{}, err
 		}
-		suppressed, err := suppressionExists(ctx, tx, "release", releaseID, name, hash)
+		suppressed, err := suppressionExists(ctx, tx, target, id, name, hash)
 		if err != nil {
 			return nil, Applied{}, err
 		}
