@@ -149,21 +149,6 @@ const conversationPageDecoder = d.object({
 export const decodeConversationPage = d.defineDecoder(conversationPageDecoder);
 export type ConversationPageDTO = d.Infer<typeof conversationPageDecoder>;
 
-// 自动整理会话（M7 D）：另带这个会话领取的待定项按状态的数目（没有的状态不出现）。
-const itemCount = () => d.optional(d.integer({ min: 0 }));
-const curationConversationPageDecoder = d.object({
-  items: d.array(
-    d.object({
-      ...conversationShape,
-      pending_item_count: d.optional(d.integer({ min: 0 })),
-      item_counts: d.object({ in_progress: itemCount(), resolved: itemCount(), shelved: itemCount(), waiting_human: itemCount(), waiting_model: itemCount() }),
-    }),
-    { max: MAX_CONVERSATION_PAGE_SIZE },
-  ),
-  pagination: conversationPaginationDecoder,
-});
-export const decodeCurationConversationPage = d.defineDecoder(curationConversationPageDecoder);
-export type CurationConversationPageDTO = d.Infer<typeof curationConversationPageDecoder>;
 
 const toolCallBlockDecoder = d.object({ id: d.string(), name: d.string(), arguments: json });
 const toolResultBlockDecoder = d.object({ call_id: d.string(), content: d.string({ max: d.unbounded }), is_error: d.boolean() });

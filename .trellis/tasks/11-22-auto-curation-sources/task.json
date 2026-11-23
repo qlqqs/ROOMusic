@@ -27,7 +27,8 @@
     "11-22-auto-curation-e1-ui",
     "11-23-auto-curation-b3-acoustid",
     "11-23-auto-curation-d-model",
-    "11-23-auto-curation-b3-bundled-key"
+    "11-23-auto-curation-b3-bundled-key",
+    "11-23-auto-curation-e2-exceptions-ui"
   ],
   "parent": null,
   "relatedFiles": [],

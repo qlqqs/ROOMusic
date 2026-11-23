@@ -8,7 +8,7 @@ import { resetRuns } from "./run/run-store";
 
 export { AgentSettings } from "./settings/agent-settings";
 export { preferBlankConversation, setDockOpen, toggleDock, useDockState } from "./dock-store";
-export { DEFAULT_STEWARD_NAME, useStewardEntry } from "./hooks/use-steward-settings";
+export { DEFAULT_STEWARD_NAME, useStewardEntry, useStewardModels } from "./hooks/use-steward-settings";
 export { StewardHostProvider, type StewardDataScope, type StewardHost } from "./context/host";
 export type { PageKind, StewardPageContext, StewardPlaybackContext } from "./context/context";
 

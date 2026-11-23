@@ -77,6 +77,8 @@ export type FakeConversation = {
   last_run_finished_at?: string | null;
   /** 摘要覆盖到的最后一条消息（C10）。 */
   summary_through_message_id?: string | null;
+  /** 自动整理的后台会话（M7 D）：不在列表、计数与未读里，改模式 409。省略时是普通对话。 */
+  kind?: "chat" | "curation";
 };
 
 export function conversationOf(id: string, overrides: Partial<FakeConversation> = {}): FakeConversation {
@@ -327,6 +329,7 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
   });
   const listItem = (conversation: FakeConversation) => ({ ...summary(conversation), pending_item_count: pendingItemCount(pendingPlanOf(conversation.id)) });
   const find = (id: string) => state.conversations.find((item) => item.id === id);
+  const chats = () => state.conversations.filter((item) => item.kind !== "curation");
   /** 会话的未处理方案；读到时已过期的标为 expired（后端在读取与确认时判定过期）。 */
   const pendingPlanOf = (conversationId: string) => {
     const plan = state.plans.find((item) => item.conversation_id === conversationId && item.status === "pending");
@@ -344,7 +347,7 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
   };
 
   // 入口提示点的未读数（C10）：按会话的 unread 数出来。
-  const withUnread = (settings: Record<string, unknown>) => ({ ...settings, unread_conversation_count: state.conversations.filter((item) => item.unread === true).length });
+  const withUnread = (settings: Record<string, unknown>) => ({ ...settings, unread_conversation_count: chats().filter((item) => item.unread === true).length });
   api.on("GET", "/api/v1/me/steward/settings", () => denied() ?? jsonResponse(200, withUnread(state.settings ?? emptySettingsSample())));
   const current = () => state.settings ?? (emptySettingsSample() as Settings);
   // 部分更新，按后端 mergeSettings（steward/httpapi/settings.go，合同 4.2）的语义：
@@ -449,8 +452,8 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
   api.on("GET", "/api/v1/me/steward/conversations", () =>
     denied() ??
     jsonResponse(200, {
-      items: [...state.conversations].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map(listItem),
-      pagination: { page: 1, page_size: 100, total: state.conversations.length },
+      items: chats().sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map(listItem),
+      pagination: { page: 1, page_size: 100, total: chats().length },
     }),
   );
   api.on("POST", "/api/v1/me/steward/conversations", (request) => {
@@ -479,6 +482,7 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
     if (conversation === undefined) return sampleResponse("steward/conversation-not-found");
     const patch = request.body as { title?: string; model?: string; mode?: string };
     if (patch.mode !== undefined) {
+      if (conversation.kind === "curation") return sampleResponse("errors/curation-conversation");
       if (!selectableModes.includes(patch.mode)) return failureOf(400, "invalid_request", "mode 不合格");
       // 改模式要求会话空闲且没有未处理的方案。
       if (conversation.status === "running" || pendingPlanOf(conversation.id) !== null) return sampleResponse("steward/conversation-busy");

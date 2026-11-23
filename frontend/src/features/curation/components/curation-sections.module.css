@@ -114,3 +114,134 @@
   border-color: var(--color-accent-700);
   outline-offset: 0;
 }
+
+/* 模型判断（M7 E2）：标题旁的“已保存”（照备份的自动清理）。 */
+.saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-signal-high);
+  font-size: var(--fs-12);
+}
+
+/* 即改即存的一项：控件靠右，错误与失败提示在下方。 */
+.field {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  width: min(100%, 420px);
+  min-width: 0;
+}
+
+.limitRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.limitInput {
+  width: 9em;
+  min-height: var(--control-height);
+  padding: 6px 10px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  caret-color: var(--color-accent-700);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.limitInput:hover:enabled {
+  border-color: var(--color-neutral-800);
+}
+
+.limitInput:focus-visible {
+  border-color: var(--color-accent-700);
+  outline-offset: 0;
+}
+
+.limitInput:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.input[aria-invalid="true"],
+.limitInput[aria-invalid="true"] {
+  border-color: var(--color-neutral-900);
+  box-shadow: inset 0 0 0 1px var(--color-neutral-900);
+}
+
+.unit {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-accent-700);
+  cursor: pointer;
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0;
+  font-size: var(--fs-13);
+  line-height: 1.5;
+}
+
+.error svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+.error span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 最近的后台会话与例外里的多行内容：紧凑的列表，长标题换行。 */
+.linkList {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-13);
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  color: var(--text-secondary);
+}
+
+.lines {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
