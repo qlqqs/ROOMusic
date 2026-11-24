@@ -35,13 +35,13 @@ function expectAddress(actual: string, expected: string) {
 }
 
 describe("设置页与权限", () => {
-  it("管理员有账号、播放、Agent、扫描目录、成员、自动整理、操作记录、备份八栏，账号展示用户名、角色与修改密码", async () => {
+  it("管理员有账号、播放、Agent、扫描目录、成员、自动整理、局域网设备、操作记录、备份九栏，账号展示用户名、角色与修改密码", async () => {
     setup();
     renderApp({ path: "/settings/account" });
     await accountHeading();
     const links = within(screen.getByRole("navigation", { name: "设置" })).getAllByRole("link");
     expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
-      ["账号", "/settings/account"], ["播放", "/settings/playback"], ["Agent", "/settings/agent"], ["扫描目录", "/settings/library"], ["成员", "/settings/members"], ["自动整理", "/settings/curation"], ["操作记录", "/settings/operations"], ["备份", "/settings/backups"],
+      ["账号", "/settings/account"], ["播放", "/settings/playback"], ["Agent", "/settings/agent"], ["扫描目录", "/settings/library"], ["成员", "/settings/members"], ["自动整理", "/settings/curation"], ["局域网设备", "/settings/devices"], ["操作记录", "/settings/operations"], ["备份", "/settings/backups"],
     ]);
     expect(links[0]?.getAttribute("aria-current")).toBe("page");
     const main = within(screen.getByRole("main"));

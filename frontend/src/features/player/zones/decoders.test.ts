@@ -54,6 +54,7 @@ const registeredDevice: Device = {
   muted: false,
   volumeControllable: true,
   outputSessionId: null,
+  upnp: null,
 };
 
 const claimedDevice: Device = {

@@ -38,6 +38,7 @@ const MembersPage = lazyRouteComponent(() => import("./routes/members-page"), "M
 const OperationsPage = lazyRouteComponent(() => import("./routes/operations-page"), "OperationsPage");
 const CurationPage = lazyRouteComponent(() => import("./routes/curation-page"), "CurationPage");
 const BackupsPage = lazyRouteComponent(() => import("./routes/backups-page"), "BackupsPage");
+const LanDevicesPage = lazyRouteComponent(() => import("./routes/lan-devices-page"), "LanDevicesPage");
 // 管家的整页对话连同 Markdown 依赖按需加载。
 const StewardPage = lazyRouteComponent(() => import("./routes/steward-page"), "StewardRoutePage");
 
@@ -488,6 +489,18 @@ function BackupsRoute() {
 
 const backupsRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/backups", component: BackupsRoute });
 
+function LanDevicesRoute() {
+  return (
+    <AdminGate>
+      <LazyPage>
+        <LanDevicesPage />
+      </LazyPage>
+    </AdminGate>
+  );
+}
+
+const lanDevicesRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/devices", component: LanDevicesRoute });
+
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
@@ -508,7 +521,7 @@ const routeTree = rootRoute.addChildren([
     artistCandidatesRoute,
     stewardRoute,
     stewardConversationRoute,
-    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, agentSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, curationRoute, operationsRoute, backupsRoute]),
+    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, agentSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, curationRoute, operationsRoute, backupsRoute, lanDevicesRoute]),
     notFoundRoute,
   ]),
 ]);

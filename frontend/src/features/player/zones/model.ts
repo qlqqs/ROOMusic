@@ -142,7 +142,14 @@ export type Device = {
   /** 能由软件调音量（能力 volume 不是 fixed）。 */
   volumeControllable: boolean;
   outputSessionId: string | null;
+  /** 局域网 UPnP 设备（M8 U3）才有：采样率上限、设备是否声明了支持的格式、现在谁在用（没人用时为 null）。 */
+  upnp: UpnpDeviceInfo | null;
 };
+
+export type UpnpDeviceInfo = { maxSampleRate: number; formatDeclared: boolean; occupiedBy: { userId: string; displayName: string } | null };
+
+/** 局域网设备可选的采样率上限（与后端白名单一致）。 */
+export const UPNP_SAMPLE_RATES = [44100, 48000, 96000, 192000] as const;
 
 export type Snapshot = { serverTime: number; devices: readonly Device[]; zones: readonly Zone[] };
 

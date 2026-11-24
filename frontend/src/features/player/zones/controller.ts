@@ -48,7 +48,8 @@ export type PlayerSnapshot = {
 };
 
 /** 设备列表的一行：设备、它的播放区（还没读到时为 null）、是不是本机、是不是正在控制的。 */
-export type PlaybackDeviceRow = { device: Device; zone: Zone | null; isLocal: boolean; isTarget: boolean };
+/** occupant：局域网设备被别的成员占用时，那位成员的显示名（没人用或自己在用时为 null）。 */
+export type PlaybackDeviceRow = { device: Device; zone: Zone | null; isLocal: boolean; isTarget: boolean; occupant: string | null };
 
 export type PlayerProgress = {
   positionSeconds: number;
@@ -71,6 +72,8 @@ export type ZoneApi = {
   sendZoneCommand: (zoneId: string, command: ZoneCommand) => Promise<CommandResult>;
   putDeviceVolume: (deviceId: string, volume: number, muted: boolean) => Promise<DeviceResult>;
   renameDevice: (deviceId: string, name: string) => Promise<DeviceResult>;
+  activateDevice: (deviceId: string, takeover: boolean) => Promise<DeviceResult>;
+  putDeviceSampleRate: (deviceId: string, rate: number) => Promise<DeviceResult>;
   deleteDevice: (deviceId: string) => Promise<void>;
   claimOutput: (deviceId: string, body: ClaimBody) => Promise<ClaimResult>;
   postOutputReport: (sessionId: string, body: ReportBody) => Promise<ReportResult>;
@@ -625,6 +628,28 @@ export class PlayerController {
     this.store.applyDevice(result.device);
   }
 
+  /**
+   * 选中一台局域网设备（M8 U3）：服务器为它认领输出，成功后改为控制它。别人正在用时失败（409 device_busy），
+   * 界面确认后以 takeover 再来一次。
+   */
+  async activateDevice(deviceId: string, takeover: boolean): Promise<void> {
+    if (this.lifecycle === "ended") return;
+    const result = await this.deps.api.activateDevice(deviceId, takeover);
+    if (this.isEnded()) return;
+    this.store.noteServerTime(result.serverTime);
+    this.store.applyDevice(result.device);
+    this.setControlTarget(result.device.zoneId);
+  }
+
+  /** 局域网设备的采样率上限；下一条流起生效。 */
+  async setDeviceSampleRate(deviceId: string, rate: number): Promise<void> {
+    if (this.lifecycle === "ended") return;
+    const result = await this.deps.api.putDeviceSampleRate(deviceId, rate);
+    if (this.isEnded()) return;
+    this.store.noteServerTime(result.serverTime);
+    this.store.applyDevice(result.device);
+  }
+
   /** 删除离线设备，连同它的播放区与队列。 */
   async deleteDevice(deviceId: string): Promise<void> {
     if (this.lifecycle === "ended") return;
@@ -749,7 +774,11 @@ export class PlayerController {
     const localId = this.deviceId;
     const cache = this.rowsCache;
     if (cache !== null && cache.devices === devices && cache.zones === zones && cache.localId === localId && cache.targetId === targetId) return cache.rows;
-    const rows = devices.map((device) => ({ device, zone: zones.get(device.zoneId) ?? null, isLocal: device.deviceId === localId, isTarget: device.zoneId === targetId }));
+    const rows = devices.map((device) => {
+      const occupiedBy = device.upnp?.occupiedBy ?? null;
+      const occupant = occupiedBy === null || occupiedBy.userId === this.deps.userId ? null : occupiedBy.displayName;
+      return { device, zone: zones.get(device.zoneId) ?? null, isLocal: device.deviceId === localId, isTarget: device.zoneId === targetId, occupant };
+    });
     rows.sort((a, b) => Number(b.isLocal) - Number(a.isLocal));
     this.rowsCache = { devices, zones, localId, targetId, rows };
     return rows;

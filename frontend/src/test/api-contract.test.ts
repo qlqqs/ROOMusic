@@ -112,6 +112,7 @@ import {
 } from "../features/personal/api/decoders";
 import { decodeAlbumResults, decodeTrackResults, decodeSearchSuggestions } from "../features/search/api/decoders";
 import { decode as d, decodeErrorEnvelope } from "../shared/api";
+import { decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings } from "../features/lan-devices/api/decoders";
 import { decodeTrackSummaries } from "../features/catalog/api/track-summary";
 import { listApiSampleNames, loadApiSample, loadRawApiSample } from "./api-samples";
 import {
@@ -655,11 +656,22 @@ const successContracts: Record<string, Contract> = {
   "playlists/restore-item": { status: 200, decode: decodeItemRestored },
   "playlists/restore-original-index": { status: 200, decode: decodeItemRestored },
   "playlists/restore-over-limit": { status: 200, decode: decodeItemRestored },
+  "upnp/settings": { status: 200, decode: decodeLanDeviceSettings },
+  "upnp/settings-updated": { status: 200, decode: decodeLanDeviceSettings },
+  "upnp/list-empty": { status: 200, decode: decodeLanDevices },
+  "upnp/list": { status: 200, decode: decodeLanDevices },
+  "upnp/manual-added": { status: 200, decode: decodeLanDevice },
+  "upnp/grants-updated": { status: 200, decode: decodeLanDeviceGrants },
+  "upnp/playback-snapshot": { status: 200, decode: decodeSnapshot, preservesWireShape: false },
+  "upnp/playback-occupied": { status: 200, decode: decodeDeviceResult, preservesWireShape: false },
 };
 
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。
 const errorContracts: Record<string, { status: number; code: string }> = {
   "steward/conversation-busy": { status: 409, code: "conversation_busy" },
+  "upnp/device-busy": { status: 409, code: "device_busy" },
+  "upnp/disabled": { status: 409, code: "upnp_disabled" },
+  "upnp/invalid-address": { status: 400, code: "invalid_address" },
   "steward/continue-nothing": { status: 409, code: "nothing_to_continue" },
   "steward/conversation-not-found": { status: 404, code: "not_found" },
   "steward/invalid-context": { status: 400, code: "invalid_request" },
@@ -871,6 +883,7 @@ const errorContracts: Record<string, { status: number; code: string }> = {
 const emptyResponseContracts: Record<string, { status: number }> = {
   "dsp/responses/preset-delete": { status: 204 },
   "steward/tokens/revoked": { status: 204 },
+  "upnp/manual-removed": { status: 204 },
   "steward/events-unavailable": { status: 204 },
   "steward/memories-cleared": { status: 204 },
   "steward/memory-deleted": { status: 204 },

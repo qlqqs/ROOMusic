@@ -28,8 +28,8 @@ function viewDevice(target: "local" | "remote") {
     isLocal: target === "local",
     device: target === "local" ? local : remote,
     devices: [
-      { device: local, zone: null, isLocal: true, isTarget: target === "local" },
-      { device: remote, zone: null, isLocal: false, isTarget: target === "remote" },
+      { device: local, zone: null, isLocal: true, isTarget: target === "local", occupant: null },
+      { device: remote, zone: null, isLocal: false, isTarget: target === "remote", occupant: null },
     ],
   };
   return render(<DeviceButton className="where" />);
