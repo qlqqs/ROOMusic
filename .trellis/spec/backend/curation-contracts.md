@@ -513,7 +513,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 - **`track_acoustic_fingerprints`**：主键 `track_id`（随曲目删除）；`pipeline_version`；有效性键 `content_fingerprint`、`source_size`、`source_modified_at`、`cue_index_frames`、`cue_end_frames`；
   `status`（`done | failed`）、`fingerprint`、`duration_seconds`、`failure_category`（`too_short | decode_failed | timeout`）、`attempts`、`computed_at`。
-  放在数据库而不是数据目录（ADR 0006 决策记录“B3 说明”）：只为走到指纹这一步的曲目按需计算。
+  放在数据库而不是数据目录（ADR 0006 决策记录“AcoustID 实施时的补充”）：只为走到指纹这一步的曲目按需计算。
 - **`curation_source_keys`**：主键 `(source, name)`；`ciphertext`、`last_four`、`status`（`unchecked | valid | invalid`）、`updated_by`、`updated_at`。清除即删行。
 - 回退删除两张表。
 
@@ -539,7 +539,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
   2. `enabler_unavailable`
   3. `source_disabled`
   4. `fingerprint_unavailable`：指纹工具自检没通过
-  5. `bundled_key_rejected`：内置的应用密钥本进程内被 AcoustID 拒过（B3 补充）
+  5. `bundled_key_rejected`：内置的应用密钥本进程内被 AcoustID 拒过（ADR 0006 决策记录“AcoustID 内置应用密钥”）
   6. `key_missing`：有一把没填
   7. `key_invalid`：都填了，有一把无效
 - 第 4、5 条由 `SourceRegistration.Unavailable func() string` 给出（空串表示可用；`app` 装配 AcoustID 时按指纹工具与 `BundledKeyRejected()` 返回）。
@@ -631,7 +631,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | 三个摘要的基准哈希与 `main` 相同 | `TestB3DigestBaseline` |
 | `needsWork` 的 32 种组合与旧状态的推断 | `TestB3FingerprintNeedsWork` |
 | 密钥接口（403、两种 400、两种 404、顺序、原因顺序、脱敏、密文用途、清除删行、变化标记） | `TestPostgreSQLB3AcoustIDKeyAPI` |
-| 内置应用密钥（B3 补充）：声明只有 user、表单用内置值、被拒只记一次日志并置标记；闸门只列 user、旧 application 行隐藏且清除 404、被拒不标 user、原因 `bundled_key_rejected` | `sources/acoustid` 的 `TestLookupFingerprintBundledKeyForm`、`TestLookupFingerprintBundledKeyRejection`；`TestPostgreSQLB3AcoustIDBundledKeyGate` |
+| 内置应用密钥（ADR 0006 决策记录“AcoustID 内置应用密钥”）：声明只有 user、表单用内置值、被拒只记一次日志并置标记；闸门只列 user、旧 application 行隐藏且清除 404、被拒不标 user、原因 `bundled_key_rejected` | `sources/acoustid` 的 `TestLookupFingerprintBundledKeyForm`、`TestLookupFingerprintBundledKeyRejection`；`TestPostgreSQLB3AcoustIDBundledKeyGate` |
 | 回写：出站成功才 `valid`、时间不变、码 6 只标用户密钥、缓存命中不验证、compare-and-set | `TestPostgreSQLB3AcoustIDKeyWriteback` |
 | 真实 ffmpeg 与 fpcalc：整轨与 CUE、缓存、内容指纹与 CUE 帧与版本变化后重算、短轨边界、解码失败的冷却与上限 | `TestPostgreSQLB3AcousticFingerprintCache` |
 | 经 `app` 装配的一轮：占位专辑对上、补字段、待定候选带分数、两种无效密钥各自标记并回退搜索 | `TestPostgreSQLB3AcoustIDProgram` |

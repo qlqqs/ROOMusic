@@ -118,8 +118,7 @@ Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-
 
 2026-09-28 用户批准 Core 1 = M0、B0、I、M1a、M1b、M2a、M2b、P（服务端播放历史）、M3、M4，
 外加独立修复 F1、F2：依次是恢复客户端、后端拆包与身份稳定、真实播放和受控的元数据/版本管理。
-M5（搜索规范化、艺人、收藏与歌单）与 M6（Steward）是后续阶段。完整能力矩阵、依赖、验收和
-ADR 裁决状态见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)。
+M5（搜索规范化、艺人、收藏与歌单）与 M6（Steward）是后续阶段。ADR 裁决状态见 [ADR 索引](../../../docs/architecture/architecture-decisions.md#adr-索引)。
 
 M1a 只消费现有 API，M1b 使用阶段 I 的 ReleaseGroup 只读接口，两者都不新增元数据治理写路径；
 初始化/会话、目录配置、扫描和成员管理的既有写操作并未被“只读客户端”称呼禁止。服务端播放

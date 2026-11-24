@@ -22,7 +22,7 @@
 M4 的第一项增加默认版本（管理员在专辑详情设定、可撤销）与版本对比（所有成员，专辑详情的“对比版本”），合同见[默认版本与版本对比合同](../backend/default-version-contracts.md)；
 第二项增加管理员的“元数据”页（`/issues`：按版本列出问题，核对、取消核对与撤销），合同见[元数据问题与核对合同](../backend/issue-review-contracts.md)；第三项增加管理员的“待认领”页（`/claims`：把已不可见的旧版本上的修改认领给新版本，可撤销），合同见[认领合同](../backend/claim-contracts.md)。依赖与路由方案的决策见
 [前端基础 ADR](../../../docs/architecture/adr/0001-frontend-foundations.md) 决策记录，阶段和
-能力矩阵见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)，M1a 的设计与验证记录见任务
+ADR 状态见 [ADR 索引](../../../docs/architecture/architecture-decisions.md#adr-索引)，M1a 的设计与验证记录见任务
 M1a 技术设计（本机归档 `.trellis/tasks/archive/2026-10/09-28-classical-m1a-shell-admin/design.md`）。各规范文件区分“已实现的合同”与尚未实现的目标
 （播放器、搜索、受治理操作与 Agent 界面）；后者不是当前前端已通过验收的声明。
 
@@ -54,7 +54,7 @@ Before writing or reviewing frontend code:
 | Guide | Contract |
 | --- | --- |
 | [Classical 设计依据](../../../frontend/DESIGN.md) | 原型来源、设计变量、布局（第 1–4 节）；组件状态、播放与页面能力见 [DESIGN-components.md](../../../frontend/DESIGN-components.md)（第 5–7 节），落地差异与验收见 [DESIGN-acceptance.md](../../../frontend/DESIGN-acceptance.md)（第 8–10 节） |
-| [Core 1 路线](../../../docs/architecture/core-1-roadmap.md) | 当前能力、已批准阶段与依赖、ADR 裁决状态、旧任务承接与实施门禁 |
+| [ADR 索引](../../../docs/architecture/architecture-decisions.md#adr-索引) | ADR 的主题与批准状态 |
 | [Directory Structure](./directory-structure.md) | App composition, feature ownership, public boundaries, and shared code |
 | [Component Guidelines](./component-guidelines.md) | Presentational contracts, workflow states, accessibility, and composition |
 | [已实现的组件目录](./component-catalog.md) | 已实现的共用组件（M1a）、专辑组件（M1b）、受治理操作、收藏与歌单、歌词组件的逐项约定 |

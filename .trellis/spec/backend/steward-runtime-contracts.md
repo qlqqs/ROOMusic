@@ -1127,7 +1127,7 @@ ROOMUSIC_TEST_RUN='TestPostgreSQLStewardAPIResponseSamples' ROOMUSIC_UPDATE_API_
 
 ## 13. 与 ADR 0005 的出入及处理
 
-C2 实现后核对出三处与 ADR 0005 原文的出入，2026-11-16 由用户决定处理方式（ADR 决策记录 D6），目前代码与 ADR 一致。
+管家运行时实现后核对出三处与 ADR 0005 原文的出入，2026-11-16 决定处理方式（ADR 0005 决策记录 2026-11-16“按管家运行时的实现修订三处”），目前代码与 ADR 一致。
 
 | 出入 | 处理 |
 | --- | --- |
@@ -1138,7 +1138,7 @@ C2 实现后核对出三处与 ADR 0005 原文的出入，2026-11-16 由用户�
 ## 14. MCP 入口与访问令牌（C3）
 
 以已实现代码为准：`steward/token`、`steward/mcp`、`steward/httpapi/tokens.go`、`identity/access.go`、`identity/source_throttle.go`、迁移 0052。
-规则来源是 ADR 0005 第 6 节与 C3 任务的决定（K1–K4）。
+规则来源是 ADR 0005 第 6 节与访问令牌实现时的决定。
 
 ### 14.1 包与依赖
 

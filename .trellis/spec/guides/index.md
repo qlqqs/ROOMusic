@@ -55,9 +55,8 @@ policy owner.
 
 - Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）
 - [Classical 设计依据](../../../frontend/DESIGN.md)
-- [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准 Core 1 范围与阶段顺序；ADR 0001–0004 为部分批准）
+- [ADR 索引](../../../docs/architecture/architecture-decisions.md#adr-索引)
 - [Current README](../../../README.md)
-- [Architecture canvas](../../../docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx)
 - [Inherited V0 product goals and phase decisions](./product-goals.md)
 
 The original V0 planning workspace is historical input, not a required sibling

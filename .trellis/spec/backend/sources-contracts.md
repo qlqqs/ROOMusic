@@ -180,7 +180,7 @@ type Declaration struct {
 
 声明：`{ID:"acoustid", Name:"AcoustID", [fingerprint_lookup], DefaultEnabled:true, MinInterval:334ms, Keys:[user]}`；没有内置应用密钥的构建为 `Keys:[application, user]`。
 条款：每秒不超过 3 次；仅限非商业免费；每个应用注册自己的应用密钥；2027-01-01 起在 acoustid.org 注册的应用查询还必须带用户密钥（上游 2026-11-19 公告）。
-按上游推荐的做法（B3 补充）：ROOMusic 作为一个应用注册，发布镜像内置这个应用的密钥，管理员只填自己的用户密钥。基础地址 `https://api.acoustid.org`，不跟随重定向。
+按上游推荐的做法（ADR 0006 决策记录“AcoustID 内置应用密钥”）：ROOMusic 作为一个应用注册，发布镜像内置这个应用的密钥，管理员只填自己的用户密钥。基础地址 `https://api.acoustid.org`，不跟随重定向。
 
 - **内置应用密钥**：未初始化的包级 `var bundledClientKey string`，由链接参数 `-X …/sources/acoustid.bundledClientKey=` 注入（见[部署环境合同](./deployment-environment-contracts.md)）；
   仓库与测试构建里为空，即“没有内置”。有内置时表单的 `client` 用它，不读管理员的应用密钥；库里早先存的 `application` 一行保留、不读不显示，

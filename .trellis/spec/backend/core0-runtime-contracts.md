@@ -9,8 +9,8 @@
 2026-09-27 删除了旧前端；2026-10-01 的 M1a 按 Classical 设计重建 `frontend/src/`（外壳、会话、目录与扫描管理、
 成员管理、简版概览），Go 内嵌的是它的生产构建。本文件涉及前端 transport、decoder 与前端测试的内容，现在由
 `frontend/src/shared/api` 与各 feature 的 `api/` 实现，前端规范见 [前端规范索引](../frontend/index.md)。
-Classical 设计见 [DESIGN.md](../../../frontend/DESIGN.md)，阶段与依赖见
-[Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准）。
+Classical 设计见 [DESIGN.md](../../../frontend/DESIGN.md)，ADR 状态见
+[ADR 索引](../../../docs/architecture/architecture-decisions.md#adr-索引)。
 M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成 API 响应样本的集成测试与其 testdata。
 2026-10-02 的 F3 补齐了 M1a 暴露的后端缺口（没有迁移）：管理员的扫描记录列表、身份响应带用户 `id`、身份与成员接口的错误映射和
 密码长度规则、静态资源/JSON/封面的缓存头；合同见 [身份与成员合同](./identity-contracts.md)、下文“HTTP 缓存”和各专题文件的错误矩阵。

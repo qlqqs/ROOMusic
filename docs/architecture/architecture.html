@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ROOMusic · Core 1 目标架构</title>
+<title>ROOMusic 架构</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Lora:wght@400;600&family=Noto+Serif+SC:wght@400;600&display=swap">
 <style>
-/* 变量取自 Classical 设计系统（docs/design/_ds/.../styles.css），离线时回退到系统衬线字体。 */
+/* 变量取自项目设计系统（docs/design/_ds/.../styles.css），离线时回退到系统衬线字体。 */
 :root {
   --color-bg: #f3f2f2;
   --color-surface: #eae9e9;
@@ -34,7 +34,7 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html { background: var(--color-bg); }
-/* Cormorant 默认是旧式数字，M0、M1 会像 “Mo”“MI”，全局改用齐线数字。 */
+/* Cormorant 默认是旧式数字，0、1 会像 “o”“I”，全局改用齐线数字。 */
 body { margin: 0; color: var(--color-text); font-family: var(--font-body); font-size: 14px; line-height: 1.55; font-variant-numeric: lining-nums; }
 h1, h2, h3 { font-family: var(--font-heading); font-weight: 600; letter-spacing: -0.01em; margin: 0; line-height: 1.12; text-wrap: balance; }
 p { margin: 0; }
@@ -230,24 +230,24 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
   <header class="masthead">
     <div>
       <div class="brand">ROO<span>Music</span></div>
-      <div class="kicker">架构图 · Classical 重设计之后</div>
-      <h1>Core 1 目标架构</h1>
+      <div class="kicker">架构图 · 前端重建之后</div>
+      <h1>目标架构</h1>
       <p class="lede">浏览器、Go 模块化单体和数据分层如何衔接，资料库写操作走哪一条路，以及各阶段的先后与依赖。颜色只作描边：边框样式区分“已有”“已完成”“已批准”“草案”和“后续阶段”。</p>
     </div>
     <dl class="meta">
-      <div><dt>依据</dt><dd>路线图 <code>core-1-roadmap.md</code> 与 ADR 0001–0004（均为部分批准）</dd></div>
-      <div><dt>核对</dt><dd>2026-09-28 · 代码基线 <code>66678d6</code></dd></div>
-      <div><dt>决策</dt><dd>2026-09-28 已裁决 D1–D6：阶段顺序、身份策略、M1 前端基础、Core 1 截止到 M4、旧任务、归组依据；记录于任务 <code>09-28-core-1-roadmap-revision</code></dd></div>
-      <div><dt>性质</dt><dd>沟通用图，不是批准记录；冲突时以路线图和 ADR 为准</dd></div>
+      <div><dt>依据</dt><dd>ADR 0001–0004；各项批准状态见 <a href="architecture-decisions.md#adr-索引">ADR 索引</a></dd></div>
+      <div><dt>核对</dt><dd>2026-10-03；各方框的状态截至这一天</dd></div>
+      <div><dt>决策</dt><dd>2026-09-28 批准阶段顺序、身份策略、前端基础与归组依据，首批范围截止到问题与版本工具</dd></div>
+      <div><dt>性质</dt><dd>沟通用图，不是批准记录；冲突时以 ADR 为准</dd></div>
     </dl>
   </header>
 
   <div class="legend" role="list" aria-label="图例">
-    <span class="lg" role="listitem"><i class="sw s-now"></i>已有（Core 0）</span>
+    <span class="lg" role="listitem"><i class="sw s-now"></i>已有</span>
     <span class="lg" role="listitem"><i class="sw s-done"></i>已完成</span>
     <span class="lg" role="listitem"><i class="sw s-appr"></i>已批准（待实施）</span>
     <span class="lg" role="listitem"><i class="sw s-draft"></i>草案（ADR 仍待批准）</span>
-    <span class="lg" role="listitem"><i class="sw s-later"></i>后续阶段（Core 1 之后）</span>
+    <span class="lg" role="listitem"><i class="sw s-later"></i>后续阶段（首批范围之后）</span>
     <span class="lg" role="listitem"><svg class="lg-edge" viewBox="0 0 34 10" aria-hidden="true"><path class="edge k-now" d="M1,5 L30,5"/></svg>依赖或数据方向（悬停方框可高亮相关连线）</span>
   </div>
 
@@ -266,34 +266,34 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
       <span class="sec-num">01</span>
       <div>
         <h2 id="s1-title">系统分层</h2>
-        <p class="sec-lede">一个 Go 进程同源提供 Web 资产、REST 和媒体。PostgreSQL 是唯一的业务权威，音乐目录永远只读。后端已按能力拆到 <code>internal/</code>（B0，2026-09-30 完成）。</p>
+        <p class="sec-lede">一个 Go 进程同源提供 Web 资产、REST 和媒体。PostgreSQL 是唯一的业务权威，音乐目录永远只读。后端已按能力拆到 <code>internal/</code>（2026-09-30 完成）。</p>
       </div>
     </div>
 
     <div class="band">
       <div class="band-label">
         <div class="kicker">浏览器</div>
-        <h3>Classical 单页应用</h3>
+        <h3>单页应用</h3>
         <p><code>frontend/</code> · Vite 开发；生产构建内嵌进 Go 二进制</p>
       </div>
       <div class="grid-3">
         <div class="node s-done">
           <div class="node-k">app/shell</div>
           <div class="node-t">应用外壳</div>
-          <p class="node-b">侧栏导航 · 窄屏模态导航 · 身份区与退出；播放条（M2a）与 Steward 抽屉（M6）后续再加。</p>
-          <div class="node-tags"><span class="tag t-done">已完成 · M1a</span></div>
+          <p class="node-b">侧栏导航 · 窄屏模态导航 · 身份区与退出；播放条（直出播放）与 Steward 抽屉（管家）后续再加。</p>
+          <div class="node-tags"><span class="tag t-done">已完成 · 2026-10-01</span></div>
         </div>
         <div class="node s-done">
           <div class="node-k">TanStack Router</div>
           <div class="node-t">路由</div>
           <p class="node-b">代码定义的路径路由与守卫（不用 loader）；<code>redirect</code> 等搜索参数在边界校验一次。选中的版本、问题等后续阶段放进 URL，可收藏、可分享。</p>
-          <div class="node-tags"><span class="tag t-done">已完成 · ADR 0001 · M1a</span></div>
+          <div class="node-tags"><span class="tag t-done">已完成 · ADR 0001</span></div>
         </div>
         <div class="node s-done">
           <div class="node-k">TanStack Query</div>
           <div class="node-t">服务端状态</div>
           <p class="node-b">缓存键带会话代次并覆盖全部输入；写操作后按资源最小失效；扫描详情轮询到终态即停止；会话结束时取消并清空缓存。</p>
-          <div class="node-tags"><span class="tag t-done">已完成 · ADR 0001 · M1a</span></div>
+          <div class="node-tags"><span class="tag t-done">已完成 · ADR 0001</span></div>
         </div>
         <div class="node s-appr">
           <div class="node-k">features/</div>
@@ -301,22 +301,22 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
           <ul class="node-list">
             <li>auth · members · library · catalog</li>
             <li>curation · operations · player</li>
-            <li class="later">search · artists · personal（M5）</li>
-            <li class="later">steward（M6）</li>
+            <li class="later">search · artists · personal（搜索与艺人）</li>
+            <li class="later">steward（管家）</li>
           </ul>
-          <div class="node-tags"><span class="tag t-done">M1a 已建 auth · members · library · catalog（M1b 扩展为专辑浏览）</span><span class="tag t-appr">M2a 起逐步交付其余</span></div>
+          <div class="node-tags"><span class="tag t-done">已建 auth · members · library · catalog（catalog 已扩展为专辑浏览）</span><span class="tag t-appr">其余从直出播放起逐步交付</span></div>
         </div>
         <div class="node s-appr">
           <div class="node-k">features/player</div>
           <div class="node-t">播放引擎 PlayerEngine</div>
           <p class="node-b">独占唯一的 <code>&lt;audio&gt;</code>；队列与播放模式放在 React 之外，界面只订阅；对接 Media Session。</p>
-          <div class="node-tags"><span class="tag t-appr">M2a</span></div>
+          <div class="node-tags"><span class="tag t-appr">直出播放</span></div>
         </div>
         <div class="node s-done">
           <div class="node-k">shared/</div>
           <div class="node-t">共享层</div>
-          <p class="node-b">传输层（Cookie 凭据、请求 ID、错误信封）· 运行时 decoder · Classical 设计变量与基础组件。</p>
-          <div class="node-tags"><span class="tag t-done">已完成 · M1a</span></div>
+          <p class="node-b">传输层（Cookie 凭据、请求 ID、错误信封）· 运行时 decoder · 设计系统变量与基础组件。</p>
+          <div class="node-tags"><span class="tag t-done">已完成 · 2026-10-01</span></div>
         </div>
       </div>
     </div>
@@ -326,7 +326,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
       <div class="proto-items">
         <span class="pill">REST JSON · <code>/api/v1</code>（版本化）</span>
         <span class="pill">HttpOnly Cookie 会话，浏览器代码不可读</span>
-        <span class="pill">媒体 · <code>GET /tracks/{id}/stream</code> · Range <span class="tag t-appr">M2a</span></span>
+        <span class="pill">媒体 · <code>GET /tracks/{id}/stream</code> · Range <span class="tag t-appr">直出播放</span></span>
         <span class="pill">Web 资产由 Go 内嵌提供</span>
       </div>
     </div>
@@ -335,7 +335,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
       <div class="band-label">
         <div class="kicker">服务端</div>
         <h3>Go 模块化单体</h3>
-        <p>这是现在的结构：B0 已拆出 platform、identity、library、catalog，并由 <code>internal/app</code> 装配；operations、playback 等仍是后续阶段的目标。</p>
+        <p>2026-09-30 已按能力拆出 platform、identity、library、catalog，并由 <code>internal/app</code> 装配；operations、playback 等仍是后续阶段的目标。</p>
       </div>
       <div>
         <div class="grid-3">
@@ -343,55 +343,55 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
             <div class="node-k">internal/platform</div>
             <div class="node-t">platform</div>
             <p class="node-b">配置 · HTTP 中间件与完成日志 · PostgreSQL 连接与事务 · 迁移执行器</p>
-            <div class="node-tags"><span class="tag t-done">已拆出 · B0</span></div>
+            <div class="node-tags"><span class="tag t-done">已拆出 · 2026-09-30</span></div>
           </div>
           <div class="node s-now">
             <div class="node-k">internal/identity</div>
             <div class="node-t">identity</div>
-            <p class="node-b">初始化关闭 · 用户 · 不透明会话与撤销 · 角色 admin / user；editor 是 M3 候选</p>
-            <div class="node-tags"><span class="tag t-done">已拆出 · B0</span></div>
+            <p class="node-b">初始化关闭 · 用户 · 不透明会话与撤销 · 角色 admin / user；editor 仍是候选</p>
+            <div class="node-tags"><span class="tag t-done">已拆出 · 2026-09-30</span></div>
           </div>
           <div class="node s-now">
             <div class="node-k">internal/library</div>
             <div class="node-t">library</div>
             <p class="node-b">允许目录与 revision · 扫描运行、取消、诊断 · 解析器与音频指纹 · 写观察层</p>
-            <div class="node-tags"><span class="tag t-done">已拆出 · B0</span></div>
+            <div class="node-tags"><span class="tag t-done">已拆出 · 2026-09-30</span></div>
           </div>
           <div class="node s-done">
             <div class="node-k">internal/catalog</div>
             <div class="node-t">catalog</div>
             <p class="node-b">Release 图 · 扫描暂存与身份规划 · 归组规则 · 有效值投影 · 读取 API（含按组只读）。library 经 <code>ingest.PlanStagedRoot</code> 规划、<code>ingest.PersistCandidate</code> 写 <code>releases</code>。</p>
-            <div class="node-tags"><span class="tag t-done">已拆出 · B0</span><span class="tag t-done">身份稳定 · 阶段 I</span></div>
+            <div class="node-tags"><span class="tag t-done">已拆出 · 2026-09-30</span><span class="tag t-done">身份稳定 · 2026-09-30</span></div>
           </div>
           <div class="node s-draft">
             <div class="node-k">internal/operations</div>
             <div class="node-t">operations</div>
             <p class="node-b">Change Set · 批准 · 操作日志 · 检查点 · 类型化逆操作。现在只有目录操作这一种。</p>
-            <div class="node-tags"><span class="tag t-draft">M3 · ADR 0003</span></div>
+            <div class="node-tags"><span class="tag t-draft">人工修正 · ADR 0003</span></div>
           </div>
           <div class="node s-appr">
             <div class="node-k">internal/playback</div>
             <div class="node-t">playback</div>
             <p class="node-b">鉴权串流与 Range · 浏览器能力判定 · ALAC / CUE 派生缓存</p>
-            <div class="node-tags"><span class="tag t-appr">M2a</span><span class="tag t-draft">M2b · ADR 0004 待批项</span></div>
+            <div class="node-tags"><span class="tag t-appr">直出播放</span><span class="tag t-draft">无损派生 · ADR 0004 待批项</span></div>
           </div>
           <div class="node s-appr">
             <div class="node-k">internal/personal</div>
             <div class="node-t">personal</div>
-            <p class="node-b">播放历史（P，Core 1，排在阶段 I 之后）；收藏与歌单在 M5。按用户隔离，不进审批流。</p>
-            <div class="node-tags"><span class="tag t-appr">P · 阶段 I 之后</span><span class="tag t-later">收藏歌单 · M5</span></div>
+            <p class="node-b">播放历史（首批范围，排在身份匹配之后）；收藏与歌单随搜索与艺人一起做。按用户隔离，不进审批流。</p>
+            <div class="node-tags"><span class="tag t-appr">播放历史 · 身份匹配之后</span><span class="tag t-later">收藏歌单 · 后续</span></div>
           </div>
           <div class="node s-later">
             <div class="node-k">internal/search</div>
             <div class="node-t">search</div>
             <p class="node-b">规范化投影（简繁日异体字）· 标题与艺人别名 · pg_trgm 加速子串</p>
-            <div class="node-tags"><span class="tag t-later">M5</span></div>
+            <div class="node-tags"><span class="tag t-later">搜索与艺人</span></div>
           </div>
           <div class="node s-later">
             <div class="node-k">internal/steward</div>
             <div class="node-t">steward</div>
             <p class="node-b">只读结果层的受限工具 · 只能提交 Change Set · 独立审查</p>
-            <div class="node-tags"><span class="tag t-later">M6</span></div>
+            <div class="node-tags"><span class="tag t-later">管家</span></div>
           </div>
         </div>
         <div class="rules">
@@ -408,7 +408,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
       <div class="proto-items">
         <span class="pill"><code>database/sql</code> + pgx · 单事务写入 · 迁移锁</span>
         <span class="pill">只读打开 · root 包含检查 · 不跟随目录符号链接</span>
-        <span class="pill">受限子进程 · 并发与缓存上限 <span class="tag t-draft">M2b</span></span>
+        <span class="pill">受限子进程 · 并发与缓存上限 <span class="tag t-draft">无损派生</span></span>
       </div>
     </div>
 
@@ -434,20 +434,20 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
         <div class="node s-now">
           <div class="node-k">数据目录</div>
           <div class="node-t">受管文件</div>
-          <p class="node-b">封面（已有）· 派生媒体缓存（M2b）；绝不写入音乐目录</p>
-          <div class="node-tags"><span class="tag t-now">已有</span><span class="tag t-draft">M2b</span></div>
+          <p class="node-b">封面（已有）· 派生媒体缓存（无损派生）；绝不写入音乐目录</p>
+          <div class="node-tags"><span class="tag t-now">已有</span><span class="tag t-draft">无损派生</span></div>
         </div>
         <div class="node s-draft">
           <div class="node-k">ffmpeg</div>
           <div class="node-t">媒体派生</div>
           <p class="node-b">ALAC 无损派生 · CUE 按样本精确分轨；许可与部署待审</p>
-          <div class="node-tags"><span class="tag t-draft">M2b · ADR 0004</span></div>
+          <div class="node-tags"><span class="tag t-draft">无损派生 · ADR 0004</span></div>
         </div>
         <div class="node s-later">
           <div class="node-k">模型服务</div>
           <div class="node-t">Steward 后端</div>
-          <p class="node-b">M6 再定；先处理提示注入与数据外发</p>
-          <div class="node-tags"><span class="tag t-later">M6</span></div>
+          <p class="node-b">做管家时再定；先处理提示注入与数据外发</p>
+          <div class="node-tags"><span class="tag t-later">管家</span></div>
         </div>
       </div>
     </div>
@@ -477,13 +477,13 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
         <div class="node s-done" id="m-id" tabindex="0" style="grid-column:3;grid-row:1">
           <div class="node-k">catalog</div>
           <div class="node-t">身份匹配</div>
-          <p class="node-b">阶段 I 已实现：改名、移动、增删少量文件，曲目与 Release 的 ID 都不变。</p>
+          <p class="node-b">2026-09-30 已实现：改名、移动、增删少量文件，曲目与 Release 的 ID 都不变。</p>
           <ul class="node-list">
             <li>按曲目成员关系匹配 Release，锚点只是位置信息</li>
             <li>同一 root 遍历完整时，唯一且音频完全相同才重绑定</li>
             <li>有歧义不重绑定，留给人工认领</li>
           </ul>
-          <div class="node-tags"><span class="tag t-done">阶段 I · 已完成</span></div>
+          <div class="node-tags"><span class="tag t-done">已完成 · 2026-09-30</span></div>
         </div>
         <div class="node s-now" id="m-derived" tabindex="0" style="grid-column:4;grid-row:1">
           <div class="node-k">派生值</div>
@@ -493,33 +493,33 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
         <div class="node s-draft" id="m-intent" tabindex="0" style="grid-column:1;grid-row:2">
           <div class="node-k">发起方</div>
           <div class="node-t">修正意图</div>
-          <p class="node-b">人类在界面提交；M6 起 Steward 也可以提案。</p>
+          <p class="node-b">人类在界面提交；管家上线后 Steward 也可以提案。</p>
         </div>
         <div class="node s-draft" id="m-ops" tabindex="0" style="grid-column:2;grid-row:2">
           <div class="node-k">operations</div>
           <div class="node-t">受治理操作</div>
           <p class="node-b">授权 · 预览 · 批准 · 单事务执行 · 检查点</p>
-          <div class="node-tags"><span class="tag t-draft">M3 · ADR 0003</span></div>
+          <div class="node-tags"><span class="tag t-draft">人工修正 · ADR 0003</span></div>
         </div>
         <div class="node s-draft" id="m-overlay" tabindex="0" style="grid-column:4;grid-row:2">
           <div class="node-k">覆盖层</div>
           <div class="node-t">人工修正</div>
           <p class="node-b">修正值、依据、操作者；绑定实体 UUID；重扫不覆盖。</p>
-          <div class="node-tags"><span class="tag t-draft">M3 · ADR 0002</span></div>
+          <div class="node-tags"><span class="tag t-draft">人工修正 · ADR 0002</span></div>
         </div>
         <div class="node s-draft" id="m-result" tabindex="0" style="grid-column:5;grid-row:1 / 3;align-self:center">
           <div class="node-k">结果层</div>
           <div class="node-t">有效值投影</div>
           <p class="node-b">有修正用修正，否则用派生值。只读、可重建；待处理问题数在这里预先算好，扫描完成和操作生效时都刷新。</p>
-          <div class="node-tags"><span class="tag t-draft">M3 / M4</span></div>
+          <div class="node-tags"><span class="tag t-draft">人工修正 · 版本工具</span></div>
         </div>
         <div class="node s-now" id="m-read" tabindex="0" style="grid-column:6;grid-row:1 / 3;align-self:center">
           <div class="node-k">读取出口</div>
           <div class="node-t">只读结果层</div>
           <ul class="node-list">
             <li>REST 读取接口（已有）</li>
-            <li class="later">搜索投影（M5）</li>
-            <li class="later">Steward 只读工具（M6）</li>
+            <li class="later">搜索投影（搜索与艺人）</li>
+            <li class="later">Steward 只读工具（管家）</li>
           </ul>
         </div>
         <svg class="edges" aria-hidden="true"></svg>
@@ -529,7 +529,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
     <div class="layer-bar">
       <div><b>观察层 · 已有</b>扫描器写入的事实与证据。失败、取消或不完整的扫描不能当作缺失的证据。</div>
       <div class="is-draft"><b>覆盖层 · 缺失</b>现状是写入 Release 图时更新已有 Release 会直接覆盖字段（<code>internal/catalog/ingest/persist.go:149</code>），所以覆盖层落地之前不开放修正。</div>
-      <div class="is-draft"><b>结果层 · 缺失</b>现在 <code>releases</code> 表同时充当观察和结果。Core 1 中 ReleaseGroup 成员关系只能由人工确认（M3 起）。</div>
+      <div class="is-draft"><b>结果层 · 缺失</b>现在 <code>releases</code> 表同时充当观察和结果。首批范围内 ReleaseGroup 成员关系只能由人工确认（人工修正上线后）。</div>
     </div>
   </section>
 
@@ -547,7 +547,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
         <div class="node s-draft" id="g-intent" tabindex="0" style="grid-column:1">
           <div class="node-k">1 · 发起</div>
           <div class="node-t">意图</div>
-          <p class="node-b">人类界面提交 · Steward 提案（M6）</p>
+          <p class="node-b">人类界面提交 · Steward 提案（管家）</p>
         </div>
         <div class="node s-draft" id="g-authz" tabindex="0" style="grid-column:2">
           <div class="node-k">2 · 入口</div>
@@ -608,7 +608,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
         <p class="hint">状态名取自 <code>.trellis/spec/frontend/state-management.md</code> 的语义示例，不是最终的接口格式。</p>
       </div>
       <div class="notes">
-        <div class="note s-appr"><b>M3 试点 · 已批准</b>字段修正 + ReleaseGroup 成员调整。后者只改 <code>releases.group_id</code>，而扫描器更新已有 Release 时不碰这个字段。</div>
+        <div class="note s-appr"><b>人工修正试点 · 已批准</b>字段修正 + ReleaseGroup 成员调整。后者只改 <code>releases.group_id</code>，而扫描器更新已有 Release 时不碰这个字段。</div>
         <div class="note s-now"><b>不走这条路</b>个人数据（按用户隔离直接写）· 扫描（只写观察层）</div>
         <div class="note s-now"><b>永远禁止</b>任意 SQL、shell 或主机路径 · Agent 自己批准 · 审查失败时降级为 Operator</div>
       </div>
@@ -675,7 +675,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
           <div class="node-k">Go · 同源</div>
           <div class="node-t">媒体接口</div>
           <p class="node-b"><code class="block">GET /tracks/{id}/stream</code>按曲目 ID 解析，前端不接触任何路径。</p>
-          <div class="node-tags"><span class="tag t-appr">M2a · 已批准</span></div>
+          <div class="node-tags"><span class="tag t-appr">直出播放 · 已批准</span></div>
         </div>
         <svg class="edges" aria-hidden="true"></svg>
         <div class="edge-labels" aria-hidden="true"></div>
@@ -694,8 +694,8 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
 ├─ <b>features/</b>   auth · home · catalog · library
 │              curation · operations · player
 │              <i>search · artists · personal · steward（后续）</i>
-└─ <b>shared/</b>     api · ui（Classical 变量）· lib</pre>
-      <div class="note s-appr"><b>接口防漂移 · 已批准（ADR 0001）</b>Go 集成测试把真实响应写成 JSON 样本，前端 decoder 测试读取这些样本；样本变了却没提交时 CI 失败。OpenAPI 留到 M6 设计 Steward 工具 schema 时再评估。</div>
+└─ <b>shared/</b>     api · ui（设计系统变量）· lib</pre>
+      <div class="note s-appr"><b>接口防漂移 · 已批准（ADR 0001）</b>Go 集成测试把真实响应写成 JSON 样本，前端 decoder 测试读取这些样本；样本变了却没提交时 CI 失败。OpenAPI 留到设计管家的 Steward 工具 schema 时再评估。</div>
     </div>
   </section>
 
@@ -719,89 +719,89 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
         <div class="lane" style="grid-row:6"></div><div class="lane-label" style="grid-row:6">独立修复</div>
 
         <div class="node s-done" id="r-m0" tabindex="0" style="grid-column:2;grid-row:1 / 4;align-self:center">
-          <div class="stage">M0</div>
+          <div class="stage">设计</div>
           <div class="node-t">设计与规范对齐</div>
           <p class="node-b">DESIGN.md · spec · ADR 0001–0004 草案 · 路线图</p>
-          <div class="node-tags"><span class="tag t-done">已完成 · 850d274</span></div>
+          <div class="node-tags"><span class="tag t-done">已完成 · 2026-09-28</span></div>
         </div>
         <div class="node s-done" id="r-b0" tabindex="0" style="grid-column:3;grid-row:1">
-          <div class="stage">B0</div>
-          <div class="node-t">拆包</div>
+          <div class="stage">拆包</div>
+          <div class="node-t">按能力拆包</div>
           <p class="node-b">纯重构：五个提交拆出 catalog、postgres、library、httpapi 与 app；行为不变。</p>
           <div class="node-tags"><span class="tag t-done">已完成 · 2026-09-30</span></div>
         </div>
         <div class="node s-done" id="r-i" tabindex="0" style="grid-column:4;grid-row:1">
-          <div class="stage">I</div>
+          <div class="stage">身份</div>
           <div class="node-t">身份与分组只读</div>
           <p class="node-b">成员关系匹配 · 保守重绑定 · ID 稳定性测试 · 按组接口</p>
           <div class="node-tags"><span class="tag t-done">已完成 · 2026-09-30</span></div>
         </div>
         <div class="node s-appr" id="r-m3" tabindex="0" style="grid-column:6;grid-row:1">
-          <div class="stage">M3</div>
+          <div class="stage">修正</div>
           <div class="node-t">修正与受治理操作</div>
           <p class="node-b">试点：字段修正 + 组成员调整</p>
           <div class="node-tags"><span class="tag t-appr">未立项</span><span class="tag t-draft">ADR 细节待批</span></div>
         </div>
         <div class="node s-appr" id="r-m4" tabindex="0" style="grid-column:7;grid-row:1">
-          <div class="stage">M4</div>
+          <div class="stage">版本</div>
           <div class="node-t">问题与版本工具</div>
           <p class="node-b">问题投影 · 版本对比 · 默认版本 · 扫描反馈；之后再做 Release 合并与拆分。</p>
           <div class="node-tags"><span class="tag t-appr">未立项</span></div>
         </div>
         <div class="node s-later" id="r-m6" tabindex="0" style="grid-column:8;grid-row:2">
-          <div class="stage">M6</div>
+          <div class="stage">管家</div>
           <div class="node-t">Music Steward</div>
           <p class="node-b">只读问答 → 提案 → 独立审查</p>
         </div>
         <div class="node s-done" id="r-m1a" tabindex="0" style="grid-column:3;grid-row:3">
-          <div class="stage">M1a</div>
+          <div class="stage">外壳</div>
           <div class="node-t">外壳与管理</div>
           <p class="node-b">登录 · 目录 · 扫描 · 成员 · 概览；恢复 CI 构建与浏览器检查。</p>
           <div class="node-tags"><span class="tag t-done">已完成 · 2026-10-01</span></div>
         </div>
         <div class="node s-done" id="r-m1b" tabindex="0" style="grid-column:6;grid-row:3">
-          <div class="stage">M1b</div>
+          <div class="stage">专辑</div>
           <div class="node-t">专辑页</div>
           <p class="node-b">直接用按组接口：搜索 · 筛选 · 分页 · 封面卡片；详情含版本导航、介质与曲目、来源与证据；一组一版本时自然退化。</p>
           <div class="node-tags"><span class="tag t-done">已完成 · 2026-10-03</span></div>
         </div>
         <div class="node s-appr" id="r-m2a" tabindex="0" style="grid-column:4;grid-row:4">
-          <div class="stage">M2a</div>
+          <div class="stage">直出</div>
           <div class="node-t">直出播放</div>
           <p class="node-b">播放引擎 · 能力判定；放不了的明确标注。</p>
           <div class="node-tags"><span class="tag t-appr">ADR 0004 替代 A</span><span class="tag t-appr">未立项</span></div>
         </div>
         <div class="node s-appr" id="r-m2b" tabindex="0" style="grid-column:6;grid-row:4">
-          <div class="stage">M2b</div>
+          <div class="stage">派生</div>
           <div class="node-t">派生与歌词</div>
           <p class="node-b">ffmpeg 无损派生 · CUE 精确分轨 · 歌词</p>
           <div class="node-tags"><span class="tag t-draft">许可与部署待审</span></div>
         </div>
         <div class="node s-appr" id="r-personal" tabindex="0" style="grid-column:6;grid-row:5">
-          <div class="stage">P</div>
+          <div class="stage">历史</div>
           <div class="node-t">播放历史</div>
-          <p class="node-b">服务端按用户隔离保存；收藏与歌单在 M5。</p>
+          <p class="node-b">服务端按用户隔离保存；收藏与歌单随搜索与艺人一起做。</p>
           <div class="node-tags"><span class="tag t-appr">未立项</span></div>
         </div>
         <div class="node s-later" id="r-m5" tabindex="0" style="grid-column:8;grid-row:5">
-          <div class="stage">M5</div>
+          <div class="stage">搜索</div>
           <div class="node-t">搜索与艺人</div>
           <p class="node-b">搜索规范化 · 标题与艺人别名 · 收藏与歌单；修改别名走受治理操作。</p>
         </div>
         <div class="node s-done" id="r-fix" tabindex="0" style="grid-column:3 / 5;grid-row:6">
           <div class="node-k">随时可插入 · 不依赖其他阶段</div>
-          <div class="node-t">F1 · F2 · F3 独立修复</div>
+          <div class="node-t">三项独立修复</div>
           <p class="node-b">未知 <code>/api/</code> 路径返回 JSON 404 · 目录操作的幂等指纹补上目录 ID，同键请求串行 · 扫描记录、查看者 ID、错误映射与 HTTP 缓存头</p>
-          <div class="node-tags"><span class="tag t-done">F1 · F2 已完成</span><span class="tag t-done">F3 已完成 · 2026-10-02</span></div>
+          <div class="node-tags"><span class="tag t-done">接口 404 与目录幂等已完成</span><span class="tag t-done">后端缺口已完成 · 2026-10-02</span></div>
         </div>
         <svg class="edges" aria-hidden="true"></svg>
         <div class="edge-labels" aria-hidden="true"></div>
       </div>
     </div>
     <div class="road-notes">
-      <div class="note s-now"><b>不能调换的顺序</b>M3 依赖阶段 I 的稳定 ID；M6 依赖 M3 / M4 的操作合同。</div>
-      <div class="note s-now"><b>可以并行</b>M1a（2026-10-01）与 M1b（2026-10-03）已完成，M1b 建在 M1a 的外壳、阶段 I 的按组接口与 F3 的封面缓存和分页组件之上（B0、阶段 I、M1a、F3、M1b 已完成）；播放（M2a）接在它们之后，不依赖治理写路径。</div>
-      <div class="note s-appr"><b>已裁决（2026-09-28）</b>Core 1 截止到 M4；阶段顺序、身份策略、M1 前端基础与归组依据等 D1–D6 见路线修订任务。各 ADR 其余细节在对应阶段规划时批准。</div>
+      <div class="note s-now"><b>不能调换的顺序</b>人工修正依赖身份匹配的稳定 ID；管家依赖人工修正与版本工具的操作合同。</div>
+      <div class="note s-now"><b>可以并行</b>外壳与管理（2026-10-01）与专辑页（2026-10-03）已完成，专辑页建在外壳、按组只读接口、封面缓存头与分页组件之上；直出播放接在它们之后，不依赖治理写路径。</div>
+      <div class="note s-appr"><b>已裁决（2026-09-28）</b>首批范围截止到问题与版本工具；同时批准阶段顺序、身份策略、前端基础与归组依据。各 ADR 其余细节在实现前批准。</div>
     </div>
   </section>
 
@@ -824,7 +824,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
         <div class="node s-later" id="x-provider" tabindex="0" style="grid-column:2;grid-row:1">
           <div class="node-k">扩展层 · 远期</div>
           <div class="node-t">元数据与封面提供方</div>
-          <p class="node-b">例如 MusicBrainz；结果只作候选或证据，不覆盖人工修正。</p>
+          <p class="node-b">例如 MusicBrainz；不覆盖人工修正。2026-11-22 起产出经匹配规则写入可撤销的自动层（ADR 0006）。</p>
         </div>
         <div class="node s-later" id="x-agent" tabindex="0" style="grid-column:3;grid-row:1">
           <div class="node-k">扩展层 · 远期</div>
@@ -847,7 +847,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
           <p class="node-b">提案带目标、revision、证据与风险；批准与执行分开记录。</p>
         </div>
         <div class="node s-draft" id="x-ops" tabindex="0" style="grid-column:4;grid-row:2">
-          <div class="node-k">operations · M3</div>
+          <div class="node-k">operations · 人工修正</div>
           <div class="node-t">授权与执行</div>
           <p class="node-b">重验授权、版本和批准；执行插件只能由这里在授权包裹下调用。</p>
         </div>
@@ -865,8 +865,8 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
       </div>
     </div>
     <div class="layer-bar">
-      <div><b>第一步 · Core 1 期间</b>只做“插件形状”：各模块由使用方定义窄接口，外部依赖做成同一二进制内的适配器，例如 M2b 的 ffmpeg、以后的元数据提供方和 M6 的模型服务。</div>
-      <div class="is-draft"><b>第二步 · 出现第三方需求时</b>把稳定接口升级为 <code>extensions/</code> 合同，再建能力注册表与插件宿主。插件优先跑在独立进程、通过类型化 RPC 调用；不用 Go 的 <code>plugin</code> 包；WASM 只用于不受信任的第三方代码。</div>
+      <div><b>第一步 · 首批范围期间</b>只做“插件形状”：各模块由使用方定义窄接口，外部依赖做成同一二进制内的适配器，例如无损派生的 ffmpeg、以后的元数据提供方和管家的模型服务。</div>
+      <div class="is-draft"><b>第二步 · 出现第三方需求时</b>把稳定接口升级为 <code>extensions/</code> 合同，再建能力注册表与插件宿主。插件优先跑在独立进程、通过类型化 RPC 调用；不用 Go 的 <code>plugin</code> 包；WASM 只用于不受信任的第三方代码。2026-11-24 起改为 WebAssembly 沙箱（ADR 0007）。</div>
       <div class="is-draft"><b>最后 · 执行插件</b>在受治理操作和恢复策略成熟之后才考虑，并继续服从音乐源默认只读的不变量。</div>
     </div>
   </section>
@@ -875,7 +875,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
     <div>
       <b>来源</b>
       <ul>
-        <li><code>docs/architecture/core-1-roadmap.md</code> · <code>docs/architecture/adr/0001–0004</code> · <code>frontend/DESIGN.md</code></li>
+        <li><code>docs/architecture/adr/0001–0004</code> · <code>frontend/DESIGN.md</code></li>
         <li><code>.trellis/spec/frontend/state-management.md</code>（批准与执行状态）</li>
         <li><code>backend/internal/catalog/ingest/persist.go:142</code>（每个新 Release 新建一个组）、<code>:149</code>（更新已有 Release 时直接覆盖字段）</li>
         <li><code>backend/internal/catalog/ingest/organizer.go:922</code>（拆分候选的锚点取最小文件路径）</li>
@@ -884,7 +884,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
     </div>
     <div>
       <b>说明</b>
-      <p style="margin-top:6px">这张图用于沟通，不是批准记录。金色实线表示 2026-09-28 已批准、尚未实施的阶段或方案；灰色虚线表示 ADR 中仍待批准的内容；点线是 Core 1 之后的阶段。离线打开时字体会回退到系统衬线体。</p>
+      <p style="margin-top:6px">这张图用于沟通，不是批准记录。金色实线表示 2026-09-28 已批准、尚未实施的阶段或方案；灰色虚线表示 ADR 中仍待批准的内容；点线是首批范围之后的阶段。离线打开时字体会回退到系统衬线体。</p>
     </div>
   </footer>
 </div>
