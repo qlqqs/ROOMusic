@@ -112,6 +112,7 @@ import {
 } from "../features/personal/api/decoders";
 import { decodeAlbumResults, decodeTrackResults, decodeSearchSuggestions } from "../features/search/api/decoders";
 import { decode as d, decodeErrorEnvelope } from "../shared/api";
+import { decodeInstalledPlugin, decodeInstalledPlugins, decodePluginPreview } from "../features/curation/api/plugins";
 import { decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings } from "../features/lan-devices/api/decoders";
 import { decodeTrackSummaries } from "../features/catalog/api/track-summary";
 import { listApiSampleNames, loadApiSample, loadRawApiSample } from "./api-samples";
@@ -664,6 +665,11 @@ const successContracts: Record<string, Contract> = {
   "upnp/grants-updated": { status: 200, decode: decodeLanDeviceGrants },
   "upnp/playback-snapshot": { status: 200, decode: decodeSnapshot, preservesWireShape: false },
   "upnp/playback-occupied": { status: 200, decode: decodeDeviceResult, preservesWireShape: false },
+  "plugins/preview": { status: 200, decode: decodePluginPreview },
+  "plugins/install": { status: 201, decode: decodeInstalledPlugin },
+  "plugins/list": { status: 200, decode: decodeInstalledPlugins },
+  "plugins/hash-changed": { status: 200, decode: decodeInstalledPlugins },
+  "plugins/enable-source": { status: 200, decode: decodeCurationSource },
 };
 
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。
@@ -884,6 +890,7 @@ const emptyResponseContracts: Record<string, { status: number }> = {
   "dsp/responses/preset-delete": { status: 204 },
   "steward/tokens/revoked": { status: 204 },
   "upnp/manual-removed": { status: 204 },
+  "plugins/delete": { status: 204 },
   "steward/events-unavailable": { status: 204 },
   "steward/memories-cleared": { status: 204 },
   "steward/memory-deleted": { status: 204 },

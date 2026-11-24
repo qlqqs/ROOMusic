@@ -2,7 +2,7 @@ import { useState } from "react";
 import { formatDateTime } from "../../../shared/lib/time";
 import { ConfirmDialog, FailureNotice, QueryContent, SettingRow, SettingsGroup, Skeleton, Switch } from "../../../shared/ui";
 import type { CurationSettingsDTO, CurationSourceDTO } from "../api/decoders";
-import { sentToSource } from "../curation-text";
+import { sentToSourceText } from "../curation-text";
 import { useCurationSettings, useCurationSources, useUpdateCurationSettings } from "../hooks/use-curation";
 import styles from "./curation-sections.module.css";
 
@@ -96,7 +96,7 @@ function EnableConsent({ sources }: { sources: readonly CurationSourceDTO[] | un
           {enabled.map((source) => (
             <li key={source.id}>
               <strong>{source.name}</strong>
-              {source.keys?.some((key) => !key.configured) === true ? "（填入密钥后）" : ""}：{sentToSource[source.id] ?? "查询需要的信息"}
+              {source.keys?.some((key) => !key.configured) === true ? "（填入密钥后）" : ""}：{sentToSourceText(source)}
             </li>
           ))}
         </ul>

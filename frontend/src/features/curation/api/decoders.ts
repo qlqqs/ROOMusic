@@ -47,10 +47,13 @@ const sourceDecoder = d.object({
   active: d.boolean(),
   capabilities: d.array(d.oneOf(SOURCE_CAPABILITIES), { min: 1, max: SOURCE_CAPABILITIES.length }),
   enabled: d.boolean(),
-  id: d.string({ min: 1, max: 64, pattern: /^[a-z0-9._-]+$/ }),
+  // 插件源的标识是 plugin:<插件 id>（M8）。
+  id: d.string({ min: 1, max: 64, pattern: /^[a-z0-9._:-]+$/ }),
   inactive_reason: d.nullable(d.oneOf(SOURCE_INACTIVE_REASONS)),
   keys: d.optional(d.array(sourceKeyDecoder, { min: 1, max: 8 })),
   name: d.string({ min: 1, max: 200 }),
+  // 插件源才有：插件会访问的上游地址（来自它的清单）。
+  upstreams: d.optional(d.array(d.string({ min: 1, max: 2048 }), { max: 16 })),
 });
 const sourcesDecoder = d.object({ items: d.array(sourceDecoder, { max: 50 }) });
 

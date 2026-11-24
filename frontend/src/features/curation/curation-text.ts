@@ -67,6 +67,17 @@ export function writesOwnChanges(source: CurationSourceDTO): boolean {
   return source.capabilities.some((capability) => capability !== "fingerprint_lookup" && capability !== "artist_lookup");
 }
 
+/** 插件源（标识 plugin:<id>，M8）。 */
+export function isPluginSource(source: Pick<CurationSourceDTO, "id">): boolean {
+  return source.id.startsWith("plugin:");
+}
+
+/** 一个源会收到什么：内置源按下表；插件源写出它会访问的地址（来自它的清单），查询内容由插件决定。 */
+export function sentToSourceText(source: Pick<CurationSourceDTO, "id" | "upstreams">): string {
+  if (isPluginSource(source)) return `插件决定的查询内容，只会发往 ${(source.upstreams ?? []).join("、") || "它声明的地址"}`;
+  return sentToSource[source.id] ?? "查询需要的信息";
+}
+
 /** 打开总开关前列出：每个开着的源会收到什么（ADR 0006 第 8 节）。 */
 export const sentToSource: Record<string, string> = {
   musicbrainz: "外部编号、条码、ISRC、厂牌与编号、标题与艺人的查询词、由曲目时长推出的光盘目录",
