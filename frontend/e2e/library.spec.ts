@@ -38,7 +38,7 @@ test.describe("目录", () => {
   test("添加目录：路径被拒绝显示在字段旁，添加成功出现在列表与操作记录，写请求带幂等键", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     await page.goto("/settings/library");
-    await expect(heading(page, "扫描目录")).toBeVisible();
+    await expect(heading(page, "音乐目录")).toBeVisible();
     await expect(rootItem(page, "classical-a")).toBeVisible();
 
     // 被拒绝：错误在路径框旁，对话框不关、输入保留。
@@ -82,7 +82,8 @@ test.describe("目录", () => {
 
     await chooseRootAction(page, "classical-b", "恢复目录");
     await expect(page.getByText(/已恢复目录“classical-b”/)).toBeVisible();
-    await expect(rootItem(page, "classical-b")).toContainText("启用");
+    // 正常的目录不挂状态标签，只有停用的标“已停用”。
+    await expect(rootItem(page, "classical-b")).not.toContainText("已停用");
     expect(mock.callsTo("POST", /\/restore$/)[0]?.body).toEqual({ expected_revision: 2 });
   });
 
@@ -97,7 +98,7 @@ test.describe("目录", () => {
     await dialog.getByRole("button", { name: "停用目录" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "目录刚有变化，列表已刷新" })).toBeVisible();
     await expect(dialog).toBeHidden();
-    await expect(rootItem(page, "classical-a")).toContainText("启用");
+    await expect(rootItem(page, "classical-a")).not.toContainText("已停用");
   });
 });
 
@@ -145,7 +146,7 @@ test.describe("扫描记录", () => {
       await page.clock.fastForward(2000);
       await expect(phaseTag(page)).toHaveText("成功", { timeout: 500 });
     }).toPass({ timeout: 10_000 });
-    await page.getByRole("link", { name: "返回扫描目录" }).click();
+    await page.getByRole("link", { name: "返回音乐目录" }).click();
 
     await expect(table.getByRole("row")).toHaveCount(5);
     const newest = table.getByRole("row").nth(1);
@@ -205,7 +206,7 @@ test.describe("扫描", () => {
     await expect.poll(scanReads).toBe(settled);
 
     // 回到扫描目录页：没有活动扫描，可以再次开始。
-    await page.getByRole("link", { name: "返回扫描目录" }).click();
+    await page.getByRole("link", { name: "返回音乐目录" }).click();
     await expect(page.getByRole("button", { name: "开始扫描" })).toBeVisible();
   });
 
@@ -260,8 +261,8 @@ test.describe("扫描", () => {
 
     await page.goto("/settings/library/scans/00000000-0000-4000-8000-0000000000ff");
     await expect(heading(page, "扫描不存在")).toBeVisible();
-    await expect(page.getByRole("link", { name: "返回扫描目录" })).toBeVisible();
-    await page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "扫描目录" }).click();
-    await expect(heading(page, "扫描目录")).toBeVisible();
+    await expect(page.getByRole("link", { name: "返回音乐目录" })).toBeVisible();
+    await page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "音乐目录" }).click();
+    await expect(heading(page, "音乐目录")).toBeVisible();
   });
 });

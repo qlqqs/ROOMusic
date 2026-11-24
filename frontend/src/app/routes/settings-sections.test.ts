@@ -8,7 +8,7 @@ describe("设置分栏", () => {
       { label: "播放", to: "/settings/playback" },
       { label: "Agent", to: "/settings/agent" },
       { label: "关于", to: "/settings/about" },
-      { label: "扫描目录", to: "/settings/library" },
+      { label: "音乐目录", to: "/settings/library" },
       { label: "成员", to: "/settings/members" },
       { label: "自动整理", to: "/settings/curation" },
       { label: "局域网设备", to: "/settings/devices" },

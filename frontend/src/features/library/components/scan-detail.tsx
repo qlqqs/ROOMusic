@@ -19,7 +19,7 @@ import { ScanTriggerTag } from "./scan-trigger-tag";
 import { ScanProgress } from "./scan-progress";
 import { ScanReport } from "./scan-report";
 
-const backToLibrary = <Link to="/settings/library">返回扫描目录</Link>;
+const backToLibrary = <Link to="/settings/library">返回音乐目录</Link>;
 
 function ScanNotFound() {
   return (

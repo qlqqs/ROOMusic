@@ -20,3 +20,7 @@
   gap: var(--space-8);
   min-width: 0;
 }
+
+.empty {
+  color: var(--text-secondary);
+}

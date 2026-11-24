@@ -3,7 +3,7 @@ export { Avatar } from "./avatar";
 export { Button } from "./button";
 export { ConfirmDialog } from "./confirm-dialog";
 export { DataTable, type Column } from "./data-table";
-export { Disclosure } from "./disclosure";
+export { Disclosure, revealDisclosure } from "./disclosure";
 export { EmptyState } from "./empty-state";
 export { FailureNotice } from "./failure-notice";
 export { FilterChip } from "./filter-chip";

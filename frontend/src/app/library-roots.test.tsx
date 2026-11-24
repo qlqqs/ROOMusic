@@ -53,7 +53,7 @@ async function rootActions(name: string): Promise<string[]> {
 async function openLibrary(options: Parameters<typeof setup>[0] = {}) {
   const context = setup(options);
   const rendered = renderApp({ path: "/settings/library" });
-  await heading("扫描目录");
+  await heading("音乐目录");
   await waitFor(() => expect(hasRoot("classical-a")).toBe(true));
   return { ...context, ...rendered };
 }
@@ -83,32 +83,32 @@ async function expectAddDialogClosedAndCleared() {
   await waitFor(() => expect(screen.queryByRole("dialog", { name: "添加音乐目录" })).toBeNull());
 }
 
-describe("扫描目录页：访问与列表", () => {
-  it("管理员看到扫描、音乐目录、扫描记录与目录操作记录四个区段，目录只显示名称与状态", async () => {
+describe("音乐目录页：访问与列表", () => {
+  it("管理员看到目录、扫描、扫描记录与目录操作记录四个区段（目录在前，不与页面标题“音乐目录”重名）；目录只显示名称，只有停用的有状态标签", async () => {
     await openLibrary();
-    for (const name of ["扫描", "音乐目录", "扫描记录", "目录操作记录"]) {
-      expect(screen.getByRole("heading", { level: 2, name })).toBeTruthy();
-    }
-    expect(within(rowOf("classical-a")).getByText("启用")).toBeTruthy();
+    const sections = screen.getAllByRole("heading", { level: 2 }).map((node) => node.textContent);
+    expect(sections.filter((name) => name !== null && ["扫描", "目录", "音乐目录", "扫描记录", "目录操作记录"].includes(name))).toEqual(["目录", "扫描", "扫描记录", "目录操作记录"]);
+    expect(within(rowOf("classical-a")).queryByText("启用")).toBeNull();
+    expect(within(rowOf("classical-a")).queryByText("已停用")).toBeNull();
     expect(await rootActions("classical-a")).toEqual(["不扫描的文件夹…", "改路径…", "停用目录"]);
     expect(within(rowOf("classical-b")).getByText("已停用")).toBeTruthy();
     expect(await rootActions("classical-b")).toEqual(["不扫描的文件夹…", "改路径…", "恢复目录"]);
     // 不显示服务器路径。
     expect(rootList().textContent).not.toContain("/music");
-    expect(document.title).toBe("扫描目录 · ROOMusic");
+    expect(document.title).toBe("音乐目录 · ROOMusic");
   });
 
-  it("设置分栏里管理员有“扫描目录”，当前页有 aria-current", async () => {
+  it("设置分栏里管理员有“音乐目录”，当前页有 aria-current", async () => {
     await openLibrary();
     const nav = screen.getByRole("navigation", { name: "设置" });
-    expect(within(nav).getByRole("link", { name: "扫描目录" }).getAttribute("aria-current")).toBe("page");
+    expect(within(nav).getByRole("link", { name: "音乐目录" }).getAttribute("aria-current")).toBe("page");
   });
 
   it("成员直接访问：显示“需要管理员权限”，不请求任何管理接口，导航里也没有这一项", async () => {
     const { api } = setup({ role: "user" });
     renderApp({ path: "/settings/library" });
     expect(await heading("需要管理员权限")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "扫描目录" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "音乐目录" })).toBeNull();
     for (const path of [rootsPath, "/api/v1/library-root-operations", "/api/v1/scans/active", "/api/v1/scans"]) {
       expect(api.requestsTo("GET", path)).toHaveLength(0);
     }
@@ -397,7 +397,7 @@ describe("停用目录", () => {
     const dialog = await openDisableDialog();
     await userEvent.click(within(dialog).getByRole("button", { name: "停用目录" }));
     expect(await within(dialog).findByText("结果未确认")).toBeTruthy();
-    expect(within(rowOf("classical-a")).getByText("启用")).toBeTruthy();
+    expect(within(rowOf("classical-a")).queryByText("已停用")).toBeNull();
 
     await userEvent.click(within(dialog).getByRole("button", { name: "重试停用" }));
     expect(await screen.findByText(/已停用目录“classical-a”/)).toBeTruthy();
@@ -427,7 +427,7 @@ describe("停用目录", () => {
 });
 
 describe("恢复目录", () => {
-  it("恢复直接执行，不需要确认：带 revision 与幂等键，成功后列表显示启用", async () => {
+  it("恢复直接执行，不需要确认：带 revision 与幂等键，成功后列表里不再标“已停用”", async () => {
     const { api } = await openLibrary();
     await chooseRootAction("classical-b", "恢复目录");
 
@@ -436,7 +436,7 @@ describe("恢复目录", () => {
     const [request] = api.requestsTo("POST", restorePath);
     expect(request?.body).toEqual({ expected_revision: 2 });
     expect(request?.headers.get("Idempotency-Key")).toMatch(uuidPattern);
-    expect(within(rowOf("classical-b")).getByText("启用")).toBeTruthy();
+    await waitFor(() => expect(within(rowOf("classical-b")).queryByText("已停用")).toBeNull());
   });
 
   it("恢复遇到 409：提示目录已变化，不假装成功", async () => {
@@ -559,17 +559,17 @@ describe("修改目录路径", () => {
 });
 
 describe("目录操作记录", () => {
-  it("显示操作、结果与版本号，失败的说明原因而不显示错误码，目录名由目录 ID 对应，对应不上的显示占位", async () => {
+  it("显示时间、目录、操作与结果（不显示内部版本号），失败的说明原因而不显示错误码，目录名由目录 ID 对应，对应不上的显示占位", async () => {
     await openLibrary();
     const table = await screen.findByRole("table", { name: "目录操作记录" });
-    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["时间", "目录", "操作", "结果", "版本号"]);
+    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["时间", "目录", "操作", "结果"]);
     expect(within(table).queryByText(/Revision|错误码|operation_failed/)).toBeNull();
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(6);
 
     // 样本：最新一条是 classical-b 的失败停用，带错误码 operation_failed，没有 revision。
     const latest = within(rows[0] as HTMLElement).getAllByRole("cell");
-    expect(latest.map((cell) => cell.textContent?.replace(/\s+/g, ""))).toEqual([expect.any(String), "classical-b", "停用", "失败操作没有完成，目录保持原样。", "—"]);
+    expect(latest.map((cell) => cell.textContent?.replace(/\s+/g, ""))).toEqual([expect.any(String), "classical-b", "停用", "失败操作没有完成，目录保持原样。"]);
     // 样本：最早一条的目录 ID 不在当前列表里。
     const earliest = within(rows[5] as HTMLElement).getAllByRole("cell");
     expect(earliest[1]?.textContent).toBe("—");

@@ -60,9 +60,16 @@ type Results = {
   tracks: ReturnType<typeof useTrackResults>;
 };
 
+/** 这一栏已经读到第 1 页而且一条结果也没有（不是翻到了超出范围的页码）。 */
+function settledEmpty(query: { data?: { items: readonly unknown[]; pagination: { total: number; page: number } } | undefined }): boolean {
+  const data = query.data;
+  return data !== undefined && data.pagination.total === 0 && data.items.length === 0 && data.pagination.page === 1;
+}
+
 /**
  * 各栏的查询在这里发出：出现的几栏都失败且没有旧结果时（通常是同一个原因，例如服务器没有响应），只显示一条错误和一个“重试”（重试所有栏），
  * 不在每一栏重复同一句话；只有部分栏失败时，各栏照常各自显示错误与重试。
+ * 几栏都读到了、全都没有结果时只说一句；有的栏有结果时，没有结果的栏不出现（不留一块只写“没有找到”的区块）。
  */
 function ResultSections({
   search,
@@ -93,11 +100,17 @@ function ResultSections({
       />
     );
   }
+  if (shown.every(settledEmpty)) {
+    return <p className={styles.empty}>没有找到与“{q}”有关的{artistsReady ? "艺人、" : ""}专辑或曲目。</p>;
+  }
+  const visible = (query: Parameters<typeof settledEmpty>[0]) => !settledEmpty(query);
   return (
     <div className={styles.sections}>
-      {artistsReady ? <ArtistSection search={search} artists={results.artists} /> : null}
-      <AlbumSection search={search} albums={results.albums} />
-      <TrackSection search={search} tracks={results.tracks} renderTrackActions={renderTrackActions} renderRowsScope={renderTrackRowsScope} notice={tracksNotice} />
+      {artistsReady && visible(results.artists) ? <ArtistSection search={search} artists={results.artists} /> : null}
+      {visible(results.albums) ? <AlbumSection search={search} albums={results.albums} /> : null}
+      {visible(results.tracks) ? (
+        <TrackSection search={search} tracks={results.tracks} renderTrackActions={renderTrackActions} renderRowsScope={renderTrackRowsScope} notice={tracksNotice} />
+      ) : null}
     </div>
   );
 }

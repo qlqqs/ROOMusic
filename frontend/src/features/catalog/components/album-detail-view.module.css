@@ -20,6 +20,15 @@
   .columns {
     grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
   }
+
+  /* 侧栏没有内容（没有发行信息、制作人员，也没有选中曲目）时曲目表占满宽度，不留一条空栏。 */
+  .columns:not(:has(> .aside > *)) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.aside:empty {
+  display: none;
 }
 
 /* 单栏版面里的曲目信息：从底部弹出、铺满宽度的面板（与设备列表、信号路径的窄屏弹层相同）。 */

@@ -172,10 +172,10 @@ test.describe("键盘", () => {
     await page.getByRole("main").getByRole("link", { name: "设置", exact: true }).focus();
     await page.keyboard.press("Enter");
     await expect(heading(page, "账号")).toBeVisible();
-    await page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "扫描目录" }).focus();
-    await expectVisibleFocusRing(page, "扫描目录分栏链接");
+    await page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "音乐目录" }).focus();
+    await expectVisibleFocusRing(page, "音乐目录分栏链接");
     await page.keyboard.press("Enter");
-    await expect(heading(page, "扫描目录")).toBeVisible();
+    await expect(heading(page, "音乐目录")).toBeVisible();
     await expect(me).toHaveAttribute("aria-current", "page");
   });
 

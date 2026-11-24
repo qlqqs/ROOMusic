@@ -16,7 +16,7 @@ import { StartScanFeedback } from "./start-scan-feedback";
 const toTarget = (root: RootDTO): RootTarget => ({ id: root.id, name: root.name, revision: root.revision });
 
 /**
- * 扫描目录页的“音乐目录”卡片：标题行的“添加目录…”打开对话框；每个目录一行，停用（确认）、恢复、改路径与不扫描的文件夹在行尾“更多”里。
+ * 音乐目录页的“目录”卡片：标题行的“添加目录…”打开对话框；每个目录一行，停用（确认）、恢复、改路径与不扫描的文件夹在行尾“更多”里。
  * 改完路径自动开始扫描。命令结果显示在卡片下方（有对话框开着时显示在对话框里）。
  */
 export function RootSection() {
@@ -45,10 +45,13 @@ export function RootSection() {
     });
 
   return (
+    // 页面标题已经是“音乐目录”，这一组只叫“目录”，不重复同一个词。
     <SettingsGroup
-      title="音乐目录"
+      title="目录"
       action={
+        // 还没有目录时这是第一步，用主要按钮的样子（此时“开始扫描”不可用，页面上仍只有一个主要操作）。
         <Button
+          variant={roots.data?.length === 0 ? "primary" : "secondary"}
           icon={<Plus size={16} />}
           onClick={() => {
             commands.dismiss();
@@ -62,7 +65,7 @@ export function RootSection() {
         <>
           {/* 对话框打开时，结果与错误显示在对话框里，页面上不重复。 */}
           {!adding && confirming === null && editing === null && relocating === null ? (
-            <RootCommandNotice state={state} onRetry={retry} onDismiss={commands.dismiss} />
+            <RootCommandNotice state={state} onRetry={retry} onDismiss={commands.dismiss} onStartScan={() => scan.begin()} scanPending={scan.start.isPending} />
           ) : null}
           <StartScanFeedback start={scan.start} begin={scan.begin} />
         </>
@@ -71,7 +74,7 @@ export function RootSection() {
       <QueryContent query={roots} loading={<Skeleton label="正在加载目录" lines={3} />}>
         {(items) =>
           items.length === 0 ? (
-            <p>还没有音乐目录，点“添加目录…”添加一个。</p>
+            <p>还没有音乐目录。添加放音乐的目录之后再扫描，专辑就会出现在资料库里。</p>
           ) : (
             <RootTable
               roots={items}

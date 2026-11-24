@@ -4,6 +4,7 @@ export { AlbumDetailView, type ReleaseActionsContext } from "./components/album-
 export { AlbumListView } from "./components/album-list-view";
 export { Cover } from "./components/cover";
 export { AttentionSummary } from "./components/attention-summary";
+export { LibraryEmptyState } from "./components/library-empty-state";
 export { LibraryStats } from "./components/library-stats";
 export { RecentlyAddedPanel } from "./components/recently-added-panel";
 export { albumArtistOf, albumMeta, formatGenres } from "./format";

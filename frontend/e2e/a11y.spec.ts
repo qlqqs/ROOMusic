@@ -336,7 +336,7 @@ const states: State[] = [
     },
   },
   {
-    name: "扫描目录",
+    name: "音乐目录",
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/settings/library");
@@ -344,7 +344,7 @@ const states: State[] = [
     },
   },
   {
-    name: "扫描目录（扫描记录，第一页）",
+    name: "音乐目录（扫描记录，第一页）",
     options: { signedInAs: "curator" },
     reach: async (page, mock) => {
       mock.seedHistory(25);
@@ -354,7 +354,7 @@ const states: State[] = [
     },
   },
   {
-    name: "扫描目录（扫描记录，末页）",
+    name: "音乐目录（扫描记录，末页）",
     options: { signedInAs: "curator" },
     reach: async (page, mock) => {
       mock.seedHistory(25);
@@ -363,7 +363,7 @@ const states: State[] = [
     },
   },
   {
-    name: "扫描目录（停用确认对话框）",
+    name: "音乐目录（停用确认对话框）",
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/settings/library");
@@ -372,7 +372,7 @@ const states: State[] = [
     },
   },
   {
-    name: "扫描目录（目录菜单）",
+    name: "音乐目录（目录菜单）",
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/settings/library");
@@ -381,7 +381,7 @@ const states: State[] = [
     },
   },
   {
-    name: "扫描目录（添加后的结果提示）",
+    name: "音乐目录（添加后的结果提示）",
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/settings/library");
@@ -393,7 +393,7 @@ const states: State[] = [
     },
   },
   {
-    name: "扫描目录（添加对话框的字段错误）",
+    name: "音乐目录（添加对话框的字段错误）",
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/settings/library");

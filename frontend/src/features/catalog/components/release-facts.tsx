@@ -15,8 +15,9 @@ type ReleaseFactsProps = {
 };
 
 /**
- * 侧栏：发行信息（没有值的条目不列出，都没有时说明暂无）与“制作人员”（专辑级署名，没有就不显示这个区块）。
+ * 侧栏：发行信息（没有值的条目不列出，一条都没有时整个区块不出现）与“制作人员”（专辑级署名，没有就不显示这个区块）。
  * 专辑艺人已写在页头标题下，制作人员里不再列。曲目自己的署名在选中曲目后的“曲目信息”里。
+ * 两块都没有时什么也不渲染：页面据此让曲目表占满宽度。
  */
 export function ReleaseFacts({ release, versioned }: ReleaseFactsProps) {
   const facts = releaseFacts(release);
@@ -26,10 +27,8 @@ export function ReleaseFacts({ release, versioned }: ReleaseFactsProps) {
   const credits = Array.from(groups, ([role, entries]) => ({ role, entries }));
   return (
     <>
-      <Panel title={versioned ? "此版本" : "发行信息"}>
-        {facts.length === 0 ? (
-          <p>暂无更多发行信息。</p>
-        ) : (
+      {facts.length === 0 ? null : (
+        <Panel title={versioned ? "此版本" : "发行信息"}>
           <dl className={styles.facts}>
             {facts.map((fact) => (
               <Fragment key={fact.label}>
@@ -46,8 +45,8 @@ export function ReleaseFacts({ release, versioned }: ReleaseFactsProps) {
               </Fragment>
             ))}
           </dl>
-        )}
-      </Panel>
+        </Panel>
+      )}
       {credits.length === 0 ? null : (
         <Panel title="制作人员">
           <dl className={styles.facts}>

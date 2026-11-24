@@ -1,0 +1,18 @@
+/* 与主要按钮同一种外观（透明底、金色描边）：导航用链接，不用 Button。 */
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  color: var(--text-accent);
+  font-size: var(--fs-13);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.action:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}

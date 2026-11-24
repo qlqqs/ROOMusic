@@ -216,7 +216,7 @@ const cases: Case[] = [
   { name: "概览（管理员）", options: { signedInAs: "curator" }, path: () => "/", title: "概览" },
   { name: "概览（成员）", options: { signedInAs: "listener" }, path: () => "/", title: "概览" },
   ...recentPlaysCases,
-  { name: "扫描目录", options: { signedInAs: "curator" }, path: () => "/settings/library", title: "扫描目录" },
+  { name: "音乐目录", options: { signedInAs: "curator" }, path: () => "/settings/library", title: "音乐目录" },
   { name: "专辑列表", options: { signedInAs: "curator" }, path: () => "/albums", title: "专辑" },
   {
     name: "专辑列表（多页，需要关注与多版本）",
@@ -237,13 +237,13 @@ const cases: Case[] = [
     title: "专辑",
   },
   {
-    name: "扫描目录（扫描记录有数据，多页）",
+    name: "音乐目录（扫描记录有数据，多页）",
     options: { signedInAs: "curator" },
     prepare: (mock) => {
       mock.seedHistory(25);
     },
     path: () => "/settings/library",
-    title: "扫描目录",
+    title: "音乐目录",
   },
   {
     name: "扫描详情（失败，多类诊断）",

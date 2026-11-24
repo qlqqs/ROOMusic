@@ -241,7 +241,7 @@ describe("播放栏、全屏、队列与信号路径", () => {
     ]);
   });
 
-  it("播放栏：信号路径在传输行最前面；右侧依次是模式、队列、分隔线、设备、音量", async () => {
+  it("播放栏：传输行依次是信号路径、上一首、播放、下一首、播放模式；右侧依次是队列、分隔线、设备、音量", async () => {
     const event = decodeStreamEvent(signalEvent.event, JSON.stringify(signalEvent.data));
     if (event?.type !== "zone") throw new Error("信号样本未解码为播放区事件");
     server.afterNext({ signal: event.zone.signal });
@@ -255,7 +255,7 @@ describe("播放栏、全屏、队列与信号路径", () => {
     const controls = signal.parentElement?.parentElement?.parentElement;
     if (controls === null || controls === undefined) throw new Error("缺少传输行");
     expect(within(controls).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual([
-      signal.getAttribute("aria-label"), "上一首", "暂停", "下一首",
+      signal.getAttribute("aria-label"), "上一首", "暂停", "下一首", "播放模式：顺序",
     ]);
     expect(title.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const queue = within(bar).getByRole("button", { name: "队列（1）" });

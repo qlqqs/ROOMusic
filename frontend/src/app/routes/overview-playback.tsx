@@ -1,10 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { Disc3, Pause, Play } from "lucide-react";
+import { Disc3, Play } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import { albumArtistOf, artworkPath, useReleaseLoader } from "../../features/catalog";
 import { useRecentReleases, type RecentReleaseDTO } from "../../features/listening";
-import { playerTracksOf, usePlaybackCapabilities, usePlayerEngine, usePlayerProgress, usePlayerSelector, type PlayerTrack } from "../../features/player";
-import { formatDuration } from "../../shared/lib/duration";
+import { playerTracksOf, usePlaybackCapabilities, usePlayerEngine, usePlayerSelector } from "../../features/player";
 import { formatRelativeTime } from "../../shared/lib/time";
 import { Button, FailureNotice } from "../../shared/ui";
 import { QUEUE_FULL_TEXT } from "./track-actions";
@@ -88,36 +87,8 @@ function ResumeArtwork({ artworkId }: { artworkId: string | null }) {
   );
 }
 
-/** 三根音柱：播放时跳动，减少动态效果时静止。 */
-function Bars({ playing }: { playing: boolean }) {
-  return (
-    <span className={styles.eq} data-playing={playing ? "" : undefined} aria-hidden="true">
-      <i />
-      <i />
-      <i />
-    </span>
-  );
-}
-
-/** 当前曲目的进度文字与细进度条：只订阅进度，取自播放器的真实事件；时长未知时只写已播放的时间。 */
-function CurrentProgress() {
-  const progress = usePlayerProgress();
-  const duration = progress.durationSeconds;
-  const percent = duration === null || duration <= 0 ? null : Math.min(100, (progress.positionSeconds / duration) * 100);
-  return (
-    <span className={styles.progress} aria-hidden="true">
-      <span className={styles.track}>{percent === null ? null : <span className={styles.fill} style={{ width: `${percent}%` }} />}</span>
-      <span className={styles.time}>
-        {formatDuration(progress.positionSeconds)}
-        {duration === null ? null : ` / ${formatDuration(duration)}`}
-      </span>
-    </span>
-  );
-}
-
 type ResumeLayoutProps = {
   kicker: string;
-  playing: boolean;
   albumTitle: string;
   groupId: string;
   releaseId: string;
@@ -128,7 +99,7 @@ type ResumeLayoutProps = {
   status?: ReactNode;
 };
 
-function ResumeLayout({ kicker, playing, albumTitle, groupId, releaseId, sub, artworkId, extra, button, status }: ResumeLayoutProps) {
+function ResumeLayout({ kicker, albumTitle, groupId, releaseId, sub, artworkId, extra, button, status }: ResumeLayoutProps) {
   const headingId = useId();
   return (
     <section className={styles.resume} aria-labelledby={headingId}>
@@ -136,7 +107,6 @@ function ResumeLayout({ kicker, playing, albumTitle, groupId, releaseId, sub, ar
         <ResumeArtwork artworkId={artworkId} />
         <div className={styles.text}>
           <h2 id={headingId} className={styles.kicker}>
-            <Bars playing={playing} />
             {kicker}
           </h2>
           <p className={styles.album}>
@@ -154,33 +124,6 @@ function ResumeLayout({ kicker, playing, albumTitle, groupId, releaseId, sub, ar
   );
 }
 
-function CurrentResume({ track }: { track: PlayerTrack }) {
-  const engine = usePlayerEngine();
-  // 与播放栏的播放键同一判定：播放区的意图是播放时按下去是暂停。
-  const playing = usePlayerSelector((snapshot) => snapshot.zone?.intent === "play");
-  return (
-    <ResumeLayout
-      kicker={playing ? "正在播放" : "继续播放"}
-      playing={playing}
-      albumTitle={track.albumTitle}
-      groupId={track.groupId}
-      releaseId={track.releaseId}
-      sub={`${track.albumArtist} · ${track.title}`}
-      artworkId={track.artworkId}
-      extra={<CurrentProgress />}
-      button={
-        <Button
-          variant="icon"
-          icon={playing ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}
-          // 名称带专辑名：播放栏也有“暂停”，同一页两个同名按钮读屏分不清。
-          label={playing ? `暂停《${track.albumTitle}》` : `继续播放《${track.albumTitle}》`}
-          onClick={() => engine.togglePlayback()}
-        />
-      }
-    />
-  );
-}
-
 function LastPlayedResume({ item }: { item: RecentReleaseDTO }) {
   const starter = useReleaseStarter();
   const { release } = item;
@@ -188,7 +131,6 @@ function LastPlayedResume({ item }: { item: RecentReleaseDTO }) {
   return (
     <ResumeLayout
       kicker="继续播放"
-      playing={false}
       albumTitle={release.title}
       groupId={item.group_id}
       releaseId={release.id}
@@ -215,15 +157,15 @@ function LastPlayedResume({ item }: { item: RecentReleaseDTO }) {
 }
 
 /**
- * 概览页首的“继续播放”：有当前曲目时显示它所在的专辑、曲目、真实进度与播放/暂停；没有当前曲目时取最近播放的第一张，
- * 按下从上次播放的那一首开始放这张专辑。都没有时不渲染；播放器还在读取播放区时也先不渲染，避免先闪出上次播放再换成当前曲目。
+ * 概览页首的“继续播放”：队列是空的（底部没有播放栏）时取最近播放的第一张，按下从上次播放的那一首开始放这张专辑。
+ * 有当前曲目时不渲染：播放栏（手机上是迷你栏）已经显示同一首曲目、进度与播放键，再放一张卡片只是重复。
+ * 没有播放记录时不渲染；播放器还在读取播放区时也先不渲染，避免先闪出卡片再被当前曲目取代。
  */
 export function ResumeCard() {
-  const current = usePlayerSelector((snapshot) => snapshot.current);
+  const hasCurrent = usePlayerSelector((snapshot) => snapshot.current !== null);
   const restoring = usePlayerSelector((snapshot) => snapshot.restoring);
   const recent = useRecentReleases();
-  if (restoring) return null;
-  if (current !== null) return <CurrentResume track={current.track} />;
+  if (restoring || hasCurrent) return null;
   const last = recent.data?.items[0];
   return last === undefined ? null : <LastPlayedResume item={last} />;
 }

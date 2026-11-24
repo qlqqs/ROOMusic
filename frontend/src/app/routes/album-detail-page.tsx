@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { AlbumDetailView, type AlbumSearch, type ReleaseActionsContext, type ReleaseDetailDTO, type ReleaseTrackDTO } from "../../features/catalog";
 import { EditTrackDialog, ReleaseHistory, useReleaseAdminActions, useReleaseCommands, type ReleaseCommands } from "../../features/governance";
 import { AddToPlaylistButton, FavoriteButton, FavoriteStatusScope } from "../../features/personal";
-import { playerTrackOf, playerTracksOf, TrackLoudness, useAlbumPlayback, useCurrentTrackMarker, usePlayerSelector } from "../../features/player";
+import { playerTrackOf, playerTracksOf, TrackLoudness, useAlbumPlayback, useCurrentTrackMarker } from "../../features/player";
 import { useViewerScope } from "../../features/auth";
 import { formatCount } from "../../shared/lib/number";
 import { MenuButton, type MenuAction } from "../../shared/ui";
@@ -119,8 +119,6 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
   // 只订阅当前曲目与播放状态：音量、队列与进度变化不重绘整张曲目表。
   const marker = useCurrentTrackMarker();
   const { groupId } = props;
-  // 标题旁的“正在播放”：当前曲目属于这个专辑组（任一版本）且正在出声。
-  const albumPlaying = usePlayerSelector((snapshot) => snapshot.status === "playing" && snapshot.current?.track.groupId === groupId);
   // 修改专辑数据之后，别处缓存的专辑（目录、版本详情）与概览的“最近播放”都要重新读取。
   const refresh = useReleaseDataRefresh();
   // 归组之后版本在另一个专辑组里：导航到那个组并选中这个版本（代表版本时详情页会把 release 参数规范掉），“返回专辑列表”的参数随之保留。
@@ -168,7 +166,7 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
   return (
     <>
       <AlbumDetailView {...props} isAdmin={isAdmin}
-        currentTrackId={marker.trackId} currentTrackLabel={marker.label} currentTrackPlaying={marker.playing} albumPlaying={albumPlaying}
+        currentTrackId={marker.trackId} currentTrackLabel={marker.label} currentTrackPlaying={marker.playing}
         renderReleaseScope={renderReleaseScope}
         renderReleaseActions={renderReleaseActions} renderTrackActions={renderTrackActions} renderTrackFacts={renderTrackFacts}
         {...(isAdmin ? { renderAdminSections } : {})} />

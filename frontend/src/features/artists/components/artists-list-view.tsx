@@ -58,7 +58,7 @@ function InitialNav({ search }: { search: ArtistsSearch }) {
 type RenderArtistPlay = ((artist: ArtistSummaryDTO) => ReactNode) | undefined;
 
 /**
- * 一位艺人：整行是一个链接——圆章（名字缩写）、名字、参与的角色（“作曲、指挥”）与右侧的专辑数；没有下划线，悬停有浅底。
+ * 一位艺人：整行是一个链接——圆章（名字缩写）、名字、参与的角色（“作曲、指挥”）与右侧的专辑数（“3 张”）；没有下划线，悬停有浅底。
  * 给了 renderPlay 时链接之后多一个播放键，悬停或聚焦时盖在圆章上（精确指针设备；触屏不显示）。
  */
 function ArtistItem({ artist, renderPlay }: { artist: ArtistSummaryDTO; renderPlay: RenderArtistPlay }) {
@@ -84,8 +84,7 @@ function ArtistItem({ artist, renderPlay }: { artist: ArtistSummaryDTO; renderPl
         </span>
         {hasCount ? (
           <span id={`${id}-count`} className={styles.count}>
-            {formatCount(artist.album_count)}
-            <VisuallyHidden> 张专辑</VisuallyHidden>
+            {formatCount(artist.album_count)} 张<VisuallyHidden>专辑</VisuallyHidden>
           </span>
         ) : null}
       </Link>
@@ -153,7 +152,7 @@ export function ArtistsListView({ search, renderArtistPlay }: { search: ArtistsS
   const filtered = search.q !== undefined || search.role !== undefined || search.initial !== undefined;
   return (
     <>
-      <ArtistFilters search={search} />
+      <ArtistFilters search={search} rail={sort === "name"} />
       {sort === "name" ? <InitialNav search={search} /> : null}
       {/* 手机上首字母是贴在右侧的竖排索引：结果区右侧给它留出位置。 */}
       <div className={styles.resultsArea} data-rail={sort === "name" ? "" : undefined}>

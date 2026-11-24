@@ -14,11 +14,12 @@
   text-decoration: none;
 }
 
+/* 标题最多两行（同一排卡片高低一致），完整标题在链接名称与详情页里。 */
 .title {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
   /* 超长的标题或没有空格的长串都在卡片内换行，完整文字仍在 DOM 里。 */
   overflow-wrap: anywhere;
@@ -49,7 +50,11 @@
   overflow: hidden;
 }
 
+/* 摘要只占一行：窄卡片里放不下时末尾省略，不折成几行、留下单独的一个字。 */
 .meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
 }
 

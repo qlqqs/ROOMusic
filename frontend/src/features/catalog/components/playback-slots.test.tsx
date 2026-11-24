@@ -22,14 +22,10 @@ describe("专辑播放插槽", () => {
     expect(screen.getAllByRole("button", { name: /^播放 Track/ })).toHaveLength(2);
     expect(screen.getAllByText("已暂停")).toHaveLength(1);
   });
-  it("这张专辑正在播放：标题后有只给看得见的人的“正在播放”标记，h1 的名称仍只是专辑名；不在播放时没有", () => {
+  it("页头的标题只有专辑名：播放状态由播放键与曲目行的音柱表达，标题旁不再另挂“正在播放”", () => {
     const release = releaseDetailOf(albumGroup(1, { medium_count: 1, track_count: 2 }).representative);
-    const { rerender } = render(<AlbumHeader release={release} detail={release} playing />);
-    const heading = screen.getByRole("heading", { level: 1, name: release.title });
-    const marker = screen.getByText("正在播放");
-    expect(heading.contains(marker)).toBe(true);
-    expect(marker.closest("[aria-hidden='true']")).not.toBeNull();
-    rerender(<AlbumHeader release={release} detail={release} playing={false} />);
+    render(<AlbumHeader release={release} detail={release} />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(release.title);
     expect(screen.queryByText("正在播放")).toBeNull();
   });
   it("只给当前曲目 ID 时写“当前曲目”", () => {

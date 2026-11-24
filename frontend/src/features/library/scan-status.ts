@@ -35,7 +35,8 @@ export function isScanFinished(scan: Pick<ScanDTO, "status">): boolean {
 export const scanPhaseNotes: Record<ScanPhase, string | null> = {
   running: null,
   cancel_requested: "正在取消，当前这一步做完就会停下。",
-  succeeded: "扫描完成。这次没找到的文件已标为缺失。",
+  // 第一次扫描也这么写会让人以为有文件丢了；这次没找到的文件有多少，报告的“消失”一栏写得清楚。
+  succeeded: "扫描完成。",
   failed: "扫描失败，没扫到的曲目保持原样。",
   canceled: "扫描已取消，没扫到的曲目保持原样。",
   incomplete: "有目录没扫完，那里的曲目保持原样。",

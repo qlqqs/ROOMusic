@@ -4,7 +4,7 @@
   list-style: none;
 }
 
-/* 一行：图标 | 名称 | 状态 | 更多；行间一条淡分隔线。 */
+/* 一行：图标 | 名称 | 状态（只有停用时有内容）| 更多；行间一条淡分隔线。 */
 .row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
@@ -26,4 +26,8 @@
   min-width: 0;
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+
+.status {
+  display: inline-flex;
 }

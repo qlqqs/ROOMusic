@@ -46,3 +46,15 @@
     display: none;
   }
 }
+
+/* 手机上右侧有竖排的首字母索引（固定在屏幕右缘）：工具条右边让出索引的宽度，筛选框、胶囊与排序不压在索引下面。 */
+@media (max-width: 767px) {
+  .toolbar[data-rail] {
+    padding-inline-end: 22px;
+  }
+
+  .toolbar[data-rail] .chips {
+    margin-inline-end: 0;
+    padding-inline-end: 0;
+  }
+}

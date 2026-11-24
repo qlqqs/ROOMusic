@@ -21,7 +21,7 @@ describe("scanPhase", () => {
   it("非成功终态说明曲目保留，不否认已保存的变化", () => {
     for (const phase of ["failed", "canceled"] as const) expect(scanPhaseNotes[phase]).toContain("没扫到的曲目保持原样");
     expect(scanPhaseNotes.incomplete).toBe("有目录没扫完，那里的曲目保持原样。");
-    expect(scanPhaseNotes.succeeded).toBe("扫描完成。这次没找到的文件已标为缺失。");
+    expect(scanPhaseNotes.succeeded).toBe("扫描完成。");
     expect(scanPhaseNotes.running).toBeNull();
     expect(scanPhaseNotes.cancel_requested).toBe("正在取消，当前这一步做完就会停下。");
     for (const note of Object.values(scanPhaseNotes)) expect(note ?? "").not.toContain("已有的曲目不受影响");

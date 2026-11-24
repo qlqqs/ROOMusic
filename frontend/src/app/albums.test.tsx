@@ -34,7 +34,8 @@ function albumLinks(): HTMLElement[] {
   return screen.getAllByRole("link").filter((link) => /^\/albums\/[0-9a-f-]{36}$/.test(link.getAttribute("href") ?? ""));
 }
 
-const titles = () => albumLinks().map((link) => link.querySelector("span")?.textContent ?? "");
+// 卡片链接的第一个直接子 span 是标题（封面是 div，没有封面时的占位图标在 div 里）。
+const titles = () => albumLinks().map((link) => link.querySelector(":scope > span")?.textContent ?? "");
 const listRequests = (api: Api) => api.requestsTo("GET", "/api/v1/release-groups").map((request) => request.path);
 const lastListRequest = (api: Api) => new URL(listRequests(api).at(-1) ?? "", "http://localhost").searchParams;
 const searchOf = (history: { location: { search: string } }) => new URLSearchParams(history.location.search);
@@ -85,7 +86,7 @@ describe("专辑列表：浏览", () => {
     expect(first.textContent).toContain("第九交响曲");
     expect(first.textContent).toContain("柏林爱乐乐团");
     expect(first.textContent).not.toContain("卡拉扬");
-    expect(first.textContent).toContain("1977 · 2 张介质 · 18 首曲目");
+    expect(first.textContent).toContain("1977 · 2 张碟 · 18 首");
     expect(within(first).getByText("3 个版本")).toBeTruthy();
     expect(within(first).getByText("需要关注")).toBeTruthy();
     // 封面是装饰：图片的替代文字为空，且整体对读屏隐藏。
@@ -94,7 +95,7 @@ describe("专辑列表：浏览", () => {
     expect(cover?.getAttribute("alt")).toBe("");
 
     expect(second.textContent).toContain("Glenn Gould");
-    expect(second.textContent).toContain("1 首曲目");
+    expect(second.textContent).toContain("1 首");
     expect(second.textContent).not.toMatch(/\d{4}/); // 年份未知就不写
     expect(second.textContent).not.toContain("版本");
     expect(second.textContent).not.toContain("需要关注");
@@ -520,11 +521,11 @@ describe("专辑列表：翻页后的滚动与焦点", () => {
 });
 
 describe("专辑列表：空库与失败", () => {
-  it("资料库没有专辑：管理员提示去扫描目录，并给出链接", async () => {
+  it("资料库没有专辑：管理员提示去音乐目录，并给出链接", async () => {
     setup({ groups: [] });
     renderApp({ path: "/albums" });
     expect(await screen.findByText(/资料库里还没有专辑。添加音乐目录并扫描后就会出现。/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "前往扫描目录" }).getAttribute("href")).toBe("/settings/library");
+    expect(screen.getByRole("link", { name: "前往音乐目录" }).getAttribute("href")).toBe("/settings/library");
     expect(screen.getByText("共 0 张专辑")).toBeTruthy();
   });
 
@@ -532,7 +533,7 @@ describe("专辑列表：空库与失败", () => {
     setup({ role: "user", groups: [] });
     renderApp({ path: "/albums" });
     expect(await screen.findByText("资料库里还没有专辑。")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "前往扫描目录" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "前往音乐目录" })).toBeNull();
   });
 
   it("读取失败（503）：显示错误（不显示请求 ID）与重试，重试成功后显示专辑", async () => {
@@ -566,10 +567,10 @@ describe("导航与概览", () => {
     expect(within(nav).getByRole("link", { name: "专辑" }).getAttribute("aria-current")).toBe("page");
     expect(within(nav).getByRole("link", { name: "概览" }).getAttribute("aria-current")).toBeNull();
     // 配置入口移到设置分栏，仍只对管理员显示。
-    expect(within(nav).queryByRole("link", { name: "扫描目录" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "音乐目录" })).toBeNull();
     await userEvent.click(within(screen.getByRole("region", { name: "当前用户" })).getByRole("link", { name: "设置" }));
     const settings = await screen.findByRole("navigation", { name: "设置" });
-    expect(within(settings).queryByRole("link", { name: "扫描目录" }) !== null).toBe(role === "admin");
+    expect(within(settings).queryByRole("link", { name: "音乐目录" }) !== null).toBe(role === "admin");
   });
 
   it("概览的两个数字分别链接到全部专辑与只看需要关注的专辑", async () => {
@@ -578,7 +579,7 @@ describe("导航与概览", () => {
     const { history } = renderApp({ path: "/" });
     const stats = await screen.findByRole("region", { name: "资料库" });
     const all = await within(stats).findByRole("link", { name: /张专辑/ });
-    const attention = await within(await screen.findByRole("region", { name: "资料库状态" })).findByRole("link", { name: /^需要关注4 张专辑有待核对的问题4/ });
+    const attention = await within(await screen.findByRole("region", { name: "资料库状态" })).findByRole("link", { name: /^需要关注\s*4\s*张专辑有待核对的问题$/ });
     expect(all.getAttribute("href")).toBe("/albums");
     expect(within(stats).getByText("首曲目").closest("a")).toBeNull();
     expect(attention.getAttribute("href")).toBe("/albums?attention=required");

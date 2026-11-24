@@ -14,8 +14,7 @@
   background: var(--color-surface);
 }
 
-.pending,
-.empty {
+.pending {
   padding: var(--space-4);
   font-size: var(--fs-13);
   color: var(--text-secondary);

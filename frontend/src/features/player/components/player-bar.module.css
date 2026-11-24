@@ -14,6 +14,9 @@
 .title, .subtitle { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .title { font-size: var(--fs-14); font-weight: 500; color: var(--text-primary); }
 .subtitle { font-size: var(--fs-12); color: var(--text-secondary); }
+/* 艺人与专辑都是链接：与文字同色，悬停才变深并出现下划线（不在播放栏里放两条金色下划线）。 */
+.subtitle a { color: inherit; text-decoration: none; }
+.subtitle a:hover { color: var(--text-primary); text-decoration: underline; }
 /* 播放栏只有 68px 高：传输键 32px，下面是 18px 高的波形与两端时间。 */
 .center { display: grid; justify-items: center; justify-self: center; gap: 2px; width: 100%; max-width: 560px; min-width: 0; --wave-height: 18px; }
 .center > .desktop { justify-self: stretch; min-width: 0; }

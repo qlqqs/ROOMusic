@@ -65,7 +65,7 @@ async function openClear(scope: HTMLElement): Promise<HTMLElement> {
 }
 
 describe("概览的“最近播放”", () => {
-  it("排在概览最前；读取期间显示占位，没有记录时说明计次规则，也不提供清除", async () => {
+  it("排在概览最前；读取期间显示占位，从来没有播放记录时整块不出现（计次规则写在历史页）", async () => {
     const { api } = setup();
     const pending = deferred<Response>();
     api.on("GET", recentPath, () => pending.promise);
@@ -75,10 +75,8 @@ describe("概览的“最近播放”", () => {
     expect(screen.getAllByRole("heading", { level: 2 })[0]?.textContent).toBe("最近播放");
 
     pending.resolve(sampleResponse("listening/recent-releases-empty"));
-    expect(await within(panel).findByText(emptyText)).toBeTruthy();
-    expect(within(panel).queryByRole("status")).toBeNull();
-    expect(moreButton(panel)).toBeNull();
-    expect(within(panel).queryByRole("link", { name: "全部历史" })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("region", { name: "最近播放" })).toBeNull());
+    expect(screen.queryByText(emptyText)).toBeNull();
   });
 
   it("按接口给的顺序显示专辑：整张卡片是链接，指向播放过的版本，写明专辑艺人与上次播放时间", async () => {

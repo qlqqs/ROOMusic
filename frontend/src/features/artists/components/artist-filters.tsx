@@ -22,12 +22,13 @@ function validate(text: string): string | null {
  * 任何一项改变都回到第 1 页。地址里的 release_artist（只匹配发行艺人）没有单独的胶囊，显示在“专辑艺人”下。
  * 换成按专辑数排序时首字母不再适用（列表不分组），一起去掉。
  */
-export function ArtistFilters({ search }: { search: ArtistsSearch }) {
+/** rail：手机上右侧有竖排的首字母索引时为真，工具条右边让出它的位置。 */
+export function ArtistFilters({ search, rail = false }: { search: ArtistsSearch; rail?: boolean }) {
   const navigate = useNavigate();
   const go = (next: ArtistsSearch, replace = false) => void navigate({ to: "/artists", search: { ...next, page: undefined }, replace });
   const selected: ArtistRole | undefined = search.role === "release_artist" ? "album_artist" : search.role;
   return (
-    <div role="search" aria-label="筛选艺人" className={styles.toolbar}>
+    <div role="search" aria-label="筛选艺人" className={styles.toolbar} data-rail={rail ? "" : undefined}>
       <div className={styles.filter}>
         <FilterField
           label="筛选艺人"

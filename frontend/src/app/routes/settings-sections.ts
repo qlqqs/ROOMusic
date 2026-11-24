@@ -18,7 +18,7 @@ export const settingsSections: readonly SettingsSection[] = [
   { to: "/settings/playback", label: "播放", icon: AudioLines, adminOnly: false },
   { to: "/settings/agent", label: "Agent", icon: Bot, adminOnly: false },
   { to: "/settings/about", label: "关于", icon: Info, adminOnly: false },
-  { to: "/settings/library", label: "扫描目录", icon: FolderSearch, adminOnly: true, group: "管理", wide: true },
+  { to: "/settings/library", label: "音乐目录", icon: FolderSearch, adminOnly: true, group: "管理", wide: true },
   { to: "/settings/members", label: "成员", icon: Users, adminOnly: true, group: "管理" },
   { to: "/settings/curation", label: "自动整理", icon: Sparkles, adminOnly: true, group: "管理" },
   { to: "/settings/devices", label: "局域网设备", icon: Speaker, adminOnly: true, group: "管理" },
@@ -32,7 +32,7 @@ export function visibleSettingsSections(role: UserRole): SettingsSection[] {
   return settingsSections.filter((section) => !section.adminOnly || role === "admin");
 }
 
-/** 地址所在的栏目：扫描详情（/settings/library/scans/…）算在“扫描目录”下。 */
+/** 地址所在的栏目：扫描详情（/settings/library/scans/…）算在“音乐目录”下。 */
 export function settingsSectionAt(pathname: string): SettingsSection | undefined {
   return settingsSections.find((section) => pathname === section.to || pathname.startsWith(`${section.to}/`));
 }

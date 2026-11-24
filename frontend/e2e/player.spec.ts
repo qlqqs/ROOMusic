@@ -146,8 +146,14 @@ for (const width of widths) {
     await expect(full.locator(":scope > div").first()).toHaveCSS("transform", "none");
     await expect(full.getByRole("heading", { level: 2, name: `1 ${LONG_TITLE}`, exact: true })).toHaveAttribute("title", `1 ${LONG_TITLE}`);
     await expect(full).toContainText(LONG_ARTIST);
-    const album = full.getByRole("link", { name: LONG_TITLE, exact: true });
-    await expect(album).toHaveAttribute("title", LONG_TITLE);
+    if (width < 768) {
+      // 窄屏顶部已经写着“正在播放 专辑名”：标题下只留艺人，不再重复专辑链接（专辑从“更多”里的“转到专辑”进入）。
+      await expect(full.getByRole("link", { name: LONG_TITLE, exact: true })).toHaveCount(0);
+      await expect(full.getByText(LONG_TITLE, { exact: true }).filter({ visible: true })).toHaveCount(1);
+    } else {
+      const album = full.getByRole("link", { name: LONG_TITLE, exact: true });
+      await expect(album).toHaveAttribute("title", LONG_TITLE);
+    }
     await expectNoHorizontalOverflow(page, "全屏长标题");
     await expectNoDocumentScroll(page, "全屏长标题");
     await expectNoSeriousViolations(page, "全屏播放器");

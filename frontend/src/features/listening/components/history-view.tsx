@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatCount } from "../../../shared/lib/number";
 import { pageCountOf } from "../../../shared/lib/pagination";
 import { formatDateTime } from "../../../shared/lib/time";
-import { Button, DataTable, Notice, Pagination, Panel, QueryContent, Skeleton, StatusTag, type Column } from "../../../shared/ui";
+import { Button, DataTable, Notice, Pagination, Panel, QueryContent, Skeleton, StatusTag, VisuallyHidden, type Column } from "../../../shared/ui";
 import { ArtistNames, trackArtistRefsOf } from "../../catalog";
 import type { HistoryItemDTO } from "../api/decoders";
 import { historyArtistOf, historyTitleOf, PLAY_COUNT_RULE_TEXT } from "../format";
@@ -153,6 +153,7 @@ export function HistoryView({ page, renderPlayAll, renderTrackActions, renderRow
       {
         id: "actions",
         header: "操作",
+        headerContent: <VisuallyHidden>操作</VisuallyHidden>,
         hideLabelWhenStacked: true,
         besideRowHeader: true,
         cell: (item) => renderTrackActions(item, () => setRemoving(item)),

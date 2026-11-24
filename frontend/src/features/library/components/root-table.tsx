@@ -1,4 +1,4 @@
-import { CircleCheck, CirclePause, Folder, FolderMinus, FolderPen, MoreHorizontal, RotateCcw, Ban } from "lucide-react";
+import { CirclePause, Folder, FolderMinus, FolderPen, MoreHorizontal, RotateCcw, Ban } from "lucide-react";
 import { MenuButton, StatusTag, type MenuAction } from "../../../shared/ui";
 import type { RootDTO } from "../api/decoders";
 import styles from "./root-table.module.css";
@@ -13,12 +13,9 @@ type RootTableProps = {
   onRelocate: (root: RootDTO) => void;
 };
 
+/** 只有停用的目录有状态标签：正常扫描的目录是常态，每行都写“启用”只是噪声。 */
 function RootStatusTag({ status }: { status: RootDTO["status"] }) {
-  return status === "active" ? (
-    <StatusTag tone="neutral" icon={<CircleCheck size={14} />}>
-      启用
-    </StatusTag>
-  ) : (
+  return status === "active" ? null : (
     <StatusTag tone="outline" icon={<CirclePause size={14} />}>
       已停用
     </StatusTag>
@@ -26,7 +23,7 @@ function RootStatusTag({ status }: { status: RootDTO["status"] }) {
 }
 
 /**
- * 音乐目录列表：每个目录一行——文件夹图标、目录名（接口只给路径的最后一段，不显示服务器路径）、状态，行尾“更多”菜单里是不扫描的文件夹、改路径与停用/恢复。
+ * 音乐目录列表：每个目录一行——文件夹图标、目录名（接口只给路径的最后一段，不显示服务器路径）、停用时的状态，行尾“更多”菜单里是不扫描的文件夹、改路径与停用/恢复。
  * 停用要确认，恢复直接执行；改路径与不扫描的文件夹在对话框里设置。
  */
 export function RootTable({ roots, busy, onDisable, onRestore, onEditExclusions, onRelocate }: RootTableProps) {
@@ -44,7 +41,9 @@ export function RootTable({ roots, busy, onDisable, onRestore, onEditExclusions,
           <li key={root.id} className={styles.row}>
             <Folder className={styles.icon} size={18} aria-hidden="true" />
             <span className={styles.name}>{root.name}</span>
-            <RootStatusTag status={root.status} />
+            <span className={styles.status}>
+              <RootStatusTag status={root.status} />
+            </span>
             <MenuButton iconOnly icon={<MoreHorizontal size={18} />} label={`目录 ${root.name} 的更多操作`} actions={actions} />
           </li>
         );
