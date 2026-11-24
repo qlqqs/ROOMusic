@@ -26,8 +26,12 @@ for (const width of [390, 1440]) {
     const bio = header.getByRole("region", { name: "艺人简介" });
     const text = bio.getByText(/^青岚室内乐团在河畔小城成立/);
     const expand = bio.getByRole("button", { name: "展开" });
-    await expect(bio.getByRole("link", { name: "维基百科" })).toBeVisible();
-    await expect(bio.getByRole("link", { name: "Wikimedia Commons" })).toBeVisible();
+    const bioSeal = bio.getByRole("button", { name: /^简介来源：维基百科/ });
+    const imageSeal = header.getByRole("button", { name: /^图片来源：Wikimedia Commons/ });
+    await expect(bioSeal).toBeVisible();
+    await expect(imageSeal).toBeVisible();
+    await expect(bio.getByText(/简介：|图片：/)).toHaveCount(0);
+    await expect(bio.getByRole("link")).toHaveCount(0);
     await expect(expand).toHaveAttribute("aria-expanded", "false");
     await page.evaluate(() => document.fonts.ready.then(() => undefined));
     const folded = await text.evaluate((element) => ({
@@ -35,7 +39,7 @@ for (const width of [390, 1440]) {
       scrollHeight: element.scrollHeight,
       lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
     }));
-    expect(folded.visibleHeight).toBeCloseTo(Math.round(folded.lineHeight * 4), 0);
+    expect(folded.visibleHeight).toBeCloseTo(Math.round(folded.lineHeight * 3), 0);
     expect(folded.scrollHeight).toBeGreaterThan(folded.visibleHeight);
     await expectNoHorizontalOverflow(page, `${width}px 折叠`);
 
@@ -52,12 +56,45 @@ for (const width of [390, 1440]) {
       window.scrollTo(0, 0);
       document.getElementById("main")?.scrollTo(0, 0);
     });
-    await page.screenshot({ path: resolve(import.meta.dirname, `../../temp/m8-artist-shots/artist-${width}.png`), animations: "disabled" });
+    await page.screenshot({ path: resolve(import.meta.dirname, `../../temp/artist-media-shots/member-${width}.png`), animations: "disabled" });
+
+    await bioSeal.click();
+    const bioSource = bio.getByRole("dialog", { name: "简介来源" });
+    await expect(bioSource.getByRole("link", { name: "维基百科" })).toBeVisible();
+    await expectNoHorizontalOverflow(page, `${width}px 简介来源`);
+    await page.keyboard.press("Escape");
+    await expect(bioSeal).toBeFocused();
+
+    await imageSeal.click();
+    const imageSource = header.getByRole("dialog", { name: "图片来源" });
+    await expect(imageSource.getByRole("link", { name: "Wikimedia Commons" })).toBeVisible();
+    await expect(imageSource.getByText("合成样本作者")).toBeVisible();
+    await page.screenshot({ path: resolve(import.meta.dirname, `../../temp/artist-media-shots/member-${width}-image-source.png`), animations: "disabled" });
+    await expectNoHorizontalOverflow(page, `${width}px 图片来源`);
+    await page.keyboard.press("Escape");
+    await expect(imageSource).toHaveCount(0);
+    await expect(imageSeal).toBeFocused();
   });
 }
 
+test("390px 图片来源弹层淡入时也没有横向溢出", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  const artist = seedArtistMedia(mock, "with-media");
+  await page.goto(`/artists/${artist.id}`);
+  // 固定在淡入中的一帧，避免浏览器调度决定能否测到动画期间的溢出。
+  await page.addStyleTag({ content: '[role="dialog"][aria-label="图片来源"] { animation-play-state: paused; }' });
+  await page.getByRole("button", { name: /^图片来源：Wikimedia Commons/ }).click();
+  const dialog = page.getByRole("dialog", { name: "图片来源" });
+  await dialog.evaluate((element) => {
+    for (const animation of element.getAnimations()) animation.currentTime = 35;
+  });
+  await page.screenshot({ path: resolve(import.meta.dirname, "../../temp/artist-media-shots/member-390-image-source-opening.png") });
+  await expectNoHorizontalOverflow(page, "390px 图片来源淡入中");
+});
+
 for (const scenario of ["without-media", "broken-image"] as const) {
-  test(scenario === "without-media" ? "无图无简介时显示缩写且不渲染简介区" : "图片加载失败时回到缩写并保留图片署名", async ({ page, backend }) => {
+  test(scenario === "without-media" ? "无图无简介时显示缩写且不渲染简介区" : "图片加载失败时回到缩写并保留来源印章", async ({ page, backend }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     const mock = await backend.start({ signedInAs: "listener" });
     const artist = seedArtistMedia(mock, scenario);
@@ -71,10 +108,13 @@ for (const scenario of ["without-media", "broken-image"] as const) {
     const bio = header.getByRole("region", { name: "艺人简介" });
     if (scenario === "broken-image") {
       expect(mock.callsTo("GET", portraitPath)).toHaveLength(1);
-      await expect(bio.getByRole("link", { name: "Wikimedia Commons" })).toBeVisible();
-      await expect(bio.getByRole("button", { name: "展开" })).toHaveCount(0);
+      await header.getByRole("button", { name: /^图片来源：Wikimedia Commons/ }).click();
+      await expect(header.getByRole("dialog", { name: "图片来源" }).getByRole("link", { name: "Wikimedia Commons" })).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(bio).toHaveCount(0);
     } else {
       expect(mock.callsTo("GET", portraitPath)).toHaveLength(0);
+      await expect(header.getByRole("button", { name: /^图片来源|指定对应/ })).toHaveCount(0);
       await expect(bio).toHaveCount(0);
     }
     await expectNoHorizontalOverflow(page, scenario);
