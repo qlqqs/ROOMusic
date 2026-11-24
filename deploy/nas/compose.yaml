@@ -1,0 +1,116 @@
+# 安装时将所有 /path/to/music 和 /path/to/roomusic 分别替换为音乐目录和部署目录的绝对路径。
+# 音乐由其他用户管理时，将 app 的 user 以及 postgres 的 PUID、PGID 改为该用户的 UID 和 GID。
+name: roomusic-server
+
+services:
+  app:
+    container_name: "roomusic-app"
+    user: "1000:1000"
+    image: "ghcr.io/qlqqs/roomusic:latest"
+    network_mode: host
+    environment:
+      ROOMUSIC_ENV: production
+      ROOMUSIC_HTTP_ADDR: "0.0.0.0:8090"
+      ROOMUSIC_LAN_URL: ""
+      ROOMUSIC_DATABASE_URL: "postgres://roomusic@127.0.0.1:55439/roomusic?sslmode=disable"
+      ROOMUSIC_DB_PASSWORD_FILE: /run/secrets/postgres_password
+      ROOMUSIC_ALLOWED_ORIGINS: ""
+      ROOMUSIC_ALLOWED_LIBRARY_ROOTS: /music
+      ROOMUSIC_SCAN_WORKERS: "4"
+      ROOMUSIC_DATA_DIR: /data
+      ROOMUSIC_BACKUP_DIR: /backups
+      ROOMUSIC_FPCALC_PATH: /usr/local/bin/fpcalc
+      ROOMUSIC_FFMPEG_PATH: /usr/local/bin/ffmpeg
+      ROOMUSIC_TIMEZONE: "Asia/Shanghai"
+      ROOMUSIC_BACKUP_HOUR: "3"
+      ROOMUSIC_BACKUP_KEEP_DAYS: "14"
+      ROOMUSIC_MEDIA_CACHE_MAX_MIB: "10240"
+    healthcheck:
+      test: ["CMD-SHELL", 'wget -q -O /dev/null "http://127.0.0.1:$${ROOMUSIC_HTTP_ADDR##*:}/readyz"']
+    volumes:
+      - type: bind
+        source: "/path/to/music"
+        target: /music
+        read_only: true
+        bind: { create_host_path: false }
+      - /path/to/roomusic/data:/data
+      - /path/to/roomusic/secrets:/run/secrets:ro
+      - "/path/to/roomusic/backups:/backups"
+    read_only: true
+    tmpfs: ["/tmp:size=64m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres: { condition: service_healthy, restart: true }
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  postgres:
+    container_name: "roomusic-postgres"
+    image: postgres:18.1-alpine3.23@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        password_file=$$POSTGRES_PASSWORD_FILE
+        if [ ! -s "$$password_file" ]; then
+          if [ -d "$$PGDATA" ]; then
+            existing=$$(find "$$PGDATA" -mindepth 1 -maxdepth 1 -print -quit)
+            if [ -n "$$existing" ]; then
+              echo '数据库已存在但缺少密码文件 secrets/postgres_password，请从备份恢复该文件' >&2
+              exit 1
+            fi
+          fi
+          (
+            umask 077
+            set -o pipefail
+            tmp=$$(mktemp "$$password_file.XXXXXX")
+            trap 'rm -f "$$tmp"' EXIT
+            od -An -v -N32 -tx1 /dev/urandom | tr -d ' \n' > "$$tmp"
+            test "$$(wc -c < "$$tmp")" -eq 64
+            mv "$$tmp" "$$password_file"
+          )
+        fi
+        for dir in /run/secrets /prep/data /prep/backups; do
+          if [ "$$(stat -c %u "$$dir")" = 0 ]; then
+            chown "$$PUID:$$PGID" "$$dir" || echo "请在 NAS 上为 $$PUID:$$PGID 授予 $$dir 的读写权限" >&2
+          fi
+          if [ "$$(stat -c %a "$$dir")" != 700 ]; then
+            chmod 0700 "$$dir" || echo "无法收紧 $$dir 的权限（网络存储或 ACL），请在 NAS 上只给 $$PUID:$$PGID 读写" >&2
+          fi
+        done
+        chown "$$PUID:$$PGID" "$$password_file" || echo "请在 NAS 上将密码文件属主设为 $$PUID:$$PGID" >&2
+        if [ "$$(stat -c %a "$$password_file")" != 600 ]; then
+          chmod 0600 "$$password_file" || echo "无法收紧密码文件的权限，请在 NAS 上只给 $$PUID:$$PGID 读取" >&2
+        fi
+        exec docker-entrypoint.sh postgres
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      POSTGRES_DB: roomusic
+      POSTGRES_USER: roomusic
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    volumes:
+      - /path/to/roomusic/postgres:/var/lib/postgresql
+      - /path/to/roomusic/secrets:/run/secrets
+      - /path/to/roomusic/data:/prep/data
+      - "/path/to/roomusic/backups:/prep/backups"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roomusic -d roomusic"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    stop_grace_period: 60s
+    networks: [roomusic]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    ports:
+      - "127.0.0.1:55439:5432"
+
+networks:
+  roomusic:
+    driver: bridge

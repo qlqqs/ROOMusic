@@ -1,5 +1,5 @@
-# 从仓库 main 分支下载 compose.prod.yaml、.env.prod.example 和 scripts/production-init.sh，分别存为部署目录里的 compose.yaml、.env 和 production-init.sh；执行 chmod 600 .env，首次安装先执行 sudo sh ./production-init.sh，再执行 docker compose up -d --wait。
-# 在仓库根目录使用时，将 .env.prod.example 复制为 .env.prod，执行 chmod 600 .env.prod，首次安装先执行 sudo sh scripts/production-init.sh compose.prod.yaml .env.prod，再执行 docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait。
+# 将本文件存为 compose.yaml，在同目录的 .env 填写 ROOMUSIC_MUSIC_DIR，执行 docker compose up -d --wait。
+# 在仓库根目录使用 .env.prod 时，执行 docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait。
 # 项目名默认 roomusic-server；本机生产实例可在对应环境文件里用 COMPOSE_PROJECT_NAME 指定为 roomusic-prod。
 name: roomusic-server
 
@@ -11,7 +11,8 @@ x-logging: &logging
 services:
   app:
     container_name: "${ROOMUSIC_APP_CONTAINER_NAME:-roomusic-app}"
-    image: "ghcr.io/qlqqs/roomusic:${ROOMUSIC_VERSION:-latest}"
+    user: "${PUID:-1000}:${PGID:-1000}"
+    image: "${ROOMUSIC_IMAGE:-ghcr.io/qlqqs/roomusic}:${ROOMUSIC_VERSION:-latest}"
     network_mode: host
     environment:
       ROOMUSIC_ENV: production
@@ -53,13 +54,53 @@ services:
   postgres:
     container_name: "${ROOMUSIC_POSTGRES_CONTAINER_NAME:-roomusic-postgres}"
     image: *postgres-image
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        password_file=$$POSTGRES_PASSWORD_FILE
+        if [ ! -s "$$password_file" ]; then
+          if [ -d "$$PGDATA" ]; then
+            existing=$$(find "$$PGDATA" -mindepth 1 -maxdepth 1 -print -quit)
+            if [ -n "$$existing" ]; then
+              echo '数据库已存在但缺少密码文件 secrets/postgres_password，请从备份恢复该文件' >&2
+              exit 1
+            fi
+          fi
+          (
+            umask 077
+            set -o pipefail
+            tmp=$$(mktemp "$$password_file.XXXXXX")
+            trap 'rm -f "$$tmp"' EXIT
+            od -An -v -N32 -tx1 /dev/urandom | tr -d ' \n' > "$$tmp"
+            test "$$(wc -c < "$$tmp")" -eq 64
+            mv "$$tmp" "$$password_file"
+          )
+        fi
+        for dir in /run/secrets /prep/data /prep/backups; do
+          if [ "$$(stat -c %u "$$dir")" = 0 ]; then
+            chown "$$PUID:$$PGID" "$$dir" || echo "请在 NAS 上为 $$PUID:$$PGID 授予 $$dir 的读写权限" >&2
+          fi
+          if [ "$$(stat -c %a "$$dir")" != 700 ]; then
+            chmod 0700 "$$dir" || echo "无法收紧 $$dir 的权限（网络存储或 ACL），请在 NAS 上只给 $$PUID:$$PGID 读写" >&2
+          fi
+        done
+        chown "$$PUID:$$PGID" "$$password_file" || echo "请在 NAS 上将密码文件属主设为 $$PUID:$$PGID" >&2
+        if [ "$$(stat -c %a "$$password_file")" != 600 ]; then
+          chmod 0600 "$$password_file" || echo "无法收紧密码文件的权限，请在 NAS 上只给 $$PUID:$$PGID 读取" >&2
+        fi
+        exec docker-entrypoint.sh postgres
     environment:
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
       POSTGRES_DB: roomusic
       POSTGRES_USER: roomusic
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     volumes:
       - ./postgres:/var/lib/postgresql
-      - ./secrets:/run/secrets:ro
+      - ./secrets:/run/secrets
+      - ./data:/prep/data
+      - "${ROOMUSIC_BACKUP_DIR:-./backups}:/prep/backups"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U roomusic -d roomusic"]
       interval: 5s
