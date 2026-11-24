@@ -1,60 +1,105 @@
-import { useLayoutEffect, useRef, useState } from "react";
-import type { ArtistBioDTO, ArtistImageDTO } from "../api/decoders";
+import { Check, ChevronDown, Copyright, Flag, Pencil, X } from "lucide-react";
+import { useId, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { cx } from "../../../shared/lib/class-names";
+import { useTooltip } from "../../../shared/ui";
+import { MAX_BIO_CHARS, type ArtistBioDTO } from "../api/decoders";
+import type { ArtistMediaControls } from "../hooks/use-artist-media";
+import { safeUrl, sourceNameOf, sourceSummaryOf } from "./artist-media-source";
+import { SourceGlyph } from "./source-glyph";
+import { MediaPopover, PopoverActions, PopoverRow } from "./media-popover";
 import styles from "./artist-bio.module.css";
 
-const sourceNames: Record<ArtistImageDTO["source"] | ArtistBioDTO["source"], string> = {
-  fanarttv: "Fanart.tv",
-  theaudiodb: "TheAudioDB",
-  commons: "Wikimedia Commons",
-  wikipedia: "维基百科",
-};
-
-/** 外部给的地址只在是 http(s) 时做成链接，其余按纯文本显示。 */
-function safeUrl(url: string | null): string | null {
-  if (url === null) return null;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : null;
-  } catch {
-    return null;
-  }
-}
-
-function ExternalLink({ href, children }: { href: string | null; children: string }) {
-  const safe = safeUrl(href);
-  if (safe === null) return <>{children}</>;
+function IconButton({
+  label,
+  onClick,
+  children,
+  tone,
+  expanded,
+  buttonRef,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+  tone?: "danger" | "accent" | undefined;
+  expanded?: boolean | undefined;
+  buttonRef?: Ref<HTMLButtonElement> | undefined;
+}) {
+  const tip = useTooltip(label);
   return (
-    <a href={safe} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={cx(styles.iconButton, tone === "danger" && styles.danger, tone === "accent" && styles.accent)}
+        aria-label={label}
+        aria-expanded={expanded}
+        onClick={onClick}
+        {...tip.triggerProps}
+      >
+        {children}
+      </button>
+      {tip.tooltip}
+    </>
   );
 }
 
-/** 署名里的一项：“简介：维基百科 · CC BY-SA 4.0”“图片：Wikimedia Commons · 作者 · CC BY 4.0”。 */
-function Credit({ label, source, sourceUrl, author, license, licenseUrl }: { label: string; source: string; sourceUrl: string; author: string | null; license: string | null; licenseUrl: string | null }) {
+function BioEditor({ initial, saving, onSave, onCancel }: { initial: string; saving: boolean; onSave: (text: string) => void; onCancel: () => void }) {
+  const [text, setText] = useState(initial);
+  const id = useId();
+  const length = Array.from(text.trim()).length;
+  const valid = length > 0 && length <= MAX_BIO_CHARS;
+  const save = () => {
+    if (valid && !saving) onSave(text.trim());
+  };
   return (
-    <span>
-      {label}：<ExternalLink href={sourceUrl}>{source}</ExternalLink>
-      {author === null ? null : <> · {author}</>}
-      {license === null ? null : (
-        <>
-          {" · "}
-          <ExternalLink href={licenseUrl}>{license}</ExternalLink>
-        </>
-      )}
-    </span>
+    <div className={styles.editor}>
+      <textarea
+        id={id}
+        className={styles.textarea}
+        value={text}
+        aria-label="简介"
+        aria-describedby={`${id}-count`}
+        autoFocus
+        onChange={(event) => setText(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onCancel();
+          } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            save();
+          }
+        }}
+      />
+      <div className={styles.row}>
+        <span id={`${id}-count`} className={styles.count} data-over={length > MAX_BIO_CHARS ? "" : undefined}>
+          {length} / {MAX_BIO_CHARS}
+        </span>
+        <span className={styles.spacer} />
+        <IconButton label="取消" onClick={onCancel}>
+          <X size={15} aria-hidden="true" />
+        </IconButton>
+        <IconButton label={saving ? "正在保存" : "保存"} tone="accent" onClick={save}>
+          <Check size={15} aria-hidden="true" />
+        </IconButton>
+      </div>
+    </div>
   );
 }
 
 /**
- * 艺人页头下方的简介与署名（M8）：简介默认最多 4 行，超出时可以展开；署名写出简介与图片各自的来源、作者与许可（外部链接在新窗口打开）。
- * 只有图片没有简介时只显示署名。两样都没有时不渲染。
+ * 艺人页头下方的简介：正文最多 3 行折叠，下面一行只有图标——来源（点开是来源与许可）、展开；
+ * 管理员悬停或聚焦时再浮出“编辑”“简介不对”，没有简介时只有一个“写简介”。编辑在原地进行。
  */
-export function ArtistBio({ bio, image }: { bio: ArtistBioDTO | null; image: ArtistImageDTO | null }) {
+export function ArtistBio({ bio, media }: { bio: ArtistBioDTO | null; media: ArtistMediaControls | null }) {
   const textRef = useRef<HTMLParagraphElement>(null);
+  const sourceRef = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
-  const text = bio?.text ?? null;
+  const [editing, setEditing] = useState(false);
+  const [popover, setPopover] = useState(false);
+  const shown = media?.hidden.bio ? null : bio;
+  const text = shown?.text ?? null;
 
   // 折叠时内容高于显示高度才给“展开”；宽度变化（转屏、拖窗口）后重新判断。
   useLayoutEffect(() => {
@@ -68,27 +113,103 @@ export function ArtistBio({ bio, image }: { bio: ArtistBioDTO | null; image: Art
     return () => observer.disconnect();
   }, [text, expanded]);
 
-  if (bio === null && image === null) return null;
+  if (editing && media !== null) {
+    return (
+      <section className={styles.bio} aria-label="编辑艺人简介">
+        <BioEditor
+          initial={shown?.text ?? ""}
+          saving={media.savingBio}
+          onCancel={() => setEditing(false)}
+          onSave={(value) => {
+            void media.saveBio(value).then((ok) => {
+              if (ok) setEditing(false);
+            });
+          }}
+        />
+      </section>
+    );
+  }
+  if (shown === null) {
+    if (media === null) return null;
+    return (
+      <section className={styles.bio} aria-label="艺人简介">
+        <div className={styles.row}>
+          <IconButton label="写简介" onClick={() => setEditing(true)}>
+            <Pencil size={14} aria-hidden="true" />
+          </IconButton>
+        </div>
+      </section>
+    );
+  }
+  const summary = sourceSummaryOf("简介", shown);
   return (
     <section className={styles.bio} aria-label="艺人简介">
-      {bio === null ? null : (
-        <>
-          <p ref={textRef} className={styles.text} lang={bio.lang === "zh" ? "zh-CN" : "en"} data-expanded={expanded ? "" : undefined}>
-            {bio.text}
-          </p>
-          {overflowing || expanded ? (
-            <button type="button" className={styles.toggle} aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
-              {expanded ? "收起" : "展开"}
-            </button>
-          ) : null}
-        </>
-      )}
-      <p className={styles.credits}>
-        {bio === null ? null : <Credit label="简介" source={sourceNames[bio.source]} sourceUrl={bio.source_url} author={null} license={bio.license} licenseUrl={bio.license_url} />}
-        {image === null ? null : (
-          <Credit label="图片" source={sourceNames[image.source]} sourceUrl={image.source_url} author={image.author} license={image.license} licenseUrl={image.license_url} />
-        )}
+      <p ref={textRef} className={styles.text} lang={shown.lang === "zh" ? "zh-CN" : "en"} data-expanded={expanded ? "" : undefined}>
+        {shown.text}
       </p>
+      <div className={styles.row} data-admin={media === null ? undefined : ""}>
+        <span className={styles.anchor}>
+          <IconButton label={summary} buttonRef={sourceRef} expanded={popover} onClick={() => setPopover((value) => !value)}>
+            <SourceGlyph source={shown.source} size={14} />
+          </IconButton>
+          {popover ? (
+            <MediaPopover label="简介来源" anchorRef={sourceRef} onClose={() => setPopover(false)} className={styles.popover}>
+              <PopoverRow icon={<SourceGlyph source={shown.source} size={15} />} href={safeUrl(shown.source_url)}>
+                {sourceNameOf(shown.source)}
+              </PopoverRow>
+              {shown.license === null ? null : (
+                <PopoverRow icon={<Copyright size={15} aria-hidden="true" />} href={safeUrl(shown.license_url)}>
+                  {shown.license}
+                </PopoverRow>
+              )}
+              {media === null ? null : (
+                <PopoverActions
+                  start={
+                    <IconButton
+                      label="简介不对"
+                      tone="danger"
+                      onClick={() => {
+                        setPopover(false);
+                        media.reject("bio");
+                      }}
+                    >
+                      <Flag size={15} aria-hidden="true" />
+                    </IconButton>
+                  }
+                  end={
+                    <IconButton
+                      label="编辑简介"
+                      onClick={() => {
+                        setPopover(false);
+                        setEditing(true);
+                      }}
+                    >
+                      <Pencil size={15} aria-hidden="true" />
+                    </IconButton>
+                  }
+                />
+              )}
+            </MediaPopover>
+          ) : null}
+        </span>
+        {overflowing || expanded ? (
+          <span className={styles.chevron} data-expanded={expanded ? "" : undefined}>
+            <IconButton label={expanded ? "收起" : "展开"} expanded={expanded} onClick={() => setExpanded((value) => !value)}>
+              <ChevronDown size={15} aria-hidden="true" />
+            </IconButton>
+          </span>
+        ) : null}
+        {media === null ? null : (
+          <span className={styles.admin}>
+            <IconButton label="编辑简介" onClick={() => setEditing(true)}>
+              <Pencil size={14} aria-hidden="true" />
+            </IconButton>
+            <IconButton label="简介不对" tone="danger" onClick={() => media.reject("bio")}>
+              <Flag size={14} aria-hidden="true" />
+            </IconButton>
+          </span>
+        )}
+      </div>
     </section>
   );
 }

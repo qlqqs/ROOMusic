@@ -20,34 +20,42 @@
 
 ## 快速开始
 
-需要 Docker、Docker Compose v2 和首次安装脚本使用的 Python 3。
+需要 Docker 与 Docker Compose v2。用 NAS 的 Docker 界面安装（群晖、飞牛、绿联、威联通、TrueNAS、Unraid 等）见[在 NAS 上安装](docs/install-nas.md)，不需要命令行。
 
-部署文件从 `main` 下载，镜像默认使用 `latest`。
+命令行安装：部署文件从 `main` 下载，镜像默认使用 `latest`。
 
 ```bash
 mkdir roomusic && cd roomusic
 curl -fL -o compose.yaml https://raw.githubusercontent.com/qlqqs/ROOMusic/main/compose.prod.yaml
 curl -fL -o .env https://raw.githubusercontent.com/qlqqs/ROOMusic/main/.env.prod.example
-curl -fL -o production-init.sh https://raw.githubusercontent.com/qlqqs/ROOMusic/main/scripts/production-init.sh
 chmod 600 .env
 ```
 
-编辑 `.env`，填写音乐目录：
+编辑 `.env`，填写音乐目录；读取音乐的用户不是 uid 1000 时，同时填写它的用户与组 ID：
 
 ```ini
 ROOMUSIC_MUSIC_DIR=/path/to/music     # 音乐目录的绝对路径
+# PUID=1000
+# PGID=1000
 ```
 
-仅首次安装先初始化，再启动：
+启动：
 
 ```bash
-sudo sh ./production-init.sh
 docker compose up -d --wait
 ```
 
-首次安装脚本生成数据库密码，持久化目录为 `secrets/`、`postgres/`、`data/` 和 `backups/`，均位于部署目录。Compose 不依赖初始化脚本，升级无需再次运行。默认固定容器名为 `roomusic-app` 和 `roomusic-postgres`，可在 `.env` 中修改。
+数据库首次启动时自动生成密码。持久化目录为 `secrets/`、`postgres/`、`data/` 和 `backups/`，都在部署目录里，由 Docker 自动创建。默认固定容器名为 `roomusic-app` 和 `roomusic-postgres`，可在 `.env` 中修改。
 
 打开 `http://<主机>:8090`，创建管理员，在“扫描目录”添加 `/music`，扫描完成后就可以听歌了。
+
+### 装到手机主屏幕
+
+ROOMusic 的网页可以装成手机上的应用，从主屏幕图标全屏打开，锁屏界面能看到正在播放并控制：
+
+- **iPhone、iPad**：用 Safari 打开 ROOMusic，点分享按钮，选“添加到主屏幕”。从主屏幕打开的窗口和 Safari 不共享登录状态，第一次要重新登录。
+- **Android**：用 Chrome 打开，点菜单里的“安装应用”或“添加到主屏幕”。
+- **电脑**：Chrome、Edge 地址栏右侧的安装按钮。
 
 ## 升级与降级
 

@@ -17,6 +17,7 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	72: artistManualMediaRollbackFixture,
 	71: sourcePluginRollbackFixture,
 	70: upnpPlaybackRollbackFixture,
 	69: upnpDiscoveryRollbackFixture,
@@ -441,8 +442,12 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if m.Version == 67 {
 				rollbackExec(t, db, beforeReleaseMergeMigration)
 			}
-			if m.Version == 68 {
+			if m.Version == 68 || m.Version == 72 {
 				rollbackExec(t, db, beforeArtistMediaMigration)
+			}
+			if m.Version == 72 {
+				rollbackExec(t, db, artistMediaRollbackFixture)
+				rollbackExec(t, db, beforeArtistManualMediaMigration)
 			}
 			if m.Version == 71 {
 				rollbackExec(t, db, beforeSourcePluginMigration)
@@ -463,6 +468,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 					}
 				}
 				rollbackExec(t, db, `UPDATE instance_insights SET enabled=false, notice_acknowledged_at=now(), last_attempt_at=now(), last_error='http_503' WHERE id`)
+			}
+			if m.Version == 72 {
+				assertArtistManualMediaBackfill(t, db)
 			}
 			if m.Version == 69 {
 				var enabled, shared bool
@@ -572,6 +580,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			s3 := rollbackSnapshot(t, db)
 			if strings.HasSuffix(m.Name, "_instance_insights.sql") {
 				assertInsightsMigrationSeed(t, db)
+			}
+			if m.Version == 72 {
+				assertArtistManualMediaBackfill(t, db)
 			}
 			// 再升级只比较结构和行数；种子 UUID、时间等合法非确定值不应误报。
 			countsOnly := func(snapshot postgrestest.SchemaSnapshot) postgrestest.SchemaSnapshot {

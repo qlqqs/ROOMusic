@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -24,10 +26,13 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 	"github.com/qlqq/roomusic/backend/internal/personal"
+	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
+	"github.com/qlqq/roomusic/backend/internal/upstreammock"
 )
 
 const artistLargeSamplesDirectoryEnv = "ROOMUSIC_ARTIST_LARGE_SAMPLES_DIR"
@@ -36,7 +41,14 @@ const artistRequiredLargeSample = "artists/queue-truncated"
 // 更新：ROOMUSIC_UPDATE_API_SAMPLES=1 go test ./internal/app -run '^TestPostgreSQLArtistAPIResponseSamples$' -count=1。
 // 所有 golden 都来自真实 handler；本套件只拥有艺人增量，不清理旧 DTO 样本。
 func TestPostgreSQLArtistAPIResponseSamples(t *testing.T) {
-	f := newArtistSamples(t)
+	mock, err := upstreammock.New(upstreammock.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream := httptest.NewServer(mock)
+	t.Cleanup(upstream.Close)
+	app := newConfiguredIntegrationTestApplication(t, slog.New(slog.NewTextHandler(io.Discard, nil)), config.Server{UpstreamMockURL: upstream.URL})
+	f := newArtistSamplesForApp(t, app)
 	recordArtistPreparingSamples(f)
 	recordArtistSearchReadyPublication(f)
 	recordArtistReadSamples(f)
@@ -103,6 +115,48 @@ func recordArtistMediaSamples(f *artistSamples) {
 			t.Fatalf("%s 的可用状态或资料不符：%v", tc.name, sample)
 		}
 	}
+	recordArtistManualMediaSamples(f, imageData)
+}
+
+func recordArtistManualMediaSamples(f *artistSamples, imageData []byte) {
+	t := f.t
+	t.Helper()
+	base := "/api/v1/artists/" + f.primary
+	f.record("artists/link-preview", "POST", base+"/link-preview", map[string]any{"url": artistMediaMBID}, 200)
+	f.record("artists/set-links", "PUT", base+"/links", map[string]any{
+		"expected_revision": f.revision(f.primary), "source": "musicbrainz", "external_id": artistMediaMBID,
+	}, 200)
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	if err := form.WriteField("expected_revision", fmt.Sprint(f.revision(f.primary))); err != nil {
+		t.Fatal(err)
+	}
+	part, err := form.CreateFormFile("image", "portrait.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(imageData); err != nil {
+		t.Fatal(err)
+	}
+	if err := form.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest("PUT", f.app.origin+base+"/image", &body)
+	request.Header.Set("Content-Type", form.FormDataContentType())
+	request.Header.Set("Origin", f.app.origin)
+	request.Header.Set("X-Request-ID", sampleRequestID)
+	request.Header.Set("Idempotency-Key", uuid.New())
+	request.AddCookie(&http.Cookie{Name: identity.SessionCookieName, Value: f.admin.token})
+	response := httptest.NewRecorder()
+	f.app.handler.ServeHTTP(response, request)
+	f.samples.record("artists/set-image", response, 200)
+	f.record("artists/set-bio", "PUT", base+"/bio", map[string]any{
+		"expected_revision": f.revision(f.primary), "text": "管理员提供的合成简介。", "lang": "zh",
+	}, 200)
+	f.get("artists/detail-manual-media", base)
+	f.record("artists/reject-media", "POST", base+"/media/reject", map[string]any{
+		"expected_revision": f.revision(f.primary), "field": "image",
+	}, 200)
 }
 
 // 同时供默认、搜索、个人套件排除独立艺人增量；比较和清理必须使用同一边界。
@@ -132,7 +186,11 @@ type artistSamples struct {
 
 func newArtistSamples(t *testing.T) *artistSamples {
 	t.Helper()
-	app := newIntegrationTestApplication(t)
+	return newArtistSamplesForApp(t, newIntegrationTestApplication(t))
+}
+
+func newArtistSamplesForApp(t *testing.T, app *integrationTestApplication) *artistSamples {
+	t.Helper()
 	// 仅固定样本计数起点，不改变投影版本、代次或状态；发布仍由真实维护事务递增。
 	mustExec(t, app, `UPDATE catalog_projection_state SET catalog_epoch=1 WHERE capability='search'`)
 	f := &artistSamples{t: t, app: app, admin: app.createUser(t, "admin"), member: app.createUser(t, "user")}
@@ -913,6 +971,7 @@ search/artist-correction-normalized-albums-old search/artist-correction-normaliz
 search/artist-correction-normalized-artists
 artists/list-preparing artists/detail-preparing artists/queue-preparing
 artists/list-name artists/list-album-count artists/list-role artists/list-initial artists/list-empty artists/list-out-of-range
+artists/set-links artists/link-preview artists/set-image artists/set-bio artists/reject-media artists/detail-manual-media
 artists/detail artists/detail-unavailable artists/detail-with-media artists/detail-redirect artists/names artists/names-out-of-range
 artists/albums artists/role-tracks artists/role-tracks-missing artists/queue artists/queue-empty artists/queue-random
 governance/artist-merge governance/artist-merge-replayed governance/artist-split-preview-aliases governance/artist-split-preview-albums

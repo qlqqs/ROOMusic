@@ -202,7 +202,7 @@ type Declaration struct {
 
 | 来源 | GET 请求 | 能力 | 最小间隔 |
 | --- | --- | --- | --- |
-| Wikidata | `/w/api.php`，按 P434 搜索或按 Q 号取 P18、中文和英文 sitelinks | `artist_lookup` | 1 秒 |
+| Wikidata | `/w/api.php`，按 P434 搜索，按 Q 号读取艺人身份或 P18、中英文 sitelinks | `artist_lookup` | 1 秒 |
 | Wikimedia Commons | `/w/api.php`，`prop=imageinfo&iiurlwidth=960`，再下载返回的缩略图 | `artist_image` | 1 秒 |
 | Wikipedia | `https://{zh,en}.wikipedia.org/api/rest_v1/page/summary/<标题>` | `artist_bio` | 1 秒 |
 | Fanart.tv | `/v3/music/<MBID>`，再下载头像 | `artist_image` | 1 秒 |
@@ -211,6 +211,8 @@ type Declaration struct {
 ### Wikidata
 
 无 Q 号时用 `list=search` 和 `srsearch=haswbstatement:P434=<MBID>`，唯一匹配才继续。按 Q 号用 `action=wbgetentities&props=claims|sitelinks&sitefilter=zhwiki|enwiki` 查询。P18 跳过 deprecated，优先 preferred，再取第一张普通照片。使用与维基百科、Commons 相同的维基媒体策略，每个来源同时最多一个请求，带项目 User-Agent 和 `Accept-Encoding: gzip`。429 和 503 的后台重试遵循 Retry-After，缺失时至少等待 5 秒。
+
+按 Q 号预览身份使用 `action=wbgetentities`，`ids` 只传一个符合 `^Q[1-9][0-9]{0,11}$` 的 Q 号，`props=labels|aliases|descriptions|claims`，`languages=zh|en|mul|zh-hans|zh-cn|zh-hant|zh-tw|ja`。名称和描述分别按请求语言顺序选第一个非空值，其他名称和别名参与本地比较。没有名称时，Wikidata 预览显示 Q 号，MusicBrainz 预览显示 MBID。读取声明中未弃用的 P31（实体类型）和 P434（MusicBrainz 艺人 MBID）。唯一的 P434 可作为同时写入的 MusicBrainz 对应。艺人姓名的一致性在本地比较，请求只外发条目 ID、语言及字段选择。开发 mock 支持同一组字段，Q900005 提供无 P434 且有 Commons 图片与中文维基百科条目的合成样本。
 
 ### Wikimedia Commons
 

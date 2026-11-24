@@ -4,7 +4,7 @@
 
 ## 客户端（`internal/insights`）
 
-- 迁移 `0072_instance_insights`：单行表 `instance_insights`（`id boolean` 主键恒为 true），`instance_id` 首次启动随机生成，`enabled` 默认 true，`notice_acknowledged_at`、`last_attempt_at`、`last_success_at`、`last_error`（错误码：`network`、`http_<状态码>`、`invalid_response`）、`created_at`。
+- 迁移 `0073_instance_insights`：单行表 `instance_insights`（`id boolean` 主键恒为 true），`instance_id` 首次启动随机生成，`enabled` 默认 true，`notice_acknowledged_at`、`last_attempt_at`、`last_success_at`、`last_error`（错误码：`network`、`http_<状态码>`、`invalid_response`）、`created_at`。
 - 配置：`ROOMUSIC_INSIGHTS_DISABLED`（布尔）强制关闭；`ROOMUSIC_INSIGHTS_URL` 留空取默认 `https://insights.roomusic.org/api/v1/heartbeat`；`ROOMUSIC_SOURCE_URL` 留空取仓库地址，二者必须是 http(s)。
   设了 `ROOMUSIC_UPSTREAM_MOCK_URL` 时心跳发到 mock 的 `insights` 服务。
 - 调度只在“未被部署层关闭”且“有版本号或显式设置了地址”时启动：首次发送不早于 `created_at + 24h`，且存在启用的管理员；之后为上次尝试 + 24 小时 + 由实例 ID 与尝试时刻确定的 [0, 1h) 偏移，重启后不变。

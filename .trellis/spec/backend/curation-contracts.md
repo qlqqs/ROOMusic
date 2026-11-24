@@ -782,7 +782,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 - 每位的 `textnorm.Text` 名字相同，或标签列表等长且该位 MBID 与外部署名相同。发行标签取所有在库曲目一致的有序 `mb_album_artist`，曲目取自己的有序 `mb_artist`。任一位无法对上，整组跳过。
 - 同一发行的各组为同一身份给出不同 MBID 时，丢弃该身份的全部对应。例如两首歌给同一位艺人对出不同 MBID，其他艺人的一致对应仍可写入。
 
-`writeMatch` 在普通对应之后、字段补全之前以独立步骤 `artist_links` 调用一次 `Writer.ApplyLinks`。写入参数为 `object_type=artist`、`method=artist_credit`、`confidence=certain`、`Source={Kind:"source", Provider:"musicbrainz"}`。写入事务持 CATP 锁重读非自动层署名，只接受发行内的当前身份，否则返回 `invalid_input`。已有对应沿用 `unchanged`、`occupied`、`suppressed` 判定。撤销沿用外部对应的归属检查和逐项标记。
+`writeMatch` 在普通对应之后、字段补全之前以独立步骤 `artist_links` 调用一次 `Writer.ApplyLinks`。写入参数为 `object_type=artist`、`method=artist_credit`、`confidence=certain`、`Source={Kind:"source", Provider:"musicbrainz"}`。写入事务持 CATP 锁重读非自动层署名，只接受发行内的当前身份，否则返回 `invalid_input`。已有对应沿用 `unchanged`、`occupied`、`suppressed` 判定。撤销沿用外部对应的归属检查和逐项标记。已由艺人级 `artist_link` 接管的对应行跳过，操作描述给出跳过数，发行同次建立的其他对应仍可撤销。
 
 ### 19.2 同一 MusicBrainz 艺人的自动合并
 
@@ -873,13 +873,27 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ## 21. 艺人图片与简介
 
-程序层按有效艺人调度 `artist_media`。入口是 `external_links` 中 `musicbrainz / artist` 的对应，合并前身份的 MBID 同样参与。有效身份和并入方都缺少某一项资料时才取该项。图片依次查 Fanart.tv、TheAudioDB、Commons。简介依次查中文维基百科、TheAudioDB 中文、英文维基百科、TheAudioDB 英文。源闸门处理总开关、单源开关和密钥状态。上一源出错可以继续尝试下一源，仍有缺口且遇到暂时错误时按工作状态退避。输入摘要涵盖艺人 MBID、缺口、来源状态与抑制标记。
+程序层按有效艺人调度 `artist_media`。入口是 `external_links` 中的 MusicBrainz 或 Wikidata 艺人对应，合并前身份的对应同样参与。有效身份和并入方都缺少某一项资料时才取该项。图片依次查 Fanart.tv、TheAudioDB、Commons。简介依次查中文维基百科、TheAudioDB 中文、英文维基百科、TheAudioDB 英文。源闸门处理总开关、单源开关和密钥状态。上一源出错可以继续尝试下一源，仍有缺口且遇到暂时错误时按工作状态退避。已有 Q 号时，Commons 和维基百科使用该条目的 P18 与中英文站点链接，写入依据为 Q 号。Fanart.tv 与 TheAudioDB 使用 MBID，只有 Q 号时跳过这两个源。输入摘要涵盖艺人 MBID、Q 号、资料缺口、来源状态与抑制标记。
 
-`ApplyArtistImage`、`ApplyArtistBio` 以 `artist` 为操作目标。图片先经受管图片存储校验，简介为最多 4000 个 Unicode 字符的纯文本。写入顺序为操作幂等锁、目录写锁、艺人行锁；事务内复查总开关、批次与 MBID 对应。同一有效身份（含并入方）已有资料返回 `occupied`，来源条目命中撤销标记返回 `suppressed`，Commons 缺少许可名返回 `license_missing`。三种情况均返回 `nothing_to_apply` 并保留跳过原因。图片与简介分别写一条操作，类型为 `artist_external_artwork`、`artist_external_bio`，保存在本轮程序批次，`origin.provider` 为实际内容来源。
+`ApplyArtistImage`、`ApplyArtistBio` 以 `artist` 为操作目标。图片先经受管图片存储校验，简介为最多 4000 个 Unicode 字符的纯文本。写入顺序为操作幂等锁、目录写锁、艺人行锁；事务内复查总开关、批次及家族内的依据对应。两张外部资料表的 `basis_source`、`basis_id` 记录实际使用的 `musicbrainz` 与 MBID 或 `wikidata` 与 Q 号。同一有效身份（含并入方）已有资料返回 `occupied`，来源条目命中撤销标记返回 `suppressed`，Commons 缺少许可名返回 `license_missing`。三种情况均返回 `nothing_to_apply` 并保留跳过原因。图片与简介分别写一条操作，类型为 `artist_external_artwork`、`artist_external_bio`，保存在本轮程序批次，`origin.provider` 为实际内容来源。
 
 资料行与操作记录在同一事务写入，图片按内容寻址并持有存储键锁。操作快照保存出处、许可与图片资源或简介内容。每次写入或撤销都递增 `artists.auto_revision`，撤销响应带目标的人工版本 `edit_revision`。操作列表展示艺人摘要和图片规格或简介语言、字符数。
 
-单条、按批次与按来源撤销共用同一执行器。仅删除原操作仍持有的资料行，标记保存在写入时的艺人身份上。标记的 `subject` 为 `artist_image` 或 `artist_bio`，`value={source,external_id}`，`value_hash` 是来源 ID、NUL 和外部条目标识的 SHA-256。图片没有独立条目标识时用下载地址的 SHA-256。新一轮查询核对有效身份和并入方的标记。图片撤销提交后，`Discard` 在存储键锁内核对发行封面和艺人图片的所有引用，再清理文件。写入失败只清理这次实际写过的文件。回退迁移清除资料行、对应操作与抑制标记、工作状态；SQL 回退不会访问数据目录中的图片文件。
+单条、按批次与按来源撤销共用同一执行器。仅删除原操作仍持有的资料行，标记保存在写入时的艺人身份上。标记的 `subject` 为 `artist_image` 或 `artist_bio`，`value={source,external_id}`，`value_hash` 是来源 ID、NUL 和外部条目标识的 SHA-256。图片没有独立条目标识时用下载地址的 SHA-256。新一轮查询核对有效身份和并入方的标记。图片撤销提交后，`Discard` 在存储键锁内核对发行封面、艺人的人工图片和自动图片以及 `artwork_retained` 的引用，再清理文件。写入失败只清理这次实际写过的文件。回退迁移清除资料行、对应操作与抑制标记、工作状态；SQL 回退不会访问数据目录中的图片文件。
+
+### 人工资料与指定对应
+
+`artist_manual_image`、`artist_manual_bio` 保存变更前后的人工层快照。人工层与自动层分别存放，清除人工层后按家族读取规则重新选出可见资料。四个写接口都经过操作幂等锁、CATP、有效身份解析和艺人行锁，复查版本并递增 `edit_revision`。人工操作不带 `origin`。接口字段见[艺人合同](./artist-contracts.md)。
+
+标记不对按字段在事务外识别当前显示层及所属操作。事务内复查可见行、层和归属，期间已变化返回 409 `revert_conflict`。人工层的清除本身可撤销。自动层先锁原操作行再取得 CATP、艺人行锁，复用该操作的撤销和抑制逻辑。字段为空返回 409 `nothing_to_apply`。
+
+`artist_link` 在有效身份上写对应。写入和预览共用 Q 号校验 `^Q[1-9][0-9]{0,11}$`。MusicBrainz 条目带 Wikidata 链接时一并写 Q 号，Wikidata 条目有唯一 P434 时一并写 MBID。人工可以替换同源对应，整组相同时返回 `nothing_to_apply`，原行所属操作保留。模型写入带模型来源、会话和批次，已有同源行按 `occupied` 跳过。模型写入撤销时登记 `external_link` 抑制标记。艺人级操作不提供发行匹配的自动合并证据。
+
+变更前保存对应的完整行及归属。同一事务移除依据已失效的自动资料，保存被删除行供撤销。迁移 0072 先从旧操作的 `origin.basis` 回填历史 MBID，缺少时取家族内唯一的 MusicBrainz 艺人对应，两者均缺时保留资料且依据为空。后续改对应时也保留依据为空的资料。
+
+撤销直接移除当前家族内以被撤回对应为依据的自动资料，这一步不登记图片或简介的抑制标记。随后恢复原资料和原对应，跳过原写入操作已被撤销的对应。操作列表的可撤销判断与执行共用检查。对应行已换归属或移除、待恢复资料离开当前家族，或者同一位置已有其他需要保留的自动资料时，撤销返回 `revert_conflict`。人工图片被替换或清除，以及写入或撤销对应时移除自动图片，均由执行该变化的操作在 `artwork_retained(storage_key, operation_id)` 登记旧内容键。登记长期保留，图片查询与清理均将其计为引用。
+
+迁移 0072 的回退有损。回退删除人工资料表、图片保留登记、新增类型操作及其撤销记录，并删除 `artist_link` 写入的对应。先前被替换的发行对应和被清除的自动资料不会由 SQL 回退恢复。
 
 ## 插件来源的整理与撤销
 

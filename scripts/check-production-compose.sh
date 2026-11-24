@@ -11,17 +11,17 @@ trap 'rm -rf -- "$work"' EXIT
 # 在独立目录中仅使用假值；不会读取工作区或部署目录的配置，也不创建容器与网络。
 cp "$ROOT_DIR/compose.prod.yaml" "$work/compose.yaml"
 cp "$ROOT_DIR/deploy/production/compose.bridge.yaml" "$work/compose.bridge.yaml"
-printf '%s\n' 'ROOMUSIC_DB_PASSWORD=ci-placeholder' 'ROOMUSIC_MUSIC_DIR=/srv/music' > "$work/required.env"
-printf '%s\n' 'ROOMUSIC_MUSIC_DIR=/srv/music' > "$work/no-password.env"
-printf '%s\n' 'ROOMUSIC_DB_PASSWORD=ci-placeholder' > "$work/no-music.env"
+printf '%s\n' 'ROOMUSIC_MUSIC_DIR=./music' > "$work/required.env"
+: > "$work/empty.env"
 cp "$work/required.env" "$work/bind.env"
 printf '%s\n' 'ROOMUSIC_BACKUP_DIR=/srv/x' >> "$work/bind.env"
 
 compose() {
   local env_file=$1
   shift
+  if [[ -n "$env_file" ]]; then set -- --env-file "$work/$env_file" "$@"; fi
   (cd "$work" && env -i PATH="$PATH" HOME="$HOME" \
-    docker compose --env-file "$work/$env_file" "$@")
+    docker compose "$@")
 }
 
 expect_missing() {
@@ -34,14 +34,14 @@ expect_missing() {
 }
 
 compose required.env config --quiet
-compose no-password.env config --quiet
-expect_missing no-music.env ROOMUSIC_MUSIC_DIR
+expect_missing empty.env ROOMUSIC_MUSIC_DIR
 
 # 完整 config 只进入管道；断言只读取非敏感字段，不向终端打印配置。
 # 部分 Compose 版本会为未配置的 ipam 输出空对象，与字段缺失等价。
 compose required.env config --format json | jq -e '
   .name == "roomusic-server" and
   (.services | keys) == ["app", "postgres"] and
+  .services.app.user == "1000:1000" and
   .services.app.image == "ghcr.io/qlqqs/roomusic:latest" and
   .services.app.container_name == "roomusic-app" and
   .services.postgres.container_name == "roomusic-postgres" and
@@ -52,6 +52,8 @@ compose required.env config --format json | jq -e '
   .services.app.environment.ROOMUSIC_DB_PASSWORD_FILE == "/run/secrets/postgres_password" and
   .services.postgres.environment.POSTGRES_PASSWORD_FILE == "/run/secrets/postgres_password" and
   .services.app.read_only and
+  (.services.app.security_opt | index("no-new-privileges:true") != null) and
+  ([.services.app.volumes[] | select(.target == "/run/secrets" or .target == "/music") | .read_only] == [true, true]) and
   (.services.app.cap_drop | index("ALL") != null) and
   .services.app.network_mode == "host" and
   (.services.app.ports | length) == 0 and
@@ -65,9 +67,21 @@ compose required.env config --format json | jq -e '
   ([.services.postgres.volumes[] | select(.target == "/var/lib/postgresql") | .source | endswith("/postgres")] | all) and
   ([.services[] | has("pull_policy")] | any | not)
 ' > /dev/null
+# 将两份配置的挂载路径对齐到同一临时目录，比较两个服务和所有网络、卷等字段。
+sed -e 's|/path/to/roomusic/|./|g' -e 's|/path/to/music|./music|g' \
+  "$ROOT_DIR/deploy/nas/compose.yaml" > "$work/nas.yaml"
+compose required.env -f compose.yaml config --format json | jq -S 'del(."x-logging", ."x-postgres-image")' > "$work/main.json"
+compose '' -f nas.yaml config --format json | jq -S . > "$work/nas.json"
+diff -u "$work/main.json" "$work/nas.json"
+
+printf '%s\n' 'ROOMUSIC_IMAGE=example/roomusic' 'PUID=1026' 'PGID=100' >> "$work/bind.env"
 compose bind.env config --format json | jq -e '
-  [.services.app.volumes[] | select(.target == "/backups") | {type, source}]
-    == [{"type": "bind", "source": "/srv/x"}]
+  .services.app.image == "example/roomusic:latest" and
+  .services.app.user == "1026:100" and
+  .services.postgres.environment.PUID == "1026" and
+  .services.postgres.environment.PGID == "100" and
+  ([.services.app.volumes[] | select(.target == "/backups") | .source] == ["/srv/x"]) and
+  ([.services.postgres.volumes[] | select(.target == "/prep/backups") | .source] == ["/srv/x"])
 ' > /dev/null
 
 printf '%s\n' 'ROOMUSIC_APP_CONTAINER_NAME=test-app' 'ROOMUSIC_POSTGRES_CONTAINER_NAME=test-postgres' >> "$work/bind.env"

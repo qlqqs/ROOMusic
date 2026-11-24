@@ -25,6 +25,7 @@ import { resolve } from "node:path";
 import {
   decodeArtistPage, decodeArtistDetail, decodeArtistNamesPage, decodeArtistAlbumsPage,
   decodeArtistTracksPage, decodeArtistQueue, decodeArtistParticipationAlbumsPage,
+  decodeArtistLinkPreview, decodeArtistMediaReject, decodeArtistMediaWrite,
 } from "../features/artists/api/decoders";
 import {
   decodeArtistCandidatePage, decodeArtistIgnoreResult, decodeArtistMergeResult,
@@ -226,10 +227,12 @@ const successContracts: Record<string, Contract> = {
   "artists/adjudication/tracks-summaries": { status: 200, decode: decodeTrackSummaries },
   // M5 ⑤：真实 handler 生成的艺人、治理、收藏与别名搜索增量样本。
   "artists/albums": { status: 200, decode: decodeArtistAlbumsPage },
+  "artists/detail-manual-media": { status: 200, decode: decodeArtistDetail },
   "artists/detail-redirect": { status: 200, decode: decodeArtistDetail },
   "artists/detail-unavailable": { status: 200, decode: decodeArtistDetail },
   "artists/detail-with-media": { status: 200, decode: decodeArtistDetail },
   "artists/detail": { status: 200, decode: decodeArtistDetail },
+  "artists/link-preview": { status: 200, decode: decodeArtistLinkPreview },
   "artists/list-album-count": { status: 200, decode: decodeArtistPage },
   "artists/list-empty": { status: 200, decode: decodeArtistPage },
   "artists/list-initial": { status: 200, decode: decodeArtistPage },
@@ -241,6 +244,10 @@ const successContracts: Record<string, Contract> = {
   "artists/queue-empty": { status: 200, decode: decodeArtistQueue },
   "artists/queue-random": { status: 200, decode: decodeArtistQueue },
   "artists/queue": { status: 200, decode: decodeArtistQueue },
+  "artists/reject-media": { status: 200, decode: decodeArtistMediaReject },
+  "artists/set-bio": { status: 200, decode: decodeArtistMediaWrite },
+  "artists/set-image": { status: 200, decode: decodeArtistMediaWrite },
+  "artists/set-links": { status: 200, decode: decodeArtistMediaWrite },
   "artists/role-tracks-missing": { status: 200, decode: decodeArtistTracksPage },
   "artists/role-tracks": { status: 200, decode: decodeArtistTracksPage },
   "catalog/status-all-ready": { status: 200, decode: decodeCatalogState },

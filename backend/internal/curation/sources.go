@@ -13,18 +13,19 @@ import (
 )
 
 type SourceRegistration struct {
-	PluginHash   string
-	Declaration  sources.Declaration
-	Releases     sources.ReleaseFinder
-	Recordings   sources.RecordingFinder
-	Artists      sources.ArtistFinder
-	ArtistLinks  sources.ArtistLinkFinder
-	ArtistImages sources.ArtistImageFinder
-	ArtistBios   sources.ArtistBioFinder
-	Covers       sources.CoverFinder
-	Lyrics       sources.LyricsFinder
-	Fingerprints sources.FingerprintFinder
-	Unavailable  func() string
+	PluginHash      string
+	Declaration     sources.Declaration
+	Releases        sources.ReleaseFinder
+	Recordings      sources.RecordingFinder
+	Artists         sources.ArtistFinder
+	WikidataArtists sources.WikidataArtistFinder
+	ArtistLinks     sources.ArtistLinkFinder
+	ArtistImages    sources.ArtistImageFinder
+	ArtistBios      sources.ArtistBioFinder
+	Covers          sources.CoverFinder
+	Lyrics          sources.LyricsFinder
+	Fingerprints    sources.FingerprintFinder
+	Unavailable     func() string
 }
 
 type SourceSettings struct {

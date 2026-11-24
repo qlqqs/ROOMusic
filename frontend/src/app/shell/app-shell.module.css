@@ -31,8 +31,9 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  min-height: var(--layout-topbar-height);
-  padding: var(--space-1) var(--space-1) var(--space-1) var(--layout-page-inset-x);
+  min-height: calc(var(--layout-topbar-height) + env(safe-area-inset-top, 0px));
+  /* 装到主屏幕的独立窗口铺满全屏（viewport-fit=cover）时，让开刘海与横屏时的侧边圆角。 */
+  padding: calc(var(--space-1) + env(safe-area-inset-top, 0px)) calc(var(--space-1) + env(safe-area-inset-right, 0px)) var(--space-1) calc(var(--layout-page-inset-x) + env(safe-area-inset-left, 0px));
   border-bottom: 1px solid var(--color-divider);
   background: var(--color-bg);
 }

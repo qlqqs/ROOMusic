@@ -31,7 +31,11 @@ type groupEnvironment struct {
 
 func newGroupEnvironment(t *testing.T, opts ...Option) *groupEnvironment {
 	t.Helper()
-	application := newIntegrationTestApplication(t, opts...)
+	return newGroupEnvironmentForApp(t, newIntegrationTestApplication(t, opts...))
+}
+
+func newGroupEnvironmentForApp(t *testing.T, application *integrationTestApplication) *groupEnvironment {
+	t.Helper()
 	environment := &groupEnvironment{application: application, admin: application.createUser(t, "admin"), ordinary: application.createUser(t, "user"), rootID: uuid.New()}
 	mustExec(t, application, `INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, environment.rootID, application.allowedRoot)
 	environment.a, environment.groupA = insertGroupedRelease(t, application, environment.rootID, groupedRelease{title: "Album A", artist: "Artist A", year: 1998, tracks: []string{"present"}, uncertain: 1})

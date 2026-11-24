@@ -1,0 +1,235 @@
+/* 大圆章与来源印章：印章在圆章右下 45° 处（圆心 + r·cos45°），弹层挂在印章下方。 */
+.portrait {
+  --disc: 168px;
+  --seal: 32px;
+  position: relative;
+  width: var(--disc);
+  height: var(--disc);
+  flex: none;
+}
+
+@media (max-width: 767px) {
+  .portrait {
+    --disc: 128px;
+    --seal: 36px;
+  }
+}
+
+.disc {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.portrait[data-drop] .disc {
+  outline: 2px dashed var(--color-accent);
+  outline-offset: 5px;
+}
+
+.preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--color-surface);
+}
+
+.preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.85;
+}
+
+/* 管理员悬停或聚焦圆章：半透明遮罩与“加图片”图标；拖着图片经过时是金色的淡底。 */
+.veil {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-neutral-100);
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+}
+
+.veil svg {
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.veil:hover,
+.veil:focus-visible,
+.portrait[data-drop] .veil {
+  background: color-mix(in srgb, var(--color-text) 36%, transparent);
+}
+
+.portrait[data-drop] .veil {
+  background: color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+
+.veil:hover svg,
+.veil:focus-visible svg,
+.portrait[data-drop] .veil svg {
+  opacity: 1;
+  transform: none;
+}
+
+.veil:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+.file {
+  display: none;
+}
+
+/* 上传进度弧：比圆章大一圈，算不出进度时是一段缓慢转动的弧。 */
+.ring {
+  position: absolute;
+  inset: -7px;
+  width: calc(100% + 14px);
+  height: calc(100% + 14px);
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.ring circle {
+  fill: none;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.track {
+  stroke: var(--color-neutral-300);
+}
+
+.arc {
+  stroke: var(--color-accent);
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  transition: stroke-dashoffset 0.2s linear;
+}
+
+.ring[data-indeterminate] .arc {
+  stroke-dasharray: 18 82;
+  animation: spin 2.4s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring[data-indeterminate] .arc {
+    animation: none;
+  }
+
+  .veil svg {
+    transition: none;
+  }
+}
+
+.seal {
+  position: absolute;
+  left: calc(var(--disc) / 2 + var(--disc) * 0.3536 - var(--seal) / 2);
+  top: calc(var(--disc) / 2 + var(--disc) * 0.3536 - var(--seal) / 2);
+  display: grid;
+  place-items: center;
+  width: var(--seal);
+  height: var(--seal);
+  padding: 0;
+  border: 1px solid var(--color-neutral-300);
+  border-radius: 50%;
+  background: var(--color-neutral-100);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.seal:hover {
+  border-color: var(--color-neutral-500);
+  transform: scale(1.06);
+}
+
+.seal:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+/* 没有图片时，管理员看到的是一枚虚线的“指定对应”。 */
+.seal[data-kind="link"] {
+  border-style: dashed;
+  border-color: var(--color-neutral-400);
+  background: var(--color-bg);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seal,
+  .seal:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
+.popover {
+  top: calc(var(--disc) + var(--space-1));
+  left: calc(var(--disc) * 0.65);
+}
+
+/* 窄容器：弹层在圆章下方居中。用 translate 属性居中，淡入动画只动 transform，两者不互相覆盖。 */
+@container (max-width: 559px) {
+  .popover {
+    left: 50%;
+    translate: -50% 0;
+  }
+}
+
+.iconButton {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  background: var(--color-hover);
+  color: var(--text-primary);
+}
+
+.iconButton:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 0;
+}
+
+.danger:hover {
+  color: var(--color-warning);
+}
+
+@media (pointer: coarse) {
+  .iconButton {
+    width: 40px;
+    height: 40px;
+  }
+}
