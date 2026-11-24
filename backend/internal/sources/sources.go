@@ -26,6 +26,7 @@ type Declaration struct {
 	Capabilities   []Capability
 	DefaultEnabled bool
 	Keys           []string
+	Upstreams      []string
 	OptionalKeys   []string
 	MinInterval    time.Duration
 }
@@ -55,8 +56,9 @@ type CoverFinder interface {
 }
 
 type CoverTarget struct {
-	Kind string // release 或 release_group
-	ID   string
+	Title, Artist string
+	Kind          string // release 或 release_group
+	ID            string
 }
 
 type CoverImage struct {
@@ -219,6 +221,12 @@ func (e *InvalidKeyError) Unwrap() error { return ErrInvalidKey }
 
 type backgroundKey struct{}
 type caller struct{ permit func(context.Context) error }
+
+// CheckPermit 在候用的插件获得实例配额后再次核对整理与源开关。
+func CheckPermit(ctx context.Context) error {
+	c, _ := ctx.Value(backgroundKey{}).(caller)
+	return c.check(ctx)
+}
 
 // WithBackground 标记后台调用；传入的回调在读取缓存和每次出站前重新核对权限。
 func WithBackground(ctx context.Context, permit ...func(context.Context) error) context.Context {

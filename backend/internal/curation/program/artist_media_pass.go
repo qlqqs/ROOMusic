@@ -4,14 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
 type artistEvidence struct {
-	ID         string
+	ID, Name   string
 	MBIDs      []string
 	Image, Bio bool
 	Markers    []string
@@ -26,7 +29,7 @@ func (w *Worker) artistMediaPage(ctx context.Context, after string) ([]artistEvi
     ), family AS MATERIALIZED (
         SELECT f.canonical_id,f.artist_id FROM artist_media_family f JOIN page p USING(canonical_id)
     )
-    SELECT p.canonical_id::text,
+    SELECT p.canonical_id::text,a.initial_name,
         (SELECT jsonb_agg(DISTINCT external_id ORDER BY external_id) FROM family f JOIN external_links l ON l.object_id=f.artist_id
          WHERE f.canonical_id=p.canonical_id AND l.source='musicbrainz' AND l.object_type='artist'),
         EXISTS(SELECT FROM family f JOIN artist_external_artworks a USING(artist_id) WHERE f.canonical_id=p.canonical_id),
@@ -34,7 +37,7 @@ func (w *Worker) artistMediaPage(ctx context.Context, after string) ([]artistEvi
         (SELECT COALESCE(jsonb_agg(DISTINCT s.subject||':'||s.value_hash ORDER BY s.subject||':'||s.value_hash),'[]') FROM family f
          JOIN curation_suppressions s ON s.target_type='artist' AND s.target_id=f.artist_id
          WHERE f.canonical_id=p.canonical_id AND s.subject IN ('artist_image','artist_bio'))
-    FROM page p ORDER BY p.canonical_id`, after, pageSize)
+    FROM page p JOIN artists a ON a.id=p.canonical_id ORDER BY p.canonical_id`, after, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +46,7 @@ func (w *Worker) artistMediaPage(ctx context.Context, after string) ([]artistEvi
 	for rows.Next() {
 		var e artistEvidence
 		var ids, markers []byte
-		if err := rows.Scan(&e.ID, &ids, &e.Image, &e.Bio, &markers); err != nil {
+		if err := rows.Scan(&e.ID, &e.Name, &ids, &e.Image, &e.Bio, &markers); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(ids, &e.MBIDs); err != nil {
@@ -73,7 +76,9 @@ func (w *Worker) artistProviders(ctx context.Context) (artistProviders, error) {
 		switch s.ID {
 		case "musicbrainz", "wikidata", "commons", "wikipedia", "fanarttv", "theaudiodb":
 		default:
-			continue
+			if !strings.HasPrefix(s.ID, "plugin:") || !slices.Contains(s.Capabilities, sources.ArtistImageLookup) && !slices.Contains(s.Capabilities, sources.ArtistBioLookup) {
+				continue
+			}
 		}
 		active[s.ID] = s.Active
 		if s.Enabled {
@@ -93,7 +98,7 @@ func (w *Worker) artistProviders(ctx context.Context) (artistProviders, error) {
 	}
 	// 换上尾号相同的新密钥也应重试；摘要只需要修改时间。
 	var changed sql.NullTime
-	err = w.db.QueryRowContext(ctx, `SELECT max(updated_at) FROM curation_source_keys WHERE source IN ('fanarttv','theaudiodb')`).Scan(&changed)
+	err = w.db.QueryRowContext(ctx, `SELECT GREATEST((SELECT max(updated_at) FROM curation_source_keys WHERE source IN ('fanarttv','theaudiodb') OR source LIKE 'plugin:%'),(SELECT max(updated_at) FROM curation_source_settings WHERE source LIKE 'plugin:%' AND enabled))`).Scan(&changed)
 	return artistProviders{active, digest([]any{state, changed})}, err
 }
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/qlqq/roomusic/backend/internal/operations"
@@ -12,6 +13,7 @@ import (
 )
 
 type SourceRegistration struct {
+	PluginHash   string
 	Declaration  sources.Declaration
 	Releases     sources.ReleaseFinder
 	Recordings   sources.RecordingFinder
@@ -26,6 +28,7 @@ type SourceRegistration struct {
 }
 
 type SourceSettings struct {
+	Upstreams      []string             `json:"upstreams,omitempty"`
 	ID             string               `json:"id"`
 	Name           string               `json:"name"`
 	Capabilities   []sources.Capability `json:"capabilities"`
@@ -36,6 +39,8 @@ type SourceSettings struct {
 }
 
 type Sources struct {
+	mu               sync.RWMutex
+	plugins          []SourceRegistration
 	rejectedDefaults sync.Map // 键为来源与被拒绝的内置密钥名。
 	keys             KeyStore
 	scanCheck        func(context.Context) (bool, error)
@@ -52,8 +57,29 @@ func (s *Sources) WithScanCheck(check func(context.Context) (bool, error)) *Sour
 	return s
 }
 
+func (s *Sources) ReplacePlugins(reg []SourceRegistration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.plugins = reg
+}
+func (s *Sources) registrations() []SourceRegistration {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return slices.Concat(s.registered, s.plugins)
+}
+func (s *Sources) PluginIDs(cap sources.Capability) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var ids []string
+	for _, r := range s.plugins {
+		if slices.Contains(r.Declaration.Capabilities, cap) {
+			ids = append(ids, r.Declaration.ID)
+		}
+	}
+	return ids
+}
 func (s *Sources) lookup(id string) (SourceRegistration, bool) {
-	for _, r := range s.registered {
+	for _, r := range s.registrations() {
 		if r.Declaration.ID == id {
 			return r, true
 		}
@@ -65,7 +91,7 @@ func unknownSource() error { return operations.NotFound("not_found", "外部源�
 
 func (s *Sources) sourceState(ctx context.Context, tx *sql.Tx, r SourceRegistration, overall Settings) (SourceSettings, error) {
 	d := r.Declaration
-	item := SourceSettings{ID: d.ID, Name: d.Name, Capabilities: d.Capabilities, Enabled: d.DefaultEnabled}
+	item := SourceSettings{Upstreams: d.Upstreams, ID: d.ID, Name: d.Name, Capabilities: d.Capabilities, Enabled: d.DefaultEnabled}
 	err := tx.QueryRowContext(ctx, `SELECT enabled FROM curation_source_settings WHERE source=$1`, d.ID).Scan(&item.Enabled)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return SourceSettings{}, err
@@ -116,7 +142,7 @@ func (s *Sources) List(ctx context.Context) ([]SourceSettings, error) {
 		return nil, err
 	}
 	items := make([]SourceSettings, 0, len(s.registered))
-	for _, r := range s.registered {
+	for _, r := range s.registrations() {
 		item, err := s.sourceState(ctx, tx, r, settings)
 		if err != nil {
 			return nil, err
@@ -136,12 +162,38 @@ func (s *Sources) SetEnabled(ctx context.Context, id, actorID string, enabled bo
 		return SourceSettings{}, err
 	}
 	defer tx.Rollback()
+	if err := lockPluginSettings(ctx, tx, r, enabled); err != nil {
+		return SourceSettings{}, err
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO curation_source_settings(source,enabled,updated_by) VALUES($1,$2,$3)
  ON CONFLICT(source) DO UPDATE SET enabled=excluded.enabled,updated_by=excluded.updated_by,updated_at=now()`, id, enabled, actorID)
 	if err != nil {
 		return SourceSettings{}, err
 	}
 	return s.committedSourceState(ctx, tx, r)
+}
+
+// 管理员提交的开关和密钥只对当前确认的版本有效。行锁与升级、删除串行。
+func lockPluginSettings(ctx context.Context, tx *sql.Tx, r SourceRegistration, enabling bool) error {
+	id, ok := strings.CutPrefix(r.Declaration.ID, "plugin:")
+	if !ok {
+		return nil
+	}
+	var digest, reason string
+	err := tx.QueryRowContext(ctx, "SELECT sha256,disabled_reason FROM source_plugins WHERE id=$1 FOR UPDATE", id).Scan(&digest, &reason)
+	if errors.Is(err, sql.ErrNoRows) {
+		return unknownSource()
+	}
+	if err != nil {
+		return err
+	}
+	if digest != r.PluginHash {
+		return operations.Conflict("plugin_changed", "插件已更新，请刷新设置")
+	}
+	if enabling && reason != "" {
+		return operations.Conflict(reason, "插件文件已变化，请重新预检安装")
+	}
+	return nil
 }
 
 func (s *Sources) committedSourceState(ctx context.Context, tx *sql.Tx, r SourceRegistration) (SourceSettings, error) {

@@ -1,0 +1,20 @@
+-- 降级时只清除旧版无法表示的插件来源资料，保留内置来源与操作历史。
+DELETE FROM track_external_lyrics WHERE source LIKE 'plugin:%';
+DELETE FROM release_external_artworks WHERE source LIKE 'plugin:%';
+DELETE FROM artist_external_artworks WHERE source LIKE 'plugin:%';
+DELETE FROM artist_external_bios WHERE source LIKE 'plugin:%';
+DELETE FROM curation_source_keys WHERE source LIKE 'plugin:%';
+DELETE FROM curation_source_settings WHERE source LIKE 'plugin:%';
+DROP TABLE source_plugins;
+ALTER TABLE curation_source_settings DROP CONSTRAINT curation_source_settings_source_check;
+ALTER TABLE curation_source_settings ADD CONSTRAINT curation_source_settings_source_check CHECK (source ~ '^[a-z0-9._-]{1,64}$');
+ALTER TABLE curation_source_keys DROP CONSTRAINT curation_source_keys_source_check;
+ALTER TABLE curation_source_keys ADD CONSTRAINT curation_source_keys_source_check CHECK (source ~ '^[a-z0-9._-]{1,64}$');
+ALTER TABLE track_external_lyrics DROP CONSTRAINT track_external_lyrics_source_check;
+ALTER TABLE track_external_lyrics ADD CONSTRAINT track_external_lyrics_source_check CHECK (source ~ '^[a-z0-9._-]{1,64}$');
+ALTER TABLE release_external_artworks DROP CONSTRAINT release_external_artworks_source_check;
+ALTER TABLE release_external_artworks ADD CONSTRAINT release_external_artworks_source_check CHECK (source ~ '^[a-z0-9._-]{1,64}$');
+ALTER TABLE artist_external_artworks DROP CONSTRAINT artist_external_artworks_source_check;
+ALTER TABLE artist_external_artworks ADD CONSTRAINT artist_external_artworks_source_check CHECK (source IN ('fanarttv','theaudiodb','commons'));
+ALTER TABLE artist_external_bios DROP CONSTRAINT artist_external_bios_source_check;
+ALTER TABLE artist_external_bios ADD CONSTRAINT artist_external_bios_source_check CHECK (source IN ('wikipedia','theaudiodb'));

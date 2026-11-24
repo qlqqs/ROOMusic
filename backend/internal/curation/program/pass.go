@@ -18,6 +18,7 @@ import (
 const pageSize = 100
 
 type pageStates struct {
+	pluginChange               sql.NullTime
 	releases, artworks, lyrics map[string]curation.WorkState
 	fingerprintAvailable       bool
 }
@@ -64,6 +65,17 @@ func (w *Worker) page(ctx context.Context, after *catalog.CurationCursor, lyrics
 		return nil, err
 	}
 	states := pageStates{fingerprintAvailable: fingerprintAvailable}
+	cap := sources.CoverArt
+	if lyrics {
+		cap = sources.LyricsLookup
+	}
+	if ids := w.sources.PluginIDs(cap); len(ids) > 0 {
+		err = w.db.QueryRowContext(ctx, `SELECT GREATEST(max(s.updated_at),max(k.updated_at)) FROM curation_source_settings s
+ LEFT JOIN curation_source_keys k ON k.source=s.source WHERE s.enabled AND s.source=ANY($1::text[])`, ids).Scan(&states.pluginChange)
+		if err != nil {
+			return nil, err
+		}
+	}
 	states.releases, err = curation.LoadWorkStates(ctx, w.db, "release", ids)
 	if err != nil {
 		return nil, err
@@ -261,7 +273,8 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	input := subjectEvidence(subject, *e, states.releases[e.ID])
 	digest := subjectDigest(subject, input, id)
 	now := w.opts.Now()
-	ordinary := needsWork(subject, state, digest, now, false)
+	// 新启用的插件或更新的密钥可以补齐上一轮留下的空缺。
+	ordinary := needsWork(subject, state, digest, now, false) || subject != "release" && states.pluginChange.Time.After(state.UpdatedAt)
 	if subject == "release" && !ordinary {
 		tracks, artists, merges := matchBackfills(state, input)
 		if tracks || artists || merges {
@@ -291,7 +304,7 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 		return err
 	}
 	// 出站期间或过滤写入时也可能失去权限，保存结论或退避前再次核对。
-	if err := w.sources.Check(ctx, subjectSource(subject)); err != nil {
+	if err := w.sources.Check(ctx, u.source()); err != nil {
 		if failureCode(err) == "source_disabled" {
 			return nil
 		}

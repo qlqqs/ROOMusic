@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -120,6 +121,8 @@ type response struct {
 }
 
 type requestSpec struct {
+	binaryCache             bool
+	acceptResponse          func(int, string, []byte) bool
 	prepare                 func(context.Context, *url.URL) (map[string]string, error)
 	method, address, accept string
 	cacheInput              string
@@ -175,6 +178,13 @@ func (r *Requester) GetBytes(ctx context.Context, address, accept string, maxByt
 	return res.body, res.contentType, err
 }
 
+// GetUpstream 复用外部源的排队和缓存策略。密钥在真正出站前才装入请求。
+func (r *Requester) GetUpstream(ctx context.Context, address, accept string, prepare func(context.Context, *url.URL) (map[string]string, error), allow func(int, string, []byte) bool) (int, string, []byte, error) {
+	spec := requestSpec{method: http.MethodGet, address: address, accept: accept, limit: 4 << 20, timeout: 10 * time.Second, prepare: prepare, binaryCache: true, acceptResponse: allow}
+	res, err := r.do(ctx, spec)
+	return res.status, res.contentType, res.body, err
+}
+
 func (r *Requester) do(ctx context.Context, spec requestSpec) (response, error) {
 	c, background := ctx.Value(backgroundKey{}).(caller)
 	if err := c.check(ctx); err != nil {
@@ -205,13 +215,24 @@ func (r *Requester) do(ctx context.Context, spec requestSpec) (response, error) 
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		request.Header.Set("Content-Encoding", "gzip")
 	}
+	if spec.binaryCache {
+		keyInput += "\x00" + spec.accept
+	}
 	key := cacheKey(keyInput)
-	e, hit, failed := r.cache.lookup(ctx, key, background, spec.decode != nil)
+	e, hit, failed := r.cache.lookup(ctx, key, background, spec.decode != nil || spec.binaryCache)
 	if failed {
 		r.hit(ctx)
 		return response{}, ErrTryLater
 	}
 	if hit {
+		if spec.binaryCache {
+			body, err := base64.StdEncoding.DecodeString(e.Body)
+			if err == nil && int64(len(body)) <= spec.limit && spec.acceptResponse(e.Status, e.ContentType, body) {
+				r.hit(ctx)
+				return response{status: e.Status, contentType: e.ContentType, body: body}, nil
+			}
+			return response{}, failure
+		}
 		if e.Status == http.StatusNotFound && spec.method == http.MethodGet {
 			r.hit(ctx)
 			return response{}, ErrNotFound
@@ -238,6 +259,15 @@ func (r *Requester) do(ctx context.Context, spec requestSpec) (response, error) 
 			return response{}, err
 		}
 		if res.status != 0 && !(res.body == nil && res.retry) {
+			if spec.binaryCache && !res.retry {
+				if res.body == nil || !spec.acceptResponse(res.status, res.contentType, res.body) {
+					return response{}, failure
+				}
+				if res.status == 200 || res.status == 404 {
+					r.cache.storeContent(ctx, key, res.status, []byte(base64.StdEncoding.EncodeToString(res.body)), res.contentType, res.status == 404, background)
+				}
+				return res, nil
+			}
 			empty, retry, err := spec.interpret(res)
 			if ctx.Err() != nil {
 				return response{}, ctx.Err()
@@ -385,7 +415,7 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 	} else {
 		r.limiter.release(true)
 	}
-	res := fetch(&client, req, spec.limit)
+	res := fetch(&client, req, spec.limit, spec.binaryCache)
 	if logger := r.cache.logger; logger != nil {
 		attrs := []any{"event", "sources.request.finished", "module", "sources", "message", "外部源请求结束", "source", r.cache.source, "domain", req.URL.Hostname(), "duration_ms", time.Since(started).Milliseconds(), "attempt", attempt}
 		if res.status != 0 {
@@ -433,7 +463,7 @@ func (r *Requester) checkRedirect(target *url.URL, via []*http.Request) error {
 	return nil
 }
 
-func fetch(client *http.Client, req *http.Request, limit int64) response {
+func fetch(client *http.Client, req *http.Request, limit int64, allStatuses bool) response {
 	resp, err := client.Do(req)
 	if err != nil {
 		// 地址策略与禁止重定向产生的错误无需重试。
@@ -447,7 +477,7 @@ func fetch(client *http.Client, req *http.Request, limit int64) response {
 	defer resp.Body.Close()
 	res := response{status: resp.StatusCode, contentType: resp.Header.Get("Content-Type"), retryAfter: resp.Header.Get("Retry-After")}
 	res.retry = resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable
-	if req.Method == http.MethodPost || resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotFound {
+	if allStatuses || req.Method == http.MethodPost || resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotFound {
 		if resp.ContentLength > limit {
 			return res
 		}

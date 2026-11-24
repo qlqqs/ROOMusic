@@ -44,6 +44,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/playback/fingerprint"
 	playbackapi "github.com/qlqq/roomusic/backend/internal/playback/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
+	"github.com/qlqq/roomusic/backend/internal/plugins"
+	pluginapi "github.com/qlqq/roomusic/backend/internal/plugins/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/acoustid"
 	"github.com/qlqq/roomusic/backend/internal/sources/commons"
@@ -273,6 +275,23 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		curation.SourceRegistration{Declaration: fanarttv.Declaration(), ArtistImages: fanart},
 		curation.SourceRegistration{Declaration: theaudiodb.Declaration(), ArtistImages: audioDB, ArtistBios: audioDB},
 	).WithScanCheck(scanRunning).WithKeyStore(instanceSecrets)
+	var pluginStore *plugins.Store
+	if database != nil && lifecycle != nil {
+		var err error
+		pluginStore, err = plugins.Open(lifecycle, database, settings.DataDirectory, settings.UpstreamMockURL, logger, sourceGate.Keys, func(items []*plugins.Source) {
+			reg := make([]curation.SourceRegistration, 0, len(items))
+			for _, p := range items {
+				reg = append(reg, curation.SourceRegistration{Declaration: p.Declaration(), PluginHash: p.SHA256, Covers: p, Lyrics: p, ArtistImages: p, ArtistBios: p, Unavailable: p.Reason})
+			}
+			sourceGate.ReplacePlugins(reg)
+		})
+		if err != nil {
+			logger.Error("插件宿主启动失败", "error", err)
+		} else {
+			context.AfterFunc(lifecycle, pluginStore.Close)
+		}
+	}
+	pluginapi.Register(mux, guard, pluginStore)
 	artistGovernance := governance.NewArtistGovernance(artistResolutionAdapter{})
 	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger).WithArtists(artistGovernance)
 	operationKinds := []operations.Kind{curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),

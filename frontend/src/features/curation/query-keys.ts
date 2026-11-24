@@ -12,4 +12,5 @@ export const curationKeys = {
   exceptions: (generation: number) => viewerQueryKey(generation, "curation", "exceptions"),
   exceptionPage: (generation: number, page: number) => viewerQueryKey(generation, "curation", "exceptions", page),
   conversations: (generation: number) => viewerQueryKey(generation, "curation", "conversations"),
+  plugins: (generation: number) => viewerQueryKey(generation, "curation", "plugins"),
 };

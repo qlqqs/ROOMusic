@@ -4,7 +4,7 @@ import { Fragment, useState } from "react";
 import { FailureNotice, MenuButton, QueryContent, SettingRow, SettingsGroup, Skeleton, Switch } from "../../../shared/ui";
 import { fetchOperations } from "../../governance/api/endpoints";
 import type { CurationSettingsDTO, CurationSourceDTO } from "../api/decoders";
-import { capabilitiesText, sourceInactiveText, writesOwnChanges } from "../curation-text";
+import { capabilitiesText, sourceInactiveText, writesOwnChanges, isPluginSource } from "../curation-text";
 import { useCurationSources, useSetCurationSource, useSetCurationSourceKey } from "../hooks/use-curation";
 import { useScopeRevert } from "../hooks/use-scope-revert";
 import { ScopeRevertDialog, ScopeRevertResult, type ScopeRevertTarget } from "./scope-revert-dialog";
@@ -23,6 +23,7 @@ function groupNote(settings: CurationSettingsDTO | undefined): string | null {
 /** 一个源的说明：它提供什么，加上这一行自己不生效的原因；只用来识别的源说明结果记在哪里。 */
 function sourceDescription(source: CurationSourceDTO): string {
   const parts = [capabilitiesText(source)];
+  if (isPluginSource(source) && source.upstreams !== undefined && source.upstreams.length > 0) parts.push(`访问 ${source.upstreams.join("、")}`);
   if (!writesOwnChanges(source)) parts.push(source.capabilities.includes("fingerprint_lookup") ? "对上的结果记在 MusicBrainz 名下" : "查到的图片与简介记在提供它们的源名下");
   const reason = sourceInactiveText(source.inactive_reason);
   return reason === null ? parts.join("；") : `${parts.join("；")}；${reason}`;
@@ -79,7 +80,7 @@ export function CurationSourcesSection({ settings, refresh }: { settings: Curati
               ];
               return (
                 <Fragment key={source.id}>
-                  <SettingRow label={source.name} description={sourceDescription(source)}>
+                  <SettingRow label={isPluginSource(source) ? `${source.name}（插件）` : source.name} description={sourceDescription(source)}>
                     {({ controlId, descriptionId }) => (
                       <span className={styles.footerRow}>
                         <Switch

@@ -69,6 +69,9 @@ func (s *Sources) SetKey(ctx context.Context, id, name, actorID, key string) (So
 		return SourceSettings{}, err
 	}
 	defer tx.Rollback()
+	if err := lockPluginSettings(ctx, tx, r, false); err != nil {
+		return SourceSettings{}, err
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO curation_source_keys(source,name,updated_by,ciphertext,last_four)
  VALUES($1,$2,$3,$4,$5)
  ON CONFLICT(source,name) DO UPDATE SET updated_by=excluded.updated_by,updated_at=now(),ciphertext=excluded.ciphertext,
@@ -89,6 +92,9 @@ func (s *Sources) ClearKey(ctx context.Context, id, name, actorID string) (Sourc
 		return SourceSettings{}, err
 	}
 	defer tx.Rollback()
+	if err := lockPluginSettings(ctx, tx, r, false); err != nil {
+		return SourceSettings{}, err
+	}
 	// 删除的行无法保存变更时间，通过源设置通知调度器。
 	_, err = tx.ExecContext(ctx, `WITH removed AS (
  DELETE FROM curation_source_keys WHERE source=$1 AND name=$2 RETURNING source)

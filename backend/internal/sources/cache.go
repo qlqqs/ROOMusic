@@ -16,10 +16,11 @@ import (
 )
 
 type entry struct {
-	StoredAt  time.Time `json:"stored_at"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Status    int       `json:"status"`
-	Body      string    `json:"body"`
+	ContentType string    `json:"content_type,omitempty"`
+	StoredAt    time.Time `json:"stored_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	Status      int       `json:"status"`
+	Body        string    `json:"body"`
 }
 
 type cache struct {
@@ -95,6 +96,9 @@ func (c *cache) fail(key string) {
 }
 
 func (c *cache) store(ctx context.Context, key string, status int, body []byte, empty, background bool) {
+	c.storeContent(ctx, key, status, body, "", empty, background)
+}
+func (c *cache) storeContent(ctx context.Context, key string, status int, body []byte, contentType string, empty, background bool) {
 	if c.dir == "" {
 		return
 	}
@@ -103,7 +107,7 @@ func (c *cache) store(ctx context.Context, key string, status int, body []byte, 
 		ttl = 24 * time.Hour
 	}
 	now := c.now()
-	e := entry{StoredAt: now, ExpiresAt: now.Add(ttl), Status: status, Body: string(body)}
+	e := entry{ContentType: contentType, StoredAt: now, ExpiresAt: now.Add(ttl), Status: status, Body: string(body)}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if background {

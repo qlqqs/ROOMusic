@@ -3,6 +3,7 @@ export { CurationExceptionsSection } from "./components/curation-exceptions-sect
 export { CurationModelSection } from "./components/curation-model-section";
 export { CurationProgressSection } from "./components/curation-progress-section";
 export { CurationSourcesSection } from "./components/curation-sources-section";
+export { PluginsSection } from "./components/plugins-section";
 export { CurationSummary, FirstScanHint } from "./components/curation-summary";
 export { CurationSwitchSection } from "./components/curation-switch-section";
 export { SuppressionsSection } from "./components/suppressions-section";

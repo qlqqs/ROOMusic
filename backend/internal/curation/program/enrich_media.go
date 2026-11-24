@@ -25,7 +25,9 @@ func mediaMiss(err error) bool {
 }
 
 func (w *Worker) applyArtwork(ctx context.Context, u *unit, e catalog.CurationEvidence) (string, error) {
-	const provider = "coverartarchive"
+	return w.mediaFallback(ctx, u, sources.CoverArt, func(provider string) (string, error) { return w.artworkFrom(ctx, u, e, provider) })
+}
+func (w *Worker) artworkFrom(ctx context.Context, u *unit, e catalog.CurationEvidence, provider string) (string, error) {
 	finder, ok := w.sources.CoverFinder(provider)
 	if !ok {
 		return "", operations.Conflict("source_disabled", "封面源不可用")
@@ -35,6 +37,9 @@ func (w *Worker) applyArtwork(ctx context.Context, u *unit, e catalog.CurationEv
 		targets = append(targets, sources.CoverTarget{Kind: "release_group", ID: e.ExternalGroupID})
 	}
 	for _, target := range targets {
+		if provider != "coverartarchive" {
+			target.Title, target.Artist = e.Title, e.AlbumArtist
+		}
 		images, err := finder.Covers(ctx, target)
 		if mediaMiss(err) {
 			continue
@@ -64,8 +69,12 @@ func (w *Worker) applyArtwork(ctx context.Context, u *unit, e catalog.CurationEv
 		if externalID == "" {
 			externalID = image.ID
 		}
+		basis := "Cover Art Archive 主封面 " + externalID
+		if provider != "coverartarchive" {
+			basis = provider + " 主封面 " + externalID
+		}
 		request := curation.ArtworkRequest{ReleaseID: e.ID, Data: file.Data, ExternalID: externalID,
-			Source: curation.Source{Kind: "source", Provider: provider, Basis: "Cover Art Archive 主封面 " + externalID}}
+			Source: curation.Source{Kind: "source", Provider: provider, Basis: basis}}
 		write := func(batch, key string) error {
 			request.BatchID, request.Key = batch, key
 			_, err := w.writer.ApplyArtwork(ctx, request)
@@ -205,7 +214,9 @@ func chooseLyrics(t catalog.CurationTrack, items []sources.Lyrics) (lyricsChoice
 }
 
 func (w *Worker) applyLyrics(ctx context.Context, u *unit, e catalog.CurationEvidence, t catalog.CurationTrack) (string, error) {
-	const provider = "lrclib"
+	return w.mediaFallback(ctx, u, sources.LyricsLookup, func(provider string) (string, error) { return w.lyricsFrom(ctx, u, e, t, provider) })
+}
+func (w *Worker) lyricsFrom(ctx context.Context, u *unit, e catalog.CurationEvidence, t catalog.CurationTrack, provider string) (string, error) {
 	finder, ok := w.sources.LyricsFinder(provider)
 	if !ok {
 		return "", operations.Conflict("source_disabled", "歌词源不可用")
@@ -237,12 +248,50 @@ func (w *Worker) applyLyrics(ctx context.Context, u *unit, e catalog.CurationEvi
 		hasMarker(e.Suppressions, "track", t.ID, "lyrics_source", provider+"\x00"+choice.id) {
 		return "done", nil
 	}
+	basis := fmt.Sprintf("LRCLIB 记录 %s，标题、艺人和时长核对相合", choice.id)
+	if provider != "lrclib" {
+		basis = provider + " 歌词 " + choice.id
+	}
 	request := curation.LyricsRequest{TrackID: t.ID, Text: choice.text, ExternalID: choice.id,
-		Source: curation.Source{Kind: "source", Provider: provider, Basis: fmt.Sprintf("LRCLIB 记录 %s，标题、艺人和时长核对相合", choice.id)}}
+		Source: curation.Source{Kind: "source", Provider: provider, Basis: basis}}
 	err = u.write(ctx, "lyrics", func(batch, key string) error {
 		request.BatchID, request.Key = batch, key
 		_, err := w.writer.ApplyLyrics(ctx, request)
 		return err
 	})
 	return "done", err
+}
+
+func (w *Worker) mediaFallback(ctx context.Context, u *unit, cap sources.Capability, run func(string) (string, error)) (string, error) {
+	builtin := subjectSource(u.subject)
+	ids := w.sources.PluginIDs(cap)
+	if len(ids) == 0 {
+		return run(builtin)
+	}
+	var retry bool
+	last := ""
+	for _, id := range append([]string{builtin}, ids...) {
+		u.provider = id
+		status, err := run(id)
+		if err == nil {
+			last = id
+			if status != "no_match" {
+				return status, nil
+			}
+			continue
+		}
+		if abort := artistSourceError(err, &retry); abort != nil {
+			return "", abort
+		}
+	}
+	if last != "" {
+		u.provider = last
+	}
+	if retry {
+		return "", sources.ErrTryLater
+	}
+	if last == "" {
+		return "", operations.Conflict("source_disabled", "没有启用的资料源")
+	}
+	return "no_match", nil
 }
