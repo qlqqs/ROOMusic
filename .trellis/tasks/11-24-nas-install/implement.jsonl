@@ -1,4 +1,0 @@
-{"file": ".trellis/tasks/11-24-nas-install/prd.md", "reason": "默认值与验收"}
-{"file": ".trellis/tasks/11-24-nas-install/design.md", "reason": "Compose 与脚本删除的设计"}
-{"file": ".trellis/tasks/11-24-adoption-readiness/research/nas-install.md", "reason": "各平台差异与无真机验证方法"}
-{"file": ".trellis/spec/backend/deployment-environment-contracts.md", "reason": "现有部署合同，需同步"}
