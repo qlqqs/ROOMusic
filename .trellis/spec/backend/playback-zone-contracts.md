@@ -17,10 +17,10 @@
 
 ## 1. 设备与播放区
 
-一台设备对应一个播放区。设备由客户端登记、服务端生成 ID；播放区持有队列、模式、播放设置与传输状态。
+每个成员的一台设备对应一个播放区。浏览器或原生设备由客户端登记，在线且可见的局域网渲染器由服务端投影。服务端生成设备与播放区 ID。播放区持有队列、模式、播放设置与传输状态。
 
 ```text
-Device = {device_id, zone_id, name, kind: "browser"|"native", online, last_seen_at, volume: 0..1, muted,
+Device = {device_id, zone_id, name, kind: "browser"|"native"|"upnp", online, last_seen_at, volume: 0..1, muted,
           capabilities: Capabilities, output_session_id: UUID?}
 Snapshot = {server_time, protocol: 1, devices: Device[], zones: Zone[]}          // 按设备创建时间升序
 QueueEntry = {entry_id: UUID, track: TrackSummary}   // 与 POST /tracks/summaries 同一投影，按曲目当前的发行与组给出
@@ -261,3 +261,17 @@ quality ∈ "lossless" > "enhanced" > "high" > "low"（从好到差；Signal.qua
 | HLS 片长 / 首次等待 / 分片保留 | 约 4 秒 / ≤ 10 秒 / 播放头前 30 秒 |
 | 设备自动清理 | 30 天没上线，每小时扫一次 |
 | 控制目标回退（客户端） | 暂停超过 15 分钟或离线 |
+
+## 10. 托管的局域网输出
+
+设备首次可见时，快照与 SSE 首帧包含成员自己的设备与播放区。UPnP 行的 `external_id` 是物理设备 UDN，`online` 表示发现在线，`output_session_id` 为 null。撤销可见性后，SSE 发送 `device_removed`，设备重新可见时恢复自己的播放区与队列。管理员分配、共享与发现接口见 [局域网设备合同](./upnp-device-contracts.md)。
+
+| 接口 | 请求与响应 |
+| --- | --- |
+| POST /devices/{device_id}/activate | 选择设备为控制目标。传 `{}` 或 `{"takeover":true}`，200 返回 `{server_time,device}`。同一成员重复选择复用当前占用 |
+| PUT /devices/{device_id}/sample-rate | 传 `{"max_sample_rate":96000}`。允许 44100、48000、96000、192000 Hz，返回 `{server_time,device}`。活跃流重新协商 |
+| POST /zones/{zone_id}/commands | `play_tracks`、`play_entry`、`play`、`next`、`previous`、`retry` 与 `transfer` 接受可选布尔字段 `takeover`。转移认领目标，成功后释放已经清空的源设备 |
+
+UPnP 行带 `max_sample_rate` 和 `format_declared`，每个 `capabilities.stream_formats[]` 带协商上限与 24 位位深。占用时另有 `occupied_by:{user_id,display_name}`。设备已由其他成员占用时返回 409，`error.code=device_busy`，`error.message` 含占用者显示名，顶层带 `request_id`。传 `takeover:true` 会暂停旧区的输出。重新使用失去分配的设备 ID 时返回 404。实体设备面板暂停或继续时，区事件带 `kind:"pause"|"play"` 与 `source:"device"`。
+
+请求与响应示例见 `backend/internal/app/testdata/api-samples/upnp/playback-snapshot.json`、`playback-occupied.json` 与 `device-busy.json`。

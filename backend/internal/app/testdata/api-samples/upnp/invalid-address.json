@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_address",
+      "message": "需要局域网设备 IP 或同主机的 HTTP 描述地址"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

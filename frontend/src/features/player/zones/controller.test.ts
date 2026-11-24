@@ -1,13 +1,15 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { waitFor } from "@testing-library/react";
 import startedSample from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/zone-track-started.json";
 import recordedSample from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/zone-play-recorded.json";
 import { fakeZoneServer, testPlayerController } from "../../../test/fake-zones";
 import { playerTrack } from "../../../test/player-data";
 import { memoryStorage } from "../../../test/memory-storage";
-import { decodeStreamEvent } from "./decoders";
+import { deferred } from "../../../test/deferred";
+import { decodeStreamEvent, type DeviceResult } from "./decoders";
 import { deviceStorageKey } from "./device";
 import type { PlayerController } from "./controller";
+import type { Device } from "./model";
 
 const controllers: PlayerController[] = [];
 afterEach(() => {
@@ -133,4 +135,78 @@ it("本机拖动后服务端版本已更新、输出端还在旧流上时，进�
   next.beginPlaying();
   next.tick(1);
   expect(controller.getProgress().positionSeconds).toBe(51);
+});
+
+describe("局域网播放设备", () => {
+  const userId = "00000000-0000-4000-8000-000000000003";
+  const otherId = "00000000-0000-4000-8000-000000000004";
+
+  async function setup() {
+    const server = fakeZoneServer();
+    const ownOccupant = { userId, displayName: "自己" };
+    const others = { userId: otherId, displayName: "书房成员" };
+    const renderer = (suffix: string, name: string, occupiedBy: typeof others | null): Device => ({
+      ...server.device(),
+      deviceId: `00000000-0000-4000-8000-00000000d00${suffix}`,
+      zoneId: `00000000-0000-4000-8000-00000000e00${suffix}`,
+      name,
+      kind: "upnp",
+      online: true,
+      upnp: { maxSampleRate: 48000, formatDeclared: false, occupiedBy },
+    });
+    const free = renderer("2", "空闲音响", null);
+    const mine = renderer("3", "自己的音响", ownOccupant);
+    const busy = renderer("4", "书房音响", others);
+    const devices = [free, mine, busy];
+    const zones = devices.map(({ zoneId, deviceId }) => ({ ...server.zone(), zoneId, deviceId }));
+    const activation = deferred<DeviceResult>();
+    const activate = vi.fn(() => activation.promise);
+    const saveRate = vi.fn(async () => ({
+      serverTime: Date.now(),
+      device: { ...free, upnp: { maxSampleRate: 96000, formatDeclared: false, occupiedBy: null } },
+    }));
+    const { controller } = testPlayerController(server, { deps: { userId, api: {
+      ...server.api,
+      fetchSnapshot: async () => ({ serverTime: Date.now(), devices: [server.device(), ...devices], zones: [server.zone(), ...zones] }),
+      activateDevice: activate,
+      putDeviceSampleRate: saveRate,
+    } } });
+    controllers.push(controller);
+    controller.attach();
+    await waitFor(() => expect(controller.getSnapshot().devices).toHaveLength(4));
+    return { controller, free, busy, ownOccupant, activation, activate, saveRate };
+  }
+
+  it("激活成功后应用返回设备并切换控制目标", async () => {
+    const { controller, busy, ownOccupant, activation, activate } = await setup();
+    const pending = controller.activateDevice(busy.deviceId, true);
+    expect(activate).toHaveBeenCalledExactlyOnceWith(busy.deviceId, true);
+    expect(controller.getSnapshot().isLocal).toBe(true);
+    const device = {
+      ...busy,
+      upnp: { maxSampleRate: 48000, formatDeclared: false, occupiedBy: ownOccupant },
+    };
+    activation.resolve({ serverTime: Date.now(), device });
+    await pending;
+    expect(controller.getSnapshot()).toMatchObject({ device, isLocal: false, zone: { zoneId: busy.zoneId } });
+    expect(controller.getSnapshot().devices.find((row) => row.device.deviceId === busy.deviceId)).toMatchObject({ isTarget: true, occupant: null });
+  });
+
+  it("采样率上限的响应写回对应设备", async () => {
+    const { controller, free, saveRate } = await setup();
+    await controller.setDeviceSampleRate(free.deviceId, 96000);
+    expect(saveRate).toHaveBeenCalledExactlyOnceWith(free.deviceId, 96000);
+    expect(controller.getSnapshot().devices.find((row) => row.device.deviceId === free.deviceId)?.device.upnp)
+      .toStrictEqual({ maxSampleRate: 96000, formatDeclared: false, occupiedBy: null });
+  });
+
+  it("设备行只显示其他成员的占用者名称", async () => {
+    const { controller } = await setup();
+    expect(Object.fromEntries(controller.getSnapshot().devices.map((row) => [row.device.name, row.occupant]))).toEqual({
+      测试设备: null,
+      空闲音响: null,
+      自己的音响: null,
+      书房音响: "书房成员",
+    });
+  });
 });

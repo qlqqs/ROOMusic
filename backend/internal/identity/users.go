@@ -126,6 +126,16 @@ func SetUserDisabled(ctx context.Context, db *sql.DB, id string, disabled bool, 
 	return nil
 }
 
+// HasActiveSession 判断账号是否仍启用且至少保有一条有效会话。
+func HasActiveSession(ctx context.Context, db *sql.DB, id string) (bool, error) {
+	var active bool
+	err := db.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id
+		WHERE u.id=$1 AND u.disabled_at IS NULL AND s.revoked_at IS NULL AND s.expires_at>NOW()
+	)`, id).Scan(&active)
+	return active, err
+}
+
 // RevokeUserSessions 检查用户存在后撤销其全部未撤销会话。
 // 调用入口负责管理员鉴权及用户 ID 格式校验。
 func RevokeUserSessions(ctx context.Context, db *sql.DB, id string, revoked ...func(string)) error {

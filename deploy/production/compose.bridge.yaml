@@ -1,0 +1,12 @@
+# 与生产 Compose 一起使用，令应用和数据库通过项目网络通信。
+services:
+  app:
+    network_mode: !reset null
+    networks: [roomusic]
+    environment:
+      ROOMUSIC_HTTP_ADDR: "0.0.0.0:8080"
+      ROOMUSIC_DATABASE_URL: "postgres://roomusic@postgres:5432/roomusic?sslmode=disable"
+    ports:
+      - "0.0.0.0:${ROOMUSIC_HTTP_PORT:-8090}:8080"
+  postgres:
+    ports: !reset []

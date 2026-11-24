@@ -10,6 +10,7 @@ trap 'rm -rf -- "$work"' EXIT
 
 # 在独立目录中仅使用假值；不会读取工作区或部署目录的配置，也不创建容器与网络。
 cp "$ROOT_DIR/compose.prod.yaml" "$work/compose.yaml"
+cp "$ROOT_DIR/deploy/production/compose.bridge.yaml" "$work/compose.bridge.yaml"
 printf '%s\n' 'ROOMUSIC_DB_PASSWORD=ci-placeholder' 'ROOMUSIC_MUSIC_DIR=/srv/music' > "$work/required.env"
 printf '%s\n' 'ROOMUSIC_MUSIC_DIR=/srv/music' > "$work/no-password.env"
 printf '%s\n' 'ROOMUSIC_DB_PASSWORD=ci-placeholder' > "$work/no-music.env"
@@ -50,10 +51,15 @@ compose required.env config --format json | jq -e '
   .services.app.environment.ROOMUSIC_FPCALC_PATH == "/usr/local/bin/fpcalc" and
   .services.app.environment.ROOMUSIC_DB_PASSWORD_FILE == "/run/secrets/postgres_password" and
   .services.postgres.environment.POSTGRES_PASSWORD_FILE == "/run/secrets/postgres_password" and
-  (.services.app.ports | length) == 1 and
-  .services.app.ports[0].published == "8090" and
-  .services.app.ports[0].target == 8080 and
-  .services.app.ports[0].host_ip == "0.0.0.0" and
+  .services.app.read_only and
+  (.services.app.cap_drop | index("ALL") != null) and
+  .services.app.network_mode == "host" and
+  (.services.app.ports | length) == 0 and
+  .services.app.environment.ROOMUSIC_HTTP_ADDR == "0.0.0.0:8090" and
+  .services.app.environment.ROOMUSIC_DATABASE_URL == "postgres://roomusic@127.0.0.1:55439/roomusic?sslmode=disable" and
+  .services.postgres.ports[0].host_ip == "127.0.0.1" and
+  .services.postgres.ports[0].published == "55439" and
+  .services.postgres.ports[0].target == 5432 and
   (.networks.roomusic.ipam // {}) == {} and
   ([.services.app.volumes[] | select(.target == "/backups") | .source | endswith("/backups")] | all) and
   ([.services.postgres.volumes[] | select(.target == "/var/lib/postgresql") | .source | endswith("/postgres")] | all) and
@@ -69,6 +75,26 @@ compose bind.env config --format json | jq -e '
   .services.app.container_name == "test-app" and
   .services.postgres.container_name == "test-postgres" and
   ((.services.postgres.depends_on // {}) | length) == 0
+' > /dev/null
+
+printf '%s\n' 'ROOMUSIC_HTTP_PORT=19090' 'ROOMUSIC_DB_PORT=55440' 'ROOMUSIC_LAN_URL=http://192.168.1.2:19090' >> "$work/bind.env"
+compose bind.env config --format json | jq -e '
+  .services.app.environment.ROOMUSIC_HTTP_ADDR == "0.0.0.0:19090" and
+  .services.app.environment.ROOMUSIC_DATABASE_URL == "postgres://roomusic@127.0.0.1:55440/roomusic?sslmode=disable" and
+  .services.postgres.ports[0].published == "55440"
+' > /dev/null
+compose bind.env -f compose.yaml -f compose.bridge.yaml config --format json | jq -e '
+  .services.app.network_mode == null and
+  (.services.app.networks | has("roomusic")) and
+  (.services.postgres.networks | has("roomusic")) and
+  (.services.postgres.ports | length) == 0 and
+  (.services.app.ports | length) == 1 and
+  .services.app.ports[0].published == "19090" and
+  .services.app.ports[0].host_ip == "0.0.0.0" and
+  .services.app.ports[0].target == 8080 and
+  .services.app.environment.ROOMUSIC_LAN_URL == "http://192.168.1.2:19090" and
+  .services.app.environment.ROOMUSIC_HTTP_ADDR == "0.0.0.0:8080" and
+  .services.app.environment.ROOMUSIC_DATABASE_URL == "postgres://roomusic@postgres:5432/roomusic?sslmode=disable"
 ' > /dev/null
 
 cat > "$work/compose.override.yaml" <<'YAML'

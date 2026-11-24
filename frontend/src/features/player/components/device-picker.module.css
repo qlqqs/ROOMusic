@@ -5,7 +5,8 @@
 .device[data-remote]::after { content: ""; position: absolute; top: calc(50% - 12px); right: calc(50% - 12px); width: 6px; height: 6px; border-radius: 50%; background: var(--text-accent); box-shadow: 0 0 0 2px var(--device-dot-ring, var(--color-bg)); pointer-events: none; }
 
 /* 弹层沿用信号路径的做法：对话框铺满视口且透明，弹层按按钮位置摆在它上方；点在弹层外即关闭。 */
-dialog.dialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+/* 弹层与其中嵌套的对话框在 DOM 里位于播放栏内，不继承播放栏的不换行。 */
+dialog.dialog { white-space: normal; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 dialog.dialog::backdrop { background: transparent; }
 .content { position: absolute; left: clamp(var(--space-2), calc(var(--anchor-x, 50vw) - 170px), calc(100vw - 340px - var(--space-2))); bottom: calc(100dvh - var(--anchor-top, 100dvh) + var(--space-2)); display: grid; align-content: start; gap: var(--space-2); width: 340px; max-height: calc(100dvh - 2 * var(--space-4)); overflow-y: auto; padding: var(--space-3) var(--space-2) var(--space-3) var(--space-3); border: 1px solid var(--color-divider); border-radius: var(--radius-lg); background: var(--color-surface); color: var(--text-primary); box-shadow: var(--shadow-lg); scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
 .content[data-below] { top: calc(var(--anchor-bottom) + var(--space-2)); bottom: auto; max-height: calc(100dvh - var(--anchor-bottom) - 2 * var(--space-4)); }
@@ -33,4 +34,43 @@ button.select { cursor: pointer; }
 @media (max-width: 767px) {
   dialog.dialog::backdrop { background: color-mix(in srgb, var(--color-neutral-900) 40%, transparent); }
   .content, .content[data-below] { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 80dvh; padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px)); border-width: 1px 0 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+}
+
+/* 采样率上限的选项。 */
+.rates {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ratesNote {
+  margin: 0 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: 1.6;
+}
+
+.rate {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  font-size: var(--fs-14);
+}
+
+.kindIcon {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

@@ -27,6 +27,9 @@ func (s *Service) scanOffline() {
 	}
 	s.mu.Unlock()
 	for userID, u := range users {
+		if err := s.syncManaged(s.ctx, userID, u); err != nil {
+			s.reportAsync("upnp_projection", userID, "", err)
+		}
 		u.mu.RLock()
 		for _, z := range u.order {
 			z.dispatch.Lock()
@@ -103,6 +106,11 @@ func (s *Service) SubscribeOutput(ctx context.Context, userID, sessionID string)
 	if err != nil {
 		return nil, err
 	}
+	if !s.ManagedOutputSession(userID, sessionID) {
+		if err := s.syncManaged(ctx, userID, u); err != nil {
+			return nil, err
+		}
+	}
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	ids := make([]string, 0, len(u.zones))
@@ -148,6 +156,9 @@ func (s *Service) SubscribeOutput(ctx context.Context, userID, sessionID string)
 	snapshot := Snapshot{ServerTime: timestamp(s.Now()), Protocol: 1, Devices: []Device{}, Zones: []Zone{}}
 	tracksByZone := make(map[string]map[string]catalog.TrackSummary, len(u.order))
 	for _, z := range u.order {
+		if !z.visible() {
+			continue
+		}
 		tracks, e := s.loadSummaries(ctx, z.persisted.Queue.Entries)
 		if e != nil {
 			return nil, e
@@ -174,6 +185,9 @@ func (s *Service) SubscribeOutput(ctx context.Context, userID, sessionID string)
 		updated = &OutputResult{Device: deviceOf(z), Zone: s.zoneOf(z, tracksByZone[p.ZoneID])}
 	}
 	for _, z := range u.order {
+		if !z.visible() {
+			continue
+		}
 		snapshot.Devices = append(snapshot.Devices, deviceOf(z))
 		snapshot.Zones = append(snapshot.Zones, s.zoneOf(z, tracksByZone[z.persisted.ZoneID]))
 	}

@@ -46,7 +46,8 @@
   `./secrets`、`./postgres`、`./data`、`./backups` 全部为 bind mount；PostgreSQL 18 挂载点为 `/var/lib/postgresql`，不创建命名或匿名卷。
   宿主机脚本依赖 Python 3 解析 Compose JSON 配置，不执行 dotenv 内容；只调整 secrets/data/backups 顶层权限；密码文件属主 uid 1000、0600，secrets/data/backups 目录 0700。新建 postgres 挂载根目录为 0755，允许 PostgreSQL 降权后访问；不修改已有数据库目录权限。首次生成 32 字节随机十六进制密码，也可通过 `ROOMUSIC_DB_PASSWORD` 指定；后续启动直接读取，重复执行脚本复用，显式不同密码报错。数据库目录非空但密码文件缺失时停止。
   PostgreSQL 官方 root 入口读取 `POSTGRES_PASSWORD_FILE` 后降权；应用通过 `ROOMUSIC_DB_PASSWORD_FILE` 在 config.DatabaseURL 中读取，使用 URL 编码组装，服务和所有 CLI 共用。未配置文件时保留原 DATABASE_URL 行为；文件模式不接受 URL 内另一份密码，读取错误不输出密码或路径。
-  端口默认 8090（IPv4），备份目录可用 `ROOMUSIC_BACKUP_DIR` 指定，首次安装脚本和 app 使用同一路径。子网默认由 Docker 分配，可通过 override 设置；不同开发测试项目使用独立网络和目录。
+  生产应用默认使用 host 网络，监听 `0.0.0.0:${ROOMUSIC_HTTP_PORT:-8090}`。数据库保留独立项目网络，只发布 `127.0.0.1:${ROOMUSIC_DB_PORT:-55439}`，应用按该地址连接。健康检查访问实际监听端口；同机多实例的两个端口均需独立。
+  `deploy/production/compose.bridge.yaml` 配合主文件将应用接回项目网络，恢复容器内 8080 及服务名 postgres，并清除数据库发布端口。bridge 用户手动添加渲染器并设置 `ROOMUSIC_LAN_URL`；host 模式默认采用发现设备的网卡地址。两种组合均由 `scripts/check-production-compose.sh` 检查。备份目录可用 `ROOMUSIC_BACKUP_DIR` 指定，首次安装脚本和 app 使用同一路径。子网默认由 Docker 分配，可通过 override 设置；不同开发测试项目使用独立网络和目录。
   入口等数据库接受连接后启动，`/readyz` 用于镜像健康检查。生产的 `ROOMUSIC_ALLOWED_ORIGINS` 可选，不配时按主机一致模式，反代须保留 Host（含端口）与 Origin；格式与冲突由后端校验。
 - `ROOMUSIC_TIMEZONE`（默认 `Asia/Shanghai`）同时用于备份与定时扫描；启动时校验为有效时区，经 `config.Server.Backup.Location` 传入调度器。定时扫描默认每天 4 点、备份默认 3 点；扫描开关与整点由数据库设置接口管理，详见[扫描协调合同](./scan-coordination-contracts.md)第 9 节。
 - 备份内置在应用（`backend/internal/backup`）：镜像含与数据库同主版本的 `postgresql18-client`；按 `ROOMUSIC_TIMEZONE` 每天

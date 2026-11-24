@@ -55,7 +55,7 @@ export function fakeZoneServer(options: { trackOf?: (trackId: string) => PlayerT
   let after: Partial<Zone> | null = null;
   let entries: QueueEntry[] = [];
   let imported = false;
-  let device: Device = { deviceId: DEVICE_ID, zoneId: ZONE_ID, name: "测试设备", kind: "browser", online: false, lastSeenAt: Date.now(), volume: 1, muted: false, volumeControllable: true, outputSessionId: null };
+  let device: Device = { deviceId: DEVICE_ID, zoneId: ZONE_ID, name: "测试设备", kind: "browser", online: false, lastSeenAt: Date.now(), volume: 1, muted: false, volumeControllable: true, outputSessionId: null, upnp: null };
   let zone: Zone = {
     zoneId: ZONE_ID, deviceId: DEVICE_ID, revision: 1, queueRevision: 0, queueLength: 0, mode: "sequential", settings: defaultSettings,
     current: null, hasNext: false, intent: "pause", status: "idle", fault: null, failures: {},
@@ -223,6 +223,11 @@ export function fakeZoneServer(options: { trackOf?: (trackId: string) => PlayerT
       device = { ...device, name };
       return { serverTime: Date.now(), device };
     },
+    activateDevice: async () => ({ serverTime: Date.now(), device }),
+    putDeviceSampleRate: async (_deviceId, rate) => {
+      if (device.upnp !== null) device = { ...device, upnp: { ...device.upnp, maxSampleRate: rate } };
+      return { serverTime: Date.now(), device };
+    },
     deleteDevice: async () => {
       if (device.online) throw new ApiError({ kind: "http", status: 409, code: "device_online", message: "设备在线", requestId: "fake" });
     },
@@ -345,6 +350,8 @@ export function delegatingZoneApi(current: () => FakeZoneServer): ZoneApi {
     sendZoneCommand: (zoneId, command) => current().api.sendZoneCommand(zoneId, command),
     putDeviceVolume: (deviceId, volume, muted) => current().api.putDeviceVolume(deviceId, volume, muted),
     renameDevice: (deviceId, name) => current().api.renameDevice(deviceId, name),
+    activateDevice: (deviceId, takeover) => current().api.activateDevice(deviceId, takeover),
+    putDeviceSampleRate: (deviceId, rate) => current().api.putDeviceSampleRate(deviceId, rate),
     deleteDevice: (deviceId) => current().api.deleteDevice(deviceId),
     claimOutput: (deviceId, body) => current().api.claimOutput(deviceId, body),
     postOutputReport: (sessionId, body) => current().api.postOutputReport(sessionId, body),

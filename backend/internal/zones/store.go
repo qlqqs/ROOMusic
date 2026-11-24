@@ -34,14 +34,17 @@ type Capabilities struct {
 
 // PersistedDevice 不含在线状态、输出会话等仅属于运行时的字段。
 type PersistedDevice struct {
-	DeviceID     string
-	Kind         string
-	Name         string
-	Capabilities Capabilities
-	Volume       float64
-	Muted        bool
-	CreatedAt    time.Time
-	LastSeenAt   time.Time
+	ExternalID        string
+	MaxSampleRate     int
+	VolumeDisplayOnly bool
+	DeviceID          string
+	Kind              string
+	Name              string
+	Capabilities      Capabilities
+	Volume            float64
+	Muted             bool
+	CreatedAt         time.Time
+	LastSeenAt        time.Time
 }
 
 // PersistedZone 保存播放区的持久状态；空 CurrentEntryID 和 nil ImportedAt 表示未设置。

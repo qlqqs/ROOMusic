@@ -276,6 +276,10 @@ export const deviceDecoder: d.Decoder<Device> = (input, path) => {
     muted: d.boolean(),
     capabilities: d.object({ volume: capabilitiesVolumeDecoder }),
     output_session_id: d.nullable(d.uuid()),
+    // 局域网 UPnP 设备才有下面三项（M8 U3）。
+    max_sample_rate: d.optional(d.integer({ min: 1 })),
+    format_declared: d.optional(d.boolean()),
+    occupied_by: d.optional(d.nullable(d.object({ user_id: d.uuid(), display_name: d.string({ min: 1, max: 200 }) }))),
   })(input, path);
   return {
     deviceId: raw.device_id,
@@ -288,6 +292,14 @@ export const deviceDecoder: d.Decoder<Device> = (input, path) => {
     muted: raw.muted,
     volumeControllable: raw.capabilities.volume !== "fixed",
     outputSessionId: raw.output_session_id,
+    upnp:
+      raw.kind === "upnp"
+        ? {
+            maxSampleRate: raw.max_sample_rate ?? 48000,
+            formatDeclared: raw.format_declared ?? true,
+            occupiedBy: raw.occupied_by === undefined || raw.occupied_by === null ? null : { userId: raw.occupied_by.user_id, displayName: raw.occupied_by.display_name },
+          }
+        : null,
   };
 };
 

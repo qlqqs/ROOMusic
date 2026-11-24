@@ -66,7 +66,13 @@ func (s *Service) RenameDevice(ctx context.Context, userID, deviceID, name strin
 	if !validID(deviceID) || !validName(name) {
 		return DeviceResult{}, ErrInvalidInput
 	}
-	return s.updateDevice(ctx, userID, deviceID, func(z *zoneRuntime, d *PersistedDevice) error { d.Name = name; return nil })
+	return s.updateDevice(ctx, userID, deviceID, func(z *zoneRuntime, d *PersistedDevice) error {
+		if d.Kind == "upnp" {
+			return ErrInvalidInput
+		}
+		d.Name = name
+		return nil
+	})
 }
 func (s *Service) SetVolume(ctx context.Context, userID, deviceID string, volume float64, muted bool) (DeviceResult, error) {
 	if !validID(deviceID) || !finite(volume) || volume < 0 || volume > 1 {
@@ -76,6 +82,7 @@ func (s *Service) SetVolume(ctx context.Context, userID, deviceID string, volume
 		if d.Capabilities.Volume == "fixed" {
 			return ErrVolumeFixed
 		}
+		d.VolumeDisplayOnly = false
 		d.Volume = volume
 		d.Muted = muted
 		return nil
@@ -87,6 +94,9 @@ func (s *Service) updateDevice(ctx context.Context, userID, deviceID string, upd
 		return DeviceResult{}, err
 	}
 	userID = strings.ToLower(userID)
+	if err := s.syncManaged(ctx, userID, u); err != nil {
+		return DeviceResult{}, err
+	}
 	// 改名与登记共享用户注册表锁，避免同名后缀计算读取旧名称。
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -97,6 +107,11 @@ func (s *Service) updateDevice(ctx context.Context, userID, deviceID string, upd
 	z.dispatch.Lock()
 	defer z.dispatch.Unlock()
 	z.mu.Lock()
+	if !z.visible() {
+		z.mu.Unlock()
+		return DeviceResult{}, ErrNotFound
+	}
+	previousRate := z.device.MaxSampleRate
 	d := z.device
 	if err := update(z, &d); err != nil {
 		z.mu.Unlock()
@@ -107,6 +122,9 @@ func (s *Service) updateDevice(ctx context.Context, userID, deviceID string, upd
 		return DeviceResult{}, err
 	}
 	z.device = d
+	if previousRate != d.MaxSampleRate && z.session != nil {
+		s.scheduleRebuild(userID, z)
+	}
 	result := DeviceResult{timestamp(s.options.Now()), deviceOf(z)}
 	z.mu.Unlock()
 	s.publishDevice(userID, result.Device)
@@ -115,6 +133,13 @@ func (s *Service) updateDevice(ctx context.Context, userID, deviceID string, upd
 func (s *Service) DeleteDevice(ctx context.Context, userID, deviceID string) error {
 	if !validID(deviceID) {
 		return ErrInvalidInput
+	}
+	u, err := s.user(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if err = s.syncManaged(ctx, userID, u); err != nil {
+		return err
 	}
 	return s.deleteDevice(ctx, userID, deviceID, nil)
 }
@@ -136,7 +161,11 @@ func (s *Service) deleteDevice(ctx context.Context, userID, deviceID string, bef
 	z.dispatch.Lock()
 	defer z.dispatch.Unlock()
 	z.mu.Lock()
-	if z.online {
+	if before == nil && !z.visible() {
+		z.mu.Unlock()
+		return ErrNotFound
+	}
+	if z.online || z.managedVisible {
 		z.mu.Unlock()
 		if before != nil {
 			return nil

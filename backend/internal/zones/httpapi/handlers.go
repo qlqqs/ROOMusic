@@ -11,16 +11,23 @@ import (
 )
 
 type Handlers struct {
-	guard   *identity.Guard
-	service *zones.Service
+	guard          *identity.Guard
+	service        *zones.Service
+	streamThrottle *identity.SourceThrottle
+	streamArtwork  StreamArtwork
 }
 
 func New(guard *identity.Guard, service *zones.Service) *Handlers {
-	return &Handlers{guard: guard, service: service}
+	return &Handlers{guard: guard, service: service, streamThrottle: identity.NewSourceThrottle(service.Now)}
 }
 
 // Register 挂载本人播放区的控制、输出端与实时接口。
 func (h *Handlers) Register(mux *http.ServeMux) {
+	mux.HandleFunc("/upnp/streams/{token}/artwork", h.upnpResource(true))
+	audio := h.upnpResource(false)
+	mux.HandleFunc("/upnp/streams/{token}", audio)
+	mux.HandleFunc("/upnp/streams", audio)
+	mux.HandleFunc("/upnp/streams/", audio)
 	h.route(mux, "GET /api/v1/me/playback", false, h.snapshot)
 	h.route(mux, "GET /api/v1/me/playback/events", false, h.events)
 	h.route(mux, "HEAD /api/v1/me/playback/events", false, h.rejectStreamHead)
@@ -35,6 +42,8 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	h.route(mux, "PATCH /api/v1/me/playback/devices/{device_id}", true, h.renameDevice)
 	h.route(mux, "DELETE /api/v1/me/playback/devices/{device_id}", true, h.deleteDevice)
 	h.route(mux, "PUT /api/v1/me/playback/devices/{device_id}/volume", true, h.setVolume)
+	h.route(mux, "POST /api/v1/me/playback/devices/{device_id}/activate", true, h.activate)
+	h.route(mux, "PUT /api/v1/me/playback/devices/{device_id}/sample-rate", true, h.sampleRate)
 	h.route(mux, "POST /api/v1/me/playback/zones/{zone_id}/commands", true, h.command)
 }
 
@@ -169,7 +178,10 @@ func respond(w http.ResponseWriter, r *http.Request, status int, result any, err
 
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	status, code, message := http.StatusServiceUnavailable, "database_unavailable", "播放区暂时不可用"
+	var busy *zones.DeviceBusyError
 	switch {
+	case errors.As(err, &busy):
+		status, code, message = http.StatusConflict, "device_busy", busy.Occupant.DisplayName+" 正在使用这台设备"
 	case errors.Is(err, zones.ErrUnsupportedProtocol):
 		status, code, message = http.StatusBadRequest, "unsupported_protocol", "不支持这个输出端协议版本"
 	case errors.Is(err, zones.ErrOutputSuperseded):

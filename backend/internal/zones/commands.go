@@ -39,19 +39,35 @@ func (s *Service) Command(ctx context.Context, userID, zoneID string, command Co
 	if err != nil {
 		return CommandResult{}, err
 	}
+	if err := s.prepareManagedCommand(ctx, userID, u, zoneID, command); err != nil {
+		return CommandResult{}, err
+	}
 	u.mu.RLock()
-	defer u.mu.RUnlock()
 	z := u.zones[zoneID]
 	if z == nil {
+		u.mu.RUnlock()
 		return CommandResult{}, ErrNotFound
 	}
 	if command.Command == "transfer" {
 		target := u.zones[command.TargetZoneID]
 		if target == nil {
+			u.mu.RUnlock()
 			return CommandResult{}, ErrNotFound
 		}
-		return s.transfer(ctx, userID, z, target)
+		z.mu.Lock()
+		udn, sessionID := z.device.ExternalID, cloneValue(z.outputSessionID)
+		z.mu.Unlock()
+		result, err := s.transfer(ctx, userID, z, target)
+		u.mu.RUnlock()
+		if err == nil && udn != "" && sessionID != nil {
+			// 队列已提交；释放旧输出的后续错误不能让调用方重试队列转移。
+			if releaseErr := s.managedOutputs().ReleaseIdle(ctx, userID, udn, *sessionID); releaseErr != nil {
+				s.reportAsync("upnp_transfer_release", userID, zoneID, releaseErr)
+			}
+		}
+		return result, err
 	}
+	defer u.mu.RUnlock()
 	z.dispatch.Lock()
 	defer z.dispatch.Unlock()
 	z.mu.Lock()

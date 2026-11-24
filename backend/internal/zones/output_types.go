@@ -28,6 +28,7 @@ type PlayingOutput struct {
 	PositionSeconds float64 `json:"position_seconds"`
 }
 type ClaimOutputInput struct {
+	Managed      bool           `json:"-"`
 	Protocol     int            `json:"protocol"`
 	Capabilities Capabilities   `json:"capabilities"`
 	Takeover     bool           `json:"takeover"`
@@ -63,6 +64,7 @@ type StreamBody struct {
 
 // 身份索引的归属与指针不可变；可变字段由对应播放区锁保护。
 type outputSession struct {
+	managed     bool
 	id, userID  string
 	zone        *zoneRuntime
 	state       string

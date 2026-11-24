@@ -176,6 +176,15 @@ func validCommandFields(fields inputObject, command string) bool {
 		return false
 	}
 	allowed := append([]string{"command"}, required...)
+	switch command {
+	case "play", "play_tracks", "play_entry", "next", "previous", "retry", "transfer":
+		if _, ok := fields["takeover"]; ok {
+			if !fields.required("takeover") {
+				return false
+			}
+			allowed = append(allowed, "takeover")
+		}
+	}
 	allowed = append(allowed, nullable...)
 	return fields.only(allowed...) && fields.required(required...)
 }

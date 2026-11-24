@@ -91,6 +91,16 @@ export function putDeviceVolume(deviceId: string, volume: number, muted: boolean
   return apiRequest({ method: "PUT", path: `${BASE}/devices/${idOf(deviceId)}/volume`, body: { volume, muted } }, decodeDeviceResult);
 }
 
+/** 选中一台局域网设备开始用它（M8 U3）：别人正在用时 409 device_busy，takeover 为 true 时接管（原播放区暂停）。 */
+export function activateDevice(deviceId: string, takeover: boolean): Promise<ApiResponse<DeviceResult>> {
+  return apiRequest({ method: "POST", path: `${BASE}/devices/${idOf(deviceId)}/activate`, body: { takeover } }, decodeDeviceResult);
+}
+
+/** 局域网设备的采样率上限：44100、48000、96000 或 192000。 */
+export function putDeviceSampleRate(deviceId: string, rate: number): Promise<ApiResponse<DeviceResult>> {
+  return apiRequest({ method: "PUT", path: `${BASE}/devices/${idOf(deviceId)}/sample-rate`, body: { max_sample_rate: rate } }, decodeDeviceResult);
+}
+
 export function sendZoneCommand(zoneId: string, command: ZoneCommand): Promise<ApiResponse<CommandResult>> {
   return apiRequest({ method: "POST", path: `${BASE}/zones/${idOf(zoneId)}/commands`, body: command }, decodeCommandResult);
 }
@@ -137,6 +147,8 @@ export const browserZoneApi: ZoneApi = {
   sendZoneCommand: async (zoneId, command) => (await sendZoneCommand(zoneId, command)).data,
   putDeviceVolume: async (deviceId, volume, muted) => (await putDeviceVolume(deviceId, volume, muted)).data,
   renameDevice: async (deviceId, name) => (await renameDevice(deviceId, name)).data,
+  activateDevice: async (deviceId, takeover) => (await activateDevice(deviceId, takeover)).data,
+  putDeviceSampleRate: async (deviceId, rate) => (await putDeviceSampleRate(deviceId, rate)).data,
   deleteDevice: async (deviceId) => {
     await deleteDevice(deviceId);
   },

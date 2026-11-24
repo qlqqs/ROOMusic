@@ -1,0 +1,138 @@
+// Package httpapi 提供局域网设备的管理员设置、手动登记与账号分配接口。
+package httpapi
+
+import (
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+
+	"github.com/qlqq/roomusic/backend/internal/devices/upnp"
+	"github.com/qlqq/roomusic/backend/internal/identity"
+	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
+)
+
+type Handlers struct {
+	guard   *identity.Guard
+	service *upnp.Service
+}
+
+func New(guard *identity.Guard, service *upnp.Service) *Handlers {
+	return &Handlers{guard: guard, service: service}
+}
+
+func (h *Handlers) Register(mux *http.ServeMux) {
+	const base = "/api/v1/admin/upnp"
+	mux.HandleFunc("GET "+base+"/settings", h.admin(h.settings))
+	mux.HandleFunc("PUT "+base+"/settings", h.admin(h.updateSettings))
+	mux.HandleFunc("GET "+base+"/devices", h.admin(h.list))
+	mux.HandleFunc("POST "+base+"/devices", h.admin(h.add))
+	mux.HandleFunc("DELETE "+base+"/devices/{udn}", h.admin(h.remove))
+	mux.HandleFunc("PUT "+base+"/devices/{udn}/grants", h.admin(h.grants))
+}
+
+func (h *Handlers) admin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && !h.guard.RequireSameOrigin(w, r) {
+			return
+		}
+		if _, ok := h.guard.RequireAdmin(w, r); ok {
+			next(w, r)
+		}
+	}
+}
+
+func decode(w http.ResponseWriter, r *http.Request, body any) bool {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(body) != nil || decoder.Decode(new(any)) != io.EOF {
+		httpserver.WriteError(w, r, http.StatusBadRequest, "invalid_json", "请求格式无效")
+		return false
+	}
+	return true
+}
+
+func respond(w http.ResponseWriter, r *http.Request, result any, err error) {
+	if err == nil {
+		if result == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		httpserver.WriteJSON(w, http.StatusOK, result)
+		return
+	}
+	status, code, message := http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用"
+	switch {
+	case errors.Is(err, upnp.ErrDisabled):
+		status, code, message = 409, "upnp_disabled", upnp.ErrDisabled.Error()
+	case errors.Is(err, upnp.ErrUnknownDevice):
+		status, code, message = 404, "not_found", upnp.ErrUnknownDevice.Error()
+	case errors.Is(err, upnp.ErrManualDevice):
+		status, code, message = 404, "not_found", upnp.ErrManualDevice.Error()
+	case errors.Is(err, upnp.ErrGrantUser):
+		status, code, message = 400, "invalid_input", upnp.ErrGrantUser.Error()
+	case errors.Is(err, upnp.ErrDeviceAddress):
+		status, code, message = 400, "invalid_address", "需要局域网设备 IP 或同主机的 HTTP 描述地址"
+	case errors.Is(err, upnp.ErrProbe):
+		status, code, message = 422, "device_unreachable", upnp.ErrProbe.Error()
+	case errors.Is(err, upnp.ErrDiscovery):
+		status, code, message = 503, "discovery_unavailable", upnp.ErrDiscovery.Error()
+	}
+	httpserver.WriteError(w, r, status, code, message)
+}
+
+func (h *Handlers) settings(w http.ResponseWriter, r *http.Request) {
+	v, err := h.service.Settings(r.Context())
+	respond(w, r, v, err)
+}
+
+func (h *Handlers) updateSettings(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Enabled *bool `json:"enabled"`
+		Shared  *bool `json:"shared"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if body.Enabled == nil && body.Shared == nil {
+		httpserver.WriteError(w, r, 400, "invalid_input", "需要指定设备开关或共享开关")
+		return
+	}
+	v, err := h.service.UpdateSettings(r.Context(), body.Enabled, body.Shared)
+	respond(w, r, v, err)
+}
+
+func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
+	items, err := h.service.Devices(r.Context())
+	respond(w, r, map[string]any{"items": items}, err)
+}
+
+func (h *Handlers) add(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Address string `json:"address"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	item, err := h.service.Add(r.Context(), body.Address)
+	respond(w, r, item, err)
+}
+
+func (h *Handlers) remove(w http.ResponseWriter, r *http.Request) {
+	respond(w, r, nil, h.service.Remove(r.Context(), r.PathValue("udn")))
+}
+
+func (h *Handlers) grants(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		UserIDs []string `json:"user_ids"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if body.UserIDs == nil {
+		respond(w, r, nil, upnp.ErrGrantUser)
+		return
+	}
+	ids, err := h.service.SetGrants(r.Context(), r.PathValue("udn"), body.UserIDs)
+	respond(w, r, map[string]any{"user_ids": ids}, err)
+}
