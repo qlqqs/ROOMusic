@@ -4,11 +4,14 @@
       "album_count": 0,
       "available": false,
       "id": "00000000-0000-4000-8000-000000000001",
+      "image": null,
       "initial_group": "T",
       "name": "Teresa Teng",
       "roles": [],
       "track_count": 0
     },
+    "bio": null,
+    "image": null,
     "name_source": "auto",
     "names": [],
     "names_pagination": {

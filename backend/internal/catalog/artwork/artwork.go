@@ -41,7 +41,8 @@ type Resource struct {
 func (s *Store) Lookup(ctx context.Context, database Queryer, resourceID string) (Resource, error) {
 	var key, mime string
 	if err := database.QueryRowContext(ctx, `SELECT storage_key,mime_type FROM release_artworks WHERE storage_key=$1
- UNION ALL SELECT storage_key,mime_type FROM release_external_artworks WHERE storage_key=$1 LIMIT 1`, resourceID).Scan(&key, &mime); err != nil {
+ UNION ALL SELECT storage_key,mime_type FROM release_external_artworks WHERE storage_key=$1
+ UNION ALL SELECT storage_key,mime FROM artist_external_artworks WHERE storage_key=$1 LIMIT 1`, resourceID).Scan(&key, &mime); err != nil {
 		return Resource{}, err
 	}
 	if !safeStorageKey(key) {
@@ -203,7 +204,8 @@ func (s *Store) Discard(ctx context.Context, db TxBeginner, key string) error {
 	}
 	var references int64
 	if err := tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM release_artworks WHERE storage_key=$1)
- + (SELECT count(*) FROM release_external_artworks WHERE storage_key=$1)`, key).Scan(&references); err != nil {
+ + (SELECT count(*) FROM release_external_artworks WHERE storage_key=$1)
+ + (SELECT count(*) FROM artist_external_artworks WHERE storage_key=$1)`, key).Scan(&references); err != nil {
 		return err
 	}
 	if references == 0 {

@@ -113,7 +113,7 @@ func (s *Store) loadArtistSummaries(ctx context.Context, ids []string) (map[stri
 	for rows.Next() {
 		var item ArtistSummary
 		var roles []byte
-		if err := rows.Scan(&item.ID, &item.Name, &item.InitialGroup, &item.AlbumCount, &item.TrackCount, &roles); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.InitialGroup, &item.AlbumCount, &item.TrackCount, &roles, &item.Image); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(roles, &item.Roles); err != nil {

@@ -2,6 +2,12 @@ package musicbrainz
 
 // 只解码整理专辑需要的字段，支持实体读取与三种查找能力的投影。
 type Entity struct {
+	Relations []struct {
+		Type string `json:"type"`
+		URL  struct {
+			Resource string `json:"resource"`
+		} `json:"url"`
+	} `json:"relations,omitempty"`
 	SortName    string   `json:"sort-name"`
 	Type        string   `json:"type"`
 	Status      string   `json:"status"`

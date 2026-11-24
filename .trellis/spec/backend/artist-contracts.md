@@ -58,7 +58,7 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 
 所有GET先鉴权与参数校验。`GET /artists`：q≤200字节，initial=A–Z/kana/#，role九项白名单（release_artist、album_artist及下列七种曲目角色），sort=name/album_count，分页1/50、最大100。只列有present参与且未重定向的身份。`role=album_artist`匹配发行级release_artist或album_artist任一；`role=release_artist`仍只匹配本身，DTO同词表。名字按首字母分组/C规范化键/ID；专辑数排序不分组。首字母采用固定Unicode17 Unihan kMandarin首音表，不扩为拼音搜索。
 
-`ArtistSummary={id,name,initial_group,album_count,track_count,roles,available}`，数字为全角色去重可见group/present轨数，role筛选只筛身份。发行级署名的曲目参与取其全部轨。摘要读取先按身份/来源去重，再将发行级展开的present轨与轨级present轨取完整并集，按当前归组计数；九项角色分别做present存在性判断，避免先物化“角色×曲目”再重复去重。不能由去重轨集合丢弃角色，也不缓存可能过期的参与数；详情含missing参与明细仍用原完整参与关系。
+`ArtistSummary={id,name,initial_group,album_count,track_count,roles,available,image}`，数字为全角色去重可见group/present轨数，role筛选只筛身份。发行级署名的曲目参与取其全部轨。摘要读取先按身份/来源去重，再将发行级展开的present轨与轨级present轨取完整并集，按当前归组计数；九项角色分别做present存在性判断，避免先物化“角色×曲目”再重复去重。不能由去重轨集合丢弃角色，也不缓存可能过期的参与数；详情含missing参与明细仍用原完整参与关系。
 
 - `GET /artists/{id}`：artist/revision/name_source/names/names_pagination/role_counts/redirect_artist_id；首批20名字；旧重定向ID仍200，保留安全摘要，子路由解析canonical；空身份available=false而不是404。
 - `/names`：`{id,key_id,name,is_display_name,origin}` 分页，按key拆分不可只拆繁体写法。
@@ -69,6 +69,17 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 `ArtistRef={artist_id,name,display_name}`，name为原署名、display_name为有效主名。ReleaseSummary加artist_refs/album_artist_refs，ReleaseTrack/TrackSummary及每条credit加artist_refs，数组必传、最多100。所有共享摘要须在同一SQL/只读快照里判断ready并读取refs；未就绪返回[]，不读半图。`releasesql.ArtistRefsReady`的目标/已发布规范化版本须取`textnorm.Version`，目标/已发布投影版本须取`artistgraph.Version`，不得硬编码协议版本。catalog延迟敏感只读入口复用readWithLocalJITOff，事务后恢复的集成测试不可省。
 
 - `GET /artist-candidates`（管理员）：不带`ignored`或`ignored=false`时是待处理候选，SQL与排序不变。`ignored=true`（2026-11-05）列出已忽略的名字对，同样按艺人对分组、每100对一块，`ArtistPage[ArtistCandidate]`形态不变；按忽略操作的`operations.created_at`取组内最大值降序，再按evidence_count降序。两位艺人已合并（解析到同一位）的不在任何一个列表里；同一对艺人部分名字对被忽略时两个列表各出现一次。其他值或参数重复为`400 invalid_filter`。恢复沿用`POST /artists/{id}/candidate-ignore`传`ignored:false`，执行器不变。
+
+### 艺人图片与简介
+
+列表、搜索、收藏、治理候选等返回的 `ArtistSummary` 均有 `image: string | null`，有值时为内容寻址图片资源 ID。使用 `GET /api/v1/artworks/{id}` 读取。详情的 `artist.image` 与顶层 `image.resource` 指向同一张图。
+
+| 详情字段 | 有资料时的对象 |
+| --- | --- |
+| `image` | `{resource, source, source_url, author, license, license_url}`。前三项为字符串，其余为字符串或 null。来源为 `fanarttv`、`theaudiodb`、`commons`。 |
+| `bio` | `{text, lang, source, source_url, license, license_url}`。正文、语言、来源与原文链接为字符串，许可和许可链接为字符串或 null。语言为 `zh` 或 `en`，来源为 `wikipedia` 或 `theaudiodb`。 |
+
+两项各自解析艺人重定向。有效艺人自身的记录优先，其次取最近并入的身份，同一合并时刻按艺人 ID 升序。旧 ID 请求仍保留该身份的摘要与 `redirect_artist_id`，其中资料取有效艺人。缺图或缺简介时对应字段显式为 `null`。即使曲库中该艺人的全部曲目暂时缺失，仍可查看已整理的资料。
 
 ## 4. 治理与错误矩阵
 

@@ -56,6 +56,80 @@
           }
         ],
         "name": "AcoustID"
+      },
+      {
+        "active": false,
+        "capabilities": [
+          "artist_lookup"
+        ],
+        "enabled": true,
+        "id": "wikidata",
+        "inactive_reason": "curation_disabled",
+        "name": "Wikidata"
+      },
+      {
+        "active": false,
+        "capabilities": [
+          "artist_image"
+        ],
+        "enabled": true,
+        "id": "commons",
+        "inactive_reason": "curation_disabled",
+        "name": "Wikimedia Commons"
+      },
+      {
+        "active": false,
+        "capabilities": [
+          "artist_bio"
+        ],
+        "enabled": true,
+        "id": "wikipedia",
+        "inactive_reason": "curation_disabled",
+        "name": "Wikipedia"
+      },
+      {
+        "active": false,
+        "capabilities": [
+          "artist_image"
+        ],
+        "enabled": true,
+        "id": "fanarttv",
+        "inactive_reason": "curation_disabled",
+        "keys": [
+          {
+            "configured": false,
+            "last_four": "",
+            "name": "project",
+            "status": "unchecked"
+          },
+          {
+            "configured": false,
+            "last_four": "",
+            "name": "personal",
+            "optional": true,
+            "status": "unchecked"
+          }
+        ],
+        "name": "Fanart.tv"
+      },
+      {
+        "active": false,
+        "capabilities": [
+          "artist_image",
+          "artist_bio"
+        ],
+        "enabled": true,
+        "id": "theaudiodb",
+        "inactive_reason": "curation_disabled",
+        "keys": [
+          {
+            "configured": false,
+            "last_four": "",
+            "name": "api_key",
+            "status": "unchecked"
+          }
+        ],
+        "name": "TheAudioDB"
       }
     ]
   },

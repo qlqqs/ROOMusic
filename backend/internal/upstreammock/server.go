@@ -60,6 +60,15 @@ func New(opts Options) (*Server, error) {
 	s.route("GET /coverartarchive/{kind}/{id}/{$}", s.coverManifest)
 	s.route("GET /coverartarchive/{kind}/{id}", s.coverManifest)
 	s.route("GET /coverartarchive/release/{id}/{image}", s.coverImage)
+	s.route("GET /wikidata/w/api.php", s.wikidata)
+	s.route("GET /commons/w/api.php", s.commons)
+	s.route("GET /commons/thumb/960/{image}", s.commonsThumb)
+	s.route("GET /wikipedia/{lang}/api/rest_v1/page/summary/{title}", s.wikipedia)
+	s.route("GET /fanarttv/v3/music/{id}", s.fanart)
+	s.route("GET /fanarttv/images/{image}", s.fanartImage)
+	s.route("GET /theaudiodb/api/v1/json/{key}/artist-mb.php", s.audioDB)
+	s.route("GET /theaudiodb/images/{image}", s.audioDBImage)
+	s.route("GET /theaudiodb/images/{image}/medium", s.audioDBImage)
 	s.route("GET /lrclib/api/get", s.lyrics)
 	s.route("GET /lrclib/api/search", s.lyrics)
 	s.route("POST /acoustid/v2/lookup", s.acoustid)
@@ -103,7 +112,11 @@ func (s *Server) record(service string, r *http.Request) (Scenario, *requestReco
 			q.Set(key, "***")
 		}
 	}
-	rec := &requestRecord{Time: time.Now().UTC(), Service: service, Method: r.Method, Path: r.URL.Path, Query: q}
+	path := r.URL.Path
+	if service == "theaudiodb" && r.PathValue("key") != "" {
+		path = "/theaudiodb/api/v1/json/***/artist-mb.php"
+	}
+	rec := &requestRecord{Time: time.Now().UTC(), Service: service, Method: r.Method, Path: path, Query: q}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.records[s.next] = rec

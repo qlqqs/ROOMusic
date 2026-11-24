@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"slices"
+	"sync"
 
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/sources"
@@ -15,6 +16,9 @@ type SourceRegistration struct {
 	Releases     sources.ReleaseFinder
 	Recordings   sources.RecordingFinder
 	Artists      sources.ArtistFinder
+	ArtistLinks  sources.ArtistLinkFinder
+	ArtistImages sources.ArtistImageFinder
+	ArtistBios   sources.ArtistBioFinder
 	Covers       sources.CoverFinder
 	Lyrics       sources.LyricsFinder
 	Fingerprints sources.FingerprintFinder
@@ -32,10 +36,11 @@ type SourceSettings struct {
 }
 
 type Sources struct {
-	keys       KeyStore
-	scanCheck  func(context.Context) (bool, error)
-	db         *sql.DB
-	registered []SourceRegistration
+	rejectedDefaults sync.Map // 键为来源与被拒绝的内置密钥名。
+	keys             KeyStore
+	scanCheck        func(context.Context) (bool, error)
+	db               *sql.DB
+	registered       []SourceRegistration
 }
 
 func NewSources(db *sql.DB, registrations ...SourceRegistration) *Sources {
@@ -58,7 +63,7 @@ func (s *Sources) lookup(id string) (SourceRegistration, bool) {
 
 func unknownSource() error { return operations.NotFound("not_found", "外部源不存在") }
 
-func sourceState(ctx context.Context, tx *sql.Tx, r SourceRegistration, overall Settings) (SourceSettings, error) {
+func (s *Sources) sourceState(ctx context.Context, tx *sql.Tx, r SourceRegistration, overall Settings) (SourceSettings, error) {
 	d := r.Declaration
 	item := SourceSettings{ID: d.ID, Name: d.Name, Capabilities: d.Capabilities, Enabled: d.DefaultEnabled}
 	err := tx.QueryRowContext(ctx, `SELECT enabled FROM curation_source_settings WHERE source=$1`, d.ID).Scan(&item.Enabled)
@@ -82,10 +87,15 @@ func sourceState(ctx context.Context, tx *sql.Tx, r SourceRegistration, overall 
 	}
 	if reason == "" {
 		switch {
-		case slices.ContainsFunc(item.Keys, func(k SourceKeySettings) bool { return !k.Configured }):
+		case slices.ContainsFunc(item.Keys, func(k SourceKeySettings) bool { return !k.Optional && !k.Configured }):
 			reason = "key_missing"
 		case slices.ContainsFunc(item.Keys, func(k SourceKeySettings) bool { return k.Status == "invalid" }):
 			reason = "key_invalid"
+		case slices.ContainsFunc(item.Keys, func(k SourceKeySettings) bool {
+			_, rejected := s.rejectedDefaults.Load(sourceKeyPurpose(d.ID, k.Name))
+			return !k.Configured && k.Optional && rejected
+		}):
+			reason = "bundled_key_rejected"
 		}
 	}
 	item.Active = reason == ""
@@ -107,7 +117,7 @@ func (s *Sources) List(ctx context.Context) ([]SourceSettings, error) {
 	}
 	items := make([]SourceSettings, 0, len(s.registered))
 	for _, r := range s.registered {
-		item, err := sourceState(ctx, tx, r, settings)
+		item, err := s.sourceState(ctx, tx, r, settings)
 		if err != nil {
 			return nil, err
 		}
@@ -131,15 +141,15 @@ func (s *Sources) SetEnabled(ctx context.Context, id, actorID string, enabled bo
 	if err != nil {
 		return SourceSettings{}, err
 	}
-	return committedSourceState(ctx, tx, r)
+	return s.committedSourceState(ctx, tx, r)
 }
 
-func committedSourceState(ctx context.Context, tx *sql.Tx, r SourceRegistration) (SourceSettings, error) {
+func (s *Sources) committedSourceState(ctx context.Context, tx *sql.Tx, r SourceRegistration) (SourceSettings, error) {
 	settings, err := loadSettings(ctx, tx)
 	if err != nil {
 		return SourceSettings{}, err
 	}
-	item, err := sourceState(ctx, tx, r, settings)
+	item, err := s.sourceState(ctx, tx, r, settings)
 	if err != nil {
 		return SourceSettings{}, err
 	}
@@ -169,7 +179,7 @@ func (s *Sources) Check(ctx context.Context, id string) error {
 	if settings.Paused {
 		return operations.Conflict("curation_paused", "自动整理已暂停")
 	}
-	item, err := sourceState(ctx, tx, r, settings)
+	item, err := s.sourceState(ctx, tx, r, settings)
 	if err != nil {
 		return err
 	}
@@ -200,6 +210,8 @@ func disabledSource(reason string) error {
 	switch reason {
 	case "fingerprint_unavailable":
 		message = "声学指纹工具不可用"
+	case "bundled_key_rejected":
+		message = "外部源拒绝了内置密钥"
 	case "key_missing":
 		message = "尚未填齐外部源密钥"
 	case "key_invalid":

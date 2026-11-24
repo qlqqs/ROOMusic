@@ -194,16 +194,27 @@ func (s *Sources) FingerprintFinder(sourceID string) (sources.FingerprintFinder,
 }
 
 func (g guardedFingerprint) LookupFingerprint(ctx context.Context, fp sources.Fingerprint) ([]sources.FingerprintMatch, error) {
+	return withSourceKeys(ctx, g.guardedFinders, func(ctx context.Context) ([]sources.FingerprintMatch, error) {
+		return g.registration.Fingerprints.LookupFingerprint(ctx, fp)
+	})
+}
+
+func withSourceKeys[T any](ctx context.Context, g guardedFinders, lookup func(context.Context) (T, error)) (T, error) {
+	var zero T
 	ctx, err := g.background(ctx)
 	if err != nil {
-		return nil, err
+		return zero, err
 	}
 	used := make(map[string]keyUse)
-	rows, err := g.registration.Fingerprints.LookupFingerprint(context.WithValue(ctx, keyUseContext{}, used), fp)
+	rows, err := lookup(context.WithValue(ctx, keyUseContext{}, used))
 	var invalid *sources.InvalidKeyError
 	status := "valid"
 	if errors.As(err, &invalid) {
 		status = "invalid"
+		d := g.registration.Declaration
+		if _, adminKey := used[invalid.Name]; !adminKey && slices.Contains(d.OptionalKeys, invalid.Name) {
+			g.gate.rejectedDefaults.Store(sourceKeyPurpose(d.ID, invalid.Name), true)
+		}
 	} else if err != nil {
 		return rows, err
 	}
@@ -219,7 +230,7 @@ func (g guardedFingerprint) LookupFingerprint(ctx context.Context, fp sources.Fi
 	}
 	if len(names) > 0 {
 		if writeErr := g.gate.markKeys(ctx, g.registration.Declaration.ID, names, ciphertexts, status); writeErr != nil {
-			return nil, writeErr
+			return zero, writeErr
 		}
 	}
 	return rows, err

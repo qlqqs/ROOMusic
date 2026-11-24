@@ -1,0 +1,69 @@
+{
+  "body": {
+    "artist": {
+      "album_count": 1,
+      "available": true,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "image": "28e84b8f75db28325ebb4f49a70b634ae7900e53d717a46f1271dc5d8bfd8a8b.png",
+      "initial_group": "D",
+      "name": "邓丽君",
+      "roles": [
+        "release_artist",
+        "album_artist",
+        "track_artist"
+      ],
+      "track_count": 2
+    },
+    "bio": {
+      "lang": "zh",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "source": "wikipedia",
+      "source_url": "https://zh.wikipedia.org/wiki/Sample",
+      "text": "这段合成简介展示艺人的资料与署名。"
+    },
+    "image": {
+      "author": "样本摄影组",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "resource": "28e84b8f75db28325ebb4f49a70b634ae7900e53d717a46f1271dc5d8bfd8a8b.png",
+      "source": "commons",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Sample.png"
+    },
+    "name_source": "auto",
+    "names": [
+      {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "is_display_name": true,
+        "key_id": "00000000-0000-4000-8000-000000000003",
+        "name": "邓丽君",
+        "origin": "scan"
+      }
+    ],
+    "names_pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 1
+    },
+    "redirect_artist_id": null,
+    "revision": 9,
+    "role_counts": [
+      {
+        "present": 2,
+        "role": "release_artist",
+        "total": 3
+      },
+      {
+        "present": 2,
+        "role": "album_artist",
+        "total": 3
+      },
+      {
+        "present": 2,
+        "role": "track_artist",
+        "total": 3
+      }
+    ]
+  },
+  "status": 200
+}

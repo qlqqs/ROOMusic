@@ -13,7 +13,27 @@
           "locale": "en",
           "primary": true
         }
-      ]
+      ],
+      "media": {
+        "qid": "Q900001",
+        "link_wikidata": true,
+        "commons": "Paper Islet rehearsal.png",
+        "image": "cover.png",
+        "articles": {
+          "zh": {
+            "title": "纸屿（二重奏）",
+            "intro": "纸屿是一支虚构的海岸二重奏，以录制潮声与木吉他合奏为特色。"
+          },
+          "en": {
+            "title": "Paper Islet (duo)",
+            "intro": "Paper Islet is a fictional duo that records acoustic music along the coast."
+          }
+        },
+        "fanart_id": "910001",
+        "audiodb_id": "920001",
+        "biography_cn": "纸屿以海岸为主题创作音乐。[1]",
+        "biography_en": "Paper Islet makes music inspired by the coast."
+      }
     },
     {
       "id": "10000000-0000-4000-8000-000000000002",
@@ -28,7 +48,13 @@
           "locale": "en",
           "primary": true
         }
-      ]
+      ],
+      "media": {
+        "image": "cover.png",
+        "audiodb_id": "920002",
+        "biography_cn": "空心子午线是一支虚构的夜车合奏组。[2]",
+        "biography_en": "Hollow Meridian is a fictional ensemble inspired by overnight trains."
+      }
     },
     {
       "id": "10000000-0000-4000-8000-000000000003",
@@ -44,6 +70,20 @@
           "primary": true
         }
       ]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000004",
+      "name": "盐风小组",
+      "sort-name": "盐风小组",
+      "type": "Group",
+      "country": "CN",
+      "disambiguation": "港湾三重奏",
+      "aliases": [],
+      "media": {
+        "qid": "Q900004",
+        "commons": "Salt Wind Trio.png",
+        "image": "cover.png"
+      }
     }
   ],
   "groups": [

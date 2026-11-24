@@ -43,9 +43,14 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/acoustid"
+	"github.com/qlqq/roomusic/backend/internal/sources/commons"
 	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
+	"github.com/qlqq/roomusic/backend/internal/sources/fanarttv"
 	"github.com/qlqq/roomusic/backend/internal/sources/lrclib"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
+	"github.com/qlqq/roomusic/backend/internal/sources/theaudiodb"
+	"github.com/qlqq/roomusic/backend/internal/sources/wikidata"
+	"github.com/qlqq/roomusic/backend/internal/sources/wikipedia"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 	zonesapi "github.com/qlqq/roomusic/backend/internal/zones/httpapi"
@@ -202,7 +207,25 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	music := musicbrainz.New(assembly.music)
 	covers := coverartarchive.New(assembly.covers)
 	lyrics := lrclib.New(assembly.lyrics)
+	artistOptions := func(id string) sources.Options {
+		opts := sources.Options{DataDirectory: settings.DataDirectory, Logger: logger, MockHost: mockHost}
+		if settings.UpstreamMockURL != "" {
+			opts.BaseURL = settings.UpstreamMockURL + "/" + id
+		}
+		opts.Keys = func(ctx context.Context) (map[string]string, error) { return sourceGate.Keys(ctx, id) }
+		return opts
+	}
+	data := wikidata.New(artistOptions("wikidata"))
+	commonsImages := commons.New(artistOptions("commons"))
+	wiki := wikipedia.New(artistOptions("wikipedia"))
+	fanart := fanarttv.New(artistOptions("fanarttv"))
+	audioDB := theaudiodb.New(artistOptions("theaudiodb"))
 	if lifecycle != nil {
+		data.StartCacheCleanup(lifecycle)
+		commonsImages.StartCacheCleanup(lifecycle)
+		wiki.StartCacheCleanup(lifecycle)
+		fanart.StartCacheCleanup(lifecycle)
+		audioDB.StartCacheCleanup(lifecycle)
 		acoustic.StartCacheCleanup(lifecycle)
 		covers.StartCacheCleanup(lifecycle)
 		lyrics.StartCacheCleanup(lifecycle)
@@ -216,7 +239,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		assembly.program.Fingerprints = programFingerprints{playback.NewFingerprints(database, settings.AllowedLibraryRoots, assembly.fingerprinter, logger)}
 	}
 	sourceGate = curation.NewSources(database,
-		curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: music, Recordings: music, Artists: music},
+		curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: music, Recordings: music, Artists: music, ArtistLinks: music},
 		curation.SourceRegistration{Declaration: coverartarchive.Declaration(), Covers: covers},
 		curation.SourceRegistration{Declaration: lrclib.Declaration(), Lyrics: lyrics},
 		curation.SourceRegistration{
@@ -232,10 +255,16 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 				}
 			},
 		},
+		curation.SourceRegistration{Declaration: wikidata.Declaration(), ArtistLinks: data},
+		curation.SourceRegistration{Declaration: commons.Declaration(), ArtistImages: commonsImages},
+		curation.SourceRegistration{Declaration: wikipedia.Declaration(), ArtistBios: wiki},
+		curation.SourceRegistration{Declaration: fanarttv.Declaration(), ArtistImages: fanart},
+		curation.SourceRegistration{Declaration: theaudiodb.Declaration(), ArtistImages: audioDB, ArtistBios: audioDB},
 	).WithScanCheck(scanRunning).WithKeyStore(instanceSecrets)
 	artistGovernance := governance.NewArtistGovernance(artistResolutionAdapter{})
 	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger).WithArtists(artistGovernance)
 	operationKinds := []operations.Kind{curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
+		curation.ArtistImageOperations(curationWriter), curation.ArtistBioOperations(curationWriter),
 		governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.TrackCorrectionOperations(), governance.TrackAutoCorrectionOperations(curationWriter), governance.GroupChangeOperations(curationWriter), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(),
 		governance.ReleaseMergeOperations(operations.TypeReleaseMerge, curationWriter), governance.ReleaseMergeOperations(operations.TypeReleaseAutoMerge, curationWriter)}

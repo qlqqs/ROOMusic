@@ -4,10 +4,27 @@
       "album_count": 0,
       "available": false,
       "id": "00000000-0000-4000-8000-000000000001",
+      "image": "28e84b8f75db28325ebb4f49a70b634ae7900e53d717a46f1271dc5d8bfd8a8b.png",
       "initial_group": "S",
       "name": "失联艺人",
       "roles": [],
       "track_count": 0
+    },
+    "bio": {
+      "lang": "zh",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "source": "wikipedia",
+      "source_url": "https://zh.wikipedia.org/wiki/Sample",
+      "text": "这位虚构的艺人曾以沿岸生活为题创作音乐。"
+    },
+    "image": {
+      "author": "样本摄影组",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "resource": "28e84b8f75db28325ebb4f49a70b634ae7900e53d717a46f1271dc5d8bfd8a8b.png",
+      "source": "commons",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Sample.png"
     },
     "name_source": "auto",
     "names": [

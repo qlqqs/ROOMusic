@@ -24,6 +24,7 @@ import (
 type ClientFactory func(egress.Options) (*http.Client, error)
 
 type Options struct {
+	Keys                   func(context.Context) (map[string]string, error)
 	MockHost               MockHost
 	MaxRedirects           int
 	AllowRedirect          func(*url.URL) bool
@@ -36,6 +37,8 @@ type Options struct {
 }
 
 type Requester struct {
+	wikimedia     bool
+	language      string
 	mockHost      MockHost
 	maxRedirects  int
 	allowRedirect func(*url.URL) bool
@@ -117,6 +120,7 @@ type response struct {
 }
 
 type requestSpec struct {
+	prepare                 func(context.Context, *url.URL) (map[string]string, error)
 	method, address, accept string
 	cacheInput              string
 	limit                   int64
@@ -134,8 +138,16 @@ func jsonLimit(ctx context.Context) int64 {
 
 // GetJSON 只在 decode 确认结构可用后缓存响应。decode 的两个返回值依次表示空结果和结构有效。
 func (r *Requester) GetJSON(ctx context.Context, address string, decode func([]byte) (empty, valid bool)) error {
-	spec := requestSpec{method: http.MethodGet, address: address, accept: "application/json", limit: jsonLimit(ctx), timeout: 20 * time.Second}
+	return r.GetAuthenticatedJSON(ctx, address, nil, "", decode)
+}
+
+// GetAuthenticatedJSON 的 address 只含公开参数，prepare 在每次真正出站前为本次请求填入密钥。
+func (r *Requester) GetAuthenticatedJSON(ctx context.Context, address string, prepare func(context.Context, *url.URL) (map[string]string, error), keyName string, decode func([]byte) (empty, valid bool)) error {
+	spec := requestSpec{method: http.MethodGet, address: address, accept: "application/json", limit: jsonLimit(ctx), timeout: 20 * time.Second, prepare: prepare}
 	spec.decode = func(status int, body []byte) (bool, bool, error) {
+		if keyName != "" && (status == http.StatusUnauthorized || status == http.StatusForbidden) {
+			return false, false, &InvalidKeyError{Name: keyName}
+		}
 		if status == http.StatusNotFound {
 			return true, false, ErrNotFound
 		}
@@ -181,6 +193,12 @@ func (r *Requester) do(ctx context.Context, spec requestSpec) (response, error) 
 	request.URL.Host = strings.ToLower(request.URL.Host)
 	request.Header.Set("Accept", spec.accept)
 	request.Header.Set("User-Agent", UserAgent())
+	if r.wikimedia {
+		request.Header.Set("Accept-Encoding", "gzip")
+	}
+	if r.language != "" {
+		request.Header.Set("Accept-Language", r.language)
+	}
 	keyInput := spec.method + " " + request.URL.String()
 	if spec.method == http.MethodPost {
 		keyInput += "\x00" + spec.cacheInput
@@ -226,7 +244,11 @@ func (r *Requester) do(ctx context.Context, spec requestSpec) (response, error) 
 			}
 			if err == nil || errors.Is(err, ErrNotFound) {
 				if spec.decode != nil && res.body != nil {
-					r.cache.store(ctx, key, res.status, res.body, empty, background)
+					body := res.body
+					if spec.prepare != nil && res.status == http.StatusNotFound {
+						body = nil
+					}
+					r.cache.store(ctx, key, res.status, body, empty, background)
 				}
 				if err != nil {
 					return response{}, err
@@ -245,10 +267,18 @@ func (r *Requester) do(ctx context.Context, spec requestSpec) (response, error) 
 			r.cache.fail(key)
 			return response{}, ErrTryLater
 		}
+		delay := retryDelay(res.retryAfter, r.cache.now(), attempt)
+		if r.wikimedia && (res.status == http.StatusTooManyRequests || res.status == http.StatusServiceUnavailable) {
+			if requested, ok := retryAfterDelay(res.retryAfter, r.cache.now()); ok {
+				delay = requested
+			} else {
+				delay = max(delay, 5*time.Second)
+			}
+		}
 		select {
 		case <-ctx.Done():
 			return response{}, ctx.Err()
-		case <-r.after(retryDelay(res.retryAfter, r.cache.now(), attempt)):
+		case <-r.after(delay):
 		}
 	}
 }
@@ -274,15 +304,23 @@ func (r *Requester) hit(ctx context.Context) {
 
 func retryDelay(header string, now time.Time, attempt int) time.Duration {
 	const maximum = 60 * time.Second
-	header = strings.TrimSpace(header)
-	if n, err := strconv.ParseUint(header, 10, 64); err == nil {
-		return time.Duration(min(n, 60)) * time.Second
-	}
-	if date, err := http.ParseTime(header); err == nil {
-		return min(maximum, max(0, date.Sub(now)))
+	if requested, ok := retryAfterDelay(header, now); ok {
+		return min(maximum, requested)
 	}
 	base := time.Second << attempt
 	return min(maximum, base+time.Duration(rand.Int64N(int64(base)/2)))
+}
+
+func retryAfterDelay(header string, now time.Time) (time.Duration, bool) {
+	header = strings.TrimSpace(header)
+	if n, err := strconv.ParseUint(header, 10, 64); err == nil {
+		return time.Duration(min(n, uint64(math.MaxInt64/int64(time.Second)))) * time.Second, true
+	}
+	date, err := http.ParseTime(header)
+	if err != nil {
+		return 0, false
+	}
+	return max(0, date.Sub(now)), true
 }
 
 func (r *Requester) attempt(ctx context.Context, c caller, background bool, request *http.Request, attempt int, spec requestSpec) (response, error) {
@@ -308,8 +346,11 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 			return err
 		}
 		next.Header = make(http.Header)
-		next.Header.Set("Accept", request.Header.Get("Accept"))
-		next.Header.Set("User-Agent", request.Header.Get("User-Agent"))
+		for _, name := range []string{"Accept", "User-Agent", "Accept-Encoding", "Accept-Language"} {
+			if value := request.Header.Get(name); value != "" {
+				next.Header.Set(name, value)
+			}
+		}
 		permitErr = c.check(next.Context())
 		return permitErr
 	}
@@ -320,7 +361,17 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, spec.timeout)
 	defer cancel()
-	req := request.WithContext(requestCtx)
+	req := request.Clone(requestCtx)
+	if spec.prepare != nil {
+		headers, err := spec.prepare(req.Context(), req.URL)
+		if err != nil {
+			r.limiter.release(false)
+			return response{}, err
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+	}
 	if spec.form != nil {
 		if err := prepareForm(req, spec.form); err != nil {
 			r.limiter.release(false)
@@ -328,7 +379,12 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 		}
 	}
 	started := time.Now()
-	r.limiter.release(true)
+	if r.wikimedia {
+		r.limiter.startSerial()
+		defer r.limiter.release(false)
+	} else {
+		r.limiter.release(true)
+	}
 	res := fetch(&client, req, spec.limit)
 	if logger := r.cache.logger; logger != nil {
 		attrs := []any{"event", "sources.request.finished", "module", "sources", "message", "外部源请求结束", "source", r.cache.source, "domain", req.URL.Hostname(), "duration_ms", time.Since(started).Milliseconds(), "attempt", attempt}
@@ -395,7 +451,17 @@ func fetch(client *http.Client, req *http.Request, limit int64) response {
 		if resp.ContentLength > limit {
 			return res
 		}
-		body, err := io.ReadAll(io.LimitReader(resp.Body, min(limit, math.MaxInt64-1)+1))
+		var reader io.Reader = resp.Body
+		// 显式发送 Accept-Encoding 后，net/http 不代为解压。上限同时约束解压后的实际大小。
+		if req.Header.Get("Accept-Encoding") == "gzip" && strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
+			compressed, err := gzip.NewReader(resp.Body)
+			if err != nil {
+				return res
+			}
+			defer compressed.Close()
+			reader = compressed
+		}
+		body, err := io.ReadAll(io.LimitReader(reader, min(limit, math.MaxInt64-1)+1))
 		if int64(len(body)) > limit {
 			return res
 		}

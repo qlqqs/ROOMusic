@@ -76,6 +76,12 @@ func (u *unit) write(ctx context.Context, step string, write func(batch, key str
 	if err := w.rotateBatch(ctx); err != nil {
 		return err
 	}
+	return u.writeInBatch(ctx, step, write)
+}
+
+// 同一艺人的两项写入在单元开始时预留批次容量。
+func (u *unit) writeInBatch(ctx context.Context, step string, write func(batch, key string) error) error {
+	w := u.w
 	if w.batch.ID == "" {
 		b, err := w.writer.OpenBatch(ctx, "program")
 		if err != nil {
@@ -122,6 +128,9 @@ func (u *unit) write(ctx context.Context, step string, write func(batch, key str
 	w.mu.Unlock()
 	if b.Operations == 0 {
 		return w.closeBatch(ctx)
+	}
+	if u.subject == "artist_media" {
+		return nil
 	}
 	return w.rotateBatch(ctx)
 }

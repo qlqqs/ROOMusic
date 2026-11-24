@@ -281,7 +281,7 @@ type Applied struct {
 ### 14.2 读取
 
 - **封面**：`releasesql` 的连接片段是两个左连接（外部的只在没有本地行时连上），四列各取 `COALESCE(本地, 外部)`；所有摘要（发行、专辑的代表版本、
-  曲目摘要、搜索、最近添加、播放历史、待处理问题、认领建议）因此一致。`artwork.Store.Lookup` 按存储键在两张表里找，图片接口不区分来源。
+  曲目摘要、搜索、最近添加、播放历史、待处理问题、认领建议）因此一致。`artwork.Store.Lookup` 按存储键在本地封面、外部封面和艺人图片表里找，图片接口不区分来源。
   摘要里的 `artwork` 对象**没有来源字段**；哪些是自动补的从操作记录看。扫描反馈的封面指纹只看本地的。
 - **歌词**：`LoadTrackLyrics` 先用本地的；本地没有，或有但解析不出可显示的行时，用外部的，`source` 为 `online`
   （见[歌词合同](./lyrics-contracts.md)）。“本地有歌词”在读取与写入两处是同一个判断：`catalog.ParseLyrics` 成功。
@@ -292,7 +292,7 @@ type Applied struct {
 - 扫描的语句不涉及两张新表：全量重扫（含扫描删除本地封面关联的情形）、改名移动、认领之后外部封面与外部歌词保持。认领不搬它们。
 - `artwork/` 目录现在有两个写者（扫描与自动整理）。“数引用再删文件”与“落盘再写行”靠**存储键的事务级 advisory lock** 互斥
   （两参数形式，类别是 ASCII 的 `ARTW`，第二个参数是存储键的哈希；永远最后取，在目录写锁与发行行锁之后）：
-  扫描与自动整理在写关联之前取锁并确认文件在；`Store.Discard` 开事务、取锁、数**两张表**的引用，为 0 才删文件。
+  扫描与自动整理在写关联之前取锁并确认文件在；`Store.Discard` 开事务、取锁、数本地封面、外部封面和艺人图片的引用，为 0 才删文件。
 - `artwork.Store` 的导出入口：`Describe`（校验并算出键，不落盘）、`Write`／`WriteIfChanged`（在调用方的事务里取锁并落盘）、`Exists`、`Discard`。
 
 ### 14.4 写入 `ApplyArtwork`、`ApplyLyrics`
@@ -870,3 +870,13 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | `TestPostgreSQLCurationMergeRevert` | 按批和按来源撤销均写标记并阻止再发现；后续人工结构操作使自动撤销跳过 |
 | `TestPostgreSQLCurationExceptionMergeAcceptDecline` | 采纳以当前管理员身份执行；前态及令牌变化返回 `exception_stale`；不采纳写标记 |
 | `TestPostgreSQLStewardReviewPolicyV4MergeEvidence` | 第 4 版证据包含双方和录音交集，外部计数取自对应操作后态；旧版批准被拒；缺少对应直接转人工 |
+
+## 21. 艺人图片与简介
+
+程序层按有效艺人调度 `artist_media`。入口是 `external_links` 中 `musicbrainz / artist` 的对应，合并前身份的 MBID 同样参与。有效身份和并入方都缺少某一项资料时才取该项。图片依次查 Fanart.tv、TheAudioDB、Commons。简介依次查中文维基百科、TheAudioDB 中文、英文维基百科、TheAudioDB 英文。源闸门处理总开关、单源开关和密钥状态。上一源出错可以继续尝试下一源，仍有缺口且遇到暂时错误时按工作状态退避。输入摘要涵盖艺人 MBID、缺口、来源状态与抑制标记。
+
+`ApplyArtistImage`、`ApplyArtistBio` 以 `artist` 为操作目标。图片先经受管图片存储校验，简介为最多 4000 个 Unicode 字符的纯文本。写入顺序为操作幂等锁、目录写锁、艺人行锁；事务内复查总开关、批次与 MBID 对应。同一有效身份（含并入方）已有资料返回 `occupied`，来源条目命中撤销标记返回 `suppressed`，Commons 缺少许可名返回 `license_missing`。三种情况均返回 `nothing_to_apply` 并保留跳过原因。图片与简介分别写一条操作，类型为 `artist_external_artwork`、`artist_external_bio`，保存在本轮程序批次，`origin.provider` 为实际内容来源。
+
+资料行与操作记录在同一事务写入，图片按内容寻址并持有存储键锁。操作快照保存出处、许可与图片资源或简介内容。每次写入或撤销都递增 `artists.auto_revision`，撤销响应带目标的人工版本 `edit_revision`。操作列表展示艺人摘要和图片规格或简介语言、字符数。
+
+单条、按批次与按来源撤销共用同一执行器。仅删除原操作仍持有的资料行，标记保存在写入时的艺人身份上。标记的 `subject` 为 `artist_image` 或 `artist_bio`，`value={source,external_id}`，`value_hash` 是来源 ID、NUL 和外部条目标识的 SHA-256。图片没有独立条目标识时用下载地址的 SHA-256。新一轮查询核对有效身份和并入方的标记。图片撤销提交后，`Discard` 在存储键锁内核对发行封面和艺人图片的所有引用，再清理文件。写入失败只清理这次实际写过的文件。回退迁移清除资料行、对应操作与抑制标记、工作状态；SQL 回退不会访问数据目录中的图片文件。

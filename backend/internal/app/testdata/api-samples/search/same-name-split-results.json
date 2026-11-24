@@ -11,6 +11,7 @@
           "album_count": 1,
           "available": true,
           "id": "00000000-0000-4000-8000-000000000001",
+          "image": null,
           "initial_group": "T",
           "name": "同名艺人",
           "roles": [
@@ -36,6 +37,7 @@
           "album_count": 1,
           "available": true,
           "id": "00000000-0000-4000-8000-000000000002",
+          "image": null,
           "initial_group": "T",
           "name": "同名艺人甲",
           "roles": [

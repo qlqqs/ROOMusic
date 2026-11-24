@@ -28,20 +28,23 @@ M7 子任务 B1（2026-11）把向外部音乐数据源发请求这件事从管�
 `sources` 及其子包**不依赖** `curation`、`steward`、`catalog` 与数据库：它们只管怎样向外部问。“现在能不能问”由 `curation.Sources`
 （闸门）决定。新增一个源就是在 `sources/` 下加一个子包并在 `app` 里注册，不改调用方。
 
+艺人资料的五个子包及其请求见第 8b 节。它们依赖 `sources`，其中按 MBID 请求的 Wikidata、Fanart.tv 与 TheAudioDB 还依赖 `platform/uuid`。
+
 ## 3. 声明与能力
 
 ```go
 type Declaration struct {
     ID             string        // ^[a-z0-9._-]{1,64}$；与操作记录 origin.provider 是同一个标识
     Name           string
-    Capabilities   []Capability  // release_lookup | recording_lookup | artist_lookup | cover_art | lyrics | fingerprint_lookup
+    Capabilities   []Capability  // release_lookup | recording_lookup | artist_lookup | cover_art | lyrics | fingerprint_lookup | artist_image | artist_bio
     DefaultEnabled bool
+    OptionalKeys   []string      // Keys 中可以缺省的密钥名
     MinInterval    time.Duration // 全实例两次出站的最小间隔
-    Keys           []string      // 需要管理员填写的密钥名（有序）；AcoustID 在发布镜像里为 user，没有内置应用密钥的构建为 application、user，其余源为空（B3、B3 补充）
+    Keys           []string      // 需要管理员填写的密钥名（有序）；各源名称与是否必填见对应来源小节
 }
 ```
 
-能力是五个窄接口：`ReleaseFinder`（按 ID、条码、厂牌编号、光盘目录、标题艺人曲目数）、`RecordingFinder`（按 ID、ISRC、标题艺人时长）、
+发行、录音、艺人、封面和歌词的窄接口为`ReleaseFinder`（按 ID、条码、厂牌编号、光盘目录、标题艺人曲目数）、`RecordingFinder`（按 ID、ISRC、标题艺人时长）、
 `ArtistFinder`（按 ID、名字）、`CoverFinder`（`Covers` 读图片清单、`FrontCover` 选出主封面并下载）、`LyricsFinder`（`LyricsFor` 精确查询、
 `SearchLyrics` 候选）。程序层只面向这些接口与中立类型（`Release`、`Track`、`Recording`、`Artist`、`Credit`、`DiscTOC`、`DiscMatch`、
 `CoverTarget`、`CoverImage`、`CoverFile`、`LyricsQuery`、`Lyrics`）。
@@ -94,7 +97,7 @@ type Declaration struct {
 - **重定向**：默认不跟随。`Options.MaxRedirects > 0` 时跟随，`Options.AllowRedirect(目标地址)` 决定每一跳是否放行。每一跳之前依次检查：
   egress 自带的协议与次数；目标是 `https`（上一跳本身是 `http` 时允许 `http`，测试用）；不带用户名密码；端口为空、443 或精确匹配配置的 mock 主机和有效端口；`AllowRedirect` 返回真；
   后台的放行回调。任何一项不满足，这次调用以所属身份的失败哨兵结束（同时 `errors.Is(err, egress.ErrDenied)` 成立），**不重试、不记失败记忆**。
-  每一跳只带 `Accept` 与 `User-Agent` 两个请求头；当前出站策略对每一跳照常生效；整条跳转链占一个限速许可；缓存键是最初请求的地址；
+  每一跳带 `Accept` 与 `User-Agent`，维基媒体请求还保留 `Accept-Encoding` 和设置过的 `Accept-Language`；当前出站策略对每一跳照常生效；整条跳转链占一个限速许可；缓存键是最初请求的地址；
   日志里的域名是最初请求的域名。包装 `CheckRedirect` 时复制工厂返回的客户端，不原地修改。
 - **`GetBytes(ctx, address, accept, maxBytes)`**：取二进制响应，不读写响应缓存；限速、调用身份、放行回调、重试、错误与失败记忆的规则与 `GetJSON` 相同
   （失败记忆同样要求有数据目录）。`Content-Length` 或实际读到的字节超过 `maxBytes` 按“响应结构不对”处理。404 是 `ErrNotFound`。
@@ -121,6 +124,7 @@ type Declaration struct {
 | `RecordingByID` | `/recording/<id>`，`inc=artist-credits isrcs releases` |
 | `RecordingsByISRC` | `/isrc/<ISRC>`，`inc=artist-credits releases`；输入规范化成 12 位大写，格式不对 `ErrInvalidQuery`；404 为空结果 |
 | `SearchRecordings` | `/recording?query=recording:"…" AND artist:"…"`，有时长时加 `dur:[毫秒−3000 TO 毫秒+3000]`；`limit=10` |
+| `ArtistLinks` | `/artist/<id>`，`inc=url-rels`，从 wikidata、wikipedia 关系投影 Q 号与中文、英文条目标题 |
 | `ArtistByID` | `/artist/<id>`，`inc=aliases` |
 | `SearchArtists` | `/artist?query=artist:"…"`，`limit=10` |
 
@@ -192,12 +196,51 @@ type Declaration struct {
   码 4、17 → `InvalidKeyError{Name:"application"}`（有内置时另见上文）；码 6 → `InvalidKeyError{Name:"user"}`；其余 → `ErrTryLater`。
 - 密钥状态的回写（`unchecked`→`valid`、某一把→`invalid`）由闸门做，见[自动整理合同](./curation-contracts.md)第 16 节；缓存命中不验证密钥。
 
+## 8b. 艺人资料的来源
+
+`ArtistLinkFinder.ArtistLinks(ctx, links)` 补全 `ArtistLinks` 中的 MBID、WikidataID、CommonsFile、WikipediaZH 和 WikipediaEN。两个 Wikipedia 字段存条目标题。程序层调用 `ArtistImageFinder.ArtistImage(ctx, links)` 取得图片字节、条目 ID 与署名，调用 `ArtistBioFinder.ArtistBio(ctx, links, lang)` 取得纯文本、条目 ID、语言与署名。署名含来源、原页面链接，以及来源给出的作者、许可、许可链接。
+
+| 来源 | GET 请求 | 能力 | 最小间隔 |
+| --- | --- | --- | --- |
+| Wikidata | `/w/api.php`，按 P434 搜索或按 Q 号取 P18、中文和英文 sitelinks | `artist_lookup` | 1 秒 |
+| Wikimedia Commons | `/w/api.php`，`prop=imageinfo&iiurlwidth=960`，再下载返回的缩略图 | `artist_image` | 1 秒 |
+| Wikipedia | `https://{zh,en}.wikipedia.org/api/rest_v1/page/summary/<标题>` | `artist_bio` | 1 秒 |
+| Fanart.tv | `/v3/music/<MBID>`，再下载头像 | `artist_image` | 1 秒 |
+| TheAudioDB | `/api/v1/json/<密钥>/artist-mb.php?i=<MBID>`，取图时再下载头像 | `artist_image`、`artist_bio` | 2 秒 |
+
+### Wikidata
+
+无 Q 号时用 `list=search` 和 `srsearch=haswbstatement:P434=<MBID>`，唯一匹配才继续。按 Q 号用 `action=wbgetentities&props=claims|sitelinks&sitefilter=zhwiki|enwiki` 查询。P18 跳过 deprecated，优先 preferred，再取第一张普通照片。使用与维基百科、Commons 相同的维基媒体策略，每个来源同时最多一个请求，带项目 User-Agent 和 `Accept-Encoding: gzip`。429 和 503 的后台重试遵循 Retry-After，缺失时至少等待 5 秒。
+
+### Wikimedia Commons
+
+`titles=File:<文件名>`、`iiprop=url|size|mime|extmetadata`、`formatversion=2`。许可取 LicenseShortName，为空时跳过下载。作者从 Artist、Attribution、Credit 依次选取并清理 HTML，页面链接取文件描述页，许可链接取 LicenseUrl。只下载查询返回的 960 宽度档。下载地址与各次跳转在本源主机、upload.wikimedia.org、thumb.wikimedia.org 和配置的 mock 主机范围内检查，最大 16 MiB。
+
+### Wikipedia
+
+中文请求和它的跳转都带 `Accept-Language: zh-cn`。两种语言各自只可跳到同语言的官方主机或配置的 mock 主机。导语取 extract，消歧义页跳过。记录页面链接、语言和 CC BY-SA 4.0 许可链接。简介清理 HTML、数字脚注与多余空白，取首个非空导语段，最多 4000 个 Unicode 码点。
+
+### Fanart.tv
+
+选择 artistthumb 中 likes 最大的一张，同票取第一张。保留图片 ID 与艺人原页面链接。API 请求头 api-key 是管理员填写的 project，缺省时读取发布时链接参数 `-X …/sources/fanarttv.bundledProjectKey=` 注入的项目密钥。client-key 来自可选的 personal。仓库 secret `fanarttv_project` 可选，发布缺少它会打印警告。管理员与构建均无项目密钥时为 `key_missing`。图片下载与重定向限于 webservice.fanart.tv、assets.fanart.tv 和配置的 mock 主机。图片请求与跳转不带密钥头。
+
+内置项目密钥被拒绝时，进程记录 `bundled_key_rejected`。管理员填写项目密钥后，闸门改用所填密钥的状态。
+
+### TheAudioDB
+
+管理员填写 api_key 后可用。出站前读取密钥并放入 URL 路径，缓存键使用未填密钥的地址。图片取 strArtistThumb，用地址的 SHA-256 标识图片，简介取 strBiographyCN 或 strBiography，使用艺人条目 ID 标识同一来源条目。两种资料的来源链接均使用艺人原页面。下载与重定向限于 theaudiodb.com、www.theaudiodb.com、r2.theaudiodb.com 和配置的 mock 主机。
+
 ## 9. 发给外部的数据
 
 | 源 | 发出的内容 |
 | --- | --- |
 | MusicBrainz | 外部 ID、条码、厂牌与编号、ISRC、标题与艺人的查询词、曲目数、由各轨时长推出的光盘目录 |
 | Cover Art Archive | 外部 ID |
+| Wikidata | MusicBrainz 艺人 MBID 或 Wikidata 条目 ID |
+| Wikimedia Commons | Commons 文件名、960 宽度档及文件缩略图地址 |
+| Wikipedia | 语言与条目标题 |
+| Fanart.tv | MusicBrainz 艺人 MBID、项目密钥及已填写的个人密钥、所选头像地址 |
+| TheAudioDB | MusicBrainz 艺人 MBID、管理员填写的 API 密钥及所选头像地址 |
 | LRCLIB | 曲目标题、艺人、专辑名、时长 |
 | AcoustID | 由音频本地算出的声学指纹、整首时长，以及应用密钥（发布镜像里是 ROOMusic 内置的，标识这个应用；没有内置的构建是管理员填入的）与管理员填入的用户密钥（标识管理员在 AcoustID 的账号） |
 
@@ -227,6 +270,7 @@ type Declaration struct {
 
 `ROOMUSIC_UPSTREAM_MOCK_URL` 由组合根读取。设置后，MusicBrainz、CAA、LRCLIB、AcoustID 的基础地址分别追加
 `/musicbrainz/ws/2`、`/coverartarchive`、`/lrclib`、`/acoustid`，Tavily 使用 `/tavily/search`。
-这五个客户端使用 `PublicOrAllowlist`，额外放行项只有配置地址的主机名（忽略大小写）和有效端口（HTTP 默认 80，HTTPS 默认 443）。
+艺人资料另加 `/wikidata`、`/commons`、`/wikipedia`、`/fanarttv`、`/theaudiodb` 五个前缀，Wikipedia 前缀后接语言段。
+这些客户端使用 `PublicOrAllowlist`，额外放行项只有配置地址的主机名（忽略大小写）和有效端口（HTTP 默认 80，HTTPS 默认 443）。
 CAA 的清单和图片重定向也接受此主机与端口，清单仍须跳到以 `/index.json` 结尾的地址。其他地址按原来的公网与重定向规则检查。
 未配置时沿用各服务的官方地址和 `PublicOnly`。管家的模型端点、SearXNG 和网页读取各自沿用原策略。
