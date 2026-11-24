@@ -34,27 +34,44 @@ RUN --mount=type=secret,id=acoustid_client \
 
 FROM mwader/static-ffmpeg@sha256:11a44711684c0b9f754c047dcd64235b8b52deab251bd0e0a86f22faa160749c AS ffmpeg
 
+# 上游 x86_64 包是静态构建；arm64 包链接 glibc 2.28 以上（libc、libm、libstdc++、libgcc，FFmpeg 已静态链入），
+# gcompat 缺 fcntl64 等符号，跑不起来。arm64 上带一份 Debian 的 glibc 运行库放进 /opt/fpcalc/lib，
+# 由包装脚本经它的加载器启动 fpcalc，不进入 Alpine 的系统库路径。
+FROM debian:12-slim@sha256:e67eeead736ff7bbe258ef088bff683635c561b1fcfefad0806c1df4ab49ce0e AS glibc
+ARG TARGETARCH
+RUN mkdir -p /out/lib \
+ && if [ "$TARGETARCH" = arm64 ]; then \
+      for f in ld-linux-aarch64.so.1 libc.so.6 libm.so.6 libstdc++.so.6 libgcc_s.so.1; do \
+        cp -L "/usr/lib/aarch64-linux-gnu/$f" /out/lib/; \
+      done; \
+    fi
+
 FROM alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db9275e198ad AS fpcalc
 ARG TARGETARCH
 ADD --checksum=sha256:c968ad4a0821592a79b158fb2e1f46cbe0a22a0a1dbc0743c67d68e75d15d2bb https://github.com/acoustid/chromaprint/releases/download/v1.6.2/chromaprint-fpcalc-1.6.2-linux-x86_64.tar.gz /amd64.tar.gz
 ADD --checksum=sha256:3aa1498126ed272d805bc9d081c77965c9e1e1a0891bb112c13b56ef2ad47bad https://github.com/acoustid/chromaprint/releases/download/v1.6.2/chromaprint-fpcalc-1.6.2-linux-arm64.tar.gz /arm64.tar.gz
-# 上游 x86_64 包是静态构建；arm64 包链接 glibc（libc、libm、libstdc++、libgcc，FFmpeg 已静态链入），
-# 在 Alpine 上经 gcompat 运行。运行镜像装同样的包。
-RUN if [ "$TARGETARCH" = arm64 ]; then apk add --no-cache gcompat libstdc++ libgcc; fi \
- && mkdir /out \
- && tar -xzf "/${TARGETARCH}.tar.gz" -C /out --strip-components=1 \
- && /out/fpcalc -version | grep -q '^fpcalc version 1\.6\.2 ('
+COPY --from=glibc /out/lib /glibc
+RUN mkdir -p /out/usr/local/bin \
+ && if [ "$TARGETARCH" = arm64 ]; then \
+      mkdir -p /out/opt/fpcalc \
+      && tar -xzf /arm64.tar.gz -C /out/opt/fpcalc --strip-components=1 \
+      && cp -a /glibc /out/opt/fpcalc/lib \
+      && printf '#!/bin/sh\nexec /opt/fpcalc/lib/ld-linux-aarch64.so.1 --library-path /opt/fpcalc/lib /opt/fpcalc/fpcalc "$@"\n' > /out/usr/local/bin/fpcalc \
+      && chmod 0755 /out/usr/local/bin/fpcalc \
+      && cp -a /out/opt/fpcalc /opt/fpcalc; \
+    else \
+      tar -xzf /amd64.tar.gz -C /out/usr/local/bin --strip-components=1; \
+    fi \
+ && /out/usr/local/bin/fpcalc -version | grep -q '^fpcalc version 1\.6\.2 ('
 
 FROM alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db9275e198ad AS app
-ARG TARGETARCH
 RUN apk add --no-cache ca-certificates postgresql18-client \
- && if [ "$TARGETARCH" = arm64 ]; then apk add --no-cache gcompat libstdc++ libgcc; fi \
  && pg_dump --version | grep -q '^pg_dump (PostgreSQL) 18\.' \
  && addgroup -S -g 1000 roomusic && adduser -S -D -H -u 1000 -G roomusic roomusic \
  && mkdir -p /app /data /backups && chown roomusic:roomusic /data /backups && chmod 0700 /backups
 COPY --from=build /out/roomusic /app/roomusic
 COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
-COPY --from=fpcalc /out/fpcalc /usr/local/bin/fpcalc
+COPY --from=fpcalc /out/ /
 # 在运行镜像里按应用的调用方式（s16le 管道）算一次合成正弦波的指纹。
 RUN /usr/local/bin/fpcalc -version | grep -q '^fpcalc version 1\.6\.2 (' \
  && /usr/local/bin/ffmpeg -v error -f lavfi -i sine=frequency=440:duration=15 -f s16le -ac 1 -ar 11025 - \

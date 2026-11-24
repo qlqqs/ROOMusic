@@ -20,8 +20,10 @@
   找不到或自检失败时应用照常启动、记 `playback.render.unavailable`，格式表为空、起播得 `503 renderer_unavailable`。`ROOMUSIC_MEDIA_CACHE_MAX_MIB` 已不再读取。
   `scripts/ffmpeg-pinned.sh` 取出按摘要固定的 ffmpeg 7.1.1，测试、CI 与推荐部署共用。详见[服务端渲染合同](./playback-render-contracts.md) §11。
 - 声学指纹需要 `fpcalc`（M7 B3）：固定 chromaprint 上游官方构建 1.6.2（`linux-x86_64`、`linux-arm64` 两个压缩包，按 sha256 核对）。
-  x86_64 包是静态构建；arm64 包链接 glibc（`libc`、`libm`、`libstdc++`、`libgcc`，FFmpeg 已静态链入），在 Alpine 上经 `gcompat` 运行，
-  `fpcalc` 阶段与运行镜像都只在 arm64 上装 `gcompat libstdc++ libgcc`（v0.8.0 首次发布时 arm64 构建因此失败，`fpcalc: not found`）。
+  x86_64 包是静态构建；arm64 包链接 glibc 2.28 以上（`libc`、`libm`、`libstdc++`、`libgcc`，FFmpeg 已静态链入），在 Alpine 上直接运行报 `fpcalc: not found`
+  （v0.8.0 首次发布时 arm64 构建因此失败），`gcompat` 缺 `fcntl64` 等符号也跑不起来。arm64 上由 `glibc` 阶段从固定摘要的 `debian:12-slim` 取加载器与这四个库，
+  放进 `/opt/fpcalc/lib`，真正的二进制在 `/opt/fpcalc/fpcalc`，`/usr/local/bin/fpcalc` 是经该加载器（`--library-path /opt/fpcalc/lib`）启动它的包装脚本；
+  这些库不进入 Alpine 的系统库路径。x86_64 上 `/usr/local/bin/fpcalc` 就是静态二进制。
   生产镜像的 `fpcalc` 阶段在**目标架构**上（不用 `--platform=$BUILDPLATFORM`）用 `ADD --checksum` 取两包、按 `TARGETARCH` 解开、核对 `fpcalc version 1.6.2`；
   运行镜像放在 `/usr/local/bin/fpcalc`（约 5.4 MB），构建时再核对版本，并按应用的调用方式（ffmpeg 生成合成正弦波、s16le 管道）算一次指纹；`compose.prod.yaml` 设 `ROOMUSIC_FPCALC_PATH`（绝对路径，空则在 `PATH` 中查找）。
   `scripts/fpcalc-pinned.sh` 下载并缓存到 `${XDG_CACHE_HOME:-$HOME/.cache}/roomusic/fpcalc-1.6.2/`，核对 sha256 与版本后打印路径；`--pins` 打印两架构的地址与摘要，CI 逐行在 Dockerfile 里核对。
