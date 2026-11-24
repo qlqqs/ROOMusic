@@ -34,9 +34,6 @@ jobs:
       - name: Check module tidiness
         working-directory: backend
         run: go mod tidy -diff
-      - name: Test
-        working-directory: backend
-        run: go test ./... -count=1
       - name: Race test
         working-directory: backend
         run: go test -race ./... -count=1
@@ -75,17 +72,38 @@ jobs:
       - name: Production build
         working-directory: frontend
         run: npm run build
+
+  e2e:
+    name: End-to-end (${{ matrix.shard }}/3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.1'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies
+        working-directory: frontend
+        run: npm ci
       - name: Install Playwright Chromium
         working-directory: frontend
         run: npx playwright install --with-deps chromium
       - name: End-to-end smoke, accessibility and responsive checks
         working-directory: frontend
-        run: npm run test:e2e
+        run: npm run test:e2e -- --shard=${{ matrix.shard }}/3
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: |
             frontend/playwright-report
             frontend/test-results
@@ -109,18 +127,13 @@ jobs:
           push: false
           platforms: linux/amd64
 
-  integration:
-    name: PostgreSQL integration and configuration
+  checks:
+    name: Configuration checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: '1.25.10'
-          cache-dependency-path: backend/go.sum
       - name: Set up shell checks
         run: |
           for script in scripts/*.sh; do bash -n "$script"; done
@@ -155,6 +168,25 @@ jobs:
           done
       - name: Test release checks
         run: python3 scripts/tests/test_release_check.py
+      - name: Check repository diff formatting
+        run: git diff --check
+
+  integration:
+    name: PostgreSQL integration (${{ matrix.shard }}/5)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.25.10'
+          cache-dependency-path: backend/go.sum
       - name: Prepare pinned audio tools
         run: |
           ffmpeg_path="$(scripts/ffmpeg-pinned.sh)"
@@ -164,9 +196,8 @@ jobs:
       - name: Run PostgreSQL 18 and pinned audio integration tests
         env:
           ROOMUSIC_TEST_PG_PASSWORD: ci-placeholder
+          ROOMUSIC_TEST_SHARD: ${{ matrix.shard }}/5
         run: ./scripts/test-integration.sh
-      - name: Check repository diff formatting
-        run: git diff --check
 
   playback:
     name: Real playback (Chromium)

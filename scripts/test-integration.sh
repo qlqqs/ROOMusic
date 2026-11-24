@@ -40,6 +40,22 @@ if [[ -z "${ROOMUSIC_TEST_PG_BIN_DIR:-}" ]]; then
 fi
 export ROOMUSIC_TEST_FFMPEG ROOMUSIC_TEST_FPCALC ROOMUSIC_TEST_PG_BIN_DIR
 
+# ROOMUSIC_TEST_RUN 可缩小测试集；未设置时保留原有 PostgreSQL/ffmpeg 范围。
+test_run="${ROOMUSIC_TEST_RUN:-TestPostgreSQL|TestFFmpeg}"
+# ROOMUSIC_TEST_SHARD=i/n 把匹配的顶层测试按名字轮流分成 n 份，只跑第 i 份；CI 用它把集成测试分到并行的作业。
+# 每个测试使用自己的 schema 或数据库，分开运行不改变结果。
+if [[ -n "${ROOMUSIC_TEST_SHARD:-}" ]]; then
+  if [[ ! "$ROOMUSIC_TEST_SHARD" =~ ^([1-9][0-9]*)/([1-9][0-9]*)$ ]] || (( BASH_REMATCH[1] > BASH_REMATCH[2] )); then
+    echo 'ROOMUSIC_TEST_SHARD 必须是 i/n，且 1 ≤ i ≤ n' >&2; exit 1
+  fi
+  shard_index="${BASH_REMATCH[1]}" shard_count="${BASH_REMATCH[2]}"
+  shard_tests="$(cd "$ROOT_DIR/backend" && go test -list "$test_run" ./... | awk '/^Test/' | sort -u |
+    awk -v i="$shard_index" -v n="$shard_count" '(NR - 1) % n == i - 1' | paste -sd '|')"
+  [[ -n "$shard_tests" ]] || { echo "分片 $ROOMUSIC_TEST_SHARD 没有测试" >&2; exit 1; }
+  printf '分片 %s：%s 个测试\n' "$ROOMUSIC_TEST_SHARD" "$(tr '|' '\n' <<<"$shard_tests" | wc -l)" >&2
+  test_run="^(${shard_tests})\$"
+fi
+
 cleanup() {
   local result=$?
   trap - EXIT INT TERM
@@ -55,6 +71,5 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 "${COMPOSE[@]}" up -d --wait postgres
 printf '运行隔离 PostgreSQL 与 ffmpeg 集成测试：project=%s database=%s port=%s\n' "$COMPOSE_PROJECT" "$ROOMUSIC_TEST_PG_DATABASE" "$ROOMUSIC_TEST_PG_PORT" >&2
-# ROOMUSIC_TEST_RUN 可缩小测试集；未设置时保留原有 PostgreSQL/ffmpeg 范围。
 # app 包串行约 8 分钟，全包并行共用一个库时会更慢。
-(cd "$ROOT_DIR/backend" && go test -v ./... -run "${ROOMUSIC_TEST_RUN:-TestPostgreSQL|TestFFmpeg}" -count=1 -timeout 25m)
+(cd "$ROOT_DIR/backend" && go test -v ./... -run "$test_run" -count=1 -timeout 25m)

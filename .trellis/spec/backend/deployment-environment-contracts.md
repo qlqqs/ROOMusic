@@ -66,15 +66,17 @@
 - `.github/workflows/ci.yml` 在 Pull Request、推送到 `main` 和手动触发时运行，权限
   固定为 `contents: read`，同一分支的新运行会取消旧运行。
 - 工作流使用 `.mise.toml` 中的 Go `1.25.10` 和 Node.js `24.16.0`。后端门禁从
-  `backend/` module 运行 `gofmt`、`go test`、`go test -race`、`go vet` 和 `go build`；
+  `backend/` module 运行 `gofmt`、`go test -race`（覆盖普通 `go test`，不再单跑）、`go vet` 和 `go build`；
   前端作业使用 `frontend/package-lock.json` 依次执行 `npm ci`、lint、typecheck、`npm run test`
   （Vitest）与 `npm run build`，没有“入口缺失”分支。
-- 生产构建之后 `npx playwright install --with-deps chromium` 与 `npm run test:e2e`（对生产构建的浏览器冒烟、无障碍与
-  响应式检查，失败时上传报告）。
-  集成 job 逐个执行 `bash -n` 检查 `scripts/*.sh` 与 `deploy/production/*.sh`，校验开发、测试 Compose，运行
+- e2e 是独立的 3 片矩阵 job（`End-to-end (i/3)`）：`npx playwright install --with-deps chromium` 后运行
+  `npm run test:e2e -- --shard=i/3`（对生产构建的浏览器冒烟、无障碍与响应式检查，失败时按分片上传报告）。
+  配置检查 job（`Configuration checks`）逐个执行 `bash -n` 检查 `scripts/*.sh` 与 `deploy/production/*.sh`，校验开发、测试 Compose，运行
   `scripts/check-production-compose.sh`（假值、只解析不启动：必填中文提示、服务与端口、默认与自定义备份目录、无数据卷、无初始化服务及依赖、固定容器名参数、override 子网），
-  检查 ffmpeg、Go 与 PostgreSQL 客户端主版本一致性（CI 不构建镜像），运行 `python3 scripts/tests/test_release_check.py`，
-  并运行 `./scripts/test-integration.sh`（时限 15 分钟，job 30 分钟）；后者先经 `scripts/ffmpeg-pinned.sh`、`scripts/fpcalc-pinned.sh` 取出固定版本的 ffmpeg 与 fpcalc（`ROOMUSIC_TEST_FFMPEG`、`ROOMUSIC_TEST_FPCALC`；取不到即失败，
+  检查 ffmpeg、Go 与 PostgreSQL 客户端主版本一致性（CI 不构建镜像），运行 `python3 scripts/tests/test_release_check.py`
+  与 `git diff --check`。集成是 5 片矩阵 job（`PostgreSQL integration (i/5)`），各自以 `ROOMUSIC_TEST_SHARD=i/5` 运行
+  `./scripts/test-integration.sh`（每个包时限 25 分钟，job 30 分钟）：脚本用 `go test -list` 列出匹配的顶层测试，按名字排序后轮流分片，
+  每片独占一个 PostgreSQL；各测试本来就使用自己的 schema 或数据库，API 样本也只核对本测试产出的部分，所以分片不改变结果。该脚本先经 `scripts/ffmpeg-pinned.sh`、`scripts/fpcalc-pinned.sh` 取出固定版本的 ffmpeg 与 fpcalc（`ROOMUSIC_TEST_FFMPEG`、`ROOMUSIC_TEST_FPCALC`；取不到即失败，
   派生用例不得静默跳过），真实启动 PostgreSQL 18 并运行 `TestPostgreSQL|TestFFmpeg`，结束时清理专用容器和数据卷。
   真实播放 job 运行 `./scripts/playback-e2e.sh`，同样经该脚本取得同一个 ffmpeg。
 - **API 响应样本**：集成测试 `TestPostgreSQLAPIResponseSamples`（`backend/internal/app/api_samples_integration_test.go`）

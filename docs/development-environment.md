@@ -48,6 +48,8 @@ cp fonts-noto-cjk/usr/share/fontconfig/conf.avail/70-fonts-noto-cjk.conf ~/.conf
 
 应用端口（Vite、Go 后端）绑定 `0.0.0.0`，便于局域网设备访问；开发和测试的 PostgreSQL 只绑定 `127.0.0.1`。开发使用独立端口，测试由脚本选取空闲端口。开发、测试与生产的 PostgreSQL 使用同一个钉死镜像。测试容器限制 CPU 与内存，数据库集成和端到端测试串行运行。
 
+`./scripts/test-integration.sh` 可以用 `ROOMUSIC_TEST_RUN` 缩小范围，用 `ROOMUSIC_TEST_SHARD=i/n` 只跑匹配测试按名字轮流分成 n 份后的第 i 份；CI 把集成测试分 5 片、e2e 分 3 片并行运行。
+
 仅清理当前测试项目及其临时目录，不执行全局 prune。测试仅使用合成数据，不访问现有实例的配置、凭据或数据。
 
 ## 外部接口 mock
