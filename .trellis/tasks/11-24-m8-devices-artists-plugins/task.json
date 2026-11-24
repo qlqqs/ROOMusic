@@ -1,0 +1,32 @@
+{
+  "id": "m8-devices-artists-plugins",
+  "name": "m8-devices-artists-plugins",
+  "title": "M8 局域网设备、艺人资料、数据源插件与测试设施",
+  "description": "父任务：测试环境中文字体、外部接口 mock 服务器、艺人图片与简介、UPnP/DLNA 设备发现与单设备串流（U3）、第三方数据源插件；每项一个子任务",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "qlqq",
+  "assignee": "qlqq",
+  "createdAt": "2026-11-24",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-24-m8-cjk-test-font",
+    "11-24-m8-mock-upstream",
+    "11-24-m8-artist-info",
+    "11-24-m8-upnp-renderer",
+    "11-24-m8-source-plugins"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

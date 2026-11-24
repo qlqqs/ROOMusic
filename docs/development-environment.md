@@ -24,6 +24,24 @@ mise exec -- node --version
   这时手动提交源任务目录的删除（以及被改写的父子任务 `task.json`）：`git add -A .trellis/tasks/<任务目录>` 后提交。
   spec 与文档引用归档文档时写成不带链接的路径文字，并注明“本机归档”。
 
+## 浏览器测试与截图
+
+Playwright 只用 Chromium。本机缺 Chromium 的系统库（`libatk` 等）时，`apt-get download` 后 `dpkg -x` 解到 `temp/` 下，
+运行时用 `LD_LIBRARY_PATH` 指向解出的库目录；对回环地址不走代理（`NO_PROXY=127.0.0.1,localhost`）。
+
+截图与文字显示核对需要中文字体，否则中文显示为方块。不用 sudo 的装法：
+
+```bash
+apt-get download fonts-noto-cjk
+dpkg -x fonts-noto-cjk_*.deb fonts-noto-cjk
+mkdir -p ~/.local/share/fonts/noto-cjk ~/.config/fontconfig/conf.d
+cp fonts-noto-cjk/usr/share/fonts/opentype/noto/NotoSansCJK-{Regular,Bold}.ttc ~/.local/share/fonts/noto-cjk/
+cp fonts-noto-cjk/usr/share/fontconfig/conf.avail/70-fonts-noto-cjk.conf ~/.config/fontconfig/conf.d/
+```
+
+第二个文件按页面语言选字形：页面是 `lang="zh-CN"`，所以用简体字形，不会落到日文字形。前端字体栈里有 `"Noto Sans CJK SC"`，
+截图看到的就是它；真实设备上用的是苹方、微软雅黑等系统字体，截图核对不能代替真实设备上的查看。
+
 ## Docker 隔离约定
 
 开发项目名使用 `roomusic-compose-dev`；每次集成测试使用 `roomusic-compose-test-` 加随机后缀；生产使用独立项目名。不同项目各自使用网络及目录，开发和测试由 Compose 生成容器名；生产使用可配置的固定容器名。
