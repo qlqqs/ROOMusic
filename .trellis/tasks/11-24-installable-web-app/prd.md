@@ -41,3 +41,12 @@
 ## 不做
 
 - 离线播放、Service Worker 缓存、推送通知。
+
+## 实施与验收记录（2026-11-24）
+
+- 合入：分支 `feat/installable-web-app`（`80f2228c`）。
+- 实际运行：`npm run lint`、`npm run typecheck` 通过；`npx playwright test e2e/installable.spec.ts` 通过（Manifest、四个图标 200 且为 `image/png`，CDP `Page.getInstallabilityErrors` 为空——Chromium 不要求 Service Worker）。
+- 截图：390×844 触屏视口，用 CDP `Emulation.setSafeAreaInsetsOverride` 模拟顶部 47px、底部 34px 安全区，核对概览、专辑页与全屏播放器：顶栏与全屏播放器的顶部让开了刘海，底栏与迷你播放栏在横条之上；无安全区时与原来一致。
+- 返回路径：窄屏始终显示底部标签栏，没有界面内返回按钮的子页面（歌单详情、设置子页）可经标签栏离开；专辑、艺人、扫描详情已有返回链接；全屏播放器与对话框有关闭按钮。未加新的返回按钮。
+- 期间发现另一个会话同时在 4173 端口跑 e2e，Playwright 的 `reuseExistingServer` 会连到对方的构建；本任务的最终结果是在临时改用 4183 端口、不复用服务器的配置下得到的（临时配置已删除）。
+- 未验证（需要真机）：iOS 与 Android 的实际安装、独立窗口的锁屏控制与后台播放。
