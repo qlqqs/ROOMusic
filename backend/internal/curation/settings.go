@@ -156,3 +156,9 @@ func (w *Writer) UpdateModelSettings(ctx context.Context, actorID string, enable
 	}
 	return s, tx.Commit()
 }
+
+// InsightSettings 只读实例开关与模型是否已指定，不取出模型名称。
+func (w *Writer) InsightSettings(ctx context.Context) (enabled, modelConfigured bool, err error) {
+	err = w.db.QueryRowContext(ctx, `SELECT enabled, model <> '' FROM curation_settings WHERE id=1`).Scan(&enabled, &modelConfigured)
+	return
+}

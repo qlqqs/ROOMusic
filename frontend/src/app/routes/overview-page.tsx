@@ -8,6 +8,7 @@ import { ResumeCard, useRecentCardPlayback } from "./overview-playback";
 import { AlbumCardPlay } from "./album-card-play";
 import styles from "./overview-page.module.css";
 import { CurationSummary, FirstScanHint } from "../../features/curation";
+import { InsightsNotice } from "../../features/insights";
 
 /** 最近播放：卡片上的播放键由这里组合（listening 不导入 player）。 */
 function RecentPlays() {
@@ -28,6 +29,7 @@ export function OverviewPage() {
       <div className={styles.layout}>
         <div className={styles.columns}>
           <div className={styles.main}>
+            <InsightsNotice />
             <FirstScanHint />
             <ResumeCard />
             <RecentPlays />

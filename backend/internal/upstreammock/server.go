@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/insights/schema"
 )
 
 type Options struct {
@@ -29,12 +31,13 @@ type Server struct {
 }
 
 type requestRecord struct {
-	Time    time.Time  `json:"time"`
-	Service string     `json:"service"`
-	Method  string     `json:"method"`
-	Path    string     `json:"path"`
-	Query   url.Values `json:"query"`
-	Status  int        `json:"status"`
+	Payload *schema.Payload `json:"payload,omitempty"`
+	Time    time.Time       `json:"time"`
+	Service string          `json:"service"`
+	Method  string          `json:"method"`
+	Path    string          `json:"path"`
+	Query   url.Values      `json:"query"`
+	Status  int             `json:"status"`
 }
 
 func New(opts Options) (*Server, error) {
@@ -72,6 +75,12 @@ func New(opts Options) (*Server, error) {
 	s.route("GET /plugins/lyrics-demo/main/{kind}", s.pluginDemo)
 	s.route("GET /lrclib/api/get", s.lyrics)
 	s.route("GET /lrclib/api/search", s.lyrics)
+	s.route("POST /insights/api/v1/heartbeat", func(_ *http.Request, notFound bool) response {
+		if notFound {
+			return missing()
+		}
+		return response{status: http.StatusNoContent}
+	})
 	s.route("POST /acoustid/v2/lookup", s.acoustid)
 	s.route("GET /searxng/search", s.search)
 	s.route("GET /searxng/artists/coast", func(r *http.Request, empty bool) response {
@@ -184,6 +193,20 @@ func (s *Server) route(pattern string, handler func(*http.Request, bool) respons
 	s.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 		sc, rec := s.record(service, r)
 		r.Body = http.MaxBytesReader(w, r.Body, 8<<20)
+		if service == "insights" {
+			payload, err := schema.Decode(r.Body)
+			s.mu.Lock()
+			if err != nil {
+				rec.Status = http.StatusBadRequest
+			} else {
+				rec.Payload = &payload
+			}
+			s.mu.Unlock()
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
 		if !sc.wait(r) {
 			return
 		}
@@ -206,6 +229,9 @@ func (s *Server) route(pattern string, handler func(*http.Request, bool) respons
 			res = problem(status, sc.Name)
 		default:
 			res = handler(r, sc.Name == "not_found")
+			if sc.Name == "drop" && res.status == http.StatusNoContent {
+				res = ok(nil)
+			}
 		}
 		s.mu.Lock()
 		rec.Status = res.status
@@ -215,6 +241,10 @@ func (s *Server) route(pattern string, handler func(*http.Request, bool) respons
 }
 
 func (res response) write(w http.ResponseWriter, scenario string) {
+	if res.status == http.StatusNoContent {
+		w.WriteHeader(res.status)
+		return
+	}
 	if res.events != nil {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(res.status)

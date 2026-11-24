@@ -14,8 +14,8 @@ const legacyAddresses = [
   ["/system/backups?tab=files&extra=a%20b#files", "/settings/backups?tab=files&extra=a%20b#files"],
 ] as const;
 
-const managementPaths = ["/settings/library", `/settings/library/scans/${scanId}`, "/settings/members", "/settings/curation", "/settings/operations", "/settings/backups"];
-const managementApis = ["/api/v1/users", "/api/v1/library-roots", "/api/v1/library-root-operations", "/api/v1/scans", "/api/v1/scans/active", `/api/v1/scans/${scanId}`, `/api/v1/scans/${scanId}/report`, "/api/v1/operations", "/api/v1/system/version", "/api/v1/system/backups", "/api/v1/admin/curation/settings", "/api/v1/admin/curation/progress", "/api/v1/admin/curation/sources", "/api/v1/admin/curation/batches", "/api/v1/admin/curation/suppressions"];
+const managementPaths = ["/settings/library", `/settings/library/scans/${scanId}`, "/settings/members", "/settings/curation", "/settings/operations", "/settings/backups", "/settings/insights"];
+const managementApis = ["/api/v1/users", "/api/v1/library-roots", "/api/v1/library-root-operations", "/api/v1/scans", "/api/v1/scans/active", `/api/v1/scans/${scanId}`, `/api/v1/scans/${scanId}/report`, "/api/v1/operations", "/api/v1/system/version", "/api/v1/system/backups", "/api/v1/admin/curation/settings", "/api/v1/admin/curation/progress", "/api/v1/admin/curation/sources", "/api/v1/admin/curation/batches", "/api/v1/admin/curation/suppressions", "/api/v1/admin/insights"];
 
 function setup(current: string | null = "curator") {
   const api = installFakeApi();
@@ -35,13 +35,13 @@ function expectAddress(actual: string, expected: string) {
 }
 
 describe("设置页与权限", () => {
-  it("管理员有账号、播放、Agent、扫描目录、成员、自动整理、局域网设备、操作记录、备份九栏，账号展示用户名、角色与修改密码", async () => {
+  it("管理员有账号、播放、Agent、关于、扫描目录、成员、自动整理、局域网设备、操作记录、备份与匿名统计十一栏，账号展示用户名、角色与修改密码", async () => {
     setup();
     renderApp({ path: "/settings/account" });
     await accountHeading();
     const links = within(screen.getByRole("navigation", { name: "设置" })).getAllByRole("link");
     expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
-      ["账号", "/settings/account"], ["播放", "/settings/playback"], ["Agent", "/settings/agent"], ["扫描目录", "/settings/library"], ["成员", "/settings/members"], ["自动整理", "/settings/curation"], ["局域网设备", "/settings/devices"], ["操作记录", "/settings/operations"], ["备份", "/settings/backups"],
+      ["账号", "/settings/account"], ["播放", "/settings/playback"], ["Agent", "/settings/agent"], ["关于", "/settings/about"], ["扫描目录", "/settings/library"], ["成员", "/settings/members"], ["自动整理", "/settings/curation"], ["局域网设备", "/settings/devices"], ["操作记录", "/settings/operations"], ["备份", "/settings/backups"], ["匿名统计", "/settings/insights"],
     ]);
     expect(links[0]?.getAttribute("aria-current")).toBe("page");
     const main = within(screen.getByRole("main"));
@@ -56,12 +56,12 @@ describe("设置页与权限", () => {
     for (const name of ["元数据", "待认领", "重复艺人"]) expect(await nav.findByRole("link", { name })).toBeTruthy();
   });
 
-  it("成员只看到账号、播放与 Agent 栏，仍能修改自己的密码，不请求管理接口", async () => {
+  it("成员只看到账号、播放、Agent 与关于栏，仍能修改自己的密码，不请求管理接口", async () => {
     const api = setup("listener");
     renderApp({ path: "/settings/account" });
     await accountHeading();
     const nav = within(screen.getByRole("navigation", { name: "设置" }));
-    expect(nav.getAllByRole("link").map((link) => link.textContent)).toEqual(["账号", "播放", "Agent"]);
+    expect(nav.getAllByRole("link").map((link) => link.textContent)).toEqual(["账号", "播放", "Agent", "关于"]);
     expect(within(screen.getByRole("main")).getByText("listener")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "修改密码" }));
     expect(await screen.findByRole("dialog", { name: "修改密码" })).toBeTruthy();
@@ -72,7 +72,7 @@ describe("设置页与权限", () => {
     const api = setup("listener");
     renderApp({ path });
     expect(await screen.findByRole("heading", { level: 1, name: "需要管理员权限" })).toBeTruthy();
-    expect(within(screen.getByRole("navigation", { name: "设置" })).getAllByRole("link").map((link) => link.textContent)).toEqual(["账号", "播放", "Agent"]);
+    expect(within(screen.getByRole("navigation", { name: "设置" })).getAllByRole("link").map((link) => link.textContent)).toEqual(["账号", "播放", "Agent", "关于"]);
     for (const apiPath of managementApis) expect(api.requestsTo("GET", apiPath)).toHaveLength(0);
   });
 

@@ -1,4 +1,4 @@
-# 与生产 Compose 一起使用，令应用和数据库通过项目网络通信。
+# 与生产 Compose 一起使用。此覆盖文件的 !reset 需要 Docker Compose v2.24.4 或更新版本。
 services:
   app:
     network_mode: !reset null

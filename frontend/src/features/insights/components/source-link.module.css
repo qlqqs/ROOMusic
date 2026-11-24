@@ -1,0 +1,6 @@
+.line {
+  margin: var(--space-6) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  text-align: center;
+}
