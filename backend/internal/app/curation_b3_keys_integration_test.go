@@ -94,8 +94,8 @@ func b3SourceList(t *testing.T, app *integrationTestApplication, admin *integrat
 		}
 		items[item.ID] = item
 	}
-	if len(items) != 9 {
-		t.Fatalf("源列表长度=%d，期望 9", len(items))
+	if len(items) != 10 {
+		t.Fatalf("源列表长度=%d，期望 10", len(items))
 	}
 	return items
 }
