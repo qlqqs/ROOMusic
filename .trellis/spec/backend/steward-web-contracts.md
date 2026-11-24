@@ -29,6 +29,8 @@ C8 后端乙补齐 Responses、模型自带搜索请求、原始内容块持久�
 
 ## 3. 请求、响应与边界
 
+后台整理使用开启者的搜索设置。启用网络搜索来源且依赖就绪时，SearXNG 或 Tavily 提供 `web_search`，同时可用 `fetch_page`。选择 native 且能力判定为 supported 时，由模型自带搜索并提供 `fetch_page`。来源关闭后停止提供后台联网工具，已启用原生搜索的运行在下一步重新检查。模型整理图片逐跳使用 `egress.PublicOnly`，引用 URL 只按相同策略预检解析结果。两者均限 HTTP(S) 的 80 或 443 端口，管家出站放行名单对两者均无效。配置 `ROOMUSIC_UPSTREAM_MOCK_URL` 后，仅该 mock 的主机与有效端口获额外放行。
+
 ### 设置与测试搜索
 
 `GET/PUT /api/v1/me/steward/settings` 响应新增：

@@ -45,7 +45,7 @@ func (w *Writer) Progress(ctx context.Context, ruleVersion int16, status Program
  SELECT count(*),count(*) FILTER (WHERE s.status <> 'try_later'),
  count(*) FILTER (WHERE s.status='matched'),count(*) FILTER (WHERE s.status='uncertain'),
  count(*) FILTER (WHERE s.status='no_match'),count(*) FILTER (WHERE s.status='try_later'),
- (SELECT count(*) FROM curation_pending_items p JOIN visible v ON p.target_id=v.id WHERE p.status='waiting_model')
+ (SELECT count(*) FROM curation_pending_items p WHERE `+PendingTargetVisibleSQL+` AND p.status='waiting_model')
  FROM visible v LEFT JOIN curation_work_states s ON s.subject='release' AND s.rule_version=$1 AND s.target_id=v.id`, ruleVersion).
 		Scan(&r.Total, &r.Processed, &r.Matched, &r.Uncertain, &r.NoMatch, &r.TryLater, &p.Pending.WaitingModel)
 	if err != nil {

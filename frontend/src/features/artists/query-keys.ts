@@ -17,5 +17,7 @@ export const artistsKeys = {
     viewerQueryKey(generation, "artists", "albums-any", artistId, { e: epoch, q, page, pageSize }),
   tracks: (generation: number, epoch: number, artistId: string, role: ArtistTrackRole, page: number, pageSize: number) =>
     viewerQueryKey(generation, "artists", "tracks", artistId, { e: epoch, role, page, pageSize }),
+  /** 管理员看到的网络搜索状态（不随目录 epoch 变化：它跟着自动整理走）。 */
+  webSearch: (generation: number, artistId: string) => viewerQueryKey(generation, "artists", "web-search", artistId),
   queue: (generation: number, artistId: string, order: string, seed: string | null) => viewerQueryKey(generation, "artists", "queue", artistId, { order, seed }),
 };

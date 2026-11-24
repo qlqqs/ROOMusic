@@ -76,11 +76,13 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 
 | 详情字段 | 返回值 |
 | --- | --- |
-| `image` | 缺失时为 null。有图时返回 `{resource, source, source_url, author, license, license_url}`。来源为 `manual`、`fanarttv`、`theaudiodb`、`commons` 或 `plugin:<id>`。 |
-| `bio` | 缺失时为 null。有简介时返回 `{text, lang, source, source_url, license, license_url}`。语言为 `zh` 或 `en`。来源为 `manual`、`wikipedia`、`theaudiodb` 或 `plugin:<id>`。 |
+| `image` | 缺失时为 null。有图时返回 `{resource, source, source_url, author, license, license_url, citations}`。来源为 `manual`、`fanarttv`、`theaudiodb`、`commons`、`plugin:<id>` 或 `web_search`。 |
+| `bio` | 缺失时为 null。有简介时返回 `{text, lang, source, source_url, license, license_url, citations}`。语言为 `zh` 或 `en`。来源为 `manual`、`wikipedia`、`theaudiodb`、`plugin:<id>` 或 `web_search`。 |
 | `links` | 固定返回对象 `{musicbrainz, wikidata}`。值分别为艺人 MBID 和 Q 号，缺少对应的来源返回 null。 |
 
-图片和简介分别先取家族内的人工资料，再取家族内的自动资料。同层优先取有效身份，再取最近并入方，同一合并时刻按艺人 ID 升序。两种外部对应各自依同样的身份顺序取值。旧 ID 的详情保留自身摘要和 `redirect_artist_id`，资料及对应解析到有效身份。艺人的全部曲目暂时缺失时仍可读取资料。
+图片和简介分别先取家族内的人工资料，再取家族内的自动资料。自动资料先按有许可来源、插件、网络搜索降序排列。同级优先取有效身份，再取最近并入方，同一合并时刻按艺人 ID 升序。两种外部对应各自依同样的身份顺序取值。旧 ID 的详情保留自身摘要和 `redirect_artist_id`，资料及对应解析到有效身份。艺人的全部曲目暂时缺失时仍可读取资料。
+
+`citations` 始终是数组。网络搜索资料返回 1 至 5 个 `{url,title}` 网页引用，标题为至多 500 个 UTF-16 码元的纯文本，允许空串。其他来源返回 `[]`。管理员可通过 `GET /api/v1/artists/{id}/web-search` 查看整理状态与待确认候选，候选引用保留网址并返回空字符串标题，成员请求返回 403。
 
 人工图片的 `source_url`、`author`、`license`、`license_url` 均为 null，人工简介的 `source_url`、`license`、`license_url` 均为 null。自动资料带来源页面链接，署名和许可等可选字段有值时为字符串。拆分艺人时，人工和自动资料以及艺人外部对应都保留在写入时的有效身份上。
 

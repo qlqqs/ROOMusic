@@ -14,6 +14,7 @@ import (
 type ModelRun struct {
 	ConversationID, Model  string
 	ActorID, PendingItemID string
+	ToolInputDigest        string
 	Batch                  func(context.Context) (string, error)
 }
 type modelRunKey struct{}
@@ -67,7 +68,7 @@ func (w *Writer) writerActor(ctx context.Context, batch, confirmed, conversation
 	return *actor, nil
 }
 
-func checkWrite(ctx context.Context, tx *sql.Tx, spec operations.Spec, confirmed, releaseID string, expected, current int64) error {
+func checkWrite(ctx context.Context, tx *sql.Tx, spec operations.Spec, confirmed, targetID string, expected, current int64) error {
 	if expected != 0 && expected != current {
 		return operations.Conflict("revision_conflict", "版本已变更")
 	}
@@ -77,7 +78,11 @@ func checkWrite(ctx context.Context, tx *sql.Tx, spec operations.Spec, confirmed
 		}
 		if run, ok := ModelRunFrom(ctx); ok && run.PendingItemID != "" {
 			var claimed bool
-			err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM curation_pending_items WHERE id=$1 AND target_id=$2 AND conversation_id=$3 AND status='in_progress' FOR SHARE)`, run.PendingItemID, releaseID, run.ConversationID).Scan(&claimed)
+			column := "target_id"
+			if spec.Type == operations.TypeArtistLink {
+				column = "artist_id"
+			}
+			err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM curation_pending_items WHERE id=$1 AND `+column+`=$2 AND conversation_id=$3 AND status='in_progress' FOR SHARE)`, run.PendingItemID, targetID, run.ConversationID).Scan(&claimed)
 			if err != nil {
 				return err
 			}

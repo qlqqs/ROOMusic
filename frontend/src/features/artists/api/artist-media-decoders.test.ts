@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { sampleBody } from "../../../test/api-samples";
-import { decodeArtistDetail, decodeArtistLinkPreview, decodeArtistMediaReject, decodeArtistMediaWrite } from "./decoders";
+import { without, withValue } from "../../../test/mutate";
+import { decodeArtistDetail, decodeArtistLinkPreview, decodeArtistMediaReject, decodeArtistMediaWrite, decodeArtistWebSearch } from "./decoders";
 
 const manualDetail = decodeArtistDetail(sampleBody("artists/detail-manual-media"));
 
@@ -63,4 +64,31 @@ it("解码预览及可空字段，拒绝未知来源和非布尔的名字匹配�
   expect(decodeArtistLinkPreview(wikidata)).toEqual(wikidata);
   expect(() => decodeArtistLinkPreview({ ...preview, source: "manual" })).toThrow(/source/);
   expect(() => decodeArtistLinkPreview({ ...preview, name_matches: "false" })).toThrow(/name_matches/);
+});
+
+it("保留网络搜索的简介与图片来源、可空来源地址及引用", () => {
+  const sample = sampleBody("artists/detail-web-search");
+  const detail = decodeArtistDetail(sample);
+  expect(detail).toStrictEqual(sample);
+  const citations = [{ title: "演出名录", url: "https://artists.example.org/profile" }];
+  expect(detail.bio).toMatchObject({ source: "web_search", citations });
+
+  const image = { ...manualDetail.image, source: "web_search", citations };
+  expect(decodeArtistDetail({ ...detail, image }).image).toStrictEqual(image);
+  expect(() => decodeArtistDetail(without(sample, ["bio", "citations"]))).toThrow(/bio\.citations/);
+  expect(() => decodeArtistDetail(withValue(sample, ["bio", "citations", 0, "title"], null))).toThrow(/bio\.citations.*title/);
+  expect(() => decodeArtistDetail({ ...detail, image: { ...image, citations: Array(6).fill(citations[0]) } })).toThrow(/image\.citations/);
+});
+
+it("解码网络搜索的五种状态和待确认候选，拒绝未知状态及不合规候选", () => {
+  const sample = sampleBody("artists/web-search");
+  expect(decodeArtistWebSearch(sample)).toStrictEqual(sample);
+  for (const state of ["none", "queued", "running", "shelved"]) {
+    const input = { state, candidates: [] };
+    expect(decodeArtistWebSearch(input)).toStrictEqual(input);
+  }
+  expect(() => decodeArtistWebSearch(without(sample, ["candidates"]))).toThrow(/candidates/);
+  expect(() => decodeArtistWebSearch(withValue(sample, ["state"], "completed"))).toThrow(/state/);
+  expect(() => decodeArtistWebSearch(withValue(sample, ["candidates", 0, "exception_id"], "Q900001"))).toThrow(/candidates.*exception_id/);
+  expect(() => decodeArtistWebSearch(withValue(sample, ["candidates", 0, "source"], "web_search"))).toThrow(/candidates.*source/);
 });

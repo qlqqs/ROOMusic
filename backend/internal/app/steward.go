@@ -162,7 +162,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		}
 	}
 	if configuration.writer != nil {
-		for _, d := range curationtools.StewardTools(configuration.writer, configuration.matcher) {
+		for _, d := range curationtools.StewardTools(configuration.writer, configuration.matcher, configuration.mockHost) {
 			register(backgroundRegistry, d)
 		}
 	}
@@ -193,6 +193,14 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		if err != nil {
 			return runtime.ReviewEvidenceFacts{}, err
 		}
+		var identity struct {
+			Facts json.RawMessage `json:"artist_identity"`
+		}
+		if item.Tool == "resolve_artist_identity" {
+			if err := json.Unmarshal(input, &identity); err != nil {
+				return runtime.ReviewEvidenceFacts{}, err
+			}
+		}
 		var merge json.RawMessage
 		if item.Tool == "merge_releases" && len(targets) == 2 {
 			facts, err := curation.ReadReleaseMergeEvidence(ctx, database, targets[0].ID, targets[1].ID, nil, true)
@@ -205,7 +213,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 			}
 		}
 		raw, err := json.Marshal(targets)
-		return runtime.ReviewEvidenceFacts{Targets: raw, External: external, ReleaseMerge: merge, RecentOperationCount: len(page.Items)}, err
+		return runtime.ReviewEvidenceFacts{Targets: raw, External: external, ReleaseMerge: merge, ArtistIdentity: identity.Facts, RecentOperationCount: len(page.Items)}, err
 	}
 	runner := runtime.NewRunner(store, registry, logger).WithMemories(memories).WithReviewEvidence(evidence)
 	background := runtime.NewRunner(store, backgroundRegistry, logger).WithReviewEvidence(evidence)
@@ -226,7 +234,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		return valid, err
 	})
 	api.Register(mux)
-	return supervisor, backgroundLauncher{api, store}
+	return supervisor, backgroundLauncher{api: api, store: store, sources: configuration.sources}
 }
 
 // withCurrentStewardUser 在预览及实际调用前重读身份，覆盖长对话、确认后执行与 MCP。
@@ -303,6 +311,32 @@ func reviewTargetInput(ctx context.Context, db *sql.DB, item runtime.PlanItem) (
 			}
 		}
 		return json.Marshal(map[string]string{"release_id": in.TargetID, "merge_source_release_id": in.SourceID})
+	case "resolve_artist_identity":
+		var in struct {
+			ItemID string `json:"item_id"`
+			Basis  struct {
+				Citations []string `json:"citations"`
+			} `json:"basis"`
+		}
+		if err := json.Unmarshal(item.Input, &in); err != nil {
+			return nil, err
+		}
+		var artistID string
+		var evidence json.RawMessage
+		err := db.QueryRowContext(ctx, `SELECT COALESCE(o.redirect_artist_id,p.artist_id)::text,
+   jsonb_build_object('names',p.evidence->'names','albums',p.evidence->'albums','tracks',p.evidence->'tracks','gaps',p.evidence->'gaps')
+   FROM curation_pending_items p LEFT JOIN artist_overrides o ON o.artist_id=p.artist_id
+   WHERE p.id=$1 AND p.kind='artist_identity'`, in.ItemID).Scan(&artistID, &evidence)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, runtime.ErrReviewUnavailable
+		}
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(map[string]any{
+			"artist_id":       artistID,
+			"artist_identity": map[string]any{"source": "program_untrusted_external", "data": evidence, "citations": in.Basis.Citations},
+		})
 	case "resolve_release_match":
 		var input struct {
 			ItemID string `json:"item_id"`

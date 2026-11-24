@@ -47,7 +47,8 @@ func restoreArtistMedia(ctx context.Context, tx *sql.Tx, id, table string, rows 
 		return err
 	}
 	result, err := tx.ExecContext(ctx, `WITH `+catalog.ArtistMediaFamilyCTE+` INSERT INTO `+table+`
-		SELECT m.* FROM jsonb_populate_recordset(NULL::`+table+`,$2::jsonb) m JOIN artist_media_family f USING(artist_id)
+		SELECT m.* FROM jsonb_array_elements($2::jsonb) snapshots(value),
+		LATERAL jsonb_populate_record(NULL::`+table+`, '{"citations":[]}'::jsonb || snapshots.value) m JOIN artist_media_family f USING(artist_id)
 		WHERE f.canonical_id=$1
 		ON CONFLICT (artist_id) DO NOTHING`, id, raw)
 	if err != nil {

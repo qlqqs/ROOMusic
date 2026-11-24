@@ -12,6 +12,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
@@ -19,15 +20,20 @@ const idSchema = `{"type":"string","minLength":36,"maxLength":36}`
 const noteSchema = `{"type":"string","minLength":1,"maxLength":500}`
 
 type adapter struct {
-	writer  *curation.Writer
-	matcher *program.ModelMatcher
+	writer   *curation.Writer
+	matcher  *program.ModelMatcher
+	mockHost sources.MockHost
 }
 
-func StewardTools(w *curation.Writer, m *program.ModelMatcher) []tool.Definition {
-	a := adapter{w, m}
+func StewardTools(w *curation.Writer, m *program.ModelMatcher, mockHost ...sources.MockHost) []tool.Definition {
+	a := adapter{writer: w, matcher: m}
+	if len(mockHost) > 0 {
+		a.mockHost = mockHost[0]
+	}
 	available := func(ctx context.Context, c tool.Caller) bool { return c.Source == tool.SourceCuration }
 	return []tool.Definition{
 		a.backgroundMergeReleases(),
+		a.identityTool(available), a.mediaTool(available),
 		{Name: "read_pending_items", Description: "读取本次自动整理领取的待定项、冲突与候选资料", Scope: tool.ScopeRead, Untrusted: true, MinRole: tool.RoleAdmin, Available: available,
 			Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_ids":{"type":"array","items":` + idSchema + `}}}`), Output: json.RawMessage(`{"type":"array","items":{"type":"object"}}`), Handler: a.read},
 		{Name: "resolve_release_match", Description: "按 MusicBrainz 编号核对待定项，建立发行与曲目的对应并补全空缺", Scope: tool.ScopeShared, Revertible: true, MinRole: tool.RoleAdmin, Available: available,
@@ -54,7 +60,7 @@ func outOfBatch() error {
 
 func (a adapter) claimed(ctx context.Context, c tool.Caller) (*curation.ModelRun, []curation.PendingItem, error) {
 	run, ok := curation.ModelRunFrom(ctx)
-	if !ok || c.Source != tool.SourceCuration || !uuid.Valid(run.ConversationID) || (c.ConversationID != "" && c.ConversationID != run.ConversationID) {
+	if !ok || c.Source != tool.SourceCuration || (run.ActorID != "" && run.ActorID != c.User.ID) || !uuid.Valid(run.ConversationID) || (c.ConversationID != "" && c.ConversationID != run.ConversationID) {
 		return nil, nil, &tool.Error{Code: tool.CodePermissionDenied, Message: "需要后台整理会话"}
 	}
 	settings, err := a.writer.Settings(ctx)
@@ -111,6 +117,10 @@ func (a adapter) read(ctx context.Context, c tool.Caller, raw json.RawMessage) (
 	}
 	rows := make([]map[string]any, 0, len(items))
 	for _, p := range items {
+		if p.Kind == "artist_identity" {
+			rows = append(rows, map[string]any{"item_id": p.ID, "kind": p.Kind, "artist_id": p.ArtistID, "evidence": p.Evidence})
+			continue
+		}
 		rows = append(rows, map[string]any{"item_id": p.ID, "kind": p.Kind, "release_id": p.TargetID, "conflicts": p.Conflicts, "evidence": p.Evidence, "candidates": p.Candidates})
 	}
 	return json.Marshal(rows)
@@ -130,6 +140,9 @@ func (a adapter) plan(ctx context.Context, c tool.Caller, in matchInput) (progra
 	item, err := selectItem(items, in.ItemID, false)
 	if err != nil {
 		return program.MatchPlan{}, nil, item, err
+	}
+	if item.TargetType != "release" {
+		return program.MatchPlan{}, nil, item, invalid()
 	}
 	plan, err := a.matcher.Plan(ctx, item, in.ExternalID)
 	return plan, run, item, toolError(err)

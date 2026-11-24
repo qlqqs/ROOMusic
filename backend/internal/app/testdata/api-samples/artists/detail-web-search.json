@@ -1,0 +1,72 @@
+{
+  "body": {
+    "artist": {
+      "album_count": 1,
+      "available": true,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "image": null,
+      "initial_group": "D",
+      "name": "邓丽君",
+      "roles": [
+        "release_artist",
+        "album_artist",
+        "track_artist"
+      ],
+      "track_count": 2
+    },
+    "bio": {
+      "citations": [
+        {
+          "title": "演出名录",
+          "url": "https://artists.example.org/profile"
+        }
+      ],
+      "lang": "zh",
+      "license": null,
+      "license_url": null,
+      "source": "web_search",
+      "source_url": "https://artists.example.org/profile",
+      "text": "这段合成简介展示模型依据演出记录整理的艺人资料。"
+    },
+    "image": null,
+    "links": {
+      "musicbrainz": null,
+      "wikidata": null
+    },
+    "name_source": "auto",
+    "names": [
+      {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "is_display_name": true,
+        "key_id": "00000000-0000-4000-8000-000000000003",
+        "name": "邓丽君",
+        "origin": "scan"
+      }
+    ],
+    "names_pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 1
+    },
+    "redirect_artist_id": null,
+    "revision": 9,
+    "role_counts": [
+      {
+        "present": 2,
+        "role": "release_artist",
+        "total": 3
+      },
+      {
+        "present": 2,
+        "role": "album_artist",
+        "total": 3
+      },
+      {
+        "present": 2,
+        "role": "track_artist",
+        "total": 3
+      }
+    ]
+  },
+  "status": 200
+}

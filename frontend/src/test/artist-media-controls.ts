@@ -13,6 +13,9 @@ export function artistMediaControls() {
     hidden: { image: false, bio: false },
     applyLink: vi.fn<ArtistMediaControls["applyLink"]>().mockResolvedValue(true),
     error: null,
+    webSearch: null,
+    decideCandidates: vi.fn(() => Promise.resolve(true)),
+    deciding: false,
     dismissError: vi.fn(),
   } satisfies ArtistMediaControls;
 }

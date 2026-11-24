@@ -245,3 +245,14 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+/* 名字前带图标的行（网络搜索的地球）。 */
+.iconLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.iconLabel svg {
+  color: var(--text-accent);
+}

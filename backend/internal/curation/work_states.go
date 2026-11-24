@@ -23,7 +23,7 @@ type WorkState struct {
 // 避免取歌词期间每新增一条歌词记录就重新扫描发行。
 type ProgramChanges struct {
 	Scan, Settings, Sources, Suppression, Operation, OtherOperation sql.NullTime
-	LatestDue, LatestReleaseDue                                     sql.NullTime
+	ArtistSettings, LatestDue, LatestReleaseDue                     sql.NullTime
 	Suppressions, Due, ReleaseDue                                   int64
 }
 
@@ -32,6 +32,7 @@ func LoadProgramChanges(ctx context.Context, q operations.Queryer, now time.Time
 	err := q.QueryRowContext(ctx, `SELECT
  (SELECT max(finished_at) FROM scan_runs),
  (SELECT updated_at FROM curation_settings WHERE id=1),
+ (SELECT u.updated_at FROM steward_user_settings u JOIN curation_settings c ON c.enabled_by=u.user_id WHERE c.id=1),
  GREATEST((SELECT max(updated_at) FROM curation_source_settings), (SELECT max(updated_at) FROM curation_source_keys)),
  (SELECT max(created_at) FROM curation_suppressions),
  (SELECT max(created_at) FROM operations),
@@ -42,7 +43,7 @@ func LoadProgramChanges(ctx context.Context, q operations.Queryer, now time.Time
  count(*),count(*) FILTER (WHERE subject IN ('release','artwork')),
  max(next_attempt_at),max(next_attempt_at) FILTER (WHERE subject IN ('release','artwork'))
  FROM curation_work_states WHERE status='try_later' AND next_attempt_at <= $1`, now).
-		Scan(&c.Scan, &c.Settings, &c.Sources, &c.Suppression, &c.Operation, &c.OtherOperation, &c.Suppressions, &c.Due, &c.ReleaseDue, &c.LatestDue, &c.LatestReleaseDue)
+		Scan(&c.Scan, &c.Settings, &c.ArtistSettings, &c.Sources, &c.Suppression, &c.Operation, &c.OtherOperation, &c.Suppressions, &c.Due, &c.ReleaseDue, &c.LatestDue, &c.LatestReleaseDue)
 	return c, err
 }
 
@@ -78,23 +79,29 @@ func SaveWorkState(ctx context.Context, q Execer, s WorkState) error {
 }
 
 type PendingItem struct {
-	ConversationID                         string
-	ClaimedAt, NextAttemptAt               *time.Time
-	Attempts, ReviewRetries                int
-	ShelvedReason                          *string
-	ID, TargetType, TargetID, Kind, Status string
-	RuleVersion                            int16
-	InputDigest                            string
-	Evidence, Candidates, Conflicts        json.RawMessage
-	Resolution                             *string
-	CreatedAt, UpdatedAt                   time.Time
-	ResolvedAt                             *time.Time
+	ConversationID                                   string
+	ClaimedAt, NextAttemptAt                         *time.Time
+	Attempts, ReviewRetries                          int
+	ShelvedReason                                    *string
+	ID, TargetType, TargetID, ArtistID, Kind, Status string
+	RuleVersion                                      int16
+	InputDigest                                      string
+	Evidence, Candidates, Conflicts                  json.RawMessage
+	Resolution                                       *string
+	CreatedAt, UpdatedAt                             time.Time
+	ResolvedAt                                       *time.Time
 }
 
 func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
-	_, err := q.ExecContext(ctx, `INSERT INTO curation_pending_items AS p(target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts)
+	target, insert := item.TargetID, `INSERT INTO curation_pending_items AS p(target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts)
  VALUES('release',$1,$2,'waiting_model',$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'))
- ON CONFLICT(target_type,target_id,kind) WHERE status <> 'resolved' DO UPDATE SET rule_version=excluded.rule_version,input_digest=excluded.input_digest,
+ ON CONFLICT(target_type,target_id,kind) WHERE status <> 'resolved'`
+	if item.TargetType == "artist" {
+		target, insert = item.ArtistID, `INSERT INTO curation_pending_items AS p(target_type,artist_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts)
+ VALUES('artist',$1,$2,'waiting_model',$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'))
+ ON CONFLICT(artist_id,kind) WHERE status <> 'resolved' AND target_type='artist'`
+	}
+	_, err := q.ExecContext(ctx, insert+` DO UPDATE SET rule_version=excluded.rule_version,input_digest=excluded.input_digest,
  evidence=excluded.evidence,candidates=excluded.candidates,conflicts=excluded.conflicts,updated_at=now(),
  status=CASE WHEN p.status='shelved' THEN 'waiting_model' ELSE p.status END,
  attempts=CASE WHEN p.status='shelved' THEN 0 ELSE p.attempts END,
@@ -106,11 +113,19 @@ func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
  WHERE p.status IN ('waiting_model','in_progress')
  OR (p.status='shelved' AND (p.input_digest<>excluded.input_digest
      OR p.candidates IS DISTINCT FROM excluded.candidates
-     OR p.conflicts IS DISTINCT FROM excluded.conflicts))`, item.TargetID, item.Kind, item.RuleVersion, item.InputDigest, item.Evidence, item.Candidates, item.Conflicts)
+     OR p.conflicts IS DISTINCT FROM excluded.conflicts))`, target, item.Kind, item.RuleVersion, item.InputDigest, item.Evidence, item.Candidates, item.Conflicts)
 	return err
 }
 
 func ResolvePendingItems(ctx context.Context, q Execer, targetID, kind, resolution string) error {
+	if kind == "artist_identity" {
+		_, err := q.ExecContext(ctx, `WITH closed AS (
+ UPDATE curation_pending_items SET status='resolved',resolution=$2,resolved_at=now(),updated_at=now(),next_attempt_at=NULL
+ WHERE target_type='artist' AND artist_id=$1 AND status<>'resolved' RETURNING id
+ ) UPDATE curation_model_exceptions SET status='superseded',decided_at=now(),decided_by=NULL
+ WHERE pending_item_id IN (SELECT id FROM closed) AND status='open'`, targetID, resolution)
+		return err
+	}
 	_, err := q.ExecContext(ctx, `UPDATE curation_pending_items SET status='resolved', resolution=$3,updated_at=now(),resolved_at=now()
  WHERE target_type='release' AND target_id=$1 AND kind=$2 AND status IN ('waiting_model','shelved','waiting_human')`, targetID, kind, resolution)
 	return err

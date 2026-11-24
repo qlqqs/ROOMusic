@@ -23,7 +23,10 @@ export function MediaPopover({ label, anchorRef, onClose, className, children }:
   useEffect(() => {
     const element = ref.current;
     if (element === null) return;
-    const first = element.querySelector<HTMLElement>("input, button, a[href], textarea, [tabindex]:not([tabindex='-1'])");
+    // 第一个看得见的可操作元素（折叠的 <details> 里的链接不算）。
+    const first = Array.from(element.querySelectorAll<HTMLElement>("input, button, a[href], textarea, summary, [tabindex]:not([tabindex='-1'])")).find(
+      (candidate) => candidate.closest("details:not([open]) > :not(summary)") === null,
+    );
     (first ?? element).focus({ preventScroll: true });
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -40,11 +43,12 @@ export function MediaPopover({ label, anchorRef, onClose, className, children }:
       const next = event.relatedTarget as Node | null;
       if (next !== null && !element.contains(next) && !anchorRef.current?.contains(next)) close();
     };
-    element.addEventListener("keydown", onKey);
+    // Esc 挂在 document 上：焦点还在触发器上（刚点开）时也能关闭。
+    document.addEventListener("keydown", onKey);
     element.addEventListener("focusout", onFocusOut);
     document.addEventListener("pointerdown", onPointer, true);
     return () => {
-      element.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey);
       element.removeEventListener("focusout", onFocusOut);
       document.removeEventListener("pointerdown", onPointer, true);
     };
@@ -57,11 +61,11 @@ export function MediaPopover({ label, anchorRef, onClose, className, children }:
   );
 }
 
-/** 弹层里的一行：前面一个图标，后面是文字；有安全的地址时整行是外链（新窗口打开）。 */
-export function PopoverRow({ icon, href, children }: { icon: ReactNode; href?: string | null | undefined; children: ReactNode }) {
+/** 弹层里的一行：前面一个图标，后面是文字；有安全的地址时整行是外链（新窗口打开）。给了 title（网页标题）时文字一行显示、过长省略。 */
+export function PopoverRow({ icon, href, title, children }: { icon: ReactNode; href?: string | null | undefined; title?: string | undefined; children: ReactNode }) {
   if (href !== undefined && href !== null) {
     return (
-      <a className={styles.row} href={href} target="_blank" rel="noopener noreferrer">
+      <a className={styles.row} href={href} target="_blank" rel="noopener noreferrer" title={title} data-truncate={title === undefined ? undefined : ""}>
         <span className={styles.rowIcon}>{icon}</span>
         <span className={styles.rowText}>{children}</span>
         <SquareArrowOutUpRight className={styles.external} size={13} aria-hidden="true" />

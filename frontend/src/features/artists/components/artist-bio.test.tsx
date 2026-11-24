@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
+import { sampleBody } from "../../../test/api-samples";
 import { artistMediaControls } from "../../../test/artist-media-controls";
 import { artistBio } from "../../../test/artist-media-data";
+import { decodeArtistDetail } from "../api/decoders";
 import { ArtistBio } from "./artist-bio";
 
 it("正文溢出时，图标行提供来源与展开按钮，展开后可收起", async () => {
@@ -51,6 +53,18 @@ it("简介来源弹层显示来源及许可，并在 Esc 后把焦点还给图�
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(document.activeElement).toBe(source);
+});
+
+it("网络搜索简介在来源弹层列出引用网页", async () => {
+  const user = userEvent.setup();
+  const { bio } = decodeArtistDetail(sampleBody("artists/detail-web-search"));
+  render(<ArtistBio bio={bio} media={null} />);
+  await user.click(screen.getByRole("button", { name: "简介来源：网络搜索" }));
+  const dialog = within(screen.getByRole("dialog", { name: "简介来源" }));
+  const citation = dialog.getByRole("link", { name: "artists.example.org/profile" });
+  expect(citation.getAttribute("href")).toBe("https://artists.example.org/profile");
+  expect(citation.getAttribute("title")).toBe("演出名录");
+  expect(citation.getAttribute("target")).toBe("_blank");
 });
 
 it("管理员原地编辑，Esc 取消，Ctrl+Enter 保存去除首尾空白的简介", async () => {

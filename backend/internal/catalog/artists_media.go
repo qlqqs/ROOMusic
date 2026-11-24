@@ -3,7 +3,9 @@ package catalog
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"strings"
 )
 
 // ArtistMediaFamilyCTE 共用治理写入时已扁平化的重定向。A→B→C 时，A 与 B 的
@@ -30,37 +32,65 @@ const ArtistMediaOrder = `(f.artist_id=f.canonical_id) DESC, f.merged_at DESC NU
 
 // ArtistImageRowsSQL 供摘要、详情与“标记不对”共用两层图片的字段。
 const ArtistImageRowsSQL = `SELECT artist_id,operation_id,storage_key,'manual'::text AS source,
- NULL::text AS source_url,NULL::text AS author,NULL::text AS license,NULL::text AS license_url
+ NULL::text AS source_url,NULL::text AS author,NULL::text AS license,NULL::text AS license_url, '[]'::jsonb AS citations
  FROM artist_manual_artworks
- UNION ALL SELECT artist_id,operation_id,storage_key,source,source_url,author,license,license_url
+ UNION ALL SELECT artist_id,operation_id,storage_key,source,source_url,author,license,license_url,citations
  FROM artist_external_artworks`
 
 // ArtistBioRowsSQL 供详情与“标记不对”共用两层简介的字段。
 const ArtistBioRowsSQL = `SELECT artist_id,operation_id,text,lang,'manual'::text AS source,
- NULL::text AS source_url,NULL::text AS license,NULL::text AS license_url FROM artist_manual_bios
- UNION ALL SELECT artist_id,operation_id,text,lang,source,source_url,license,license_url FROM artist_external_bios`
+ NULL::text AS source_url,NULL::text AS license,NULL::text AS license_url, '[]'::jsonb AS citations FROM artist_manual_bios
+ UNION ALL SELECT artist_id,operation_id,text,lang,source,source_url,license,license_url,citations FROM artist_external_bios`
 
-const artistLayerOrder = `(m.source='manual') DESC, ` + ArtistMediaOrder
+// ArtistMediaRankSQL 与 ArtistMediaRank 使用同一组来源等级，m 是资料行。
+const ArtistMediaRankSQL = `CASE WHEN m.source='manual' THEN 4 WHEN m.source='web_search' THEN 1 WHEN m.source LIKE 'plugin:%' THEN 2 ELSE 3 END`
+const (
+	ArtistMediaPluginRank   = 2
+	ArtistMediaLicensedRank = 3
+)
+const ArtistMediaDisplayOrder = ArtistMediaRankSQL + ` DESC, ` + ArtistMediaOrder
+
+func ArtistMediaRank(source string) int {
+	switch {
+	case source == "":
+		return 0
+	case source == "web_search":
+		return 1
+	case strings.HasPrefix(source, "plugin:"):
+		return ArtistMediaPluginRank
+	case source == "manual":
+		return 4
+	default:
+		return ArtistMediaLicensedRank
+	}
+}
 
 func (s *Store) readArtistMedia(ctx context.Context, canonical string, result *ArtistDetail) error {
+	var citations []byte
 	var image ArtistImage
 	err := s.database.QueryRowContext(ctx, `WITH `+ArtistMediaFamilyCTE+`
- SELECT m.storage_key,m.source,m.source_url,m.author,m.license,m.license_url
+ SELECT m.storage_key,m.source,m.source_url,m.author,m.license,m.license_url,m.citations
  FROM artist_media_family f JOIN (`+ArtistImageRowsSQL+`) m ON m.artist_id=f.artist_id
- WHERE f.canonical_id=$1::uuid ORDER BY `+artistLayerOrder+` LIMIT 1`, canonical).
-		Scan(&image.Resource, &image.Source, &image.SourceURL, &image.Author, &image.License, &image.LicenseURL)
+ WHERE f.canonical_id=$1::uuid ORDER BY `+ArtistMediaDisplayOrder+` LIMIT 1`, canonical).
+		Scan(&image.Resource, &image.Source, &image.SourceURL, &image.Author, &image.License, &image.LicenseURL, &citations)
 	if err == nil {
+		if err := json.Unmarshal(citations, &image.Citations); err != nil {
+			return err
+		}
 		result.Image = &image
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 	var bio ArtistBio
 	err = s.database.QueryRowContext(ctx, `WITH `+ArtistMediaFamilyCTE+`
- SELECT m.text,m.lang,m.source,m.source_url,m.license,m.license_url
+ SELECT m.text,m.lang,m.source,m.source_url,m.license,m.license_url,m.citations
  FROM artist_media_family f JOIN (`+ArtistBioRowsSQL+`) m ON m.artist_id=f.artist_id
- WHERE f.canonical_id=$1::uuid ORDER BY `+artistLayerOrder+` LIMIT 1`, canonical).
-		Scan(&bio.Text, &bio.Lang, &bio.Source, &bio.SourceURL, &bio.License, &bio.LicenseURL)
+ WHERE f.canonical_id=$1::uuid ORDER BY `+ArtistMediaDisplayOrder+` LIMIT 1`, canonical).
+		Scan(&bio.Text, &bio.Lang, &bio.Source, &bio.SourceURL, &bio.License, &bio.LicenseURL, &citations)
 	if err == nil {
+		if err := json.Unmarshal(citations, &bio.Citations); err != nil {
+			return err
+		}
 		result.Bio = &bio
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return err

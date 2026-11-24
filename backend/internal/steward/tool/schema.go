@@ -17,6 +17,7 @@ type schema struct {
 	items                *schema
 	minimum, maximum     *big.Rat
 	minLength, maxLength *big.Rat
+	maxItems             *big.Rat
 }
 
 func compileSchema(raw json.RawMessage) (*schema, error) {
@@ -95,12 +96,12 @@ func compileSchemaNode(value any, path string) (*schema, error) {
 				return nil, err
 			}
 			compiled.items = child
-		case "minimum", "maximum", "minLength", "maxLength":
+		case "minimum", "maximum", "minLength", "maxLength", "maxItems":
 			number, ok := value.(*big.Rat)
 			if !ok {
 				return nil, fmt.Errorf("%s: expected a number", location)
 			}
-			if (keyword == "minLength" || keyword == "maxLength") && (!number.IsInt() || number.Sign() < 0) {
+			if keyword != "minimum" && keyword != "maximum" && (!number.IsInt() || number.Sign() < 0) {
 				return nil, fmt.Errorf("%s: expected a nonnegative integer", location)
 			}
 			switch keyword {
@@ -112,6 +113,8 @@ func compileSchemaNode(value any, path string) (*schema, error) {
 				compiled.minLength = number
 			case "maxLength":
 				compiled.maxLength = number
+			case "maxItems":
+				compiled.maxItems = number
 			}
 		default:
 			return nil, fmt.Errorf("%s: unsupported schema keyword", location)

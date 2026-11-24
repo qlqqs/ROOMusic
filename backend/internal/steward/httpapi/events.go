@@ -144,7 +144,7 @@ func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identit
 		Check:    h.runCredentialCheck(r, user, settings), Caller: tool.Caller{User: user, Source: "chat", RequestID: r.Header.Get("X-Request-ID")},
 		ReviewPlanID: reviewPlanID, ReviewModel: settings.ReviewModel, Decision: decision, ConversationID: id, Text: text, Context: messageContext, Continue: continuation, DisplayName: settings.DisplayName,
 		Provider: model, Model: modelName, Protocol: provider.Protocol(settings.Protocol), Endpoint: settings.Endpoint,
-		NativeSearch: settings.SearchSource == "native" && effectiveNativeSearch(settings, settingsUpdate(settings)) == provider.NativeSearchSupported})
+		NativeSearch: nativeSearchEnabled(settings)})
 	if err != nil {
 		closeClient()
 		h.writeStoreError(w, r, err)

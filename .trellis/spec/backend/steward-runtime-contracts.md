@@ -417,7 +417,7 @@ type Result struct{ Output json.RawMessage; Truncated, Untrusted bool }
 
 schema 子集（输入、输出都按此编译，出现其他关键字注册失败）：`type`（`object/array/string/number/integer/boolean/null`，单个字符串）、
 `properties`、`required`（不重复的字符串数组）、`additionalProperties`（只接受 `false`，省略表示允许）、`enum`（非空、不重复）、
-`items`、`minimum`、`maximum`、`minLength`、`maxLength`（按 Unicode 字符计）。数值用精确有理数比较。
+`items`、`maxItems`（按数组元素计）、`minimum`、`maximum`、`minLength`、`maxLength`（按 Unicode 字符计）。数值用精确有理数比较，长度与元素数量上限须为非负整数。
 `Invoke` 只校验输入；输出 schema 只在注册时编译，输出是否符合由处理器负责。
 
 调用错误（`*tool.Error{Code, Tool, Message}`，`errors.As` 识别；处理器返回的其他错误保留原错误链）：
@@ -964,7 +964,7 @@ JSON 错误信封只给上表的固定消息；适配器脱敏后的 `Message` �
 
 ### 后台整理运行
 
-`RunParams.Background` 为后台运行分配全实例唯一名额，已占用返回 `ErrBackgroundBusy`。对话继续使用每用户三个名额。调度器通过 `StartBackground` 提供 `BeforeStep`、`Usage`、`Escalate` 和 `SystemSuffix`，并启用 `SkipMemory`。后台关闭原生搜索，使用开启者的模型端点与个人审查模型。每次主模型步骤与重审前执行 `BeforeStep`，返回 `ErrRunStopped` 时结束原因为 `curation_stopped`。用量回调区分 main、review、summary。后台转人工或拒绝时，`Escalate` 返回持久例外 ID。转人工项取舍记为 `escalated`。
+`RunParams.Background` 为后台运行分配全实例唯一名额，已占用返回 `ErrBackgroundBusy`。对话继续使用每用户三个名额。调度器通过 `StartBackground` 提供 `BeforeStep`、`Usage`、`Escalate` 和 `SystemSuffix`，并启用 `SkipMemory`。后台使用开启者的模型端点与个人审查模型。网络搜索来源可用且该模型启用原生搜索时设置 `NativeSearch`。后台每步重新列出可用工具，调用时再次检查。`RunParams.BackgroundDirectTools` 只登记 `submit_artist_media`，保留 shared 的输入校验、操作幂等及提交不确定时的原键对账。`resolve_artist_identity` 走独立审查。每次主模型步骤与重审前执行 `BeforeStep`，返回 `ErrRunStopped` 时结束原因为 `curation_stopped`。用量回调区分 main、review、summary。后台转人工或拒绝时，`Escalate` 返回持久例外 ID。转人工项取舍记为 `escalated`。
 
 `CancelUser` 和 `CancelMembers` 跳过后台运行。端点或密钥更换时由 `CancelBackground(userID)` 取消开启者的后台运行。每 60 秒的凭据复查发现后台凭据失效时只取消该运行。应用停机取消全部运行。`Run.Wait(ctx)` 返回持久化收尾后的结束原因及错误。
 

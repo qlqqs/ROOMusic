@@ -1,0 +1,7 @@
+{
+  "models": [
+    "mock-model",
+    "mock-reviewer"
+  ],
+  "artist_scenario": "identity"
+}

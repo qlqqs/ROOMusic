@@ -1,4 +1,4 @@
-import { MoreHorizontal } from "lucide-react";
+import { Globe, MoreHorizontal } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Fragment, useState } from "react";
 import { FailureNotice, MenuButton, QueryContent, SettingRow, SettingsGroup, Skeleton, Switch } from "../../../shared/ui";
@@ -9,6 +9,7 @@ import { useCurationSources, useSetCurationSource, useSetCurationSourceKey } fro
 import { useScopeRevert } from "../hooks/use-scope-revert";
 import { ScopeRevertDialog, ScopeRevertResult, type ScopeRevertTarget } from "./scope-revert-dialog";
 import { keyLabel, SourceKeyRow } from "./source-key-row";
+import { requirementsMissing, SourceRequirements } from "./source-requirements";
 import styles from "./curation-sections.module.css";
 
 /** 分组层面的说明：总开关关着、打开它的管理员不可用或已暂停时，所有源都不会被后台使用。 */
@@ -80,14 +81,29 @@ export function CurationSourcesSection({ settings, refresh }: { settings: Curati
               ];
               return (
                 <Fragment key={source.id}>
-                  <SettingRow label={isPluginSource(source) ? `${source.name}（插件）` : source.name} description={sourceDescription(source)}>
+                  <SettingRow
+                    label={
+                      source.id === "web_search" ? (
+                        <span className={styles.iconLabel}>
+                          <Globe size={16} aria-hidden="true" />
+                          {source.name}
+                        </span>
+                      ) : isPluginSource(source) ? (
+                        `${source.name}（插件）`
+                      ) : (
+                        source.name
+                      )
+                    }
+                    description={sourceDescription(source)}
+                  >
                     {({ controlId, descriptionId }) => (
                       <span className={styles.footerRow}>
+                        {source.requirements === undefined || source.requirements === null ? null : <SourceRequirements requirements={source.requirements} />}
                         <Switch
                           id={controlId}
                           aria-describedby={descriptionId}
                           checked={checked}
-                          disabled={setSource.isPending}
+                          disabled={setSource.isPending || (requirementsMissing(source) && !checked)}
                           onChange={(enabled) => setSource.mutate({ id: source.id, enabled })}
                         />
                         {writesOwnChanges(source) ? (

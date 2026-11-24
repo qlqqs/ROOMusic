@@ -233,7 +233,7 @@ describe("艺人浏览与详情（⑤）", () => {
   });
 });
 
-it("艺人列表使用摘要图片，艺人页头使用详情图片并显示简介与图片署名", async () => {
+it("艺人列表使用摘要图片，艺人页头使用详情图片并在弹层显示图片署名", async () => {
   const { data } = setup();
   const detail = getDetail(data);
   detail.artist.image = "artist-list-portrait";
@@ -251,5 +251,10 @@ it("艺人列表使用摘要图片，艺人页头使用详情图片并显示简�
   const scope = within(header);
   expect(scope.getByAltText("").getAttribute("src")).toBe("/api/v1/artworks/m8-artist-portrait");
   expect(scope.getByText(artistBio.text)).toBeTruthy();
-  expect(scope.getByRole("link", { name: "Wikimedia Commons" })).toBeTruthy();
+  expect(scope.queryByText("合成样本作者")).toBeNull();
+  await userEvent.click(scope.getByRole("button", { name: "图片来源：Wikimedia Commons · CC BY 4.0" }));
+  const source = within(scope.getByRole("dialog", { name: "图片来源" }));
+  expect(source.getByRole("link", { name: "Wikimedia Commons" }).getAttribute("href")).toBe(artistImage.source_url);
+  expect(source.getByText("合成样本作者")).toBeTruthy();
+  expect(source.getByRole("link", { name: "CC BY 4.0" }).getAttribute("href")).toBe(artistImage.license_url);
 });

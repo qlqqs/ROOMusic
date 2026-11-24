@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
@@ -119,6 +120,18 @@ func (k artistMediaKind) Describe(ctx context.Context, q operations.Queryer, rec
 			} else {
 				change["lang"] = value.Lang
 				change["length"] = utf8.RuneCountInString(value.Text)
+			}
+			var audit struct{ Replaced []struct{ Source string } }
+			if err := json.Unmarshal(raw, &audit); err != nil {
+				return nil, err
+			}
+			if len(audit.Replaced) > 0 {
+				names := make([]string, 0, len(audit.Replaced))
+				for _, entry := range audit.Replaced {
+					names = append(names, entry.Source)
+				}
+				change["replaced"] = names
+				change["note"] = "替换了 " + strings.Join(names, "、") + "，撤销不恢复"
 			}
 			d.Changes = change
 			d.Revertible = artist.Name != "" && r.Type != operations.TypeRevert && r.RevertedByID == "" && owners[r.TargetID] == r.ID

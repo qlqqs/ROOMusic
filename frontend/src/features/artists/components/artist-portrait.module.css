@@ -102,10 +102,10 @@
   pointer-events: none;
 }
 
+/* 线宽按 viewBox 单位（100 对应约 182px，0.9 约 1.6px）；不用 vector-effect，否则 pathLength 失效、虚线按实际周长重复成多段。 */
 .ring circle {
   fill: none;
-  stroke-width: 1.6;
-  vector-effect: non-scaling-stroke;
+  stroke-width: 0.9;
 }
 
 .track {
@@ -171,6 +171,36 @@
   outline-offset: var(--focus-offset);
 }
 
+/* 网络搜索整理的图片：星光用强调色。 */
+.seal[data-kind="web"] {
+  border-color: var(--color-accent-400);
+  color: var(--text-accent);
+}
+
+/* 网络搜索中：地球用强调色，不可误认为可点的“完成”。 */
+.seal[data-kind="searching"] {
+  color: var(--text-accent);
+}
+
+/* 有身份候选等你确认：金底白色地球，右上一个提示点。 */
+.seal[data-kind="pending"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-neutral-100);
+}
+
+.seal[data-kind="pending"]::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--color-bg);
+  border-radius: 50%;
+  background: var(--color-warning);
+}
+
 /* 没有图片时，管理员看到的是一枚虚线的“指定对应”。 */
 .seal[data-kind="link"] {
   border-style: dashed;
@@ -216,6 +246,16 @@
 .iconButton:hover {
   background: var(--color-hover);
   color: var(--text-primary);
+}
+
+.iconButton[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.iconButton[aria-disabled="true"]:hover {
+  background: none;
+  color: var(--text-secondary);
 }
 
 .iconButton:focus-visible {

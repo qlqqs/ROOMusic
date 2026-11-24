@@ -1,4 +1,4 @@
-import { Copyright, Flag, ImagePlus, Link2, User } from "lucide-react";
+import { Copyright, Flag, Globe, ImagePlus, Link2, User, X } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { cx } from "../../../shared/lib/class-names";
 import { useTooltip } from "../../../shared/ui";
@@ -6,7 +6,9 @@ import type { ArtistImageDTO, ArtistLinksDTO } from "../api/decoders";
 import type { ArtistMediaControls } from "../hooks/use-artist-media";
 import { safeUrl, sourceKindOf, sourceNameOf, sourceSummaryOf } from "./artist-media-source";
 import { SourceGlyph } from "./source-glyph";
+import { ArtistCandidates } from "./artist-candidates";
 import { ArtistLinkPopover, linkInputOf } from "./artist-link-popover";
+import { CitationRows } from "./citation-rows";
 import { ArtistMonogram } from "./artist-monogram";
 import { MediaPopover, PopoverActions, PopoverRow } from "./media-popover";
 import styles from "./artist-portrait.module.css";
@@ -19,11 +21,11 @@ type ArtistPortraitProps = {
   media: ArtistMediaControls | null;
 };
 
-function IconButton({ label, onClick, icon, tone }: { label: string; onClick: () => void; icon: ReactNode; tone?: "danger" }) {
+function IconButton({ label, onClick, icon, tone, disabled = false }: { label: string; onClick: () => void; icon: ReactNode; tone?: "danger"; disabled?: boolean }) {
   const tip = useTooltip(label);
   return (
     <>
-      <button type="button" className={cx(styles.iconButton, tone === "danger" && styles.danger)} aria-label={label} onClick={onClick} {...tip.triggerProps}>
+      <button type="button" className={cx(styles.iconButton, tone === "danger" && styles.danger)} aria-label={label} aria-disabled={disabled ? true : undefined} onClick={() => !disabled && onClick()} {...tip.triggerProps}>
         {icon}
       </button>
       {tip.tooltip}
@@ -54,9 +56,11 @@ function LinkRows({ links }: { links: ArtistLinksDTO }) {
  * - 有图片时显示图片（读不出来时退回名字圆章），右下 45° 处一枚印章，图标表示来源；点开是来源、作者、许可与外部对应。
  * - 管理员：悬停圆章出现遮罩与“加图片”图标，点击选图；把图片拖到圆章上也能上传；上传中先显示本地预览与进度弧。
  *   印章弹层底部有“图片不对”“指定对应”“更换图片”；没有图片时印章是“指定对应”。在页面任意处粘贴 MusicBrainz 或 Wikidata 链接直接打开指定对应。
+ * - 网络搜索（管理员）：排队或处理中时圆章外一圈缓慢转动的细弧，没有图片时印章是地球；有候选等你确认时印章是金底地球加提示点，
+ *   点开列出候选，逐个打勾采纳，或“都不是”。
  */
 export function ArtistPortrait({ artist, image, links, media }: ArtistPortraitProps) {
-  const [popover, setPopover] = useState<null | "source" | "link">(null);
+  const [popover, setPopover] = useState<null | "source" | "link" | "candidates">(null);
   const [pastedLink, setPastedLink] = useState("");
   const [dropping, setDropping] = useState(false);
   const sealRef = useRef<HTMLButtonElement>(null);
@@ -64,7 +68,21 @@ export function ArtistPortrait({ artist, image, links, media }: ArtistPortraitPr
   const shown = media?.hidden.image ? null : image;
   const upload = media?.upload ?? { status: "idle" as const };
   const resource = upload.status === "uploading" ? null : (shown?.resource ?? (media?.hidden.image ? null : artist.image));
-  const sealLabel = shown === null ? "指定对应" : sourceSummaryOf("图片", shown);
+  const webState = media?.webSearch?.state ?? "none";
+  const candidates = webState === "waiting_human" ? (media?.webSearch?.candidates ?? []) : [];
+  const searching = webState === "queued" || webState === "running";
+  // 印章的模式：有候选待确认优先；其次是图片来源；没有图片时管理员看到网络搜索中或“指定对应”。
+  const seal = candidates.length > 0 ? "pending" : shown !== null ? "source" : searching ? "searching" : media !== null ? "link" : null;
+  const sealLabel =
+    seal === "pending"
+      ? `有 ${candidates.length} 个身份候选等你确认`
+      : seal === "source" && shown !== null
+        ? sourceSummaryOf("图片", shown)
+        : seal === "searching"
+          ? webState === "running"
+            ? "正在网络搜索"
+            : "排队等待网络搜索"
+          : "指定对应";
   const sealTip = useTooltip(popover === null ? sealLabel : undefined);
   const veilTip = useTooltip(shown === null ? "上传图片" : "更换图片");
 
@@ -102,8 +120,8 @@ export function ArtistPortrait({ artist, image, links, media }: ArtistPortraitPr
     if (file !== undefined) media.uploadImage(file);
   };
 
-  const showSeal = shown !== null || media !== null;
   const closePopover = () => setPopover(null);
+  const sealPopover = seal === "pending" ? "candidates" : seal === "source" ? "source" : "link";
 
   return (
     <div
@@ -117,7 +135,13 @@ export function ArtistPortrait({ artist, image, links, media }: ArtistPortraitPr
       onDrop={onDrop}
     >
       <div className={styles.disc}>
-        {upload.status === "uploading" ? (
+        {(searching || media?.deciding === true) && upload.status === "idle" ? (
+        <svg className={styles.ring} data-indeterminate="" viewBox="0 0 100 100" aria-hidden="true">
+          <circle className={styles.track} cx="50" cy="50" r="48" pathLength={100} />
+          <circle className={styles.arc} cx="50" cy="50" r="48" pathLength={100} />
+        </svg>
+      ) : null}
+      {upload.status === "uploading" ? (
           <span className={styles.preview} aria-hidden="true">
             <img src={upload.preview} alt="" />
           </span>
@@ -152,29 +176,67 @@ export function ArtistPortrait({ artist, image, links, media }: ArtistPortraitPr
           <circle className={styles.arc} cx="50" cy="50" r="48" pathLength={100} style={{ strokeDashoffset: upload.progress === null ? undefined : 100 - upload.progress * 100 }} />
         </svg>
       ) : null}
-      {showSeal ? (
+      {seal !== null ? (
         <>
           <button
             ref={sealRef}
             type="button"
             className={styles.seal}
-            data-kind={shown === null ? "link" : sourceKindOf(shown.source)}
+            data-kind={seal === "source" && shown !== null ? sourceKindOf(shown.source) : seal}
             aria-label={sealLabel}
             aria-expanded={popover !== null}
             aria-haspopup="dialog"
-            onClick={() => setPopover((current) => (current === null ? (shown === null ? "link" : "source") : null))}
+            onClick={() => setPopover((current) => (current === null ? sealPopover : null))}
             {...sealTip.triggerProps}
           >
-            {shown === null ? <Link2 size={15} aria-hidden="true" /> : <SourceGlyph source={shown.source} size={15} />}
+            {seal === "source" && shown !== null ? <SourceGlyph source={shown.source} size={15} /> : seal === "link" ? <Link2 size={15} aria-hidden="true" /> : <Globe size={15} aria-hidden="true" />}
           </button>
           {sealTip.tooltip}
         </>
+      ) : null}
+      {popover === "candidates" && media !== null && candidates.length > 0 ? (
+        <MediaPopover label="身份候选" anchorRef={sealRef} onClose={closePopover} className={styles.popover}>
+          <ArtistCandidates
+            candidates={candidates}
+            deciding={media.deciding}
+            onAccept={(candidate) => {
+              void media.decideCandidates([candidate.exception_id], "accept").then((ok) => {
+                if (ok) setPopover(null);
+              });
+            }}
+          />
+          <PopoverActions
+            start={
+              <IconButton
+                label="都不是"
+                tone="danger"
+                disabled={media.deciding}
+                icon={<X size={15} aria-hidden="true" />}
+                onClick={() => {
+                  void media.decideCandidates(
+                    candidates.map((candidate) => candidate.exception_id),
+                    "decline",
+                  ).then((ok) => {
+                    if (ok) setPopover(null);
+                  });
+                }}
+              />
+            }
+            end={
+              <>
+                <IconButton label="指定对应" icon={<Link2 size={15} aria-hidden="true" />} onClick={() => setPopover("link")} />
+                <IconButton label={shown === null ? "上传图片" : "更换图片"} icon={<ImagePlus size={15} aria-hidden="true" />} onClick={chooseFile} />
+              </>
+            }
+          />
+        </MediaPopover>
       ) : null}
       {popover === "source" && shown !== null ? (
         <MediaPopover label="图片来源" anchorRef={sealRef} onClose={closePopover} className={styles.popover}>
           <PopoverRow icon={<SourceGlyph source={shown.source} size={15} />} href={safeUrl(shown.source_url)}>
             {sourceNameOf(shown.source)}
           </PopoverRow>
+          <CitationRows citations={shown.citations} />
           {shown.author === null ? null : <PopoverRow icon={<User size={15} aria-hidden="true" />}>{shown.author}</PopoverRow>}
           {shown.license === null ? null : (
             <PopoverRow icon={<Copyright size={15} aria-hidden="true" />} href={safeUrl(shown.license_url)}>

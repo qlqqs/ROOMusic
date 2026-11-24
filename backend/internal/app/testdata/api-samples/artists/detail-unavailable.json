@@ -11,6 +11,7 @@
       "track_count": 0
     },
     "bio": {
+      "citations": [],
       "lang": "zh",
       "license": "CC BY-SA 4.0",
       "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
@@ -20,6 +21,7 @@
     },
     "image": {
       "author": "样本摄影组",
+      "citations": [],
       "license": "CC BY 4.0",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "resource": "28e84b8f75db28325ebb4f49a70b634ae7900e53d717a46f1271dc5d8bfd8a8b.png",

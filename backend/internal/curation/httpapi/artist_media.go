@@ -13,6 +13,7 @@ import (
 
 func (h *Handlers) registerArtistMedia(mux *http.ServeMux) {
 	const base = "/api/v1/artists/{id}"
+	mux.HandleFunc("GET "+base+"/web-search", h.artistCommand(false, h.artistWebSearch))
 	mux.HandleFunc("PUT "+base+"/image", h.artistCommand(true, h.putArtistImage))
 	mux.HandleFunc("PUT "+base+"/bio", h.artistCommand(true, h.putArtistBio))
 	mux.HandleFunc("PUT "+base+"/links", h.artistCommand(true, h.putArtistLink))
@@ -92,4 +93,9 @@ func (h *Handlers) putArtistLink(w http.ResponseWriter, r *http.Request, cmd cur
 		ExpectedRevision: body.ExpectedRevision, ExternalSource: body.Source, ExternalID: body.ExternalID,
 	})
 	h.respond(w, r, result, err)
+}
+
+func (h *Handlers) artistWebSearch(w http.ResponseWriter, r *http.Request, cmd curation.ArtistEditRequest) {
+	state, err := h.writer.ArtistWebSearch(r.Context(), cmd.ArtistID)
+	h.respond(w, r, state, err)
 }

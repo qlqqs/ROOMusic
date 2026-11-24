@@ -4,8 +4,9 @@ import { cx } from "../../../shared/lib/class-names";
 import { useTooltip } from "../../../shared/ui";
 import { MAX_BIO_CHARS, type ArtistBioDTO } from "../api/decoders";
 import type { ArtistMediaControls } from "../hooks/use-artist-media";
-import { safeUrl, sourceNameOf, sourceSummaryOf } from "./artist-media-source";
+import { safeUrl, sourceKindOf, sourceNameOf, sourceSummaryOf } from "./artist-media-source";
 import { SourceGlyph } from "./source-glyph";
+import { CitationRows } from "./citation-rows";
 import { MediaPopover, PopoverActions, PopoverRow } from "./media-popover";
 import styles from "./artist-bio.module.css";
 
@@ -149,7 +150,7 @@ export function ArtistBio({ bio, media }: { bio: ArtistBioDTO | null; media: Art
       </p>
       <div className={styles.row} data-admin={media === null ? undefined : ""}>
         <span className={styles.anchor}>
-          <IconButton label={summary} buttonRef={sourceRef} expanded={popover} onClick={() => setPopover((value) => !value)}>
+          <IconButton label={summary} buttonRef={sourceRef} expanded={popover} tone={sourceKindOf(shown.source) === "web" ? "accent" : undefined} onClick={() => setPopover((value) => !value)}>
             <SourceGlyph source={shown.source} size={14} />
           </IconButton>
           {popover ? (
@@ -162,6 +163,7 @@ export function ArtistBio({ bio, media }: { bio: ArtistBioDTO | null; media: Art
                   {shown.license}
                 </PopoverRow>
               )}
+              <CitationRows citations={shown.citations} />
               {media === null ? null : (
                 <PopoverActions
                   start={

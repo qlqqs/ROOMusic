@@ -7,6 +7,7 @@ export const artistImage = {
   author: "合成样本作者",
   license: "CC BY 4.0",
   license_url: "https://creativecommons.example.test/licenses/by/4.0/",
+  citations: [],
 } satisfies ArtistImageDTO;
 
 export const artistBio = {
@@ -16,4 +17,5 @@ export const artistBio = {
   source_url: "http://wiki.example.test/Artist",
   license: "CC BY-SA 4.0",
   license_url: "https://creativecommons.example.test/licenses/by-sa/4.0/",
+  citations: [],
 } satisfies ArtistBioDTO;

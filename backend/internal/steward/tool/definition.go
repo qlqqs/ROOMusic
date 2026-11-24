@@ -97,7 +97,7 @@ type Basis struct {
 
 // Definition 是业务包提供并由 app 注册的工具合同。
 // 两个 schema 都仅支持 type、properties、required、additionalProperties: false、
-// enum、items、minimum、maximum、minLength、maxLength；不支持的关键字在注册时拒绝。
+// enum、items、minimum、maximum、minLength、maxLength、maxItems；不支持的关键字在注册时拒绝。
 type Definition struct {
 	// ReadOnly 允许 personal 范围的只读工具供只读 MCP 令牌使用。
 	ReadOnly bool

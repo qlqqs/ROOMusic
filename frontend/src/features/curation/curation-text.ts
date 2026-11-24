@@ -54,6 +54,8 @@ export function sourceInactiveText(reason: SourceInactiveReason | null): string 
       return "填入密钥后可用。";
     case "key_invalid":
       return "密钥无效，请重新填写。";
+    case "search_unconfigured":
+      return "打开自动整理的管理员还没有在管家设置里选搜索来源，暂时不能使用。";
     default:
       return null;
   }
@@ -80,6 +82,7 @@ export function sentToSourceText(source: Pick<CurationSourceDTO, "id" | "upstrea
 
 /** 打开总开关前列出：每个开着的源会收到什么（ADR 0006 第 8 节）。 */
 export const sentToSource: Record<string, string> = {
+  web_search: "没对上外部条目的艺人的名字、别名与若干专辑名、曲目名（经管家设置的对话模型与搜索来源）",
   musicbrainz: "外部编号、条码、ISRC、厂牌与编号、标题与艺人的查询词、由曲目时长推出的光盘目录",
   coverartarchive: "外部编号",
   lrclib: "曲目标题、艺人、专辑名、时长",
@@ -212,13 +215,21 @@ export function tokenText(tokens: number): string {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** 例外里匹配的外部编号与它在 MusicBrainz 上的地址（编号不是 UUID 时没有地址）；外部编号是不可信文本。 */
-export function exceptionExternal(exception: CurationExceptionDTO): { id: string; url: string | null } | null {
-  if (exception.tool !== "resolve_release_match") return null;
+const WIKIDATA_ID = /^Q[1-9][0-9]{0,11}$/;
+
+/**
+ * 例外里匹配的外部条目：来源与种类的说明（“MusicBrainz 发行”“Wikidata 条目”）、编号与它的地址（编号格式不对时没有地址）；外部编号是不可信文本。
+ */
+export function exceptionExternal(exception: CurationExceptionDTO): { label: string; id: string; url: string | null } | null {
   const raw = exception.input["external_id"];
   if (typeof raw !== "string") return null;
+  if (exception.tool === "resolve_artist_identity") {
+    if (exception.input["source"] === "wikidata") return { label: "Wikidata 条目", id: raw, url: WIKIDATA_ID.test(raw) ? `https://www.wikidata.org/wiki/${raw}` : null };
+    return { label: "MusicBrainz 艺人", id: raw, url: UUID.test(raw) ? `https://musicbrainz.org/artist/${raw.toLowerCase()}` : null };
+  }
+  if (exception.tool !== "resolve_release_match") return null;
   const kind = exception.kind === "recording_match" ? "recording" : "release";
-  return { id: raw, url: UUID.test(raw) ? `https://musicbrainz.org/${kind}/${raw.toLowerCase()}` : null };
+  return { label: exception.kind === "recording_match" ? "MusicBrainz 录音" : "MusicBrainz 发行", id: raw, url: UUID.test(raw) ? `https://musicbrainz.org/${kind}/${raw.toLowerCase()}` : null };
 }
 
 function fieldValueText(value: JsonValue): string {

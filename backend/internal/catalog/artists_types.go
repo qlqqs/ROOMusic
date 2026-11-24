@@ -50,22 +50,29 @@ type ArtistRoleCount struct {
 	Present int64  `json:"present"`
 }
 
+type Citation struct {
+	URL   string `json:"url"`
+	Title string `json:"title"`
+}
+
 type ArtistImage struct {
-	Resource   string  `json:"resource"`
-	Source     string  `json:"source"`
-	SourceURL  *string `json:"source_url"`
-	Author     *string `json:"author"`
-	License    *string `json:"license"`
-	LicenseURL *string `json:"license_url"`
+	Citations  []Citation `json:"citations"`
+	Resource   string     `json:"resource"`
+	Source     string     `json:"source"`
+	SourceURL  *string    `json:"source_url"`
+	Author     *string    `json:"author"`
+	License    *string    `json:"license"`
+	LicenseURL *string    `json:"license_url"`
 }
 
 type ArtistBio struct {
-	Text       string  `json:"text"`
-	Lang       string  `json:"lang"`
-	Source     string  `json:"source"`
-	SourceURL  *string `json:"source_url"`
-	License    *string `json:"license"`
-	LicenseURL *string `json:"license_url"`
+	Citations  []Citation `json:"citations"`
+	Text       string     `json:"text"`
+	Lang       string     `json:"lang"`
+	Source     string     `json:"source"`
+	SourceURL  *string    `json:"source_url"`
+	License    *string    `json:"license"`
+	LicenseURL *string    `json:"license_url"`
 }
 
 type ArtistLinks struct {

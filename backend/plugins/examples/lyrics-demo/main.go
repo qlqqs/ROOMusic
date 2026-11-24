@@ -23,11 +23,11 @@ func lyrics() uint32 {
 
 //go:wasmexport artist_bio
 func artistBio() uint32 {
-	var q struct{ MBID, Lang string }
+	var q struct{ MBID, Name, Lang string }
 	if pdk.InputJSON(&q) != nil {
 		return 1
 	}
-	return lookup("artist_bio", map[string]string{"mbid": q.MBID, "lang": q.Lang})
+	return lookup("artist_bio", map[string]string{"mbid": q.MBID, "name": q.Name, "lang": q.Lang})
 }
 
 func lookup(path string, q map[string]string) uint32 {
