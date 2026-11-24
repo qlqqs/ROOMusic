@@ -1,6 +1,7 @@
 # V12 真实环境试用：步骤与记录表
 
-状态：2026-11-23 执行一轮（qlqq 确认，模型用本机 Codex 的端点与 gpt-6.2-sol）。结果见文末“执行记录”。AcoustID 因缺用户密钥未生效，指纹一项待补。
+状态：2026-11-23 执行一轮（qlqq 确认，模型用本机 Codex 的端点与 gpt-6.2-sol）。结果见文末“执行记录”。
+2026-11-24 填入用户密钥后补做了 AcoustID 一项，见“补测记录（2026-11-24）”。
 
 ## 前提
 
@@ -64,7 +65,7 @@
 | --- | --- | --- |
 | 发行匹配比例：matched / uncertain / no_match / try_later | `GET /api/v1/admin/curation/progress` 的 `releases` | 首轮 11 个发行：6 / 4 / 1 / 0。按批撤销、并入、重扫后可见 10 个：0 / 9 / 1 / 0，被撤销的发行转为拿不准，原因 `suppressed` |
 | 补上的封面、歌词、字段数 | 整理记录的各批 | 封面 6；歌词 93 首（歌词主题：done 93、no_match 26、uncertain 1）；字段 4 次（厂牌、目录号、条码） |
-| AcoustID 的命中、`ambiguous`、`too_many` 比例（B3） | 匹配记录的方法与原因 | 未取得：只填了应用密钥，没有用户密钥，AcoustID 显示 `key_missing`。3 个走到指纹一步的发行记为 `fingerprint=unavailable`，填齐后会各重做一次（16.5） |
+| AcoustID 的命中、`ambiguous`、`too_many` 比例（B3） | 匹配记录的方法与原因 | 首轮未取得：只填了应用密钥，没有用户密钥，AcoustID 显示 `key_missing`。3 个走到指纹一步的发行记为 `fingerprint=unavailable`。2026-11-24 补测结果见下文 |
 | 模型层每批的 token 用量、当天总量 | 进度的 `model.today` | 每次运行约 2 万到 3 万输入、几百输出；当天合计输入 516,538、输出 8,339（含修复前失败的审查） |
 | 例外比例；`shelved/unhandled` 的数目（D） | 例外列表、进度的 `model.items` | 例外 1 个（并入发行，审查转人工，已采纳）。搁置 9 个：模型给出理由 8 个，`unhandled` 1 个（《吻別》，见问题 2） |
 | 曲目字段补占位的命中数；文件名推出的标题被换掉是否符合预期（I） | 整理记录 `track_auto_correction` | 0。带占位曲名的《Discovery》对上 3 个版本、没能唯一匹配，所以没有补；模型认出了占位曲名的正确标题，但只写进了搁置理由 |
@@ -85,4 +86,26 @@
 4. **未处理（后续）：发行并入的审查证据没有合并后的碟序。** 审查员给出转人工的理由是“预览未展示合并后的碟号、曲序和曲目归属”，所以证据充分的并入也只能转人工。
 5. **试用步骤的问题（已改本文）：** AcoustID 要两把密钥；只清模型密钥不会让模型层停止。
 
-没有执行：AcoustID 指纹一项（需要用户密钥）；停用开启者账号（只有一个管理员；自动化测试 `TestPostgreSQLCurationModelStopConditions` 已覆盖）。
+没有执行：停用开启者账号（只有一个管理员；自动化测试 `TestPostgreSQLCurationModelStopConditions` 已覆盖）。
+
+## 补测记录（2026-11-24）：AcoustID
+
+同一实例（镜像 `1105bc11`），在“资料来源”接口填入 qlqq 提供的用户密钥，AcoustID 变为 `active`。模型端点仍是第 6 步清除后的状态，
+模型层不可用，所以这次只看程序层。
+
+- 填入密钥后 30 秒内程序层开始新一轮（密钥的修改时间计入输入变化），只重做了 3 个记为 `fingerprint=unavailable` 的发行，
+  其他发行没有重做，符合 16.5。
+- AcoustID 请求 10 次，全部返回 200：《U87》4 首、《Discovery》4 首、`Downloads/` 2 首。日志里相邻请求的结束时刻相隔 0.3 到 0.6 秒，与 AcoustID 每秒 3 次的上限相符（只记了结束时刻，没有逐条核对发出时刻）。
+- 命中：真实录音 2/2 命中（`Downloads/` 的两首 Kevin MacLeod）；合成的正弦波 8/8 没有命中，与预期一致。
+  按发行统计：`Downloads` 由 `fingerprint=unavailable` 转为 `method=acoustid`、原因 `acoustid_spread`（两首各自对上录音，但没有共同的发行）；
+  《U87》《Discovery》指纹没有结果，退回 `search`，原因仍是 `search_only`，记为 `fingerprint=used`。
+- `ambiguous`、`too_many`：0。单曲模式的指纹判定这次没有走到，因为零散单曲被归成了以目录名为标题的发行（问题 3），
+  只能走专辑模式。`Singles/` 里的真实录音《Sneaky Snitch》所在发行首轮的方法是 `isrc`，不在重做范围内，没有算指纹。
+- no_match 由 1 变为 0：`Downloads` 从 no_match 转为 uncertain。
+
+补测发现的问题：
+
+6. **未处理（后续）：指纹重做得到新候选，已搁置的待定项不会重开。** `Downloads` 的匹配记录更新为 `acoustid_spread`，
+   但待定项仍是首轮的搁置状态，候选为空，搁置理由还是“没有发行候选”。原因是搁置项只在输入摘要变化时重开，
+   而填入密钥后重做不改变发行的输入摘要。这样，补上的指纹证据到不了模型。这个例子里结论多半不变（同样受问题 3 影响），
+   但对一张真正的专辑，指纹带来的候选会被丢掉。

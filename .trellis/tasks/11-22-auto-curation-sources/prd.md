@@ -153,7 +153,7 @@
 - [x] V9 自动的专辑归组、艺人合并、发行合并只在有强证据时发生，每一项都能撤销并回到操作前原样。（`TestPostgreSQLCurationCJoinGroup`、`TestPostgreSQLCurationAutoMergeRevertSuppresses`、`TestPostgreSQLArtistMergeRevertRestoresIntent`、`TestPostgreSQLCurationMergeRevert`、`TestPostgreSQLReleaseMergeRevert`）
 - [x] V10 曲目标题与曲目艺人：人工可改、自动可写、人工优先、可撤销；流媒体下载的单曲（没有条码与编号）能靠 ISRC 或声学指纹匹配并补全。（`TestPostgreSQLTrackAutoApply`、`TestPostgreSQLTrackCorrectionAPI`、`TestPostgreSQLCurationStreamingSingleEnrichment`（ISRC 只在标题相等时直接匹配，标题是占位时交给模型，按 C 的合同））
 - [x] V11 音乐目录以只读方式挂载时全部功能可用，源文件的内容与修改时间不变。（`TestPostgreSQLCurationReadOnlyMusicTree`）
-- [ ] V12 真实环境试用一次：真实的 MusicBrainz、Cover Art Archive、LRCLIB、AcoustID 与一个真实模型端点，对合成曲库跑完一轮，记录匹配比例、token 消耗与发现的问题。（2026-11-23 执行一轮，结果与发现的问题见 `v12-trial.md`；修了两处缺陷。AcoustID 缺用户密钥未生效，指纹一项待补）
+- [x] V12 真实环境试用一次：真实的 MusicBrainz、Cover Art Archive、LRCLIB、AcoustID 与一个真实模型端点，对合成曲库跑完一轮，记录匹配比例、token 消耗与发现的问题。（2026-11-23 执行一轮，修了两处缺陷；2026-11-24 补做 AcoustID，真实录音 2/2 命中。结果与发现的问题见 `v12-trial.md`，问题 3、4、6 留作后续）
 
 ## 本任务取代的既有决定
 
