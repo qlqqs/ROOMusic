@@ -14,6 +14,16 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	73: `INSERT INTO curation_pending_items(id,target_type,artist_id,kind,status,rule_version,input_digest,evidence)
+ VALUES ('e7300000-0000-4000-8000-000000000001','artist','a6800000-0000-4000-8000-000000000001','artist_identity','resolved',1,repeat('a',64),'{}');
+ INSERT INTO curation_model_exceptions(pending_item_id,plan_item_id,tool,input,preview,provider,review_id,review_model,review_decision,review_source,status,decided_at,decided_by)
+ VALUES ('e7300000-0000-4000-8000-000000000001',gen_random_uuid(),'resolve_artist_identity','{}','{}','synthetic',gen_random_uuid(),'synthetic-review','needs_human_confirmation','model','superseded',now(),'f6800000-0000-4000-8000-000000000001');
+ INSERT INTO artist_external_artworks(artist_id,storage_key,mime,width,height,source,source_url,citations,operation_id)
+ VALUES ('a6800000-0000-4000-8000-000000000001','synthetic.png','image/png',200,200,'web_search','https://example.org/artist',
+ '[{"url":"https://example.org/artist","title":"合成图片出处"}]','d7300000-0000-4000-8000-000000000001');
+ INSERT INTO artist_external_bios(artist_id,text,lang,source,source_url,citations,operation_id)
+ VALUES ('a6800000-0000-4000-8000-000000000001','合成简介','zh','web_search','https://example.org/artist',
+ '[{"url":"https://example.org/artist","title":"合成简介出处"}]','d7300000-0000-4000-8000-000000000002');`,
 	72: artistManualMediaRollbackFixture,
 	71: sourcePluginRollbackFixture,
 	70: upnpPlaybackRollbackFixture,
@@ -439,8 +449,15 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if m.Version == 67 {
 				rollbackExec(t, db, beforeReleaseMergeMigration)
 			}
-			if m.Version == 68 || m.Version == 72 {
+			if m.Version == 68 || m.Version == 72 || m.Version == 73 {
 				rollbackExec(t, db, beforeArtistMediaMigration)
+			}
+			if m.Version == 73 {
+				rollbackExec(t, db, `INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
+ SELECT id::uuid,'f6800000-0000-4000-8000-000000000001',kind,'artist','a6800000-0000-4000-8000-000000000001',
+ gen_random_uuid(),kind,1,2,'{}','{}','{}','fixture'
+ FROM (VALUES ('d7300000-0000-4000-8000-000000000001','artist_external_artwork'),
+ ('d7300000-0000-4000-8000-000000000002','artist_external_bio')) AS f(id,kind)`)
 			}
 			if m.Version == 72 {
 				rollbackExec(t, db, artistMediaRollbackFixture)

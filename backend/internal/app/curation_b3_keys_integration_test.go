@@ -177,7 +177,7 @@ func TestPostgreSQLB3AcoustIDBundledKeyGate(t *testing.T) {
 			}
 			return nil, &sources.InvalidKeyError{Name: "application"}
 		}),
-		Unavailable: func() string { return unavailable },
+		Unavailable: func(context.Context, string) string { return unavailable },
 	}).WithKeyStore(store)
 	settings := func() curation.SourceSettings {
 		t.Helper()
