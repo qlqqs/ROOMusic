@@ -12,7 +12,7 @@
   "assignee": "qlqq",
   "createdAt": "2026-11-24",
   "completedAt": null,
-  "branch": null,
+  "branch": "feat/merge-review-disc-order",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,

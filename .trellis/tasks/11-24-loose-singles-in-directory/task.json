@@ -12,7 +12,7 @@
   "assignee": "qlqq",
   "createdAt": "2026-11-24",
   "completedAt": null,
-  "branch": null,
+  "branch": "feat/loose-singles-in-directory",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
