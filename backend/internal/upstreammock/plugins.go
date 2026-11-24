@@ -15,6 +15,9 @@ func (s *Server) pluginDemo(r *http.Request, empty bool) response {
 		}
 		return ok(object{"kind": "plain", "text": "海岸的灯亮了\n潮汐寄来一封信", "source_url": base + "/songs/tide", "external_id": "demo-tide"})
 	case "artist_bio":
+		if q.Get("mbid") == "" && q.Get("name") == "折纸灯乐团" && q.Get("lang") == "zh" {
+			return ok(object{"lang": "zh", "text": "折纸灯乐团是虚构的民谣组合，名字来自乐手在码头折出的第一盏纸灯。", "source_url": base + "/artists/paper-lantern", "external_id": "demo-paper-lantern"})
+		}
 		if q.Get("mbid") != "10000000-0000-4000-8000-000000000003" || q.Get("lang") != "zh" {
 			return missing()
 		}

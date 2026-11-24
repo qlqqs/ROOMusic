@@ -88,7 +88,14 @@ const settingsColumns = `user_id::text,endpoint,key_ciphertext,key_last_four,pro
 
 // GetUserSettings 读取当前用户的设置，尚未保存时返回零值设置与 nil 错误。
 func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSettings, error) {
-	settings, err := scanSettings(s.db.QueryRowContext(ctx, `SELECT `+settingsColumns+`
+	return ReadUserSettings(ctx, s.db, userID)
+}
+
+// ReadUserSettings 支持在读取整理开关的同一事务内核对开启者的管家设置。
+func ReadUserSettings(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, userID string) (UserSettings, error) {
+	settings, err := scanSettings(q.QueryRowContext(ctx, `SELECT `+settingsColumns+`
  FROM steward_user_settings WHERE user_id=$1::uuid`, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserSettings{SearchSource: "none"}, nil

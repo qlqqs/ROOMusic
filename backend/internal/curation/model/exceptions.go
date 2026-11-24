@@ -31,6 +31,7 @@ func NewExceptionResolver(db *sql.DB, writer *curation.Writer, matcher *program.
 }
 
 type proposal struct {
+	Source     string                                    `json:"source"`
 	TrackID    string                                    `json:"track_id"`
 	ItemID     string                                    `json:"item_id"`
 	ReleaseID  string                                    `json:"release_id"`
@@ -78,6 +79,8 @@ func (r *ExceptionResolver) Accept(ctx context.Context, id, actor, requestID str
 		err = r.acceptCorrection(ctx, e, in, actor, key, requestID)
 	case "merge_releases":
 		err = r.acceptMerge(ctx, e, in, actor, key, requestID)
+	case "resolve_artist_identity":
+		err = r.acceptArtistIdentity(ctx, e, in, actor, key)
 	case "resolve_release_match":
 		err = r.acceptMatch(ctx, e, in, actor, key)
 	}
@@ -219,7 +222,7 @@ func classifyChange(err error) error {
 	var f *operations.Failure
 	if errors.As(err, &f) {
 		switch f.Code {
-		case "item_stale", "not_found", "revision_conflict", "release_not_found", "track_count", "position_conflict", "media_count_mismatch", "existing_link", "external_id_mismatch", "suppressed":
+		case "item_stale", "not_found", "revision_conflict", "release_not_found", "track_count", "position_conflict", "media_count_mismatch", "existing_link", "external_id_mismatch", "suppressed", "identity_mismatch", "not_an_artist":
 			return staleException()
 		case "curation_paused", "scan_running":
 			return operations.Conflict("curation_disabled", f.Message)
@@ -269,6 +272,35 @@ func truncateBasis(note string) string {
 		end--
 	}
 	return note[:end]
+}
+
+func (r *ExceptionResolver) acceptArtistIdentity(ctx context.Context, e curation.ModelException, in proposal, actor, key string) error {
+	item, err := r.writer.PendingItem(ctx, e.PendingItemID)
+	if err != nil {
+		return err
+	}
+	if item.Kind != "artist_identity" || item.Status != "waiting_human" || !strings.EqualFold(in.ItemID, item.ID) {
+		return staleException()
+	}
+	plan, err := r.matcher.PlanArtistIdentity(ctx, item, in.Source, in.ExternalID)
+	if err != nil {
+		return classifyChange(err)
+	}
+	if err = compareChanges(e, plan.Changes); err != nil {
+		return err
+	}
+	opt := program.ApplyOptions{
+		Key: key, ConfirmedBy: actor, PendingItemID: item.ID,
+		Source: curation.Source{Kind: "model", Provider: e.Provider, Basis: truncateBasis(in.Basis.Note)},
+		Finish: func(ctx context.Context, tx *sql.Tx, ids []string) error {
+			return curation.FinishException(ctx, tx, e.ID, actor, "accepted", ids)
+		},
+	}
+	if e.ConversationID != nil {
+		opt.ConversationID = *e.ConversationID
+	}
+	_, err = r.matcher.ApplyArtistIdentity(ctx, plan, opt)
+	return classifyChange(err)
 }
 
 func (r *ExceptionResolver) acceptMatch(ctx context.Context, e curation.ModelException, in proposal, actor, key string) error {
@@ -368,10 +400,33 @@ func (r *ExceptionResolver) Decline(ctx context.Context, id, actor string) (cura
 			return e, err
 		}
 	}
+	if e.Tool == "resolve_artist_identity" {
+		if err = catalog.AcquireArtistWriteGate(ctx, tx); err != nil {
+			return e, err
+		}
+		ids, err := catalog.NewStore(tx).ResolveArtists(ctx, []string{item.ArtistID})
+		if err != nil {
+			return e, err
+		}
+		if ids[item.ArtistID] != item.ArtistID || item.Status != "waiting_human" {
+			return e, staleException()
+		}
+		if err = curation.CheckMatchItem(ctx, tx, item, "", true); err != nil {
+			return e, classifyChange(err)
+		}
+	}
 	if err = curation.FinishException(ctx, tx, id, actor, "declined", nil); err != nil {
 		return e, err
 	}
 	switch {
+	case e.Tool == "resolve_artist_identity":
+		externalID := in.ExternalID
+		if in.Source == "musicbrainz" {
+			externalID = strings.ToLower(externalID)
+		}
+		if err = curation.SuppressExternalLink(ctx, tx, "artist", item.ArtistID, in.Source, externalID, "", actor); err != nil {
+			return e, err
+		}
 	case e.Tool == "correct_release" || e.Tool == "correct_track":
 		parse, suppress, target := governance.ParseCorrectionChanges, r.writer.SuppressReleaseValue, item.TargetID
 		if e.Tool == "correct_track" {

@@ -74,6 +74,18 @@ func New(opts Options) (*Server, error) {
 	s.route("GET /lrclib/api/search", s.lyrics)
 	s.route("POST /acoustid/v2/lookup", s.acoustid)
 	s.route("GET /searxng/search", s.search)
+	s.route("GET /searxng/artists/coast", func(r *http.Request, empty bool) response {
+		if empty {
+			return missing()
+		}
+		return ok(artistSearchPage(mediaURL(r, "")))
+	})
+	s.route("GET /searxng/artists/portrait.png", func(_ *http.Request, empty bool) response {
+		if empty {
+			return missing()
+		}
+		return response{status: 200, image: artistPortrait}
+	})
 	s.route("POST /tavily/search", s.search)
 	s.route("GET /openai/v1/models", s.models)
 	s.route("GET /openai/chat/v1/models", s.models)

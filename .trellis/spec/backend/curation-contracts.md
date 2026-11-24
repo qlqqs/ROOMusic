@@ -653,9 +653,9 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 17.2 调度、停止与收尾
 
-应用在管家恢复完成后启动 `model.Scheduler.Run(ctx)`。调度器先关闭遗留 model 批次，作废遗留后台方案，将处理中的项放回队列并清除领取与重审信息，保留未处理次数。默认每分钟轮询。启动与每步开始前检查开关、开启者仍是有效管理员、暂停、扫描、MusicBrainz 开关、开启者的管家配置和每日额度。每一步还核对开启者身份与启动时相同。
+应用在管家恢复完成后启动 `model.Scheduler.Run(ctx)`。调度器先关闭遗留 model 批次，作废遗留后台方案，将处理中的项放回队列并清除领取与重审信息，保留未处理次数。默认每分钟轮询。启动与每步开始前检查开关、开启者仍是有效管理员、暂停、扫描、待定项目标所需来源、开启者的管家配置和每日额度。每一步还核对开启者身份与启动时相同。
 
-先处理已到期的重审会话，使用其待审后台方案。方案已作废或归属已变更则释放待定项。新会话归开启者，按创建时间和 ID 领取最多五个到期且发行可见的项，行锁使用 `SKIP LOCKED`。第一条消息只携带程序产生的项 ID、种类与冲突代码。候选和证据经工具的不可信输出返回。模型批次在首次写入时打开，运行收尾时关闭。
+先处理已到期的重审会话，使用其待审后台方案。方案已作废或归属已变更则释放待定项。新会话归开启者，按创建时间和 ID 领取最多五个到期且目标有效的项。发行需可见且 MusicBrainz 启用，艺人需为有效身份且网络搜索可用，行锁使用 `SKIP LOCKED`。第一条消息只携带程序产生的项 ID、种类与冲突代码。候选和证据经工具的不可信输出返回。模型批次在首次写入时打开，运行收尾时关闭。
 
 运行返回 `completed`、`step_limit` 或 `token_limit` 时，调度器在收尾前复查每步开始前的条件（含开启者身份），条件已不满足则按 `curation_stopped` 收尾。
 
@@ -695,7 +695,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | 方法与路径 | 请求与响应 |
 | --- | --- |
 | `PUT /settings` | `model` 最多 200 字节，空串使用开启者对话模型。`daily_token_limit` 为 1 至 10¹² 的整数或 null，默认 10000000。省略保留原值。GET、PUT 都返回这两项。无效值返回 400 `invalid_input` |
-| `GET /progress` | `model` 段含 `state`、可空 `unavailable_reason`、有效模型、`today.{date,input_tokens,output_tokens}`、`daily_token_limit`、仅统计可见发行的 `items.{waiting_model,in_progress,waiting_human,shelved}` |
+| `GET /progress` | `model` 段含 `state`、可空 `unavailable_reason`、有效模型、`today.{date,input_tokens,output_tokens}`、`daily_token_limit`、仅统计可见发行和有效艺人的 `items.{waiting_model,in_progress,waiting_human,shelved}` |
 | `GET /exceptions` | `status=open\|all`（默认 open）、`page`、`page_size`（最多 100）。返回 `items,total,page,page_size`。包含发行摘要、输入、变化、审查与决定。参数错误返回 400 `invalid_input` |
 | `POST /exceptions/{id}/accept` | 返回 `{exception,operation_ids}`。前值变化为 409 `exception_stale`，匹配受开关、资料源或当前可写内容限制时为 409 `curation_disabled`、`source_disabled`、`nothing_to_apply`。外部源暂时失败为 503 `source_unavailable` |
 | `POST /exceptions/{id}/decline` | 返回 `{exception}`。两个决定接口均校验 ID 与例外状态，分别可返回 400 `invalid_id`、404 `not_found`、409 `exception_decided` |
@@ -873,9 +873,9 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ## 21. 艺人图片与简介
 
-程序层按有效艺人调度 `artist_media`。入口是 `external_links` 中的 MusicBrainz 或 Wikidata 艺人对应，合并前身份的对应同样参与。有效身份和并入方都缺少某一项资料时才取该项。图片依次查 Fanart.tv、TheAudioDB、Commons。简介依次查中文维基百科、TheAudioDB 中文、英文维基百科、TheAudioDB 英文。源闸门处理总开关、单源开关和密钥状态。上一源出错可以继续尝试下一源，仍有缺口且遇到暂时错误时按工作状态退避。已有 Q 号时，Commons 和维基百科使用该条目的 P18 与中英文站点链接，写入依据为 Q 号。Fanart.tv 与 TheAudioDB 使用 MBID，只有 Q 号时跳过这两个源。输入摘要涵盖艺人 MBID、Q 号、资料缺口、来源状态与抑制标记。
+程序层按有效艺人调度 `artist_media`。有对应时读取家族内 MusicBrainz 或 Wikidata 艺人对应。按家族可见的资料等级选择查询来源，缺项或较高等级的来源可触发补全。人工资料等级最高，家族中已有人工图片或简介时，程序层跳过该项的自动查询，写入事务也复查人工层。无对应时按“网络搜索与身份待定项”的主署名范围查询。图片依次查 Fanart.tv、TheAudioDB、Commons。简介依次查中文维基百科、TheAudioDB 中文、英文维基百科、TheAudioDB 英文。源闸门处理总开关、单源开关和密钥状态。上一源出错可以继续尝试下一源，仍有缺口且遇到暂时错误时按工作状态退避。已有 Q 号时，Commons 和维基百科使用该条目的 P18 与中英文站点链接，写入依据为 Q 号。Fanart.tv 与 TheAudioDB 使用 MBID，只有 Q 号时跳过这两个源。输入摘要涵盖艺人 MBID、Q 号、资料缺口、来源状态与抑制标记。
 
-`ApplyArtistImage`、`ApplyArtistBio` 以 `artist` 为操作目标。图片先经受管图片存储校验，简介为最多 4000 个 Unicode 字符的纯文本。写入顺序为操作幂等锁、目录写锁、艺人行锁；事务内复查总开关、批次及家族内的依据对应。两张外部资料表的 `basis_source`、`basis_id` 记录实际使用的 `musicbrainz` 与 MBID 或 `wikidata` 与 Q 号。同一有效身份（含并入方）已有资料返回 `occupied`，来源条目命中撤销标记返回 `suppressed`，Commons 缺少许可名返回 `license_missing`。三种情况均返回 `nothing_to_apply` 并保留跳过原因。图片与简介分别写一条操作，类型为 `artist_external_artwork`、`artist_external_bio`，保存在本轮程序批次，`origin.provider` 为实际内容来源。
+`ApplyArtistImage`、`ApplyArtistBio` 以 `artist` 为操作目标。图片先经受管图片存储校验，简介为最多 4000 个 Unicode 字符的纯文本。写入顺序为操作幂等锁、目录写锁、艺人行锁；事务内复查总开关、批次及家族内的依据对应。两张外部资料表的 `basis_source`、`basis_id` 记录实际使用的 `musicbrainz` 与 MBID 或 `wikidata` 与 Q 号。同一家族已有同级或更高等级的自动资料返回 `occupied`，来源条目命中撤销标记返回 `suppressed`，Commons 缺少许可名返回 `license_missing`。三种情况均返回 `nothing_to_apply` 并保留跳过原因。图片与简介分别写一条操作，类型为 `artist_external_artwork`、`artist_external_bio`，保存在本轮整理批次，`origin.provider` 为实际内容来源。
 
 资料行与操作记录在同一事务写入，图片按内容寻址并持有存储键锁。操作快照保存出处、许可与图片资源或简介内容。每次写入或撤销都递增 `artists.auto_revision`，撤销响应带目标的人工版本 `edit_revision`。操作列表展示艺人摘要和图片规格或简介语言、字符数。
 
@@ -898,3 +898,19 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 ## 插件来源的整理与撤销
 
 内置来源之后，四种媒体查询分别按安装顺序尝试支持该能力的插件。艺人简介先完成内置来源的中英文查询，再查插件。默认关闭，源开关和密钥沿用外部源设置，插件声明列出可能收到资料的上游基础地址。歌词和封面写入前检查实际提供结果的源。新打开插件或更改密钥后，以前未命中的空缺可以重新查询。操作和抑制标记使用稳定的 `plugin:<id>`，删除插件后仍可按该标识撤销。见[插件合同](plugin-contracts.md)。
+
+## 网络搜索与身份待定项
+
+`web_search` 默认开启，能力为 `["artist_image","artist_bio"]`。仅该来源返回 `requirements`，顺序为 `{kind:"model",ready}`、`{kind:"search",ready}`，其他来源省略字段。两项依赖都按自动整理开启者的管家设置读取。整体开关、开启者或来源开关不可用时沿用对应原因；单独缺搜索时返回 `search_unconfigured`。对话模型未就绪由模型层给出原因，程序层在两项就绪时才建项。
+
+程序在 SQL 分页中筛选有 MusicBrainz 或 Wikidata 艺人对应的有效艺人，以及同时满足以下条件的有效艺人：家族无对应、有在库的发行艺人、专辑艺人或曲目艺人主署名、缺图或缺简介。无对应的候选先由已启用的艺人插件按名查询。模型只收到名字、别名、至多 8 个专辑名与年份、12 个曲目名，以及图片与简介的缺口。整理摘要纳入对应、名字与署名样本、资料等级、抑制标记和相关来源状态。摘要变化可重开搁置项。程序收尾已对应、补齐、目标并入或失去主署名的待定项，并将其 `open` 例外置为 `superseded`，由采纳流程处理 `accepting` 例外。
+
+迁移 0073 使用两个互斥的目标列。发行继续使用 `target_id`；艺人项使用 `target_type=artist,artist_id,kind=artist_identity`，未结束项按艺人及种类唯一。领取、到期判断与计数共用目标可见性。后台通过 `read_pending_items` 读取已领取艺人项的 `item_id,kind,artist_id,evidence`，同一模型层每日额度覆盖主模型与审查。
+
+* `resolve_artist_identity` 提交外部来源、编号和 `basis={note,citations}`，引用为 1 至 5 个 HTTP(S) 网址。程序核验条目类型、本地与外部名字或别名、家族已有对应和抑制标记，再交独立审查。MusicBrainz 类型为空时仍可核对，只拒绝 `Other` 与 `Character`。Wikidata 要求人物或音乐团体的 P31。审查通过写模型来源的 `artist_link`，同事务结束身份项。已有对应返回 `occupied`。
+* `submit_artist_media` 提交一项或两项资料，共用 1 至 5 个 `{url,title}` 网页引用。标题 schema 使用 `maxLength: 500`。标题清理为纯文本后允许空串，长度以艺人页使用的 500 个 UTF-16 码元为上限。写库前复查引用数量、URL 形状及标题长度与编码。简介去 HTML 后为 20 至 4000 个 Unicode 字符，语言为 zh 或 en。图片所在网页须在引用中，下载限 10 秒、16 MiB，校验格式和尺寸，短边至少 200 像素。图片下载和引用公网检查使用管家联网合同的出站规则。媒体操作来源为 `model/web_search`，模型名单独记录。任一项写入即以 `resolved/model_media` 结束本次待定项。程序层按更新后的缺口和输入摘要判断是否为剩余缺口创建新项。[管家联网合同](steward-web-contracts.md)
+* 写入按对应、名字或模型领取关系复查依据。有许可来源、插件、网络搜索的等级依次降低。更高等级的自动资料事务内替换家族内的低等级行，旧行保存在操作的 `replaced` 快照。撤销只删除新操作持有的行，旧图提交后按引用清理。网络搜索图片的外部标识是图片地址的 SHA-256，简介固定为 `artist`。插件沿用条目 ID。
+* 例外同时返回可空的 `release` 和 `artist`，后者形状为 `{id,name}`。同项允许多个未决身份候选。采纳时复查预览，记录确认者并写对应，仅将同项的 `open` 候选置为 `superseded`。`accepting` 候选保留原状态和确认者，后续由其采纳流程按 `occupied` 等既有判定处理。待定项的采纳收尾在没有 `open` 或 `accepting` 候选时将该项置为 `resolved`。不采纳时写 `external_link` 抑制，最后一个候选被拒后重新排队。状态接口返回 `none|queued|running|shelved|waiting_human` 与 `candidates` 数组，候选引用的标题为 `""`。
+* 离线试用可为 mock 的 `-script` 选择 `backend/internal/upstreammock/testdata/artist-{identity,media,candidates}.json`。用主署名“纸屿”试验身份与同名候选，用“海岸来信”试验图片与简介。示例插件用“折纸灯乐团”试验按名补简介。
+
+工具边界验证应覆盖第六条引用、501 字标题、经管家出站放行名单登记的内网地址，以及纯文本标题写入。集成验证应覆盖单项资料写入后原待定项的结论、剩余缺口的新摘要、人工资料优先和程序收尾时的例外状态。

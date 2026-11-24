@@ -9,7 +9,48 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
-func (s *Scheduler) conditions(ctx context.Context) (p curation.ModelProgress, actor string, err error) {
+type schedulingConditions struct {
+	curation.ModelProgress
+	targets []string
+}
+
+// 按待定项目标检查来源。没有注册网络搜索的调度器仍可处理发行项。
+func (s *Scheduler) targetSources(ctx context.Context, p *schedulingConditions) error {
+	for _, source := range []struct{ id, target string }{{"musicbrainz", "release"}, {"web_search", "artist"}} {
+		err := s.sources.Check(ctx, source.id)
+		if err == nil {
+			p.targets = append(p.targets, source.target)
+			continue
+		}
+		var failure *operations.Failure
+		if !errors.As(err, &failure) {
+			return err
+		}
+		switch failure.Code {
+		case "scan_running":
+			p.State = "waiting_for_scan"
+			return nil
+		case "curation_paused":
+			p.State = "paused"
+			return nil
+		case "curation_disabled":
+			p.State = "disabled"
+			return nil
+		case "not_found", "source_disabled":
+			continue
+		default:
+			return err
+		}
+	}
+	if len(p.targets) == 0 {
+		reason := "source_disabled"
+		p.State = "unavailable"
+		p.UnavailableReason = &reason
+	}
+	return nil
+}
+
+func (s *Scheduler) conditions(ctx context.Context) (p schedulingConditions, actor string, err error) {
 	settings, err := s.writer.Settings(ctx)
 	if err != nil {
 		return p, "", err
@@ -30,24 +71,8 @@ func (s *Scheduler) conditions(ctx context.Context) (p curation.ModelProgress, a
 		p.State = "paused"
 	default:
 		actor = settings.EnabledBy.ID
-		if err = s.sources.Check(ctx, "musicbrainz"); err != nil {
-			var f *operations.Failure
-			if !errors.As(err, &f) {
-				return p, actor, err
-			}
-			switch f.Code {
-			case "scan_running":
-				p.State = "waiting_for_scan"
-			case "curation_paused":
-				p.State = "paused"
-			case "curation_disabled":
-				p.State = "disabled"
-			case "source_disabled":
-				unavailable("source_disabled")
-			default:
-				return p, actor, err
-			}
-			return p, actor, nil
+		if err = s.targetSources(ctx, &p); err != nil || p.State != "" {
+			return p, actor, err
 		}
 		if s.launcher == nil {
 			return p, actor, operations.ErrUnavailable
@@ -77,7 +102,8 @@ func (s *Scheduler) conditions(ctx context.Context) (p curation.ModelProgress, a
 }
 
 func (s *Scheduler) ModelStatus(ctx context.Context) (curation.ModelProgress, error) {
-	p, _, err := s.conditions(ctx)
+	conditions, _, err := s.conditions(ctx)
+	p := conditions.ModelProgress
 	if err != nil {
 		return p, err
 	}
@@ -86,7 +112,7 @@ func (s *Scheduler) ModelStatus(ctx context.Context) (curation.ModelProgress, er
  SELECT count(*) FILTER (WHERE status='waiting_model'),count(*) FILTER (WHERE status='in_progress'),
  count(*) FILTER (WHERE status='waiting_human'),count(*) FILTER (WHERE status='shelved'),
  count(*) FILTER (WHERE status='in_progress' AND next_attempt_at IS NOT NULL)>0
- FROM curation_pending_items p JOIN visible v ON v.id=p.target_id`).Scan(&p.Items.WaitingModel, &p.Items.InProgress, &p.Items.WaitingHuman, &p.Items.Shelved, &waitingReview)
+ FROM curation_pending_items p WHERE `+curation.PendingTargetVisibleSQL).Scan(&p.Items.WaitingModel, &p.Items.InProgress, &p.Items.WaitingHuman, &p.Items.Shelved, &waitingReview)
 	if p.State == "idle" {
 		s.mu.RLock()
 		running := s.running

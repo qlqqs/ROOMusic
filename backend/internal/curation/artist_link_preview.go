@@ -23,6 +23,8 @@ type ArtistLinkPreview struct {
 	WikidataID  *string  `json:"wikidata"`
 	NameMatch   bool     `json:"name_matches"`
 	InstanceOf  []string `json:"-"`
+	artistType  string
+	entryID     string
 }
 
 func parseArtistLink(input string) (externalIdentity, error) {
@@ -78,6 +80,7 @@ func readArtistLink(ctx context.Context, gate *Sources, link externalIdentity) (
 		if err != nil {
 			return p, nil, artistLinkSourceError(err)
 		}
+		p.entryID = entry.WikidataID
 		p.Name, p.WikidataID, p.InstanceOf = entry.Name, &link.ExternalID, entry.InstanceOf
 		if entry.Description != "" {
 			p.Description = &entry.Description
@@ -100,6 +103,7 @@ func readArtistLink(ctx context.Context, gate *Sources, link externalIdentity) (
 	if err != nil {
 		return p, nil, artistLinkSourceError(err)
 	}
+	p.artistType, p.entryID = entry.Type, entry.ID
 	p.Name, p.MBID = cmp.Or(strings.TrimSpace(entry.Name), link.ExternalID), &link.ExternalID
 	if entry.Disambiguation != "" {
 		p.Description = &entry.Disambiguation

@@ -11,8 +11,9 @@ import (
 )
 
 type script struct {
-	Models []string `json:"models"`
-	Rules  []rule   `json:"rules"`
+	Models         []string `json:"models"`
+	ArtistScenario string   `json:"artist_scenario"`
+	Rules          []rule   `json:"rules"`
 }
 type rule struct {
 	When struct {
@@ -50,6 +51,11 @@ func loadScript(path string) (script, error) {
 	if err != nil {
 		return s, fmt.Errorf("模型脚本: %w", err)
 	}
+	switch s.ArtistScenario {
+	case "", "identity", "media", "candidates":
+	default:
+		return s, fmt.Errorf("未知艺人脚本 %q", s.ArtistScenario)
+	}
 	for i, rule := range s.Rules {
 		if (rule.Reply.Text == "") == (len(rule.Reply.Calls) == 0) {
 			return s, fmt.Errorf("脚本规则 %d 需要一种回复", i+1)
@@ -76,9 +82,10 @@ type wireMessage struct {
 	Content            json.RawMessage
 }
 type turn struct {
-	model, user, result string
-	tools               []string
-	nativeSearch        bool
+	model, user, result    string
+	pendingResult, baseURL string
+	tools                  []string
+	nativeSearch           bool
 }
 
 func (input modelInput) turn() turn {
@@ -124,6 +131,9 @@ func (input modelInput) turn() turn {
 				}
 			}
 		}
+		if strings.HasPrefix(strings.TrimSpace(t.result), `<roomusic-source kind="tool" name="read_pending_items">`) {
+			t.pendingResult = t.result
+		}
 	}
 	return t
 }
@@ -146,7 +156,11 @@ func (s script) reply(t turn) reply {
 		if json.Unmarshal([]byte(t.user), &request) == nil && len(request.Items) > 0 {
 			items := []object{}
 			for _, item := range request.Items {
-				items = append(items, object{"item_id": item.ID, "decision": "approved", "risk": "low", "reasons": []string{"合成审查已批准。"}})
+				decision, risk, reason := "approved", "low", "合成审查已批准。"
+				if s.ArtistScenario == "candidates" && strings.Contains(t.user, `"tool":"resolve_artist_identity"`) {
+					decision, risk, reason = "needs_human_confirmation", "medium", "合成署名对应两个同名艺人，请确认。"
+				}
+				items = append(items, object{"item_id": item.ID, "decision": decision, "risk": risk, "reasons": []string{reason}})
 			}
 			return reply{Calls: []call{{"submit_review", object{"items": items}}}}
 		}
@@ -155,22 +169,31 @@ func (s script) reply(t turn) reply {
 		return reply{Calls: []call{{"read_pending_items", object{}}}}
 	}
 	if slices.Contains(t.tools, "resolve_release_match") && t.result != "" {
-		if calls := pendingCalls(t); len(calls) > 0 {
+		if calls := s.pendingCalls(t); len(calls) > 0 {
 			return reply{Calls: calls}
 		}
 	}
 	return reply{Text: "这是 ROOMusic 外部接口 mock 的合成回复。"}
 }
 
-func pendingCalls(t turn) []call {
+func (s script) pendingCalls(t turn) []call {
 	result := strings.TrimSpace(t.result)
+	searched := strings.HasPrefix(result, `<roomusic-source kind="tool" name="web_search">`)
+	if searched {
+		result = strings.TrimSpace(t.pendingResult)
+	}
 	// 管家把不可信的工具结果包在来源标签内，并转义标签中的文本。
 	if strings.HasPrefix(result, `<roomusic-source kind="tool" name="read_pending_items">`) {
 		_, body, _ := strings.Cut(result, ">")
 		result = html.UnescapeString(strings.TrimSuffix(body, "</roomusic-source>"))
 	}
 	var items []struct {
-		ID         string `json:"item_id"`
+		ID       string `json:"item_id"`
+		Kind     string `json:"kind"`
+		Evidence struct {
+			Names []string                  `json:"names"`
+			Gaps  struct{ Image, Bio bool } `json:"gaps"`
+		} `json:"evidence"`
 		Candidates []struct {
 			ID string `json:"external_id"`
 		}
@@ -181,6 +204,15 @@ func pendingCalls(t turn) []call {
 	var calls []call
 	for _, item := range items {
 		if item.ID == "" {
+			continue
+		}
+		if item.Kind == "artist_identity" {
+			if !searched && slices.Contains(t.tools, "web_search") && len(item.Evidence.Names) > 0 {
+				return []call{{"web_search", object{"q": strings.Join(item.Evidence.Names, " ")}}}
+			}
+			if slices.Contains(t.tools, "resolve_artist_identity") {
+				calls = append(calls, s.artistCalls(t.baseURL, item.ID, item.Evidence.Gaps.Image, item.Evidence.Gaps.Bio)...)
+			}
 			continue
 		}
 		if len(item.Candidates) > 0 && item.Candidates[0].ID != "" {

@@ -47,7 +47,7 @@ type reviewArtist struct {
 func SupportsReviewEvidence(name string) bool {
 	switch name {
 	case "correct_track", "correct_release", "change_release_group", "set_default_release", "review_release_issue", "claim_release",
-		"merge_releases", "merge_artists", "rename_artist", "ignore_artist_candidate":
+		"resolve_artist_identity", "merge_releases", "merge_artists", "rename_artist", "ignore_artist_candidate":
 		return true
 	default:
 		return false

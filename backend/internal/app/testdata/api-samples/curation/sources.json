@@ -130,6 +130,27 @@
           }
         ],
         "name": "TheAudioDB"
+      },
+      {
+        "active": false,
+        "capabilities": [
+          "artist_image",
+          "artist_bio"
+        ],
+        "enabled": true,
+        "id": "web_search",
+        "inactive_reason": "curation_disabled",
+        "name": "网络搜索",
+        "requirements": [
+          {
+            "kind": "model",
+            "ready": false
+          },
+          {
+            "kind": "search",
+            "ready": false
+          }
+        ]
       }
     ]
   },

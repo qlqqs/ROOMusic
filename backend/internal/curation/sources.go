@@ -25,10 +25,17 @@ type SourceRegistration struct {
 	Covers          sources.CoverFinder
 	Lyrics          sources.LyricsFinder
 	Fingerprints    sources.FingerprintFinder
-	Unavailable     func() string
+	Unavailable     func(context.Context, string) string
+	Requirements    func(context.Context, *sql.Tx, string) ([]SourceRequirement, error)
+}
+
+type SourceRequirement struct {
+	Kind  string `json:"kind"`
+	Ready bool   `json:"ready"`
 }
 
 type SourceSettings struct {
+	Requirements   []SourceRequirement  `json:"requirements,omitempty"`
 	Upstreams      []string             `json:"upstreams,omitempty"`
 	ID             string               `json:"id"`
 	Name           string               `json:"name"`
@@ -101,6 +108,16 @@ func (s *Sources) sourceState(ctx context.Context, tx *sql.Tx, r SourceRegistrat
 	if err != nil {
 		return SourceSettings{}, err
 	}
+	enabler := ""
+	if overall.EnabledBy != nil {
+		enabler = overall.EnabledBy.ID
+	}
+	if r.Requirements != nil {
+		item.Requirements, err = r.Requirements(ctx, tx, enabler)
+		if err != nil {
+			return SourceSettings{}, err
+		}
+	}
 	reason := ""
 	switch {
 	case !overall.Enabled:
@@ -110,7 +127,9 @@ func (s *Sources) sourceState(ctx context.Context, tx *sql.Tx, r SourceRegistrat
 	case !item.Enabled:
 		reason = "source_disabled"
 	case r.Unavailable != nil:
-		reason = r.Unavailable()
+		reason = r.Unavailable(ctx, enabler)
+	case slices.ContainsFunc(item.Requirements, func(r SourceRequirement) bool { return r.Kind == "search" && !r.Ready }):
+		reason = "search_unconfigured"
 	}
 	if reason == "" {
 		switch {
@@ -255,12 +274,19 @@ func (s *Sources) Check(ctx context.Context, id string) error {
 	if item.InactiveReason != nil {
 		return disabledSource(*item.InactiveReason)
 	}
+	for _, r := range item.Requirements {
+		if r.Kind == "model" && !r.Ready {
+			return operations.Conflict("source_disabled", "开启者尚未配置可用的管家模型")
+		}
+	}
 	return nil
 }
 
 func disabledSource(reason string) error {
 	message := "外部源开关已关闭"
 	switch reason {
+	case "search_unconfigured":
+		message = "开启者尚未配置可用的搜索来源"
 	case "fingerprint_unavailable":
 		message = "声学指纹工具不可用"
 	case "bundled_key_rejected":

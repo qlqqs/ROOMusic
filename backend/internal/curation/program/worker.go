@@ -177,6 +177,7 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 func releaseMarker(c curation.ProgramChanges) curation.ProgramChanges {
+	c.ArtistSettings = sql.NullTime{}
 	c.Operation = sql.NullTime{}
 	c.LatestDue = sql.NullTime{}
 	c.Due = 0

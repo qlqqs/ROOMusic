@@ -38,6 +38,8 @@ zip 根目录放两个普通文件 `manifest.json` 和 `plugin.wasm`。压缩包
 | `artist_image` | `mbid,name,wikidata`，未知条目号为空 | `url,source_url,external_id`，可选 `author,license,license_url` |
 | `artist_bio` | `mbid,name,lang`，第一版依次尝试 `zh` 与 `en` | `text,lang,source_url,external_id`，可选 `license,license_url` |
 
+`artist_image` 和 `artist_bio` 也会按名字调用。此时 `mbid` 是空字符串，`name` 为本地艺人名，图片查询的 `wikidata` 同样为空。插件可用名字查询自身目录，无法确认时返回 1。
+
 提供至少一种能力。`external_id` 是用于撤销和抑制的稳定条目标识，最长 128 字节。URL 使用 HTTP(S)，最长 2048 字节。图片下载地址须属于已声明的上游基础路径，宿主下载并校验图片。简介经宿主去 HTML、取首段并限制为 4000 字。歌词文本最多 64 KiB、2000 行，同步歌词使用 LRC 时间戳。
 
 ## 宿主函数

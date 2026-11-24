@@ -56,6 +56,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/sources/theaudiodb"
 	"github.com/qlqq/roomusic/backend/internal/sources/wikidata"
 	"github.com/qlqq/roomusic/backend/internal/sources/wikipedia"
+	stewardapi "github.com/qlqq/roomusic/backend/internal/steward/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 	zonesapi "github.com/qlqq/roomusic/backend/internal/zones/httpapi"
@@ -258,7 +259,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		curation.SourceRegistration{Declaration: lrclib.Declaration(), Lyrics: lyrics},
 		curation.SourceRegistration{
 			Declaration: acoustid.Declaration(), Fingerprints: acoustic,
-			Unavailable: func() string {
+			Unavailable: func(context.Context, string) string {
 				switch {
 				case assembly.program.Fingerprints == nil:
 					return "fingerprint_unavailable"
@@ -274,6 +275,19 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		curation.SourceRegistration{Declaration: wikipedia.Declaration(), ArtistBios: wiki},
 		curation.SourceRegistration{Declaration: fanarttv.Declaration(), ArtistImages: fanart},
 		curation.SourceRegistration{Declaration: theaudiodb.Declaration(), ArtistImages: audioDB, ArtistBios: audioDB},
+		curation.SourceRegistration{Declaration: sources.Declaration{ID: "web_search", Name: "网络搜索", Capabilities: []sources.Capability{sources.ArtistImageLookup, sources.ArtistBioLookup}, DefaultEnabled: true},
+			Requirements: func(ctx context.Context, tx *sql.Tx, enabler string) ([]curation.SourceRequirement, error) {
+				var modelReady, searchReady bool
+				if enabler != "" {
+					settings, err := runtime.ReadUserSettings(ctx, tx, enabler)
+					if err != nil {
+						return nil, err
+					}
+					modelReady, searchReady = stewardapi.BackgroundSearchReadiness(settings, enabler, instanceSecrets)
+				}
+				return []curation.SourceRequirement{{Kind: "model", Ready: modelReady}, {Kind: "search", Ready: searchReady}}, nil
+			},
+		},
 	).WithScanCheck(scanRunning).WithKeyStore(instanceSecrets)
 	var pluginStore *plugins.Store
 	if database != nil && lifecycle != nil {
@@ -281,7 +295,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		pluginStore, err = plugins.Open(lifecycle, database, settings.DataDirectory, settings.UpstreamMockURL, logger, sourceGate.Keys, func(items []*plugins.Source) {
 			reg := make([]curation.SourceRegistration, 0, len(items))
 			for _, p := range items {
-				reg = append(reg, curation.SourceRegistration{Declaration: p.Declaration(), PluginHash: p.SHA256, Covers: p, Lyrics: p, ArtistImages: p, ArtistBios: p, Unavailable: p.Reason})
+				reg = append(reg, curation.SourceRegistration{Declaration: p.Declaration(), PluginHash: p.SHA256, Covers: p, Lyrics: p, ArtistImages: p, ArtistBios: p, Unavailable: func(context.Context, string) string { return p.Reason() }})
 			}
 			sourceGate.ReplacePlugins(reg)
 		})

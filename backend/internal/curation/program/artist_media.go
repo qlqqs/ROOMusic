@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
@@ -24,9 +25,12 @@ func artistSourceError(err error, retry *bool) error {
 }
 
 func (w *Worker) artistLinks(ctx context.Context, e artistEvidence, p artistProviders) ([]sources.ArtistLinks, bool, error) {
+	if e.NoLink {
+		return []sources.ArtistLinks{{Name: e.Name}}, false, nil
+	}
 	var links []sources.ArtistLinks
 	var retry bool
-	needLinks := !e.Image && p.active["commons"] || !e.Bio && p.active["wikipedia"]
+	needLinks := e.ImageRank < catalog.ArtistMediaLicensedRank && p.active["commons"] || e.BioRank < catalog.ArtistMediaLicensedRank && p.active["wikipedia"]
 	for _, mbid := range e.MBIDs {
 		links = append(links, sources.ArtistLinks{MBID: mbid})
 	}
@@ -55,11 +59,14 @@ func (w *Worker) artistLinks(ctx context.Context, e artistEvidence, p artistProv
 	return links, retry, nil
 }
 
-func mediaLink(link sources.ArtistLinks) curation.ArtistMediaLink {
+func mediaBasis(link sources.ArtistLinks) (curation.ArtistMediaLink, string) {
 	if link.MBID != "" {
-		return curation.ArtistMediaLink{Source: "musicbrainz", ExternalID: link.MBID}
+		return curation.ArtistMediaLink{Source: "musicbrainz", ExternalID: link.MBID}, ""
 	}
-	return curation.ArtistMediaLink{Source: "wikidata", ExternalID: link.WikidataID}
+	if link.WikidataID != "" {
+		return curation.ArtistMediaLink{Source: "wikidata", ExternalID: link.WikidataID}, ""
+	}
+	return curation.ArtistMediaLink{}, link.Name
 }
 
 func (e artistEvidence) suppressed(kind, provider, externalID string) bool {
@@ -86,10 +93,11 @@ func (u *unit) writeArtist(ctx context.Context, provider, step string, apply fun
 	return result.OperationID != "" || result.Skipped == "occupied", nil
 }
 
-func (w *Worker) artistImage(ctx context.Context, u *unit, e artistEvidence, p artistProviders, links []sources.ArtistLinks) (filled, retry bool, err error) {
+func (w *Worker) artistImage(ctx context.Context, u *unit, e artistEvidence, p artistProviders, links []sources.ArtistLinks) (rank int, retry bool, err error) {
+	var retryRank int
 	for _, id := range append([]string{"fanarttv", "theaudiodb", "commons"}, w.sources.PluginIDs(sources.ArtistImageLookup)...) {
 		f, ok := w.sources.ArtistImageFinder(id)
-		if !ok || !p.active[id] {
+		if !ok || !p.active[id] || catalog.ArtistMediaRank(id) <= e.ImageRank {
 			continue
 		}
 		for _, link := range links {
@@ -98,31 +106,39 @@ func (w *Worker) artistImage(ctx context.Context, u *unit, e artistEvidence, p a
 			}
 			img, err := f.ArtistImage(ctx, link)
 			if err == nil && img.ID != "" && !e.suppressed("artist_image", id, img.ID) {
+				basis, name := mediaBasis(link)
+				var filled bool
 				filled, err = u.writeArtist(ctx, id, "image/"+id+"/"+img.ID, func(batch, key string) (curation.ExternalApplied, error) {
-					return w.writer.ApplyArtistImage(ctx, curation.ArtistImageRequest{ArtistID: e.ID, Link: mediaLink(link), Image: img, BatchID: batch, Key: key})
+					return w.writer.ApplyArtistImage(ctx, curation.ArtistImageRequest{ArtistID: e.ID, Link: basis, Name: name, Image: img, BatchID: batch, Key: key})
 				})
 				if filled {
-					return true, false, nil
+					rank = catalog.ArtistMediaRank(id)
+					return rank, retryRank > rank, nil
 				}
 				// 图片字节可能损坏；校验失败后仍可试用下一来源。
 				if failureCode(err) == "invalid_input" {
 					continue
 				}
 			}
-			if err := artistSourceError(err, &retry); err != nil {
-				return false, false, err
+			var sourceRetry bool
+			if err := artistSourceError(err, &sourceRetry); err != nil {
+				return 0, false, err
+			}
+			if sourceRetry {
+				retryRank = max(retryRank, catalog.ArtistMediaRank(id))
 			}
 		}
 	}
-	return false, retry, nil
+	return e.ImageRank, retryRank > e.ImageRank, nil
 }
 
-func (w *Worker) artistBio(ctx context.Context, u *unit, e artistEvidence, p artistProviders, links []sources.ArtistLinks) (filled, retry bool, err error) {
+func (w *Worker) artistBio(ctx context.Context, u *unit, e artistEvidence, p artistProviders, links []sources.ArtistLinks) (rank int, retry bool, err error) {
+	var retryRank int
 	for _, group := range [][]string{{"wikipedia", "theaudiodb"}, w.sources.PluginIDs(sources.ArtistBioLookup)} {
 		for _, lang := range []string{"zh", "en"} {
 			for _, id := range group {
 				f, ok := w.sources.ArtistBioFinder(id)
-				if !ok || !p.active[id] {
+				if !ok || !p.active[id] || catalog.ArtistMediaRank(id) <= e.BioRank {
 					continue
 				}
 				for _, link := range links {
@@ -131,24 +147,31 @@ func (w *Worker) artistBio(ctx context.Context, u *unit, e artistEvidence, p art
 					}
 					bio, err := f.ArtistBio(ctx, link, lang)
 					if err == nil && bio.ID != "" && !e.suppressed("artist_bio", id, bio.ID) {
+						basis, name := mediaBasis(link)
+						var filled bool
 						filled, err = u.writeArtist(ctx, id, "bio/"+id+"/"+bio.ID, func(batch, key string) (curation.ExternalApplied, error) {
-							return w.writer.ApplyArtistBio(ctx, curation.ArtistBioRequest{ArtistID: e.ID, Link: mediaLink(link), Bio: bio, BatchID: batch, Key: key})
+							return w.writer.ApplyArtistBio(ctx, curation.ArtistBioRequest{ArtistID: e.ID, Link: basis, Name: name, Bio: bio, BatchID: batch, Key: key})
 						})
 						if filled {
-							return true, false, nil
+							rank = catalog.ArtistMediaRank(id)
+							return rank, retryRank > rank, nil
 						}
 						if failureCode(err) == "invalid_input" {
 							continue
 						}
 					}
-					if err := artistSourceError(err, &retry); err != nil {
-						return false, false, err
+					var sourceRetry bool
+					if err := artistSourceError(err, &sourceRetry); err != nil {
+						return 0, false, err
+					}
+					if sourceRetry {
+						retryRank = max(retryRank, catalog.ArtistMediaRank(id))
 					}
 				}
 			}
 		}
 	}
-	return false, retry, nil
+	return e.BioRank, retryRank > e.BioRank, nil
 }
 
 func (w *Worker) enrichArtist(ctx context.Context, u *unit, e *artistEvidence, p artistProviders) (bool, error) {
@@ -157,17 +180,17 @@ func (w *Worker) enrichArtist(ctx context.Context, u *unit, e *artistEvidence, p
 		return false, err
 	}
 	var imageRetry, bioRetry bool
-	if !e.Image {
-		e.Image, imageRetry, err = w.artistImage(ctx, u, *e, p, links)
+	if e.ImageRank < catalog.ArtistMediaLicensedRank {
+		e.ImageRank, imageRetry, err = w.artistImage(ctx, u, *e, p, links)
 		if err != nil {
 			return false, err
 		}
 	}
-	if !e.Bio {
-		e.Bio, bioRetry, err = w.artistBio(ctx, u, *e, p, links)
+	if e.BioRank < catalog.ArtistMediaLicensedRank {
+		e.BioRank, bioRetry, err = w.artistBio(ctx, u, *e, p, links)
 		if err != nil {
 			return false, err
 		}
 	}
-	return imageRetry || bioRetry || linksRetry && (!e.Image && p.active["commons"] || !e.Bio && p.active["wikipedia"]), nil
+	return imageRetry || bioRetry || linksRetry && (e.ImageRank < catalog.ArtistMediaLicensedRank && p.active["commons"] || e.BioRank < catalog.ArtistMediaLicensedRank && p.active["wikipedia"]), nil
 }

@@ -26,7 +26,7 @@ const artistSummarySQL = `WITH ` + ArtistMediaFamilyCTE + `, summary_release_sub
  EXISTS (SELECT 1 FROM media m JOIN tracks t ON t.medium_id=m.id WHERE m.release_id=e.release_id AND t.source_status='present')))
  ORDER BY ` + artistRoleOrder + `)),
  (SELECT m.storage_key FROM artist_media_family f JOIN (` + ArtistImageRowsSQL + `) m ON m.artist_id=f.artist_id
-  WHERE f.canonical_id=COALESCE(o.redirect_artist_id,a.id) ORDER BY ` + artistLayerOrder + ` LIMIT 1)
+  WHERE f.canonical_id=COALESCE(o.redirect_artist_id,a.id) ORDER BY ` + ArtistMediaDisplayOrder + ` LIMIT 1)
  FROM artists a JOIN artist_profiles p ON p.artist_id=a.id LEFT JOIN counts c ON c.artist_id=a.id
  LEFT JOIN artist_overrides o ON o.artist_id=a.id
  WHERE a.id=ANY($1::uuid[])`

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -135,8 +136,8 @@ func (s *Scheduler) poll(ctx context.Context) error {
 	case errors.Is(err, sql.ErrNoRows):
 		var due bool
 		err = s.db.QueryRowContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`) SELECT EXISTS(
- SELECT 1 FROM curation_pending_items p JOIN visible v ON v.id=p.target_id
- WHERE p.status='waiting_model' AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1))`, now).Scan(&due)
+ SELECT 1 FROM curation_pending_items p WHERE `+curation.PendingTargetVisibleSQL+`
+ AND p.status='waiting_model' AND p.target_type=ANY($2::text[]) AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1))`, now, progress.targets).Scan(&due)
 		if err != nil || !due {
 			return err
 		}
@@ -144,13 +145,16 @@ func (s *Scheduler) poll(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		items, err = s.writer.ClaimPendingItems(ctx, conversation, now, s.options.BatchSize)
+		items, err = s.writer.ClaimPendingItems(ctx, conversation, now, s.options.BatchSize, progress.targets...)
 		if err != nil || len(items) == 0 {
 			return errors.Join(err, s.launcher.DeleteConversation(ctx, actor, conversation))
 		}
 	}
 	if err != nil {
 		return err
+	}
+	if !batchSourcesReady(items, progress.targets) {
+		return s.release(ctx, conversation, false, nil)
 	}
 	return s.runBatch(ctx, actor, progress.Model, conversation, plan, items, retries)
 }
@@ -164,12 +168,21 @@ func firstMessage(items []curation.PendingItem) string {
 	return msg.String()
 }
 
-func (s *Scheduler) checkRunConditions(ctx context.Context, actor string) error {
+func batchSourcesReady(items []curation.PendingItem, targets []string) bool {
+	for _, p := range items {
+		if !slices.Contains(targets, p.TargetType) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Scheduler) checkRunConditions(ctx context.Context, actor string, items []curation.PendingItem) error {
 	progress, enabler, err := s.conditions(ctx)
 	if err != nil {
 		return err
 	}
-	if enabler != actor || progress.State != "idle" {
+	if enabler != actor || progress.State != "idle" || !batchSourcesReady(items, progress.targets) {
 		return ErrStopped
 	}
 	return nil
@@ -202,7 +215,7 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		if usageErr != nil {
 			return usageErr
 		}
-		return s.checkRunConditions(ctx, actor)
+		return s.checkRunConditions(ctx, actor, items)
 	}
 	params.Usage = func(ctx context.Context, in, out int64) {
 		if err := s.writer.AddModelUsage(ctx, s.options.Now(), in, out); err != nil {
@@ -219,7 +232,16 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 			return "", err
 		}
 		for _, p := range items {
-			if ((e.Tool == "resolve_release_match" || e.Tool == "merge_releases") && strings.EqualFold(target.ItemID, p.ID)) || ((e.Tool == "correct_release" || e.Tool == "correct_track") && strings.EqualFold(target.ReleaseID, p.TargetID)) {
+			var matches bool
+			switch e.Tool {
+			case "resolve_artist_identity":
+				matches = p.Kind == "artist_identity" && strings.EqualFold(target.ItemID, p.ID)
+			case "resolve_release_match", "merge_releases":
+				matches = p.TargetType == "release" && strings.EqualFold(target.ItemID, p.ID)
+			case "correct_release", "correct_track":
+				matches = p.TargetType == "release" && strings.EqualFold(target.ReleaseID, p.TargetID)
+			}
+			if matches {
 				e.PendingItemID, e.ConversationID, e.Provider = p.ID, &conversation, model
 				return s.writer.CreateException(ctx, e)
 			}
@@ -240,7 +262,7 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		var finishErr error
 		if !itemsFinished {
-			finishErr = s.finish(cleanup, actor, conversation, reason, retries, now)
+			finishErr = s.finish(cleanup, actor, conversation, reason, retries, now, items)
 			itemsFinished = finishErr == nil
 		}
 		if itemsFinished && batch != "" {
@@ -278,7 +300,7 @@ func (s *Scheduler) recordEnd(reason string, now time.Time) {
 	s.mu.Unlock()
 }
 
-func (s *Scheduler) finish(ctx context.Context, actor, id, reason string, retries int, now time.Time) error {
+func (s *Scheduler) finish(ctx context.Context, actor, id, reason string, retries int, now time.Time, items []curation.PendingItem) error {
 	switch reason {
 	case "review_unavailable":
 		if retries < min(3, len(s.options.ReviewBackoff)) {
@@ -297,7 +319,7 @@ func (s *Scheduler) finish(ctx context.Context, actor, id, reason string, retrie
 		next := now.Add(24 * time.Hour)
 		return s.release(ctx, id, false, &next)
 	case "completed", "step_limit", "token_limit":
-		err := s.checkRunConditions(ctx, actor)
+		err := s.checkRunConditions(ctx, actor, items)
 		if err == nil {
 			return s.writer.ReleaseClaimed(ctx, id, true, nil)
 		}
