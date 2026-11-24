@@ -53,16 +53,22 @@ test.describe("真实搜索规范化", () => {
       const row = page.getByRole("row").filter({ has: page.getByText(item.title, { exact: true }) });
       const heart = row.getByRole("button", { name: `收藏《${item.title}》`, exact: true });
       await expect(heart).toHaveAttribute("aria-pressed", "false");
-      await row.hover();
-      await heart.click();
+      // 行内按钮只在行悬停时接收指针；结果行刚渲染时可能还在移动，悬停落空就重新悬停再点。
+      // 点击失败时没有触发，重试不会重复切换收藏。
+      await expect(async () => {
+        await row.hover();
+        await heart.click({ timeout: 2_000 });
+      }).toPass();
       await expect(heart).toHaveAttribute("aria-pressed", "true");
       // 等服务端读回落盘结果，不能只把乐观心形当作成功；刷新后仍在搜索页验证。
       await expect.poll(async () => decodeFavoriteTracksPage(await body(await page.request.get("/api/v1/me/favorites/tracks"))).items.map((entry) => entry.track.track_id)).toContain(hit.track_id);
       await page.reload();
       await expect(heart).toHaveAttribute("aria-pressed", "true");
       await expect(heart).toBeEnabled();
-      await row.hover();
-      await row.getByRole("button", { name: /^播放 / }).click();
+      await expect(async () => {
+        await row.hover();
+        await row.getByRole("button", { name: /^播放 / }).click({ timeout: 2_000 });
+      }).toPass();
       await expect.poll(async () => (await mediaState(page))?.paused).toBe(false);
       await expect.poll(async () => (await mediaState(page))?.time).toBeGreaterThan(0);
       const media = await mediaState(page);
