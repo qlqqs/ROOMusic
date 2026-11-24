@@ -1,0 +1,5 @@
+{
+  "id":"lyrics-demo","name":"示例歌词源","version":"1.0.0","author":"ROOMusic","abi":1,
+  "upstreams":[{"id":"main","base_url":"https://lyrics.example.org/api","min_interval_ms":1000}],
+  "keys":[]
+}

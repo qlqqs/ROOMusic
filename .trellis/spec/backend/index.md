@@ -86,6 +86,7 @@ Before writing or reviewing backend code:
 | [元数据问题与核对合同](./issue-review-contracts.md) | M4 第二项：迁移 0019、“需要关注”的三类拆分、依据与依据令牌、核对接口与执行器、撤销与展示、问题列表与版本的问题、测试 |
 | [自动整理合同](./curation-contracts.md) | M7 子任务 A：迁移 0058、自动层与三层有效值、`curation.Writer.Apply`、来源与批次、按写入者判断的撤销、按批与按来源撤销、不再提出、总开关、管理员接口与错误码；子任务 B1：各源开关、闸门、外部对应的存储；子任务 B2：外部封面与外部歌词的存放、本地优先的读取、写入与撤销、存储键的锁；子任务 C：程序层后台匹配与补全、外部对应与强证据归组的受治理写入、工作状态与待定项、暂停与进度 |
 | [外部源合同](./sources-contracts.md) | M7 子任务 B1：平台层出站客户端、声明与能力接口、对话与后台两种调用身份、限速、缓存、重试、MusicBrainz 适配器、发给外部的数据；子任务 B2：封面与歌词能力、重定向与取字节、Cover Art Archive 与 LRCLIB 适配器 |
+| [数据源插件](plugin-contracts.md) | 插件运行时、出网、安装与完整性 |
 | [认领合同](./claim-contracts.md) | M4 第三项：迁移 0020、待认领的判定与推荐、预览与令牌、认领的执行器与撤销、读取接口、测试 |
 | [备份管理合同](./backup-management-contracts.md) | 删除与批量删除备份、保留规则（天数 / 份数上限、备份目录里的规则文件、未确认不删的保存语义）、测试 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |

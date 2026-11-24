@@ -69,6 +69,7 @@ func New(opts Options) (*Server, error) {
 	s.route("GET /theaudiodb/api/v1/json/{key}/artist-mb.php", s.audioDB)
 	s.route("GET /theaudiodb/images/{image}", s.audioDBImage)
 	s.route("GET /theaudiodb/images/{image}/medium", s.audioDBImage)
+	s.route("GET /plugins/lyrics-demo/main/{kind}", s.pluginDemo)
 	s.route("GET /lrclib/api/get", s.lyrics)
 	s.route("GET /lrclib/api/search", s.lyrics)
 	s.route("POST /acoustid/v2/lookup", s.acoustid)
@@ -107,6 +108,10 @@ func missing() response { return problem(404, "未找到") }
 func (s *Server) record(service string, r *http.Request) (Scenario, *requestRecord) {
 	q := r.URL.Query()
 	for key := range q {
+		if service == "plugins" {
+			q.Set(key, "***")
+			continue
+		}
 		switch strings.ToLower(key) {
 		case "client", "user", "key", "api_key", "token":
 			q.Set(key, "***")

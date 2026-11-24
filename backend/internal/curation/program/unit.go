@@ -13,7 +13,7 @@ import (
 
 type unit struct {
 	w                      *Worker
-	subject, id            string
+	subject, id, provider  string
 	generation             int
 	releaseID, inputDigest string
 	releaseState           curation.WorkState
@@ -22,6 +22,13 @@ type unit struct {
 }
 
 // 以目标 UUID 为命名空间，名称中的字段顺序固定。
+func (u *unit) source() string {
+	if u.provider != "" {
+		return u.provider
+	}
+	return subjectSource(u.subject)
+}
+
 func (u *unit) key(step string) string {
 	name := fmt.Sprintf("roomusic/curation/%s/%d/%d/%s", u.subject, StoredRuleVersion, u.generation, step)
 	return curation.DerivedKey(u.id, name)
@@ -70,7 +77,7 @@ func (u *unit) write(ctx context.Context, step string, write func(batch, key str
 		}
 		u.checked = true
 	}
-	if err := w.sources.Check(ctx, subjectSource(u.subject)); err != nil {
+	if err := w.sources.Check(ctx, u.source()); err != nil {
 		return err
 	}
 	if err := w.rotateBatch(ctx); err != nil {

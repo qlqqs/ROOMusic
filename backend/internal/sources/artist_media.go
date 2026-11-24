@@ -14,7 +14,7 @@ import (
 
 // ArtistLinks 保存从已对位的 MBID 推出的条目号、文件名与维基百科标题。
 type ArtistLinks struct {
-	MBID, WikidataID, CommonsFile, WikipediaZH, WikipediaEN string
+	Name, MBID, WikidataID, CommonsFile, WikipediaZH, WikipediaEN string
 }
 
 type ArtistLinkFinder interface {

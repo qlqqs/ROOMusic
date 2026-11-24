@@ -1,0 +1,26 @@
+{
+  "body": {
+    "capabilities": [
+      "lyrics",
+      "artist_bio"
+    ],
+    "manifest": {
+      "abi": 1,
+      "author": "ROOMusic",
+      "id": "lyrics-demo",
+      "keys": [],
+      "name": "示例歌词源",
+      "upstreams": [
+        {
+          "base_url": "https://lyrics.example.org/api",
+          "id": "main",
+          "min_interval_ms": 1000
+        }
+      ],
+      "version": "1.0.0"
+    },
+    "preview_token": "example-preview-token",
+    "sha256": "cf813b55b3a502bb97c763791b26fd120e92b59c5db4392c01afba630caaa455"
+  },
+  "status": 200
+}

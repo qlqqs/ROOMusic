@@ -57,7 +57,9 @@ func (w *Writer) ApplyArtistImage(ctx context.Context, r ArtistImageRequest) (Ex
 		}
 	case "theaudiodb", "fanarttv":
 	default:
-		return ExternalApplied{}, operations.Invalid("invalid_input", "艺人图片来源无效")
+		if !strings.HasPrefix(image.Source, "plugin:") || !externalProviderPattern.MatchString(image.Source) {
+			return ExternalApplied{}, operations.Invalid("invalid_input", "艺人图片来源无效")
+		}
 	}
 	stored, err := w.artworks.Describe(image.Data)
 	if err != nil {
@@ -94,7 +96,7 @@ func (w *Writer) discardArtistImage(ctx context.Context, key, artistID string) {
 
 func (w *Writer) ApplyArtistBio(ctx context.Context, r ArtistBioRequest) (ExternalApplied, error) {
 	bio := r.Bio
-	if (bio.Source != "theaudiodb" && bio.Source != "wikipedia") || (bio.Lang != "zh" && bio.Lang != "en") ||
+	if (bio.Source != "theaudiodb" && bio.Source != "wikipedia" && !strings.HasPrefix(bio.Source, "plugin:")) || (bio.Lang != "zh" && bio.Lang != "en") ||
 		strings.TrimSpace(bio.Text) == "" || !utf8.ValidString(bio.Text) || utf8.RuneCountInString(bio.Text) > 4000 {
 		return ExternalApplied{}, operations.Invalid("invalid_input", "艺人简介来源、语言或文本无效")
 	}

@@ -34,7 +34,7 @@ M7 子任务 B1（2026-11）把向外部音乐数据源发请求这件事从管�
 
 ```go
 type Declaration struct {
-    ID             string        // ^[a-z0-9._-]{1,64}$；与操作记录 origin.provider 是同一个标识
+    ID             string        // 内置源 ^[a-z0-9._-]{1,64}$，插件为 plugin:<id>；与操作记录 origin.provider 是同一个标识
     Name           string
     Capabilities   []Capability  // release_lookup | recording_lookup | artist_lookup | cover_art | lyrics | fingerprint_lookup | artist_image | artist_bio
     DefaultEnabled bool
@@ -274,3 +274,7 @@ type Declaration struct {
 这些客户端使用 `PublicOrAllowlist`，额外放行项只有配置地址的主机名（忽略大小写）和有效端口（HTTP 默认 80，HTTPS 默认 443）。
 CAA 的清单和图片重定向也接受此主机与端口，清单仍须跳到以 `/index.json` 结尾的地址。其他地址按原来的公网与重定向规则检查。
 未配置时沿用各服务的官方地址和 `PublicOnly`。管家的模型端点、SearXNG 和网页读取各自沿用原策略。
+
+## 第三方插件外部源
+
+安装的插件声明为 `plugin:<id>`，默认关，声明能力取自经校验的 describe，密钥名称、上游地址、最小请求间隔来自清单。四种媒体查询能力沿用本包接口。插件宿主的 GET 在 Requester 中使用 4 MiB 响应上限、按 Accept 区分的二进制缓存与真实出站前的密钥注入。启用 mock 后按插件和上游标识拼接替换路径。见[插件合同](plugin-contracts.md)。

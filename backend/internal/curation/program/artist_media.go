@@ -43,6 +43,7 @@ func (w *Worker) artistLinks(ctx context.Context, e artistEvidence, p artistProv
 				}
 			}
 		}
+		entry.Name = e.Name
 		links = append(links, entry)
 	}
 	return links, retry, nil
@@ -73,7 +74,7 @@ func (u *unit) writeArtist(ctx context.Context, provider, step string, apply fun
 }
 
 func (w *Worker) artistImage(ctx context.Context, u *unit, e artistEvidence, p artistProviders, links []sources.ArtistLinks) (filled, retry bool, err error) {
-	for _, id := range []string{"fanarttv", "theaudiodb", "commons"} {
+	for _, id := range append([]string{"fanarttv", "theaudiodb", "commons"}, w.sources.PluginIDs(sources.ArtistImageLookup)...) {
 		f, ok := w.sources.ArtistImageFinder(id)
 		if !ok || !p.active[id] {
 			continue
@@ -104,30 +105,32 @@ func (w *Worker) artistImage(ctx context.Context, u *unit, e artistEvidence, p a
 }
 
 func (w *Worker) artistBio(ctx context.Context, u *unit, e artistEvidence, p artistProviders, links []sources.ArtistLinks) (filled, retry bool, err error) {
-	for _, lang := range []string{"zh", "en"} {
-		for _, id := range []string{"wikipedia", "theaudiodb"} {
-			f, ok := w.sources.ArtistBioFinder(id)
-			if !ok || !p.active[id] {
-				continue
-			}
-			for _, link := range links {
-				if id == "wikipedia" && (lang == "zh" && link.WikipediaZH == "" || lang == "en" && link.WikipediaEN == "") {
+	for _, group := range [][]string{{"wikipedia", "theaudiodb"}, w.sources.PluginIDs(sources.ArtistBioLookup)} {
+		for _, lang := range []string{"zh", "en"} {
+			for _, id := range group {
+				f, ok := w.sources.ArtistBioFinder(id)
+				if !ok || !p.active[id] {
 					continue
 				}
-				bio, err := f.ArtistBio(ctx, link, lang)
-				if err == nil && bio.ID != "" && !e.suppressed("artist_bio", id, bio.ID) {
-					filled, err = u.writeArtist(ctx, id, "bio/"+id+"/"+bio.ID, func(batch, key string) (curation.ExternalApplied, error) {
-						return w.writer.ApplyArtistBio(ctx, curation.ArtistBioRequest{ArtistID: e.ID, MBID: link.MBID, Bio: bio, BatchID: batch, Key: key})
-					})
-					if filled {
-						return true, false, nil
-					}
-					if failureCode(err) == "invalid_input" {
+				for _, link := range links {
+					if id == "wikipedia" && (lang == "zh" && link.WikipediaZH == "" || lang == "en" && link.WikipediaEN == "") {
 						continue
 					}
-				}
-				if err := artistSourceError(err, &retry); err != nil {
-					return false, false, err
+					bio, err := f.ArtistBio(ctx, link, lang)
+					if err == nil && bio.ID != "" && !e.suppressed("artist_bio", id, bio.ID) {
+						filled, err = u.writeArtist(ctx, id, "bio/"+id+"/"+bio.ID, func(batch, key string) (curation.ExternalApplied, error) {
+							return w.writer.ApplyArtistBio(ctx, curation.ArtistBioRequest{ArtistID: e.ID, MBID: link.MBID, Bio: bio, BatchID: batch, Key: key})
+						})
+						if filled {
+							return true, false, nil
+						}
+						if failureCode(err) == "invalid_input" {
+							continue
+						}
+					}
+					if err := artistSourceError(err, &retry); err != nil {
+						return false, false, err
+					}
 				}
 			}
 		}

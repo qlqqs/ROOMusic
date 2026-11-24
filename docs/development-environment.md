@@ -129,6 +129,8 @@ make mock-upstream MOCK_ADDR=127.0.0.1:18091 MOCK_ARGS='-scenario lrclib=slow -s
 make mock-upstream MOCK_ARGS='-data ../temp/mock-data -script ../temp/mock-script.json'
 ```
 
+数据源插件的 mock 前缀是 `/plugins/<插件标识>/<上游标识>`。示例歌词源提供合成歌词与艺人简介，请求记录可按 `service=plugins` 过滤。构建、打包与试用步骤见[示例歌词源](../backend/plugins/examples/lyrics-demo/README.md)。
+
 ### Compose 试用实例
 
 在与试用容器同架构的 Linux 宿主机上，用项目工具链构建独立二进制：

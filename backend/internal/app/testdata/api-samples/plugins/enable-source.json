@@ -1,0 +1,17 @@
+{
+  "body": {
+    "active": true,
+    "capabilities": [
+      "lyrics",
+      "artist_bio"
+    ],
+    "enabled": true,
+    "id": "plugin:lyrics-demo",
+    "inactive_reason": null,
+    "name": "示例歌词源",
+    "upstreams": [
+      "https://lyrics.example.org/api"
+    ]
+  },
+  "status": 200
+}

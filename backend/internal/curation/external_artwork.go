@@ -27,7 +27,7 @@ type ExternalApplied struct {
 	Skipped     string `json:"skipped,omitempty"`
 }
 
-var externalProviderPattern = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
+var externalProviderPattern = regexp.MustCompile(`^([a-z0-9._-]{1,64}|plugin:[a-z0-9-]{3,40})$`)
 
 func (w *Writer) externalSpec(ctx context.Context, kind, targetField, targetID, hash string, source Source, externalID, batchID, key, requestID string) (operations.Spec, error) {
 	if !validExternalID(externalID) {
