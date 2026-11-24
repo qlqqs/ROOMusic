@@ -14,6 +14,7 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	68: artistMediaRollbackFixture,
 	67: mergedReleaseRollbackFixture,
 	65: `UPDATE tracks SET edit_revision=5 WHERE id='c3000000-0000-4000-8000-000000000065';
  INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
@@ -433,6 +434,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			if m.Version == 67 {
 				rollbackExec(t, db, beforeReleaseMergeMigration)
+			}
+			if m.Version == 68 {
+				rollbackExec(t, db, beforeArtistMediaMigration)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
