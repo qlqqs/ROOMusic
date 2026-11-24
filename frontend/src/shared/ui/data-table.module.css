@@ -64,6 +64,25 @@
   min-width: 0;
 }
 
+/*
+ * 曲目表（有 secondary 列）：标题用常规字重，与专辑详情的曲目行一致；艺人、专辑这类次要栏整列都是链接，
+ * 不靠下划线辨认，平时与单元格同色，悬停才变深并出现下划线（与专辑详情曲目行里的艺人链接同一种写法）。
+ */
+.compound .rowHeader {
+  font-family: var(--font-body);
+  font-weight: 400;
+}
+
+.table .secondary a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.table .secondary a:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
 /* 只占一行的列：max-width: 0 让列宽按表格分配而不是被长文字撑开，内容末尾省略。 */
 .table .truncate {
   max-width: 0;

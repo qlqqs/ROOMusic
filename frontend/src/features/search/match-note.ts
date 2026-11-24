@@ -37,13 +37,23 @@ function labelOf(match: SearchMatchDTO): string {
   return fieldNames[match.field];
 }
 
+/** 一段显示的文字拆成单个名字：多位艺人写在一起时（“甲 / 乙”“甲、乙”），命中其中一位也算已经显示。 */
+function shownParts(shown: readonly string[]): Set<string> {
+  const parts = new Set<string>();
+  for (const text of shown) {
+    parts.add(text.trim());
+    for (const part of text.split(/\s*[/、;；]\s*/)) if (part.trim() !== "") parts.add(part.trim());
+  }
+  return parts;
+}
+
 /**
  * 一条结果的命中说明；不需要说明时是 null。shown 是这一行已经显示的文字（标题、艺人、专辑名）：
- * 命中的原文就是其中之一时不再重复。别名命中写匹配到的别名（“别名：Teresa Teng”）。
+ * 命中的原文就是其中之一（或多位艺人里的一位）时不再重复。别名命中写匹配到的别名（“别名：Teresa Teng”）。
  */
 export function matchNote(match: SearchMatchDTO, shown: readonly string[]): string | null {
   const text = match.field === "artist_alias" ? (match.alias ?? match.original) : match.original;
   if (text.trim() === "") return null;
-  if (match.field !== "artist_alias" && shown.includes(text)) return null;
+  if (match.field !== "artist_alias" && shownParts(shown).has(text.trim())) return null;
   return `${labelOf(match)}：${text}`;
 }

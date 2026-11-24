@@ -20,12 +20,13 @@ function fieldCell(field: string, marks: FieldMarks) {
   );
 }
 
+// 摘要所有登录成员都能看：只写字段、来源、可信度与处理方式。整理规则的内部代号（majority_v1 之类）对读者没有意义，
+// 只在管理员的完整证据（归组依据）里出现。
 const summaryColumns = (marks: FieldMarks): Column<ReleaseEvidenceSummaryDTO>[] => [
   { id: "field", header: "字段", rowHeader: true, cell: (item) => fieldCell(item.field, marks) },
   { id: "source", header: "来源", cell: (item) => evidenceSourceLabel(item.source) },
   { id: "confidence", header: "可信度", cell: (item) => confidenceLabel(item.confidence) },
   { id: "action", header: "处理方式", cell: (item) => evidenceActionLabel(item.action) },
-  { id: "rule", header: "规则", cell: (item) => <code>{item.rule_id}</code> },
 ];
 
 const none = "—";
@@ -148,10 +149,13 @@ function FullEvidence({ releaseId, marks }: { releaseId: string; marks: FieldMar
  * 详情底部折叠的“来源与证据”。所有登录用户都能读摘要（来自版本详情，字段、来源、可信度与处理方式）；
  * 管理员在展开后多一个“查看完整证据”，其余用户从不请求管理员接口。换版本时（key）回到折叠。
  */
+/** “来源与证据”折叠区块的 id：页头“需要关注”旁的入口据此展开它。 */
+export const EVIDENCE_SECTION_ID = "release-evidence";
+
 export function EvidenceSection({ release, isAdmin }: { release: ReleaseDetailDTO; isAdmin: boolean }) {
   const count = release.evidence.length;
   return (
-    <Disclosure title="来源与证据" detail={`（${formatCount(count)} 项）`}>
+    <Disclosure id={EVIDENCE_SECTION_ID} title="来源与证据" detail={`（${formatCount(count)} 项）`}>
       {release.corrected_fields.length === 0 ? null : (
         <p className={styles.note}>标有“人工修正”的字段，页面上显示的是改过的值。</p>
       )}

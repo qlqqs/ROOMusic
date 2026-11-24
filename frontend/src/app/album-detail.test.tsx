@@ -102,7 +102,7 @@ describe("专辑详情：单版本", () => {
     release();
   });
 
-  it("没有额外发行信息的版本：侧栏说明暂无，不写“未知”；没有制作人员区块", async () => {
+  it("没有额外发行信息的版本：没有发行信息区块（不写“暂无”或“未知”），也没有制作人员区块", async () => {
     const album = symphonies();
     const { catalog } = setup({ groups: [album] });
     catalog.releases.set(
@@ -111,7 +111,8 @@ describe("专辑详情：单版本", () => {
     );
     renderApp({ path: `/albums/${album.id}` });
     await screen.findByText("Track 1-01");
-    expect(screen.getByText("暂无更多发行信息。")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "发行信息" })).toBeNull();
+    expect(screen.queryByText("暂无更多发行信息。")).toBeNull();
     expect(screen.queryByRole("region", { name: "制作人员" })).toBeNull();
     expect(screen.queryByText("流派")).toBeNull();
     expect(screen.queryByText("未知")).toBeNull();
@@ -150,7 +151,7 @@ describe("专辑详情：介质与曲目", () => {
     Element.prototype.scrollIntoView = original;
   });
 
-  it("多张介质逐段列出：每段一个标题与曲目列表，顶部有跳到每一张的链接", async () => {
+  it("多张介质逐段列出：每段一个标题与曲目列表；只有两张时没有跳转链接，表头只在第一张出现", async () => {
     const album = symphonies();
     setup({ groups: [album] });
     renderApp({ path: `/albums/${album.id}` });
@@ -161,9 +162,9 @@ describe("专辑详情：介质与曲目", () => {
     expect(first.getAllByRole("listitem")).toHaveLength(2);
     expect(second.getAllByRole("listitem")).toHaveLength(1);
     expect(first.getByRole("heading", { level: 3 }).textContent).toBe("第 1 张，2 首");
-    // 宽表艺人与作曲分栏；共同的指挥署名只在页头列一次。
+    // 艺人都与专辑艺人相同时没有艺人一栏；全部曲目共同的作曲与指挥只在页头列一次，曲目行不再重复。
     const row = first.getAllByRole("listitem")[0];
-    expect(rowFacts(row)).toBe("1Track 1-01艺人：Sample Orchestra作曲：Sample Composer1:51");
+    expect(rowFacts(row)).toBe("1Track 1-011:51");
     expect(sharedCreditsText()).toBe("全部曲目：作曲： Sample Composer；指挥： Sample Conductor");
     // 播放动作在行末单独的插槽里，不混进曲目事实。
     if (row === undefined) throw new Error("缺少曲目行");
@@ -173,15 +174,20 @@ describe("专辑详情：介质与曲目", () => {
     // 不显示来源文件名。
     expect(screen.queryByText(/\.flac/)).toBeNull();
 
-    const jump = within(screen.getByRole("navigation", { name: "介质" }));
-    expect(jump.getAllByRole("link").map((link) => link.textContent)).toEqual(["第 1 张", "第 2 张"]);
+    // 两张碟一眼看得全，不需要页内跳转；表头不在每张碟上重复。
+    expect(screen.queryByRole("navigation", { name: "介质" })).toBeNull();
+    const columnHeaders = (region: ReturnType<typeof within>) => region.queryAllByText("时长");
+    expect(columnHeaders(first)).toHaveLength(1);
+    expect(columnHeaders(second)).toHaveLength(0);
   });
 
-  it("点“第 2 张”：滚到该段标题并把焦点放上去，地址与历史不变", async () => {
-    const album = symphonies();
+  it("三张及以上介质：顶部有跳到每一张的链接；点“第 2 张”滚到该段标题并把焦点放上去，地址与历史不变", async () => {
+    const album = symphonies({ medium_count: 3, track_count: 4 });
     setup({ groups: [album] });
     const { history } = renderApp({ path: `/albums/${album.id}` });
     await screen.findByText("Track 1-01");
+    const jump = within(screen.getByRole("navigation", { name: "介质" }));
+    expect(jump.getAllByRole("link").map((link) => link.textContent)).toEqual(["第 1 张", "第 2 张", "第 3 张"]);
     const length = history.length;
     const location = history.location.href;
 
@@ -282,7 +288,7 @@ describe("专辑详情：介质与曲目", () => {
     expect(info.getByText("指挥").nextElementSibling?.textContent).toBe("Sample Conductor");
   });
 
-  it("CUE 分轨带标记：取自真实的 CUE 样本", async () => {
+  it("整张都是 CUE 分轨：页头概况写一次“CUE 分轨”，曲目行不再逐行标出（取自真实的 CUE 样本）", async () => {
     const cue = decodeReleaseDetail(sampleBody("releases/get-cue"));
     const album = albumGroup(1, { title: cue.title, artist: cue.artist, album_artist: cue.album_artist ?? "Sample Cue Artist", year: cue.year, medium_count: 1, track_count: 2 });
     const { catalog } = setup({ groups: [album] });
@@ -291,9 +297,27 @@ describe("专辑详情：介质与曲目", () => {
 
     await screen.findByText("Cue One");
     expect(screen.getByText("Cue Two")).toBeTruthy();
-    expect(screen.getAllByText("CUE 分轨")).toHaveLength(2);
-    expect(trackRows().map((row) => rowFacts(row))).toEqual(["1Cue OneCUE 分轨艺人：Sample Cue Artist2:00", "2Cue TwoCUE 分轨艺人：Sample Cue Artist2:00"]);
+    expect(headerFact("来源")).toBe("CUE 分轨");
+    expect(screen.getAllByText("CUE 分轨")).toHaveLength(1);
+    expect(trackRows().map((row) => rowFacts(row))).toEqual(["1Cue One2:00", "2Cue Two2:00"]);
     expect(headerFact("总时长")).toBe("4 分钟");
+  });
+
+  it("CUE 分轨与普通文件混在一个版本里：只给 CUE 分轨的那几行标出", async () => {
+    const cue = decodeReleaseDetail(sampleBody("releases/get-cue"));
+    const [medium] = cue.media;
+    if (medium === undefined) throw new Error("CUE 样本缺少介质");
+    const [cueTrack, plainTrack] = medium.tracks;
+    if (cueTrack === undefined || plainTrack === undefined) throw new Error("CUE 样本缺少曲目");
+    const mixed = { ...cue, media: [{ ...medium, tracks: [cueTrack, { ...plainTrack, source_kind: "file" as const, cue: null }] }] };
+    const album = albumGroup(1, { title: cue.title, artist: cue.artist, album_artist: cue.album_artist ?? "Sample Cue Artist", year: cue.year, medium_count: 1, track_count: 2 });
+    const { catalog } = setup({ groups: [album] });
+    catalog.releases.set(album.representative.id, { ...mixed, id: album.representative.id });
+    renderApp({ path: `/albums/${album.id}` });
+
+    await screen.findByText("Cue One");
+    expect(headerFact("来源")).toBeNull();
+    expect(trackRows().map((row) => rowFacts(row))).toEqual(["1Cue OneCUE 分轨2:00", "2Cue Two2:00"]);
   });
 
   it("一千首曲目的版本可以渲染，计数带千位分隔符", async () => {
@@ -758,7 +782,7 @@ describe("专辑详情：来源与证据", () => {
     expect(details?.hasAttribute("open")).toBe(true);
     const rows = within(table).getAllByRole("row");
     expect(rows).toHaveLength(10); // 表头加九个字段
-    expect(within(rows[1] as HTMLElement).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["音频标签", "高", "直接采用", "majority_v1"]);
+    expect(within(rows[1] as HTMLElement).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["音频标签", "高", "直接采用"]);
     expect(within(rows[1] as HTMLElement).getByRole("rowheader").textContent).toBe("专辑艺人");
 
     // 再点一次折叠，内容随之移除。
@@ -885,13 +909,26 @@ describe("专辑详情：来源与证据", () => {
     expect(screen.getByRole("table", { name: "证据摘要" })).toBeTruthy();
   }, 15_000);
 
-  it("需要关注的版本：头部有标签并指向“来源与证据”；没有需要关注的版本没有这个标签", async () => {
+  it("需要关注的版本：头部有标签，“查看来源与证据”展开页面底部的那个区块并把焦点放上去；没有需要关注的版本没有这个标签", async () => {
     const attention = symphonies({ attention_count: 2 });
     setup({ groups: [attention] });
     const { view } = renderApp({ path: `/albums/${attention.id}` });
     await screen.findByText("Track 1-01");
     expect(screen.getByText("需要关注")).toBeTruthy();
-    expect(screen.getByText("详见页面底部的“来源与证据”。")).toBeTruthy();
+    const summary = screen.getByText("来源与证据").closest("summary");
+    const details = summary?.parentElement;
+    expect(details instanceof HTMLDetailsElement && details.open).toBe(false);
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      await userEvent.click(screen.getByRole("button", { name: "查看来源与证据" }));
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+    expect(details instanceof HTMLDetailsElement && details.open).toBe(true);
+    expect(scroll).toHaveBeenCalled();
+    expect(document.activeElement).toBe(summary);
     view.unmount();
 
     const calm = symphonies();
@@ -924,9 +961,9 @@ describe("专辑详情：来源与证据", () => {
     const table = await summaryTable();
     const rows = within(table).getAllByRole("row");
     expect(rows.map((row) => row.textContent)).toEqual([
-      "字段来源可信度处理方式规则",
-      "年份CUE 文件（专辑）中不确定，已暂时采用majority_v1",
-      "new_fieldnew_sourceunsurenew_actionnew_rule_v9",
+      "字段来源可信度处理方式",
+      "年份CUE 文件（专辑）中不确定，已暂时采用",
+      "new_fieldnew_sourceunsurenew_action",
     ]);
     // 未知角色原样显示；新增的已知角色显示中文名，并保留对应署名。
     const credits = within(screen.getByRole("region", { name: "制作人员" }));

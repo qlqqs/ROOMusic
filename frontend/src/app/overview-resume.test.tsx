@@ -79,7 +79,7 @@ describe("概览的“继续播放”", () => {
   it("没有当前曲目也没有播放记录时不出现", async () => {
     const api = setup([]);
     renderApp();
-    await screen.findByText("还没有播放记录。曲目听过一半就会记在这里。");
+    await screen.findByRole("region", { name: "资料库状态" });
     await waitFor(() => expect(api.requestsTo("GET", recentPath)).toHaveLength(1));
     expect(screen.queryByRole("region", { name: "继续播放" })).toBeNull();
     expect(screen.queryByRole("region", { name: "正在播放" })).toBeNull();
@@ -99,18 +99,10 @@ describe("概览的“继续播放”", () => {
     await waitFor(() => expect(server().queueIds()).toEqual(tracks.map((entry) => entry.id)));
     expect(server().zone().current?.track.trackId).toBe(track(2).id);
 
-    // 开始播放后这一块换成当前曲目：标题“正在播放”，按钮暂停的是播放器，不是重新开始。
-    const playing = await screen.findByRole("region", { name: "正在播放" });
-    expect(within(playing).getByText(`Glenn Gould · ${track(2).title}`)).toBeTruthy();
-    const commands = server().commands.length;
-    await userEvent.click(within(playing).getByRole("button", { name: "暂停《Goldberg Variations》" }));
-    await waitFor(() => expect(server().zone().intent).toBe("pause"));
-    expect(server().commands.length).toBe(commands + 1);
-    expect(server().queueIds()).toHaveLength(tracks.length);
-    const paused = await screen.findByRole("region", { name: "继续播放" });
-    await userEvent.click(within(paused).getByRole("button", { name: "继续播放《Goldberg Variations》" }));
-    await waitFor(() => expect(server().zone().intent).toBe("play"));
-    expect(server().zone().current?.track.trackId).toBe(track(2).id);
+    // 开始播放后这一块不再出现：播放栏已经显示同一首曲目、进度与暂停键，概览上不再重复一张“正在播放”卡片。
+    await waitFor(() => expect(screen.queryByRole("region", { name: "继续播放" })).toBeNull());
+    expect(screen.queryByRole("region", { name: "正在播放" })).toBeNull();
+    expect(within(screen.getByRole("region", { name: "播放器" })).getByText(track(2).title)).toBeTruthy();
   });
 
   it("上次那首现在不在这个版本里时从第一首开始", async () => {

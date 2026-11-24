@@ -131,11 +131,16 @@ function Layout({ track, titleId, collapseRef, onCollapse, renderCurrentTrackAct
   </div>;
 }
 
-/** “专辑 · 艺人”：都是链接（艺人数据还在整理时艺人是纯文字）。 */
+/**
+ * “专辑 · 艺人”：都是链接（艺人数据还在整理时艺人是纯文字）。窄屏顶部已经写着“正在播放 专辑名”，这里只留艺人；
+ * 专辑仍可从“更多”里的“转到专辑”进入。
+ */
 function TrackMeta({ track }: { track: PlayerTrack }) {
   return <p className={styles.meta}>
-    <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }} title={track.albumTitle}>{track.albumTitle}</Link>
-    <span aria-hidden="true"> · </span>
+    <span className={styles.metaAlbum}>
+      <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }} title={track.albumTitle}>{track.albumTitle}</Link>
+      <span aria-hidden="true"> · </span>
+    </span>
     <ArtistNames text={track.artist} refs={track.artistRefs ?? noRefs} />
   </p>;
 }

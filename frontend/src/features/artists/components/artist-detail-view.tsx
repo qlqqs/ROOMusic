@@ -4,7 +4,7 @@ import { failureOf, isHttpFailure } from "../../../shared/api";
 import { formatDuration } from "../../../shared/lib/duration";
 import { formatCount } from "../../../shared/lib/number";
 import { pageCountOf } from "../../../shared/lib/pagination";
-import { Button, DataTable, Page, Pagination, Panel, QueryContent, Skeleton, StatusTag, type Column } from "../../../shared/ui";
+import { Button, DataTable, Page, Pagination, Panel, QueryContent, Skeleton, StatusTag, VisuallyHidden, type Column } from "../../../shared/ui";
 import {
   albumMeta,
   AlbumGridLayout,
@@ -306,7 +306,7 @@ function RoleTracks({ detail, roles, role, search, renderTrackActions, renderTra
             <span className={styles.missing}>{item.release.title}</span>
           ),
       },
-      { id: "actions", header: "操作", hideLabelWhenStacked: true, besideRowHeader: true, cell: (item) => renderTrackActions(item) },
+      { id: "actions", header: "操作", headerContent: <VisuallyHidden>操作</VisuallyHidden>, hideLabelWhenStacked: true, besideRowHeader: true, cell: (item) => renderTrackActions(item) },
       { id: "duration", header: "时长", numeric: true, secondary: true, cell: (item) => <span className={styles.duration}>{formatDuration(item.duration_seconds)}</span> },
     ],
     [renderTrackActions],

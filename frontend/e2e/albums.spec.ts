@@ -171,19 +171,19 @@ test.describe("专辑列表", () => {
       .toBe(48);
   });
 
-  test("资料库没有专辑：管理员被引导去扫描目录，成员只被告知等待", async ({ page, backend }) => {
+  test("资料库没有专辑：管理员被引导去音乐目录，成员只被告知等待", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = [];
     await page.goto("/albums");
     await expect(page.getByText(/资料库里还没有专辑。添加音乐目录并扫描后就会出现。/)).toBeVisible();
-    await page.getByRole("link", { name: "前往扫描目录" }).click();
-    await expect(heading(page, "扫描目录")).toBeVisible();
+    await page.getByRole("link", { name: "前往音乐目录" }).click();
+    await expect(heading(page, "音乐目录")).toBeVisible();
 
     const memberPage = await page.context().newPage();
     mock.session = "listener";
     await memberPage.goto("/albums");
     await expect(memberPage.getByText("资料库里还没有专辑。", { exact: true })).toBeVisible();
-    await expect(memberPage.getByRole("link", { name: "前往扫描目录" })).toHaveCount(0);
+    await expect(memberPage.getByRole("link", { name: "前往音乐目录" })).toHaveCount(0);
   });
 
   test("没有符合条件的专辑：说明并可以一键清除", async ({ page, backend }) => {

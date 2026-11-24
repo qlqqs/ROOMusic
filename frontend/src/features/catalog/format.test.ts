@@ -3,17 +3,17 @@ import type { ReleaseMediumDTO } from "./api/decoders";
 import { albumArtistOf, albumMeta, creditsText, groupCredits, isFieldCorrected, mediumHeading, releaseFacts, totalDuration } from "./format";
 
 describe("albumMeta", () => {
-  it("年份、介质数（多于一张才写）与曲目数，用间隔号连接", () => {
-    expect(albumMeta({ year: 1998, medium_count: 2, track_count: 3 })).toBe("1998 · 2 张介质 · 3 首曲目");
-    expect(albumMeta({ year: 2001, medium_count: 1, track_count: 1 })).toBe("2001 · 1 首曲目");
+  it("年份、碟数（多于一张才写）与曲目数，用间隔号连接，写法与详情页概况相同", () => {
+    expect(albumMeta({ year: 1998, medium_count: 2, track_count: 3 })).toBe("1998 · 2 张碟 · 3 首");
+    expect(albumMeta({ year: 2001, medium_count: 1, track_count: 1 })).toBe("2001 · 1 首");
   });
 
   it("年份未知就省略，不写占位", () => {
-    expect(albumMeta({ year: null, medium_count: 1, track_count: 12 })).toBe("12 首曲目");
+    expect(albumMeta({ year: null, medium_count: 1, track_count: 12 })).toBe("12 首");
   });
 
   it("数量按中文习惯加千位分隔符", () => {
-    expect(albumMeta({ year: null, medium_count: 12, track_count: 1234 })).toBe("12 张介质 · 1,234 首曲目");
+    expect(albumMeta({ year: null, medium_count: 12, track_count: 1234 })).toBe("12 张碟 · 1,234 首");
   });
 });
 
@@ -99,22 +99,21 @@ describe("署名", () => {
 });
 
 describe("releaseFacts", () => {
-  const empty = { label: null, catalog_number: null, barcode: null, edition: null, genres: [], source_type: null, media_type: null };
+  const empty = { label: null, catalog_number: null, barcode: null, edition: null, source_type: null, media_type: null };
 
   it("没有值（或只有空白）的条目不列出", () => {
     expect(releaseFacts(empty)).toEqual([]);
-    expect(releaseFacts({ ...empty, label: "  ", genres: [] })).toEqual([]);
+    expect(releaseFacts({ ...empty, label: "  " })).toEqual([]);
   });
 
-  it("按固定顺序列出有值的条目，多流派用间隔号连接", () => {
+  it("按固定顺序列出有值的条目；流派写在页头的概况里，这里不重复", () => {
     expect(
-      releaseFacts({ label: "L", catalog_number: "C-1", barcode: "012", edition: "Remastered", genres: ["国语流行乐", "台语流行乐"], source_type: "CD", media_type: "CD" }),
+      releaseFacts({ label: "L", catalog_number: "C-1", barcode: "012", edition: "Remastered", source_type: "CD", media_type: "CD" }),
     ).toEqual([
       { label: "厂牌", value: "L", field: "label" },
       { label: "编号", value: "C-1", field: "catalog_number" },
       { label: "条码", value: "012", field: "barcode" },
       { label: "版本说明", value: "Remastered", field: "edition" },
-      { label: "流派", value: "国语流行乐 · 台语流行乐", field: "genre" },
       { label: "来源类型", value: "CD", field: "source_type" },
       { label: "介质类型", value: "CD", field: "media_type" },
     ]);

@@ -41,23 +41,22 @@ describe("Cover", () => {
     expect(image(container)).toBeTruthy();
   });
 
-  it("没有封面：确定性的文字版面，不发图片请求；卡片里是装饰，详情页有名称", () => {
+  it("没有封面：图标占位，不发图片请求，也不在封面里重复排标题；卡片里是装饰，详情页有名称", () => {
     const card = render(<Cover artwork={null} title="没有封面的专辑" variant="card" />);
     expect(card.container.querySelector("img")).toBeNull();
-    expect(card.container.textContent).toContain("没有封面的专辑");
-    expect(card.container.querySelector('[data-state="none"]')).not.toBeNull();
+    expect(card.container.textContent).toBe("");
+    expect(card.container.querySelector('[data-state="none"] svg')).not.toBeNull();
     card.unmount();
 
     render(<Cover artwork={null} title="没有封面的专辑" variant="detail" />);
     expect(screen.getByRole("img", { name: "《没有封面的专辑》没有封面" })).toBeTruthy();
   });
 
-  it("卡片里加载失败：同样的版面加“封面无法加载”，没有重新加载按钮", () => {
+  it("卡片里加载失败：同样的占位加“封面无法加载”，没有重新加载按钮", () => {
     const { container } = render(<Cover artwork={artwork} title="失败的专辑" variant="card" />);
     fireEvent.error(image(container));
     expect(container.querySelector("img")).toBeNull();
-    expect(container.querySelector('[data-state="failed"]')?.textContent).toContain("封面无法加载");
-    expect(container.textContent).toContain("失败的专辑");
+    expect(container.querySelector('[data-state="failed"]')?.textContent).toBe("封面无法加载");
     expect(screen.queryByRole("button")).toBeNull();
   });
 

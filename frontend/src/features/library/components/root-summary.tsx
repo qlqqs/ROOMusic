@@ -6,7 +6,7 @@ import { summarizeRoots, useRoots } from "../hooks/use-roots";
 
 const icon = <FolderOpen size={16} />;
 
-/** 概览“资料库状态”里的音乐目录一行（管理员）：右侧是启用的目录数，有停用的另写一句；整行进入扫描目录。 */
+/** 概览“资料库状态”里的音乐目录一行（管理员）：右侧是启用的目录数，有停用的另写一句；还没有目录时只写“还没有音乐目录”。整行进入音乐目录。 */
 export function RootSummary() {
   const roots = useRoots();
   if (roots.data === undefined) return <PendingStatusRow icon={icon} label="音乐目录" query={roots} />;
@@ -17,7 +17,7 @@ export function RootSummary() {
       icon={icon}
       label="音乐目录"
       detail={detail}
-      value={formatCount(summary.active)}
+      value={roots.data.length === 0 ? undefined : formatCount(summary.active)}
       renderLink={({ className, children }) => (
         <Link to="/settings/library" className={className}>
           {children}

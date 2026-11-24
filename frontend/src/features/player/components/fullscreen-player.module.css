@@ -107,6 +107,8 @@ dialog.dialog > div[aria-hidden="true"], .root dialog > div[aria-hidden="true"] 
   .deckCell { display: grid; place-items: center; min-height: 0; }
   .deck { width: min(72vw, 40vh, 300px); margin-right: 0; }
   .title { font-size: 22px; }
+  /* 顶部已经写着“正在播放 专辑名”：标题下只留艺人。 */
+  .metaAlbum { display: none; }
   .lyricsView { grid-template-rows: auto minmax(0, 1fr); }
   .miniHead { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); }
   .miniArt { display: block; width: 52px; height: 52px; overflow: hidden; border-radius: var(--radius-md); }

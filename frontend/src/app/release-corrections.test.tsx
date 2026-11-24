@@ -393,11 +393,14 @@ describe("撤销与人工修正的标记", () => {
     const facts = within(screen.getByRole("region", { name: "发行信息" }));
     expect(facts.getByText("厂牌").nextElementSibling?.textContent).toContain("Corrected Label");
     expect(facts.getByText("厂牌").nextElementSibling?.textContent).toContain("人工修正");
-    expect(facts.getByText("流派").nextElementSibling?.textContent).toContain("人工修正");
     expect(facts.getByText("条码").nextElementSibling?.textContent).not.toContain("人工修正");
+    // 流派只写在页头概况里（侧栏不重复），人工修正的标记跟着它。
+    expect(facts.queryByText("流派")).toBeNull();
     const overview = screen.getByRole("list", { name: "概况" });
     expect(overview.textContent).toContain("1975");
-    expect(overview.textContent).toContain("人工修正");
+    const genreFact = Array.from(overview.querySelectorAll("li")).find((item) => item.textContent?.startsWith("流派："));
+    expect(genreFact?.textContent).toContain("Romantic");
+    expect(genreFact?.textContent).toContain("人工修正");
 
     await user.click(screen.getByText("来源与证据"));
     const evidence = await screen.findByRole("table", { name: "证据摘要" });

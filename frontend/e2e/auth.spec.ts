@@ -79,7 +79,7 @@ test.describe("初始化、登录与退出", () => {
 
     await openSettings(page);
     mock.expireSession();
-    await page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "扫描目录" }).click();
+    await page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "音乐目录" }).click();
     await expect(heading(page, "登录")).toBeVisible();
     await expect(page.getByText("登录已失效，请重新登录。")).toBeVisible();
     await expect(page).toHaveURL(/redirect=%2Fsettings%2Flibrary/);
@@ -87,7 +87,7 @@ test.describe("初始化、登录与退出", () => {
     await page.getByLabel("用户名").fill("curator");
     await page.getByLabel("密码").fill("curator-password");
     await page.getByRole("button", { name: "登录" }).click();
-    await expect(heading(page, "扫描目录")).toBeVisible();
+    await expect(heading(page, "音乐目录")).toBeVisible();
   });
 
   test("另一个标签页退出后，本页跟随回到登录页", async ({ page, context, backend }) => {
@@ -128,7 +128,7 @@ test.describe("权限", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.forbid.add("GET /api/v1/library-roots");
     await page.goto("/settings/library");
-    await expect(heading(page, "扫描目录")).toBeVisible();
+    await expect(heading(page, "音乐目录")).toBeVisible();
     await expect(page.getByRole("alert").filter({ hasText: "你没有权限执行此操作。" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "主导航" })).toBeVisible();
     await expect(page.getByRole("region", { name: "当前用户" })).toContainText("curator");
@@ -316,7 +316,7 @@ test.describe("侧栏底部的当前用户", () => {
     await expect(identity).toContainText("curator");
     await expect(identity).toContainText("管理员");
     await expect(identity.locator('[aria-hidden="true"]').filter({ hasText: "C" })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: /^(扫描目录|成员|自动整理|操作记录|备份)$/ })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: /^(音乐目录|成员|自动整理|操作记录|备份)$/ })).toHaveCount(0);
     await expect(settingsLink(page)).not.toHaveAttribute("aria-current", "page");
     const trigger = userTrigger(page);
     await keyActivate(page, trigger, "ArrowDown");
@@ -343,7 +343,7 @@ test.describe("侧栏底部的当前用户", () => {
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await openSettings(page);
     await expect(settingsLink(page)).toHaveAttribute("aria-current", "page");
-    await expect(page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link")).toHaveText(["账号", "播放", "Agent", "关于", "扫描目录", "成员", "自动整理", "局域网设备", "操作记录", "备份", "匿名统计"]);
+    await expect(page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link")).toHaveText(["账号", "播放", "Agent", "关于", "音乐目录", "成员", "自动整理", "局域网设备", "操作记录", "备份", "匿名统计"]);
   });
 
   test("退出失败留在当前页面，菜单关闭且提示重试后才真正退出", async ({ page, backend }) => {

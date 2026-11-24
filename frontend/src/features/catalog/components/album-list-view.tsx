@@ -73,7 +73,7 @@ export function AlbumListView({ search, isAdmin, renderAlbumPlay }: { search: Al
                 </p>
               ) : isAdmin ? (
                 <p>
-                  资料库里还没有专辑。添加音乐目录并扫描后就会出现。 <Link to="/settings/library">前往扫描目录</Link>
+                  资料库里还没有专辑。添加音乐目录并扫描后就会出现。 <Link to="/settings/library">前往音乐目录</Link>
                 </p>
               ) : (
                 <p>资料库里还没有专辑。</p>

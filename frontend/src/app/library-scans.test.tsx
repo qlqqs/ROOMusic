@@ -37,7 +37,7 @@ afterEach(() => {
   Reflect.deleteProperty(document, "visibilityState");
 });
 
-describe("扫描目录页：扫描区段", () => {
+describe("音乐目录页：扫描区段", () => {
   it("没有活动扫描：显示空闲提示，提供“开始扫描”", async () => {
     setup();
     renderApp({ path: "/settings/library" });
@@ -164,7 +164,7 @@ function rowAt(table: HTMLElement, index: number): HTMLElement {
 
 const lastScanListRequest = (api: ReturnType<typeof setup>["api"]) => api.requestsTo("GET", "/api/v1/scans").at(-1)?.path;
 
-describe("扫描目录页：扫描记录", () => {
+describe("音乐目录页：扫描记录", () => {
   it("没有扫描：说明还没有记录，不显示表格与分页", async () => {
     setup();
     renderApp({ path: "/settings/library" });
@@ -348,7 +348,7 @@ describe("扫描目录页：扫描记录", () => {
     await tick(2000);
     await waitFor(() => expect(within(panel).getByRole("status").textContent).toBe("成功"));
 
-    await userEvent.click(screen.getByRole("link", { name: "返回扫描目录" }));
+    await userEvent.click(screen.getByRole("link", { name: "返回音乐目录" }));
     await waitFor(() => expect(within(rowAt(screen.getByRole("table", { name: "扫描记录" }), 0)).getByText("成功")).toBeTruthy());
   });
 });
@@ -363,7 +363,7 @@ describe("扫描详情：状态", () => {
       note: /正在取消，当前这一步做完就会停下/,
       reconciles: false,
     },
-    { label: "成功", scan: { status: "succeeded", finished_at: finishedAt }, note: /这次没找到的文件已标为缺失/, reconciles: true },
+    { label: "成功", scan: { status: "succeeded", finished_at: finishedAt }, note: /^扫描完成。$/, reconciles: true },
     { label: "失败", scan: { status: "failed", finished_at: finishedAt }, note: /扫描失败，没扫到的曲目保持原样/, reconciles: false },
     { label: "已取消", scan: { status: "canceled", finished_at: finishedAt, cancel_requested_at: "2026-01-02T00:00:30Z" }, note: /扫描已取消，没扫到的曲目保持原样/, reconciles: false },
     { label: "不完整", scan: { status: "incomplete", finished_at: finishedAt }, note: /有目录没扫完，那里的曲目保持原样。/, reconciles: false },
@@ -424,7 +424,7 @@ describe("扫描详情：状态", () => {
     expect(reads()).toBe(settled);
 
     // 终态让活动扫描的缓存过期：回到扫描目录页时立刻显示没有活动扫描，而不是等 30 秒的保鲜期或下一次轮询。
-    await userEvent.click(screen.getByRole("link", { name: "返回扫描目录" }));
+    await userEvent.click(screen.getByRole("link", { name: "返回音乐目录" }));
     expect(await screen.findByText("没有正在运行的扫描。")).toBeTruthy();
   });
 
@@ -605,7 +605,7 @@ describe("扫描详情：访问", () => {
     renderApp({ path: "/settings/library/scans/not-a-uuid" });
     expect(await heading("扫描不存在")).toBeTruthy();
     expect(api.requests.filter((request) => request.path.includes("/api/v1/scans/"))).toHaveLength(0);
-    expect(screen.getByRole("link", { name: "返回扫描目录" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "返回音乐目录" })).toBeTruthy();
   });
 
   it("扫描 ID 是 UUID 但服务器返回 404：同样显示“扫描不存在”，不显示诊断区段", async () => {

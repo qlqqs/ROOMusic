@@ -115,7 +115,7 @@ test("两张专辑三首合成 WAV：真实扫描 100%、报告计数、最近�
       await memberPage.goto("/");
       const recentPanel = memberPage.getByRole("region", { name: "最近新增" });
       for (const title of titles) await expect(recentPanel.getByRole("link", { name: new RegExp(title) })).toBeVisible();
-      await expect(memberPage.getByRole("link", { name: "扫描目录", exact: true })).toHaveCount(0);
+      await expect(memberPage.getByRole("link", { name: "音乐目录", exact: true })).toHaveCount(0);
     } finally {
       await context.close();
     }

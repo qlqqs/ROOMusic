@@ -117,8 +117,9 @@ for (const width of [320, 375, 390, 768, 1024, 1440]) {
     await input.press("Enter");
     await expect(page).toHaveURL(/\/search\?q=/);
     await expect(page.getByRole("table", { name: "曲目结果" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "艺人", exact: true })).toBeVisible();
-    await expect(page.getByText("没有找到匹配的艺人。", { exact: true })).toBeVisible();
+    // 专辑与曲目有结果时，没有结果的艺人一栏不出现（不留一块只写“没有找到”的区块）。
+    await expect(page.getByRole("heading", { name: "艺人", exact: true })).toHaveCount(0);
+    await expect(page.getByText("没有找到匹配的艺人。", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("alert")).toHaveCount(0);
     const albums = page.getByRole("heading", { name: "专辑", exact: true });
     const tracks = page.getByRole("heading", { name: "曲目", exact: true });

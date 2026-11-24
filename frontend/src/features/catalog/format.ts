@@ -3,14 +3,14 @@ import type { ReleaseCreditDTO, ReleaseDetailDTO, ReleaseMediumDTO, ReleaseSumma
 import { creditRoleLabel } from "./labels";
 
 /**
- * 卡片上的一行摘要：年份、介质数（只在多于一张时写）与曲目数，用间隔号连接。年份未知就省略，不写占位的“未知”。
- * 接口只统计当前存在的曲目，所以这里的数字就是接口给的数字，不做推算。
+ * 卡片上的一行摘要：年份、碟数（只在多于一张时写）与曲目数，用间隔号连接，写法与详情页的概况相同（“2 张碟”“12 首”）。
+ * 年份未知就省略，不写占位的“未知”。接口只统计当前存在的曲目，所以这里的数字就是接口给的数字，不做推算。
  */
 export function albumMeta(release: Pick<ReleaseSummaryDTO, "year" | "medium_count" | "track_count">): string {
   const parts: string[] = [];
   if (release.year !== null) parts.push(String(release.year));
-  if (release.medium_count > 1) parts.push(`${formatCount(release.medium_count)} 张介质`);
-  parts.push(`${formatCount(release.track_count)} 首曲目`);
+  if (release.medium_count > 1) parts.push(`${formatCount(release.medium_count)} 张碟`);
+  parts.push(`${formatCount(release.track_count)} 首`);
   return parts.join(" · ");
 }
 
@@ -97,16 +97,15 @@ export function formatGenres(genres: readonly string[]): string {
 }
 
 /**
- * 侧栏“此版本”的条目：厂牌、编号、条码、版本说明、流派、来源类型与介质类型。没有值的条目不列出，
- * 不写“未知”：很多资料库的文件根本没有这些标签，满屏的“未知”只是噪声。
+ * 侧栏“此版本”的条目：厂牌、编号、条码、版本说明、来源类型与介质类型。没有值的条目不列出，
+ * 不写“未知”：很多资料库的文件根本没有这些标签，满屏的“未知”只是噪声。流派已经写在页头的概况里，这里不重复。
  */
-export function releaseFacts(release: Pick<ReleaseDetailDTO, "label" | "catalog_number" | "barcode" | "edition" | "genres" | "source_type" | "media_type">): ReleaseFact[] {
+export function releaseFacts(release: Pick<ReleaseDetailDTO, "label" | "catalog_number" | "barcode" | "edition" | "source_type" | "media_type">): ReleaseFact[] {
   const candidates: [string, string, string | null][] = [
     ["厂牌", "label", release.label],
     ["编号", "catalog_number", release.catalog_number],
     ["条码", "barcode", release.barcode],
     ["版本说明", "edition", release.edition],
-    ["流派", "genre", formatGenres(release.genres)],
     ["来源类型", "source_type", release.source_type],
     ["介质类型", "media_type", release.media_type],
   ];

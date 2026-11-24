@@ -146,7 +146,7 @@ describe("成员页：访问与列表", () => {
     await openMembers();
     const nav = screen.getByRole("navigation", { name: "设置" });
     expect(within(nav).getByRole("link", { name: "成员" }).getAttribute("aria-current")).toBe("page");
-    expect(within(nav).getByRole("link", { name: "扫描目录" })).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "音乐目录" })).toBeTruthy();
   });
 
   it("新建表单只能创建“成员”角色：没有选择角色的控件", async () => {

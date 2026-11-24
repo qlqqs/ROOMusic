@@ -61,14 +61,22 @@ describe("概览资料库卡片", () => {
     expect(within(stats).getByRole("link", { name: /张专辑/ }).getAttribute("href")).toBe("/albums");
   });
 
-  it("空资料库不显示统计列表，只说一句空库文案", async () => {
+  it("空资料库：主栏说明资料库还是空的，管理员有“添加音乐目录”的链接；右栏不出现统计卡片", async () => {
     const api = setup();
     api.on("GET", "/api/v1/catalog/stats", () => jsonResponse(200, { albums: 0, tracks: 0, artists: 0, composers: 0 }));
     renderApp();
-    const stats = await overview();
-    expect(await within(stats).findByText("资料库里还没有专辑。添加音乐目录并扫描后就会出现。")).toBeTruthy();
-    expect(within(stats).queryByRole("list")).toBeNull();
-    expect(within(stats).queryByRole("link")).toBeNull();
+    expect(await screen.findByText("资料库还是空的")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "添加音乐目录" }).getAttribute("href")).toBe("/settings/library");
+    expect(screen.queryByRole("region", { name: "资料库" })).toBeNull();
+  });
+
+  it("空资料库（成员）：只说明要等管理员添加，没有管理入口", async () => {
+    const api = setup("user");
+    api.on("GET", "/api/v1/catalog/stats", () => jsonResponse(200, { albums: 0, tracks: 0, artists: 0, composers: 0 }));
+    renderApp();
+    expect(await screen.findByText("资料库还是空的")).toBeTruthy();
+    expect(screen.getByText(/管理员添加音乐并扫描之后/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "添加音乐目录" })).toBeNull();
   });
 });
 
@@ -106,13 +114,13 @@ describe("概览资料库状态表", () => {
     expect(api.requestsTo("GET", "/api/v1/users")).toHaveLength(0);
   });
 
-  it("没有需要关注的专辑时写一句说明，这一行不是链接", async () => {
+  it("没有需要关注的专辑时右侧写 0，不另写一句同样意思的说明，这一行不是链接", async () => {
     const api = installFakeApi();
     installFakeSession(api, { current: "listener" });
     installOverviewApi(api, { attention: 0 });
     renderApp();
     const table = await statusTable();
-    await waitFor(() => expect(statusRow(table, "需要关注").textContent).toContain("没有需要关注的专辑"));
+    await waitFor(() => expect(statusRow(table, "需要关注").textContent).toBe("需要关注0"));
     expect(within(statusRow(table, "需要关注")).queryByRole("link")).toBeNull();
   });
 

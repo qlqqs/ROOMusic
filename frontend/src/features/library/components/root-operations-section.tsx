@@ -51,7 +51,6 @@ export function RootOperationsSection() {
           </span>
         ),
     },
-    { id: "revision", header: "版本号", cell: (item) => item.revision ?? UNKNOWN_TIME, numeric: true },
   ];
 
   const limited = (operations.data?.length ?? 0) >= OPERATION_LIMIT;

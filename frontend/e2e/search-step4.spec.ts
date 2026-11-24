@@ -307,7 +307,7 @@ for (const width of [320, ...widths]) {
     expect(lines.visible, "按真实 Range 并排除 line-clamp 裁剪部分计数").toBe(2);
     expect(lines.clamp).toBe("2");
     const representative = album.group.representative;
-    const fullName = `${representative.title} ${representative.album_artist} 2026 · 3 首曲目 ${noteText}`.replace(/\s+/g, " ").trim();
+    const fullName = `${representative.title} ${representative.album_artist} 2026 · 3 首 ${noteText}`.replace(/\s+/g, " ").trim();
     await expect(card).toHaveAccessibleName(fullName);
     await layout(page, "两行匹配说明与个人动作");
   });

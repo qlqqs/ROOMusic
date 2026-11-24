@@ -66,27 +66,46 @@
 }
 
 /*
- * 栏目：曲目号、标题、艺人、（作曲）、动作、时长。轨道定义在 .grid 上，表头、列表、作品与每一行都是 subgrid，
+ * 栏目：曲目号、标题、（艺人）、（作曲）、（动作）、时长。轨道定义在 .grid 上，表头、列表、作品与每一行都是 subgrid，
  * 动作与时长按全表最宽者对齐。曲目号一栏宽度随有无动作变化（有动作时与播放按钮同宽）。
+ * 艺人一栏只在有曲目艺人与专辑艺人不同时出现，作曲一栏只在有曲目自己的作曲时出现（data-artist、data-composer）。
+ * 宽版面的轨道写在 --cols 里：窄版面（容器查询）直接覆盖 grid-template-columns，不必与这些属性组合比优先级。
  */
 .grid {
   --lead: 2.4em;
+  --cols: var(--lead) minmax(0, 1fr) auto;
   display: grid;
-  grid-template-columns: var(--lead) minmax(0, 2fr) minmax(0, 1.2fr) auto auto;
+  grid-template-columns: var(--cols);
   column-gap: var(--space-3);
   min-width: 0;
 }
 
+.grid[data-has-actions] {
+  --cols: var(--lead) minmax(0, 1fr) auto auto;
+}
+
+.grid[data-artist] {
+  --cols: var(--lead) minmax(0, 2fr) minmax(0, 1.2fr) auto;
+}
+
+.grid[data-artist][data-has-actions] {
+  --cols: var(--lead) minmax(0, 2fr) minmax(0, 1.2fr) auto auto;
+}
+
 .grid[data-composer] {
-  grid-template-columns: var(--lead) minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto auto;
+  --cols: var(--lead) minmax(0, 2fr) minmax(0, 1fr) auto;
 }
 
-.grid:not([data-has-actions]) {
-  grid-template-columns: var(--lead) minmax(0, 2fr) minmax(0, 1.2fr) auto;
+.grid[data-composer][data-has-actions] {
+  --cols: var(--lead) minmax(0, 2fr) minmax(0, 1fr) auto auto;
 }
 
-.grid[data-composer]:not([data-has-actions]) {
-  grid-template-columns: var(--lead) minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto;
+.grid[data-artist][data-composer] {
+  --cols: var(--lead) minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto;
+}
+
+.grid[data-artist][data-composer][data-has-actions] {
+  --cols: var(--lead) minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto auto;
 }
 
 .grid[data-has-actions] {
@@ -400,14 +419,12 @@
  * 艺人与专辑艺人相同时不写，两者都没有时没有第二行。
  */
 @container (max-width: 639px) {
-  .grid,
-  .grid[data-composer] {
+  .grid {
     grid-template-columns: var(--lead) minmax(0, 1fr) auto auto;
     column-gap: var(--space-2);
   }
 
-  .grid:not([data-has-actions]),
-  .grid[data-composer]:not([data-has-actions]) {
+  .grid:not([data-has-actions]) {
     grid-template-columns: var(--lead) minmax(0, 1fr) auto;
   }
 
@@ -423,16 +440,24 @@
     grid-row: 1 / span 2;
   }
 
+  /* 有第二行时标题贴着它的下沿、第二行贴着上沿，两行合在一起居中；没有第二行时标题跨两行居中，与曲目号、时长对齐。 */
   .title {
     grid-column: 2;
     grid-row: 1;
+    align-self: end;
     min-height: 0;
+  }
+
+  .track:not(:has(> .meta > :not([data-same], :empty))) > .title {
+    grid-row: 1 / span 2;
+    align-self: center;
   }
 
   .meta {
     display: block;
     grid-column: 2;
     grid-row: 2;
+    align-self: start;
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;

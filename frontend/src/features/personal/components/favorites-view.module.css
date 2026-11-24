@@ -69,8 +69,8 @@
 .cardTitle {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
   overflow-wrap: anywhere;
   font-family: var(--font-heading);
@@ -101,6 +101,9 @@ a.card:hover .cardTitle {
 }
 
 .cardMeta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
 }
 

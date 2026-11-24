@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo, type ReactNode } from "react";
 import { formatDuration } from "../../../shared/lib/duration";
-import { DataTable, StatusTag, type Column } from "../../../shared/ui";
+import { DataTable, StatusTag, VisuallyHidden, type Column } from "../../../shared/ui";
 import type { SearchTrackItemDTO } from "../api/decoders";
 import { matchNote } from "../match-note";
 import { ArtistNames, trackArtistOf, trackArtistRefsOf, trackTitleOf } from "../../catalog";
@@ -71,6 +71,8 @@ export function TrackResults({ items, renderTrackActions }: TrackResultsProps) {
       {
         id: "actions",
         header: "操作",
+        // 与其他曲目表一致：动作列平时只有悬停才出现的图标，表头不写字，名称只给读屏。
+        headerContent: <VisuallyHidden>操作</VisuallyHidden>,
         hideLabelWhenStacked: true,
         besideRowHeader: true,
         cell: (item) => renderTrackActions(item),

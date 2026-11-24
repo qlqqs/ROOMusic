@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronLeft, TriangleAlert } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { formatCount } from "../../../shared/lib/number";
-import { StatusTag, VisuallyHidden } from "../../../shared/ui";
+import { revealDisclosure, StatusTag, VisuallyHidden } from "../../../shared/ui";
 import type { ReleaseDetailDTO, ReleaseSummaryDTO } from "../api/decoders";
 import type { AlbumSearch } from "../album-search";
 import { albumArtistRefsOf } from "../api/track-summary";
@@ -12,6 +12,8 @@ import styles from "./album-header.module.css";
 import { ArtistNames } from "./artist-names";
 import { Cover } from "./cover";
 import { FieldMarkTag, hasFieldMark } from "./field-mark-tag";
+import { EVIDENCE_SECTION_ID } from "./evidence-section";
+import { allCueTracks } from "./release-media";
 import { sharedTrackCredits, type TrackCreditGroup } from "../track-credits";
 
 type AlbumHeaderProps = {
@@ -23,8 +25,6 @@ type AlbumHeaderProps = {
   list?: AlbumSearch;
   /** 标题很长时降一级字号，完整显示并换行。 */
   compactTitle?: boolean;
-  /** 这张专辑正在播放：标题旁一个“正在播放”的小标记（跳动的音柱，减少动态效果时静止）。 */
-  playing?: boolean;
   /**
    * 概况下方的操作区（由页面组合：一条操作行，以及它下方的状态与结果提示）；详情到达之前没有。
    * catalog 不知道里面有什么，只负责位置。
@@ -35,16 +35,21 @@ type AlbumHeaderProps = {
 /** 概况只写值；label 只给读屏。field 是这项对应的字段名，有人工修正时标出“人工修正”。 */
 type Fact = { label: string; value: string; field?: string };
 
-/** 年份未知、单碟不写；有一首曲目的时长未知就不写总时长：不拿已知的部分冒充总数。 */
+/**
+ * 年份未知、单碟不写；有一首曲目的时长未知就不写总时长：不拿已知的部分冒充总数。
+ * 整张都是 CUE 分轨时在这里写一次（曲目行不再逐行标出）。
+ */
 function factsOf(release: ReleaseSummaryDTO, detail: ReleaseDetailDTO | undefined): Fact[] {
   const genre = detail === undefined ? "" : formatGenres(detail.genres);
   const duration = detail === undefined ? null : totalDuration(detail.media);
+  const cue = detail !== undefined && allCueTracks(detail.media);
   return [
     ...(release.year === null ? [] : [{ label: "年份", value: String(release.year), field: "year" }]),
     ...(genre === "" ? [] : [{ label: "流派", value: genre, field: "genre" }]),
     ...(release.medium_count > 1 ? [{ label: "介质", value: `${formatCount(release.medium_count)} 张碟` }] : []),
     { label: "曲目", value: `${formatCount(release.track_count)} 首` },
     ...(duration === null || duration <= 0 ? [] : [{ label: "总时长", value: formatSpokenDuration(duration) }]),
+    ...(cue ? [{ label: "来源", value: "CUE 分轨" }] : []),
   ];
 }
 
@@ -79,11 +84,11 @@ function SharedCredits({ groups }: { groups: readonly TrackCreditGroup[] }) {
  * 专辑详情的页头（经 Page 的 header 插槽替换默认页头，渲染唯一的 h1，文字与页面标题相同）：
  * 标题上方是“‹ 专辑”（读屏名“返回专辑列表”）；封面在左，右侧依次是专辑名、专辑艺人、一行概况、全部曲目共有的署名与操作区，整体底对齐封面。
  * 容器窄（手机）时封面放大居中，文字与操作行一起居中。
- * “需要关注”只是提示核对，这里不把它写成错误，说明在底部的“来源与证据”里。
+ * “需要关注”只是提示核对，这里不把它写成错误；旁边的“查看来源与证据”展开页面底部的那个区块并滚过去。
  */
 const noFilters: AlbumSearch = {};
 
-export function AlbumHeader({ release, detail, list = noFilters, compactTitle = false, playing = false, actions }: AlbumHeaderProps) {
+export function AlbumHeader({ release, detail, list = noFilters, compactTitle = false, actions }: AlbumHeaderProps) {
   const marks = detail === undefined ? { corrected: [], auto: undefined } : fieldMarksOf(detail);
   const artist = albumArtistOf(release);
   const media = detail?.media;
@@ -100,20 +105,7 @@ export function AlbumHeader({ release, detail, list = noFilters, compactTitle = 
         </div>
         <div className={styles.info}>
           <div className={styles.heading} data-compact={compactTitle ? "" : undefined}>
-            <h1>
-              {release.title}
-              {/* 标记只给看得见的人：标题的可访问名称只是专辑名，播放状态由曲目行与播放栏说明。 */}
-              {playing ? (
-                <span className={styles.nowPlaying} aria-hidden="true">
-                  <span className={styles.eq}>
-                    <i />
-                    <i />
-                    <i />
-                  </span>
-                  正在播放
-                </span>
-              ) : null}
-            </h1>
+            <h1>{release.title}</h1>
             {artist === "" ? null : (
               <p className={styles.artist}>
                 <ArtistNames text={artist} refs={albumArtistRefsOf(release)} />
@@ -142,7 +134,10 @@ export function AlbumHeader({ release, detail, list = noFilters, compactTitle = 
               <StatusTag tone="outline" icon={<TriangleAlert size={12} />}>
                 需要关注
               </StatusTag>{" "}
-              <span>详见页面底部的“来源与证据”。</span>
+              {/* 直接展开页面底部的“来源与证据”并滚过去，不让人自己往下找。 */}
+              <button type="button" className={styles.evidenceLink} onClick={() => revealDisclosure(EVIDENCE_SECTION_ID)}>
+                查看来源与证据
+              </button>
             </p>
           ) : null}
         </div>

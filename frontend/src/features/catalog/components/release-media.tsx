@@ -4,6 +4,7 @@ import { StatusTag, VisuallyHidden } from "../../../shared/ui";
 import type { ReleaseMediumDTO, ReleaseTrackDTO } from "../api/decoders";
 import { formatDuration } from "../../../shared/lib/duration";
 import { mediumHeading, totalDuration, type FieldMarks } from "../format";
+import { ownTrackCredits, sharedTrackCredits } from "../track-credits";
 import { ArtistNames } from "./artist-names";
 import { FieldMarkTag, hasFieldMark } from "./field-mark-tag";
 import styles from "./release-media.module.css";
@@ -13,6 +14,9 @@ export type TrackLocate = { trackId: string; token: string };
 
 /** 定位后高亮持续多久；之后只留下可以聚焦的行，没有别的标识。 */
 const LOCATE_HIGHLIGHT_MS = 2_500;
+
+/** 至少这么多张碟时顶部才有“跳到第 N 张”。 */
+const JUMP_NAV_MIN_MEDIA = 3;
 
 type ReleaseMediaProps = {
   /**
@@ -26,7 +30,7 @@ type ReleaseMediaProps = {
   /** 当前曲目正在播放：音柱跳动（减少动态效果时静止）；暂停、加载等其他状态静止。 */
   currentTrackPlaying?: boolean | undefined;
   media: readonly ReleaseMediumDTO[];
-  /** 专辑艺人：窄版面的第二行里，曲目艺人与它相同时不重复显示。 */
+  /** 专辑艺人：曲目艺人都与它相同时没有“艺人”一栏；窄版面的第二行里，曲目艺人与它相同时不重复显示。 */
   albumArtist: string;
   /** 选中的曲目（单击一行选中，右栏显示曲目信息）；onSelectTrack 不给时行不能选中。 */
   selectedTrackId?: string | undefined;
@@ -39,10 +43,21 @@ type ReleaseMediaProps = {
 /** 定位到的行：focusToken 变化时滚到这一行并把焦点放上去；highlighted 期间短暂高亮。 */
 type Located = { trackId: string; token: string; highlighted: boolean };
 
+/** 整个版本共用的栏目判断：每张碟的曲目表据此对齐，不因某一张碟恰好没有不同的艺人就少一栏。 */
+type Columns = {
+  /** 有曲目艺人与专辑艺人不同（或艺人被修正、补全过）时才有“艺人”一栏。 */
+  withArtist: boolean;
+  /** 去掉页头已列的共同署名后，任一曲目还有自己的作曲时才有“作曲”一栏。 */
+  withComposer: boolean;
+  /** 页头已经列出的全部曲目共有的署名（组的 key）：曲目行不再重复。 */
+  sharedCredits: ReadonlySet<string>;
+  /** 整个版本都是 CUE 分轨：页头概况写了一次，行内不再逐行标出。 */
+  allCue: boolean;
+};
+
 type TrackListProps = Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions" | "currentTrackId" | "currentTrackLabel" | "currentTrackPlaying" | "selectedTrackId" | "onSelectTrack"> & {
   located: Located | null;
-  /** 任一曲目有作曲署名时才有“作曲”一栏。 */
-  withComposer: boolean;
+  columns: Columns;
 };
 
 /** 双击发生在这些元素上时不播放：它们有自己的点击含义。 */
@@ -60,9 +75,27 @@ function selectOnClick(event: MouseEvent<HTMLLIElement>, trackId: string, onSele
   onSelect(trackId);
 }
 
-/** 曲目的作曲署名（作曲一栏）。 */
-function composersOf(track: ReleaseTrackDTO) {
-  return track.credits.filter((credit) => credit.role === "composer");
+/** 曲目自己的作曲署名（作曲一栏）：页头已经列过的共同署名不算。 */
+function composersOf(track: ReleaseTrackDTO, shared: ReadonlySet<string>) {
+  return ownTrackCredits(track.credits, shared).filter((credit) => credit.role === "composer");
+}
+
+/** 曲目来自 CUE 分轨（虚拟轨或带 CUE 信息）。 */
+export function isCueTrack(track: Pick<ReleaseTrackDTO, "source_kind" | "cue">): boolean {
+  return track.source_kind === "cue_virtual" || track.cue !== null;
+}
+
+/** 整个版本的每一首都是 CUE 分轨（至少有一首）：页头概况写一次“CUE 分轨”，曲目行不再逐行标出。 */
+export function allCueTracks(media: readonly Pick<ReleaseMediumDTO, "tracks">[]): boolean {
+  const tracks = media.flatMap((medium) => medium.tracks);
+  return tracks.length > 0 && tracks.every(isCueTrack);
+}
+
+/** 曲目艺人不同于专辑艺人，或艺人字段被人工修正、自动补全过（要看得见标记）。 */
+function artistStandsOut(track: ReleaseTrackDTO, albumArtist: string): boolean {
+  const artist = track.artist.trim();
+  if (artist !== "" && artist !== albumArtist) return true;
+  return hasFieldMark({ corrected: track.corrected_fields ?? [], auto: track.auto_fields }, "artist");
 }
 
 /** 双击的第二次按下不选中文字（否则双击会选中一个词）；按在控件上时不拦，焦点照常移动。 */
@@ -97,13 +130,13 @@ function Equalizer({ playing }: { playing: boolean }) {
 /**
  * memo：当前曲目或它的状态变化时，只有标记变了的行重绘，万首曲目的版本不必整表重绘。
  * 所以每行只拿自己的标记（不是当前曲目 ID），renderTrackActions 与 onSelect 也要求调用方保持同一个引用。
- * 一行一首：曲目号、标题、艺人、（作曲）、动作、时长各占一栏，与表头对齐，过长的文字末尾省略、悬停看全文。
+ * 一行一首：曲目号、标题、（艺人）、（作曲）、动作、时长各占一栏，与表头对齐，过长的文字末尾省略、悬停看全文。
  */
 const TrackRow = memo(function TrackRow({
   track,
   albumArtist,
   renderTrackActions,
-  withComposer,
+  columns,
   marker,
   playing,
   selected,
@@ -112,7 +145,7 @@ const TrackRow = memo(function TrackRow({
   highlighted,
 }: Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions"> & {
   track: ReleaseTrackDTO;
-  withComposer: boolean;
+  columns: Columns;
   marker: string | undefined;
   playing: boolean;
   selected: boolean;
@@ -126,9 +159,9 @@ const TrackRow = memo(function TrackRow({
   const shownTitle = titleMarked ? track.title : (track.work?.movement ?? track.title);
   const title = shownTitle.trim() === "" ? "（无标题）" : shownTitle;
   const artist = track.artist.trim();
-  const composers = composersOf(track);
+  const composers = composersOf(track, columns.sharedCredits);
   const composerText = composers.map((credit) => credit.name).join("、");
-  const isCue = track.source_kind === "cue_virtual" || track.cue !== null;
+  const cueTag = !columns.allCue && isCueTrack(track);
   const rowRef = useRef<HTMLLIElement>(null);
   useEffect(() => {
     if (focusToken === undefined) return;
@@ -165,21 +198,23 @@ const TrackRow = memo(function TrackRow({
         <span className={styles.titleText}>{title}</span>
         {marker === undefined ? null : <VisuallyHidden>{marker}</VisuallyHidden>}
         {selected ? <VisuallyHidden>，已选中</VisuallyHidden> : null}
-        {isCue ? <StatusTag>CUE 分轨</StatusTag> : null}
+        {cueTag ? <StatusTag>CUE 分轨</StatusTag> : null}
         {titleMarked ? <FieldMarkTag marks={marks} field="title" /> : null}
       </p>
       {/* 宽版面里 display: contents，两栏直接对齐表头；窄版面里成为标题下一行“艺人 · 作曲”（艺人与专辑艺人相同时不写）。 */}
       <div className={styles.meta}>
-        <p className={styles.artist} title={artist} data-same={artist === "" || artist === albumArtist ? "" : undefined}>
-          {artist === "" ? null : (
-            <>
-              <VisuallyHidden>艺人：</VisuallyHidden>
-              <ArtistNames text={artist} refs={track.artist_refs} />
-              <FieldMarkTag marks={marks} field="artist" />
-            </>
-          )}
-        </p>
-        {withComposer ? (
+        {columns.withArtist ? (
+          <p className={styles.artist} title={artist} data-same={artist === "" || artist === albumArtist ? "" : undefined}>
+            {artist === "" ? null : (
+              <>
+                <VisuallyHidden>艺人：</VisuallyHidden>
+                <ArtistNames text={artist} refs={track.artist_refs} />
+                <FieldMarkTag marks={marks} field="artist" />
+              </>
+            )}
+          </p>
+        ) : null}
+        {columns.withComposer ? (
           <p className={styles.composer} title={composerText}>
             {composers.length === 0 ? null : (
               <>
@@ -242,20 +277,20 @@ export function groupTracksByWork(tracks: readonly ReleaseTrackDTO[]): TrackList
 }
 
 /** 表头：只给视觉对齐，读屏从每个单元格前只给读屏的“艺人：”“作曲：”得知栏目。 */
-function ColumnHeader({ withComposer, withActions }: { withComposer: boolean; withActions: boolean }) {
+function ColumnHeader({ columns, withActions }: { columns: Columns; withActions: boolean }) {
   return (
     <div className={styles.columns} aria-hidden="true">
       <span className={styles.number}>#</span>
       <span>标题</span>
-      <span>艺人</span>
-      {withComposer ? <span>作曲</span> : null}
+      {columns.withArtist ? <span>艺人</span> : null}
+      {columns.withComposer ? <span>作曲</span> : null}
       {withActions ? <span /> : null}
       <span className={styles.duration}>时长</span>
     </div>
   );
 }
 
-function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying = false, selectedTrackId, onSelectTrack, located, withComposer }: TrackListProps & { tracks: readonly ReleaseTrackDTO[] }) {
+function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying = false, selectedTrackId, onSelectTrack, located, columns, showColumns = true }: TrackListProps & { tracks: readonly ReleaseTrackDTO[]; showColumns?: boolean }) {
   const idPrefix = useId();
   if (tracks.length === 0) return <p>这一张里没有可显示的曲目。</p>;
   const withActions = renderTrackActions !== undefined;
@@ -265,7 +300,7 @@ function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, cu
       track={track}
       albumArtist={albumArtist}
       renderTrackActions={renderTrackActions}
-      withComposer={withComposer}
+      columns={columns}
       marker={track.id === currentTrackId ? (currentTrackLabel ?? "当前曲目") : undefined}
       playing={track.id === currentTrackId && currentTrackPlaying}
       selected={track.id === selectedTrackId}
@@ -277,8 +312,8 @@ function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, cu
   // 去掉了列表样式的 ol 在 Safari 里会失去列表语义，所以显式写出 role。各层都是 subgrid，栏目与表头对齐。
   return (
     <div className={styles.frame}>
-      <div className={styles.grid} data-composer={withComposer ? "" : undefined} data-has-actions={withActions ? "" : undefined}>
-        <ColumnHeader withComposer={withComposer} withActions={withActions} />
+      <div className={styles.grid} data-artist={columns.withArtist ? "" : undefined} data-composer={columns.withComposer ? "" : undefined} data-has-actions={withActions ? "" : undefined}>
+        {showColumns ? <ColumnHeader columns={columns} withActions={withActions} /> : null}
         <ol className={styles.tracks} role="list">
           {groupTracksByWork(tracks).map((item) => {
             if (item.kind === "track") return rowOf(item.track);
@@ -304,7 +339,7 @@ function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, cu
 }
 
 /**
- * 介质逐段列出：一张时直接是曲目列表，多于一张时每张一个带标题的分段，顶部有“跳到第 N 张”的页内链接。
+ * 介质逐段列出：一张时直接是曲目列表，多于一张时每张一个带标题的分段，三张及以上时顶部有“跳到第 N 张”的页内链接。
  * 每个分段用 content-visibility 跳过屏幕外的布局，万首曲目的版本也能流畅滚动；文字都在 DOM 里，页内查找照常可用。
  * 有定位请求时滚到那一行、把焦点放上去并短暂高亮（减少动态效果时不做渐隐动画）。
  */
@@ -328,35 +363,49 @@ export function ReleaseMedia({ media, albumArtist, renderTrackActions, currentTr
     return () => window.clearTimeout(timer);
   }, [highlightToken]);
 
-  const withComposer = useMemo(() => media.some((medium) => medium.tracks.some((track) => composersOf(track).length > 0)), [media]);
+  // 栏目按整个版本判断（不是每张碟各算各的），几张碟的曲目表栏目一致、上下对齐。
+  const columns = useMemo((): Columns => {
+    const sharedCredits = sharedTrackCredits(media).keys;
+    const tracks = media.flatMap((medium) => medium.tracks);
+    return {
+      withArtist: tracks.some((track) => artistStandsOut(track, albumArtist)),
+      withComposer: tracks.some((track) => composersOf(track, sharedCredits).length > 0),
+      sharedCredits,
+      allCue: allCueTracks(media),
+    };
+  }, [media, albumArtist]);
 
   if (media.length === 0) return <p>这个版本没有可显示的曲目。</p>;
   const [only] = media;
-  const listProps: TrackListProps = { albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying, selectedTrackId, onSelectTrack, located, withComposer };
+  const listProps: TrackListProps = { albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying, selectedTrackId, onSelectTrack, located, columns };
   if (only !== undefined && media.length === 1) return <TrackList tracks={only.tracks} {...listProps} />;
 
   const headingIdOf = (index: number) => `${idPrefix}-medium-${index}`;
   return (
     <div className={styles.media}>
-      <nav aria-label="介质" className={styles.jump}>
-        <span>跳到</span>
-        <ul className={styles.jumpList}>
-          {media.map((medium, index) => (
-            <li key={medium.id}>
-              <a href={`#${headingIdOf(index)}`} onClick={(event) => jumpTo(event, headingIdOf(index))}>
-                {mediumHeading(medium, index)}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      {/* 两张碟一眼就能看全，碟多了才需要页内跳转。 */}
+      {media.length >= JUMP_NAV_MIN_MEDIA ? (
+        <nav aria-label="介质" className={styles.jump}>
+          <span>跳到</span>
+          <ul className={styles.jumpList}>
+            {media.map((medium, index) => (
+              <li key={medium.id}>
+                <a href={`#${headingIdOf(index)}`} onClick={(event) => jumpTo(event, headingIdOf(index))}>
+                  {mediumHeading(medium, index)}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ) : null}
       {media.map((medium, index) => (
         <section key={medium.id} className={styles.medium} aria-labelledby={headingIdOf(index)}>
           <h3 id={headingIdOf(index)} tabIndex={-1} className={styles.heading}>
             {mediumHeading(medium, index)}
             <span className={styles.count}>，{formatCount(medium.tracks.length)} 首</span>
           </h3>
-          <TrackList tracks={medium.tracks} {...listProps} />
+          {/* 表头只在第一张碟上方出现一次：各张碟的栏目相同，逐张重复只是噪声。 */}
+          <TrackList tracks={medium.tracks} {...listProps} showColumns={index === 0} />
         </section>
       ))}
     </div>

@@ -25,6 +25,7 @@ type RecentPlaysPanelProps = {
  * 标题行还有去历史页的“全部历史”与“更多”菜单（里面是“清除播放历史”）。
  * 有任何记录（含文件缺失、卡片里不显示的）时才有“全部历史”与“更多”：历史页仍会列出缺失的曲目，可以逐首移除。
  * 记录只属于当前用户，清除前需要确认；清除成功后焦点回到区块标题（打开对话框的菜单按钮已经不存在了），并用状态提示说明结果。
+ * 从来没有播放记录时整块不出现（概览上不留一块只有一句空态的区块）；计次规则写在历史页的空态里。
  */
 export function RecentPlaysPanel({ renderCardAction, status }: RecentPlaysPanelProps) {
   const recent = useRecentReleases();
@@ -45,6 +46,7 @@ export function RecentPlaysPanel({ renderCardAction, status }: RecentPlaysPanelP
 
   const hasHistory = recent.data?.has_history === true;
   const close = () => setConfirming(false);
+  if (recent.data !== undefined && !recent.data.has_history && recent.data.items.length === 0 && !cleared && !confirming) return null;
 
   return (
     <>

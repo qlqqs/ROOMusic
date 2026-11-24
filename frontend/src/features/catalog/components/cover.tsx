@@ -1,4 +1,4 @@
-import { ListMusic } from "lucide-react";
+import { Disc3, ListMusic } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../../../shared/ui";
 import type { ArtworkDTO } from "../api/decoders";
@@ -17,8 +17,9 @@ type CoverProps = {
 };
 
 /**
- * 带裱边的正方形封面，四种状态各自可见：加载中（同尺寸的静态底色）、已加载、没有封面（深色底上排标题）、
- * 加载失败（同样的版面加“封面无法加载”）。不加滤镜、不裁切真实封面，只引用同源的封面接口，不拉外部图片。
+ * 带裱边的正方形封面，四种状态各自可见：加载中（同尺寸的静态底色）、已加载、没有封面（浅底上一枚唱片图标）、
+ * 加载失败（同样的占位加“封面无法加载”）。占位里不再排标题：标题就在旁边（卡片标题、详情页的 h1），排两遍只是重复。
+ * 不加滤镜、不裁切真实封面，只引用同源的封面接口，不拉外部图片。
  */
 export function Cover({ artwork, title, variant }: CoverProps) {
   const [attempt, setAttempt] = useState(0);
@@ -27,7 +28,7 @@ export function Cover({ artwork, title, variant }: CoverProps) {
     return (
       <div className={styles.cover} data-variant={variant} aria-hidden={variant === "card" ? true : undefined}>
         <div className={styles.frame} data-state="none" role={variant === "detail" ? "img" : undefined} aria-label={variant === "detail" ? `《${title}》没有封面` : undefined}>
-          <TextCover title={title} />
+          <Placeholder />
         </div>
       </div>
     );
@@ -42,7 +43,7 @@ function CoverImage({ artwork, title, variant, onRetry }: CoverProps & { artwork
     <div className={styles.cover} data-variant={variant} aria-hidden={variant === "card" ? true : undefined}>
       <div className={styles.frame} data-state={state}>
         {state === "failed" ? (
-          <TextCover title={title} caption="封面无法加载" />
+          <Placeholder caption="封面无法加载" />
         ) : (
           <img
             className={styles.image}
@@ -86,13 +87,11 @@ function ThumbCover({ artwork }: { artwork: ArtworkDTO | null }) {
   );
 }
 
-// 标题在封面里只是版面：页面上已经有标题（卡片的链接名称、详情页的 h1），读屏不再重复。
-function TextCover({ title, caption }: { title: string; caption?: string }) {
+// 图标只是装饰：卡片里封面整体对读屏隐藏，详情页由外层的 role="img" 给出“《专辑》没有封面”。
+function Placeholder({ caption }: { caption?: string }) {
   return (
-    <span className={styles.text}>
-      <span className={styles.textTitle} aria-hidden="true">
-        {title}
-      </span>
+    <span className={styles.placeholder}>
+      <Disc3 className={styles.placeholderIcon} strokeWidth={1.25} aria-hidden="true" />
       {caption === undefined ? null : <span className={styles.caption}>{caption}</span>}
     </span>
   );
