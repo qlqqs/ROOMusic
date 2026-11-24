@@ -23,7 +23,8 @@ backend/cmd/roomusic-fake-renderer/    假渲染器
 
 ## 设备与播放区的映射
 
-- 实例级注册表保存发现到的设备（UDN 为键）。每个成员的快照里，每台在线的 UPnP 设备对应一行该成员自己的 `playback_devices`（`kind='upnp'`，`external_id=UDN`），
+- 实例级注册表保存发现到的设备（UDN 为键）。可见性：共享开关开时所有成员可见；关时只有 `upnp_device_grants`（设备 UDN × 用户）里分配到的成员与管理员可见。
+  每个成员的快照里，每台对他可见的在线 UPnP 设备对应一行该成员自己的 `playback_devices`（`kind='upnp'`，`external_id=UDN`），
   首次在快照里出现时创建；对应的播放区归该成员，队列与设置各自独立。
 - 占用：注册表记录每台设备当前服务的播放区。成员选择设备为输出（现有“控制目标/转移”流程最终落到这台设备的播放区开始播放）时：
   - 空闲 → 适配器以该播放区认领输出；
@@ -69,15 +70,18 @@ backend/cmd/roomusic-fake-renderer/    假渲染器
 
 ## 部署
 
-- `compose.prod.yaml` 不变；新增 `deploy/production/compose.host-network.yaml` 覆盖：应用用 `network_mode: host`，监听端口由 `ROOMUSIC_HTTP_ADDR` 指定；
-  数据库改为只在 `127.0.0.1` 发布端口，应用的数据库地址改为 `127.0.0.1:<端口>`。`scripts/check-production-compose.sh` 覆盖两种组合。
-- `.env.prod.example` 增加 `ROOMUSIC_LAN_URL` 的说明。
+- `compose.prod.yaml` 默认改为 host 网络：应用 `network_mode: host`，`ROOMUSIC_HTTP_ADDR` 默认 `0.0.0.0:${ROOMUSIC_HTTP_PORT:-8090}`；
+  PostgreSQL 保留自己的网络，端口发布为 `127.0.0.1:${ROOMUSIC_DB_PORT:-<选一个不常用的默认值>}:5432`，应用的数据库地址改为 `127.0.0.1:<该端口>`。
+  其余加固（`read_only`、`cap_drop`）保留；确认 host 网络下 SSDP 收发不需要额外 capability。
+- 新增 `deploy/production/compose.bridge.yaml` 覆盖文件恢复原来的 bridge 网络（手动添加设备，需设 `ROOMUSIC_LAN_URL`）。
+- `scripts/check-production-compose.sh` 覆盖两种组合；`deploy/production/README.md` 写升级说明（网络变化、端口冲突检查、同机多实例端口）；`.env.prod.example` 增加端口与 `ROOMUSIC_LAN_URL`。
+- 登录限速依赖 TCP 对端地址：host 网络下看到的是真实来源，与原来一致，验收时核对。
 
 ## 前端
 
 - 设备列表：`kind=upnp` 用音箱图标与“局域网设备”副标题；占用中显示“<成员> 正在使用”，点选时确认接管。
 - 设备菜单：采样率上限（44.1/48/96/192 kHz）；音量固定时隐藏音量滑块并显示“设备音量”。
-- 设置 › 播放（或现有的设备相关设置页）：管理员开关、手动添加（地址输入、添加结果）、已发现设备列表（名称、型号、地址、在线）。
+- 设置 › 播放（或现有的设备相关设置页）：管理员开关、共享开关与按设备分配账号（关闭共享时显示）、手动添加（地址输入、添加结果）、已发现设备列表（名称、型号、地址、在线）。
 
 ## 假渲染器
 
