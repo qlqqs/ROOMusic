@@ -1,4 +1,0 @@
-{"file": ".trellis/tasks/11-24-instance-insights/prd.md", "reason": "验收条目"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试与验证标准"}
-{"file": ".trellis/spec/backend/database-verification.md", "reason": "迁移往返与集成测试"}
-{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "前端验证层次"}
