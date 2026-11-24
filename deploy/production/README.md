@@ -131,7 +131,7 @@ curl -fL -o compose.bridge.yaml https://raw.githubusercontent.com/qlqqs/ROOMusic
 
 在 `.env` 写入 `COMPOSE_FILE=compose.yaml:compose.bridge.yaml`，后续日常与升级命令仍是 `docker compose`。应用在项目网络内连接 `postgres:5432`，只发布网页端口。要使用局域网播放，在 `.env` 将 `ROOMUSIC_LAN_URL` 设为设备可达的宿主机 HTTP 地址，并由管理员在设备设置里手动添加描述地址。host 模式可直接打开设置里的“局域网设备”进行 SSDP 发现。两种模式的设备面板都支持暂停、继续与停止；跳转与上下首从 ROOMusic 控制。
 
-升级到带匿名统计的版本后，应用默认每天向 `insights.roomusic.org` 发送一次匿名统计，新实例满 24 小时后才开始；管理员首次登录会看到说明。
+升级到带匿名统计的版本后，应用默认每天向 `roomusic.org` 发送一次匿名统计，新实例满 24 小时后才开始；管理员首次登录会看到说明。
 不想发送时，在 `.env` 里加 `ROOMUSIC_INSIGHTS_DISABLED=true` 再执行升级命令，或者在网页“设置 › 匿名统计”里关闭。字段说明见[匿名统计说明](../../docs/insights.md)。
 
 ## 4. 备份与恢复

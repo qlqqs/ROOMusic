@@ -1,7 +1,7 @@
 {
   "body": {
     "enabled": true,
-    "endpoint_host": "insights.roomusic.org",
+    "endpoint_host": "roomusic.org",
     "first_send_after": "2026-01-01T00:00:00Z",
     "forced_off": false,
     "instance_id": "00000000-0000-4000-8000-000000000001",
@@ -36,7 +36,7 @@
       "schema": 2,
       "version": "dev"
     },
-    "public_page_url": "https://insights.roomusic.org/"
+    "public_page_url": "https://roomusic.org/stats"
   },
   "status": 200
 }

@@ -72,7 +72,7 @@ func New(db *sql.DB, inputs Inputs, opts Options) *Service {
 	if err != nil {
 		panic(err)
 	}
-	page := (&url.URL{Scheme: endpoint.Scheme, Host: endpoint.Host, Path: "/"}).String()
+	page := (&url.URL{Scheme: endpoint.Scheme, Host: endpoint.Host, Path: "/stats"}).String()
 	if opts.MockURL != "" {
 		endpoint, err = url.Parse(opts.MockURL + "/insights/api/v1/heartbeat")
 		if err != nil {

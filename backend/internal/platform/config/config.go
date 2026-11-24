@@ -256,7 +256,7 @@ func configuredScanWorkers() (int, error) {
 	return workers, nil
 }
 
-const DefaultInsightsURL = "https://insights.roomusic.org/api/v1/heartbeat"
+const DefaultInsightsURL = "https://roomusic.org/api/v1/heartbeat"
 const DefaultSourceURL = buildinfo.ProjectURL
 
 func configureInsights(s *Server) error {

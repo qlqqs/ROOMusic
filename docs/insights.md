@@ -1,7 +1,7 @@
 # 匿名统计
 
 ROOMusic 默认每天向项目的统计端发送一次匿名心跳，让项目知道大约有多少实例在用、用到了哪些功能。
-统计端程序开源在门户项目 [roomusic-site](https://github.com/qlqqs/roomusic-site)，汇总公开在 <https://insights.roomusic.org/>。
+统计端程序开源在门户项目 [roomusic-site](https://github.com/qlqqs/roomusic-site)，汇总公开在 <https://roomusic.org/stats>。
 
 ## 发送什么
 

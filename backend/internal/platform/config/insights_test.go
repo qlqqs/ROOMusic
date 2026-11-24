@@ -15,7 +15,7 @@ func TestLoadInsightsConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	if defaults.InsightsDisabled || defaults.InsightsURLExplicit ||
-		defaults.InsightsURL != "https://insights.roomusic.org/api/v1/heartbeat" ||
+		defaults.InsightsURL != "https://roomusic.org/api/v1/heartbeat" ||
 		defaults.SourceURL != "https://github.com/qlqqs/ROOMusic" {
 		t.Fatalf("匿名统计默认配置不符合同：启用=%t，显式 URL=%t，端点=%q，源代码=%q",
 			!defaults.InsightsDisabled, defaults.InsightsURLExplicit, defaults.InsightsURL, defaults.SourceURL)
