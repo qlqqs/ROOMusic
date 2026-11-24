@@ -1,7 +1,0 @@
-{"file": ".trellis/spec/backend/sources-contracts.md", "reason": "外部源的请求、限速、Retry-After、错误分类与适配器写法；mock 的响应要让这些规则可验证"}
-{"file": ".trellis/spec/backend/steward-runtime-contracts.md", "reason": "模型端点的流式协议、端点检测、运行错误处理"}
-{"file": ".trellis/spec/backend/steward-web-contracts.md", "reason": "SearXNG 与 Tavily 的请求与响应、出站策略"}
-{"file": ".trellis/spec/backend/steward-config-contracts.md", "reason": "端点与密钥的设置、成员放行名单"}
-{"file": ".trellis/spec/backend/deployment-environment-contracts.md", "reason": "环境变量的校验与记录方式"}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新包与 cmd 的位置、依赖规则"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "启动警告的写法"}
