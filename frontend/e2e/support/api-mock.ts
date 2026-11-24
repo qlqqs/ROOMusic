@@ -60,6 +60,7 @@ import { artistCatalogState, artistSummaryOriginError, artistError, respondToArt
 import { zonesMock } from "./zones";
 import { LAN_DEVICE_API, lanDevicesMock } from "./lan-devices";
 import { gradientPng } from "./png";
+import { demoPlugin, PLUGINS_API, pluginsMock } from "./plugins";
 
 // 受控后端：用后端集成测试产出的真实响应样本回答 /api/v1/*，并保持必要的状态（会话、目录、扫描、成员），
 // 让页面能走完整的流程。这里只实现冒烟需要的行为；幂等重放、请求丢失等细节由 Vitest 的页面级测试覆盖。
@@ -163,6 +164,7 @@ type ApiMockContext = { route: (pattern: string, handler: (route: ApiMockRoute) 
 export async function installApiMock(context: ApiMockContext, options: MockOptions = {}): Promise<ApiMock> {
   const { setupRequired = false, signedInAs = null, failSetupStatusTimes = 0 } = options;
   const lanDevices = lanDevicesMock();
+  const plugins = pluginsMock();
   const mock: ApiMock = {
     zones: zonesMock((id) => mock.personal.tracks.get(id) ?? personalTracksOf(mock).find((track) => track.track_id === id)),
     search: searchDataOf(),
@@ -516,6 +518,10 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     if (path.startsWith(`${LAN_DEVICE_API}/`)) return guarded(method, path, true, () => lanDevices.respond(method, path, body));
 
     // 自动整理（管理员）。
+    if (key === `GET ${PLUGINS_API}`) return guarded(method, path, true, () => plugins.list(mock.curation));
+    if (key === `POST ${PLUGINS_API}/preview`) return guarded(method, path, true, () => plugins.preview(headers["content-type"], body));
+    if (key === `POST ${PLUGINS_API}`) return guarded(method, path, true, () => plugins.install(mock.curation, body));
+    if (key === `DELETE ${PLUGINS_API}/${demoPlugin.id}`) return guarded(method, path, true, () => plugins.delete(mock.curation));
     if (key === "GET /api/v1/admin/curation/settings") return guarded(method, path, true, () => respondToCurationSettings(mock.curation));
     if (key === "PUT /api/v1/admin/curation/settings") return guarded(method, path, true, () => respondToUpdateCurationSettings(mock.curation, body));
     if (key === "GET /api/v1/admin/curation/sources") return guarded(method, path, true, () => respondToCurationSources(mock.curation));
@@ -667,7 +673,8 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     let invalidJSON = false;
     try {
       // Playwright 对无请求体也返回 null，必须与显式 JSON null 区分，心形 PUT/DELETE 合法地不带 body。
-      body = request.postData() === null ? undefined : request.postDataJSON();
+      const raw = request.postData();
+      body = raw === null ? undefined : url.pathname === `${PLUGINS_API}/preview` ? raw : request.postDataJSON();
     } catch {
       invalidJSON = true;
       body = undefined;
