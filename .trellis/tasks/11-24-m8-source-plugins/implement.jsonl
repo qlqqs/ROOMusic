@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/11-24-m8-source-plugins/research/wasm-hosting.md", "reason": "Extism、wazero、Navidrome 做法与风险"}
+{"file": "docs/architecture/adr/0007-source-plugins.md", "reason": "插件的裁决与规则"}
+{"file": ".trellis/spec/backend/sources-contracts.md", "reason": "外部源的声明、请求器、限速缓存、mock 替换、发给外部的数据"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "外部源闸门、写入与撤销、抑制"}
+{"file": ".trellis/spec/backend/deployment-environment-contracts.md", "reason": "只读根文件系统与数据目录"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移写法"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新包位置与依赖规则"}
