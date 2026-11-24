@@ -13,6 +13,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/backup"
 	backupapi "github.com/qlqq/roomusic/backend/internal/backup/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/artwork"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	catalogapi "github.com/qlqq/roomusic/backend/internal/catalog/httpapi"
@@ -28,6 +29,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/dspsettings/irload"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	identityapi "github.com/qlqq/roomusic/backend/internal/identity/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/insights"
+	insightsapi "github.com/qlqq/roomusic/backend/internal/insights/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/library"
 	libraryapi "github.com/qlqq/roomusic/backend/internal/library/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/listening"
@@ -36,6 +39,7 @@ import (
 	operationsapi "github.com/qlqq/roomusic/backend/internal/operations/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/personal"
 	personalapi "github.com/qlqq/roomusic/backend/internal/personal/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/platform/buildinfo"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/diagnostics"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
@@ -57,6 +61,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/sources/wikidata"
 	"github.com/qlqq/roomusic/backend/internal/sources/wikipedia"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
+	"github.com/qlqq/roomusic/backend/internal/steward/token"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 	zonesapi "github.com/qlqq/roomusic/backend/internal/zones/httpapi"
 )
@@ -205,7 +210,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		assembly.lyrics.BaseURL, assembly.lyrics.MockHost = base+"/lrclib", mockHost
 		assembly.acoustid.BaseURL, assembly.acoustid.MockHost = base+"/acoustid", mockHost
 		tavilyEndpoint = base + "/tavily/search"
-		const message = "所有外部音乐源与 Tavily 已指向 mock 服务"
+		const message = "外部音乐源、Tavily 与实例统计已指向 mock 服务"
 		logger.Warn(message, "event", "sources.mock.enabled", "module", "sources", "message", message, "url", base)
 	}
 	assembly.music.DataDirectory, assembly.music.Logger = settings.DataDirectory, logger
@@ -294,6 +299,28 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	pluginapi.Register(mux, guard, pluginStore)
 	artistGovernance := governance.NewArtistGovernance(artistResolutionAdapter{})
 	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger).WithArtists(artistGovernance)
+	endpoint := settings.InsightsURL
+	if endpoint == "" {
+		endpoint = config.DefaultInsightsURL
+	}
+	sourceURL := settings.SourceURL
+	if sourceURL == "" {
+		sourceURL = config.DefaultSourceURL
+	}
+	insightService := insights.New(database, insights.Inputs{
+		Accounts: guard, Library: catalog.NewStore(database), Models: runtime.NewStore(database), Tokens: token.NewStore(database, guard),
+		Curation: curationWriter, Plugins: sourceGate, Zones: zonesService,
+		LANEnabled: func(ctx context.Context) (bool, error) { v, err := lanDevices.Settings(ctx); return v.Enabled, err },
+		ScheduledScan: func(ctx context.Context) (bool, error) {
+			v, err := libraryService.LoadScanSchedule(ctx)
+			return v.Enabled, err
+		},
+	}, insights.Options{Endpoint: endpoint, Version: buildinfo.Current().Version, ForcedOff: settings.InsightsDisabled,
+		ExplicitURL: settings.InsightsURLExplicit, MockURL: settings.UpstreamMockURL})
+	insightsapi.Register(mux, guard, insightService, sourceURL)
+	if lifecycle != nil && database != nil {
+		go insightService.Run(lifecycle)
+	}
 	operationKinds := []operations.Kind{curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
 		curation.ArtistImageOperations(curationWriter), curation.ArtistBioOperations(curationWriter),
 		governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.TrackCorrectionOperations(), governance.TrackAutoCorrectionOperations(curationWriter), governance.GroupChangeOperations(curationWriter), governance.GroupDefaultOperations(),

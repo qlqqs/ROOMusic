@@ -1,0 +1,26 @@
+name: roomusic-insights
+services:
+  insights:
+    container_name: roomusic-insights
+    build:
+      context: ../..
+      dockerfile: deploy/insights/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18110:18110"
+    # 从宿主机回环地址转发到容器的连接使用本项目网桥的网关地址。
+    command: ["-addr", "0.0.0.0:18110", "-data", "/data", "-trusted-proxy", "${INSIGHTS_BRIDGE_GATEWAY:-172.28.181.1}"]
+    volumes:
+      - type: bind
+        source: ./data
+        target: /data
+        bind: { create_host_path: false }
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: "${INSIGHTS_BRIDGE_SUBNET:-172.28.181.0/28}"
+          gateway: "${INSIGHTS_BRIDGE_GATEWAY:-172.28.181.1}"

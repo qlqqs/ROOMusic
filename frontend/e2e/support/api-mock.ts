@@ -522,6 +522,9 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     if (key === `POST ${PLUGINS_API}/preview`) return guarded(method, path, true, () => plugins.preview(headers["content-type"], body));
     if (key === `POST ${PLUGINS_API}`) return guarded(method, path, true, () => plugins.install(mock.curation, body));
     if (key === `DELETE ${PLUGINS_API}/${demoPlugin.id}`) return guarded(method, path, true, () => plugins.delete(mock.curation));
+    // 匿名统计：默认已确认说明，概览上不出现；关于在登录前也能读。
+    if (key === "GET /api/v1/system/about") return json(sampleBody("insights/about"));
+    if (key === "GET /api/v1/admin/insights") return guarded(method, path, true, () => json({ ...(sampleBody("insights/status") as object), notice_acknowledged: true }));
     if (key === "GET /api/v1/admin/curation/settings") return guarded(method, path, true, () => respondToCurationSettings(mock.curation));
     if (key === "PUT /api/v1/admin/curation/settings") return guarded(method, path, true, () => respondToUpdateCurationSettings(mock.curation, body));
     if (key === "GET /api/v1/admin/curation/sources") return guarded(method, path, true, () => respondToCurationSources(mock.curation));

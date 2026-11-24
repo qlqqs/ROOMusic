@@ -1,8 +1,8 @@
-import { AudioLines, Bot, DatabaseBackup, FolderSearch, History, Speaker, Sparkles, UserRound, Users, type LucideIcon } from "lucide-react";
+import { AudioLines, BarChart3, Bot, DatabaseBackup, FolderSearch, History, Info, Speaker, Sparkles, UserRound, Users, type LucideIcon } from "lucide-react";
 import type { UserRole } from "../../features/auth";
 
 export type SettingsSection = {
-  to: "/settings/account" | "/settings/playback" | "/settings/agent" | "/settings/library" | "/settings/members" | "/settings/curation" | "/settings/operations" | "/settings/backups" | "/settings/devices";
+  to: "/settings/account" | "/settings/playback" | "/settings/agent" | "/settings/library" | "/settings/members" | "/settings/curation" | "/settings/operations" | "/settings/backups" | "/settings/devices" | "/settings/insights" | "/settings/about";
   label: string;
   icon: LucideIcon;
   /** 只有管理员看到；页面仍由路由里的 AdminGate 把关，后端也独立鉴权，这里只决定显示。 */
@@ -17,15 +17,17 @@ export const settingsSections: readonly SettingsSection[] = [
   { to: "/settings/account", label: "账号", icon: UserRound, adminOnly: false },
   { to: "/settings/playback", label: "播放", icon: AudioLines, adminOnly: false },
   { to: "/settings/agent", label: "Agent", icon: Bot, adminOnly: false },
+  { to: "/settings/about", label: "关于", icon: Info, adminOnly: false },
   { to: "/settings/library", label: "扫描目录", icon: FolderSearch, adminOnly: true, group: "管理", wide: true },
   { to: "/settings/members", label: "成员", icon: Users, adminOnly: true, group: "管理" },
   { to: "/settings/curation", label: "自动整理", icon: Sparkles, adminOnly: true, group: "管理" },
   { to: "/settings/devices", label: "局域网设备", icon: Speaker, adminOnly: true, group: "管理" },
   { to: "/settings/operations", label: "操作记录", icon: History, adminOnly: true, group: "管理" },
   { to: "/settings/backups", label: "备份", icon: DatabaseBackup, adminOnly: true, group: "管理" },
+  { to: "/settings/insights", label: "匿名统计", icon: BarChart3, adminOnly: true, group: "管理" },
 ];
 
-/** 当前角色在设置分栏里看到的栏目：成员只有“账号”“播放”与“Agent”。 */
+/** 当前角色在设置分栏里看到的栏目：成员只有“账号”“播放”“Agent”与“关于”。 */
 export function visibleSettingsSections(role: UserRole): SettingsSection[] {
   return settingsSections.filter((section) => !section.adminOnly || role === "admin");
 }

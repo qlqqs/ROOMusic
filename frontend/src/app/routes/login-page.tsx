@@ -1,4 +1,5 @@
 import { LoginForm, useSession } from "../../features/auth";
+import { SourceLink } from "../../features/insights";
 import { AuthLayout } from "./auth-layout";
 
 export function LoginPage() {
@@ -8,6 +9,7 @@ export function LoginPage() {
   return (
     <AuthLayout title="登录">
       <LoginForm notice={notice} initialUsername={username} />
+      <SourceLink />
     </AuthLayout>
   );
 }

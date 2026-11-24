@@ -28,3 +28,10 @@ func IsEnabledAdmin(ctx context.Context, tx *sql.Tx, id string) (bool, error) {
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE id=$1::uuid AND role='admin' AND disabled_at IS NULL FOR SHARE)`, id).Scan(&enabled)
 	return enabled, err
 }
+
+// EnabledAccountCounts 只返回启用的账号数与其中的管理员数。
+func (guard *Guard) EnabledAccountCounts(ctx context.Context) (members, admins int, err error) {
+	err = guard.database.QueryRowContext(ctx, `SELECT count(*), count(*) FILTER (WHERE role='admin')
+        FROM users WHERE disabled_at IS NULL`).Scan(&members, &admins)
+	return
+}

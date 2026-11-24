@@ -257,7 +257,7 @@ func TestMockControlAndScenarios(t *testing.T) {
 		return decodeBody[map[string]upstreammock.Scenario](t, resp)
 	}
 	defaultState := upstreammock.Scenario{Name: "ok", RetryAfter: 2, DelayMS: 3000}
-	services := []string{"plugins", "musicbrainz", "coverartarchive", "lrclib", "acoustid", "wikidata", "commons", "wikipedia", "fanarttv", "theaudiodb", "openai", "anthropic", "searxng", "tavily"}
+	services := []string{"insights", "plugins", "musicbrainz", "coverartarchive", "lrclib", "acoustid", "wikidata", "commons", "wikipedia", "fanarttv", "theaudiodb", "openai", "anthropic", "searxng", "tavily"}
 	initial := state()
 	if len(initial) != len(services) {
 		t.Fatalf("初始情景 = %+v", initial)

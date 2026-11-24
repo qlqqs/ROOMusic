@@ -1,0 +1,41 @@
+{
+  "body": {
+    "enabled": false,
+    "endpoint_host": "insights.roomusic.org",
+    "first_send_after": "2026-01-01T00:00:00Z",
+    "forced_off": false,
+    "instance_id": "00000000-0000-4000-8000-000000000001",
+    "last_attempt_at": null,
+    "last_error": null,
+    "last_success_at": null,
+    "notice_acknowledged": false,
+    "payload": {
+      "arch": "amd64",
+      "container": false,
+      "devices_30d": {
+        "browser": "0",
+        "upnp": "0"
+      },
+      "features": {
+        "auto_curation": false,
+        "dsp": false,
+        "lan_devices": false,
+        "mcp_token": false,
+        "plugins": "0",
+        "scheduled_scan": true,
+        "steward_model": false
+      },
+      "instance_id": "00000000-0000-4000-8000-000000000001",
+      "library": {
+        "releases": "0",
+        "tracks": "0"
+      },
+      "members": "1",
+      "os": "linux",
+      "schema": 1,
+      "version": "dev"
+    },
+    "public_page_url": "https://insights.roomusic.org/"
+  },
+  "status": 200
+}

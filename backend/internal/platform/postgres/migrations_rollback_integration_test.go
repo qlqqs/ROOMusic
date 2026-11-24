@@ -1,6 +1,8 @@
 package postgres
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"reflect"
@@ -9,6 +11,7 @@ import (
 	"testing/fstest"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/migrations"
 )
 
@@ -450,6 +453,17 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
+			if strings.HasSuffix(m.Name, "_instance_insights.sql") {
+				assertInsightsMigrationSeed(t, db)
+				for _, tc := range []struct{ id, state string }{{"true", "23505"}, {"false", "23514"}} {
+					_, err := db.ExecContext(t.Context(), `INSERT INTO instance_insights (id, instance_id) VALUES ($1::boolean, gen_random_uuid())`, tc.id)
+					var rejected interface{ SQLState() string }
+					if !errors.As(err, &rejected) || rejected.SQLState() != tc.state {
+						t.Fatalf("插入 id=%s：错误 %v，期望 SQLSTATE %s", tc.id, err, tc.state)
+					}
+				}
+				rollbackExec(t, db, `UPDATE instance_insights SET enabled=false, notice_acknowledged_at=now(), last_attempt_at=now(), last_error='http_503' WHERE id`)
+			}
 			if m.Version == 69 {
 				var enabled, shared bool
 				err := db.QueryRow("SELECT enabled,shared FROM upnp_settings WHERE id=1").Scan(&enabled, &shared)
@@ -556,6 +570,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s3 := rollbackSnapshot(t, db)
+			if strings.HasSuffix(m.Name, "_instance_insights.sql") {
+				assertInsightsMigrationSeed(t, db)
+			}
 			// 再升级只比较结构和行数；种子 UUID、时间等合法非确定值不应误报。
 			countsOnly := func(snapshot postgrestest.SchemaSnapshot) postgrestest.SchemaSnapshot {
 				data := make(map[string]string, len(snapshot.Data))
@@ -569,6 +586,19 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 				t.Fatalf("再次升级结构/行数不一致：\n%s", strings.Join(diff, "\n"))
 			}
 		})
+	}
+}
+
+func assertInsightsMigrationSeed(t *testing.T, db *sql.DB) {
+	t.Helper()
+	var id string
+	var defaults bool
+	err := db.QueryRowContext(t.Context(), `SELECT instance_id::text,
+		enabled AND created_at IS NOT NULL AND notice_acknowledged_at IS NULL
+		AND last_attempt_at IS NULL AND last_success_at IS NULL AND last_error IS NULL
+		FROM instance_insights WHERE id`).Scan(&id, &defaults)
+	if err != nil || !uuid.Valid(id) || id[14] != '4' || !defaults {
+		t.Fatalf("0072 默认记录：实例 ID %q，默认值有效 %t，错误 %v", id, defaults, err)
 	}
 }
 

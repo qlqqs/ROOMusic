@@ -39,6 +39,8 @@ const OperationsPage = lazyRouteComponent(() => import("./routes/operations-page
 const CurationPage = lazyRouteComponent(() => import("./routes/curation-page"), "CurationPage");
 const BackupsPage = lazyRouteComponent(() => import("./routes/backups-page"), "BackupsPage");
 const LanDevicesPage = lazyRouteComponent(() => import("./routes/lan-devices-page"), "LanDevicesPage");
+const InsightsPage = lazyRouteComponent(() => import("./routes/insights-page"), "InsightsPage");
+const AboutPage = lazyRouteComponent(() => import("./routes/about-page"), "AboutPage");
 // 管家的整页对话连同 Markdown 依赖按需加载。
 const StewardPage = lazyRouteComponent(() => import("./routes/steward-page"), "StewardRoutePage");
 
@@ -501,6 +503,28 @@ function LanDevicesRoute() {
 
 const lanDevicesRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/devices", component: LanDevicesRoute });
 
+function InsightsRoute() {
+  return (
+    <AdminGate>
+      <LazyPage>
+        <InsightsPage />
+      </LazyPage>
+    </AdminGate>
+  );
+}
+
+const insightsRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/insights", component: InsightsRoute });
+
+function AboutRoute() {
+  return (
+    <LazyPage>
+      <AboutPage />
+    </LazyPage>
+  );
+}
+
+const aboutRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/about", component: AboutRoute });
+
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
@@ -521,7 +545,7 @@ const routeTree = rootRoute.addChildren([
     artistCandidatesRoute,
     stewardRoute,
     stewardConversationRoute,
-    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, agentSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, curationRoute, operationsRoute, backupsRoute, lanDevicesRoute]),
+    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, agentSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, curationRoute, operationsRoute, backupsRoute, lanDevicesRoute, insightsRoute, aboutRoute]),
     notFoundRoute,
   ]),
 ]);
