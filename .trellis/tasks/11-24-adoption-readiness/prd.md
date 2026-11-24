@@ -76,3 +76,20 @@
 ## 规划决定的选择方式
 
 人工选择：范围与上表决定由 qlqq 在 2026-11-24 的对话中逐项选定；按其长期约定（规划完直接实现、取推荐默认值、交付时列出），不再单独等待规划批准。
+
+## 完成记录（2026-11-24）
+
+| 子任务 | 合入 |
+| --- | --- |
+| ① 匿名实例统计与源代码链接 | `08a47fc6` |
+| ② 手机网页可安装 | `9c40582a` |
+| ③ NAS 一键安装 | `2429d405` |
+| ④ Chromecast 投放 | `d11438fe`（依赖规则补丁 `3503cc86`） |
+| ⑤ AirPlay 2 投放 | `e157ef08` |
+
+- 跨子任务验收：统计端出站写入 ADR 0008；投放协议的出站只到局域网地址；主程序加固未回退（`check-production-compose.sh` 断言 app 仍为 `cap_drop: [ALL]`、`no-new-privileges`、只读根，`ptp` 只有 `NET_BIND_SERVICE`）；
+  生产镜像演练：NAS 子任务的从零安装与 0.8.0 升级，AirPlay 子任务的对时与 Cast 控制（独立网络命名空间）；README 与部署说明已同步。
+- 期间的变化：统计端程序与 `deploy/insights/` 由另一会话移到独立仓库 `roomusic-site`（`insights/`，合同 `docs/heartbeat.md`），本仓库保留客户端；schema 3 已先在 roomusic-site 合入（`c6a8f6a`）。
+  另一会话的艺人网络搜索占用了迁移 0074，本任务的迁移依次为 0073（统计）、0075（Cast）、0076–0077（AirPlay）。
+- AirPlay 参考 GPL 实现的边界按 qlqq 的修正放宽为“可读源码、不翻译不照抄、先记笔记”。
+- 未完成（需要 qlqq）：统计端上线（DNS、OpenResty 站点、启动容器）；Docker Hub 仓库与 secret；真实设备试用（手机安装、各家 NAS、Chromecast/Nest、HomePod/Apple TV/Mac/Sonos）。
