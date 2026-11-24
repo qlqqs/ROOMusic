@@ -38,18 +38,27 @@ FROM alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db92
 ARG TARGETARCH
 ADD --checksum=sha256:c968ad4a0821592a79b158fb2e1f46cbe0a22a0a1dbc0743c67d68e75d15d2bb https://github.com/acoustid/chromaprint/releases/download/v1.6.2/chromaprint-fpcalc-1.6.2-linux-x86_64.tar.gz /amd64.tar.gz
 ADD --checksum=sha256:3aa1498126ed272d805bc9d081c77965c9e1e1a0891bb112c13b56ef2ad47bad https://github.com/acoustid/chromaprint/releases/download/v1.6.2/chromaprint-fpcalc-1.6.2-linux-arm64.tar.gz /arm64.tar.gz
-RUN mkdir /out \
+# 上游 x86_64 包是静态构建；arm64 包链接 glibc（libc、libm、libstdc++、libgcc，FFmpeg 已静态链入），
+# 在 Alpine 上经 gcompat 运行。运行镜像装同样的包。
+RUN if [ "$TARGETARCH" = arm64 ]; then apk add --no-cache gcompat libstdc++ libgcc; fi \
+ && mkdir /out \
  && tar -xzf "/${TARGETARCH}.tar.gz" -C /out --strip-components=1 \
  && /out/fpcalc -version | grep -q '^fpcalc version 1\.6\.2 ('
 
 FROM alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db9275e198ad AS app
+ARG TARGETARCH
 RUN apk add --no-cache ca-certificates postgresql18-client \
+ && if [ "$TARGETARCH" = arm64 ]; then apk add --no-cache gcompat libstdc++ libgcc; fi \
  && pg_dump --version | grep -q '^pg_dump (PostgreSQL) 18\.' \
  && addgroup -S -g 1000 roomusic && adduser -S -D -H -u 1000 -G roomusic roomusic \
  && mkdir -p /app /data /backups && chown roomusic:roomusic /data /backups && chmod 0700 /backups
 COPY --from=build /out/roomusic /app/roomusic
 COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
 COPY --from=fpcalc /out/fpcalc /usr/local/bin/fpcalc
+# 在运行镜像里按应用的调用方式（s16le 管道）算一次合成正弦波的指纹。
+RUN /usr/local/bin/fpcalc -version | grep -q '^fpcalc version 1\.6\.2 (' \
+ && /usr/local/bin/ffmpeg -v error -f lavfi -i sine=frequency=440:duration=15 -f s16le -ac 1 -ar 11025 - \
+  | /usr/local/bin/fpcalc -format s16le -rate 11025 -channels 1 -length 120 -json - | grep -q '"fingerprint": *"[^"]'
 COPY --chmod=0755 deploy/production/entrypoint.sh /app/entrypoint.sh
 USER 1000:1000
 WORKDIR /app

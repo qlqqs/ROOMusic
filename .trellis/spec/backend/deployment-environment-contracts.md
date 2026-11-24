@@ -19,9 +19,11 @@
 - 服务端渲染需要 ffmpeg：生产镜像构建时从固定摘要镜像复制，开发由部署者安装（项目不单独分发二进制）；`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）。
   找不到或自检失败时应用照常启动、记 `playback.render.unavailable`，格式表为空、起播得 `503 renderer_unavailable`。`ROOMUSIC_MEDIA_CACHE_MAX_MIB` 已不再读取。
   `scripts/ffmpeg-pinned.sh` 取出按摘要固定的 ffmpeg 7.1.1，测试、CI 与推荐部署共用。详见[服务端渲染合同](./playback-render-contracts.md) §11。
-- 声学指纹需要 `fpcalc`（M7 B3）：固定 chromaprint 上游官方的静态构建 1.6.2（`linux-x86_64`、`linux-arm64` 两个压缩包，按 sha256 核对）。
-  生产镜像的 `fpcalc` 阶段在**目标架构**上（不用 `--platform=$BUILDPLATFORM`）用 `ADD --checksum` 取两包、按 `TARGETARCH` 解开、核对 `fpcalc version 1.6.2`，
-  运行镜像放在 `/usr/local/bin/fpcalc`（约 5.4 MB），`compose.prod.yaml` 设 `ROOMUSIC_FPCALC_PATH`（绝对路径，空则在 `PATH` 中查找）。
+- 声学指纹需要 `fpcalc`（M7 B3）：固定 chromaprint 上游官方构建 1.6.2（`linux-x86_64`、`linux-arm64` 两个压缩包，按 sha256 核对）。
+  x86_64 包是静态构建；arm64 包链接 glibc（`libc`、`libm`、`libstdc++`、`libgcc`，FFmpeg 已静态链入），在 Alpine 上经 `gcompat` 运行，
+  `fpcalc` 阶段与运行镜像都只在 arm64 上装 `gcompat libstdc++ libgcc`（v0.8.0 首次发布时 arm64 构建因此失败，`fpcalc: not found`）。
+  生产镜像的 `fpcalc` 阶段在**目标架构**上（不用 `--platform=$BUILDPLATFORM`）用 `ADD --checksum` 取两包、按 `TARGETARCH` 解开、核对 `fpcalc version 1.6.2`；
+  运行镜像放在 `/usr/local/bin/fpcalc`（约 5.4 MB），构建时再核对版本，并按应用的调用方式（ffmpeg 生成合成正弦波、s16le 管道）算一次指纹；`compose.prod.yaml` 设 `ROOMUSIC_FPCALC_PATH`（绝对路径，空则在 `PATH` 中查找）。
   `scripts/fpcalc-pinned.sh` 下载并缓存到 `${XDG_CACHE_HOME:-$HOME/.cache}/roomusic/fpcalc-1.6.2/`，核对 sha256 与版本后打印路径；`--pins` 打印两架构的地址与摘要，CI 逐行在 Dockerfile 里核对。
   启动时与 ffmpeg 一起自检（合成 PCM 走一遍管道）；通过记 `playback.fingerprint.ready`（带 fpcalc 版本），不通过只记 `playback.fingerprint.unavailable`，AcoustID 显示 `fingerprint_unavailable`，其余功能不受影响。
 - 内置 AcoustID 应用密钥（M7 B3 补充）：生产镜像 Go 构建的 `RUN` 挂载可选 BuildKit secret `acoustid_client`；文件非空才读，内容只许字母数字（否则构建失败），
