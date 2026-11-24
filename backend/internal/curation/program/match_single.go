@@ -1,6 +1,9 @@
 package program
 
 import (
+	"cmp"
+	"slices"
+
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
@@ -54,7 +57,8 @@ func DecideSingle(e catalog.CurationEvidence, method string, recordings []source
 }
 
 func recordingCandidates(method string, recordings []sources.Recording) []Candidate {
-	rows := recordings[:min(10, len(recordings))]
+	rows := slices.Clone(recordings[:min(10, len(recordings))])
+	slices.SortFunc(rows, func(a, b sources.Recording) int { return cmp.Compare(a.ID, b.ID) })
 	out := make([]Candidate, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, Candidate{Source: "musicbrainz", ExternalID: r.ID, Method: method, Title: r.Title, Artist: credits(r.Artists), CatalogNumbers: []string{}})

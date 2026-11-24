@@ -173,8 +173,10 @@ func compareLength(local int, ms *int64) (comparable, matches bool) {
 }
 
 func releaseCandidates(method string, releases []sources.Release) []Candidate {
-	out := make([]Candidate, 0, min(10, len(releases)))
-	for _, r := range releases[:min(10, len(releases))] {
+	rows := slices.Clone(releases[:min(10, len(releases))])
+	slices.SortFunc(rows, func(a, b sources.Release) int { return cmp.Compare(a.ID, b.ID) })
+	out := make([]Candidate, 0, len(rows))
+	for _, r := range rows {
 		count := 0
 		for _, m := range r.Media {
 			count += max(m.TrackCount, len(m.Tracks))
@@ -185,6 +187,7 @@ func releaseCandidates(method string, releases []sources.Release) []Candidate {
 				numbers = append(numbers, l.CatalogNumber)
 			}
 		}
+		slices.Sort(numbers)
 		out = append(out, Candidate{Source: "musicbrainz", ExternalID: r.ID, Method: method, Title: r.Title, Artist: credits(r.Artists), Date: r.Date, Country: r.Country, Status: r.Status, TrackCount: count, Barcode: r.Barcode, CatalogNumbers: numbers, ReleaseGroupID: r.Group.ID})
 	}
 	return out
