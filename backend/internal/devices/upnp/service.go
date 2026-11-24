@@ -9,52 +9,60 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/qlqq/roomusic/backend/internal/devices/airplay"
 	"github.com/qlqq/roomusic/backend/internal/devices/cast"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/ptp"
 )
 
 var (
-	ErrDisabled      = errors.New("局域网设备开关已关闭")
-	ErrCastDisabled  = errors.New("Google Cast 发现已关闭")
-	ErrUnknownDevice = errors.New("找不到这个设备")
-	ErrManualDevice  = errors.New("找不到手动添加的设备")
-	ErrGrantUser     = errors.New("需要有效的账号列表")
-	ErrProbe         = errors.New("无法读取渲染器信息")
-	ErrDiscovery     = errors.New("无法启动设备发现")
+	ErrDisabled        = errors.New("局域网设备开关已关闭")
+	ErrAirPlayDisabled = errors.New("AirPlay 发现已关闭")
+	ErrCastDisabled    = errors.New("Google Cast 发现已关闭")
+	ErrUnknownDevice   = errors.New("找不到这个设备")
+	ErrManualDevice    = errors.New("找不到手动添加的设备")
+	ErrGrantUser       = errors.New("需要有效的账号列表")
+	ErrProbe           = errors.New("无法读取渲染器信息")
+	ErrDiscovery       = errors.New("无法启动设备发现")
 )
 
 type Settings struct {
-	UPnPEnabled bool `json:"upnp_enabled"`
-	CastEnabled bool `json:"cast_enabled"`
-	Enabled     bool `json:"enabled"`
-	Shared      bool `json:"shared"`
+	UPnPEnabled    bool `json:"upnp_enabled"`
+	CastEnabled    bool `json:"cast_enabled"`
+	AirPlayEnabled bool `json:"airplay_enabled"`
+	Enabled        bool `json:"enabled"`
+	Shared         bool `json:"shared"`
 }
 
 type AdminDevice struct {
 	Entry
-	Format  *CastFormat `json:"format"`
-	UserIDs []string    `json:"user_ids"`
+	Format  *DeviceFormat `json:"format"`
+	UserIDs []string      `json:"user_ids"`
 }
 
 // Service 将管理员写入、持久开关与本进程的发现周期串行化。
 type Service struct {
-	lifecycle context.Context
-	db        *sql.DB
-	registry  *Registry
-	mu        sync.RWMutex
-	cast      *cast.Registry
-	protocols map[string]*protocol
-	output    *outputManager
+	lifecycle          context.Context
+	db                 *sql.DB
+	registry           *Registry
+	mu                 sync.RWMutex
+	cast               *cast.Registry
+	protocols          map[string]*protocol
+	output             *outputManager
+	airplayCredentials *airplay.CredentialStore
+	clock              ptp.Client
+	pendingPIN         map[string]*pinChallenge
 }
 
-func NewService(ctx context.Context, db *sql.DB, registry *Registry) *Service {
+func NewService(ctx context.Context, db *sql.DB, registry *Registry, credentials *airplay.CredentialStore, ptpAddress string) *Service {
 	receivers := cast.NewRegistry()
 	return &Service{
-		lifecycle: ctx, db: db, registry: registry, cast: receivers,
+		lifecycle: ctx, db: db, registry: registry, cast: receivers, airplayCredentials: credentials, clock: ptp.Client{Address: ptpAddress}, pendingPIN: make(map[string]*pinChallenge),
 		protocols: map[string]*protocol{
-			"upnp": {registry: registry},
-			"cast": {registry: castRegistry{receivers}},
+			"upnp":    {registry: registry},
+			"cast":    {registry: castRegistry{receivers}},
+			"airplay": {registry: airplayRegistry{airplay.NewRegistry()}},
 		},
 	}
 }
@@ -72,7 +80,7 @@ func (s *Service) Restore(ctx context.Context) error {
 }
 
 func (v Settings) active(kind string) bool {
-	return v.Enabled && (kind == "upnp" && v.UPnPEnabled || kind == "cast" && v.CastEnabled)
+	return v.Enabled && (kind == "upnp" && v.UPnPEnabled || kind == "cast" && v.CastEnabled || kind == "airplay" && v.AirPlayEnabled)
 }
 func (s *Service) running() bool {
 	for _, p := range s.protocols {
@@ -86,7 +94,7 @@ func (s *Service) running() bool {
 // 恢复实例时保留成功启动的协议；管理员更新设置时可按列表撤回本次启动。
 func (s *Service) startProtocols(ctx context.Context, settings Settings) ([]string, error) {
 	var pending []string
-	for _, kind := range []string{"upnp", "cast"} {
+	for _, kind := range []string{"upnp", "cast", "airplay"} {
 		if settings.active(kind) && s.protocols[kind].ctx == nil {
 			pending = append(pending, kind)
 		}
@@ -137,10 +145,11 @@ func (s *Service) Close() {
 }
 
 type SettingsUpdate struct {
-	Enabled     *bool `json:"enabled"`
-	Shared      *bool `json:"shared"`
-	UPnPEnabled *bool `json:"upnp_enabled"`
-	CastEnabled *bool `json:"cast_enabled"`
+	Enabled        *bool `json:"enabled"`
+	Shared         *bool `json:"shared"`
+	UPnPEnabled    *bool `json:"upnp_enabled"`
+	CastEnabled    *bool `json:"cast_enabled"`
+	AirPlayEnabled *bool `json:"airplay_enabled"`
 }
 
 func (s *Service) UpdateSettings(ctx context.Context, changes SettingsUpdate) (Settings, error) {
@@ -163,9 +172,12 @@ func (s *Service) UpdateSettings(ctx context.Context, changes SettingsUpdate) (S
 	if changes.CastEnabled != nil {
 		after.CastEnabled = *changes.CastEnabled
 	}
+	if changes.AirPlayEnabled != nil {
+		after.AirPlayEnabled = *changes.AirPlayEnabled
+	}
 	started, err := s.startProtocols(ctx, after)
 	if err == nil && after != before {
-		_, err = s.db.ExecContext(ctx, `UPDATE upnp_settings SET enabled=$1, shared=$2, upnp_enabled=$3, cast_enabled=$4 WHERE id=1`, after.Enabled, after.Shared, after.UPnPEnabled, after.CastEnabled)
+		_, err = s.db.ExecContext(ctx, `UPDATE upnp_settings SET enabled=$1, shared=$2, upnp_enabled=$3, cast_enabled=$4, airplay_enabled=$5 WHERE id=1`, after.Enabled, after.Shared, after.UPnPEnabled, after.CastEnabled, after.AirPlayEnabled)
 	}
 	if err != nil {
 		for _, kind := range started {
@@ -185,6 +197,9 @@ func (s *Service) UpdateSettings(ctx context.Context, changes SettingsUpdate) (S
 }
 
 func deviceKind(udn string) string {
+	if strings.HasPrefix(udn, "airplay:") {
+		return "airplay"
+	}
 	if strings.HasPrefix(udn, "cast:") {
 		return "cast"
 	}
@@ -199,6 +214,26 @@ func (s *Service) entries() []Entry {
 	}
 	return items
 }
+
+// 同一份快照中的所有设备共享一次本地时钟查询。
+func (s *Service) deviceProjection(ctx context.Context, formats map[string]storedFormat) func(*Entry) *DeviceFormat {
+	clock := sync.OnceValue(func() ptp.Status {
+		status, err := s.clock.Status(ctx)
+		if err != nil {
+			return ptp.Status{Reason: "clock_unavailable"}
+		}
+		return status
+	})
+	return func(e *Entry) *DeviceFormat {
+		if info := e.Capabilities.AirPlay; info != nil {
+			projected := *info
+			projected.ApplyTiming(e.Model, clock)
+			e.Capabilities.AirPlay = &projected
+		}
+		return applyFormat(e, formats)
+	}
+}
+
 func (s *Service) Devices(ctx context.Context) ([]AdminDevice, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -227,8 +262,9 @@ func (s *Service) Devices(ctx context.Context) ([]AdminDevice, error) {
 		return nil, err
 	}
 	items := make([]AdminDevice, 0, len(entries))
+	project := s.deviceProjection(ctx, formats)
 	for udn, e := range entries {
-		format := applyFormat(&e, formats)
+		format := project(&e)
 		items = append(items, AdminDevice{Entry: e, Format: format, UserIDs: append([]string{}, grants[udn]...)})
 	}
 	slices.SortFunc(items, func(a, b AdminDevice) int { return strings.Compare(a.UDN, b.UDN) })
@@ -236,6 +272,9 @@ func (s *Service) Devices(ctx context.Context) ([]AdminDevice, error) {
 }
 
 func disabledProtocol(kind string) error {
+	if kind == "airplay" {
+		return ErrAirPlayDisabled
+	}
 	if kind == "cast" {
 		return ErrCastDisabled
 	}
@@ -269,7 +308,7 @@ func (s *Service) Add(ctx context.Context, kind, address string) (AdminDevice, e
 		return AdminDevice{}, disabledProtocol(kind)
 	}
 	if err != nil {
-		if errors.Is(err, ErrDeviceAddress) || errors.Is(err, cast.ErrAddress) {
+		if errors.Is(err, ErrDeviceAddress) || errors.Is(err, cast.ErrAddress) || errors.Is(err, airplay.ErrAddress) {
 			return AdminDevice{}, err
 		}
 		return AdminDevice{}, fmt.Errorf("%w: %w", ErrProbe, err)
@@ -287,7 +326,7 @@ func (s *Service) Add(ctx context.Context, kind, address string) (AdminDevice, e
 	}
 	p.registry.Remember(d)
 	entry := Entry{Device: d, Online: true, Manual: true}
-	format := applyFormat(&entry, formats)
+	format := s.deviceProjection(ctx, formats)(&entry)
 	return AdminDevice{Entry: entry, Format: format, UserIDs: append([]string{}, grants[d.UDN]...)}, nil
 }
 
@@ -296,6 +335,9 @@ func (s *Service) Remove(ctx context.Context, udn string) error {
 	defer s.mu.Unlock()
 	if err := s.deleteManual(ctx, udn); err != nil {
 		return err
+	}
+	if flow := s.pendingPIN[udn]; flow != nil {
+		flow.cancel()
 	}
 	s.protocols[deviceKind(udn)].registry.Forget(udn)
 	return s.enforceGrants(ctx)
@@ -352,9 +394,10 @@ func (s *Service) visibleLocked(ctx context.Context, actor identity.User) ([]Ent
 	if err != nil {
 		return nil, err
 	}
+	project := s.deviceProjection(ctx, formats)
 	for _, e := range s.entries() {
-		applyFormat(&e, formats)
 		if e.Online && (grants == nil || len(grants[e.UDN]) > 0) {
+			project(&e)
 			items = append(items, e)
 		}
 	}

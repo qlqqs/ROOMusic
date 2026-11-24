@@ -40,13 +40,13 @@ expect_missing empty.env ROOMUSIC_MUSIC_DIR
 # 部分 Compose 版本会为未配置的 ipam 输出空对象，与字段缺失等价。
 compose required.env config --format json | jq -e '
   .name == "roomusic-server" and
-  (.services | keys) == ["app", "postgres"] and
+  (.services | keys) == ["app", "postgres", "ptp"] and
   .services.app.user == "1000:1000" and
   .services.app.image == "ghcr.io/qlqqs/roomusic:latest" and
   .services.app.container_name == "roomusic-app" and
   .services.postgres.container_name == "roomusic-postgres" and
   ((.volumes // {}) | length) == 0 and
-  ([.services[].volumes[] | .type == "bind"] | all) and
+  ([.services[].volumes[]? | .type == "bind"] | all) and
   .services.app.depends_on.postgres.condition == "service_healthy" and
   .services.app.environment.ROOMUSIC_FPCALC_PATH == "/usr/local/bin/fpcalc" and
   .services.app.environment.ROOMUSIC_DB_PASSWORD_FILE == "/run/secrets/postgres_password" and
@@ -54,7 +54,19 @@ compose required.env config --format json | jq -e '
   .services.app.read_only and
   (.services.app.security_opt | index("no-new-privileges:true") != null) and
   ([.services.app.volumes[] | select(.target == "/run/secrets" or .target == "/music") | .read_only] == [true, true]) and
-  (.services.app.cap_drop | index("ALL") != null) and
+  .services.app.cap_drop == ["ALL"] and
+  (.services.app.cap_add | length) == 0 and
+  .services.ptp.container_name == "roomusic-ptp" and
+  .services.ptp.image == .services.app.image and
+  .services.ptp.entrypoint == ["/app/roomusic-ptp"] and
+  .services.ptp.user == "0:0" and .services.ptp.read_only and
+  .services.ptp.network_mode == "host" and
+  .services.ptp.cap_drop == ["ALL"] and .services.ptp.cap_add == ["NET_BIND_SERVICE"] and
+  .services.ptp.security_opt == ["no-new-privileges:true"] and
+  (.services.ptp.volumes | length) == 0 and (.services.ptp.ports | length) == 0 and
+  (.services.app.depends_on | keys) == ["postgres"] and
+  .services.ptp.environment.ROOMUSIC_PTP_ADDR == "127.0.0.1:55440" and
+  .services.ptp.environment.ROOMUSIC_PTP_ADDR == .services.app.environment.ROOMUSIC_PTP_ADDR and
   .services.app.network_mode == "host" and
   (.services.app.ports | length) == 0 and
   .services.app.environment.ROOMUSIC_HTTP_ADDR == "0.0.0.0:8090" and
@@ -67,7 +79,7 @@ compose required.env config --format json | jq -e '
   ([.services.postgres.volumes[] | select(.target == "/var/lib/postgresql") | .source | endswith("/postgres")] | all) and
   ([.services[] | has("pull_policy")] | any | not)
 ' > /dev/null
-# 将两份配置的挂载路径对齐到同一临时目录，比较两个服务和所有网络、卷等字段。
+# 将两份配置的挂载路径对齐到同一临时目录，比较服务和所有网络、卷等字段。
 sed -e 's|/path/to/roomusic/|./|g' -e 's|/path/to/music|./music|g' \
   "$ROOT_DIR/deploy/nas/compose.yaml" > "$work/nas.yaml"
 compose required.env -f compose.yaml config --format json | jq -S 'del(."x-logging", ."x-postgres-image")' > "$work/main.json"
@@ -84,9 +96,12 @@ compose bind.env config --format json | jq -e '
   ([.services.postgres.volumes[] | select(.target == "/prep/backups") | .source] == ["/srv/x"])
 ' > /dev/null
 
-printf '%s\n' 'ROOMUSIC_APP_CONTAINER_NAME=test-app' 'ROOMUSIC_POSTGRES_CONTAINER_NAME=test-postgres' >> "$work/bind.env"
+printf '%s\n' 'ROOMUSIC_PTP_CONTAINER_NAME=test-ptp' 'ROOMUSIC_PTP_ADDR=127.0.0.1:55441' 'ROOMUSIC_APP_CONTAINER_NAME=test-app' 'ROOMUSIC_POSTGRES_CONTAINER_NAME=test-postgres' >> "$work/bind.env"
 compose bind.env config --format json | jq -e '
   .services.app.container_name == "test-app" and
+  .services.ptp.container_name == "test-ptp" and
+  .services.ptp.environment.ROOMUSIC_PTP_ADDR == "127.0.0.1:55441" and
+  .services.app.environment.ROOMUSIC_PTP_ADDR == "127.0.0.1:55441" and
   .services.postgres.container_name == "test-postgres" and
   ((.services.postgres.depends_on // {}) | length) == 0
 ' > /dev/null
@@ -98,6 +113,7 @@ compose bind.env config --format json | jq -e '
   .services.postgres.ports[0].published == "55440"
 ' > /dev/null
 compose bind.env -f compose.yaml -f compose.bridge.yaml config --format json | jq -e '
+  (.services | has("ptp") | not) and
   .services.app.network_mode == null and
   (.services.app.networks | has("roomusic")) and
   (.services.postgres.networks | has("roomusic")) and

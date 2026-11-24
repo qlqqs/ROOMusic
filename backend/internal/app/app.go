@@ -22,6 +22,7 @@ import (
 	curationapi "github.com/qlqq/roomusic/backend/internal/curation/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/curation/model"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
+	"github.com/qlqq/roomusic/backend/internal/devices/airplay"
 	"github.com/qlqq/roomusic/backend/internal/devices/upnp"
 	upnpapi "github.com/qlqq/roomusic/backend/internal/devices/upnp/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/dspsettings"
@@ -169,7 +170,8 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	playbackService := newPlaybackService(database, settings, assembly)
 	renderer, closeRenderer := assembleRenderer(database, playbackService, assembly.renderer, logger, dspSettingsService)
 	zonesService := zones.NewService(database, zones.Options{Logger: logger, Renderer: renderer, IRReferences: zoneIRReferences{service: dspSettingsService}, PlayRecorder: zonePlayRecorder{service: listeningService}})
-	lanDevices := upnp.NewService(lifecycle, database, upnp.NewRegistry())
+	instanceSecrets := newInstanceSecrets(settings.DataDirectory)
+	lanDevices := upnp.NewService(lifecycle, database, upnp.NewRegistry(), airplay.NewCredentialStore(database, instanceSecrets), settings.PTPAddress)
 	lanDevices.AttachOutput(zonesService, settings.LANURL, settings.Address, logger)
 	zonesService.SetManagedOutputs(lanDevices)
 	if database != nil && lifecycle != nil {
@@ -217,7 +219,6 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	assembly.music.DataDirectory, assembly.music.Logger = settings.DataDirectory, logger
 	assembly.covers.DataDirectory, assembly.covers.Logger = settings.DataDirectory, logger
 	assembly.lyrics.DataDirectory, assembly.lyrics.Logger = settings.DataDirectory, logger
-	instanceSecrets := newInstanceSecrets(settings.DataDirectory)
 	var sourceGate *curation.Sources
 	assembly.acoustid.DataDirectory, assembly.acoustid.Logger = settings.DataDirectory, logger
 	assembly.acoustid.Keys = func(ctx context.Context) (map[string]string, error) {
@@ -383,14 +384,16 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	listeningapi.New(guard, listeningService).Register(mux)
 	personalapi.New(guard, personalService).Register(mux)
 	coversStore := artwork.NewStore(settings.DataDirectory)
-	zonesapi.New(guard, zonesService).WithStreamArtwork(func(ctx context.Context, id string, head bool) (string, []byte, error) {
+	readArtwork := func(ctx context.Context, id string, head bool) (string, []byte, error) {
 		resource, err := coversStore.Lookup(ctx, database, id)
 		if err != nil || head {
 			return resource.MIMEType, nil, err
 		}
 		data, err := coversStore.Read(resource)
 		return resource.MIMEType, data, err
-	}).Register(mux)
+	}
+	lanDevices.WithAirPlayArtwork(readArtwork)
+	zonesapi.New(guard, zonesService).WithStreamArtwork(readArtwork).Register(mux)
 	upnpapi.New(guard, lanDevices).Register(mux)
 	dspsettingsapi.New(guard, dspSettingsService, dspsettingsapi.WithIRDeleter(zonesService)).Register(mux)
 	if assembly.backups != nil {

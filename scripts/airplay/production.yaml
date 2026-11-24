@@ -1,0 +1,25 @@
+services:
+  app:
+    image: ${AIRPLAY_PRODUCTION_IMAGE:?}
+    entrypoint: !reset null
+    user: "1000:1000"
+    volumes: !override
+      - ${AIRPLAY_WORK:?}/music:/music:ro
+    environment:
+      ROOMUSIC_ENV: production
+      ROOMUSIC_ALLOWED_ORIGINS: http://app:8080
+      ROOMUSIC_PUBLIC_URL: ""
+      ROOMUSIC_FFMPEG_PATH: /usr/local/bin/ffmpeg
+      ROOMUSIC_FPCALC_PATH: /usr/local/bin/fpcalc
+      ROOMUSIC_INSIGHTS_DISABLED: "true"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  ptp:
+    image: ${AIRPLAY_PRODUCTION_IMAGE:?}
+    entrypoint: ["/app/roomusic-ptp"]
+    volumes: !reset []
+    healthcheck:
+      disable: true

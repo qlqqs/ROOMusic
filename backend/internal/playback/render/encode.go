@@ -25,7 +25,7 @@ type encoder struct {
 
 func newEncoder(ctx context.Context, reservation processStarter, tool *ffmpeg.Tool, f zones.StreamFormat, pcm chain.Format, output *io.PipeWriter, hls *hlsMedia, fail func(error)) (*encoder, error) {
 	e := &encoder{format: f, output: output, done: make(chan struct{})}
-	if f.Codec == "wav" {
+	if f.Codec == "wav" || f.Delivery == "push" {
 		e.format.SampleRate, e.format.Channels, e.format.Layout = pcm.SampleRate, pcm.Channels, pcm.Layout
 		close(e.done)
 		return e, nil
@@ -112,7 +112,7 @@ func (e *encoder) write(data []byte) error {
 	if e.process != nil {
 		return writeAll(e.process, data)
 	}
-	if !e.header {
+	if e.format.Codec == "wav" && !e.header {
 		if err := writeAll(e, wavHeader(e.format)); err != nil {
 			return err
 		}

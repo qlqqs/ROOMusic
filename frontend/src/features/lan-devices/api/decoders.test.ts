@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sampleBody } from "../../../test/api-samples";
-import { decodeCastFormat, decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings } from "./decoders";
+import { decodeAirPlayFormat, decodeCastFormat, decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings } from "./decoders";
 
 const udn = "uuid:00000000-0000-4000-8000-000000000001";
 const device = {
@@ -19,16 +19,17 @@ const device = {
     format_declared: true,
     max_sample_rate: 48000,
     max_bit_depth: 24,
+    airplay: null,
   },
   format: null,
 };
 
 describe("局域网设备管理接口解码", () => {
   it("读取和更新两个开关", () => {
-    expect(decodeLanDeviceSettings(sampleBody("upnp/settings"))).toStrictEqual({ enabled: false, shared: true, upnp_enabled: true, cast_enabled: true });
-    expect(decodeLanDeviceSettings(sampleBody("upnp/settings-updated"))).toStrictEqual({ enabled: true, shared: false, upnp_enabled: true, cast_enabled: true });
+    expect(decodeLanDeviceSettings(sampleBody("upnp/settings"))).toStrictEqual({ enabled: false, shared: true, upnp_enabled: true, cast_enabled: true, airplay_enabled: true });
+    expect(decodeLanDeviceSettings(sampleBody("upnp/settings-updated"))).toStrictEqual({ enabled: true, shared: false, upnp_enabled: true, cast_enabled: true, airplay_enabled: true });
     expect(() => decodeLanDeviceSettings({ enabled: true })).toThrow("$.shared");
-    expect(() => decodeLanDeviceSettings({ enabled: "true", shared: false, upnp_enabled: true, cast_enabled: true })).toThrow("$.enabled");
+    expect(() => decodeLanDeviceSettings({ enabled: "true", shared: false, upnp_enabled: true, cast_enabled: true, airplay_enabled: true })).toThrow("$.enabled");
   });
 
   it("保留设备信息、能力和成员分配，也接受空列表", () => {
@@ -50,7 +51,16 @@ describe("局域网设备管理接口解码", () => {
     expect(cast.format).toStrictEqual({ codec: "mp3", max_sample_rate: 48000 });
     expect(decodeCastFormat(sampleBody("upnp/cast-format"))).toStrictEqual({ codec: "flac", max_sample_rate: 96000 });
     expect(() => decodeLanDevice({ ...cast, format: { codec: "wav", max_sample_rate: 48000 } })).toThrow("$.format.codec");
-    expect(() => decodeLanDevice({ ...device, kind: "airplay" })).toThrow("$.kind");
+    expect(() => decodeLanDevice({ ...device, kind: "bluetooth" })).toThrow("$.kind");
+  });
+
+  it("AirPlay 设备带公告信息与 ALAC 音质，按 codec 区分格式形状", () => {
+    const airplay = decodeLanDevice(sampleBody("upnp/airplay-manual-added"));
+    expect(airplay.kind).toBe("airplay");
+    expect(airplay.format).toStrictEqual({ codec: "alac", max_sample_rate: 44100, max_bit_depth: 16 });
+    expect(airplay.capabilities.airplay?.device_id).toBe("02:3F:BA:15:D9:79");
+    expect(decodeAirPlayFormat(sampleBody("upnp/airplay-high-resolution-format"))).toStrictEqual({ codec: "alac", max_sample_rate: 48000, max_bit_depth: 24 });
+    expect(() => decodeLanDevice({ ...airplay, format: { codec: "alac", max_sample_rate: 44100 } })).toThrow("$.format.max_bit_depth");
   });
 
   it("分配返回成员 ID，允许清空并拒绝无效的成员 ID", () => {

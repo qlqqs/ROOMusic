@@ -17,7 +17,7 @@ type StreamFormat struct {
 	Codec, MimeType, Quality       string
 	SampleRate, BitDepth, Channels int
 	Layout                         uint32 `json:"-"`
-	Delivery                       string `json:"-"` // stream（长流）或 hls。
+	Delivery                       string `json:"-"` // stream（长流）、hls 或 push（进程内 PCM）。
 	// 协商时携带的设备上限，不属于对外 Stream.format；0 表示未声明。
 	MaxSampleRate, MaxBitDepth, MaxChannels int `json:"-"`
 }

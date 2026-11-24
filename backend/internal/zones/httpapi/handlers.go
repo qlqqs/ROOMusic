@@ -200,6 +200,12 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusNotFound, "track_not_found", "曲目不存在"
 	case errors.Is(err, zones.ErrQueueFull):
 		status, code, message = http.StatusConflict, "queue_full", "队列已满"
+	case errors.Is(err, zones.ErrDevicePairingRequired):
+		status, code, message = http.StatusConflict, "airplay_pairing_required", "请先为 AirPlay 设备完成 PIN 配对"
+	case errors.Is(err, zones.ErrPrecisionUnavailable):
+		status, code, message = http.StatusConflict, "device_unsupported", zones.ErrPrecisionUnavailable.Error()
+	case errors.Is(err, zones.ErrDeviceUnsupported):
+		status, code, message = http.StatusConflict, "device_unsupported", "设备需要不支持的认证方式"
 	case errors.Is(err, zones.ErrZoneOffline):
 		status, code, message = http.StatusConflict, "zone_offline", "播放设备已离线"
 	case errors.Is(err, zones.ErrDeviceOnline):

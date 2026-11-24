@@ -39,7 +39,7 @@ func readObject(d *json.Decoder, v reflect.Value, version int) error {
 	fields := make(map[string]reflect.Value, v.NumField())
 	for i := 0; i < v.NumField(); i++ {
 		name, _, _ := strings.Cut(v.Type().Field(i).Tag.Get("json"), ",")
-		if version == 1 && name == "cast" && v.Type() == reflect.TypeFor[Devices]() {
+		if v.Type() == reflect.TypeFor[Devices]() && ((version < 2 && name == "cast") || (version < 3 && name == "airplay")) {
 			continue
 		}
 		fields[name] = v.Field(i)

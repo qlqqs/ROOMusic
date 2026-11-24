@@ -46,9 +46,10 @@ type userRuntime struct {
 	order      []*zoneRuntime
 }
 type zoneRuntime struct {
-	managedVisible bool
-	formatDeclared bool
-	occupiedBy     *DeviceOccupant
+	unavailableReason string
+	managedVisible    bool
+	formatDeclared    bool
+	occupiedBy        *DeviceOccupant
 	// dispatch 让解锁后的广播仍与同区命令顺序一致；双区始终按 ID 取锁。
 	dispatch                  sync.Mutex
 	mu                        sync.Mutex
@@ -326,6 +327,7 @@ func deviceOf(z *zoneRuntime) Device {
 	if managedKind(d.Kind) {
 		device.ExternalID, device.MaxSampleRate = d.ExternalID, d.MaxSampleRate
 		device.FormatDeclared, device.OccupiedBy = cloneValue(&z.formatDeclared), cloneValue(z.occupiedBy)
+		device.UnavailableReason = z.unavailableReason
 		device.Online, device.OutputSessionID = z.managedVisible, nil
 	}
 	return device

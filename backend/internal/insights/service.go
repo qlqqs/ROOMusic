@@ -39,7 +39,7 @@ type Inputs struct {
 		EnabledPluginCount(context.Context) (int, error)
 	}
 	Zones interface {
-		DeviceUsage(context.Context, time.Time) (browser, upnp, cast int, dsp bool, err error)
+		DeviceUsage(context.Context, time.Time) (browser, upnp, cast, airplay int, dsp bool, err error)
 	}
 	LANEnabled    func(context.Context) (bool, error)
 	ScheduledScan func(context.Context) (bool, error)
@@ -167,11 +167,11 @@ func (s *Service) payload(ctx context.Context, id string, members int) (json.Raw
 		return nil, err
 	}
 	p.Features.Plugins = schema.DeviceBucket(plugins)
-	browser, upnp, cast, dsp, err := s.inputs.Zones.DeviceUsage(ctx, time.Now().Add(-30*24*time.Hour))
+	browser, upnp, cast, airplay, dsp, err := s.inputs.Zones.DeviceUsage(ctx, time.Now().Add(-30*24*time.Hour))
 	if err != nil {
 		return nil, err
 	}
-	p.Devices30d = schema.Devices{Browser: schema.DeviceBucket(browser), UPnP: schema.DeviceBucket(upnp), Cast: schema.DeviceBucket(cast)}
+	p.Devices30d = schema.Devices{Browser: schema.DeviceBucket(browser), UPnP: schema.DeviceBucket(upnp), Cast: schema.DeviceBucket(cast), AirPlay: schema.DeviceBucket(airplay)}
 	p.Features.DSP = dsp
 	if p.Features.AutoCuration, p.Features.StewardModel, err = s.inputs.Curation.InsightSettings(ctx); err != nil {
 		return nil, err

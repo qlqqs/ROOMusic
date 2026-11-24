@@ -17,6 +17,17 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	77: `INSERT INTO playback_devices(id,user_id,kind,name,external_id,max_sample_rate)
+ VALUES ('f7700000-0000-4000-8000-000000000001','f6900000-0000-4000-8000-000000000001','airplay','合成接收端','airplay:02:00:00:00:00:01',48000);
+ INSERT INTO playback_zones(id,user_id,device_id,position_seconds)
+ VALUES ('f7700000-0000-4000-8000-000000000002','f6900000-0000-4000-8000-000000000001','f7700000-0000-4000-8000-000000000001',12);
+ INSERT INTO playback_queue_entries(zone_id,entry_id,position,track_id)
+ VALUES ('f7700000-0000-4000-8000-000000000002','f7700000-0000-4000-8000-000000000003',0,'f6900000-0000-4000-8000-000000000008');
+ INSERT INTO airplay_device_formats VALUES ('airplay:02:00:00:00:00:01',48000,24);`,
+	76: `INSERT INTO upnp_manual_devices(udn,address,name,model,capabilities,kind)
+ VALUES ('airplay:02:00:00:00:00:01','192.168.44.3:7000','合成接收端','Fake','{}','airplay');
+ INSERT INTO upnp_device_grants(udn,user_id) VALUES ('airplay:02:00:00:00:00:01','f6900000-0000-4000-8000-000000000001');
+ INSERT INTO airplay_pairings(udn,credentials_ciphertext) VALUES ('airplay:02:00:00:00:00:01','synthetic');`,
 	75: `INSERT INTO playback_devices(id,user_id,kind,name,external_id,max_sample_rate)
  VALUES ('f7400000-0000-4000-8000-000000000002','f6900000-0000-4000-8000-000000000001','cast','合成 Cast 设备','cast:migration',96000);
  INSERT INTO playback_zones(id,user_id,device_id,position_seconds)
@@ -477,16 +488,23 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if m.Version == 71 {
 				rollbackExec(t, db, beforeSourcePluginMigration)
 			}
-			if m.Version == 69 || m.Version == 70 || m.Version == 75 {
+			if m.Version == 69 || m.Version == 70 || m.Version == 75 || m.Version == 76 || m.Version == 77 {
 				rollbackExec(t, db, beforeUPnPMigration)
 			}
-			if m.Version == 75 {
+			if m.Version == 75 || m.Version == 76 || m.Version == 77 {
 				rollbackExec(t, db, upnpDiscoveryRollbackFixture)
 				rollbackExec(t, db, upnpPlaybackRollbackFixture)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
+			if m.Version == 76 {
+				var defaultEnabled bool
+				err := db.QueryRowContext(t.Context(), "SELECT airplay_enabled FROM upnp_settings WHERE id=1").Scan(&defaultEnabled)
+				if err != nil || !defaultEnabled {
+					t.Fatalf("0076 升级已有局域网设置后的 AirPlay 默认开关 = %t，错误 %v", defaultEnabled, err)
+				}
+			}
 			if m.Version == 75 {
 				var settingsPreserved bool
 				var legacyKind string

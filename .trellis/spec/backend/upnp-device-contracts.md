@@ -109,3 +109,16 @@ contentFeatures.dlna.org: DLNA.ORG_OP=00;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=0170000000
 - 取流：沿用托管输出的令牌拉流与封面路径；每首一个流（渲染 `SingleTrack`），收到 `IDLE/FINISHED` 且有接续流时 LOAD 下一首，曲间不保证无缝。
 - 格式：`PUT /api/v1/admin/upnp/devices/{udn}/format {codec, max_sample_rate}`，`codec` 为 `mp3`（默认，libmp3lame CBR 320 kb/s）、`aac`、`flac`；采样率上限 44100 或 48000（默认），FLAC 另可 96000；其他组合或非 Cast 设备 `400 invalid_input`。设置按物理设备保存，对所有可用成员生效，下一首起生效。
 - 开发与测试：`cmd/roomusic-fake-cast` 假接收端（自签 TLS、mDNS 公告、CASTV2 子集、拉流计字节、`/_fake/state`）。
+
+## AirPlay
+
+与 UPnP、Google Cast 共用设置、可见性、分配、占用与托管输出规则，以下只列不同之处。参考实现的许可边界与逐条来源见任务调研笔记（本机归档 `.trellis/tasks/archive/2026-11/11-24-airplay-output/research/airplay-notes.md`）。
+
+- 设置：`upnp_settings.airplay_enabled`（默认 true）。迁移 `0076_airplay_devices`（手动设备、配对凭据加密存库）、`0077_airplay_output`（音质设置、播放设备种类 `airplay`）。设备键 `airplay:<deviceid>`。
+- 发现：mDNS `_airplay._tcp` 与 `_raop._tcp`，按 deviceid 合并。设备行 `capabilities.airplay`（非 AirPlay 设备为 `null`）给出公告信息、`requires_pin`、`paired`、`fairplay`、`ptp_required`、`timing_protocol`（`PTP`/`NTP`/`null`）、`timing_reason`（`port_in_use`、`clock_unavailable`、`missing_airplay_service` 等原因码或 `null`）、`unsupported` 与 `unavailable_reason`（给人看的文字或 `null`）。
+- 配对：transient 配对；需要屏幕 PIN 的设备经 `POST …/devices/{udn}/pair/start`（204）与 `POST …/pair/finish {"pin"}`（204；过期 `409 pairing_expired`），长期凭据加密保存。
+- 协议：原生 AirPlay 2（加密 RTSP、二进制 plist、加密 RTP/ALAC），PTP 可用时用 PTP 并以 `SETRATEANCHORTIME` 定锚；不需要 PTP 的设备可用 NTP；接收端不接受原生会话时回退 AirPlay 1（RAOP）。`User-Agent` 使用兼容版本号。
+- 推流：应用从渲染会话进程内读取连续 PCM（跨曲无缝），ALAC 未压缩帧，支持重传；暂停时持续发静音，暂停超过 10 分钟断开会话，继续时重建。被其他发送端接管时暂停播放区并发出 `source:"device"` 的 pause 事件。
+- 音质：`PUT …/devices/{udn}/format {"codec":"alac","max_sample_rate","max_bit_depth"}`，44100/16（默认）或 48000/24（仅 AirPlay 2）；其他 `400 invalid_input`。
+- 对时：独立的 `ptp` 服务（`cmd/roomusic-ptp`，见部署合同）在 UDP 319/320 上运行 PTP，应用经 `ROOMUSIC_PTP_ADDR` 读取。必须 PTP 的型号（设备差异表，如 HomePod、Sonos Era）在时钟不可用时 `unsupported`，激活返回 `409 device_unsupported`；播放中失去时钟时自动重建为兼容会话。
+- 测试：`scripts/test-airplay.sh` 在独立 Docker 网络里用 shairport-sync（AirPlay 2 带 nqptp，与 classic）做真实接收端，覆盖原生 PTP、端口占用回退、播放中失去时钟与 AirPlay 1。

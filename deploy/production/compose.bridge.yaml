@@ -1,5 +1,7 @@
 # 与生产 Compose 一起使用。此覆盖文件的 !reset 需要 Docker Compose v2.24.4 或更新版本。
 services:
+  # bridge 部署无法提供 AirPlay 原生精确对时，兼容接收端使用 NTP。
+  ptp: !reset null
   app:
     network_mode: !reset null
     networks: [roomusic]

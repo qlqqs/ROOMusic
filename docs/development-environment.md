@@ -173,3 +173,12 @@ mise exec -- go run ./cmd/roomusic-fake-cast -name 客厅Cast -addr 0.0.0.0:0
 
 终端输出 CASTV2 端口与状态接口地址。在“局域网设备”里打开 Google Cast 即可发现；组播不回送时，按 `IP:端口` 手动添加并选择“Google Cast”。`-fixed-volume` 模拟音量只能在设备上调的接收端。
 播放时用 `curl --noproxy '*' "<状态接口地址>/_fake/state"` 查看加载的地址、播放状态、音量与拉取字节数。
+
+## AirPlay 测试接收端
+
+```bash
+sg docker -c scripts/test-airplay.sh              # AirPlay 2（含 nqptp）与 classic 两个 shairport-sync 接收端
+sg docker -c 'scripts/test-airplay.sh --ptp'      # 另加原生 PTP、端口占用回退与播放中失去时钟
+```
+
+接收端运行在独立的 Docker 网络里，PCM 写到临时目录后与合成信号比对；不在宿主机绑定 UDP 319/320。脚本结束时清理自己的容器、网络与目录。

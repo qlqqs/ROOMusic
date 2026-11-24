@@ -115,7 +115,7 @@ func (s *session) prepare() error {
 	if track.DSDLayout == nil {
 		count++
 	}
-	if s.format.Codec != "wav" {
+	if s.format.Codec != "wav" && s.format.Delivery != "push" {
 		count++
 	}
 	var starter processStarter
@@ -538,7 +538,7 @@ func (s *session) waitToRender(ticker Ticker) (int, error) {
 // needsStreamBytesLocked 统一长流的低字节例外，进料与事件背压使用同一阈值。
 // 直接取编码累计值，冲刷期间也能看到新增字节；已播放量仍沿用 PCM 检查点近似。
 func (s *session) needsStreamBytesLocked() bool {
-	return s.encoder != nil && s.format.Delivery != "hls" &&
+	return s.encoder != nil && s.format.Delivery == "stream" &&
 		s.encoder.encodedBytes.Load()-s.encodedPlayed < streamUnplayedBytes
 }
 
@@ -546,7 +546,7 @@ func (s *session) needsStreamBytesLocked() bool {
 // 检查点把此时已取出的编码字节近似归到最新提交块的末帧，不解析编码帧。
 // 异步滞后的输出归到后续采样块，因而可能较晚扣除；同帧的新输出合并累计。
 func (s *session) sampleEncodedLocked() {
-	if s.encoder == nil || s.format.Delivery == "hls" {
+	if s.encoder == nil || s.format.Delivery != "stream" {
 		return
 	}
 	total := s.encoder.encodedBytes.Load()

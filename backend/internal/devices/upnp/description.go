@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/qlqq/roomusic/backend/internal/devices/airplay"
 )
 
 const (
@@ -19,12 +21,13 @@ const (
 )
 
 type Capabilities struct {
-	Pause          bool     `json:"pause"`
-	Volume         string   `json:"volume"`
-	StreamFormats  []string `json:"stream_formats"`
-	FormatDeclared bool     `json:"format_declared"`
-	MaxSampleRate  int      `json:"max_sample_rate"`
-	MaxBitDepth    int      `json:"max_bit_depth"`
+	AirPlay        *airplay.Info `json:"airplay"`
+	Pause          bool          `json:"pause"`
+	Volume         string        `json:"volume"`
+	StreamFormats  []string      `json:"stream_formats"`
+	FormatDeclared bool          `json:"format_declared"`
+	MaxSampleRate  int           `json:"max_sample_rate"`
+	MaxBitDepth    int           `json:"max_bit_depth"`
 }
 
 type Device struct {
@@ -128,7 +131,7 @@ func describeDevice(ctx context.Context, u *url.URL, peerIP netip.Addr) (Device,
 		return Device{}, fmt.Errorf("解析设备描述: %w", err)
 	}
 	renderer := root.Device.renderer()
-	if renderer == nil || strings.TrimSpace(renderer.UDN) == "" || strings.HasPrefix(strings.TrimSpace(renderer.UDN), "cast:") {
+	if renderer == nil || strings.TrimSpace(renderer.UDN) == "" || deviceKind(strings.TrimSpace(renderer.UDN)) != "upnp" {
 		return Device{}, errors.New("设备描述缺少媒体渲染器或 UDN")
 	}
 	base := u

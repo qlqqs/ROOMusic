@@ -11,7 +11,7 @@ import (
 
 func (s *Service) Settings(ctx context.Context) (Settings, error) {
 	var v Settings
-	err := s.db.QueryRowContext(ctx, `SELECT enabled, shared,upnp_enabled,cast_enabled FROM upnp_settings WHERE id=1`).Scan(&v.Enabled, &v.Shared, &v.UPnPEnabled, &v.CastEnabled)
+	err := s.db.QueryRowContext(ctx, `SELECT enabled, shared,upnp_enabled,cast_enabled,airplay_enabled FROM upnp_settings WHERE id=1`).Scan(&v.Enabled, &v.Shared, &v.UPnPEnabled, &v.CastEnabled, &v.AirPlayEnabled)
 	return v, err
 }
 
@@ -63,6 +63,14 @@ func (s *Service) deleteManual(ctx context.Context, udn string) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM upnp_device_grants WHERE udn=$1`, udn); err != nil {
 		return err
+	}
+	if deviceKind(udn) == "airplay" {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM airplay_pairings WHERE udn=$1`, udn); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM airplay_device_formats WHERE udn=$1`, udn); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

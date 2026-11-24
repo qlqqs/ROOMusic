@@ -129,7 +129,12 @@ func sameSourceFormat(a, b Track) bool {
 func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, renderPlan, error) {
 	f := spec.Format
 	selected, ok := codecInfo(f.Codec, f.MimeType)
-	if !ok {
+	if f.Delivery == "push" {
+		if f.Codec != "alac" || f.MaxChannels != 2 || (f.MaxSampleRate != 44100 && f.MaxSampleRate != 48000) || (f.MaxBitDepth != 16 && f.MaxBitDepth != 24) {
+			return f, renderPlan{}, ErrNoStreamFormat
+		}
+		selected = deliveryFormat{codec: f.Codec, mime: f.MimeType, delivery: f.Delivery, lossless: true}
+	} else if !ok {
 		return f, renderPlan{}, ErrNoStreamFormat
 	}
 	f.Delivery = selected.delivery
@@ -162,6 +167,11 @@ func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, re
 	if err := plan.chooseChannels(spec.Settings.Downmix, maxChannels); err != nil {
 		return f, renderPlan{}, err
 	}
+	if f.Delivery == "push" && plan.outputPCM.Channels == 1 {
+		in := plan.outputPCM
+		plan.outputPCM.Channels, plan.outputPCM.Layout = 2, chain.DefaultLayout(2)
+		plan.tail = append(plan.tail, chain.Stage{In: in, Out: plan.outputPCM, Node: &monoStereo{}})
+	}
 	plan.peq, err = zones.DecodeSettingsDocument[zones.PEQSettings](spec.Settings.PEQ)
 	if err != nil {
 		return f, renderPlan{}, err
@@ -187,6 +197,9 @@ func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, re
 			return f, renderPlan{}, ErrNoStreamFormat
 		}
 	}
+	if f.Delivery == "push" {
+		f.BitDepth = f.MaxBitDepth
+	}
 	return f, plan, nil
 }
 
@@ -205,6 +218,11 @@ func chooseSampleRate(sourceRate int, document zones.SettingsDocument, f zones.S
 	}
 	if settings.CustomRate != nil {
 		request.CustomRate = *settings.CustomRate
+	}
+	if f.Delivery == "push" {
+		request.Strategy, request.CustomRate = "custom", f.MaxSampleRate
+		plan, err := src.Choose(request)
+		return plan, settings.Filter, err
 	}
 	var rates []int
 	switch f.Codec {

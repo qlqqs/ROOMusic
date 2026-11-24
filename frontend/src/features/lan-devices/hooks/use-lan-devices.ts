@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useViewerScope } from "../../auth";
-import type { CastFormatDTO, LanDeviceDTO, LanDeviceSettingsDTO } from "../api/decoders";
-import { addLanDevice, fetchLanDevices, fetchLanDeviceSettings, putCastFormat, putLanDeviceGrants, removeLanDevice, updateLanDeviceSettings } from "../api/endpoints";
+import type { AirPlayFormatDTO, CastFormatDTO, LanDeviceDTO, LanDeviceSettingsDTO } from "../api/decoders";
+import { addLanDevice, fetchLanDevices, fetchLanDeviceSettings, finishAirPlayPairing, putAirPlayFormat, putCastFormat, startAirPlayPairing, putLanDeviceGrants, removeLanDevice, updateLanDeviceSettings } from "../api/endpoints";
 import { lanDeviceKeys } from "../query-keys";
 
 /** 发现到的设备每 30 秒刷新一次（后端每 30 秒搜索一次）；开关关着时不轮询。 */
@@ -66,4 +66,19 @@ export function usePutLanDeviceGrants() {
 export function usePutCastFormat() {
   const refresh = useRefreshDevices();
   return useMutation({ mutationFn: ({ udn, format }: { udn: string; format: CastFormatDTO }) => putCastFormat(udn, format), onSuccess: refresh });
+}
+
+export function usePutAirPlayFormat() {
+  const refresh = useRefreshDevices();
+  return useMutation({ mutationFn: ({ udn, format }: { udn: string; format: AirPlayFormatDTO }) => putAirPlayFormat(udn, format), onSuccess: refresh });
+}
+
+export function useStartAirPlayPairing() {
+  return useMutation({ mutationFn: (udn: string) => startAirPlayPairing(udn) });
+}
+
+/** 配对成功后刷新设备列表（paired 变为 true）。 */
+export function useFinishAirPlayPairing() {
+  const refresh = useRefreshDevices();
+  return useMutation({ mutationFn: ({ udn, pin }: { udn: string; pin: string }) => finishAirPlayPairing(udn, pin), onSuccess: refresh });
 }

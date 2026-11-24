@@ -1,5 +1,6 @@
 {
   "body": {
+    "airplay_enabled": false,
     "cast_enabled": true,
     "enabled": true,
     "shared": true,

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	Version       = 2
+	Version       = 3
 	DevVersion    = "dev"
 	MaxBytes      = 4 << 10
 	Zero          = "0"
@@ -57,6 +57,7 @@ type Devices struct {
 	Browser string `json:"browser"`
 	UPnP    string `json:"upnp"`
 	Cast    string `json:"cast,omitempty"`
+	AirPlay string `json:"airplay,omitempty"`
 }
 
 func LibraryBucket(n int) string {
@@ -109,14 +110,21 @@ func (p Payload) Validate() error {
 	small := []string{Zero, One, TwoToFive, SixPlus}
 	switch p.Schema {
 	case 1:
-		if p.Devices30d.Cast != "" {
+		if p.Devices30d.Cast != "" || p.Devices30d.AirPlay != "" {
 			return ErrInvalid
 		}
 	case 2:
-		if !slices.Contains(small, p.Devices30d.Cast) {
+		if p.Devices30d.AirPlay != "" {
+			return ErrInvalid
+		}
+	case Version:
+		if !slices.Contains(small, p.Devices30d.AirPlay) {
 			return ErrInvalid
 		}
 	default:
+		return ErrInvalid
+	}
+	if p.Schema >= 2 && !slices.Contains(small, p.Devices30d.Cast) {
 		return ErrInvalid
 	}
 	if !uuid.Valid(p.InstanceID) ||

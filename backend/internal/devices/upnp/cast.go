@@ -7,7 +7,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/devices/cast"
 )
 
-// 两种协议共享手动登记、成员授权和物理占用，注册表各自管理网络发现。
+// 各协议共享手动登记、成员授权和物理占用，注册表各自管理网络发现。
 type deviceRegistry interface {
 	Start(context.Context, []ManualDevice) error
 	Stop()

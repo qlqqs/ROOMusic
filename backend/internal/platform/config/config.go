@@ -34,6 +34,7 @@ type Server struct {
 	SecureCookies       bool
 	DataDirectory       string
 	PublicURL           string
+	PTPAddress          string
 	LANURL              string
 	UpstreamMockURL     string
 	InsightsDisabled    bool
@@ -92,7 +93,7 @@ func Load() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
-	config := Server{LANURL: lanURL, UpstreamMockURL: mockURL, ScanWorkers: scanWorkers, AudioAnalysis: audioAnalysis, Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, FPCalcPath: fpcalcPath}
+	config := Server{PTPAddress: os.Getenv("ROOMUSIC_PTP_ADDR"), LANURL: lanURL, UpstreamMockURL: mockURL, ScanWorkers: scanWorkers, AudioAnalysis: audioAnalysis, Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, FPCalcPath: fpcalcPath}
 	if err := configureInsights(&config); err != nil {
 		return Server{}, err
 	}

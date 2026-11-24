@@ -2,6 +2,7 @@
   "body": {
     "address": "http://192.168.44.2:49152/description.xml",
     "capabilities": {
+      "airplay": null,
       "format_declared": true,
       "max_bit_depth": 24,
       "max_sample_rate": 48000,

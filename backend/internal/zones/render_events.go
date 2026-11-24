@@ -57,11 +57,26 @@ func (z *zoneRuntime) handleFor(seq *int64) *renderHandle {
 	return nil
 }
 func (z *zoneRuntime) hasRenderSeq(seq int64) bool { return z.handleFor(&seq) != nil }
+
+// 推送设备的网络编码在发送端完成，固定出口采样格式由管理员的物理设备设置决定。
+func (s *Service) negotiateRender(z *zoneRuntime) (StreamFormat, error) {
+	if z.device.Kind != "airplay" {
+		return s.options.Renderer.Negotiate(cloneCapabilities(z.device.Capabilities), z.persisted.Settings.Quality)
+	}
+	for _, f := range z.device.Capabilities.StreamFormats {
+		if f.Codec == "alac" && f.MaxBitDepth != nil && f.MaxSampleRate != nil {
+			return StreamFormat{Codec: "alac", MimeType: "audio/alac", Quality: "lossless", Delivery: "push",
+				MaxBitDepth: *f.MaxBitDepth, MaxSampleRate: *f.MaxSampleRate, MaxChannels: 2}, nil
+		}
+	}
+	return StreamFormat{}, ErrInvalidInput
+}
+
 func (s *Service) createRender(userID string, z *zoneRuntime, entryID string, seconds float64) (*renderHandle, string) {
 	if s.options.Renderer == nil {
 		return nil, "transient"
 	}
-	format, err := s.options.Renderer.Negotiate(cloneCapabilities(z.device.Capabilities), z.persisted.Settings.Quality)
+	format, err := s.negotiateRender(z)
 	if err != nil {
 		return nil, "no_stream_format"
 	}
@@ -92,7 +107,9 @@ func (s *Service) createRender(userID string, z *zoneRuntime, entryID string, se
 		mimeType = format.MimeType
 	}
 	url := fmt.Sprintf("/api/v1/me/playback/zones/%s/streams/%d", spec.ZoneID, spec.Seq)
-	if format.Delivery == "hls" {
+	if format.Delivery == "push" {
+		url = ""
+	} else if format.Delivery == "hls" {
 		url += "/index.m3u8"
 	}
 	stream := &Stream{Seq: spec.Seq, URL: url, MimeType: mimeType, Quality: quality, Format: projected, Segments: []StreamSegment{{EntryID: entryID, Track: z.cursorTracks[entry.TrackID], TrackStartSeconds: seconds}}}

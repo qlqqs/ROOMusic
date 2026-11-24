@@ -13,6 +13,7 @@
       "arch": "amd64",
       "container": false,
       "devices_30d": {
+        "airplay": "0",
         "browser": "0",
         "cast": "0",
         "upnp": "0"
@@ -33,7 +34,7 @@
       },
       "members": "1",
       "os": "linux",
-      "schema": 2,
+      "schema": 3,
       "version": "dev"
     },
     "public_page_url": "https://roomusic.org/stats"

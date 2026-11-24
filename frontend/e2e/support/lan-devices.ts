@@ -6,7 +6,7 @@ export const LAN_DEVICE_API = "/api/v1/admin/upnp";
 export const manualRenderer = decodeLanDevice(sampleBody("upnp/manual-added"));
 export const rendererIp = new URL(manualRenderer.address).hostname;
 
-const settingsPatch = d.defineDecoder(d.object({ enabled: d.optional(d.boolean()), shared: d.optional(d.boolean()), upnp_enabled: d.optional(d.boolean()), cast_enabled: d.optional(d.boolean()) }));
+const settingsPatch = d.defineDecoder(d.object({ enabled: d.optional(d.boolean()), shared: d.optional(d.boolean()), upnp_enabled: d.optional(d.boolean()), cast_enabled: d.optional(d.boolean()), airplay_enabled: d.optional(d.boolean()) }));
 const addressBody = d.defineDecoder(d.object({ address: d.string({ min: 1 }) }));
 const grantsBody = d.defineDecoder(d.object({ user_ids: d.array(d.uuid(), { max: 10_000 }) }));
 
