@@ -15,14 +15,14 @@ const added = decodeLanDevice(sampleBody("upnp/manual-added"));
 const devicePath = `${devicesPath}/${encodeURIComponent(added.udn)}`;
 const useLan = () => screen.findByRole<HTMLInputElement>("switch", { name: "使用局域网里的播放设备" });
 const shared = () => screen.getByRole<HTMLInputElement>("switch", { name: "所有成员共用" });
-const settingsPatch = d.defineDecoder(d.object({ enabled: d.optional(d.boolean()), shared: d.optional(d.boolean()) }));
+const settingsPatch = d.defineDecoder(d.object({ enabled: d.optional(d.boolean()), shared: d.optional(d.boolean()), upnp_enabled: d.optional(d.boolean()), cast_enabled: d.optional(d.boolean()) }));
 const addressBody = d.defineDecoder(d.object({ address: d.string() }));
 
 function setup({ enabled = false, items = [], current = "curator" }: { enabled?: boolean; items?: LanDeviceDTO[]; current?: string } = {}) {
   const api = installFakeApi();
   const session = installFakeSession(api, { current });
   installMembersApi(api, session);
-  let settings = { enabled, shared: true };
+  let settings = { enabled, shared: true, upnp_enabled: true, cast_enabled: true };
   const devices = [...items];
   api.on("GET", settingsPath, () => jsonResponse(200, settings));
   api.on("PUT", settingsPath, ({ body }) => {
@@ -172,5 +172,63 @@ describe("设置 › 局域网设备", () => {
     expect(within(screen.getByRole("navigation", { name: "设置" })).queryByRole("link", { name: "局域网设备" })).toBeNull();
     expect(api.requestsTo("GET", settingsPath)).toHaveLength(0);
     expect(api.requestsTo("GET", devicesPath)).toHaveLength(0);
+  });
+
+  it("总开关打开后分别开关两种协议", async () => {
+    const user = userEvent.setup();
+    const { api } = setup({ enabled: true });
+    renderSettings();
+    const cast = await screen.findByRole<HTMLInputElement>("switch", { name: "Google Cast" });
+    expect(cast.checked).toBe(true);
+    expect(screen.getByRole<HTMLInputElement>("switch", { name: "UPnP/DLNA" }).checked).toBe(true);
+    await user.click(cast);
+    await waitFor(() => expect(cast.checked).toBe(false));
+    expect(api.requestsTo("PUT", settingsPath).map(({ body }) => body)).toEqual([{ cast_enabled: false }]);
+  });
+
+  it("总开关关着时不显示协议开关", async () => {
+    setup();
+    renderSettings();
+    await useLan();
+    expect(screen.queryByRole("switch", { name: "Google Cast" })).toBeNull();
+  });
+
+  it("手动添加 Google Cast：选类型后提交 kind 与地址，行上标出类型与编码", async () => {
+    const user = userEvent.setup();
+    const { api, devices } = setup({ enabled: true });
+    const cast = decodeLanDevice(sampleBody("upnp/cast-manual-added"));
+    api.on("POST", devicesPath, () => {
+      devices.push(cast);
+      return sampleResponse("upnp/cast-manual-added");
+    });
+    renderSettings();
+    await user.click(await screen.findByRole("button", { name: "手动添加" }));
+    const dialog = within(screen.getByRole("dialog", { name: "手动添加设备" }));
+    await user.click(dialog.getByRole("radio", { name: "Google Cast" }));
+    await user.type(dialog.getByRole("textbox", { name: "设备地址" }), "192.168.44.2:8009");
+    await user.click(dialog.getByRole("button", { name: "添加" }));
+    expect(await screen.findByText(cast.name)).toBeTruthy();
+    expect(api.requestsTo("POST", devicesPath).map(({ body }) => body)).toEqual([{ kind: "cast", address: "192.168.44.2:8009" }]);
+    const region = within(screen.getByRole("region", { name: "设备" }));
+    expect(region.getByText("Google Cast")).toBeTruthy();
+    expect(region.getByText(/MP3，最高 48 kHz，曲目之间可能有短暂停顿/)).toBeTruthy();
+  });
+
+  it("Google Cast 编码格式：FLAC 才有 96 kHz，保存写入选中值", async () => {
+    const user = userEvent.setup();
+    const cast = decodeLanDevice(sampleBody("upnp/cast-manual-added"));
+    const { api } = setup({ enabled: true, items: [cast] });
+    const formatPath = `${devicesPath}/${encodeURIComponent(cast.udn)}/format`;
+    api.on("PUT", formatPath, ({ body }) => jsonResponse(200, body));
+    renderSettings();
+    await user.click(await screen.findByRole("button", { name: `${cast.name} 的更多操作` }));
+    await user.click(screen.getByRole("menuitem", { name: `${cast.name} 的编码格式…` }));
+    const dialog = within(screen.getByRole("dialog", { name: `“${cast.name}”的编码格式` }));
+    expect(dialog.queryByRole("radio", { name: "96 kHz" })).toBeNull();
+    await user.click(dialog.getByRole("radio", { name: "FLAC" }));
+    await user.click(dialog.getByRole("radio", { name: "96 kHz" }));
+    await user.click(dialog.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: `“${cast.name}”的编码格式` })).toBeNull());
+    expect(api.requestsTo("PUT", formatPath).map(({ body }) => body)).toEqual([{ codec: "flac", max_sample_rate: 96000 }]);
   });
 });

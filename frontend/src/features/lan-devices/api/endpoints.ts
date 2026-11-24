@@ -1,6 +1,6 @@
 import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
-import { decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings, type LanDeviceDTO, type LanDeviceSettingsDTO } from "./decoders";
+import { decodeCastFormat, decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings, type CastFormatDTO, type LanDeviceDTO, type LanDeviceSettingsDTO } from "./decoders";
 
 const BASE = "/api/v1/admin/upnp" as const;
 const udnPath = (udn: string) => `/api/v1/admin/upnp/devices/${encodeURIComponent(udn)}` as const;
@@ -18,9 +18,14 @@ export function fetchLanDevices(signal?: AbortSignal): Promise<ApiResponse<{ ite
   return apiRequest({ method: "GET", path: `${BASE}/devices`, signal }, decodeLanDevices);
 }
 
-/** 手动添加：设备的局域网 IP，或同主机的 HTTP 描述地址。地址不合格时 400 invalid_address。 */
-export function addLanDevice(address: string): Promise<ApiResponse<LanDeviceDTO>> {
-  return apiRequest({ method: "POST", path: `${BASE}/devices`, body: { address } }, decodeLanDevice);
+/** 手动添加：UPnP 填设备的局域网 IP 或同主机的 HTTP 描述地址；Google Cast 填局域网 IP（可带端口）。地址不合格时 400 invalid_address。 */
+export function addLanDevice(kind: LanDeviceDTO["kind"], address: string): Promise<ApiResponse<LanDeviceDTO>> {
+  return apiRequest({ method: "POST", path: `${BASE}/devices`, body: { kind, address } }, decodeLanDevice);
+}
+
+/** 设定一台 Google Cast 设备的编码与采样率上限；不合格时 400 invalid_input。 */
+export function putCastFormat(udn: string, format: CastFormatDTO): Promise<ApiResponse<CastFormatDTO>> {
+  return apiRequest({ method: "PUT", path: `${udnPath(udn)}/format`, body: format }, decodeCastFormat);
 }
 
 /** 移除手动添加的设备（同时清掉它的账号分配）。 */

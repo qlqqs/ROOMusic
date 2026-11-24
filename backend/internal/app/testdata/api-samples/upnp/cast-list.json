@@ -1,0 +1,31 @@
+{
+  "body": {
+    "items": [
+      {
+        "address": "192.168.44.2:8009",
+        "capabilities": {
+          "format_declared": true,
+          "max_bit_depth": 24,
+          "max_sample_rate": 96000,
+          "pause": true,
+          "stream_formats": [
+            "flac"
+          ],
+          "volume": "number"
+        },
+        "format": {
+          "codec": "flac",
+          "max_sample_rate": 96000
+        },
+        "kind": "cast",
+        "manual": true,
+        "model": "ROOMusic Fake Cast",
+        "name": "客厅 Cast",
+        "online": true,
+        "udn": "cast:00112233445566778899aabbccddeeff",
+        "user_ids": []
+      }
+    ]
+  },
+  "status": 200
+}

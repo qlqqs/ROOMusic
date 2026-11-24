@@ -11,6 +11,8 @@
       ],
       "volume": "number"
     },
+    "format": null,
+    "kind": "upnp",
     "manual": true,
     "model": "Fake Renderer",
     "name": "客厅音响",

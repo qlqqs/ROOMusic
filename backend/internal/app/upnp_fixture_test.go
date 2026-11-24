@@ -240,19 +240,24 @@ func (f *upnpFixture) activate(t *testing.T, user *integrationTestUser, device z
 
 func (f *upnpFixture) tracks(t *testing.T, seconds ...int) []string {
 	t.Helper()
+	return f.tracksAtRate(t, 44100, seconds...)
+}
+
+func (f *upnpFixture) tracksAtRate(t *testing.T, rate int, seconds ...int) []string {
+	t.Helper()
 	library := createPlaybackLibrary(t, f.integrationTestApplication)
 	var tracks []string
 	for i, duration := range seconds {
 		name := fmt.Sprintf("upnp-%d.flac", i)
 		generator := exec.CommandContext(t.Context(), requireTestFFmpeg(t), "-v", "error", "-f", "lavfi",
-			"-i", fmt.Sprintf("sine=frequency=%d:sample_rate=44100:duration=%d", 440+i*100, duration), "-ac", "2", "-c:a", "flac", "-f", "flac", "pipe:1")
+			"-i", fmt.Sprintf("sine=frequency=%d:sample_rate=%d:duration=%d", 440+i*100, rate, duration), "-ac", "2", "-c:a", "flac", "-f", "flac", "pipe:1")
 		var stderr bytes.Buffer
 		generator.Stderr = &stderr
 		audio, err := generator.Output()
 		if err != nil {
 			t.Fatalf("生成合成音频: %v %s", err, &stderr)
 		}
-		id := library.addTrack(t, f.integrationTestApplication, playbackTrackSpec{relative: name, content: audio, sampleRate: 44100, bitDepth: 16, channels: 2})
+		id := library.addTrack(t, f.integrationTestApplication, playbackTrackSpec{relative: name, content: audio, sampleRate: rate, bitDepth: 16, channels: 2})
 		mustExec(t, f.integrationTestApplication, "UPDATE tracks SET duration_seconds=$1 WHERE id=$2", duration, id)
 		if i == 0 {
 			mustExec(t, f.integrationTestApplication, "UPDATE tracks SET title='海 & 浪' WHERE id=$1", id)

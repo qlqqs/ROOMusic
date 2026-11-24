@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/devices/lan"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -55,7 +56,7 @@ func New(opts Options) (*Renderer, error) {
 		opts.Name = "ROOMusic 假渲染器"
 	}
 	return &Renderer{state: State{UDN: opts.UDN, Name: opts.Name, TransportState: "STOPPED", Volume: 50},
-		zeroTime: opts.RelTime == "zero", client: streamClient(), changed: make(chan struct{})}, nil
+		zeroTime: opts.RelTime == "zero", client: lan.NewStreamClient(), changed: make(chan struct{})}, nil
 }
 
 func (r *Renderer) Close() {
@@ -131,7 +132,7 @@ func (r *Renderer) act(action string, args map[string]string) (map[string]string
 	}
 	switch action {
 	case "SetAVTransportURI":
-		if !validStreamURI(args["CurrentURI"]) {
+		if !lan.ValidStreamURI(args["CurrentURI"]) {
 			return nil, &actionError{402, "Invalid Args"}
 		}
 		r.stopLocked()

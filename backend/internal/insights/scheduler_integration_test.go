@@ -24,8 +24,8 @@ func (insightsCounts) HasConfiguredModel(context.Context) (bool, error)    { ret
 func (insightsCounts) HasUnrevokedToken(context.Context) (bool, error)     { return true, nil }
 func (insightsCounts) InsightSettings(context.Context) (bool, bool, error) { return true, false, nil }
 func (insightsCounts) EnabledPluginCount(context.Context) (int, error)     { return 5, nil }
-func (insightsCounts) DeviceUsage(context.Context, time.Time) (int, int, bool, error) {
-	return 6, 1, true, nil
+func (insightsCounts) DeviceUsage(context.Context, time.Time) (int, int, int, bool, error) {
+	return 6, 1, 0, true, nil
 }
 
 type insightsAccountsFunc func(context.Context) (int, int, error)
@@ -284,7 +284,7 @@ func TestPostgreSQLInsightsClientPayloadDecodes(t *testing.T) {
 	}
 	if got.InstanceID != status.InstanceID || got.Version != "1.2.3" || got.Members != "1" ||
 		got.Library != (schema.Library{Tracks: "1k-10k", Releases: "1-999"}) ||
-		got.Devices30d != (schema.Devices{Browser: "6+", UPnP: "1"}) ||
+		got.Devices30d != (schema.Devices{Browser: "6+", UPnP: "1", Cast: "0"}) ||
 		got.Features != (schema.Features{AutoCuration: true, StewardModel: true, MCPToken: true, LANDevices: true, DSP: true, Plugins: "2-5"}) {
 		t.Errorf("客户端载荷未按预期聚合：%+v", got)
 	}

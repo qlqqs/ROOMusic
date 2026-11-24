@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/devices/lan"
 )
 
 const (
@@ -25,7 +27,7 @@ const (
 var ErrDeviceAddress = errors.New("设备地址必须是来源主机上的局域网 HTTP 地址")
 
 func IsLANAddress(ip netip.Addr) bool {
-	return ip.Is4() && (ip.IsPrivate() || ip.IsLinkLocalUnicast())
+	return lan.IsLANAddress(ip)
 }
 
 func parseDeviceURL(raw string, base *url.URL) (*url.URL, error) {

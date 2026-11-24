@@ -9,12 +9,14 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/qlqq/roomusic/backend/internal/devices/cast"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 var (
 	ErrDisabled      = errors.New("局域网设备开关已关闭")
+	ErrCastDisabled  = errors.New("Google Cast 发现已关闭")
 	ErrUnknownDevice = errors.New("找不到这个设备")
 	ErrManualDevice  = errors.New("找不到手动添加的设备")
 	ErrGrantUser     = errors.New("需要有效的账号列表")
@@ -23,28 +25,38 @@ var (
 )
 
 type Settings struct {
-	Enabled bool `json:"enabled"`
-	Shared  bool `json:"shared"`
+	UPnPEnabled bool `json:"upnp_enabled"`
+	CastEnabled bool `json:"cast_enabled"`
+	Enabled     bool `json:"enabled"`
+	Shared      bool `json:"shared"`
 }
 
 type AdminDevice struct {
 	Entry
-	UserIDs []string `json:"user_ids"`
+	Format  *CastFormat `json:"format"`
+	UserIDs []string    `json:"user_ids"`
 }
 
 // Service 将管理员写入、持久开关与本进程的发现周期串行化。
 type Service struct {
-	lifecycle  context.Context
-	db         *sql.DB
-	registry   *Registry
-	mu         sync.RWMutex
-	running    bool
-	generation uint64
-	output     *outputManager
+	lifecycle context.Context
+	db        *sql.DB
+	registry  *Registry
+	mu        sync.RWMutex
+	cast      *cast.Registry
+	protocols map[string]*protocol
+	output    *outputManager
 }
 
 func NewService(ctx context.Context, db *sql.DB, registry *Registry) *Service {
-	return &Service{lifecycle: ctx, db: db, registry: registry}
+	receivers := cast.NewRegistry()
+	return &Service{
+		lifecycle: ctx, db: db, registry: registry, cast: receivers,
+		protocols: map[string]*protocol{
+			"upnp": {registry: registry},
+			"cast": {registry: castRegistry{receivers}},
+		},
+	}
 }
 
 // Restore 在装配时读取设置。默认关闭的实例不会建立网络监听。
@@ -52,44 +64,86 @@ func (s *Service) Restore(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	settings, err := s.Settings(ctx)
-	if err != nil || !settings.Enabled || s.running {
-		return err
-	}
-	return s.start(ctx)
-}
-
-func (s *Service) start(ctx context.Context) error {
-	devices, err := s.manualDevices(ctx)
 	if err != nil {
 		return err
 	}
-	targets := make([]ManualDevice, 0, len(devices))
+	_, err = s.startProtocols(ctx, settings)
+	return err
+}
+
+func (v Settings) active(kind string) bool {
+	return v.Enabled && (kind == "upnp" && v.UPnPEnabled || kind == "cast" && v.CastEnabled)
+}
+func (s *Service) running() bool {
+	for _, p := range s.protocols {
+		if p.ctx != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// 恢复实例时保留成功启动的协议；管理员更新设置时可按列表撤回本次启动。
+func (s *Service) startProtocols(ctx context.Context, settings Settings) ([]string, error) {
+	var pending []string
+	for _, kind := range []string{"upnp", "cast"} {
+		if settings.active(kind) && s.protocols[kind].ctx == nil {
+			pending = append(pending, kind)
+		}
+	}
+	if len(pending) == 0 {
+		return nil, nil
+	}
+	devices, err := s.manualDevices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	targets := make(map[string][]ManualDevice)
 	for _, d := range devices {
-		targets = append(targets, ManualDevice{UDN: d.UDN, Address: d.Address})
+		targets[d.Kind] = append(targets[d.Kind], ManualDevice{UDN: d.UDN, Address: d.Address})
 	}
-	if err := s.registry.Start(s.lifecycle, targets); err != nil {
-		return fmt.Errorf("%w: %w", ErrDiscovery, err)
+	var started []string
+	var discoveryErr error
+	for _, kind := range pending {
+		p := s.protocols[kind]
+		run, cancel := context.WithCancel(s.lifecycle)
+		if err := p.registry.Start(run, targets[kind]); err != nil {
+			cancel()
+			discoveryErr = errors.Join(discoveryErr, fmt.Errorf("%w (%s): %w", ErrDiscovery, kind, err))
+			continue
+		}
+		p.ctx, p.cancel = run, cancel
+		started = append(started, kind)
 	}
-	s.generation++
-	s.running = true
-	return nil
+	return started, discoveryErr
 }
-
-func (s *Service) stopLocked() {
-	if s.running {
-		s.stopOutputs(func(*deviceOutput) bool { return true })
-		s.registry.Stop()
-		s.running = false
+func (s *Service) stopProtocol(kind string) {
+	p := s.protocols[kind]
+	if p.ctx == nil {
+		return
 	}
+	s.stopOutputs(func(o *deviceOutput) bool { return deviceKind(o.udn) == kind })
+	p.cancel()
+	p.registry.Stop()
+	p.probes.Wait()
+	p.ctx, p.cancel = nil, nil
 }
-
 func (s *Service) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.stopLocked()
+	for kind := range s.protocols {
+		s.stopProtocol(kind)
+	}
 }
 
-func (s *Service) UpdateSettings(ctx context.Context, enabled, shared *bool) (Settings, error) {
+type SettingsUpdate struct {
+	Enabled     *bool `json:"enabled"`
+	Shared      *bool `json:"shared"`
+	UPnPEnabled *bool `json:"upnp_enabled"`
+	CastEnabled *bool `json:"cast_enabled"`
+}
+
+func (s *Service) UpdateSettings(ctx context.Context, changes SettingsUpdate) (Settings, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	before, err := s.Settings(ctx)
@@ -97,37 +151,54 @@ func (s *Service) UpdateSettings(ctx context.Context, enabled, shared *bool) (Se
 		return Settings{}, err
 	}
 	after := before
-	if enabled != nil {
-		after.Enabled = *enabled
+	if changes.Enabled != nil {
+		after.Enabled = *changes.Enabled
 	}
-	if shared != nil {
-		after.Shared = *shared
+	if changes.Shared != nil {
+		after.Shared = *changes.Shared
 	}
-	starting := after.Enabled && !s.running
-	if starting {
-		if err := s.start(ctx); err != nil {
-			return Settings{}, err
+	if changes.UPnPEnabled != nil {
+		after.UPnPEnabled = *changes.UPnPEnabled
+	}
+	if changes.CastEnabled != nil {
+		after.CastEnabled = *changes.CastEnabled
+	}
+	started, err := s.startProtocols(ctx, after)
+	if err == nil && after != before {
+		_, err = s.db.ExecContext(ctx, `UPDATE upnp_settings SET enabled=$1, shared=$2, upnp_enabled=$3, cast_enabled=$4 WHERE id=1`, after.Enabled, after.Shared, after.UPnPEnabled, after.CastEnabled)
+	}
+	if err != nil {
+		for _, kind := range started {
+			s.stopProtocol(kind)
+		}
+		return Settings{}, err
+	}
+	for kind := range s.protocols {
+		if !after.active(kind) {
+			s.stopProtocol(kind)
 		}
 	}
-	if after != before {
-		_, err = s.db.ExecContext(ctx, `UPDATE upnp_settings SET enabled=$1,shared=$2 WHERE id=1`, after.Enabled, after.Shared)
-		if err != nil {
-			if starting {
-				s.stopLocked()
-			}
-			return Settings{}, err
-		}
+	if before.Shared && !after.Shared {
+		err = s.enforceGrants(ctx)
 	}
-	if !after.Enabled {
-		s.stopLocked()
-	} else if before.Shared && !after.Shared {
-		if err := s.enforceGrants(ctx); err != nil {
-			return after, err
-		}
-	}
-	return after, nil
+	return after, err
 }
 
+func deviceKind(udn string) string {
+	if strings.HasPrefix(udn, "cast:") {
+		return "cast"
+	}
+	return "upnp"
+}
+func (s *Service) entries() []Entry {
+	var items []Entry
+	for _, p := range s.protocols {
+		if p.ctx != nil {
+			items = append(items, p.registry.List()...)
+		}
+	}
+	return items
+}
 func (s *Service) Devices(ctx context.Context) ([]AdminDevice, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -140,7 +211,7 @@ func (s *Service) Devices(ctx context.Context) ([]AdminDevice, error) {
 		return nil, err
 	}
 	entries := make(map[string]Entry, len(manual))
-	for _, e := range s.registry.List() {
+	for _, e := range s.entries() {
 		entries[e.UDN] = e
 	}
 	for _, d := range manual {
@@ -151,30 +222,54 @@ func (s *Service) Devices(ctx context.Context) ([]AdminDevice, error) {
 		e.Manual = true
 		entries[d.UDN] = e
 	}
+	formats, err := s.formats(ctx)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]AdminDevice, 0, len(entries))
 	for udn, e := range entries {
-		items = append(items, AdminDevice{Entry: e, UserIDs: append([]string{}, grants[udn]...)})
+		format := applyFormat(&e, formats)
+		items = append(items, AdminDevice{Entry: e, Format: format, UserIDs: append([]string{}, grants[udn]...)})
 	}
 	slices.SortFunc(items, func(a, b AdminDevice) int { return strings.Compare(a.UDN, b.UDN) })
 	return items, nil
 }
 
-func (s *Service) Add(ctx context.Context, address string) (AdminDevice, error) {
-	s.mu.RLock()
-	generation, running := s.generation, s.running
-	s.mu.RUnlock()
-	if !running {
-		return AdminDevice{}, ErrDisabled
+func disabledProtocol(kind string) error {
+	if kind == "cast" {
+		return ErrCastDisabled
 	}
-	d, err := s.registry.Probe(ctx, strings.TrimSpace(address))
+	return ErrDisabled
+}
+
+func (s *Service) Add(ctx context.Context, kind, address string) (AdminDevice, error) {
+	s.mu.RLock()
+	p := s.protocols[kind]
+	if p == nil {
+		s.mu.RUnlock()
+		return AdminDevice{}, ErrKind
+	}
+	run := p.ctx
+	if run == nil {
+		s.mu.RUnlock()
+		return AdminDevice{}, disabledProtocol(kind)
+	}
+	p.probes.Add(1)
+	s.mu.RUnlock()
+	probe, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stop := context.AfterFunc(run, cancel)
+	defer stop()
+	d, err := p.registry.Probe(probe, strings.TrimSpace(address))
+	p.probes.Done()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// 关闭会取消正在进行的探测。即使又开启，也不能提交上一轮的结果。
-	if !s.running || s.generation != generation {
-		return AdminDevice{}, ErrDisabled
+	if p.ctx != run || run.Err() != nil {
+		return AdminDevice{}, disabledProtocol(kind)
 	}
 	if err != nil {
-		if errors.Is(err, ErrDeviceAddress) {
+		if errors.Is(err, ErrDeviceAddress) || errors.Is(err, cast.ErrAddress) {
 			return AdminDevice{}, err
 		}
 		return AdminDevice{}, fmt.Errorf("%w: %w", ErrProbe, err)
@@ -183,11 +278,17 @@ func (s *Service) Add(ctx context.Context, address string) (AdminDevice, error) 
 	if err != nil {
 		return AdminDevice{}, err
 	}
+	formats, err := s.formats(ctx)
+	if err != nil {
+		return AdminDevice{}, err
+	}
 	if err := s.saveManual(ctx, d); err != nil {
 		return AdminDevice{}, err
 	}
-	s.registry.Remember(d)
-	return AdminDevice{Entry: Entry{Device: d, Online: true, Manual: true}, UserIDs: append([]string{}, grants[d.UDN]...)}, nil
+	p.registry.Remember(d)
+	entry := Entry{Device: d, Online: true, Manual: true}
+	format := applyFormat(&entry, formats)
+	return AdminDevice{Entry: entry, Format: format, UserIDs: append([]string{}, grants[d.UDN]...)}, nil
 }
 
 func (s *Service) Remove(ctx context.Context, udn string) error {
@@ -196,21 +297,15 @@ func (s *Service) Remove(ctx context.Context, udn string) error {
 	if err := s.deleteManual(ctx, udn); err != nil {
 		return err
 	}
-	s.registry.Forget(udn)
+	s.protocols[deviceKind(udn)].registry.Forget(udn)
 	return s.enforceGrants(ctx)
 }
 
 func (s *Service) SetGrants(ctx context.Context, udn string, ids []string) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.registry.Lookup(udn); !ok {
-		var exists bool
-		if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM upnp_manual_devices WHERE udn=$1)`, udn).Scan(&exists); err != nil {
-			return nil, err
-		}
-		if !exists {
-			return nil, ErrUnknownDevice
-		}
+	if err := s.requireDevice(ctx, udn); err != nil {
+		return nil, err
 	}
 	normalized := make([]string, 0, len(ids))
 	for _, id := range ids {
@@ -236,7 +331,7 @@ func (s *Service) Visible(ctx context.Context, actor identity.User) ([]Entry, er
 
 func (s *Service) visibleLocked(ctx context.Context, actor identity.User) ([]Entry, error) {
 	items := []Entry{}
-	if !s.running {
+	if !s.running() {
 		return items, nil
 	}
 	settings, err := s.Settings(ctx)
@@ -253,7 +348,12 @@ func (s *Service) visibleLocked(ctx context.Context, actor identity.User) ([]Ent
 			return nil, err
 		}
 	}
-	for _, e := range s.registry.List() {
+	formats, err := s.formats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range s.entries() {
+		applyFormat(&e, formats)
 		if e.Online && (grants == nil || len(grants[e.UDN]) > 0) {
 			items = append(items, e)
 		}

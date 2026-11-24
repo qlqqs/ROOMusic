@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_input",
+      "message": "需要有效的 Cast 编码格式与采样率上限"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

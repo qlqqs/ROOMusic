@@ -28,6 +28,7 @@ type Capabilities struct {
 }
 
 type Device struct {
+	Kind         string       `json:"kind"`
 	UDN          string       `json:"udn"`
 	Name         string       `json:"name"`
 	Model        string       `json:"model"`
@@ -127,7 +128,7 @@ func describeDevice(ctx context.Context, u *url.URL, peerIP netip.Addr) (Device,
 		return Device{}, fmt.Errorf("解析设备描述: %w", err)
 	}
 	renderer := root.Device.renderer()
-	if renderer == nil || strings.TrimSpace(renderer.UDN) == "" {
+	if renderer == nil || strings.TrimSpace(renderer.UDN) == "" || strings.HasPrefix(strings.TrimSpace(renderer.UDN), "cast:") {
 		return Device{}, errors.New("设备描述缺少媒体渲染器或 UDN")
 	}
 	base := u
@@ -138,7 +139,7 @@ func describeDevice(ctx context.Context, u *url.URL, peerIP netip.Addr) (Device,
 		}
 	}
 	d := Device{
-		UDN: strings.TrimSpace(renderer.UDN), Name: strings.TrimSpace(renderer.Name), Model: strings.TrimSpace(renderer.Model),
+		Kind: "upnp", UDN: strings.TrimSpace(renderer.UDN), Name: strings.TrimSpace(renderer.Name), Model: strings.TrimSpace(renderer.Model),
 		Address: u.String(), LocalAddress: local, peerIP: peerIP, services: make(map[string]serviceEndpoint),
 		Capabilities: Capabilities{Volume: "fixed", StreamFormats: []string{"flac"}, MaxSampleRate: 48000, MaxBitDepth: 24},
 		volumeRange:  volumeRange{Min: 0, Max: 100, Step: 1},

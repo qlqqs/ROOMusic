@@ -7,7 +7,7 @@ const smallBucket = d.oneOf(["0", "1", "2-5", "6+"] as const);
 
 /** 将要发送的心跳：字段与后端载荷一一对应，数字都是分档。 */
 const payloadDecoder = d.object({
-  schema: d.literal(1),
+  schema: d.literal(2),
   instance_id: d.uuid(),
   version: d.string({ min: 1, max: 64 }),
   os: d.string({ min: 1, max: 32 }),
@@ -24,7 +24,7 @@ const payloadDecoder = d.object({
     scheduled_scan: d.boolean(),
     plugins: smallBucket,
   }),
-  devices_30d: d.object({ browser: smallBucket, upnp: smallBucket }),
+  devices_30d: d.object({ browser: smallBucket, upnp: smallBucket, cast: smallBucket }),
 });
 export type InsightsPayloadDTO = d.Infer<typeof payloadDecoder>;
 

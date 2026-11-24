@@ -31,7 +31,7 @@ func (s *Store) Summary(now time.Time) Summary {
 	defer s.mu.RUnlock()
 	result := Summary{GeneratedAt: now.UTC(), Versions: distribution{}, Arch: distribution{}, Container: distribution{"true": 0, "false": 0},
 		Library: map[string]distribution{"tracks": {}, "releases": {}}, Members: distribution{}, Features: FeatureSummary{Plugins: distribution{}},
-		Devices30d: map[string]distribution{"browser": {}, "upnp": {}}}
+		Devices30d: map[string]distribution{"browser": {}, "upnp": {}, "cast": {}}}
 	week, month := now.Add(-7*24*time.Hour), now.Add(-30*24*time.Hour)
 	for _, entry := range s.instances {
 		if entry.LastSeen.Before(month) {
@@ -73,6 +73,9 @@ func (s *Store) Summary(now time.Time) Summary {
 		result.Features.Plugins[p.Features.Plugins]++
 		result.Devices30d["browser"][p.Devices30d.Browser]++
 		result.Devices30d["upnp"][p.Devices30d.UPnP]++
+		if p.Schema == 2 {
+			result.Devices30d["cast"][p.Devices30d.Cast]++
+		}
 	}
 	return result
 }

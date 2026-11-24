@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useViewerScope } from "../../auth";
-import type { LanDeviceSettingsDTO } from "../api/decoders";
-import { addLanDevice, fetchLanDevices, fetchLanDeviceSettings, putLanDeviceGrants, removeLanDevice, updateLanDeviceSettings } from "../api/endpoints";
+import type { CastFormatDTO, LanDeviceDTO, LanDeviceSettingsDTO } from "../api/decoders";
+import { addLanDevice, fetchLanDevices, fetchLanDeviceSettings, putCastFormat, putLanDeviceGrants, removeLanDevice, updateLanDeviceSettings } from "../api/endpoints";
 import { lanDeviceKeys } from "../query-keys";
 
 /** 发现到的设备每 30 秒刷新一次（后端每 30 秒搜索一次）；开关关着时不轮询。 */
@@ -49,7 +49,7 @@ function useRefreshDevices() {
 
 export function useAddLanDevice() {
   const refresh = useRefreshDevices();
-  return useMutation({ mutationFn: (address: string) => addLanDevice(address), onSuccess: refresh });
+  return useMutation({ mutationFn: ({ kind, address }: { kind: LanDeviceDTO["kind"]; address: string }) => addLanDevice(kind, address), onSuccess: refresh });
 }
 
 export function useRemoveLanDevice() {
@@ -60,4 +60,10 @@ export function useRemoveLanDevice() {
 export function usePutLanDeviceGrants() {
   const refresh = useRefreshDevices();
   return useMutation({ mutationFn: ({ udn, userIds }: { udn: string; userIds: readonly string[] }) => putLanDeviceGrants(udn, userIds), onSuccess: refresh });
+}
+
+/** 改一台 Google Cast 设备的编码设置；成功后刷新设备列表（下一首起生效）。 */
+export function usePutCastFormat() {
+  const refresh = useRefreshDevices();
+  return useMutation({ mutationFn: ({ udn, format }: { udn: string; format: CastFormatDTO }) => putCastFormat(udn, format), onSuccess: refresh });
 }

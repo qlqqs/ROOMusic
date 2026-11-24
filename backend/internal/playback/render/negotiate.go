@@ -2,6 +2,7 @@ package render
 
 import (
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/dsp/chain"
@@ -25,6 +26,7 @@ var deliveryFormats = [...]deliveryFormat{
 	{"flac", "audio/flac", "stream", "flac", true},
 	{"wav", "audio/wav", "stream", "", true},
 	{"opus", `audio/ogg; codecs="opus"`, "stream", "libopus", false},
+	{"mp3", "audio/mpeg", "stream", "libmp3lame", false},
 	{"aac", "audio/aac", "stream", "aac", false},
 	{"alac", "application/vnd.apple.mpegurl", "hls", "alac", true},
 	{"aac", "application/vnd.apple.mpegurl", "hls", "aac", false},
@@ -67,6 +69,9 @@ func (r *Renderer) Negotiate(caps zones.Capabilities, quality string) (zones.Str
 			continue
 		}
 		if capability.Codec == "opus" && format.MaxSampleRate > 0 && format.MaxSampleRate < 48000 {
+			continue
+		}
+		if capability.Codec == "mp3" && format.MaxSampleRate > 0 && format.MaxSampleRate < 32000 {
 			continue
 		}
 		if capability.Codec == "aac" && format.MaxSampleRate > 0 && format.MaxSampleRate < 44100 {
@@ -138,7 +143,9 @@ func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, re
 		return f, renderPlan{}, ErrNoStreamFormat
 	}
 	// 压缩编码最多交付八声道；WAV 保留设备声明的上限。
-	if f.Codec != "wav" {
+	if f.Codec == "mp3" {
+		maxChannels = min(maxChannels, 2)
+	} else if f.Codec != "wav" {
 		maxChannels = min(maxChannels, 8)
 	}
 	pcm := effectiveSource(source).pcm
@@ -199,19 +206,32 @@ func chooseSampleRate(sourceRate int, document zones.SettingsDocument, f zones.S
 	if settings.CustomRate != nil {
 		request.CustomRate = *settings.CustomRate
 	}
-	constrained := f.Codec == "opus" || f.Codec == "aac"
-	if constrained {
-		// Choose 的标准集合与实际编码合法率取交集，不先按用户设置升频再让编码器降频。
+	var rates []int
+	switch f.Codec {
+	case "opus":
+		rates = []int{48000}
+	case "aac":
+		rates = []int{48000, 44100}
+	case "mp3":
+		// 320 kb/s 使用 MPEG-1 的三个采样率，32 kHz 也是可明确协商的编码目标。
+		rates = []int{48000, 44100, 32000}
+		request.CompatibilityRates = rates
+	}
+	if len(rates) > 0 {
 		request.Strategy = "none"
-		request.MaxRate = min(maximum, 48000)
-		request.Supported = func(rate int) bool {
-			return rate == 48000 || f.Codec == "aac" && rate == 44100
-		}
+		request.MaxRate = min(maximum, rates[0])
+		request.Supported = func(rate int) bool { return slices.Contains(rates, rate) }
 	}
 	plan, err := src.Choose(request)
 	if errors.Is(err, src.ErrStrategyUnavailable) {
 		request.Strategy = "none"
 		plan, err = src.Choose(request)
+	}
+	if errors.Is(err, src.ErrNoSupportedRate) && f.MaxSampleRate > 0 && sourceRate > request.MaxRate {
+		// 高于设备上限的音源可能需要同时降频和换族，例如 96 → 44.1 kHz。
+		request.Strategy = "max_sample_rate"
+		plan, err = src.Choose(request)
+		plan.Compatibility = true
 	}
 	if err != nil {
 		return src.Plan{}, "", errors.Join(ErrNoStreamFormat, err)

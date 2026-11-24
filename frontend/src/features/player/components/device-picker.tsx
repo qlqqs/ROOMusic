@@ -87,7 +87,7 @@ function DeviceList({ titleId, onClose }: { titleId: string; onClose: () => void
     }).finally(() => setTakeoverPending(false));
   }
   function select(row: PlaybackDeviceRow) {
-    if (row.device.upnp !== null) {
+    if (row.device.lan !== null) {
       activate(row, async () => {});
       return;
     }
@@ -95,7 +95,7 @@ function DeviceList({ titleId, onClose }: { titleId: string; onClose: () => void
     onClose();
   }
   function transferTo(row: PlaybackDeviceRow, sourceZoneId: string) {
-    if (row.device.upnp !== null) {
+    if (row.device.lan !== null) {
       activate(row, () => engine.transfer(sourceZoneId, row.device.zoneId));
       return;
     }
@@ -125,7 +125,7 @@ function DeviceList({ titleId, onClose }: { titleId: string; onClose: () => void
     <ul role="list" className={styles.list}>
       {snapshot.devices.map((row) => {
         const { device, zone } = row;
-        const text = <><span className={styles.name}>{device.upnp === null ? null : <Speaker size={14} aria-hidden="true" className={styles.kindIcon} />}<span className={styles.nameText}>{device.name}</span>{row.isLocal ? <StatusTag>本机</StatusTag> : null}{device.upnp === null ? null : <StatusTag>局域网</StatusTag>}</span><span className={styles.state}>{stateText(row)}</span></>;
+        const text = <><span className={styles.name}>{device.lan === null ? null : <Speaker size={14} aria-hidden="true" className={styles.kindIcon} />}<span className={styles.nameText}>{device.name}</span>{row.isLocal ? <StatusTag>本机</StatusTag> : null}{device.lan === null ? null : <StatusTag>{device.kind === "cast" ? "Google Cast" : "局域网"}</StatusTag>}</span><span className={styles.state}>{stateText(row)}</span></>;
         // 转到这台设备：把正在控制的播放区转过来；离线的设备可以转到本机接着放。
         const transferHere = device.online && !row.isTarget && source !== null && source.current !== null ? source.zoneId : null;
         const transferToLocal = !device.online && zone !== null && zone.current !== null && localZoneId !== undefined ? zone.zoneId : null;
@@ -136,7 +136,8 @@ function DeviceList({ titleId, onClose }: { titleId: string; onClose: () => void
           <div className={styles.actions} role="group" aria-label={`${device.name}的操作`}>
             {transferHere === null ? null : <Button variant="icon" icon={<ArrowRightLeft size={16} />} label="转到这台设备" onClick={() => transferTo(row, transferHere)} />}
             {transferToLocal === null || localZoneId === undefined ? null : <Button variant="icon" icon={<ArrowRightLeft size={16} />} label="转到本机" onClick={() => transfer(transferToLocal, localZoneId)} />}
-            {device.upnp === null ? null : <Button variant="icon" icon={<AudioWaveform size={16} />} label="采样率上限" onClick={() => setRateRow(row)} />}
+            {/* Google Cast 的格式与采样率由管理员在“局域网设备”里按设备设置。 */}
+            {device.lan === null || device.kind === "cast" ? null : <Button variant="icon" icon={<AudioWaveform size={16} />} label="采样率上限" onClick={() => setRateRow(row)} />}
             <Button variant="icon" icon={<Pencil size={16} />} label="改名" onClick={() => setRenaming(row)} />
             {device.online ? null : <Button variant="icon" icon={<Trash2 size={16} />} label="删除" onClick={() => { setDeleteError(null); setDeleting(row); }} />}
           </div>
@@ -206,7 +207,7 @@ function RenameForm({ row, titleId, onClose }: { row: PlaybackDeviceRow; titleId
 /** 局域网设备的采样率上限：设备声明不了自己支持多高的采样率，默认 48 kHz，设备支持更高时可以调高。 */
 function SampleRateDialog({ row, onClose }: { row: PlaybackDeviceRow; onClose: () => void }) {
   const { engine } = usePlayer();
-  const current = row.device.upnp?.maxSampleRate ?? 48000;
+  const current = row.device.lan?.maxSampleRate ?? 48000;
   const [rate, setRate] = useState<number>(current);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -224,7 +225,7 @@ function SampleRateDialog({ row, onClose }: { row: PlaybackDeviceRow; onClose: (
     });
   }
   return <ConfirmDialog open title={`“${row.device.name}”的采样率上限`} confirmLabel="保存" pending={pending} error={error === null ? undefined : <FailureNotice error={error} />} onCancel={onClose} onConfirm={save}>
-    <p id={`${name}-note`} className={styles.ratesNote}>高于上限的音乐会转换到上限再送给设备；下一首起生效。{row.device.upnp?.formatDeclared === false ? "这台设备没有说明它支持的格式。" : ""}</p>
+    <p id={`${name}-note`} className={styles.ratesNote}>高于上限的音乐会转换到上限再送给设备；下一首起生效。{row.device.lan?.formatDeclared === false ? "这台设备没有说明它支持的格式。" : ""}</p>
     <fieldset className={styles.rates} aria-describedby={`${name}-note`}>
       <legend className={styles.visuallyHidden}>采样率上限</legend>
       {UPNP_SAMPLE_RATES.map((value) => <label key={value} className={styles.rate}>

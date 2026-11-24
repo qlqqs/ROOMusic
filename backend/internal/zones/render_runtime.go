@@ -115,7 +115,7 @@ func (s *Service) renderFault(z *zoneRuntime, kind string) {
 }
 func (s *Service) schedulePause(userID string, z *zoneRuntime) {
 	// 设备上的继续按钮会重用原 URI，暂停期间保留有效的托管输出流。
-	if z.device.Kind == "upnp" && z.output != nil && z.stream != nil && z.fault == nil {
+	if managedKind(z.device.Kind) && z.output != nil && z.stream != nil && z.fault == nil {
 		s.cancelPause(z)
 		return
 	}

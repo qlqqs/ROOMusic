@@ -95,3 +95,17 @@ contentFeatures.dlna.org: DLNA.ORG_OP=00;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=0170000000
 - 播放中每秒读取 TransportInfo 与 PositionInfo，其余状态每五秒读取 TransportInfo。RelTime 可用时采用设备位置，停滞或回跳后，从既有播放头改按墙钟累计，暂停时冻结。通过 `ReportOutput` 回报状态与流内位置。连续三次控制或轮询失败导致设备下线、释放输出并暂停播放区。
 - 设备端暂停、继续、提前停止分别产生播放区 pause、play、pause 命令，事件带 `source:"device"`。缺少 Pause 动作时用 Stop，继续时从暂停位置重新推送。正常暂停保留托管流，设备端长时间暂停后仍可通过原 URI 恢复。设备端跳转与上下首未映射。
 - 播放头到达已交付流的末尾且设备停止时，有接续流就推送其 URI 和 DIDL，再以 playing 回报晋升为当前流；队列放完则回报 ended。设备重连复用 URI 时只更新 seq 和流内时间起点。
+
+## Google Cast
+
+与 UPnP 共用设置、可见性、分配、占用与托管输出规则，以下只列不同之处。
+
+- 设置：`upnp_settings` 增加 `upnp_enabled`、`cast_enabled`（默认 true），都只在 `enabled` 为 true 时起作用；关闭某个协议时停止该协议的发现并释放其托管输出。
+  `GET/PUT /api/v1/admin/upnp/settings` 返回 `{enabled, shared, upnp_enabled, cast_enabled}`。迁移 `0074_cast_devices`：手动设备表加 `kind`，新表 `cast_device_formats(udn, codec, max_sample_rate)`。
+- 设备键 `cast:<TXT id>`，与 UDN 共用分配表。设备行有 `kind`（`upnp`/`cast`）与 `format`（Cast 为 `{codec, max_sample_rate}`，UPnP 为 `null`）。
+- 发现：`internal/devices/mdns` 每 30 秒在局域网 IPv4 网卡上查询 `_googlecast._tcp`（PTR→SRV/TXT/A，按记录 TTL 过期），不绑定特权端口；地址只接受局域网 IPv4（`internal/devices/lan` 与 UPnP 共用）。手动添加 `POST …/devices {"kind":"cast","address":"IP[:端口]"}`，默认端口 8009，注册表每 30 秒重探。
+- 协议：`internal/devices/cast/castv2` 自写最小 CASTV2（TLS 8009、长度前缀的 CastMessage，connection/heartbeat/receiver/media 命名空间），启动默认媒体接收端 `CC1AD845`；每 5 秒心跳与 `GET_STATUS`，连续无响应视为离线并释放。
+  接收端应用或会话被换掉视为被其他发送端接管，释放输出并暂停播放区（`source:"device"`）。`controlType=fixed` 按固定音量处理。
+- 取流：沿用托管输出的令牌拉流与封面路径；每首一个流（渲染 `SingleTrack`），收到 `IDLE/FINISHED` 且有接续流时 LOAD 下一首，曲间不保证无缝。
+- 格式：`PUT /api/v1/admin/upnp/devices/{udn}/format {codec, max_sample_rate}`，`codec` 为 `mp3`（默认，libmp3lame CBR 320 kb/s）、`aac`、`flac`；采样率上限 44100 或 48000（默认），FLAC 另可 96000；其他组合或非 Cast 设备 `400 invalid_input`。设置按物理设备保存，对所有可用成员生效，下一首起生效。
+- 开发与测试：`cmd/roomusic-fake-cast` 假接收端（自签 TLS、mDNS 公告、CASTV2 子集、拉流计字节、`/_fake/state`）。

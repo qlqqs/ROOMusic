@@ -65,6 +65,9 @@ func (p *player) announceBoundary(entry zones.Entry, reason string) error {
 
 // prepareNext 不推进 Cursor；失败重取和取消已选条目都由调用方决定。
 func (p *player) prepareNext(ctx context.Context, entry zones.Entry, allowFade bool) (bool, error) {
+	if p.session.spec.SingleTrack {
+		return true, p.announceBoundary(entry, "format")
+	}
 	track, err := p.session.owner.options.Sources.Prepare(ctx, p.session.spec.UserID, entry.TrackID)
 	if ctx.Err() != nil {
 		if track.File != nil {

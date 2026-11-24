@@ -24,14 +24,14 @@ afterEach(() => {
 });
 
 /** 控制本机或别的设备（客厅音箱）时的设备按钮。 */
-function viewDevice(target: "local" | "remote", lan?: { occupant: string | null; formatDeclared?: boolean }) {
+function viewDevice(target: "local" | "remote", lan?: { occupant: string | null; formatDeclared?: boolean; kind?: "upnp" | "cast" }) {
   const server = fakeZoneServer();
   engine = testPlayerController(server).controller;
   const local = { ...server.device(), online: true };
   const remote = {
     ...local, deviceId: remoteDeviceId, zoneId: remoteZoneId, name: "客厅音箱",
-    kind: lan === undefined ? "browser" : "upnp",
-    upnp: lan === undefined ? null : { maxSampleRate: 48000, formatDeclared: lan.formatDeclared ?? false, occupiedBy: null },
+    kind: lan === undefined ? "browser" : (lan.kind ?? "upnp"),
+    lan: lan === undefined ? null : { maxSampleRate: 48000, formatDeclared: lan.formatDeclared ?? false, occupiedBy: null },
   };
   const source = { ...server.zone(), current: { entryId: "entry-1", track: playerTrack("示例曲目") } };
   snapshot = {
@@ -189,6 +189,15 @@ describe("播放设备列表的局域网操作", () => {
     await user.click(dialog().getByRole("button", { name: "保存" }));
     expect(save).toHaveBeenCalledExactlyOnceWith(remoteDeviceId, 192000);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "“客厅音箱”的采样率上限" })).toBeNull());
+  });
+
+  it("Google Cast 设备标出类型，没有成员自己的采样率上限", async () => {
+    const user = userEvent.setup();
+    viewDevice("local", { occupant: null, kind: "cast" });
+    await user.click(screen.getByRole("button", { name: "播放设备" }));
+    const row = within(screen.getByRole("group", { name: "客厅音箱的操作" }));
+    expect(screen.getByText("Google Cast")).toBeTruthy();
+    expect(row.queryByRole("button", { name: "采样率上限" })).toBeNull();
   });
 
   it("浏览器行保留直接控制与转移，没有局域网操作", async () => {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"reflect"
+	"strings"
 )
 
 // Decode 按结构体标签逐层读取，要求每个字段恰好出现一次，拒绝 null、大小写变体和尾随数据。
@@ -14,8 +15,15 @@ func Decode(r io.Reader) (Payload, error) {
 	if err != nil || len(raw) > MaxBytes {
 		return p, ErrInvalid
 	}
+	// 先取版本以选择字段集合，字段顺序任意；下方仍严格检查版本键的大小写与重复。
+	var header struct {
+		Schema int `json:"schema"`
+	}
+	if err := json.Unmarshal(raw, &header); err != nil {
+		return p, ErrInvalid
+	}
 	d := json.NewDecoder(bytes.NewReader(raw))
-	if err := readObject(d, reflect.ValueOf(&p).Elem()); err != nil {
+	if err := readObject(d, reflect.ValueOf(&p).Elem(), header.Schema); err != nil {
 		return Payload{}, ErrInvalid
 	}
 	if _, err := d.Token(); err != io.EOF {
@@ -24,13 +32,17 @@ func Decode(r io.Reader) (Payload, error) {
 	return p, p.Validate()
 }
 
-func readObject(d *json.Decoder, v reflect.Value) error {
+func readObject(d *json.Decoder, v reflect.Value, version int) error {
 	if t, err := d.Token(); err != nil || t != json.Delim('{') {
 		return ErrInvalid
 	}
 	fields := make(map[string]reflect.Value, v.NumField())
 	for i := 0; i < v.NumField(); i++ {
-		fields[v.Type().Field(i).Tag.Get("json")] = v.Field(i)
+		name, _, _ := strings.Cut(v.Type().Field(i).Tag.Get("json"), ",")
+		if version == 1 && name == "cast" && v.Type() == reflect.TypeFor[Devices]() {
+			continue
+		}
+		fields[name] = v.Field(i)
 	}
 	for d.More() {
 		t, err := d.Token()
@@ -41,7 +53,7 @@ func readObject(d *json.Decoder, v reflect.Value) error {
 		}
 		delete(fields, key)
 		if field.Kind() == reflect.Struct {
-			if err := readObject(d, field); err != nil {
+			if err := readObject(d, field, version); err != nil {
 				return err
 			}
 			continue

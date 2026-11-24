@@ -1,0 +1,9 @@
+{
+  "body": {
+    "cast_enabled": true,
+    "enabled": true,
+    "shared": true,
+    "upnp_enabled": false
+  },
+  "status": 200
+}

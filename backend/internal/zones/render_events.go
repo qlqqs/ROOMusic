@@ -66,7 +66,7 @@ func (s *Service) createRender(userID string, z *zoneRuntime, entryID string, se
 		return nil, "no_stream_format"
 	}
 	entry := renderEntry(z.persisted.Queue, entryID, z.cursorTracks)
-	spec := RenderSpec{UserID: userID, ZoneID: z.persisted.ZoneID, Seq: z.persisted.Revision, Start: entry, StartSeconds: seconds, Settings: settingsOf(z.persisted.Settings), Format: format, Cursor: &renderCursor{service: s, zone: z, generation: z.generation, seq: z.persisted.Revision}}
+	spec := RenderSpec{SingleTrack: z.device.Kind == "cast", UserID: userID, ZoneID: z.persisted.ZoneID, Seq: z.persisted.Revision, Start: entry, StartSeconds: seconds, Settings: settingsOf(z.persisted.Settings), Format: format, Cursor: &renderCursor{service: s, zone: z, generation: z.generation, seq: z.persisted.Revision}}
 	session, err := s.options.Renderer.Open(s.ctx, spec)
 	if err != nil || session == nil {
 		if session != nil {
@@ -315,7 +315,7 @@ func (s *Service) applyRenderEvent(userID string, z *zoneRuntime, h *renderHandl
 		}
 	case "stream_ended":
 		// 托管设备可能仍有音频缓冲；保留当前流，等物理输出确认播完。
-		if z.device.Kind == "upnp" && z.currentHandle == h && h.stream.Format != nil {
+		if managedKind(z.device.Kind) && z.currentHandle == h && h.stream.Format != nil {
 			return true, nil
 		}
 		if (z.nextHandle != nil && !nextEmptyEnded) || z.resumeRetry != nil {

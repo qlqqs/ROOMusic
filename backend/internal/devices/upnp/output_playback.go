@@ -99,12 +99,16 @@ func (o *deviceOutput) finish(sub *zones.Subscription) {
 			o.manager.logger.Warn("停止渲染器失败", "module", "upnp", "udn", d.UDN, "error", err)
 		}
 	}
-	o.releaseErr = o.manager.zones.ReleaseOutput(context.Background(), o.actor.ID, o.sessionID, zones.ReleaseOutputInput{StreamSeq: o.seq, StreamSeconds: o.position()})
+	o.release(zones.ReleaseOutputInput{StreamSeq: o.seq, StreamSeconds: o.position()})
+}
+
+func (o *deviceOutput) release(position zones.ReleaseOutputInput) {
+	o.releaseErr = o.manager.zones.ReleaseOutput(context.Background(), o.actor.ID, o.sessionID, position)
 	if o.releaseErr != nil {
-		o.manager.logger.Error("释放播放区输出失败", "module", "upnp", "zone_id", o.zoneID, "error", o.releaseErr)
+		o.manager.logger.Error("释放播放区输出失败", "module", deviceKind(o.udn), "zone_id", o.zoneID, "error", o.releaseErr)
 	}
 	o.manager.mu.Lock()
-	delete(o.manager.owners, o.device.UDN)
+	delete(o.manager.owners, o.udn)
 	o.manager.mu.Unlock()
 	close(o.done)
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/qlqq/roomusic/backend/internal/devices/cast"
 	"github.com/qlqq/roomusic/backend/internal/devices/upnp"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
@@ -28,6 +29,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+base+"/devices", h.admin(h.list))
 	mux.HandleFunc("POST "+base+"/devices", h.admin(h.add))
 	mux.HandleFunc("DELETE "+base+"/devices/{udn}", h.admin(h.remove))
+	mux.HandleFunc("PUT "+base+"/devices/{udn}/format", h.admin(h.format))
 	mux.HandleFunc("PUT "+base+"/devices/{udn}/grants", h.admin(h.grants))
 }
 
@@ -63,12 +65,18 @@ func respond(w http.ResponseWriter, r *http.Request, result any, err error) {
 	}
 	status, code, message := http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用"
 	switch {
+	case errors.Is(err, upnp.ErrCastDisabled):
+		status, code, message = 409, "cast_disabled", upnp.ErrCastDisabled.Error()
+	case errors.Is(err, cast.ErrAddress):
+		status, code, message = 400, "invalid_address", cast.ErrAddress.Error()
 	case errors.Is(err, upnp.ErrDisabled):
 		status, code, message = 409, "upnp_disabled", upnp.ErrDisabled.Error()
 	case errors.Is(err, upnp.ErrUnknownDevice):
 		status, code, message = 404, "not_found", upnp.ErrUnknownDevice.Error()
 	case errors.Is(err, upnp.ErrManualDevice):
 		status, code, message = 404, "not_found", upnp.ErrManualDevice.Error()
+	case errors.Is(err, upnp.ErrFormat), errors.Is(err, upnp.ErrKind):
+		status, code, message = 400, "invalid_input", err.Error()
 	case errors.Is(err, upnp.ErrGrantUser):
 		status, code, message = 400, "invalid_input", upnp.ErrGrantUser.Error()
 	case errors.Is(err, upnp.ErrDeviceAddress):
@@ -87,18 +95,15 @@ func (h *Handlers) settings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) updateSettings(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Enabled *bool `json:"enabled"`
-		Shared  *bool `json:"shared"`
-	}
+	var body upnp.SettingsUpdate
 	if !decode(w, r, &body) {
 		return
 	}
-	if body.Enabled == nil && body.Shared == nil {
+	if body == (upnp.SettingsUpdate{}) {
 		httpserver.WriteError(w, r, 400, "invalid_input", "需要指定设备开关或共享开关")
 		return
 	}
-	v, err := h.service.UpdateSettings(r.Context(), body.Enabled, body.Shared)
+	v, err := h.service.UpdateSettings(r.Context(), body)
 	respond(w, r, v, err)
 }
 
@@ -110,11 +115,15 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) add(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Address string `json:"address"`
+		Kind    string `json:"kind"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	item, err := h.service.Add(r.Context(), body.Address)
+	if body.Kind == "" {
+		body.Kind = "upnp"
+	}
+	item, err := h.service.Add(r.Context(), body.Kind, body.Address)
 	respond(w, r, item, err)
 }
 
@@ -135,4 +144,13 @@ func (h *Handlers) grants(w http.ResponseWriter, r *http.Request) {
 	}
 	ids, err := h.service.SetGrants(r.Context(), r.PathValue("udn"), body.UserIDs)
 	respond(w, r, map[string]any{"user_ids": ids}, err)
+}
+
+func (h *Handlers) format(w http.ResponseWriter, r *http.Request) {
+	var body upnp.CastFormat
+	if !decode(w, r, &body) {
+		return
+	}
+	result, err := h.service.SetFormat(r.Context(), r.PathValue("udn"), body)
+	respond(w, r, result, err)
 }

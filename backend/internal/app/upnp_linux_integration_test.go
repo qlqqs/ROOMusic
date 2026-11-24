@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/devices/upnp"
 	"golang.org/x/sys/unix"
 )
 
@@ -52,4 +53,24 @@ func TestPostgreSQLUPnPDisabledHasNoNetworkActivity(t *testing.T) {
 	if after := ownUDPSockets(t); !reflect.DeepEqual(before, after) || hits.Load() != 0 {
 		t.Fatalf("关闭时 UDP 套接字从 %v 变为 %v，探测 HTTP 请求数 %d", before, after, hits.Load())
 	}
+}
+
+func TestPostgreSQLCastProtocolStopsDiscovery(t *testing.T) {
+	f := newUPnPFixture(t, false)
+	before := ownUDPSockets(t)
+	assertUPnPSample(t, "settings", f.request(t, "GET", upnpAdmin+"/settings", nil, &f.admin, nil))
+	enableCast(t, f)
+	if active := ownUDPSockets(t); len(active) <= len(before) {
+		t.Fatal("启用 Cast 时没有打开 mDNS 套接字")
+	}
+	settings := zonesSampleDecode[upnp.Settings](t, f.request(t, "PUT", upnpAdmin+"/settings",
+		map[string]bool{"cast_enabled": false}, &f.admin, nil), 200)
+	if !settings.Enabled || settings.CastEnabled || settings.UPnPEnabled {
+		t.Fatalf("单独关闭 Cast 后的设置 = %+v", settings)
+	}
+	if after := ownUDPSockets(t); !reflect.DeepEqual(before, after) {
+		t.Fatalf("关闭 Cast 后 UDP 套接字从 %v 变为 %v", before, after)
+	}
+	requireAPIError(t, f.request(t, "POST", upnpAdmin+"/devices",
+		map[string]string{"kind": "cast", "address": "192.168.44.2"}, &f.admin, nil), 409, "cast_disabled")
 }

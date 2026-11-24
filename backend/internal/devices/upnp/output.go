@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/devices/cast"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
@@ -52,7 +53,16 @@ func (s *Service) account(ctx context.Context, id string) (identity.User, error)
 func playbackCaps(c Capabilities) zones.Capabilities {
 	out := zones.Capabilities{MaxChannels: 2, DSD: "none", Volume: c.Volume}
 	for _, codec := range c.StreamFormats {
-		out.StreamFormats = append(out.StreamFormats, zones.StreamFormatCapability{Codec: codec, MIMEType: "audio/" + codec, Lossless: true, MaxSampleRate: &c.MaxSampleRate, MaxBitDepth: &c.MaxBitDepth})
+		mime := "audio/" + codec
+		if codec == "mp3" {
+			mime = "audio/mpeg"
+		}
+		lossless := codec == "flac" || codec == "wav"
+		f := zones.StreamFormatCapability{Codec: codec, MIMEType: mime, Lossless: lossless, MaxSampleRate: &c.MaxSampleRate}
+		if lossless {
+			f.MaxBitDepth = &c.MaxBitDepth
+		}
+		out.StreamFormats = append(out.StreamFormats, f)
 	}
 	return out
 }
@@ -60,7 +70,7 @@ func playbackCaps(c Capabilities) zones.Capabilities {
 func (s *Service) VisibleDevices(ctx context.Context, userID string) ([]zones.ManagedDevice, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if !s.running {
+	if !s.running() {
 		return nil, nil
 	}
 	actor, err := s.account(ctx, userID)
@@ -78,7 +88,7 @@ func (s *Service) VisibleDevices(ctx context.Context, userID string) ([]zones.Ma
 	s.output.mu.Lock()
 	defer s.output.mu.Unlock()
 	for _, d := range items {
-		row := zones.ManagedDevice{UDN: d.UDN, Name: d.Name, InitialVolume: d.initialVolume, Capabilities: playbackCaps(d.Capabilities), FormatDeclared: d.Capabilities.FormatDeclared}
+		row := zones.ManagedDevice{Kind: d.Kind, MaxSampleRate: d.Capabilities.MaxSampleRate, UDN: d.UDN, Name: d.Name, InitialVolume: d.initialVolume, Capabilities: playbackCaps(d.Capabilities), FormatDeclared: d.Capabilities.FormatDeclared}
 		if owner := s.output.owners[d.UDN]; owner != nil {
 			row.OccupiedBy = &zones.DeviceOccupant{UserID: owner.actor.ID, DisplayName: owner.actor.Username}
 		}
@@ -90,7 +100,7 @@ func (s *Service) VisibleDevices(ctx context.Context, userID string) ([]zones.Ma
 func (s *Service) Acquire(ctx context.Context, userID, deviceID, udn string, caps zones.Capabilities, takeover bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.running {
+	if !s.running() {
 		return zones.ErrNotFound
 	}
 	actor, err := s.account(ctx, userID)
@@ -147,7 +157,12 @@ func (s *Service) Acquire(ctx context.Context, userID, deviceID, udn string, cap
 	m.mu.Lock()
 	m.owners[udn] = o
 	m.mu.Unlock()
-	go o.run(sub)
+	if device.Kind == "cast" {
+		output := cast.Output{Zones: m.zones, UserID: userID, DeviceID: deviceID, ZoneID: o.zoneID, SessionID: o.sessionID, BaseURL: base, Address: device.Address, Logger: m.logger, Online: func() bool { d, ok := s.cast.Lookup(udn); return ok && d.Online }, Offline: func() { s.cast.Offline(udn) }}
+		go func() { position := output.Run(run, sub); sub.Close(); o.cancel(); o.release(position) }()
+	} else {
+		go o.run(sub)
+	}
 	return nil
 }
 
@@ -181,7 +196,7 @@ func (s *Service) enforceGrants(ctx context.Context) error {
 		grants, err = s.grants(ctx, "")
 	}
 	s.stopOutputs(func(o *deviceOutput) bool {
-		d, exists := s.registry.Lookup(o.udn)
+		d, exists := s.protocols[deviceKind(o.udn)].registry.Lookup(o.udn)
 		return !exists || !d.Online || err != nil || (!settings.Shared && o.actor.Role != "admin" && !slices.Contains(grants[d.UDN], o.actor.ID))
 	})
 	return err
@@ -191,7 +206,7 @@ func (s *Service) enforceGrants(ctx context.Context) error {
 func (s *Service) SessionRevoked(userID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.running || s.output == nil {
+	if !s.running() || s.output == nil {
 		return
 	}
 	active, err := identity.HasActiveSession(s.lifecycle, s.db, userID)

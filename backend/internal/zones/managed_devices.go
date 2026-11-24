@@ -16,11 +16,12 @@ type ManagedOutputs interface {
 }
 
 type ManagedDevice struct {
-	UDN, Name      string
-	InitialVolume  *float64
-	Capabilities   Capabilities
-	FormatDeclared bool
-	OccupiedBy     *DeviceOccupant
+	Kind, UDN, Name string
+	MaxSampleRate   int
+	InitialVolume   *float64
+	Capabilities    Capabilities
+	FormatDeclared  bool
+	OccupiedBy      *DeviceOccupant
 }
 
 type DeviceOccupant struct {
@@ -47,7 +48,9 @@ func (s *Service) managedOutputs() ManagedOutputs {
 	return s.managed
 }
 
-func (z *zoneRuntime) visible() bool { return z.device.Kind != "upnp" || z.managedVisible }
+func managedKind(kind string) bool { return kind == "upnp" || kind == "cast" }
+
+func (z *zoneRuntime) visible() bool { return !managedKind(z.device.Kind) || z.managedVisible }
 
 func limitSampleRate(c Capabilities, rate int) Capabilities {
 	c = cloneCapabilities(c)
@@ -74,7 +77,7 @@ func (s *Service) syncManaged(ctx context.Context, userID string, u *userRuntime
 	existing := make(map[string]*zoneRuntime)
 	for _, z := range u.order {
 		z.mu.Lock()
-		if z.device.Kind == "upnp" {
+		if managedKind(z.device.Kind) {
 			existing[z.device.ExternalID] = z
 		}
 		z.mu.Unlock()
@@ -116,7 +119,7 @@ func (s *Service) createManaged(ctx context.Context, userID string, u *userRunti
 	if item.InitialVolume != nil {
 		volume = *item.InitialVolume
 	}
-	d := PersistedDevice{DeviceID: s.newID(), ExternalID: item.UDN, Kind: "upnp", Name: managedName(item.Name), MaxSampleRate: 48000, Capabilities: limitSampleRate(item.Capabilities, 48000), Volume: volume, VolumeDisplayOnly: item.InitialVolume == nil, CreatedAt: now, LastSeenAt: now}
+	d := PersistedDevice{DeviceID: s.newID(), ExternalID: item.UDN, Kind: item.Kind, Name: managedName(item.Name), MaxSampleRate: item.MaxSampleRate, Capabilities: limitSampleRate(item.Capabilities, item.MaxSampleRate), Volume: volume, VolumeDisplayOnly: item.InitialVolume == nil, CreatedAt: now, LastSeenAt: now}
 	p := PersistedZone{ZoneID: s.newID(), DeviceID: d.DeviceID, Queue: queue.EmptyQueue(), PositionSavedAt: now, Settings: defaultSettings()}
 	if err := s.transact(ctx, func(st *Store) error { return st.CreateDevice(ctx, userID, d, p) }); err != nil {
 		return err
@@ -138,7 +141,11 @@ func (s *Service) refreshManaged(ctx context.Context, userID string, z *zoneRunt
 	defer z.mu.Unlock()
 	d := z.device
 	d.Name = managedName(item.Name)
+	if item.Kind == "cast" {
+		d.MaxSampleRate = item.MaxSampleRate
+	}
 	d.Capabilities = limitSampleRate(item.Capabilities, d.MaxSampleRate)
+	formatChanged := !reflect.DeepEqual(d.Capabilities.StreamFormats, z.device.Capabilities.StreamFormats)
 	changed := d.Name != z.device.Name || !reflect.DeepEqual(d.Capabilities, z.device.Capabilities)
 	newlyVisible := !z.managedVisible
 	if newlyVisible || changed || s.Now().Sub(d.LastSeenAt) >= DeviceSeenSaveInterval {
@@ -150,6 +157,9 @@ func (s *Service) refreshManaged(ctx context.Context, userID string, z *zoneRunt
 	if newlyVisible || changed || z.formatDeclared != item.FormatDeclared || !reflect.DeepEqual(z.occupiedBy, item.OccupiedBy) {
 		z.device, z.formatDeclared, z.occupiedBy, z.managedVisible = d, item.FormatDeclared, cloneValue(item.OccupiedBy), true
 		s.publishDevice(userID, deviceOf(z))
+		if formatChanged && z.session != nil {
+			s.scheduleRebuild(userID, z)
+		}
 		if newlyVisible {
 			tracks, err := s.loadSummaries(ctx, z.persisted.Queue.Entries)
 			if err != nil {
@@ -171,7 +181,7 @@ func (s *Service) acquireManaged(ctx context.Context, userID string, z *zoneRunt
 	if !visible {
 		return ErrNotFound
 	}
-	if d.Kind != "upnp" {
+	if !managedKind(d.Kind) {
 		return nil
 	}
 	return s.managedOutputs().Acquire(ctx, userID, d.DeviceID, d.ExternalID, cloneCapabilities(d.Capabilities), takeover)
@@ -195,7 +205,7 @@ func (s *Service) ActivateDevice(ctx context.Context, userID, deviceID string, t
 		return DeviceResult{}, ErrNotFound
 	}
 	z.mu.Lock()
-	managed := z.device.Kind == "upnp"
+	managed := managedKind(z.device.Kind)
 	z.mu.Unlock()
 	if !managed {
 		return DeviceResult{}, ErrInvalidInput

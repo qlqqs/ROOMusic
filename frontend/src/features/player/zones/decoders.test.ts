@@ -56,7 +56,7 @@ const registeredDevice: Device = {
   muted: false,
   volumeControllable: true,
   outputSessionId: null,
-  upnp: null,
+  lan: null,
 };
 
 const claimedDevice: Device = {
@@ -215,7 +215,7 @@ describe("播放区公开 DTO 的真实样本", () => {
       { ...occupiedDevice.body.device, device_id: id(93), max_sample_rate: 96000, format_declared: false },
       { ...deviceEvent.data.device, device_id: id(94), kind: "upnp" },
     ];
-    expect(decodeSnapshot({ ...body, devices }).devices.map((device) => device.upnp)).toStrictEqual([
+    expect(decodeSnapshot({ ...body, devices }).devices.map((device) => device.lan)).toStrictEqual([
       null,
       { maxSampleRate: 48000, formatDeclared: true, occupiedBy: null },
       { maxSampleRate: 48000, formatDeclared: true, occupiedBy: null },

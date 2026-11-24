@@ -23,6 +23,7 @@ type StreamFormat struct {
 }
 
 type RenderSpec struct {
+	SingleTrack    bool
 	UserID, ZoneID string
 	Seq            int64
 	Start          Entry

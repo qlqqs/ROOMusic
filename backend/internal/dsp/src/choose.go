@@ -28,6 +28,8 @@ type Request struct {
 	Filter     Filter
 	Supported  func(rate int) bool
 	MaxRate    int
+	// 常规换族、减半与倍增均无解时，按优先顺序尝试编码器明确支持的采样率。
+	CompatibilityRates []int
 }
 
 // Plan 不持有处理状态，也不生成核；From==To 时 Stages 为空。
@@ -89,7 +91,7 @@ func Choose(req Request) (Plan, error) {
 	default:
 		return Plan{}, ErrInvalidRequest
 	}
-	chosen, compatibility := compatibleRate(target, limit, supported)
+	chosen, compatibility := compatibleRate(target, limit, supported, req.CompatibilityRates)
 	if chosen == 0 {
 		return Plan{}, ErrNoSupportedRate
 	}
@@ -124,8 +126,8 @@ func standardRate(rate int) bool {
 	return false
 }
 
-func compatibleRate(rate, limit int, supported func(int) bool) (int, bool) {
-	// none 允许设备原生支持的非标准源率直通；转换目标仍只从标准集合取。
+func compatibleRate(rate, limit int, supported func(int) bool, compatibilityRates []int) (int, bool) {
+	// 先允许设备原生支持的源率直通，再按标准采样率换族、减半或倍增。
 	if supported(rate) {
 		return rate, false
 	}
@@ -148,6 +150,11 @@ func compatibleRate(rate, limit int, supported func(int) bool) (int, bool) {
 		r *= 2
 		if standardRate(r) && supported(r) {
 			return r, true
+		}
+	}
+	for _, candidate := range compatibilityRates {
+		if supported(candidate) {
+			return candidate, true
 		}
 	}
 	return 0, false
