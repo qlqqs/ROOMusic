@@ -10,7 +10,7 @@
 
 ## 数据
 
-迁移 `0072_instance_insights`：单行表 `instance_insights`（`id boolean primary key default true check (id)`、`instance_id uuid not null`、`enabled boolean not null default true`、
+迁移 `0073_instance_insights`：单行表 `instance_insights`（`id boolean primary key default true check (id)`、`instance_id uuid not null`、`enabled boolean not null default true`、
 `notice_acknowledged_at timestamptz`、`last_attempt_at`、`last_success_at timestamptz`、`last_error text`（错误码，不是原文）、`created_at timestamptz not null default now()`）。
 首次启动插入一行；下行迁移删表。
 

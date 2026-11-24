@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/qlqq/roomusic/backend/internal/platform/buildinfo"
 	"github.com/qlqq/roomusic/backend/internal/platform/weborigin"
 )
 
@@ -35,6 +36,10 @@ type Server struct {
 	PublicURL           string
 	LANURL              string
 	UpstreamMockURL     string
+	InsightsDisabled    bool
+	InsightsURL         string
+	InsightsURLExplicit bool
+	SourceURL           string
 	// FFmpegPath 是 ffmpeg 可执行文件的绝对路径；空表示在 PATH 中查找。找不到或自检不过时渲染不可用，应用照常启动。
 	FFmpegPath    string
 	FPCalcPath    string
@@ -88,6 +93,9 @@ func Load() (Server, error) {
 		return Server{}, err
 	}
 	config := Server{LANURL: lanURL, UpstreamMockURL: mockURL, ScanWorkers: scanWorkers, AudioAnalysis: audioAnalysis, Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, FPCalcPath: fpcalcPath}
+	if err := configureInsights(&config); err != nil {
+		return Server{}, err
+	}
 	for _, configuredRoot := range strings.Split(os.Getenv("ROOMUSIC_ALLOWED_LIBRARY_ROOTS"), ",") {
 		if root := strings.TrimSpace(configuredRoot); root != "" {
 			config.AllowedLibraryRoots = append(config.AllowedLibraryRoots, root)
@@ -246,4 +254,38 @@ func configuredScanWorkers() (int, error) {
 		return 0, fmt.Errorf("ROOMUSIC_SCAN_WORKERS must be an integer between 1 and 16")
 	}
 	return workers, nil
+}
+
+const DefaultInsightsURL = "https://insights.roomusic.org/api/v1/heartbeat"
+const DefaultSourceURL = buildinfo.ProjectURL
+
+func configureInsights(s *Server) error {
+	disabled := strings.TrimSpace(os.Getenv("ROOMUSIC_INSIGHTS_DISABLED"))
+	if disabled != "" {
+		value, err := strconv.ParseBool(disabled)
+		if err != nil {
+			return fmt.Errorf("ROOMUSIC_INSIGHTS_DISABLED 必须是布尔值")
+		}
+		s.InsightsDisabled = value
+	}
+	var err error
+	s.InsightsURL, err = configuredHTTPURL("ROOMUSIC_INSIGHTS_URL", DefaultInsightsURL)
+	if err != nil {
+		return err
+	}
+	s.InsightsURLExplicit = strings.TrimSpace(os.Getenv("ROOMUSIC_INSIGHTS_URL")) != ""
+	s.SourceURL, err = configuredHTTPURL("ROOMUSIC_SOURCE_URL", DefaultSourceURL)
+	return err
+}
+
+func configuredHTTPURL(key, fallback string) (string, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback, nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
+		return "", fmt.Errorf("%s 必须是带主机且无凭据的 HTTP(S) 地址", key)
+	}
+	return raw, nil
 }

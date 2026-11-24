@@ -272,3 +272,10 @@ func disabledSource(reason string) error {
 	}
 	return operations.Conflict("source_disabled", message)
 }
+
+func (s *Sources) EnabledPluginCount(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM curation_source_settings
+        WHERE enabled AND source LIKE 'plugin:%'`).Scan(&n)
+	return n, err
+}

@@ -1320,6 +1320,9 @@ func (recorder *apiSampleRecorder) ownsSample(name string) bool {
 	if strings.HasPrefix(name, "dsp/") {
 		return recorder.scope == "dsp"
 	}
+	if strings.HasPrefix(name, "insights/") {
+		return recorder.scope == "insights"
+	}
 	if strings.HasPrefix(name, "plugins/") {
 		return recorder.scope == "plugins"
 	}

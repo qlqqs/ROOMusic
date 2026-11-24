@@ -136,3 +136,9 @@ func (s *Store) Validate(ctx context.Context, plaintext string) (Principal, erro
 	}
 	return principal, nil
 }
+
+func (s *Store) HasUnrevokedToken(ctx context.Context) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM steward_access_tokens WHERE revoked_at IS NULL)`).Scan(&exists)
+	return exists, err
+}

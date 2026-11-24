@@ -45,3 +45,11 @@ func ReadCatalogStats(ctx context.Context, database ReadTransactionBeginner) (Ca
 		return stats, nil
 	})
 }
+
+// LibraryCounts 返回当前可见的曲目与发行数，同一张专辑的不同发行分别计数。
+func (s *Store) LibraryCounts(ctx context.Context) (tracks, releases int, err error) {
+	err = s.database.QueryRowContext(ctx, `SELECT
+        (SELECT count(*) FROM tracks WHERE source_status='present'),
+        (SELECT count(*) FROM (`+VisibleReleaseIDsSQL+`) visible)`).Scan(&tracks, &releases)
+	return
+}

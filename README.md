@@ -16,6 +16,7 @@
 - **扫描**：只读扫描音乐目录，从不改动音乐文件；可以定时扫描。
 - **账号**：管理员添加成员、重置成员密码；管理员自己忘了密码，可以在服务器上用命令重置。
 - **备份**：每天自动备份数据库，升级或降级前也会自动备份；管理员可以在网页上立即备份、下载和删除备份，并设置自动清理（保留几天、保留几份）。
+- **匿名统计**：默认每天向项目发送一次匿名统计（版本、曲库规模的分档、用到了哪些功能），不含曲目、文件名、账号或 IP；可以在设置里关闭，发送的内容见[匿名统计说明](docs/insights.md)。
 
 ## 快速开始
 
@@ -115,6 +116,7 @@ git tag -a vX.Y.Z -m "ROOMusic vX.Y.Z" && git push origin vX.Y.Z
 - [部署说明](deploy/production/README.md)：配置、备份恢复、反向代理、排查
 - [用 MCP 客户端连接](docs/steward-mcp.md)：访问令牌与 Claude Code 的接入
 - [插件开发说明](docs/plugins.md)：数据源插件的清单、调用约定与打包
+- [匿名统计说明](docs/insights.md)：发送哪些字段、什么时候发、怎么关闭
 - [开发与测试环境](docs/development-environment.md)：工具链、外部接口 mock、UPnP 假渲染器
 - [架构决策](docs/architecture/architecture-decisions.md)：长期规则与 ADR 索引
 - [前端设计依据](frontend/DESIGN.md)

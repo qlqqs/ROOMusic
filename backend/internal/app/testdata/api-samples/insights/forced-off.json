@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "insights_forced_off",
+      "message": "部署配置已关闭匿名统计"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

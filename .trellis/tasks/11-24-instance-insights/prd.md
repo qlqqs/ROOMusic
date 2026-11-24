@@ -64,3 +64,13 @@
 
 - 统计端的实际上线（DNS、OpenResty 站点、启动容器）：需要 qlqq 授权，单列为交付后的操作。
 - 崩溃报告、性能数据、按用户的使用统计。
+
+## 实施与验收记录（2026-11-24）
+
+- 实现（Codex gpt-6.2-astra）：迁移、`internal/insights`（schema、调度、发送、接口）、统计端 `roomusic-insights` 与部署文件、配置项、mock、`/api/v1/system/about`、接口样本。
+- 测试（Codex gpt-6.2-sol）：10 个测试文件，覆盖分档与严格解码、调度时机与条件更新、出站规则、mock 实收与预览逐字节一致、接口与迁移、统计端（校验、限速、去重、窗口、清理、原子写、进程与文件里没有 IP）。未发现实现缺陷。
+- 前端与文档（主代理）：概览说明、设置 › 匿名统计、设置 › 关于（放在“账号、播放、Agent”之后）、登录页源代码链接；ADR 0008、`docs/insights.md`、匿名统计合同、部署说明、README、`.env.prod.example`。
+- 合入时与 main 的调整：main 已有 `0072_artist_manual_media`，本任务迁移改为 `0073_instance_insights`（迁移必须连续）；`deploy/nas/compose.yaml` 同步三个新环境变量。
+- 本轮实际运行：`go build ./...`；`go test ./internal/insights/... ./internal/platform/postgres/`；`ROOMUSIC_TEST_RUN='Insights|SystemAbout|Migration' sg docker -c ./scripts/test-integration.sh`（全部通过，含逐个迁移的升级→回退→再升级）；
+  `scripts/check-production-compose.sh`；前端 `typecheck`、`lint`、相关 vitest 46 项；e2e `auth.spec.ts` 全部通过（顺带更新了一个早已过期的设置分栏断言）；390/1440 截图核对概览说明、设置页、关于页与登录页。
+- 未做：统计端上线（DNS、OpenResty 站点、启动容器）需要 qlqq 授权；`go test -race` 因本机没有 C 编译器未运行。

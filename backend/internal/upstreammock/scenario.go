@@ -20,7 +20,7 @@ func (s *Server) reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.scenarios = map[string]Scenario{}
-	for _, service := range []string{"plugins", "musicbrainz", "coverartarchive", "lrclib", "acoustid", "wikidata", "commons", "wikipedia", "fanarttv", "theaudiodb", "openai", "anthropic", "tavily", "searxng"} {
+	for _, service := range []string{"insights", "plugins", "musicbrainz", "coverartarchive", "lrclib", "acoustid", "wikidata", "commons", "wikipedia", "fanarttv", "theaudiodb", "openai", "anthropic", "tavily", "searxng"} {
 		s.scenarios[service] = defaultScenario()
 	}
 	clear(s.records[:])

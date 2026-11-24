@@ -9,9 +9,11 @@ var commitPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 type Info struct{ Version, Commit string }
 
+func ValidVersion(value string) bool { return versionPattern.MatchString(value) }
+
 func Current() Info {
 	var info Info
-	if versionPattern.MatchString(version) {
+	if ValidVersion(version) {
 		info.Version = version
 	}
 	if commitPattern.MatchString(commit) {

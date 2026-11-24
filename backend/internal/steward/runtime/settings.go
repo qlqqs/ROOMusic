@@ -201,3 +201,11 @@ func (s *Store) SetMembersEnabled(ctx context.Context, enabled bool) error {
 	err := requireAffected(s.db.ExecContext(ctx, `UPDATE steward_instance_settings SET members_enabled=$1 WHERE id=1`, enabled))
 	return storeError("保存管家成员开关", err)
 }
+
+// HasConfiguredModel 与 IsConfigured 使用相同条件，仅返回是否已有可用配置。
+func (s *Store) HasConfiguredModel(ctx context.Context) (bool, error) {
+	var configured bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM steward_user_settings
+        WHERE endpoint <> '' AND protocol <> '' AND model <> '')`).Scan(&configured)
+	return configured, err
+}
