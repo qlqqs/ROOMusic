@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/11-24-airplay-output/prd.md", "reason": "默认值、许可边界与验收"}
+{"file": ".trellis/tasks/11-24-airplay-output/design.md", "reason": "包结构、推流输出、部署"}
+{"file": ".trellis/tasks/11-24-adoption-readiness/research/casting-protocols.md", "reason": "AirPlay 协议、设备差异、开源实现与许可"}
+{"file": ".trellis/spec/backend/upnp-device-contracts.md", "reason": "托管输出与占用的既有合同"}
+{"file": ".trellis/spec/backend/playback-zone-contracts.md", "reason": "播放区与输出端协议"}
+{"file": ".trellis/spec/backend/deployment-environment-contracts.md", "reason": "Compose 与加固约定"}
