@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试与验证标准"}
+{"file": ".trellis/spec/backend/sources-contracts.md", "reason": "各情景下外部源客户端应有的结果"}
+{"file": ".trellis/spec/backend/steward-runtime-contracts.md", "reason": "模型流断开与错误的处理"}
+{"file": ".trellis/spec/guides/engineering-principles.md", "reason": "不以 mock 代替业务结论的断言"}
