@@ -51,6 +51,11 @@ func newIntegrationTestApplication(t *testing.T, applied ...Option) *integration
 // newIntegrationTestApplicationWithLogger 与 newIntegrationTestApplication 相同，但使用给定的日志，供断言日志事件的测试使用。
 func newIntegrationTestApplicationWithLogger(t *testing.T, logger *slog.Logger, applied ...Option) *integrationTestApplication {
 	t.Helper()
+	return newConfiguredIntegrationTestApplication(t, logger, config.Server{}, applied...)
+}
+
+func newConfiguredIntegrationTestApplication(t *testing.T, logger *slog.Logger, settings config.Server, applied ...Option) *integrationTestApplication {
+	t.Helper()
 	scopedURL := postgrestest.NewSchema(t, "roomusic_test_")
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -69,10 +74,8 @@ func newIntegrationTestApplicationWithLogger(t *testing.T, logger *slog.Logger, 
 	}
 	allowedRoot := t.TempDir()
 	dataDirectory := t.TempDir()
-	config := config.Server{
-		AllowedLibraryRoots: []string{allowedRoot},
-		DataDirectory:       dataDirectory,
-	}
+	settings.AllowedLibraryRoots = []string{allowedRoot}
+	settings.DataDirectory = dataDirectory
 	scanContext, cancelScans := context.WithCancel(context.Background())
 	// 旧接口夹具直接写 SQL，默认保留 legacy；搜索测试显式启动真实后台。
 	applied = append([]Option{func(settings *options) {
@@ -81,7 +84,7 @@ func newIntegrationTestApplicationWithLogger(t *testing.T, logger *slog.Logger, 
 		settings.disableModel = true
 		settings.model.Now = func() time.Time { return time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC) }
 	}}, applied...)
-	application := New(scanContext, config, database, testFrontend(), logger, applied...)
+	application := New(scanContext, settings, database, testFrontend(), logger, applied...)
 	// 后注册先执行：测试结束（含中途失败）时先取消并等待扫描 worker 退出，再关闭数据库、清理 schema。
 	t.Cleanup(func() {
 		cancelScans()

@@ -14,6 +14,8 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	70: upnpPlaybackRollbackFixture,
+	69: upnpDiscoveryRollbackFixture,
 	68: artistMediaRollbackFixture,
 	67: mergedReleaseRollbackFixture,
 	65: `UPDATE tracks SET edit_revision=5 WHERE id='c3000000-0000-4000-8000-000000000065';
@@ -438,9 +440,19 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if m.Version == 68 {
 				rollbackExec(t, db, beforeArtistMediaMigration)
 			}
+			if m.Version == 69 || m.Version == 70 {
+				rollbackExec(t, db, beforeUPnPMigration)
+			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
+			if m.Version == 69 {
+				var enabled, shared bool
+				err := db.QueryRow("SELECT enabled,shared FROM upnp_settings WHERE id=1").Scan(&enabled, &shared)
+				if err != nil || enabled || !shared {
+					t.Fatalf("0069 默认设置 enabled=%v shared=%v err=%v", enabled, shared, err)
+				}
+			}
 			fixture, ok := rollbackFixtures[m.Version]
 			if rollbackNeedsFixture(s0, s1) && !ok {
 				t.Fatalf("迁移 %d 改变旧约束或枚举，必须补 rollbackFixtures 的新取值数据", m.Version)

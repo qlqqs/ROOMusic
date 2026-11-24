@@ -117,7 +117,7 @@ var packageRules = map[string]packageRule{
 	"playback/render":                   {imports: []string{"zones", "dsp/chain", "dsp/leveling", "dsp/fade", "dsp/dither", "dsp/src", "dsp/downmix", "dsp/peq", "dsp/convolution", "playback/dsdio", "playback/dsdpcm", "playback/render/ffmpeg", "platform/uuid"}},
 	"playback/fingerprint":              {},
 	"playback":                          {imports: []string{"catalog", "library", "playback/analysis", "playback/dsdio", "playback/dsdpcm", "playback/fingerprint"}},
-	"devices/upnp":                      {imports: []string{"identity", "platform/uuid"}, http: true},
+	"devices/upnp":                      {imports: []string{"identity", "platform/uuid", "zones"}, http: true},
 	"devices/upnp/httpapi":              {imports: []string{"devices/upnp", "identity", "platform/httpserver"}, http: true},
 	"devices/fakerenderer":              {imports: []string{"platform/uuid"}, http: true},
 	"zones/queue":                       {},
@@ -143,7 +143,7 @@ var packageRules = map[string]packageRule{
 		"steward/httpapi", "steward/runtime", "steward/secret", "steward/tool",
 		"steward/token", "steward/mcp", "steward/web", "steward/memory",
 		"dspsettings", "dspsettings/httpapi", "dspsettings/irload", "dsp/chain", "backup", "backup/httpapi", "zones", "zones/queue", "zones/httpapi",
-		"catalog", "catalog/governance", "catalog/httpapi", "catalog/maintenance", "identity", "identity/httpapi", "library", "library/httpapi", "listening", "listening/httpapi",
+		"catalog", "catalog/artwork", "catalog/governance", "catalog/httpapi", "catalog/maintenance", "identity", "identity/httpapi", "library", "library/httpapi", "listening", "listening/httpapi",
 		"personal", "personal/httpapi", "operations/httpapi", "platform/config", "platform/httpserver", "playback", "playback/analysis", "playback/httpapi", "playback/render", "playback/render/ffmpeg",
 	}, http: true},
 }
