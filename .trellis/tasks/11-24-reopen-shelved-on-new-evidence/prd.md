@@ -22,10 +22,10 @@ V12 补测 AcoustID（`.trellis/tasks/archive/2026-11/11-22-auto-curation-source
 
 ## 验收标准
 
-- [ ] 用例：待定项因没有候选被搁置；之后指纹重做得到候选，输入摘要不变；程序重判后该项回到 `waiting_model`，候选是新的。
-- [ ] 用例：候选与冲突都没变的重判，不重开搁置项。
-- [ ] 用例：人工不采纳的例外，重判给出相同候选时不再提出。
-- [ ] 不影响 `TestPostgreSQLCurationExceptionAcceptDecline` 等既有用例。
+- [x] 用例：待定项因没有候选被搁置；之后指纹重做得到候选，输入摘要不变；程序重判后该项回到 `waiting_model`，候选是新的。
+- [x] 用例：候选与冲突都没变的重判，不重开搁置项。
+- [x] 用例：人工不采纳的例外，重判给出相同候选时不再提出（重判会另建待定项，模型再试时得到 `suppressed`，修改不会再写入；这是既有行为，本任务未改）。
+- [x] 不影响 `TestPostgreSQLCurationExceptionAcceptDecline` 等既有用例。
 
 ## 关联
 

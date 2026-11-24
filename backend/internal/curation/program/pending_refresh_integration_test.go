@@ -67,16 +67,16 @@ func (f pendingRefreshFixture) release(t *testing.T, title, artist string) (stri
 	return release, firstTrack
 }
 
-func (f pendingRefreshFixture) claim(t *testing.T, release string) curation.PendingItem {
+func (f pendingRefreshFixture) claim(t *testing.T, release, kind string) curation.PendingItem {
 	t.Helper()
 	ctx := t.Context()
 	conversation, err := runtime.NewStore(f.db).CreateCurationConversation(ctx, f.adminID, "合成自动整理", "synthetic")
 	requirePendingRefreshOK(t, err)
 	items, err := f.writer.ClaimPendingItems(ctx, conversation.ID, time.Now(), 1)
 	requirePendingRefreshOK(t, err)
-	if len(items) != 1 || items[0].TargetID != release || items[0].Kind != "release_match" ||
+	if len(items) != 1 || items[0].TargetID != release || items[0].Kind != kind ||
 		items[0].Status != "in_progress" || items[0].ConversationID != conversation.ID || items[0].ClaimedAt == nil {
-		t.Fatalf("会话 %s 应领取发行 %s 的 release_match，得到 %+v", conversation.ID, release, items)
+		t.Fatalf("会话 %s 应领取发行 %s 的 %s，得到 %+v", conversation.ID, release, kind, items)
 	}
 	return items[0]
 }
@@ -104,7 +104,7 @@ func TestPostgreSQLCurationPendingUpsert(t *testing.T) {
 			requirePendingRefreshOK(t, curation.UpsertPendingItem(ctx, f.db, item))
 			var id string
 			if tc.status == "in_progress" || tc.status == "waiting_human" {
-				id = f.claim(t, release).ID
+				id = f.claim(t, release, item.Kind).ID
 			} else {
 				err := f.db.QueryRowContext(ctx, `SELECT id FROM curation_pending_items WHERE target_id=$1`, release).Scan(&id)
 				requirePendingRefreshOK(t, err)
@@ -118,8 +118,10 @@ func TestPostgreSQLCurationPendingUpsert(t *testing.T) {
 
 			item.InputDigest, item.RuleVersion = tc.digest, StoredRuleVersion+1
 			item.Evidence = json.RawMessage(`{"title":"新资料"}`)
-			item.Candidates = json.RawMessage(`[{"title":"新候选"}]`)
-			item.Conflicts = json.RawMessage(`["disc_fuzzy"]`)
+			if tc.name != "shelved_same" {
+				item.Candidates = json.RawMessage(`[{"title":"新候选"}]`)
+				item.Conflicts = json.RawMessage(`["disc_fuzzy"]`)
+			}
 			requirePendingRefreshOK(t, curation.UpsertPendingItem(ctx, f.db, item))
 			got, err := f.writer.PendingItem(ctx, id)
 			requirePendingRefreshOK(t, err)
@@ -181,7 +183,7 @@ func TestPostgreSQLCurationModelPlanAfterClaimRefresh(t *testing.T) {
 	release, track := f.release(t, remote.Title, remote.Artists[0].Name)
 
 	requirePendingRefreshOK(t, worker.walk(ctx, false, nil, false))
-	claimed := f.claim(t, release)
+	claimed := f.claim(t, release, "release_match")
 	before, err := curation.LoadWorkStates(ctx, f.db, "release", []string{release})
 	requirePendingRefreshOK(t, err)
 	if state := before[release]; state.Status != "uncertain" || state.InputDigest != claimed.InputDigest {

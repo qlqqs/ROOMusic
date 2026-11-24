@@ -103,7 +103,10 @@ func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
  claimed_at=CASE WHEN p.status='in_progress' THEN p.claimed_at END,
  review_retries=CASE WHEN p.status='in_progress' THEN p.review_retries ELSE 0 END,
  next_attempt_at=CASE WHEN p.status IN ('waiting_model','in_progress') THEN p.next_attempt_at END
- WHERE p.status IN ('waiting_model','in_progress') OR (p.status='shelved' AND p.input_digest<>excluded.input_digest)`, item.TargetID, item.Kind, item.RuleVersion, item.InputDigest, item.Evidence, item.Candidates, item.Conflicts)
+ WHERE p.status IN ('waiting_model','in_progress')
+ OR (p.status='shelved' AND (p.input_digest<>excluded.input_digest
+     OR p.candidates IS DISTINCT FROM excluded.candidates
+     OR p.conflicts IS DISTINCT FROM excluded.conflicts))`, item.TargetID, item.Kind, item.RuleVersion, item.InputDigest, item.Evidence, item.Candidates, item.Conflicts)
 	return err
 }
 
