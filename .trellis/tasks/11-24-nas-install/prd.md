@@ -39,3 +39,13 @@
 ## 不做
 
 - 各家 NAS 的真机验证（交给 qlqq 与用户）；群晖 DSM 虚拟机（许可只允许群晖硬件）。
+
+## 实施与验收记录（2026-11-24）
+
+- 实现（Codex gpt-6.2-astra）：Compose 的 PUID/PGID 与 postgres 内联准备入口、`deploy/nas/compose.yaml`（无 `x-` 锚点）、删除首次安装脚本及其测试、静态检查脚本（加固断言、单文件与主文件展开等价）、发布流水线可选推送 Docker Hub、部署合同同步。
+  主代理审阅时把 `chmod` 失败改为只提示（原写法在 `sh -e` 下会让 NAS 网络存储或 ACL 目录上的数据库起不来）。
+- 测试（Codex gpt-6.2-sol）：重写 `scripts/tests/test_production_deployment.py`。实际运行 `sg docker -c 'python3 scripts/tests/test_production_deployment.py -v'`，12 项全部通过：
+  空目录首次安装（只填音乐目录，创建管理员、登录、扫描）、重建复用密码、缺密码拒绝启动、四种 NAS 属主（1026:100、1000:10、99:100、568:568）写入与手动备份、Docker 自动建目录后属主修正、单文件版本无 `.env` 启动、从 0.8.0 原地升级（管理员与密码保留、可登录）、Compose v2.20.1 对主文件与单文件 `config`。
+  `scripts/check-production-compose.sh` 通过。
+- 文档（主代理）：`docs/install-nas.md`（群晖、飞牛、绿联、极空间、威联通、TrueNAS、Unraid）、README 快速开始去掉脚本并链接 NAS 说明。
+- 未做：各家 NAS 真机；Docker Hub 推送要等 qlqq 建好仓库并配置 `vars.DOCKERHUB_IMAGE`、`secrets.DOCKERHUB_USERNAME`、`secrets.DOCKERHUB_TOKEN`，之后把默认镜像与文档切到 Docker Hub。

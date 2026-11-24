@@ -41,13 +41,14 @@
 - 开发与测试的 PostgreSQL 镜像与 `compose.prod.yaml` 的 `x-postgres-image` 是同一个钉死字符串，CI 校验三者一致。
 - 生产镜像固定 Node、Go、Alpine、PostgreSQL 基础镜像版本与摘要，ffmpeg 与 `scripts/ffmpeg-pinned.sh` 同一摘要；
   Node 阶段（`--platform=$BUILDPLATFORM`，版本与 `.mise.toml` 一致，CI 校验）`npm ci` 后 `npm run build`，Go 阶段校验 `dist/index.html`、
-  运行 `TestEmbeddedAssetsAreContentHashed` 后内嵌；运行镜像不含 Node。构建上下文的排除规则在 `deploy/production/Dockerfile.dockerignore`。应用以 uid 1000 运行，音乐只读挂载；仅首次安装以 root 在宿主机运行 `scripts/production-init.sh`，镜像不包含初始化脚本。
-  生产 Compose 仅包含 postgres（健康检查）→ app，顶层 `name: roomusic-server`。固定容器名默认为 `roomusic-app`、`roomusic-postgres`，分别通过 `ROOMUSIC_APP_CONTAINER_NAME`、`ROOMUSIC_POSTGRES_CONTAINER_NAME` 配置。同机多实例使用不同名称。Compose 不引用、不执行、不依赖初始化脚本；升级直接 pull 后 up。必填仅 `ROOMUSIC_MUSIC_DIR`。
+  运行 `TestEmbeddedAssetsAreContentHashed` 后内嵌；运行镜像不含 Node。构建上下文的排除规则在 `deploy/production/Dockerfile.dockerignore`。应用以 `PUID:PGID`（默认 1000:1000）运行，音乐只读挂载。
+  生产 Compose 仅包含 postgres（健康检查）→ app，顶层 `name: roomusic-server`。固定容器名默认为 `roomusic-app`、`roomusic-postgres`，分别通过 `ROOMUSIC_APP_CONTAINER_NAME`、`ROOMUSIC_POSTGRES_CONTAINER_NAME` 配置。同机多实例使用不同名称。首次安装直接 up，升级 pull 后 up。应用镜像仓库由 `ROOMUSIC_IMAGE` 指定，默认 `ghcr.io/qlqqs/roomusic`。必填仅 `ROOMUSIC_MUSIC_DIR`。
   `./secrets`、`./postgres`、`./data`、`./backups` 全部为 bind mount；PostgreSQL 18 挂载点为 `/var/lib/postgresql`，不创建命名或匿名卷。
-  宿主机脚本依赖 Python 3 解析 Compose JSON 配置，不执行 dotenv 内容；只调整 secrets/data/backups 顶层权限；密码文件属主 uid 1000、0600，secrets/data/backups 目录 0700。新建 postgres 挂载根目录为 0755，允许 PostgreSQL 降权后访问；不修改已有数据库目录权限。首次生成 32 字节随机十六进制密码，也可通过 `ROOMUSIC_DB_PASSWORD` 指定；后续启动直接读取，重复执行脚本复用，显式不同密码报错。数据库目录非空但密码文件缺失时停止。
-  PostgreSQL 官方 root 入口读取 `POSTGRES_PASSWORD_FILE` 后降权；应用通过 `ROOMUSIC_DB_PASSWORD_FILE` 在 config.DatabaseURL 中读取，使用 URL 编码组装，服务和所有 CLI 共用。未配置文件时保留原 DATABASE_URL 行为；文件模式不接受 URL 内另一份密码，读取错误不输出密码或路径。
+  postgres 服务启动时只将属主为 root 的 secrets/data/backups 顶层目录改归 `PUID:PGID`，目录权限 0700。密码文件属主为 `PUID:PGID`、权限 0600。首次生成 32 字节随机十六进制密码，已有密码继续复用。PGDATA 非空但密码文件缺失或为空时停止。
+  PostgreSQL 官方入口以 root 读取 `POSTGRES_PASSWORD_FILE`，导出密码并清除文件变量后降权；应用通过 `ROOMUSIC_DB_PASSWORD_FILE` 在 config.DatabaseURL 中读取，使用 URL 编码组装，服务和所有 CLI 共用。未配置文件时保留原 DATABASE_URL 行为；文件模式不接受 URL 内另一份密码，读取错误不输出密码或路径。
   生产应用默认使用 host 网络，监听 `0.0.0.0:${ROOMUSIC_HTTP_PORT:-8090}`。数据库保留独立项目网络，只发布 `127.0.0.1:${ROOMUSIC_DB_PORT:-55439}`，应用按该地址连接。健康检查访问实际监听端口；同机多实例的两个端口均需独立。
-  `deploy/production/compose.bridge.yaml` 配合主文件将应用接回项目网络，恢复容器内 8080 及服务名 postgres，并清除数据库发布端口。bridge 用户手动添加渲染器并设置 `ROOMUSIC_LAN_URL`；host 模式默认采用发现设备的网卡地址。两种组合均由 `scripts/check-production-compose.sh` 检查。备份目录可用 `ROOMUSIC_BACKUP_DIR` 指定，首次安装脚本和 app 使用同一路径。子网默认由 Docker 分配，可通过 override 设置；不同开发测试项目使用独立网络和目录。
+  `deploy/production/compose.bridge.yaml` 配合主文件将应用接回项目网络，恢复容器内 8080 及服务名 postgres，并清除数据库发布端口。bridge 用户手动添加渲染器并设置 `ROOMUSIC_LAN_URL`；host 模式默认采用发现设备的网卡地址。主文件和无锚点的 NAS 单文件支持 Compose v2.20.1，bridge 覆盖文件需要 v2.24.4。
+  `scripts/check-production-compose.sh` 检查 host、bridge 配置及 NAS 单文件与主文件的等价性。备份目录可用 `ROOMUSIC_BACKUP_DIR` 指定，postgres 和 app 挂载同一路径。子网默认由 Docker 分配，可通过 override 设置；不同开发测试项目使用独立网络和目录。
   入口等数据库接受连接后启动，`/readyz` 用于镜像健康检查。生产的 `ROOMUSIC_ALLOWED_ORIGINS` 可选，不配时按主机一致模式，反代须保留 Host（含端口）与 Origin；格式与冲突由后端校验。
 - `ROOMUSIC_TIMEZONE`（默认 `Asia/Shanghai`）同时用于备份与定时扫描；启动时校验为有效时区，经 `config.Server.Backup.Location` 传入调度器。定时扫描默认每天 4 点、备份默认 3 点；扫描开关与整点由数据库设置接口管理，详见[扫描协调合同](./scan-coordination-contracts.md)第 9 节。
 - 备份内置在应用（`backend/internal/backup`）：镜像含与数据库同主版本的 `postgresql18-client`；按 `ROOMUSIC_TIMEZONE` 每天
@@ -71,7 +72,6 @@
   响应式检查，失败时上传报告）。
   集成 job 逐个执行 `bash -n` 检查 `scripts/*.sh` 与 `deploy/production/*.sh`，校验开发、测试 Compose，运行
   `scripts/check-production-compose.sh`（假值、只解析不启动：必填中文提示、服务与端口、默认与自定义备份目录、无数据卷、无初始化服务及依赖、固定容器名参数、override 子网），
-  运行 `python3 scripts/tests/test_production_init.py`（合成配置，替换 id/chown 验证权限调用，其余文件操作与配置解析真实执行），
   检查 ffmpeg、Go 与 PostgreSQL 客户端主版本一致性（CI 不构建镜像），运行 `python3 scripts/tests/test_release_check.py`，
   并运行 `./scripts/test-integration.sh`（时限 15 分钟，job 30 分钟）；后者先经 `scripts/ffmpeg-pinned.sh`、`scripts/fpcalc-pinned.sh` 取出固定版本的 ffmpeg 与 fpcalc（`ROOMUSIC_TEST_FFMPEG`、`ROOMUSIC_TEST_FPCALC`；取不到即失败，
   派生用例不得静默跳过），真实启动 PostgreSQL 18 并运行 `TestPostgreSQL|TestFFmpeg`，结束时清理专用容器和数据卷。
