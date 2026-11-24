@@ -16,6 +16,7 @@ type Stream = {
   segments: { entry_id: string; track: TrackSummaryDTO; stream_start_seconds: number; track_start_seconds: number }[];
 };
 const now = () => new Date().toISOString();
+type Upnp = { max_sample_rate: number; format_declared: boolean; occupied_by: { user_id: string; display_name: string } | null };
 
 /** 只模拟现有界面用到的播放区合同（F3 可显式预置额外设备）；音频仍由原生 Audio 解码，不模拟浏览器媒体事件或计次。 */
 export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) {
@@ -37,7 +38,8 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
     stream: null as Stream | null, next_stream: null, paused_at: null as string | null, signal: null as unknown,
     event: null as { seq: number; kind: "track_started"; entry_id: string } | null,
   };
-  const remotes = new Map<string, { device: typeof device; zone: typeof zone; entries: Entry[] }>();
+  type MockDevice = typeof device & Partial<Upnp>;
+  const remotes = new Map<string, { device: MockDevice; zone: typeof zone; entries: Entry[] }>();
   const snapshot = () => ({ server_time: now(), protocol: 1,
     devices: [...(registered ? [device] : []), ...[...remotes.values()].map((row) => row.device)],
     zones: [...(registered ? [zone] : []), ...[...remotes.values()].map((row) => row.zone)],
@@ -193,7 +195,7 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
       update();
     },
     /** F3 的远端设备；与本机使用同一份 DTO 形状，但各自保有队列、设置和音量。 */
-    addDevice(options: { name: string; online: boolean; fixed?: boolean; track: TrackSummaryDTO }) {
+    addDevice(options: { name: string; online: boolean; fixed?: boolean; track: TrackSummaryDTO; upnp?: Upnp }) {
       const suffix = String(remotes.size + 2).padStart(3, "0");
       const deviceId = `00000000-0000-4000-8000-00000000d${suffix}`;
       const zoneId = `00000000-0000-4000-8000-00000000e${suffix}`;
@@ -203,7 +205,8 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
         current: remoteEntries[0] ?? null, queue_length: remoteEntries.length,
         intent: "pause" as const, status: "paused" as const, paused_at: now(), stream: null };
       remotes.set(zoneId, { device: { ...structuredClone(device), device_id: deviceId, zone_id: zoneId,
-        name: options.name, online: options.online,
+        name: options.name, online: options.online, kind: options.upnp === undefined ? "browser" : "upnp",
+        ...options.upnp,
         capabilities: { ...device.capabilities, volume: options.fixed ? "fixed" : "number" } }, zone: remoteZone, entries: remoteEntries });
       return { deviceId, zoneId };
     },
@@ -211,7 +214,7 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
     queueSnapshot: () => structuredClone(queue()),
     currentTrack: () => zone.current?.track.track_id,
     streamUrl: () => zone.stream?.url,
-    async handle(route: ApiMockRoute, path: string, method: string, input: unknown): Promise<void> {
+    async handle(route: ApiMockRoute, path: string, method: string, input: unknown, viewer: { id: string; username: string }): Promise<void> {
       const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
       if (path === BASE) return json(snapshot());
       if (path === `${BASE}/events`) {
@@ -228,6 +231,24 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
         return json({ server_time: now(), protocol: 1, session_id: SESSION, device, zone });
       }
       if (path.endsWith("/release")) return route.fulfill({ status: 204 });
+      const lanMatch = new RegExp(`^${BASE}/devices/([^/]+)/(activate|sample-rate)$`).exec(path);
+      if (lanMatch !== null) {
+        const renderer = [...remotes.values()].find((row) => row.device.device_id === lanMatch[1])?.device;
+        if (renderer?.kind !== "upnp") throw new Error("局域网设备夹具不存在");
+        if (lanMatch[2] === "activate" && method === "POST") {
+          const { takeover } = d.object({ takeover: d.boolean() })(input, "$");
+          const owner = renderer.occupied_by;
+          if (owner != null && owner.user_id !== viewer.id && !takeover) {
+            return json({ error: { code: "device_busy", message: `${owner.display_name} 正在使用这台设备` } }, 409);
+          }
+          renderer.occupied_by = { user_id: viewer.id, display_name: viewer.username };
+          return json({ server_time: now(), device: renderer });
+        }
+        if (lanMatch[2] === "sample-rate" && method === "PUT") {
+          renderer.max_sample_rate = d.object({ max_sample_rate: d.integer() })(input, "$").max_sample_rate;
+          return json({ server_time: now(), device: renderer });
+        }
+      }
       const deviceMatch = new RegExp(`^${BASE}/devices/([^/]+)$`).exec(path);
       if (deviceMatch) {
         const row = [rowOf(MOCK_ZONE), ...remotes.values()].find((item) => item.device.device_id === deviceMatch[1]);

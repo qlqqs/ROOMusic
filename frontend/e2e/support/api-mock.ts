@@ -58,6 +58,7 @@ import { respondToSearch, searchDataOf, type SearchData } from "../../src/test/s
 import { backupFileAt, backupNotFound, respondToSystem, systemDataOf, type SystemData } from "../../src/test/system-data";
 import { artistCatalogState, artistSummaryOriginError, artistError, respondToArtistFavorites, respondToArtists, respondToArtistSummaries, type ArtistData } from "../../src/test/artist-data";
 import { zonesMock } from "./zones";
+import { LAN_DEVICE_API, lanDevicesMock } from "./lan-devices";
 import { gradientPng } from "./png";
 
 // 受控后端：用后端集成测试产出的真实响应样本回答 /api/v1/*，并保持必要的状态（会话、目录、扫描、成员），
@@ -161,6 +162,7 @@ type ApiMockContext = { route: (pattern: string, handler: (route: ApiMockRoute) 
 
 export async function installApiMock(context: ApiMockContext, options: MockOptions = {}): Promise<ApiMock> {
   const { setupRequired = false, signedInAs = null, failSetupStatusTimes = 0 } = options;
+  const lanDevices = lanDevicesMock();
   const mock: ApiMock = {
     zones: zonesMock((id) => mock.personal.tracks.get(id) ?? personalTracksOf(mock).find((track) => track.track_id === id)),
     search: searchDataOf(),
@@ -511,6 +513,8 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     if (key === "GET /api/v1/release-claims") return guarded(method, path, true, () => respondToClaims(mock.governance, search));
     const claimRead = /^\/api\/v1\/release-claims\/([^/]+)$/.exec(path);
     if (claimRead !== null && method === "GET") return guarded(method, path, true, () => respondToClaim(mock.governance, claimRead[1] ?? ""));
+    if (path.startsWith(`${LAN_DEVICE_API}/`)) return guarded(method, path, true, () => lanDevices.respond(method, path, body));
+
     // 自动整理（管理员）。
     if (key === "GET /api/v1/admin/curation/settings") return guarded(method, path, true, () => respondToCurationSettings(mock.curation));
     if (key === "PUT /api/v1/admin/curation/settings") return guarded(method, path, true, () => respondToUpdateCurationSettings(mock.curation, body));
@@ -670,11 +674,12 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     }
     mock.calls.push({ method: request.method(), path: url.pathname, search: url.search, body, idempotencyKey: request.headers()["idempotency-key"] ?? null });
     if (/^\/api\/v1\/me\/playback(?:\/|$)/.test(url.pathname)) {
-      if (viewer() === null) {
+      const current = viewer();
+      if (current === null) {
         const unauthorized = loadApiSample("errors/unauthorized");
         await route.fulfill({ status: unauthorized.status, contentType: "application/json", body: JSON.stringify(unauthorized.body) });
       } else {
-        await mock.zones.handle(route, url.pathname, request.method(), body);
+        await mock.zones.handle(route, url.pathname, request.method(), body, current);
       }
       return;
     }

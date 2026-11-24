@@ -6,6 +6,8 @@ import snapshotEvent from "../../../../../backend/internal/app/testdata/api-samp
 import signalEvent from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/zone-signal.json";
 import nextStreamEvent from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/zone-next-stream.json";
 import failedTrackEvent from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/zone-track-failed.json";
+import upnpSnapshot from "../../../../../backend/internal/app/testdata/api-samples/upnp/playback-snapshot.json";
+import occupiedDevice from "../../../../../backend/internal/app/testdata/api-samples/upnp/playback-occupied.json";
 import { sampleBody } from "../../../test/api-samples";
 import type { QueueEntry } from "../engine/queue";
 import {
@@ -201,6 +203,34 @@ describe("播放区公开 DTO 的真实样本", () => {
 
   it("快照响应逐字段映射服务器时间、设备与播放区", () => {
     expect(decodeSnapshot(response("snapshot"))).toStrictEqual(snapshot);
+  });
+
+  it("快照映射局域网设备的采样率、格式声明及占用者，兼容空值和缺省字段", () => {
+    const { body } = upnpSnapshot;
+    const [renderer] = body.devices;
+    const devices = [
+      deviceEvent.data.device,
+      { ...renderer, device_id: id(91) },
+      { ...renderer, device_id: id(92), occupied_by: null },
+      { ...occupiedDevice.body.device, device_id: id(93), max_sample_rate: 96000, format_declared: false },
+      { ...deviceEvent.data.device, device_id: id(94), kind: "upnp" },
+    ];
+    expect(decodeSnapshot({ ...body, devices }).devices.map((device) => device.upnp)).toStrictEqual([
+      null,
+      { maxSampleRate: 48000, formatDeclared: true, occupiedBy: null },
+      { maxSampleRate: 48000, formatDeclared: true, occupiedBy: null },
+      { maxSampleRate: 96000, formatDeclared: false, occupiedBy: { userId: id(4), displayName: "listener" } },
+      { maxSampleRate: 48000, formatDeclared: true, occupiedBy: null },
+    ]);
+  });
+
+  it.each([
+    [{ max_sample_rate: 48.5 }, "max_sample_rate"],
+    [{ format_declared: "false" }, "format_declared"],
+    [{ occupied_by: { user_id: "invalid", display_name: "listener" } }, "occupied_by.user_id"],
+  ])("拒绝畸形的局域网设备字段 %j", (patch, field) => {
+    const { body } = upnpSnapshot;
+    expect(() => decodeSnapshot({ ...body, devices: [{ ...body.devices[0], ...patch }] })).toThrow(`$.devices[0].${field}`);
   });
 
   it("队列响应逐字段映射条目身份、曲目摘要与顺序", () => {
