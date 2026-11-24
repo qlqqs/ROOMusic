@@ -65,6 +65,13 @@ a.row:focus-visible {
   flex: 1;
 }
 
+/* 网页地址一行显示，过长时省略（完整标题在悬停提示里）。 */
+.row[data-truncate] .rowText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .external {
   flex: none;
   color: var(--text-secondary);

@@ -32,6 +32,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
+	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/upstreammock"
 )
 
@@ -79,6 +80,7 @@ func recordArtistMediaSamples(f *artistSamples) {
 	if _, err := writer.SetSettings(ctx, f.admin.id, true); err != nil {
 		t.Fatal(err)
 	}
+	recordArtistWebSearchSamples(f, writer)
 	imageData, err := os.ReadFile(filepath.Join("..", "upstreammock", "testdata", "cover.png"))
 	if err != nil {
 		t.Fatal(err)
@@ -116,6 +118,49 @@ func recordArtistMediaSamples(f *artistSamples) {
 		}
 	}
 	recordArtistManualMediaSamples(f, imageData)
+}
+
+func recordArtistWebSearchSamples(f *artistSamples, w *curation.Writer) {
+	t := f.t
+	t.Helper()
+	ctx := t.Context()
+	base := "/api/v1/artists/" + f.primary
+	conversation, err := runtime.NewStore(f.app.database).CreateCurationConversation(ctx, f.admin.id, "艺人样本", "sample-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := uuid.New()
+	mustExec(t, f.app, `INSERT INTO curation_pending_items(id,target_type,artist_id,kind,status,rule_version,input_digest,evidence,conversation_id,claimed_at)
+ VALUES($1,'artist',$2,'artist_identity','in_progress',1,'sample','{}',$3,now())`, item, f.primary, conversation.ID)
+	batch, err := w.OpenBatch(ctx, "model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const page = "https://artists.example.org/profile"
+	run := curation.WithModelRun(ctx, &curation.ModelRun{ActorID: f.admin.id, Model: "sample-model", ConversationID: conversation.ID, PendingItemID: item})
+	_, err = w.ApplyArtistBio(run, curation.ArtistBioRequest{ArtistID: f.primary, BatchID: batch.ID, Key: uuid.New(), Citations: []catalog.Citation{{URL: page, Title: "演出名录"}},
+		Bio: sources.ArtistBio{Attribution: sources.Attribution{Source: "web_search", SourceURL: page}, ID: "artist", Lang: "zh", Text: "这段合成简介展示模型依据演出记录整理的艺人资料。"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = w.CloseBatch(ctx, batch.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.get("artists/detail-web-search", base)
+	input, err := json.Marshal(map[string]any{"item_id": item, "source": "wikidata", "external_id": "Q900001", "basis": map[string]any{"note": "需要核对同名艺人的署名。", "citations": []string{page}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = w.CreateException(ctx, curation.ModelException{PendingItemID: item, PlanItemID: uuid.New(), ConversationID: &conversation.ID, Tool: "resolve_artist_identity", Provider: "sample-model", Input: input,
+		Preview: json.RawMessage(`{"changes":[{"field":"artist_link","before":null,"after":{"name":"同名艺人","description":null}}]}`),
+		Review:  curation.ExceptionReview{ID: uuid.New(), Model: "sample-review", Decision: "needs_human_confirmation", Source: "model"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.get("artists/web-search", base+"/web-search")
+	if err = curation.ResolvePendingItems(ctx, f.app.database, f.primary, "artist_identity", "program_matched"); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func recordArtistManualMediaSamples(f *artistSamples, imageData []byte) {
@@ -972,7 +1017,7 @@ search/artist-correction-normalized-artists
 artists/list-preparing artists/detail-preparing artists/queue-preparing
 artists/list-name artists/list-album-count artists/list-role artists/list-initial artists/list-empty artists/list-out-of-range
 artists/set-links artists/link-preview artists/set-image artists/set-bio artists/reject-media artists/detail-manual-media
-artists/detail artists/detail-unavailable artists/detail-with-media artists/detail-redirect artists/names artists/names-out-of-range
+artists/detail-web-search artists/web-search artists/detail artists/detail-unavailable artists/detail-with-media artists/detail-redirect artists/names artists/names-out-of-range
 artists/albums artists/role-tracks artists/role-tracks-missing artists/queue artists/queue-empty artists/queue-random
 governance/artist-merge governance/artist-merge-replayed governance/artist-split-preview-aliases governance/artist-split-preview-albums
 governance/artist-split-new governance/artist-split-restored-id governance/artist-name-set governance/artist-name-auto

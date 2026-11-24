@@ -314,6 +314,10 @@ func (h *Handlers) resolveModelConfig(ctx context.Context, userID string) (runti
 	if err != nil {
 		return settings, "", err
 	}
+	return modelConfig(settings, userID, h.secrets)
+}
+
+func modelConfig(settings runtime.UserSettings, userID string, secrets *secret.Store) (runtime.UserSettings, string, error) {
 	settings, support, err := effectiveSettings(settings)
 	if err != nil {
 		return settings, "", errInvalidModelConfig
@@ -323,7 +327,7 @@ func (h *Handlers) resolveModelConfig(ctx context.Context, userID string) (runti
 	}
 	var key []byte
 	if settings.Key != nil {
-		key, err = h.secrets.Open(userID, modelKeyPurpose, settings.Key.Ciphertext)
+		key, err = secrets.Open(userID, modelKeyPurpose, settings.Key.Ciphertext)
 		if err != nil {
 			return settings, "", &ModelUnavailable{Reason: "key_needs_reentry"}
 		}

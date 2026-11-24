@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { sampleBody } from "../../../test/api-samples";
 import { artistMediaControls } from "../../../test/artist-media-controls";
 import { artistImage } from "../../../test/artist-media-data";
-import { decodeArtistDetail, type ArtistImageDTO } from "../api/decoders";
+import { decodeArtistDetail, decodeArtistWebSearch, type ArtistImageDTO } from "../api/decoders";
 import { ArtistPortrait } from "./artist-portrait";
 
 const mbid = "00000000-0000-4000-8000-000000000002";
@@ -18,6 +18,7 @@ it.each<{ image: ArtistImageDTO | null; sourceName: string; kind: string; glyph:
   { image: artistImage, sourceName: "Wikimedia Commons · CC BY 4.0", kind: "licensed", glyph: "book-open" },
   { image: { ...artistImage, source: "plugin:synthetic-media", license: null }, sourceName: "插件 synthetic-media", kind: "plugin", glyph: "puzzle" },
   { image: manualDetail.image, sourceName: "管理员提供", kind: "manual", glyph: "user-round-pen" },
+  { image: { ...artistImage, source: "web_search", license: null }, sourceName: "网络搜索", kind: "web", glyph: "sparkles" },
 ])("显示 $sourceName 的印章、图标与悬停提示", async ({ image, sourceName, kind, glyph }) => {
   const user = userEvent.setup();
   render(<ArtistPortrait artist={artist} image={image} links={links} media={null} />);
@@ -27,6 +28,61 @@ it.each<{ image: ArtistImageDTO | null; sourceName: string; kind: string; glyph:
   expect(seal.querySelector(`svg.lucide-${glyph}[aria-hidden="true"]`)).not.toBeNull();
   await user.hover(seal);
   expect((await screen.findByText(label)).getAttribute("aria-hidden")).toBe("true");
+});
+
+it.each([
+  ["queued", "排队等待网络搜索"],
+  ["running", "正在网络搜索"],
+] as const)("无图时 %s 显示网络搜索印章和细弧", (state, label) => {
+  const media = { ...artistMediaControls(), webSearch: { state, candidates: [] } };
+  const { container } = render(<ArtistPortrait artist={{ ...artist, image: null }} image={null} links={links} media={media} />);
+  const seal = screen.getByRole("button", { name: label });
+  expect(seal.getAttribute("data-kind")).toBe("searching");
+  expect(seal.querySelector("svg.lucide-globe")).not.toBeNull();
+  expect(container.querySelector('svg[data-indeterminate][aria-hidden="true"]')).not.toBeNull();
+});
+
+function renderPendingPortrait() {
+  const search = decodeArtistWebSearch(sampleBody("artists/web-search"));
+  const first = search.candidates[0];
+  if (first === undefined) throw new Error("缺少网络搜索候选样本");
+  const second = { ...first, exception_id: mbid, external_id: "Q900002", name: "另一位合成艺人", citations: [] };
+  const media = { ...artistMediaControls(), webSearch: { ...search, candidates: [first, second] } };
+  const props = { artist, image: artistImage, links, media };
+  return { ...render(<ArtistPortrait {...props} />), first, second, props, media };
+}
+
+it.each(["accept", "decline"] as const)("待确认印章显示候选数，支持 %s", async (decision) => {
+  const user = userEvent.setup();
+  const { first, second, media } = renderPendingPortrait();
+  const seal = screen.getByRole("button", { name: "有 2 个身份候选等你确认" });
+  expect(seal.getAttribute("data-kind")).toBe("pending");
+  expect(seal.querySelector("svg.lucide-globe")).not.toBeNull();
+  await user.click(seal);
+  const dialog = within(screen.getByRole("dialog", { name: "身份候选" }));
+  expect(dialog.getByText(first.external_id)).toBeTruthy();
+  expect(dialog.getByText(second.external_id)).toBeTruthy();
+  await user.click(dialog.getByLabelText("1 个依据网页"));
+  expect(dialog.getByRole("link", { name: "artists.example.org/profile" }).getAttribute("href")).toBe("https://artists.example.org/profile");
+  await user.click(dialog.getByRole("button", { name: decision === "accept" ? `就是 ${second.name}` : "都不是" }));
+  expect(media.decideCandidates).toHaveBeenCalledExactlyOnceWith(
+    decision === "accept" ? [second.exception_id] : [first.exception_id, second.exception_id],
+    decision,
+  );
+  expect(screen.queryByRole("dialog", { name: "身份候选" })).toBeNull();
+});
+
+it("候选处理中无法再次采纳或全部不采纳", async () => {
+  const user = userEvent.setup();
+  const { media, props, rerender } = renderPendingPortrait();
+  await user.click(screen.getByRole("button", { name: "有 2 个身份候选等你确认" }));
+  rerender(<ArtistPortrait {...props} media={{ ...media, deciding: true }} />);
+
+  const dialog = within(screen.getByRole("dialog", { name: "身份候选" }));
+  expect(dialog.getAllByLabelText("正在处理")).toHaveLength(2);
+  expect(dialog.queryByRole("button", { name: /^就是 / })).toBeNull();
+  await user.click(dialog.getByRole("button", { name: "都不是" }));
+  expect(media.decideCandidates).not.toHaveBeenCalled();
 });
 
 it("来源弹层显示作者、许可和外部对应，普通成员没有写入入口", async () => {

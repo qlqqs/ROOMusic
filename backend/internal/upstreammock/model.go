@@ -55,6 +55,7 @@ func (s *Server) model(r *http.Request, empty bool) response {
 		return missing()
 	}
 	t := input.turn()
+	t.baseURL = mediaURL(r, "")
 	if t.nativeSearch {
 		return response{status: 400, json: object{"error": object{"code": "tool_unsupported", "message": "web_search is not supported"}}}
 	}

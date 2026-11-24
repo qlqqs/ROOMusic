@@ -101,7 +101,7 @@ contentFeatures.dlna.org: DLNA.ORG_OP=00;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=0170000000
 与 UPnP 共用设置、可见性、分配、占用与托管输出规则，以下只列不同之处。
 
 - 设置：`upnp_settings` 增加 `upnp_enabled`、`cast_enabled`（默认 true），都只在 `enabled` 为 true 时起作用；关闭某个协议时停止该协议的发现并释放其托管输出。
-  `GET/PUT /api/v1/admin/upnp/settings` 返回 `{enabled, shared, upnp_enabled, cast_enabled}`。迁移 `0074_cast_devices`：手动设备表加 `kind`，新表 `cast_device_formats(udn, codec, max_sample_rate)`。
+  `GET/PUT /api/v1/admin/upnp/settings` 返回 `{enabled, shared, upnp_enabled, cast_enabled}`。迁移 `0075_cast_devices`：手动设备表加 `kind`，新表 `cast_device_formats(udn, codec, max_sample_rate)`。
 - 设备键 `cast:<TXT id>`，与 UDN 共用分配表。设备行有 `kind`（`upnp`/`cast`）与 `format`（Cast 为 `{codec, max_sample_rate}`，UPnP 为 `null`）。
 - 发现：`internal/devices/mdns` 每 30 秒在局域网 IPv4 网卡上查询 `_googlecast._tcp`（PTR→SRV/TXT/A，按记录 TTL 过期），不绑定特权端口；地址只接受局域网 IPv4（`internal/devices/lan` 与 UPnP 共用）。手动添加 `POST …/devices {"kind":"cast","address":"IP[:端口]"}`，默认端口 8009，注册表每 30 秒重探。
 - 协议：`internal/devices/cast/castv2` 自写最小 CASTV2（TLS 8009、长度前缀的 CastMessage，connection/heartbeat/receiver/media 命名空间），启动默认媒体接收端 `CC1AD845`；每 5 秒心跳与 `GET_STATUS`，连续无响应视为离线并释放。

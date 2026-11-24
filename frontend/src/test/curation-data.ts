@@ -305,6 +305,7 @@ export function seedException(data: CurationData, patch: Partial<CurationExcepti
   data.counter += 1;
   const n = String(data.counter).padStart(12, "0");
   const exception: CurationExceptionDTO = {
+    artist: null,
     conversation_id: `00000000-0000-4000-9000-${n}`,
     created_at: "2026-01-05T08:00:00Z",
     decided_at: null,

@@ -28,6 +28,9 @@ func (schema *schema) validate(value any, path string) error {
 	case map[string]any:
 		return schema.validateObject(value, path)
 	case []any:
+		if schema.maxItems != nil && new(big.Rat).SetInt64(int64(len(value))).Cmp(schema.maxItems) > 0 {
+			return fmt.Errorf("%s: 元素数超过 maxItems", path)
+		}
 		if schema.items != nil {
 			for i, item := range value {
 				if err := schema.items.validate(item, fmt.Sprintf("%s[%d]", path, i)); err != nil {

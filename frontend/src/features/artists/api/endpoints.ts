@@ -7,6 +7,7 @@ import {
   decodeArtistLinkPreview,
   decodeArtistMediaReject,
   decodeArtistMediaWrite,
+  decodeArtistWebSearch,
   decodeArtistNamesPage,
   decodeArtistParticipationAlbumsPage,
   decodeArtistPage,
@@ -17,6 +18,7 @@ import {
   type ArtistLinkPreviewDTO,
   type ArtistMediaRejectDTO,
   type ArtistMediaWriteDTO,
+  type ArtistWebSearchDTO,
   type ArtistNamesPageDTO,
   type ArtistParticipationAlbumsPageDTO,
   type ArtistPageDTO,
@@ -139,4 +141,17 @@ export function putArtistLink(
     { method: "PUT", path: `/api/v1/artists/${artistId}/links`, body: { expected_revision: params.expectedRevision, source: params.source, external_id: params.externalId }, idempotencyKey },
     decodeArtistMediaWrite,
   );
+}
+
+/** 管理员：这位艺人的网络搜索状态与待确认的身份候选。 */
+export function fetchArtistWebSearch(artistId: string, signal?: AbortSignal): Promise<ApiResponse<ArtistWebSearchDTO>> {
+  return apiRequest({ method: "GET", path: `/api/v1/artists/${artistId}/web-search`, signal }, decodeArtistWebSearch);
+}
+
+/**
+ * 采纳或不采纳一个身份候选：走自动整理的例外接口（完整的响应由 curation 解码，这里只需要成功与否）。
+ * 采纳后同一位艺人的其他候选由后端关闭。
+ */
+export function decideArtistCandidate(exceptionId: string, decision: "accept" | "decline"): Promise<ApiResponse<null>> {
+  return apiRequest({ method: "POST", path: `/api/v1/admin/curation/exceptions/${encodeURIComponent(exceptionId)}/${decision}` }, () => null);
 }

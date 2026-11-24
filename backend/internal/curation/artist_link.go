@@ -65,7 +65,7 @@ func (w *Writer) artistLinkSpec(ctx context.Context, r ArtistLinkRequest) (opera
 	}
 	fp := operations.Fingerprint(map[string]any{"type": operations.TypeArtistLink, "artist_id": r.ArtistID, "source": r.ExternalSource, "external_id": r.ExternalID, "expected_revision": r.ExpectedRevision, "writer": r.Source, "batch_id": r.BatchID, "conversation_id": r.ConversationID, "confirmed_by": r.ConfirmedBy})
 	if r.Source.Kind == "model" {
-		if !uuid.Valid(r.ConversationID) || (r.ConfirmedBy == "" && !uuid.Valid(r.BatchID)) {
+		if r.ConfirmedBy == "" && (!uuid.Valid(r.ConversationID) || !uuid.Valid(r.BatchID)) {
 			return operations.Spec{}, operations.Invalid("invalid_input", "模型写入需要批次与会话")
 		}
 		return w.sourceSpec(ctx, operations.TypeArtistLink, r.ArtistID, fp, r.Source, r.BatchID, key, r.RequestID, r.ConfirmedBy, r.ConversationID)
@@ -98,6 +98,10 @@ func (w *Writer) ApplyArtistLink(ctx context.Context, gate *Sources, r ArtistLin
 			return ArtistLinkApplied{}, err
 		}
 	}
+	return w.applyArtistLink(ctx, r, spec, p, nil, nil)
+}
+
+func (w *Writer) applyArtistLink(ctx context.Context, r ArtistLinkRequest, spec operations.Spec, p ArtistLinkPreview, item *PendingItem, finish func(context.Context, *sql.Tx, []string) error) (ArtistLinkApplied, error) {
 	res, err := operations.Run(ctx, w.db, spec, func(ctx context.Context, tx *sql.Tx, op string) (operations.Outcome, error) {
 		id, revision, err := lockEffectiveArtist(ctx, tx, r.ArtistID)
 		if err != nil {
@@ -111,11 +115,38 @@ func (w *Writer) ApplyArtistLink(ctx context.Context, gate *Sources, r ArtistLin
 				return operations.Outcome{}, err
 			}
 		}
+		if item != nil {
+			if id != r.ArtistID {
+				return operations.Outcome{}, operations.Conflict("item_stale", "艺人身份已变更")
+			}
+			if err = CheckMatchItem(ctx, tx, *item, r.ConversationID, r.ConfirmedBy != ""); err != nil {
+				return operations.Outcome{}, err
+			}
+			var occupied bool
+			if err := tx.QueryRowContext(ctx, artistLinkFamilyCTE+` SELECT EXISTS(SELECT FROM media_links)`, id).Scan(&occupied); err != nil {
+				return operations.Outcome{}, err
+			}
+			if occupied {
+				return operations.Outcome{}, operations.Conflict("occupied", "艺人已有外部对应")
+			}
+		}
 		before, after, err := writeArtistLinks(ctx, tx, id, op, p, spec.Origin != nil)
 		if err != nil {
 			return operations.Outcome{}, err
 		}
 		out, err := artistEditOutcome(ctx, tx, id, before, after)
+		if err != nil {
+			return out, err
+		}
+		if finish != nil {
+			if err := finish(ctx, tx, []string{op}); err != nil {
+				return out, err
+			}
+		} else if item != nil {
+			if err := ResolvePendingItem(ctx, tx, item.ID, r.ConversationID, "model_linked"); err != nil {
+				return out, err
+			}
+		}
 		out.Response = ArtistLinkApplied{OperationID: op, ArtistID: id, Revision: out.ResultRevision}
 		return out, err
 	})

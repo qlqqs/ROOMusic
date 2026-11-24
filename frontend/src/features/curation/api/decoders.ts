@@ -28,7 +28,7 @@ const settingsDecoder = d.object({
 export const SOURCE_CAPABILITIES = ["release_lookup", "recording_lookup", "artist_lookup", "cover_art", "lyrics", "fingerprint_lookup", "artist_image", "artist_bio"] as const;
 export type SourceCapability = (typeof SOURCE_CAPABILITIES)[number];
 
-export const SOURCE_INACTIVE_REASONS = ["curation_disabled", "enabler_unavailable", "source_disabled", "fingerprint_unavailable", "bundled_key_rejected", "key_missing", "key_invalid"] as const;
+export const SOURCE_INACTIVE_REASONS = ["curation_disabled", "enabler_unavailable", "source_disabled", "fingerprint_unavailable", "bundled_key_rejected", "key_missing", "key_invalid", "search_unconfigured"] as const;
 export type SourceInactiveReason = (typeof SOURCE_INACTIVE_REASONS)[number];
 
 // 需要密钥的源（AcoustID：发布镜像内置应用密钥时只有用户密钥，自行构建的没有内置时是应用密钥与用户密钥）才有 keys，按声明顺序每把一项：只给出有没有、末四位与服务端用过之后的结论（unchecked 是还没用过）。
@@ -52,6 +52,8 @@ const sourceDecoder = d.object({
   inactive_reason: d.nullable(d.oneOf(SOURCE_INACTIVE_REASONS)),
   keys: d.optional(d.array(sourceKeyDecoder, { min: 1, max: 8 })),
   name: d.string({ min: 1, max: 200 }),
+  // 网络搜索才有：它依赖的对话模型与搜索来源（都在开启者的管家设置里）是否就绪。
+  requirements: d.optional(d.nullable(d.array(d.object({ kind: d.oneOf(["model", "search"] as const), ready: d.boolean() }), { min: 1, max: 4 }))),
   // 插件源才有：插件会访问的上游地址（来自它的清单）。
   upstreams: d.optional(d.array(d.string({ min: 1, max: 2048 }), { max: 16 })),
 });
@@ -157,12 +159,14 @@ const exceptionDecoder = d.object({
   decided_by: d.nullable(d.uuid()),
   id: d.uuid(),
   input: suppressionValueDecoder,
-  // release_merge（M7 H）：两个本地发行对上同一个外部发行，模型提出整张并入。
-  kind: d.oneOf(["release_match", "recording_match", "release_merge"] as const),
+  // release_merge（M7 H）：两个本地发行对上同一个外部发行，模型提出整张并入。artist_identity：网络搜索给没有外部对应的艺人提出的身份候选。
+  kind: d.oneOf(["release_match", "recording_match", "release_merge", "artist_identity"] as const),
+  // 目标是发行时有 release，是艺人时有 artist（另一个为 null）。
+  artist: d.nullable(d.object({ id: d.uuid(), name: d.string({ max: d.unbounded }) })),
   operation_ids: d.array(d.uuid(), { max: 16 }),
   pending_item_id: d.uuid(),
   preview: d.object({ changes: d.array(exceptionChangeDecoder, { max: 100 }) }),
-  release: d.object({ artist: d.string({ max: d.unbounded }), id: d.uuid(), title: d.string({ max: d.unbounded }) }),
+  release: d.nullable(d.object({ artist: d.string({ max: d.unbounded }), id: d.uuid(), title: d.string({ max: d.unbounded }) })),
   review: d.object({
     decision: d.oneOf(["rejected", "needs_human_confirmation"] as const),
     id: d.uuid(),
@@ -171,8 +175,9 @@ const exceptionDecoder = d.object({
     risk: d.nullable(d.oneOf(["low", "medium", "high"] as const)),
     source: d.oneOf(["model", "policy"] as const),
   }),
-  status: d.oneOf(["open", "accepting", "accepted", "declined"] as const),
-  tool: d.oneOf(["resolve_release_match", "correct_release", "correct_track", "merge_releases"] as const),
+  // superseded：同一位艺人的另一个身份候选被采纳，这一条随之关闭。
+  status: d.oneOf(["open", "accepting", "accepted", "declined", "superseded"] as const),
+  tool: d.oneOf(["resolve_release_match", "correct_release", "correct_track", "merge_releases", "resolve_artist_identity"] as const),
   // 曲目字段的提案（M7 I）带曲目（提出时的有效标题）。
   track: d.optional(d.object({ id: d.uuid(), title: d.string({ max: d.unbounded }) })),
 });

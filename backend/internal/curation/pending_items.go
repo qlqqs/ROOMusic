@@ -10,12 +10,12 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
-const pendingColumns = `id,target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,
+const pendingColumns = `id,target_type,coalesce(target_id::text,''),coalesce(artist_id::text,''),kind,status,rule_version,input_digest,evidence,candidates,conflicts,
  resolution,created_at,updated_at,resolved_at,coalesce(conversation_id::text,''),claimed_at,next_attempt_at,attempts,review_retries,shelved_reason`
 
 func scanPending(row interface{ Scan(...any) error }) (PendingItem, error) {
 	var p PendingItem
-	err := row.Scan(&p.ID, &p.TargetType, &p.TargetID, &p.Kind, &p.Status, &p.RuleVersion, &p.InputDigest, &p.Evidence, &p.Candidates, &p.Conflicts, &p.Resolution, &p.CreatedAt, &p.UpdatedAt, &p.ResolvedAt, &p.ConversationID, &p.ClaimedAt, &p.NextAttemptAt, &p.Attempts, &p.ReviewRetries, &p.ShelvedReason)
+	err := row.Scan(&p.ID, &p.TargetType, &p.TargetID, &p.ArtistID, &p.Kind, &p.Status, &p.RuleVersion, &p.InputDigest, &p.Evidence, &p.Candidates, &p.Conflicts, &p.Resolution, &p.CreatedAt, &p.UpdatedAt, &p.ResolvedAt, &p.ConversationID, &p.ClaimedAt, &p.NextAttemptAt, &p.Attempts, &p.ReviewRetries, &p.ShelvedReason)
 	return p, err
 }
 func pendingRows(rows *sql.Rows, err error) ([]PendingItem, error) {
@@ -46,9 +46,11 @@ func (w *Writer) PendingItem(ctx context.Context, id string) (PendingItem, error
 func CheckMatchItem(ctx context.Context, tx *sql.Tx, item PendingItem, conversation string, confirmed bool) error {
 	var valid bool
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM curation_pending_items
- WHERE id=$1 AND target_id=$2 AND kind=$3 AND input_digest=$4
+ WHERE id=$1 AND (target_id=NULLIF($2,'')::uuid OR (artist_id=NULLIF($7,'')::uuid
+ AND NOT EXISTS(SELECT FROM artist_overrides o WHERE o.artist_id=curation_pending_items.artist_id AND o.redirect_artist_id IS NOT NULL)))
+ AND kind=$3 AND input_digest=$4
  AND ((NOT $6 AND conversation_id=NULLIF($5,'')::uuid AND status='in_progress') OR ($6 AND status='waiting_human')) FOR SHARE)`,
-		item.ID, item.TargetID, item.Kind, item.InputDigest, conversation, confirmed).Scan(&valid)
+		item.ID, item.TargetID, item.Kind, item.InputDigest, conversation, confirmed, item.ArtistID).Scan(&valid)
 	if err != nil {
 		return err
 	}
@@ -58,12 +60,19 @@ func CheckMatchItem(ctx context.Context, tx *sql.Tx, item PendingItem, conversat
 	return nil
 }
 
-func (w *Writer) ClaimPendingItems(ctx context.Context, conversation string, now time.Time, n int) ([]PendingItem, error) {
+// PendingTargetVisibleSQL 与 visible 发行 CTE 共用，只调度未并入其他身份的艺人。
+const PendingTargetVisibleSQL = `(EXISTS(SELECT FROM visible v WHERE v.id=p.target_id)
+ OR (p.artist_id IS NOT NULL AND NOT EXISTS(SELECT FROM artist_overrides o WHERE o.artist_id=p.artist_id AND o.redirect_artist_id IS NOT NULL)))`
+
+func (w *Writer) ClaimPendingItems(ctx context.Context, conversation string, now time.Time, n int, targetTypes ...string) ([]PendingItem, error) {
+	if len(targetTypes) == 0 {
+		targetTypes = []string{"release", "artist"}
+	}
 	return pendingRows(w.db.QueryContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`), picked AS (
- SELECT p.id FROM curation_pending_items p JOIN visible v ON v.id=p.target_id WHERE p.status='waiting_model'
+ SELECT p.id FROM curation_pending_items p WHERE `+PendingTargetVisibleSQL+` AND p.status='waiting_model' AND p.target_type=ANY($4::text[])
  AND (p.next_attempt_at IS NULL OR p.next_attempt_at <= $2) ORDER BY p.created_at,p.id LIMIT $3 FOR UPDATE OF p SKIP LOCKED
  ), claimed AS (UPDATE curation_pending_items SET status='in_progress',conversation_id=$1,claimed_at=$2,updated_at=now(),next_attempt_at=NULL
- WHERE id IN (SELECT id FROM picked) RETURNING *) SELECT `+pendingColumns+` FROM claimed ORDER BY created_at,id`, conversation, now, n))
+ WHERE id IN (SELECT id FROM picked) RETURNING *) SELECT `+pendingColumns+` FROM claimed ORDER BY created_at,id`, conversation, now, n, targetTypes))
 }
 
 func (w *Writer) ClaimedItems(ctx context.Context, conversation string) ([]PendingItem, error) {

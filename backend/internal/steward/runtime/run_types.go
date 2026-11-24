@@ -34,12 +34,13 @@ const (
 
 // RunParams 是入口已取得的调用者身份、会话及模型配置，不包含端点密钥。
 type RunParams struct {
-	Background   bool
-	BeforeStep   func(context.Context) error
-	Usage        func(context.Context, UsageKind, provider.Usage)
-	SkipMemory   bool
-	SystemSuffix string
-	Escalate     func(context.Context, PlanItem, Review, ReviewItem) (string, error)
+	Background            bool
+	BackgroundDirectTools []string
+	BeforeStep            func(context.Context) error
+	Usage                 func(context.Context, UsageKind, provider.Usage)
+	SkipMemory            bool
+	SystemSuffix          string
+	Escalate              func(context.Context, PlanItem, Review, ReviewItem) (string, error)
 	// Check 在运行开始及后台凭据复查时执行。
 	Check func(context.Context) error
 	// Finished 释放运行独占的出站资源。

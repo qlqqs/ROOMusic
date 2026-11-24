@@ -135,12 +135,12 @@ test("管理员保存简介并上传图片，刷新后显示人工来源", async
   const bioResult = decodeArtistMediaWrite(sampleBody("artists/set-bio"));
   const imageResult = decodeArtistMediaWrite(sampleBody("artists/set-image"));
   await page.route(`**${api}/bio`, (route) => {
-    detail.bio = { text, lang: "zh", source: "manual", source_url: null, license: null, license_url: null };
+    detail.bio = { text, lang: "zh", source: "manual", source_url: null, license: null, license_url: null, citations: [] };
     detail.revision = revision + 1;
     return route.fulfill({ json: { ...bioResult, artist_id: detail.artist.id, revision: detail.revision } });
   });
   await page.route(`**${api}/image`, (route) => {
-    detail.image = { resource: imageResource, source: "manual", source_url: null, license: null, license_url: null, author: null };
+    detail.image = { resource: imageResource, source: "manual", source_url: null, license: null, license_url: null, author: null, citations: [] };
     detail.artist.image = imageResource;
     detail.revision = revision + 2;
     return route.fulfill({ json: { ...imageResult, artist_id: detail.artist.id, revision: detail.revision } });

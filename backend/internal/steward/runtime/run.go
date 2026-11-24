@@ -294,19 +294,23 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 		return RunEnd{}, err
 	}
 	var definitions []provider.ToolDefinition
-	for _, definition := range s.registry.ListContext(ctx, s.params.Caller) {
-		s.definitions[definition.Name] = definition
-		if definition.Scope == tool.ScopeRead || definition.Scope == tool.ScopePersonal || definition.Scope == tool.ScopeShared {
-			definitions = append(definitions, provider.ToolDefinition{Name: definition.Name,
-				Description: definition.Description, InputSchema: definition.Input})
-		}
-	}
 	for s.step < maxSteps {
 		if end, err := s.beforeStep(ctx); err != nil || end.Reason != "" {
 			return end, err
 		}
 		if s.inputTokens+s.outputTokens >= maxRunTokens {
 			return RunEnd{Reason: EndTokenLimit}, nil
+		}
+		if definitions == nil || s.params.Background {
+			clear(s.definitions)
+			definitions = definitions[:0]
+			for _, definition := range s.registry.ListContext(ctx, s.params.Caller) {
+				s.definitions[definition.Name] = definition
+				if definition.Scope == tool.ScopeRead || definition.Scope == tool.ScopePersonal || definition.Scope == tool.ScopeShared {
+					definitions = append(definitions, provider.ToolDefinition{Name: definition.Name,
+						Description: definition.Description, InputSchema: definition.Input})
+				}
+			}
 		}
 		s.step++
 		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: systemPromptWithMode(s.params.DisplayName, s.conversation.Mode) + s.params.SystemSuffix + s.memoryBlock,
@@ -509,5 +513,8 @@ func modelFailure(ctx context.Context, err error) RunEnd {
 }
 
 func (s *runState) sharedDirect(name string) bool {
+	if s.params.Background {
+		return slices.Contains(s.params.BackgroundDirectTools, name)
+	}
 	return s.conversation.Mode == "operator" || (s.conversation.Mode == "assistant" && s.definitions[name].Revertible && slices.Contains(s.conversation.AutoApprovedTools, name))
 }

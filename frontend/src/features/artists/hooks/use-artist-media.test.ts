@@ -1,12 +1,21 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
+import { createElement, type PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sampleBody } from "../../../test/api-samples";
+import type { ArtistWebSearchDTO } from "../api/decoders";
+import { fetchArtistWebSearch } from "../api/endpoints";
 import { bioLangOf, useArtistMedia } from "./use-artist-media";
 
-vi.mock("../../auth", () => {
-  const scope = { isCurrent: () => true };
-  return { useViewerScope: () => scope };
+vi.mock("../../auth", async (importOriginal) => {
+  const scope = { generation: 1, isCurrent: () => true };
+  return { ...await importOriginal<typeof import("../../auth")>(), useViewerScope: () => scope };
 });
+
+vi.mock("../api/endpoints", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../api/endpoints")>(),
+  fetchArtistWebSearch: vi.fn(),
+}));
 
 const artistId = "00000000-0000-4000-8000-000000000001";
 const revision = 12;
@@ -19,9 +28,11 @@ function setup() {
     Response.json(sampleBody(url === `${path}/bio` ? "artists/set-bio" : "artists/reject-media")),
   );
   vi.stubGlobal("fetch", fetch);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const wrapper = ({ children }: PropsWithChildren) => createElement(QueryClientProvider, { client: queryClient }, children);
   const hook = renderHook(
     (props: { revision: number }) => useArtistMedia({ artistId, revision: props.revision, refresh }),
-    { initialProps: { revision } },
+    { initialProps: { revision }, wrapper },
   );
   return { ...hook, fetch, refresh };
 }
@@ -41,7 +52,10 @@ function advance(ms: number) {
 }
 
 describe("useArtistMedia", () => {
-  beforeEach(() => vi.useFakeTimers());
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.mocked(fetchArtistWebSearch).mockReset().mockResolvedValue({ status: 200, data: { state: "none", candidates: [] } });
+  });
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
@@ -159,6 +173,61 @@ describe("useArtistMedia", () => {
       expect(result.current.savingBio).toBe(false);
     },
   );
+
+  it.each(["queued", "running"] as const)("网络搜索 %s 每 20 秒重读，候选待确认后停止轮询", async (state) => {
+    const status = vi.mocked(fetchArtistWebSearch);
+    status.mockResolvedValueOnce({ status: 200, data: { state, candidates: [] } });
+    const { result } = setup();
+
+    await advance(1);
+    expect(result.current.webSearch?.state).toBe(state);
+    expect(status).toHaveBeenCalledExactlyOnceWith(artistId, expect.any(AbortSignal));
+
+    status.mockResolvedValue({ status: 200, data: { state: "waiting_human", candidates: [] } });
+    await advance(19_998);
+    expect(status).toHaveBeenCalledOnce();
+    await advance(10);
+    expect(result.current.webSearch?.state).toBe("waiting_human");
+    expect(status).toHaveBeenCalledTimes(2);
+    await advance(60_000);
+    expect(status).toHaveBeenCalledTimes(2);
+  });
+
+  it.each<ArtistWebSearchDTO["state"]>(["none", "shelved", "waiting_human"])("网络搜索 %s 只读取一次", async (state) => {
+    const status = vi.mocked(fetchArtistWebSearch);
+    status.mockResolvedValue({ status: 200, data: { state, candidates: [] } });
+    const { result } = setup();
+    await advance(60_000);
+    expect(result.current.webSearch?.state).toBe(state);
+    expect(status).toHaveBeenCalledOnce();
+  });
+
+  it("全部不采纳时逐个提交候选，完成后刷新资料", async () => {
+    const { result, fetch, refresh } = setup();
+    const ids = ["00000000-0000-4000-8000-000000000002", "00000000-0000-4000-8000-000000000003"];
+    let finishFirst = () => {};
+    fetch.mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      finishFirst = () => resolve(Response.json(sampleBody("curation/exception-declined")));
+    }));
+    fetch.mockResolvedValueOnce(Response.json(sampleBody("curation/exception-declined")));
+    let decision: Promise<boolean> | undefined;
+
+    act(() => { decision = result.current.decideCandidates(ids, "decline"); });
+    expect(result.current.deciding).toBe(true);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(refresh).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishFirst();
+      expect(await decision).toBe(true);
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    for (const [index, id] of ids.entries()) {
+      expect(fetch).toHaveBeenNthCalledWith(index + 1, `/api/v1/admin/curation/exceptions/${id}/decline`, expect.objectContaining({ method: "POST" }));
+    }
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(result.current.deciding).toBe(false);
+  });
 });
 
 it.each([["Biography", "en"], ["かな 🎵", "en"], ["English 和中文", "zh"], ["扩展区 𠮷", "zh"], ["𠮷", "zh"]])(

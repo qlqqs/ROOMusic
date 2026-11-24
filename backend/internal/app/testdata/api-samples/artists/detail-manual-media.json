@@ -15,6 +15,7 @@
       "track_count": 2
     },
     "bio": {
+      "citations": [],
       "lang": "zh",
       "license": null,
       "license_url": null,
@@ -24,6 +25,7 @@
     },
     "image": {
       "author": null,
+      "citations": [],
       "license": null,
       "license_url": null,
       "resource": "28e84b8f75db28325ebb4f49a70b634ae7900e53d717a46f1271dc5d8bfd8a8b.png",

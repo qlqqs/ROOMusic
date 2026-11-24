@@ -23,28 +23,33 @@ type ExceptionRelease struct {
 	Title  string `json:"title"`
 	Artist string `json:"artist"`
 }
+type ExceptionArtist struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
 type ExceptionTrack struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
 }
 type ModelException struct {
-	Track          *ExceptionTrack  `json:"track,omitempty"`
-	ID             string           `json:"id"`
-	PendingItemID  string           `json:"pending_item_id"`
-	PlanItemID     string           `json:"-"`
-	Provider       string           `json:"-"`
-	Tool           string           `json:"tool"`
-	Input          json.RawMessage  `json:"input"`
-	Preview        json.RawMessage  `json:"preview"`
-	Review         ExceptionReview  `json:"review"`
-	ConversationID *string          `json:"conversation_id"`
-	Kind           string           `json:"kind"`
-	Release        ExceptionRelease `json:"release"`
-	Status         string           `json:"status"`
-	DecidedBy      *string          `json:"decided_by"`
-	DecidedAt      *time.Time       `json:"decided_at"`
-	OperationIDs   []string         `json:"operation_ids"`
-	CreatedAt      time.Time        `json:"created_at"`
+	Track          *ExceptionTrack   `json:"track,omitempty"`
+	ID             string            `json:"id"`
+	PendingItemID  string            `json:"pending_item_id"`
+	PlanItemID     string            `json:"-"`
+	Provider       string            `json:"-"`
+	Tool           string            `json:"tool"`
+	Input          json.RawMessage   `json:"input"`
+	Preview        json.RawMessage   `json:"preview"`
+	Review         ExceptionReview   `json:"review"`
+	ConversationID *string           `json:"conversation_id"`
+	Kind           string            `json:"kind"`
+	Release        *ExceptionRelease `json:"release"`
+	Artist         *ExceptionArtist  `json:"artist"`
+	Status         string            `json:"status"`
+	DecidedBy      *string           `json:"decided_by"`
+	DecidedAt      *time.Time        `json:"decided_at"`
+	OperationIDs   []string          `json:"operation_ids"`
+	CreatedAt      time.Time         `json:"created_at"`
 }
 
 func (w *Writer) CreateException(ctx context.Context, e ModelException) (string, error) {
@@ -77,17 +82,27 @@ func (w *Writer) CreateException(ctx context.Context, e ModelException) (string,
 }
 
 const exceptionSelect = `SELECT x.id,x.pending_item_id,x.plan_item_id,x.provider,x.tool,x.input,(x.preview-'confirmation_snapshot'),x.review_id,x.review_model,
- x.review_decision,x.review_source,x.risk,x.reasons,x.conversation_id,p.kind,r.id,r.title,r.artist,x.status,x.decided_by,
+ x.review_decision,x.review_source,x.risk,x.reasons,x.conversation_id,p.kind,r.id,r.title,r.artist,a.id,coalesce(ap.effective_display_name,a.initial_name),x.status,x.decided_by,
  x.decided_at,to_json(x.operation_ids),x.created_at,t.id,t.title FROM curation_model_exceptions x JOIN curation_pending_items p ON p.id=x.pending_item_id
- JOIN release_effective r ON r.id=p.target_id LEFT JOIN track_effective t ON x.tool='correct_track' AND t.id=(x.input->>'track_id')::uuid`
+ LEFT JOIN release_effective r ON r.id=p.target_id
+ LEFT JOIN artist_overrides ao ON ao.artist_id=p.artist_id
+ LEFT JOIN artists a ON a.id=coalesce(ao.redirect_artist_id,p.artist_id)
+ LEFT JOIN artist_profiles ap ON ap.artist_id=a.id
+ LEFT JOIN track_effective t ON x.tool='correct_track' AND t.id=(x.input->>'track_id')::uuid`
 
 func scanException(row interface{ Scan(...any) error }) (ModelException, error) {
 	var e ModelException
-	var trackID, title *string
+	var trackID, title, releaseID, releaseTitle, releaseArtist, artistID, artistName *string
 	var reasons, ops []byte
-	err := row.Scan(&e.ID, &e.PendingItemID, &e.PlanItemID, &e.Provider, &e.Tool, &e.Input, &e.Preview, &e.Review.ID, &e.Review.Model, &e.Review.Decision, &e.Review.Source, &e.Review.Risk, &reasons, &e.ConversationID, &e.Kind, &e.Release.ID, &e.Release.Title, &e.Release.Artist, &e.Status, &e.DecidedBy, &e.DecidedAt, &ops, &e.CreatedAt, &trackID, &title)
+	err := row.Scan(&e.ID, &e.PendingItemID, &e.PlanItemID, &e.Provider, &e.Tool, &e.Input, &e.Preview, &e.Review.ID, &e.Review.Model, &e.Review.Decision, &e.Review.Source, &e.Review.Risk, &reasons, &e.ConversationID, &e.Kind, &releaseID, &releaseTitle, &releaseArtist, &artistID, &artistName, &e.Status, &e.DecidedBy, &e.DecidedAt, &ops, &e.CreatedAt, &trackID, &title)
 	if err != nil {
 		return e, err
+	}
+	if releaseID != nil {
+		e.Release = &ExceptionRelease{*releaseID, *releaseTitle, *releaseArtist}
+	}
+	if artistID != nil {
+		e.Artist = &ExceptionArtist{*artistID, *artistName}
 	}
 	if trackID != nil {
 		e.Track = &ExceptionTrack{ID: *trackID, Title: *title}
@@ -153,8 +168,8 @@ func FinishException(ctx context.Context, tx *sql.Tx, id, actor, decision string
 	if decision != "accepted" && decision != "declined" {
 		return operations.Invalid("invalid_input", "例外结论无效")
 	}
-	var pending string
-	err := tx.QueryRowContext(ctx, `SELECT p.id FROM curation_pending_items p JOIN curation_model_exceptions x ON x.pending_item_id=p.id WHERE x.id=$1 FOR UPDATE OF p`, id).Scan(&pending)
+	var pending, kind string
+	err := tx.QueryRowContext(ctx, `SELECT p.id,p.kind FROM curation_pending_items p JOIN curation_model_exceptions x ON x.pending_item_id=p.id WHERE x.id=$1 FOR UPDATE OF p`, id).Scan(&pending, &kind)
 	if errors.Is(err, sql.ErrNoRows) {
 		return operations.NotFound("not_found", "例外不存在")
 	}
@@ -166,9 +181,16 @@ func FinishException(ctx context.Context, tx *sql.Tx, id, actor, decision string
 	if err := requireChanged(r, err, "exception_decided", "例外已处理"); err != nil {
 		return err
 	}
+	if kind == "artist_identity" && decision == "accepted" {
+		_, err = tx.ExecContext(ctx, `UPDATE curation_model_exceptions SET status='superseded',decided_by=$2,decided_at=now()
+ WHERE pending_item_id=$1 AND status='open'`, pending, actor)
+		if err != nil {
+			return err
+		}
+	}
 	_, err = tx.ExecContext(ctx, `WITH summary AS (
  SELECT bool_or(status IN ('open','accepting')) AS pending,
- bool_or(tool IN ('resolve_release_match','merge_releases') AND status='accepted') AS accepted,
+ bool_or(tool IN ('resolve_release_match','merge_releases','resolve_artist_identity') AND status='accepted') AS accepted,
  bool_or(tool IN ('resolve_release_match','merge_releases') AND status='declined') AS declined FROM curation_model_exceptions WHERE pending_item_id=$1)
  UPDATE curation_pending_items SET status=CASE WHEN accepted OR declined THEN 'resolved' ELSE 'waiting_model' END,
  resolution=CASE WHEN accepted THEN 'human_accepted' WHEN declined THEN 'human_declined' END,

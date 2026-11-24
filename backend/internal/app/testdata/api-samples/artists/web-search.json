@@ -1,0 +1,22 @@
+{
+  "body": {
+    "candidates": [
+      {
+        "citations": [
+          {
+            "title": "",
+            "url": "https://artists.example.org/profile"
+          }
+        ],
+        "description": null,
+        "exception_id": "00000000-0000-4000-8000-000000000001",
+        "external_id": "Q900001",
+        "name": "同名艺人",
+        "note": "需要核对同名艺人的署名。",
+        "source": "wikidata"
+      }
+    ],
+    "state": "waiting_human"
+  },
+  "status": 200
+}

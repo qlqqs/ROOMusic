@@ -23,7 +23,7 @@ func (k manualMediaKind) displayed(ctx context.Context, q operations.Queryer, ca
 	err := q.QueryRowContext(ctx, `WITH `+catalog.ArtistMediaFamilyCTE+`
         SELECT m.artist_id::text,m.operation_id::text,m.source='manual'
         FROM artist_media_family f JOIN (`+media+`) m ON m.artist_id=f.artist_id
-        WHERE f.canonical_id=$1 ORDER BY (m.source='manual') DESC,`+catalog.ArtistMediaOrder+` LIMIT 1`, canonical).
+        WHERE f.canonical_id=$1 ORDER BY `+catalog.ArtistMediaDisplayOrder+` LIMIT 1`, canonical).
 		Scan(&item.artistID, &item.operationID, &item.manual)
 	if errors.Is(err, sql.ErrNoRows) {
 		return displayedMedia{}, nil

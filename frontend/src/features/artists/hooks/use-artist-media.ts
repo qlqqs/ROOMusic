@@ -1,9 +1,11 @@
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { describeFailure, failureOf, isOutcomeUncertain, type ApiFailure } from "../../../shared/api";
 import { newIdempotencyKey } from "../../../shared/lib/ids";
 import { useViewerScope } from "../../auth";
-import type { ArtistLinkPreviewDTO } from "../api/decoders";
-import { putArtistBio, putArtistLink, rejectArtistMedia, uploadArtistImage } from "../api/endpoints";
+import type { ArtistLinkPreviewDTO, ArtistWebSearchDTO } from "../api/decoders";
+import { decideArtistCandidate, fetchArtistWebSearch, putArtistBio, putArtistLink, rejectArtistMedia, uploadArtistImage } from "../api/endpoints";
+import { artistsKeys } from "../query-keys";
 
 export type ArtistMediaField = "image" | "bio";
 
@@ -26,6 +28,11 @@ export type ArtistMediaControls = {
   /** 正在等待提交或已经提交、还没刷新回来的标记：这一项先不显示。 */
   hidden: Readonly<Record<ArtistMediaField, boolean>>;
   applyLink: (preview: ArtistLinkPreviewDTO) => Promise<boolean>;
+  /** 网络搜索的状态与待确认的候选；读到之前或读取失败时为 null（不显示任何网络搜索的提示）。 */
+  webSearch: ArtistWebSearchDTO | null;
+  /** 采纳一个候选，或不采纳（decline）它；“都不是”就是把全部候选都不采纳。正在处理的候选在 deciding 里。 */
+  decideCandidates: (exceptionIds: readonly string[], decision: "accept" | "decline") => Promise<boolean>;
+  deciding: boolean;
   /** 最近一次失败的说明（就近显示在页头下方）；新的操作开始时清掉。 */
   error: string | null;
   dismissError: () => void;
@@ -64,6 +71,18 @@ export function useArtistMedia({ artistId, revision, refresh }: { artistId: stri
   const [pendingReject, setPendingReject] = useState<PendingReject | null>(null);
   const [submitted, setSubmitted] = useState<Readonly<Record<ArtistMediaField, boolean>>>({ image: false, bio: false });
   const [error, setError] = useState<string | null>(null);
+  const [deciding, setDeciding] = useState(false);
+  const { generation } = scope;
+  // 排队与处理中时每 20 秒看一次进展；其余状态不轮询（采纳、标记之后随刷新重读）。
+  const webSearch = useQuery({
+    queryKey: artistsKeys.webSearch(generation, artistId),
+    queryFn: ({ signal }) => fetchArtistWebSearch(artistId, signal),
+    select: (response) => response.data,
+    refetchInterval: (query) => {
+      const state = query.state.data?.data.state;
+      return state === "queued" || state === "running" ? 20_000 : false;
+    },
+  });
   const timer = useRef<number | undefined>(undefined);
   const pending = useRef<{ artistId: string; field: ArtistMediaField; key: string } | null>(null);
   // 等待中的标记在提交时才取版本号：前一项提交并刷新后版本号已经变了。
@@ -191,9 +210,43 @@ export function useArtistMedia({ artistId, revision, refresh }: { artistId: stri
     [artistId, revision, fail, settle],
   );
 
+  const decideCandidates = useCallback(
+    async (exceptionIds: readonly string[], decision: "accept" | "decline") => {
+      setError(null);
+      setDeciding(true);
+      try {
+        for (const id of exceptionIds) await decideArtistCandidate(id, decision);
+        await settle();
+        return true;
+      } catch (cause) {
+        fail(cause, decision === "accept" ? "没能采纳这个候选，请重试。" : "没能处理这些候选，请重试。");
+        void settle();
+        return false;
+      } finally {
+        if (scope.isCurrent()) setDeciding(false);
+      }
+    },
+    [fail, settle, scope],
+  );
+
   const hidden = {
     image: submitted.image || pendingReject?.field === "image",
     bio: submitted.bio || pendingReject?.field === "bio",
   };
-  return { upload, uploadImage, saveBio, savingBio, reject, undoReject, pendingReject, hidden, applyLink, error, dismissError: () => setError(null) };
+  return {
+    upload,
+    uploadImage,
+    saveBio,
+    savingBio,
+    reject,
+    undoReject,
+    pendingReject,
+    hidden,
+    applyLink,
+    webSearch: webSearch.data ?? null,
+    decideCandidates,
+    deciding,
+    error,
+    dismissError: () => setError(null),
+  };
 }

@@ -25,7 +25,7 @@ import { resolve } from "node:path";
 import {
   decodeArtistPage, decodeArtistDetail, decodeArtistNamesPage, decodeArtistAlbumsPage,
   decodeArtistTracksPage, decodeArtistQueue, decodeArtistParticipationAlbumsPage,
-  decodeArtistLinkPreview, decodeArtistMediaReject, decodeArtistMediaWrite,
+  decodeArtistLinkPreview, decodeArtistMediaReject, decodeArtistMediaWrite, decodeArtistWebSearch,
 } from "../features/artists/api/decoders";
 import {
   decodeArtistCandidatePage, decodeArtistIgnoreResult, decodeArtistMergeResult,
@@ -230,6 +230,7 @@ const successContracts: Record<string, Contract> = {
   "artists/albums": { status: 200, decode: decodeArtistAlbumsPage },
   "artists/detail-manual-media": { status: 200, decode: decodeArtistDetail },
   "artists/detail-redirect": { status: 200, decode: decodeArtistDetail },
+  "artists/detail-web-search": { status: 200, decode: decodeArtistDetail },
   "artists/detail-unavailable": { status: 200, decode: decodeArtistDetail },
   "artists/detail-with-media": { status: 200, decode: decodeArtistDetail },
   "artists/detail": { status: 200, decode: decodeArtistDetail },
@@ -249,6 +250,7 @@ const successContracts: Record<string, Contract> = {
   "artists/set-bio": { status: 200, decode: decodeArtistMediaWrite },
   "artists/set-image": { status: 200, decode: decodeArtistMediaWrite },
   "artists/set-links": { status: 200, decode: decodeArtistMediaWrite },
+  "artists/web-search": { status: 200, decode: decodeArtistWebSearch },
   "artists/role-tracks-missing": { status: 200, decode: decodeArtistTracksPage },
   "artists/role-tracks": { status: 200, decode: decodeArtistTracksPage },
   "catalog/status-all-ready": { status: 200, decode: decodeCatalogState },
