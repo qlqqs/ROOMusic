@@ -43,8 +43,9 @@ func TestCacheLifetime(t *testing.T) {
 				w.WriteHeader(tc.status)
 				io.WriteString(w, tc.body)
 			})
-			now := time.Unix(123456, 0)
-			opts.Now = func() time.Time { return now }
+			var clock atomic.Int64
+			clock.Store(int64(123456 * time.Second))
+			opts.Now = func() time.Time { return time.Unix(0, clock.Load()) }
 			opts.DataDirectory = t.TempDir()
 			call := func(c *Client, ctx context.Context, want int32) {
 				t.Helper()
@@ -62,10 +63,10 @@ func TestCacheLifetime(t *testing.T) {
 			if err != nil || len(files) != 1 {
 				t.Fatalf("磁盘缓存=%v %v", files, err)
 			}
-			now = now.Add(tc.ttl - time.Nanosecond)
+			clock.Add(int64(tc.ttl - time.Nanosecond))
 			c := New(opts)
 			call(c, t.Context(), 1)
-			now = now.Add(time.Nanosecond)
+			clock.Add(int64(time.Nanosecond))
 			call(c, t.Context(), 2)
 			synctest.Test(t, func(t *testing.T) {
 				ctx, cancel := context.WithCancel(t.Context())
@@ -75,7 +76,7 @@ func TestCacheLifetime(t *testing.T) {
 				if _, err := os.Stat(files[0]); err != nil {
 					t.Fatalf("启动清理误删有效文件：%v", err)
 				}
-				now = now.Add(tc.ttl)
+				clock.Add(int64(tc.ttl))
 				time.Sleep(24 * time.Hour)
 				synctest.Wait()
 				if _, err := os.Stat(files[0]); !errors.Is(err, os.ErrNotExist) {

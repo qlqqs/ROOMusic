@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -235,11 +236,10 @@ func TestC10SupervisorPeriodicCredentialCheck(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				s := NewSupervisor(context.Background(), c10Executor(c10Waiting))
 				defer s.Shutdown(context.Background())
-				checks := 0
+				var checks atomic.Int32
 				p := runParams(nil)
 				p.Check = func(ctx context.Context) error {
-					checks++
-					if checks == 1 {
+					if checks.Add(1) == 1 {
 						return nil
 					}
 					deadline, ok := ctx.Deadline()
@@ -258,8 +258,8 @@ func TestC10SupervisorPeriodicCredentialCheck(t *testing.T) {
 				sibling := c10Start(t, s, p.Caller.User.ID, "sibling", "user")
 				time.Sleep(60 * time.Second)
 				synctest.Wait()
-				if checks != 2 {
-					t.Fatal(checks)
+				if got := checks.Load(); got != 2 {
+					t.Fatal(got)
 				}
 				c10Finished(t, r, !databaseError)
 				c10Finished(t, sibling, !databaseError)
