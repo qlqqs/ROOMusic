@@ -17,6 +17,10 @@ func TestPostgreSQLArtistWebSearchProgramScope(t *testing.T) {
 	f := newArtistWebSearchFixture(t, "", true, false, nil)
 	app := f.application
 	f.configureMock(t)
+	// 已有外部对应由夹具写入。关闭发行匹配和艺人资料补全来源，避免轮询等待真实限速。
+	for _, source := range []string{"musicbrainz", "wikidata", "commons", "wikipedia"} {
+		f.update(t, http.MethodPut, curationBase+"/sources/"+source, map[string]bool{"enabled": false})
+	}
 	for _, name := range []string{"缺资料主艺人", "已有 MB 对应", "已有 WD 对应", "人工资料齐全", "并入既有对应"} {
 		f.addRelease(t, name)
 	}
