@@ -616,7 +616,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 - 同一首歌在 MusicBrainz 里常有重复录音，单曲方式会出现较多 `ambiguous`。
 - 同一张专辑的多个版本，在曲目数与碟数都相同时会是 `too_many` 或 `ambiguous`。
 - 真实的匹配比例要到 V12 的真实试用才知道。
-- arm64 的 fpcalc 只在发布流水线的构建阶段验证（经 `gcompat` 运行，构建时核对版本并对合成正弦波算一次指纹；见部署环境合同）。CI 的镜像任务只构建 amd64，改动镜像后用发布流水线的手动运行验证 arm64。
+- arm64 的 fpcalc 只在发布流水线的构建阶段验证（经自带的 glibc 加载器运行，构建时核对版本并对合成正弦波算一次指纹；见部署环境合同）。CI 的镜像任务只构建 amd64，改动镜像后用发布流水线的手动运行验证 arm64。
 
 ### 16.7 必需测试与断言点
 
