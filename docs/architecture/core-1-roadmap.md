@@ -138,6 +138,20 @@ I、G、H 只依赖 A，可以在里程碑一、二期间穿插。每个子任�
 不在 M7 范围内：局域网多协议设备发现与单设备串流（U3，另立任务）；第三方插件宿主；物理文件整理与写回标签；
 外部源的资源搜索与下载；艺人图片与简介；没有官方开放接口的平台。
 
+## M8 局域网设备、艺人资料、数据源插件与测试设施
+
+2026-11-24 立项并完成（选择者 qlqq，决定 W1–W9 见本机归档父任务 `11-24-m8-devices-artists-plugins` 的 `prd.md`）。五个子任务各自规划、实施、验收和归档：
+
+| 顺序 | 子任务 | 交付 | 状态 |
+| --- | --- | --- | --- |
+| 1 | `11-24-m8-cjk-test-font` | 用户目录安装 Noto Sans CJK SC，供本机无头 Chromium 截图核对中文（不改系统） | 已完成（`3cacf17f`） |
+| 2 | `11-24-m8-mock-upstream` | 外部接口 mock 服务器 `roomusic-upstream-mock` 与 `ROOMUSIC_UPSTREAM_MOCK_URL`：替代各外部源、模型端点、SearXNG、Tavily，可切换故障情景 | 已完成（`8579b6b2`） |
+| 3 | `11-24-m8-artist-info` | 艺人图片与简介：Wikidata、Commons、维基百科（不要密钥），Fanart.tv、TheAudioDB（填密钥后）；只补空缺、带署名、可撤销 | 已完成（`46776685`） |
+| 4 | `11-24-m8-upnp-renderer` | U3：UPnP/DLNA 渲染器发现与单设备串流；账号间共享开关；生产 Compose 默认改为 host 网络 | 已完成（`73012804`）；真实设备试用待 qlqq |
+| 5 | `11-24-m8-source-plugins` | 第三方数据源插件：WebAssembly 沙箱（[ADR 0007](adr/0007-source-plugins.md)，提议） | 已完成（`31b24e36`）；ADR 0007 的 P2–P8 待审阅 |
+
+不在 M8 范围内：Chromecast、AirPlay、多设备同步；匹配类插件、插件签名与在线目录；本地艺人图片文件；发行拆分（M7 H 另立）。
+
 ## 阶段、依赖与验收出口
 
 | 阶段 | 独立交付 | 前置与允许并行 | 验收出口 | 任务 |
