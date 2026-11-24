@@ -44,6 +44,7 @@ type ImportEntry struct {
 }
 
 type Command struct {
+	Takeover        bool          `json:"takeover,omitempty"`
 	Command         string        `json:"command"`
 	TrackIDs        []string      `json:"track_ids"`
 	StartIndex      int           `json:"start_index"`
@@ -64,16 +65,20 @@ type QueueEntry struct {
 }
 
 type Device struct {
-	DeviceID        string       `json:"device_id"`
-	ZoneID          string       `json:"zone_id"`
-	Name            string       `json:"name"`
-	Kind            string       `json:"kind"`
-	Online          bool         `json:"online"`
-	LastSeenAt      Timestamp    `json:"last_seen_at"`
-	Volume          float64      `json:"volume"`
-	Muted           bool         `json:"muted"`
-	Capabilities    Capabilities `json:"capabilities"`
-	OutputSessionID *string      `json:"output_session_id"`
+	ExternalID      string          `json:"external_id,omitempty"`
+	MaxSampleRate   int             `json:"max_sample_rate,omitempty"`
+	FormatDeclared  *bool           `json:"format_declared,omitempty"`
+	OccupiedBy      *DeviceOccupant `json:"occupied_by,omitempty"`
+	DeviceID        string          `json:"device_id"`
+	ZoneID          string          `json:"zone_id"`
+	Name            string          `json:"name"`
+	Kind            string          `json:"kind"`
+	Online          bool            `json:"online"`
+	LastSeenAt      Timestamp       `json:"last_seen_at"`
+	Volume          float64         `json:"volume"`
+	Muted           bool            `json:"muted"`
+	Capabilities    Capabilities    `json:"capabilities"`
+	OutputSessionID *string         `json:"output_session_id"`
 }
 
 type Fault struct {
@@ -110,6 +115,7 @@ type Stream struct {
 	Segments []StreamSegment    `json:"segments"`
 }
 type ZoneEvent struct {
+	Source   string `json:"source,omitempty"`
 	Seq      int64  `json:"seq"`
 	Kind     string `json:"kind"`
 	EntryID  string `json:"entry_id,omitempty"`

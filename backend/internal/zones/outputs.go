@@ -34,12 +34,16 @@ func (s *Service) ClaimOutput(ctx context.Context, userID, deviceID string, inpu
 	defer z.dispatch.Unlock()
 	z.mu.Lock()
 	defer func() {
+		visible := z.visible()
 		z.mu.Unlock()
-		if err == nil {
+		if err == nil && visible {
 			s.publishDevice(userID, result.Device)
 			s.publishZone(userID, result.Zone)
 		}
 	}()
+	if (z.device.Kind == "upnp") != input.Managed || !z.visible() {
+		return ClaimOutputResult{}, ErrNotFound
+	}
 	tracks, err := s.loadSummaries(ctx, z.persisted.Queue.Entries)
 	if err != nil {
 		return ClaimOutputResult{}, err
@@ -64,6 +68,9 @@ func (s *Service) ClaimOutput(ctx context.Context, userID, deviceID string, inpu
 		}
 	}
 	d.Capabilities = cloneCapabilities(input.Capabilities)
+	if input.Managed {
+		d.Capabilities = limitSampleRate(d.Capabilities, d.MaxSampleRate)
+	}
 	d.LastSeenAt = now
 	if err = s.transact(ctx, func(st *Store) error {
 		if e := st.UpdateDevice(ctx, userID, d); e != nil {
@@ -76,7 +83,7 @@ func (s *Service) ClaimOutput(ctx context.Context, userID, deviceID string, inpu
 	if z.output != nil {
 		z.output.state = "superseded"
 	}
-	out := &outputSession{id: s.newID(), userID: userID, zone: z, state: "active", lastReport: now}
+	out := &outputSession{managed: input.Managed, id: s.newID(), userID: userID, zone: z, state: "active", lastReport: now}
 	s.outputMu.Lock()
 	s.outputs[out.id] = out
 	s.outputMu.Unlock()
@@ -171,8 +178,9 @@ func (s *Service) ReportOutput(ctx context.Context, userID, sessionID string, in
 	z.mu.Lock()
 	publishDevice := false
 	defer func() {
+		visible := z.visible()
 		z.mu.Unlock()
-		if err == nil {
+		if err == nil && visible {
 			if publishDevice {
 				s.publishDevice(userID, result.Device)
 			}
@@ -369,8 +377,9 @@ func (s *Service) ReleaseOutput(ctx context.Context, userID, sessionID string, i
 	z.mu.Lock()
 	var result *OutputResult
 	defer func() {
+		visible := z.visible()
 		z.mu.Unlock()
-		if result != nil {
+		if result != nil && visible {
 			s.publishDevice(out.userID, result.Device)
 			s.publishZone(out.userID, result.Zone)
 		}
@@ -497,7 +506,7 @@ func (s *Service) accessStream(ctx context.Context, userID, zoneID string, seq i
 	z.mu.Lock()
 	defer z.mu.Unlock()
 	h := z.handleFor(&seq)
-	if z.output == nil || outputError(z.output) != nil || h == nil {
+	if z.device.Kind == "upnp" || z.output == nil || outputError(z.output) != nil || h == nil {
 		return nil, "", ErrStreamGone
 	}
 	if take {

@@ -29,6 +29,10 @@ func (h *Handlers) reportOutput(w http.ResponseWriter, r *http.Request, userID s
 	if !ok {
 		return
 	}
+	if h.service.ManagedOutputSession(userID, sessionID) {
+		writeError(w, r, zones.ErrOutputUnknown)
+		return
+	}
 	var input zones.ReportOutputInput
 	fields, ok := decodeInput(w, r, &input)
 	if !ok {
@@ -46,6 +50,10 @@ func (h *Handlers) reportOutput(w http.ResponseWriter, r *http.Request, userID s
 func (h *Handlers) releaseOutput(w http.ResponseWriter, r *http.Request, userID string) {
 	sessionID, ok := pathID(w, r, "session_id")
 	if !ok {
+		return
+	}
+	if h.service.ManagedOutputSession(userID, sessionID) {
+		writeError(w, r, zones.ErrOutputUnknown)
 		return
 	}
 	var input zones.ReleaseOutputInput

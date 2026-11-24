@@ -1,6 +1,6 @@
 # 部署说明
 
-ROOMusic 生产环境只包含应用和 PostgreSQL 18 两个容器，默认固定名称为 `roomusic-app`、`roomusic-postgres`。应用自带备份和 ffmpeg，数据库不对外开放端口。
+ROOMusic 生产环境只包含应用和 PostgreSQL 18 两个容器，默认固定名称为 `roomusic-app`、`roomusic-postgres`。应用自带备份和 ffmpeg。Linux 上应用默认使用宿主机网络以发现局域网渲染器，数据库在独立的项目网络内，仅向宿主机回环地址发布端口。
 宿主机需要 Docker、Docker Compose v2，以及首次安装脚本用于解析配置的 Python 3，不需要克隆仓库。下文命令都在部署目录里执行。
 
 数据全部存放在部署目录的宿主机文件夹中，不创建 Docker 数据卷。
@@ -65,7 +65,9 @@ roomusic/
 | `ROOMUSIC_VERSION` | `latest` | 镜像版本；固定或降级时填具体版本，不带 `v` |
 | `ROOMUSIC_APP_CONTAINER_NAME` | `roomusic-app` | 应用固定容器名，同机多实例分别设置 |
 | `ROOMUSIC_POSTGRES_CONTAINER_NAME` | `roomusic-postgres` | 数据库固定容器名，同机多实例分别设置 |
-| `ROOMUSIC_HTTP_PORT` | `8090` | 网页端口 |
+| `ROOMUSIC_HTTP_PORT` | `8090` | 应用监听的 IPv4 网页及音频流端口 |
+| `ROOMUSIC_DB_PORT` | `55439` | host 部署下 PostgreSQL 发布在 127.0.0.1 的 TCP 端口 |
+| `ROOMUSIC_LAN_URL` | 空 | 设备可达的 HTTP 基址，须含端口，例如 `http://192.168.1.10:8090`。留空时取发现设备的本机网卡地址和应用监听端口 |
 | `ROOMUSIC_BACKUP_DIR` | `./backups` | 可指定其他宿主机目录，首次安装脚本设置目录权限 |
 | `ROOMUSIC_BACKUP_HOUR` | `3` | 每天几点后自动备份，0–23 |
 | `ROOMUSIC_TIMEZONE` | `Asia/Shanghai` | 自动备份使用的时区 |
@@ -102,6 +104,8 @@ docker compose pull && docker compose up -d --wait
 docker compose exec app /app/roomusic --version
 ```
 
+从原有 bridge 配置升级时，保留部署目录、项目名、容器名、密码文件和数据挂载，下载新版 `compose.yaml`。默认网络会改为 host，应用直接监听 `0.0.0.0:${ROOMUSIC_HTTP_PORT:-8090}`，直接访问时登录限速按 TCP 对端地址区分。先用 `ss -ltn` 核对 HTTP 端口和回环数据库端口（默认 55439）是否可用；HTTP 端口可沿用本实例之前发布的端口。同机多实例分别指定 HTTP 端口、数据库端口、项目名和固定容器名，再执行上面的升级命令。现有 `postgres/` 和账号继续使用。
+
 从旧版包含 `init` 的 Compose 切换时，先更新部署文件，并执行一次 `docker compose up -d --wait --remove-orphans`，清除该项目遗留的初始化容器；已有目录和密码继续复用，不再运行初始化脚本。固定名称变更会重建应用和数据库容器，安排在维护窗口执行。
 
 要固定或降级版本，把 `.env` 里的 `ROOMUSIC_VERSION` 改成具体版本（不带 `v`），再执行同样的命令。
@@ -119,6 +123,16 @@ docker compose exec app /app/roomusic --version
 
 `0.1.0` 不认识网页上设置的自动清理，只按 `ROOMUSIC_BACKUP_KEEP_DAYS` 清理旧备份。如果在网页上把保留天数设成了“不限”或比这个值更长，
 降级前先把 `ROOMUSIC_BACKUP_KEEP_DAYS` 调大，不然降级后第一次备份完成时会按它删掉更早的备份。再升级回来，网页上的设置照常生效。
+
+### 使用 bridge 网络
+
+需要保留 bridge 网络时，下载覆盖文件（Docker Compose v2.24.4 或更新版），在部署目录执行：
+
+```bash
+curl -fL -o compose.bridge.yaml https://raw.githubusercontent.com/qlqqs/ROOMusic/main/deploy/production/compose.bridge.yaml
+```
+
+在 `.env` 写入 `COMPOSE_FILE=compose.yaml:compose.bridge.yaml`，后续日常与升级命令仍是 `docker compose`。应用在项目网络内连接 `postgres:5432`，只发布网页端口。要使用局域网播放，在 `.env` 将 `ROOMUSIC_LAN_URL` 设为设备可达的宿主机 HTTP 地址，并由管理员在设备设置里手动添加描述地址。host 模式可直接打开设置里的“局域网设备”进行 SSDP 发现。两种模式的设备面板都支持暂停、继续与停止；跳转与上下首从 ROOMusic 控制。
 
 ## 4. 备份与恢复
 

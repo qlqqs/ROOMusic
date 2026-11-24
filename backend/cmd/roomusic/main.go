@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -101,7 +102,17 @@ func main() {
 	logger.Info("roomusic server starting", "event", "platform.server.starting", "module", "platform", "address", server.Addr, "version", version, "commit", build.Commit)
 	serveErrors := make(chan error, 1)
 	go func() {
-		serveErrors <- server.ListenAndServe()
+		// 显式指定 IPv4 通配地址时只创建 IPv4 套接字，保持 host 部署的发布范围。
+		network := "tcp"
+		if host, _, _ := net.SplitHostPort(server.Addr); host == "0.0.0.0" {
+			network = "tcp4"
+		}
+		listener, err := net.Listen(network, server.Addr)
+		if err != nil {
+			serveErrors <- err
+			return
+		}
+		serveErrors <- server.Serve(listener)
 	}()
 	var serveErr error
 	select {
@@ -201,7 +212,7 @@ func frontendHandler(webAssets fs.FS, application http.Handler, logger *slog.Log
 	const message = "前端未构建，开发请使用 Vite 开发服务器（默认端口 5173）。"
 	logger.Warn("frontend assets missing", "event", "platform.frontend.missing", "module", "platform")
 	mux := http.NewServeMux()
-	for _, route := range []string{"/api", "/api/", "GET /healthz", "GET /readyz"} {
+	for _, route := range []string{"/api", "/api/", "/upnp/streams", "/upnp/streams/", "GET /healthz", "GET /readyz"} {
 		mux.Handle(route, application)
 	}
 	mux.HandleFunc("/", func(responseWriter http.ResponseWriter, request *http.Request) {

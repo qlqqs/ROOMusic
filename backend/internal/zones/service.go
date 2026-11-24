@@ -21,6 +21,7 @@ import (
 
 // Service 的注册表只管理对象生命周期，播放状态由每区锁保护；仅支持单进程。
 type Service struct {
+	managed     ManagedOutputs
 	db          *sql.DB
 	options     Options
 	mu          sync.Mutex
@@ -33,16 +34,21 @@ type Service struct {
 	entropyMu   sync.Mutex
 	outputMu    sync.Mutex
 	outputs     map[string]*outputSession
+	upnpStreams sync.Map // 随渲染句柄释放，键为随机令牌，值为 *upnpStreamToken。
 	offlineScan Timer
 	workers     sync.WaitGroup
 }
 type userRuntime struct {
-	mu      sync.RWMutex
-	zones   map[string]*zoneRuntime
-	devices map[string]*zoneRuntime
-	order   []*zoneRuntime
+	projection sync.Mutex
+	mu         sync.RWMutex
+	zones      map[string]*zoneRuntime
+	devices    map[string]*zoneRuntime
+	order      []*zoneRuntime
 }
 type zoneRuntime struct {
+	managedVisible bool
+	formatDeclared bool
+	occupiedBy     *DeviceOccupant
 	// dispatch 让解锁后的广播仍与同区命令顺序一致；双区始终按 ID 取锁。
 	dispatch                  sync.Mutex
 	mu                        sync.Mutex
@@ -248,6 +254,9 @@ func (s *Service) Snapshot(ctx context.Context, userID string) (Snapshot, error)
 	if err != nil {
 		return Snapshot{}, err
 	}
+	if err := s.syncManaged(ctx, userID, u); err != nil {
+		return Snapshot{}, err
+	}
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	// 与转移使用相同的 ID 锁序，避免读到源转移前、目标转移后的混合快照。
@@ -269,6 +278,9 @@ func (s *Service) Snapshot(ctx context.Context, userID string) (Snapshot, error)
 	}()
 	result := Snapshot{ServerTime: timestamp(s.options.Now()), Protocol: 1, Devices: []Device{}, Zones: []Zone{}}
 	for _, z := range u.order {
+		if !z.visible() {
+			continue
+		}
 		tracks, e := s.loadSummaries(ctx, z.persisted.Queue.Entries)
 		if e != nil {
 			return Snapshot{}, e
@@ -286,6 +298,9 @@ func (s *Service) ReadQueue(ctx context.Context, userID, zoneID string) (QueueRe
 	if err != nil {
 		return QueueResult{}, err
 	}
+	if err := s.syncManaged(ctx, userID, u); err != nil {
+		return QueueResult{}, err
+	}
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	z := u.zones[strings.ToLower(zoneID)]
@@ -294,6 +309,9 @@ func (s *Service) ReadQueue(ctx context.Context, userID, zoneID string) (QueueRe
 	}
 	z.mu.Lock()
 	defer z.mu.Unlock()
+	if !z.visible() {
+		return QueueResult{}, ErrNotFound
+	}
 	tracks, err := s.loadSummaries(ctx, z.persisted.Queue.Entries)
 	if err != nil {
 		return QueueResult{}, err
@@ -304,7 +322,13 @@ func (s *Service) ReadQueue(ctx context.Context, userID, zoneID string) (QueueRe
 func deviceOf(z *zoneRuntime) Device {
 	d := z.device
 	caps := cloneCapabilities(d.Capabilities)
-	return Device{DeviceID: d.DeviceID, ZoneID: z.persisted.ZoneID, Name: d.Name, Kind: d.Kind, Online: z.online, LastSeenAt: timestamp(d.LastSeenAt), Volume: d.Volume, Muted: d.Muted, Capabilities: caps, OutputSessionID: cloneValue(z.outputSessionID)}
+	device := Device{DeviceID: d.DeviceID, ZoneID: z.persisted.ZoneID, Name: d.Name, Kind: d.Kind, Online: z.online, LastSeenAt: timestamp(d.LastSeenAt), Volume: d.Volume, Muted: d.Muted, Capabilities: caps, OutputSessionID: cloneValue(z.outputSessionID)}
+	if d.Kind == "upnp" {
+		device.ExternalID, device.MaxSampleRate = d.ExternalID, d.MaxSampleRate
+		device.FormatDeclared, device.OccupiedBy = cloneValue(&z.formatDeclared), cloneValue(z.occupiedBy)
+		device.Online, device.OutputSessionID = z.managedVisible, nil
+	}
+	return device
 }
 func (s *Service) zoneOf(z *zoneRuntime, tracks map[string]catalog.TrackSummary) Zone {
 	p := z.persisted

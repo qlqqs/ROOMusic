@@ -69,3 +69,29 @@
 ## 验证接点
 
 `fakerenderer.New(Options)` 提供可挂载的 HTTP handler 与完整的 `Serve`（SSDP + HTTP）。使用合成 WAV 或 FLAC，经发现、SetAVTransportURI 和 Play 后，核对 GetPositionInfo 与 `/_fake/state` 的 URI、状态和拉流字节。`-rel-time zero` 模拟拉流正常但位置停在零。权限和迁移检查需要独立 PostgreSQL 数据；可见性断言覆盖共享开启、关闭、分配、撤销及管理员。
+
+## 渲染器取流
+
+托管输出调用 `zones.Service.UPnPStream(userID, sessionID, seq)` 取得 `Path` 与 `Delivered`。路径只由当前或接续渲染句柄持有，渲染器通过 `GET /upnp/streams/{token}` 免 Cookie 拉流。回复成功时为 200，使用实际音频 MIME（`audio/flac` 或 `audio/wav`），带以下响应头。
+
+```http
+Cache-Control: no-store
+Accept-Ranges: none
+transferMode.dlna.org: Streaming
+contentFeatures.dlna.org: DLNA.ORG_OP=00;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=01700000000000000000000000000000
+```
+
+- GET 忽略 Range，使用 HTTP/1.1 分块传输。HEAD 返回相同的媒体头，保留首个 GET 的取流资格。
+- 同一地址再 GET 时，服务在播放区锁内记录当前播放位置，复用 `stream_lost` 的恢复流程并将令牌转至新 seq，结束旧 HTTP 连接。换曲重建、接续流被替换、释放输出或结束播放会销毁相应句柄的令牌。带会话 Cookie 的普通播放区流地址不能获取托管输出的音频。
+- `Delivered` 表示该 seq 的所有音频字节已写入 HTTP 响应并读到 EOF。设备可在播放完自身缓冲后才变为 STOPPED。渲染完成后，`DurationSeconds` 给出实际输出帧数对应的流长，含剪静音和过渡效果。
+- DIDL-Lite 有封面时使用 `GET/HEAD /upnp/streams/{token}/artwork`。封面绑定到签发令牌时的曲目发行封面，两种方法都保留音频取流资格。封面与音频使用相同的令牌有效期、TCP 对端校验和令牌失败配额。
+- 按 TCP 对端接受 IPv4 私网、IPv4 链路本地及回环地址。缺少令牌、令牌失效、来自其他地址均返回 404。使用独立的 `identity.SourceThrottle` 按来源计数，一分钟内第 30 次失败返回 429 和 `Retry-After`，暂停该来源一分钟。日志记录路由模板。
+
+## 托管输出与占用
+
+- `upnp.Service.Acquire` 在实例内串行检查设备上线、成员启用、有效会话及当前共享／分配。以 UDN 记录物理占用。相同成员重复激活同一设备共用输出会话，占用者显示名取自账号的 `username`。占用冲突使用统一的 409 错误信封，`error.code` 为 `device_busy`，`error.message` 包含占用者显示名，顶层携带 `request_id`。其他成员需要确认接管；接管等旧输出停止并完成 `ReleaseOutput` 后才认领新播放区。
+- 关闭发现时先停止全部托管输出。关闭共享、变更分配、删除手动设备时重新核对占用者权限。成员停用或失去最后一条有效会话时，`WithSessionRevoked` 释放该成员的所有占用。队列转移后释放仍处于暂停且队列为空的原设备。
+- 每个占用者通过进程内的 `ClaimOutput`、`SubscribeOutput` 接收所属设备的音量和播放区事件。流地址优先取 `ROOMUSIC_LAN_URL`，否则取发现设备时的本机 IPv4 和实际 HTTP 监听端口。推送新流前查询播放状态，在播放中先 Stop，再设置 URI 和 DIDL、Play。协议选取音频、位深、采样率的规则见上文。新登记的成员设备沿用探测到的 Master 音量。可调设备未提供有效读数时登记 0.5 供显示，首次由成员设置音量或静音后才向设备发送 SetVolume。成员的设备行持久保存该状态，重新认领或重启后继续生效。后续使用成员保存的音量，从 0–1 映射至 0–100，静音取 0。
+- 播放中每秒读取 TransportInfo 与 PositionInfo，其余状态每五秒读取 TransportInfo。RelTime 可用时采用设备位置，停滞或回跳后，从既有播放头改按墙钟累计，暂停时冻结。通过 `ReportOutput` 回报状态与流内位置。连续三次控制或轮询失败导致设备下线、释放输出并暂停播放区。
+- 设备端暂停、继续、提前停止分别产生播放区 pause、play、pause 命令，事件带 `source:"device"`。缺少 Pause 动作时用 Stop，继续时从暂停位置重新推送。正常暂停保留托管流，设备端长时间暂停后仍可通过原 URI 恢复。设备端跳转与上下首未映射。
+- 播放头到达已交付流的末尾且设备停止时，有接续流就推送其 URI 和 DIDL，再以 playing 回报晋升为当前流；队列放完则回报 ended。设备重连复用 URI 时只更新 seq 和流内时间起点。

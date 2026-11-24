@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "device_busy",
+      "message": "listener 正在使用这台设备"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

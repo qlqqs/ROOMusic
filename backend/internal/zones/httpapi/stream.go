@@ -146,7 +146,7 @@ type streamRead struct {
 	err  error
 }
 
-func copyStream(ctx context.Context, w http.ResponseWriter, body io.Reader) {
+func copyStream(ctx context.Context, w http.ResponseWriter, body io.Reader) bool {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	reads := make(chan streamRead)
@@ -155,21 +155,21 @@ func copyStream(ctx context.Context, w http.ResponseWriter, body io.Reader) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return false
 		case next <- struct{}{}:
 		}
 		select {
 		case <-ctx.Done():
-			return
+			return false
 		case read := <-reads:
 			if ctx.Err() != nil {
-				return
+				return false
 			}
 			if len(read.data) > 0 && writeAndFlush(w, read.data) != nil {
-				return
+				return false
 			}
 			if read.err != nil {
-				return
+				return read.err == io.EOF
 			}
 		}
 	}

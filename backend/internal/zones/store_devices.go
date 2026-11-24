@@ -12,7 +12,7 @@ func (s *Store) CreateDevice(ctx context.Context, userID string, d PersistedDevi
 	if err != nil {
 		return err
 	}
-	_, err = s.tx.ExecContext(ctx, `INSERT INTO playback_devices(id,user_id,kind,name,capabilities,volume,muted,created_at,last_seen_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, d.DeviceID, userID, d.Kind, d.Name, caps, d.Volume, d.Muted, d.CreatedAt, d.LastSeenAt)
+	_, err = s.tx.ExecContext(ctx, `INSERT INTO playback_devices(id,user_id,kind,name,capabilities,volume,muted,created_at,last_seen_at,external_id,max_sample_rate,volume_display_only) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NULLIF($10,''),NULLIF($11::integer,0),$12)`, d.DeviceID, userID, d.Kind, d.Name, caps, d.Volume, d.Muted, d.CreatedAt, d.LastSeenAt, d.ExternalID, d.MaxSampleRate, d.VolumeDisplayOnly)
 	if err != nil {
 		return fmt.Errorf("create playback device: %w", err)
 	}
@@ -27,7 +27,7 @@ func (s *Store) UpdateDevice(ctx context.Context, userID string, d PersistedDevi
 	if err != nil {
 		return err
 	}
-	result, err := s.tx.ExecContext(ctx, `UPDATE playback_devices SET name=$3,volume=$4,muted=$5,capabilities=$6,last_seen_at=$7 WHERE user_id=$1::uuid AND id=$2::uuid`, userID, d.DeviceID, d.Name, d.Volume, d.Muted, caps, d.LastSeenAt)
+	result, err := s.tx.ExecContext(ctx, `UPDATE playback_devices SET name=$3,volume=$4,muted=$5,capabilities=$6,last_seen_at=$7,max_sample_rate=NULLIF($8::integer,0),volume_display_only=$9 WHERE user_id=$1::uuid AND id=$2::uuid`, userID, d.DeviceID, d.Name, d.Volume, d.Muted, caps, d.LastSeenAt, d.MaxSampleRate, d.VolumeDisplayOnly)
 	if err != nil {
 		return fmt.Errorf("update playback device: %w", err)
 	}

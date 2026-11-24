@@ -13,6 +13,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/backup"
 	backupapi "github.com/qlqq/roomusic/backend/internal/backup/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/catalog/artwork"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	catalogapi "github.com/qlqq/roomusic/backend/internal/catalog/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
@@ -161,6 +162,8 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	renderer, closeRenderer := assembleRenderer(database, playbackService, assembly.renderer, logger, dspSettingsService)
 	zonesService := zones.NewService(database, zones.Options{Logger: logger, Renderer: renderer, IRReferences: zoneIRReferences{service: dspSettingsService}, PlayRecorder: zonePlayRecorder{service: listeningService}})
 	lanDevices := upnp.NewService(lifecycle, database, upnp.NewRegistry())
+	lanDevices.AttachOutput(zonesService, settings.LANURL, settings.Address, logger)
+	zonesService.SetManagedOutputs(lanDevices)
 	if database != nil && lifecycle != nil {
 		if err := lanDevices.Restore(lifecycle); err != nil {
 			logger.Error("局域网设备发现启动失败", "event", "upnp.discovery.start_failed", "module", "upnp", "error", err)
@@ -318,7 +321,15 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	}).Register(mux)
 	listeningapi.New(guard, listeningService).Register(mux)
 	personalapi.New(guard, personalService).Register(mux)
-	zonesapi.New(guard, zonesService).Register(mux)
+	coversStore := artwork.NewStore(settings.DataDirectory)
+	zonesapi.New(guard, zonesService).WithStreamArtwork(func(ctx context.Context, id string, head bool) (string, []byte, error) {
+		resource, err := coversStore.Lookup(ctx, database, id)
+		if err != nil || head {
+			return resource.MIMEType, nil, err
+		}
+		data, err := coversStore.Read(resource)
+		return resource.MIMEType, data, err
+	}).Register(mux)
 	upnpapi.New(guard, lanDevices).Register(mux)
 	dspsettingsapi.New(guard, dspSettingsService, dspsettingsapi.WithIRDeleter(zonesService)).Register(mux)
 	if assembly.backups != nil {
@@ -338,6 +349,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		close(catalogDone)
 	}
 	identityapi.New(database, guard, assembly.loginThrottle, logger).WithSessionRevoked(func(userID string) {
+		lanDevices.SessionRevoked(userID)
 		if supervisor != nil {
 			supervisor.CancelUser(userID)
 		}
@@ -419,6 +431,8 @@ func Degraded(frontend fs.FS, logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return false }))
+	mux.HandleFunc("/upnp/streams", http.NotFound)
+	mux.HandleFunc("/upnp/streams/", http.NotFound)
 	httpserver.RegisterAPIFallback(mux, http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
 		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用")
 	}))

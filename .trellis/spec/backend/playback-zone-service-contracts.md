@@ -195,3 +195,11 @@ func (s *Service) AfterFunc(time.Duration, func()) Timer
 API 样本由独立测试经真实 handler 生成到 `backend/internal/app/testdata/api-samples/playback-zones/`，生成约定见 B3 `implementation-notes.md`；独立测试已新增 `TestPostgreSQLZonesAPIResponseSamples`，结果与本轮限定范围见 B3 测试记录（本机归档 `.trellis/tasks/archive/2026-11/11-09-zones-b3-realtime-output/test-notes.md`）。
 
 测试接点注意：`zonestest.Session.Emit` 的确认可能晚于终结事件触发的 `Close`；仅终结事件允许 `zonestest.ErrClosed`，且仍须等待相应状态公告作为成功证据。不能把全部 Emit 错误统一忽略，也不能仅凭 Emit 返回成功认定事件已应用。
+
+## 9. 进程内托管输出
+
+启动装配通过 `SetManagedOutputs` 设置可见设备查询与物理占用提供者。`Snapshot`、控制端订阅首帧和常规命令先按成员刷新投影。现有五秒离线扫描为已加载的用户刷新设备增量。设备的发现在线与播放区输出租约独立，只有后者能驱动渲染。
+
+认领物理设备时适配器先检查授权与占用，再用 `ClaimOutputInput.Managed` 调用 `ClaimOutput`、关联 `SubscribeOutput`。进程内托管订阅复用已取得的投影，避开占用交接时重复申请发现锁。普通 Cookie 接口拒绝托管认领、状态伪报和释放，设备 DTO 隐去托管会话 ID。服务在用户或区锁外申请占用，跨区转移提交后在锁外释放空闲源设备。
+
+`CommandFromOutput` 在区锁内检查当前会话，设备端的暂停和继续复用区命令事务与广播。托管设备暂停期间保留长流以便设备面板继续播放。渲染器报告当前长流结束时保留句柄，物理设备确认缓冲区播完后由 `ReportOutput(ended)` 提交最终暂停。会话失效按既有离线路径保存播放头并暂停。

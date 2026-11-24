@@ -40,6 +40,7 @@ type Service struct {
 	mu         sync.RWMutex
 	running    bool
 	generation uint64
+	output     *outputManager
 }
 
 func NewService(ctx context.Context, db *sql.DB, registry *Registry) *Service {
@@ -76,6 +77,7 @@ func (s *Service) start(ctx context.Context) error {
 
 func (s *Service) stopLocked() {
 	if s.running {
+		s.stopOutputs(func(*deviceOutput) bool { return true })
 		s.registry.Stop()
 		s.running = false
 	}
@@ -118,6 +120,10 @@ func (s *Service) UpdateSettings(ctx context.Context, enabled, shared *bool) (Se
 	}
 	if !after.Enabled {
 		s.stopLocked()
+	} else if before.Shared && !after.Shared {
+		if err := s.enforceGrants(ctx); err != nil {
+			return after, err
+		}
 	}
 	return after, nil
 }
@@ -191,7 +197,7 @@ func (s *Service) Remove(ctx context.Context, udn string) error {
 		return err
 	}
 	s.registry.Forget(udn)
-	return nil
+	return s.enforceGrants(ctx)
 }
 
 func (s *Service) SetGrants(ctx context.Context, udn string, ids []string) ([]string, error) {
@@ -218,13 +224,17 @@ func (s *Service) SetGrants(ctx context.Context, udn string, ids []string) ([]st
 	if err := s.replaceGrants(ctx, udn, normalized); err != nil {
 		return nil, err
 	}
-	return normalized, nil
+	return normalized, s.enforceGrants(ctx)
 }
 
 // Visible 返回当前会话可见的在线设备，供播放区快照与控制入口使用。
 func (s *Service) Visible(ctx context.Context, actor identity.User) ([]Entry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.visibleLocked(ctx, actor)
+}
+
+func (s *Service) visibleLocked(ctx context.Context, actor identity.User) ([]Entry, error) {
 	items := []Entry{}
 	if !s.running {
 		return items, nil

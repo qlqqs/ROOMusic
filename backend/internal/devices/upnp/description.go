@@ -35,6 +35,7 @@ type Device struct {
 	LocalAddress string       `json:"-"`
 	Capabilities Capabilities `json:"capabilities"`
 
+	initialVolume    *float64
 	discoveryContext context.Context
 	peerIP           netip.Addr
 	services         map[string]serviceEndpoint
@@ -172,6 +173,16 @@ func describeDevice(ctx context.Context, u *url.URL, peerIP netip.Addr) (Device,
 		} else if ctx.Err() != nil {
 			return Device{}, ctx.Err()
 		}
+	}
+	// 首次为成员登记设备时沿用功放的 Master 音量。
+	if d.Capabilities.Volume == "fixed" {
+		volume := 1.0
+		d.initialVolume = &volume
+	} else if volume, err := d.GetVolume(ctx); err == nil {
+		level := float64(volume) / 100
+		d.initialVolume = &level
+	} else if ctx.Err() != nil {
+		return Device{}, ctx.Err()
 	}
 	return d, nil
 }

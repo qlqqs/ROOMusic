@@ -195,6 +195,17 @@ func (s *session) HLS() zones.HLSMedia {
 	}
 	return s.hls
 }
+
+// CompletedDuration 返回编码完成后的实际流长，包含音效处理、剪静音与跨曲过渡。
+func (s *session) CompletedDuration() float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.renderComplete || s.outputPCM.SampleRate == 0 {
+		return 0
+	}
+	return float64(s.written) / float64(s.outputPCM.SampleRate)
+}
+
 func (s *session) Events() <-chan zones.Event { return s.events }
 func (s *session) NextChanged() {
 	// 通知锁只串行快照发布与通知交接，不持会话锁，也不调用 Cursor 或音频处理。

@@ -1,0 +1,39 @@
+{
+  "body": {
+    "device": {
+      "capabilities": {
+        "dsd": "none",
+        "exclusive": false,
+        "max_channels": 2,
+        "stream_formats": [
+          {
+            "codec": "flac",
+            "lossless": true,
+            "max_bit_depth": 24,
+            "max_sample_rate": 48000,
+            "mime_type": "audio/flac"
+          }
+        ],
+        "volume": "number"
+      },
+      "device_id": "00000000-0000-4000-8000-000000000001",
+      "external_id": "uuid:00000000-0000-4000-8000-000000000003",
+      "format_declared": true,
+      "kind": "upnp",
+      "last_seen_at": "2026-01-01T00:00:00Z",
+      "max_sample_rate": 48000,
+      "muted": false,
+      "name": "客厅音响",
+      "occupied_by": {
+        "display_name": "listener",
+        "user_id": "00000000-0000-4000-8000-000000000004"
+      },
+      "online": true,
+      "output_session_id": null,
+      "volume": 0.5,
+      "zone_id": "00000000-0000-4000-8000-000000000002"
+    },
+    "server_time": "2026-01-01T00:00:00Z"
+  },
+  "status": 200
+}

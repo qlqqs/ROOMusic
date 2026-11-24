@@ -14,7 +14,11 @@ const (
 
 func (h *Handlers) events(w http.ResponseWriter, r *http.Request, userID string) {
 	// Service 原子地关联在线状态、生成首条快照并订阅；非法会话只作为控制端连接。
-	sub, err := h.service.SubscribeOutput(r.Context(), userID, r.URL.Query().Get("output_session"))
+	sessionID := r.URL.Query().Get("output_session")
+	if h.service.ManagedOutputSession(userID, sessionID) {
+		sessionID = ""
+	}
+	sub, err := h.service.SubscribeOutput(r.Context(), userID, sessionID)
 	if err != nil {
 		writeError(w, r, err)
 		return

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
@@ -18,6 +19,8 @@ type renderHandle struct {
 	entryID      string
 	startSeconds float64
 	taken        bool
+	upnp         *upnpStreamToken
+	delivered    atomic.Bool
 	wake         chan struct{}
 	done         chan struct{}
 	once         sync.Once
@@ -30,6 +33,9 @@ type renderHandle struct {
 
 func (h *renderHandle) close() {
 	h.once.Do(func() {
+		if h.upnp != nil {
+			h.upnp.remove()
+		}
 		if h.rebuild != nil {
 			h.rebuild.Stop()
 			h.rebuild = nil
@@ -308,6 +314,10 @@ func (s *Service) applyRenderEvent(userID string, z *zoneRuntime, h *renderHandl
 			return true, nil
 		}
 	case "stream_ended":
+		// 托管设备可能仍有音频缓冲；保留当前流，等物理输出确认播完。
+		if z.device.Kind == "upnp" && z.currentHandle == h && h.stream.Format != nil {
+			return true, nil
+		}
 		if (z.nextHandle != nil && !nextEmptyEnded) || z.resumeRetry != nil {
 			return true, nil
 		}
