@@ -1,9 +1,12 @@
 import type { ApiResponse } from "../../../shared/api";
-import { apiRequest } from "../../../shared/api";
+import { apiRequest, apiUpload } from "../../../shared/api";
 import type { ArtistInitialGroup, ArtistRole } from "../../catalog/api/artist-summary";
 import {
   decodeArtistAlbumsPage,
   decodeArtistDetail,
+  decodeArtistLinkPreview,
+  decodeArtistMediaReject,
+  decodeArtistMediaWrite,
   decodeArtistNamesPage,
   decodeArtistParticipationAlbumsPage,
   decodeArtistPage,
@@ -11,6 +14,9 @@ import {
   decodeArtistTracksPage,
   type ArtistAlbumsPageDTO,
   type ArtistDetailDTO,
+  type ArtistLinkPreviewDTO,
+  type ArtistMediaRejectDTO,
+  type ArtistMediaWriteDTO,
   type ArtistNamesPageDTO,
   type ArtistParticipationAlbumsPageDTO,
   type ArtistPageDTO,
@@ -77,4 +83,60 @@ export function fetchArtistQueue(artistId: string, order: { kind: "album" } | { 
   const query = new URLSearchParams({ order: order.kind });
   if (order.kind === "random") query.set("seed", order.seed);
   return apiRequest({ method: "GET", path: `/api/v1/artists/${artistId}/queue?${query}`, signal }, decodeArtistQueue);
+}
+
+// 管理员对艺人资料的写入：都带页面读到的人工修改版本号与一个幂等键（结果不确定后的重试沿用同一个键）。
+
+/** 上传图片（替换管理员提供的那张）；onProgress 是已发出的比例。 */
+export function uploadArtistImage(
+  artistId: string,
+  params: { expectedRevision: number; file: File; onProgress?: (fraction: number) => void; signal?: AbortSignal },
+  idempotencyKey: string,
+): Promise<ApiResponse<ArtistMediaWriteDTO>> {
+  const form = new FormData();
+  form.set("expected_revision", String(params.expectedRevision));
+  form.set("image", params.file);
+  return apiUpload(
+    { method: "PUT", path: `/api/v1/artists/${artistId}/image`, form, idempotencyKey, signal: params.signal, ...(params.onProgress === undefined ? {} : { onProgress: params.onProgress }) },
+    decodeArtistMediaWrite,
+  );
+}
+
+export function putArtistBio(artistId: string, params: { expectedRevision: number; text: string; lang: "zh" | "en" }, idempotencyKey: string): Promise<ApiResponse<ArtistMediaWriteDTO>> {
+  return apiRequest(
+    { method: "PUT", path: `/api/v1/artists/${artistId}/bio`, body: { expected_revision: params.expectedRevision, text: params.text, lang: params.lang }, idempotencyKey },
+    decodeArtistMediaWrite,
+  );
+}
+
+/**
+ * 标记当前显示的图片或简介不对：管理员提供的就清除，自动补上的就撤销并且以后不再写回同一条目。
+ * keepalive：离开页面时仍要发出（撤回的等待期间关掉了页面）。
+ */
+export function rejectArtistMedia(
+  artistId: string,
+  params: { expectedRevision: number; field: "image" | "bio" },
+  idempotencyKey: string,
+  keepalive = false,
+): Promise<ApiResponse<ArtistMediaRejectDTO>> {
+  return apiRequest(
+    { method: "POST", path: `/api/v1/artists/${artistId}/media/reject`, body: { expected_revision: params.expectedRevision, field: params.field }, idempotencyKey, keepalive },
+    decodeArtistMediaReject,
+  );
+}
+
+/** 指定对应前预览一个 MusicBrainz 或 Wikidata 链接（也接受裸 MBID 与 Q 号）。 */
+export function previewArtistLink(artistId: string, url: string, signal?: AbortSignal): Promise<ApiResponse<ArtistLinkPreviewDTO>> {
+  return apiRequest({ method: "POST", path: `/api/v1/artists/${artistId}/link-preview`, body: { url }, signal }, decodeArtistLinkPreview);
+}
+
+export function putArtistLink(
+  artistId: string,
+  params: { expectedRevision: number; source: "musicbrainz" | "wikidata"; externalId: string },
+  idempotencyKey: string,
+): Promise<ApiResponse<ArtistMediaWriteDTO>> {
+  return apiRequest(
+    { method: "PUT", path: `/api/v1/artists/${artistId}/links`, body: { expected_revision: params.expectedRevision, source: params.source, external_id: params.externalId }, idempotencyKey },
+    decodeArtistMediaWrite,
+  );
 }

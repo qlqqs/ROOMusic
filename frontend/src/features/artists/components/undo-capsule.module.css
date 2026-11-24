@@ -1,0 +1,85 @@
+/* 撤回胶囊：深色、圆角满、浮在内容之上；窄屏在标签栏与迷你播放栏之上，宽屏在底部播放栏之上。 */
+.capsule {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--shell-bottom-inset, 0px) + var(--space-4));
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 14px;
+  border-radius: 999px;
+  background: var(--color-neutral-900);
+  color: var(--color-neutral-100);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-50%);
+  animation: rise 0.2s ease-out;
+}
+
+@media (min-width: 768px) {
+  .capsule {
+    bottom: 88px;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
+
+.undo {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-inline-start: 4px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.undo:hover {
+  background: color-mix(in srgb, var(--color-neutral-100) 12%, transparent);
+}
+
+.undo:focus-visible {
+  outline: 2px solid var(--color-accent-300);
+  outline-offset: 1px;
+}
+
+/* 倒计时环：从满到空，走完即提交。 */
+.countdown {
+  position: absolute;
+  inset: 2px;
+  width: 28px;
+  height: 28px;
+  transform: rotate(-90deg);
+}
+
+.countdown circle {
+  fill: none;
+  stroke: var(--color-accent-400);
+  stroke-width: 1.6;
+  stroke-dasharray: 82;
+  stroke-dashoffset: 0;
+  animation-name: drain;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes drain {
+  to {
+    stroke-dashoffset: 82;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capsule {
+    animation: none;
+  }
+}

@@ -1,0 +1,174 @@
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 34px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  color: var(--text-secondary);
+}
+
+.field:focus-within {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.field[data-valid] {
+  color: var(--text-accent);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-13);
+}
+
+.clear {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.clear:hover {
+  background: var(--color-hover);
+}
+
+.candidate {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 6px;
+  padding: 6px;
+  border-radius: var(--radius-md);
+}
+
+.disc,
+.skeletonDisc {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.skeletonLines {
+  display: grid;
+  gap: 6px;
+}
+
+.skeletonLines span {
+  height: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.skeletonLines span:first-child {
+  width: 60%;
+}
+
+.body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--fs-13);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.description {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  overflow-wrap: anywhere;
+}
+
+.ids {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.match {
+  color: var(--text-accent);
+}
+
+.mismatch {
+  color: var(--color-warning);
+}
+
+.confirm {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-accent);
+  border-radius: 50%;
+  background: none;
+  color: var(--text-accent);
+  cursor: pointer;
+}
+
+.confirm:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.confirm:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+.already {
+  color: var(--text-accent);
+}
+
+.message {
+  margin: 6px 6px 2px;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+
+.spin {
+  color: var(--text-secondary);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+/* 焦点环画在外框上（:focus-within），输入框自己不再画一圈。 */
+.input:focus-visible {
+  outline: none;
+}

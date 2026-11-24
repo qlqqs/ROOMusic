@@ -118,6 +118,10 @@ function settle<T>(status: number, body: JsonBody, requestId: string, generation
 export type ApiUploadSpec = {
   path: ApiPath;
   form: FormData;
+  /** 默认 POST；替换一份资源（艺人图片）用 PUT。 */
+  method?: "POST" | "PUT";
+  /** 写操作的幂等键（结果不确定后的重试沿用同一个）。 */
+  idempotencyKey?: string | undefined;
   signal?: AbortSignal | undefined;
   /** 已发出的比例 0–1；浏览器算不出总长时不回调。 */
   onProgress?: (fraction: number) => void;
@@ -139,9 +143,10 @@ export function apiUpload<T>(spec: ApiUploadSpec, decode: (input: unknown, statu
     const abort = () => xhr.abort();
     spec.signal?.addEventListener("abort", abort, { once: true });
     const finish = () => spec.signal?.removeEventListener("abort", abort);
-    xhr.open("POST", spec.path);
+    xhr.open(spec.method ?? "POST", spec.path);
     xhr.setRequestHeader("Accept", "application/json");
     xhr.setRequestHeader("X-Request-ID", requestId);
+    if (spec.idempotencyKey !== undefined) xhr.setRequestHeader("Idempotency-Key", spec.idempotencyKey);
     const { onProgress } = spec;
     if (onProgress !== undefined) {
       xhr.upload.addEventListener("progress", (event) => {
