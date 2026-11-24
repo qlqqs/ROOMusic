@@ -80,3 +80,18 @@ func (n *channelSelect) Process(b *chain.Buffer) *chain.Buffer {
 
 func (n *channelSelect) Reset()                 { n.result = chain.Buffer{} }
 func (n *channelSelect) Step() chain.SignalStep { return n.step }
+
+// AirPlay 交付双声道。复制单声道样本只改变声道布局，保留整数精度。
+type monoStereo struct {
+	result   chain.Buffer
+	channels [2][]float64
+}
+
+func (n *monoStereo) Process(b *chain.Buffer) *chain.Buffer {
+	n.result = *b
+	n.channels[0], n.channels[1] = b.Samples[0], b.Samples[0]
+	n.result.Samples = n.channels[:]
+	return &n.result
+}
+func (n *monoStereo) Reset()                 { *n = monoStereo{} }
+func (n *monoStereo) Step() chain.SignalStep { return chain.SignalStep{} }

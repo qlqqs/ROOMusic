@@ -15,14 +15,14 @@ const added = decodeLanDevice(sampleBody("upnp/manual-added"));
 const devicePath = `${devicesPath}/${encodeURIComponent(added.udn)}`;
 const useLan = () => screen.findByRole<HTMLInputElement>("switch", { name: "使用局域网里的播放设备" });
 const shared = () => screen.getByRole<HTMLInputElement>("switch", { name: "所有成员共用" });
-const settingsPatch = d.defineDecoder(d.object({ enabled: d.optional(d.boolean()), shared: d.optional(d.boolean()), upnp_enabled: d.optional(d.boolean()), cast_enabled: d.optional(d.boolean()) }));
+const settingsPatch = d.defineDecoder(d.object({ enabled: d.optional(d.boolean()), shared: d.optional(d.boolean()), upnp_enabled: d.optional(d.boolean()), cast_enabled: d.optional(d.boolean()), airplay_enabled: d.optional(d.boolean()) }));
 const addressBody = d.defineDecoder(d.object({ address: d.string() }));
 
 function setup({ enabled = false, items = [], current = "curator" }: { enabled?: boolean; items?: LanDeviceDTO[]; current?: string } = {}) {
   const api = installFakeApi();
   const session = installFakeSession(api, { current });
   installMembersApi(api, session);
-  let settings = { enabled, shared: true, upnp_enabled: true, cast_enabled: true };
+  let settings = { enabled, shared: true, upnp_enabled: true, cast_enabled: true, airplay_enabled: true };
   const devices = [...items];
   api.on("GET", settingsPath, () => jsonResponse(200, settings));
   api.on("PUT", settingsPath, ({ body }) => {
@@ -230,5 +230,36 @@ describe("设置 › 局域网设备", () => {
     await user.click(dialog.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: `“${cast.name}”的编码格式` })).toBeNull());
     expect(api.requestsTo("PUT", formatPath).map(({ body }) => body)).toEqual([{ codec: "flac", max_sample_rate: 96000 }]);
+  });
+
+  it("AirPlay：音质对话框写入 48 kHz / 24 位；需要 PIN 的设备经配对对话框完成配对", async () => {
+    const user = userEvent.setup();
+    const base = decodeLanDevice(sampleBody("upnp/airplay-manual-added"));
+    const appleTv = { ...base, name: "客厅 Apple TV", capabilities: { ...base.capabilities, airplay: base.capabilities.airplay === null ? null : { ...base.capabilities.airplay, requires_pin: true, paired: false } } };
+    const { api } = setup({ enabled: true, items: [appleTv] });
+    const path = `${devicesPath}/${encodeURIComponent(appleTv.udn)}`;
+    api.on("PUT", `${path}/format`, ({ body }) => jsonResponse(200, body));
+    api.on("POST", `${path}/pair/start`, () => new Response(null, { status: 204 }));
+    api.on("POST", `${path}/pair/finish`, () => new Response(null, { status: 204 }));
+    renderSettings();
+    const region = within(await screen.findByRole("region", { name: "设备" }));
+    expect(await region.findByText("待配对")).toBeTruthy();
+    expect(region.getByText("AirPlay")).toBeTruthy();
+    expect(region.getByText(/ALAC，最高 44.1 kHz \/ 16 位 · 精确对时/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: `${appleTv.name} 的更多操作` }));
+    await user.click(screen.getByRole("menuitem", { name: `${appleTv.name} 的音质…` }));
+    const quality = within(screen.getByRole("dialog", { name: `“${appleTv.name}”的音质` }));
+    await user.click(quality.getByRole("radio", { name: /48 kHz \/ 24 位/ }));
+    await user.click(quality.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(api.requestsTo("PUT", `${path}/format`).map(({ body }) => body)).toEqual([{ codec: "alac", max_sample_rate: 48000, max_bit_depth: 24 }]));
+
+    await user.click(screen.getByRole("button", { name: `${appleTv.name} 的更多操作` }));
+    await user.click(screen.getByRole("menuitem", { name: `与 ${appleTv.name} 配对…` }));
+    const pair = within(screen.getByRole("dialog", { name: `与“${appleTv.name}”配对` }));
+    await waitFor(() => expect(api.requestsTo("POST", `${path}/pair/start`)).toHaveLength(1));
+    await user.type(pair.getByRole("textbox", { name: "屏幕上的 PIN" }), "1234");
+    await user.click(pair.getByRole("button", { name: "配对" }));
+    await waitFor(() => expect(api.requestsTo("POST", `${path}/pair/finish`).map(({ body }) => body)).toEqual([{ pin: "1234" }]));
   });
 });

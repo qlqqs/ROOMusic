@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/devices/airplay"
 	"github.com/qlqq/roomusic/backend/internal/devices/cast"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/zones"
@@ -24,10 +25,15 @@ type outputManager struct {
 	lanURL, httpAddr string
 	mu               sync.Mutex
 	owners           map[string]*deviceOutput
+	artwork          func(context.Context, string, bool) (string, []byte, error)
 }
 
 func (s *Service) AttachOutput(z *zones.Service, lanURL, httpAddr string, logger *slog.Logger) {
 	s.output = &outputManager{zones: z, lanURL: strings.TrimRight(lanURL, "/"), httpAddr: httpAddr, logger: logger, owners: map[string]*deviceOutput{}}
+}
+
+func (s *Service) WithAirPlayArtwork(read func(context.Context, string, bool) (string, []byte, error)) {
+	s.output.artwork = read
 }
 
 func (m *outputManager) baseURL(d Device) (string, error) {
@@ -57,7 +63,7 @@ func playbackCaps(c Capabilities) zones.Capabilities {
 		if codec == "mp3" {
 			mime = "audio/mpeg"
 		}
-		lossless := codec == "flac" || codec == "wav"
+		lossless := codec == "flac" || codec == "wav" || codec == "alac"
 		f := zones.StreamFormatCapability{Codec: codec, MIMEType: mime, Lossless: lossless, MaxSampleRate: &c.MaxSampleRate}
 		if lossless {
 			f.MaxBitDepth = &c.MaxBitDepth
@@ -89,6 +95,9 @@ func (s *Service) VisibleDevices(ctx context.Context, userID string) ([]zones.Ma
 	defer s.output.mu.Unlock()
 	for _, d := range items {
 		row := zones.ManagedDevice{Kind: d.Kind, MaxSampleRate: d.Capabilities.MaxSampleRate, UDN: d.UDN, Name: d.Name, InitialVolume: d.initialVolume, Capabilities: playbackCaps(d.Capabilities), FormatDeclared: d.Capabilities.FormatDeclared}
+		if info := d.Capabilities.AirPlay; info != nil {
+			row.UnavailableReason = string(info.UnavailableReason)
+		}
 		if owner := s.output.owners[d.UDN]; owner != nil {
 			row.OccupiedBy = &zones.DeviceOccupant{UserID: owner.actor.ID, DisplayName: owner.actor.Username}
 		}
@@ -124,9 +133,23 @@ func (s *Service) Acquire(ctx context.Context, userID, deviceID, udn string, cap
 	}
 	device := visible[index].Device
 	m := s.output
-	base, err := m.baseURL(device)
-	if err != nil {
-		return err
+	var base string
+	if device.Kind != "airplay" {
+		base, err = m.baseURL(device)
+		if err != nil {
+			return err
+		}
+	} else {
+		info := device.Capabilities.AirPlay
+		if info != nil && info.UnavailableReason == airplay.PrecisionUnavailable {
+			return zones.ErrPrecisionUnavailable
+		}
+		if info == nil || info.UnavailableReason != "" {
+			return zones.ErrDeviceUnsupported
+		}
+		if (info.RequiresPIN || info.RequiresPassword) && !info.Paired {
+			return zones.ErrDevicePairingRequired
+		}
 	}
 	m.mu.Lock()
 	old := m.owners[udn]
@@ -157,7 +180,11 @@ func (s *Service) Acquire(ctx context.Context, userID, deviceID, udn string, cap
 	m.mu.Lock()
 	m.owners[udn] = o
 	m.mu.Unlock()
-	if device.Kind == "cast" {
+	if device.Kind == "airplay" {
+		receiver := airplay.Device{Key: device.UDN, Name: device.Name, Model: device.Model, Address: device.Address, LocalAddress: device.LocalAddress, Info: *device.Capabilities.AirPlay}
+		p := airplayOutput{deviceOutput: o, receiver: receiver, clock: &s.clock, credentials: s.airplayCredentials, registry: s.protocols["airplay"].registry}
+		go p.run(sub)
+	} else if device.Kind == "cast" {
 		output := cast.Output{Zones: m.zones, UserID: userID, DeviceID: deviceID, ZoneID: o.zoneID, SessionID: o.sessionID, BaseURL: base, Address: device.Address, Logger: m.logger, Online: func() bool { d, ok := s.cast.Lookup(udn); return ok && d.Online }, Offline: func() { s.cast.Offline(udn) }}
 		go func() { position := output.Run(run, sub); sub.Close(); o.cancel(); o.release(position) }()
 	} else {

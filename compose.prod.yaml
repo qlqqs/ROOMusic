@@ -17,6 +17,7 @@ services:
     environment:
       ROOMUSIC_ENV: production
       ROOMUSIC_HTTP_ADDR: "0.0.0.0:${ROOMUSIC_HTTP_PORT:-8090}"
+      ROOMUSIC_PTP_ADDR: "${ROOMUSIC_PTP_ADDR:-127.0.0.1:55440}"
       ROOMUSIC_LAN_URL: "${ROOMUSIC_LAN_URL:-}"
       ROOMUSIC_INSIGHTS_DISABLED: "${ROOMUSIC_INSIGHTS_DISABLED:-false}"
       ROOMUSIC_INSIGHTS_URL: "${ROOMUSIC_INSIGHTS_URL:-}"
@@ -51,6 +52,23 @@ services:
     security_opt: ["no-new-privileges:true"]
     depends_on:
       postgres: { condition: service_healthy, restart: true }
+    restart: unless-stopped
+    logging: *logging
+
+  ptp:
+    container_name: "${ROOMUSIC_PTP_CONTAINER_NAME:-roomusic-ptp}"
+    image: "${ROOMUSIC_IMAGE:-ghcr.io/qlqqs/roomusic}:${ROOMUSIC_VERSION:-latest}"
+    entrypoint: ["/app/roomusic-ptp"]
+    user: "0:0"
+    network_mode: host
+    environment:
+      ROOMUSIC_PTP_ADDR: "${ROOMUSIC_PTP_ADDR:-127.0.0.1:55440}"
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      disable: true
     restart: unless-stopped
     logging: *logging
 

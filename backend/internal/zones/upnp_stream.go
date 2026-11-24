@@ -40,7 +40,7 @@ func (s *Service) ManagedStream(userID, sessionID string, seq int64) (UPnPStream
 	z.mu.Lock()
 	defer z.mu.Unlock()
 	h := z.handleFor(&seq)
-	if outputError(out) != nil || !managedKind(z.device.Kind) || h == nil || h.session.HLS() != nil {
+	if outputError(out) != nil || (z.device.Kind != "upnp" && z.device.Kind != "cast") || h == nil || h.session.HLS() != nil {
 		return UPnPStreamInfo{}, ErrStreamGone
 	}
 	if h.upnp == nil {

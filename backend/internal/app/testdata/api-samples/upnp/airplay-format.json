@@ -1,0 +1,8 @@
+{
+  "body": {
+    "codec": "alac",
+    "max_bit_depth": 16,
+    "max_sample_rate": 44100
+  },
+  "status": 200
+}

@@ -1,0 +1,83 @@
+services:
+  receiver:
+    image: ${AIRPLAY_TEST_IMAGE:?}
+    command: ["--service-type", "${AIRPLAY_TEST_MODE:?}", "-a", "${AIRPLAY_TEST_NAME:?}", "-o", "pipe"]
+    volumes:
+      - ${AIRPLAY_TEST_DIR:?}/receiver.conf:/etc/shairport-sync.conf:ro
+      - ${AIRPLAY_TEST_DIR:?}/audio.fifo:/tmp/roomusic-audio
+    cpus: 1
+    mem_limit: 192m
+
+  sender:
+    image: ${AIRPLAY_TEST_IMAGE:?}
+    entrypoint: ["/airplay-probe"]
+    command: ["${AIRPLAY_TEST_MODE:?}", "${AIRPLAY_TEST_NAME:?}"]
+    volumes:
+      - ${AIRPLAY_PROBE:?}:/airplay-probe:ro
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 1
+    mem_limit: 128m
+
+  postgres:
+    image: postgres:18.1-alpine3.23@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29
+    environment:
+      POSTGRES_DB: airplay_probe
+      POSTGRES_USER: airplay_probe
+      POSTGRES_HOST_AUTH_METHOD: trust
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airplay_probe -d airplay_probe"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+    cpus: 1
+    mem_limit: 256m
+
+  app:
+    image: ${AIRPLAY_TEST_IMAGE:?}
+    entrypoint: ["/roomusic"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ROOMUSIC_ENV: development
+      ROOMUSIC_HTTP_ADDR: "0.0.0.0:8080"
+      ROOMUSIC_PUBLIC_URL: http://app:8080
+      ROOMUSIC_ALLOWED_LIBRARY_ROOTS: /music
+      ROOMUSIC_DATA_DIR: /tmp/data
+      ROOMUSIC_DATABASE_URL: postgres://airplay_probe@postgres:5432/airplay_probe?sslmode=disable
+      ROOMUSIC_FFMPEG_PATH: /ffmpeg
+      ROOMUSIC_AUDIO_ANALYSIS: "off"
+    volumes:
+      - ${AIRPLAY_WORK:?}/roomusic:/roomusic:ro
+      - ${AIRPLAY_WORK:?}/music:/music:ro
+      - ${AIRPLAY_FFMPEG:?}:/ffmpeg:ro
+    user: "65534:65534"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 2
+    mem_limit: 512m
+
+  playback:
+    image: python:3.13-alpine@sha256:bf12ecc0bea3f171d55145dd02c78b5eeb09f30ee2ac9cc2b4c9e4e8f5e30741
+    entrypoint: ["python3", "-u", "/playback.py"]
+    command: ["${AIRPLAY_TEST_MODE:?}", "${AIRPLAY_TEST_NAME:?}"]
+    volumes:
+      - ./playback.py:/playback.py:ro
+      - ${AIRPLAY_PROBE:?}:/airplay-probe:ro
+      - ${AIRPLAY_TEST_DIR:?}/audio.pcm:/audio.pcm:ro
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+
+networks:
+  default:
+    driver: bridge

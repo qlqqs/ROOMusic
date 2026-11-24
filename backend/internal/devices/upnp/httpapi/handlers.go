@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/qlqq/roomusic/backend/internal/devices/airplay"
 	"github.com/qlqq/roomusic/backend/internal/devices/cast"
 	"github.com/qlqq/roomusic/backend/internal/devices/upnp"
 	"github.com/qlqq/roomusic/backend/internal/identity"
@@ -29,6 +30,8 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+base+"/devices", h.admin(h.list))
 	mux.HandleFunc("POST "+base+"/devices", h.admin(h.add))
 	mux.HandleFunc("DELETE "+base+"/devices/{udn}", h.admin(h.remove))
+	mux.HandleFunc("POST "+base+"/devices/{udn}/pair/start", h.admin(h.startPairing))
+	mux.HandleFunc("POST "+base+"/devices/{udn}/pair/finish", h.admin(h.finishPairing))
 	mux.HandleFunc("PUT "+base+"/devices/{udn}/format", h.admin(h.format))
 	mux.HandleFunc("PUT "+base+"/devices/{udn}/grants", h.admin(h.grants))
 }
@@ -65,17 +68,25 @@ func respond(w http.ResponseWriter, r *http.Request, result any, err error) {
 	}
 	status, code, message := http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用"
 	switch {
+	case errors.Is(err, upnp.ErrAirPlayDisabled):
+		status, code, message = 409, "airplay_disabled", upnp.ErrAirPlayDisabled.Error()
 	case errors.Is(err, upnp.ErrCastDisabled):
 		status, code, message = 409, "cast_disabled", upnp.ErrCastDisabled.Error()
-	case errors.Is(err, cast.ErrAddress):
-		status, code, message = 400, "invalid_address", cast.ErrAddress.Error()
+	case errors.Is(err, cast.ErrAddress), errors.Is(err, airplay.ErrAddress):
+		status, code, message = 400, "invalid_address", err.Error()
 	case errors.Is(err, upnp.ErrDisabled):
 		status, code, message = 409, "upnp_disabled", upnp.ErrDisabled.Error()
 	case errors.Is(err, upnp.ErrUnknownDevice):
 		status, code, message = 404, "not_found", upnp.ErrUnknownDevice.Error()
 	case errors.Is(err, upnp.ErrManualDevice):
 		status, code, message = 404, "not_found", upnp.ErrManualDevice.Error()
-	case errors.Is(err, upnp.ErrFormat), errors.Is(err, upnp.ErrKind):
+	case errors.Is(err, upnp.ErrPairingBusy):
+		status, code, message = 409, "pairing_busy", err.Error()
+	case errors.Is(err, upnp.ErrPairingExpired):
+		status, code, message = 409, "pairing_expired", err.Error()
+	case errors.Is(err, upnp.ErrPairingRejected):
+		status, code, message = 422, "pairing_rejected", err.Error()
+	case errors.Is(err, upnp.ErrPairingInput), errors.Is(err, upnp.ErrAirPlayFormat), errors.Is(err, upnp.ErrFormat), errors.Is(err, upnp.ErrKind):
 		status, code, message = 400, "invalid_input", err.Error()
 	case errors.Is(err, upnp.ErrGrantUser):
 		status, code, message = 400, "invalid_input", upnp.ErrGrantUser.Error()
@@ -147,10 +158,24 @@ func (h *Handlers) grants(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) format(w http.ResponseWriter, r *http.Request) {
-	var body upnp.CastFormat
+	var body upnp.DeviceFormat
 	if !decode(w, r, &body) {
 		return
 	}
 	result, err := h.service.SetFormat(r.Context(), r.PathValue("udn"), body)
 	respond(w, r, result, err)
+}
+
+func (h *Handlers) startPairing(w http.ResponseWriter, r *http.Request) {
+	respond(w, r, nil, h.service.BeginAirPlayPIN(r.Context(), r.PathValue("udn")))
+}
+
+func (h *Handlers) finishPairing(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		PIN string `json:"pin"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	respond(w, r, nil, h.service.FinishAirPlayPIN(r.Context(), r.PathValue("udn"), body.PIN))
 }

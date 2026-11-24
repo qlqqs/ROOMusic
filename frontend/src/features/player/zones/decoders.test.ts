@@ -217,11 +217,17 @@ describe("播放区公开 DTO 的真实样本", () => {
     ];
     expect(decodeSnapshot({ ...body, devices }).devices.map((device) => device.lan)).toStrictEqual([
       null,
-      { maxSampleRate: 48000, formatDeclared: true, occupiedBy: null },
-      { maxSampleRate: 48000, formatDeclared: true, occupiedBy: null },
-      { maxSampleRate: 96000, formatDeclared: false, occupiedBy: { userId: id(4), displayName: "listener" } },
-      { maxSampleRate: 48000, formatDeclared: true, occupiedBy: null },
+      { maxSampleRate: 48000, formatDeclared: true, occupiedBy: null, unavailableReason: null },
+      { maxSampleRate: 48000, formatDeclared: true, occupiedBy: null, unavailableReason: null },
+      { maxSampleRate: 96000, formatDeclared: false, occupiedBy: { userId: id(4), displayName: "listener" }, unavailableReason: null },
+      { maxSampleRate: 48000, formatDeclared: true, occupiedBy: null, unavailableReason: null },
     ]);
+  });
+
+  it("AirPlay 设备映射为局域网设备，带服务器给出的不可用原因", () => {
+    const [renderer] = upnpSnapshot.body.devices;
+    const devices = [{ ...renderer, device_id: id(95), kind: "airplay", unavailable_reason: "精确对时不可用" }];
+    expect(decodeSnapshot({ ...upnpSnapshot.body, devices }).devices[0]?.lan?.unavailableReason).toBe("精确对时不可用");
   });
 
   it.each([

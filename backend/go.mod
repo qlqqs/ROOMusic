@@ -3,6 +3,7 @@ module github.com/qlqq/roomusic/backend
 go 1.25.0
 
 require (
+	filippo.io/bigmod v0.1.0
 	github.com/extism/go-sdk v1.7.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0

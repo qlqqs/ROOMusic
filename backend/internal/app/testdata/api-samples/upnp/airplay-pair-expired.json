@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "pairing_expired",
+      "message": "屏幕 PIN 配对已过期，请重新开始"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

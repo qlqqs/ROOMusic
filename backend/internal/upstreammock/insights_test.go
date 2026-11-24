@@ -11,7 +11,7 @@ import (
 
 func TestMockInsightsHeartbeatScenariosAndRequestRecords(t *testing.T) {
 	const path = "/insights/api/v1/heartbeat"
-	const valid = `{"schema":1,"instance_id":"a1000000-0000-4000-8000-000000000001","version":"1.2.3","os":"linux","arch":"amd64","container":true,"library":{"tracks":"0","releases":"0"},"members":"1","features":{"auto_curation":false,"steward_model":false,"mcp_token":false,"lan_devices":false,"dsp":false,"scheduled_scan":false,"plugins":"0"},"devices_30d":{"browser":"0","upnp":"0"}}`
+	const valid = `{"schema":3,"instance_id":"a1000000-0000-4000-8000-000000000001","version":"1.2.3","os":"linux","arch":"amd64","container":true,"library":{"tracks":"0","releases":"0"},"members":"1","features":{"auto_curation":false,"steward_model":false,"mcp_token":false,"lan_devices":false,"dsp":false,"scheduled_scan":false,"plugins":"0"},"devices_30d":{"browser":"0","upnp":"0","cast":"0","airplay":"1"}}`
 	mock := newMock(t, upstreammock.Options{})
 	requireStatus(t, callMock(mock, http.MethodPost, path, valid), http.StatusNoContent)
 	requireStatus(t, callMock(mock, http.MethodPost, path, `{"unknown":true}`), http.StatusBadRequest)

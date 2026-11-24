@@ -142,11 +142,12 @@ export type Device = {
   /** 能由软件调音量（能力 volume 不是 fixed）。 */
   volumeControllable: boolean;
   outputSessionId: string | null;
-  /** 服务器托管的局域网设备（UPnP/DLNA、Google Cast）才有：采样率上限、设备是否声明了支持的格式、现在谁在用（没人用时为 null）。 */
+  /** 服务器托管的局域网设备（UPnP/DLNA、Google Cast、AirPlay）才有：采样率上限、设备是否声明了支持的格式、现在谁在用（没人用时为 null）。 */
   lan: LanDeviceInfo | null;
 };
 
-export type LanDeviceInfo = { maxSampleRate: number; formatDeclared: boolean; occupiedBy: { userId: string; displayName: string } | null };
+/** unavailableReason：设备现在不能用的原因（例如 AirPlay 设备需要的精确对时不可用），由服务器给出；能用时为 null。 */
+export type LanDeviceInfo = { maxSampleRate: number; formatDeclared: boolean; occupiedBy: { userId: string; displayName: string } | null; unavailableReason: string | null };
 
 /** 局域网设备可选的采样率上限（与后端白名单一致）。 */
 export const UPNP_SAMPLE_RATES = [44100, 48000, 96000, 192000] as const;

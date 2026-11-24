@@ -16,12 +16,13 @@ type ManagedOutputs interface {
 }
 
 type ManagedDevice struct {
-	Kind, UDN, Name string
-	MaxSampleRate   int
-	InitialVolume   *float64
-	Capabilities    Capabilities
-	FormatDeclared  bool
-	OccupiedBy      *DeviceOccupant
+	Kind, UDN, Name   string
+	MaxSampleRate     int
+	InitialVolume     *float64
+	Capabilities      Capabilities
+	FormatDeclared    bool
+	UnavailableReason string
+	OccupiedBy        *DeviceOccupant
 }
 
 type DeviceOccupant struct {
@@ -48,7 +49,7 @@ func (s *Service) managedOutputs() ManagedOutputs {
 	return s.managed
 }
 
-func managedKind(kind string) bool { return kind == "upnp" || kind == "cast" }
+func managedKind(kind string) bool { return kind == "upnp" || kind == "cast" || kind == "airplay" }
 
 func (z *zoneRuntime) visible() bool { return !managedKind(z.device.Kind) || z.managedVisible }
 
@@ -125,7 +126,7 @@ func (s *Service) createManaged(ctx context.Context, userID string, u *userRunti
 		return err
 	}
 	at := timestamp(now)
-	z := &zoneRuntime{device: d, persisted: p, managedVisible: true, formatDeclared: item.FormatDeclared, occupiedBy: cloneValue(item.OccupiedBy), intent: "pause", status: "idle", failures: []Failure{}, pausedAt: &at, prepared: map[string]string{}}
+	z := &zoneRuntime{device: d, persisted: p, managedVisible: true, unavailableReason: item.UnavailableReason, formatDeclared: item.FormatDeclared, occupiedBy: cloneValue(item.OccupiedBy), intent: "pause", status: "idle", failures: []Failure{}, pausedAt: &at, prepared: map[string]string{}}
 	u.devices[d.DeviceID], u.zones[p.ZoneID] = z, z
 	u.order = append(u.order, z)
 	sortUser(u)
@@ -141,7 +142,7 @@ func (s *Service) refreshManaged(ctx context.Context, userID string, z *zoneRunt
 	defer z.mu.Unlock()
 	d := z.device
 	d.Name = managedName(item.Name)
-	if item.Kind == "cast" {
+	if item.Kind == "cast" || item.Kind == "airplay" {
 		d.MaxSampleRate = item.MaxSampleRate
 	}
 	d.Capabilities = limitSampleRate(item.Capabilities, d.MaxSampleRate)
@@ -154,7 +155,8 @@ func (s *Service) refreshManaged(ctx context.Context, userID string, z *zoneRunt
 			return err
 		}
 	}
-	if newlyVisible || changed || z.formatDeclared != item.FormatDeclared || !reflect.DeepEqual(z.occupiedBy, item.OccupiedBy) {
+	if newlyVisible || changed || z.unavailableReason != item.UnavailableReason || z.formatDeclared != item.FormatDeclared || !reflect.DeepEqual(z.occupiedBy, item.OccupiedBy) {
+		z.unavailableReason = item.UnavailableReason
 		z.device, z.formatDeclared, z.occupiedBy, z.managedVisible = d, item.FormatDeclared, cloneValue(item.OccupiedBy), true
 		s.publishDevice(userID, deviceOf(z))
 		if formatChanged && z.session != nil {

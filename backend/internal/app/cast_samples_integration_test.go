@@ -17,7 +17,7 @@ func TestPostgreSQLCastAPISamples(t *testing.T) {
 	headers := map[string]string{"X-Request-ID": "sample-request"}
 	invalidAddress := map[string]string{"kind": "cast", "address": "127.0.0.1"}
 	assertUPnPSample(t, "cast-disabled", f.request(t, "POST", base, invalidAddress, &f.admin, headers))
-	settings := map[string]bool{"enabled": true, "upnp_enabled": false}
+	settings := map[string]bool{"enabled": true, "upnp_enabled": false, "airplay_enabled": false}
 	assertUPnPSample(t, "cast-settings", f.request(t, "PUT", upnpAdmin+"/settings", settings, &f.admin, nil))
 	assertUPnPSample(t, "cast-invalid-address", f.request(t, "POST", base, invalidAddress, &f.admin, headers))
 	listener := lanTestListener(t)

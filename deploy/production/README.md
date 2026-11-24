@@ -134,6 +134,10 @@ curl -fL -o compose.bridge.yaml https://raw.githubusercontent.com/qlqqs/ROOMusic
 升级到带匿名统计的版本后，应用默认每天向 `insights.roomusic.org` 发送一次匿名统计，新实例满 24 小时后才开始；管理员首次登录会看到说明。
 不想发送时，在 `.env` 里加 `ROOMUSIC_INSIGHTS_DISABLED=true` 再执行升级命令，或者在网页“设置 › 匿名统计”里关闭。字段说明见[匿名统计说明](../../docs/insights.md)。
 
+升级到带 AirPlay 的版本后，Compose 多一个 `ptp` 服务（容器名默认 `roomusic-ptp`，`ROOMUSIC_PTP_CONTAINER_NAME` 可改），为 AirPlay 2 设备提供精确对时。
+它与应用同一镜像，只有绑定低端口的权限，在 host 网络使用 UDP 319/320。同一台机器上已经运行 shairport-sync、nqptp 或其他 PTP 程序时端口会被占用：
+应用照常工作，兼容设备改用普通对时，HomePod、Sonos Era 等必须精确对时的设备在“局域网设备”里显示“精确对时不可用”。用 bridge 覆盖文件部署时没有 `ptp` 服务，也不支持精确对时。
+
 ## 4. 备份与恢复
 
 管理员在“设置 › 备份”可以查看备份状态、立即备份、下载和删除备份文件（可以勾选多份一起删除）。默认每天上海时间 3 点后自动备份一次，保留 14 天；

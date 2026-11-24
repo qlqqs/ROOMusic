@@ -1,0 +1,20 @@
+services:
+  receiver:
+    command: ["--service-type", "${AIRPLAY_TEST_MODE:?}", "-a", "${AIRPLAY_TEST_NAME:?}", "-vv", "--statistics", "-o", "pipe"]
+  ptp:
+    image: ${AIRPLAY_TEST_IMAGE:?}
+    entrypoint: ["/roomusic-ptp"]
+    network_mode: service:app
+    volumes:
+      - ${AIRPLAY_WORK:?}/roomusic-ptp:/roomusic-ptp:ro
+    environment:
+      ROOMUSIC_PTP_ADDR: 127.0.0.1:55440
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+  app:
+    environment:
+      ROOMUSIC_PTP_ADDR: 127.0.0.1:55440

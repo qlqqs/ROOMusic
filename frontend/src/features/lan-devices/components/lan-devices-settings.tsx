@@ -1,18 +1,26 @@
 import { MoreHorizontal, Plus } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useMembers } from "../../members";
 import { Button, ConfirmDialog, FailureNotice, MenuButton, QueryContent, SettingRow, SettingsGroup, Skeleton, StatusTag, Switch, TextField } from "../../../shared/ui";
-import type { CastFormatDTO, LanDeviceDTO, LanDeviceSettingsDTO } from "../api/decoders";
-import { useAddLanDevice, useLanDevices, useLanDeviceSettings, usePutCastFormat, usePutLanDeviceGrants, useRemoveLanDevice, useUpdateLanDeviceSettings } from "../hooks/use-lan-devices";
+import type { AirPlayFormatDTO, CastFormatDTO, LanDeviceDTO, LanDeviceSettingsDTO } from "../api/decoders";
+import { useAddLanDevice, useFinishAirPlayPairing, useLanDevices, useLanDeviceSettings, usePutAirPlayFormat, usePutCastFormat, usePutLanDeviceGrants, useRemoveLanDevice, useStartAirPlayPairing, useUpdateLanDeviceSettings } from "../hooks/use-lan-devices";
 import styles from "./lan-devices-settings.module.css";
 
 const addFailures = {
   upnp: { invalid_address: "需要设备的局域网 IP，或这台设备自己的 HTTP 描述地址（例如 http://192.168.1.25:49152/description.xml）。", upnp_disabled: "UPnP/DLNA 已关闭，先在上面打开。" },
   cast: { invalid_address: "需要设备的局域网 IP，可以带端口（例如 192.168.1.25 或 192.168.1.25:8009）。", cast_disabled: "Google Cast 已关闭，先在上面打开。" },
+  airplay: { invalid_address: "需要设备的局域网 IP，可以带端口（例如 192.168.1.25 或 192.168.1.25:7000）。", airplay_disabled: "AirPlay 已关闭，先在上面打开。" },
 } as const;
 
-const kindLabels = { upnp: "UPnP/DLNA", cast: "Google Cast" } as const;
+const kindLabels = { upnp: "UPnP/DLNA", cast: "Google Cast", airplay: "AirPlay" } as const;
 const codecLabels = { mp3: "MP3", aac: "AAC", flac: "FLAC" } as const;
+
+/** AirPlay 精确对时（PTP）不可用的原因码。 */
+const timingReasons: Record<string, string> = {
+  port_in_use: "对时端口（UDP 319/320）被本机其他程序占用",
+  clock_unavailable: "对时服务没有运行",
+  missing_airplay_service: "设备没有公告 AirPlay 2 服务",
+};
 
 /** 采样率写成“48 kHz”“44.1 kHz”。 */
 function rateText(rate: number): string {
@@ -22,7 +30,12 @@ function rateText(rate: number): string {
 /** 一台设备的说明：型号、在线、格式与上限、音量是否可调、手动添加。Google Cast 的格式是管理员设定的编码。 */
 function deviceDescription(device: LanDeviceDTO): string {
   const parts = [device.model === "" ? null : device.model, device.online ? "在线" : "离线"];
-  if (device.format !== null) {
+  const airplay = device.capabilities.airplay;
+  if (device.format !== null && device.format.codec === "alac") {
+    parts.push(`ALAC，最高 ${rateText(device.format.max_sample_rate)} / ${device.format.max_bit_depth} 位`);
+    if (airplay?.timing_protocol != null) parts.push(airplay.timing_protocol === "PTP" ? "精确对时" : "兼容模式");
+    if (airplay?.timing_reason != null) parts.push(timingReasons[airplay.timing_reason] ?? "精确对时暂不可用");
+  } else if (device.format !== null) {
     parts.push(`${codecLabels[device.format.codec]}，最高 ${rateText(device.format.max_sample_rate)}，曲目之间可能有短暂停顿`);
   } else {
     const formats = device.capabilities.format_declared ? device.capabilities.stream_formats.map((format) => format.toUpperCase()).join("、") : "没有声明支持的格式，先试 FLAC";
@@ -65,6 +78,11 @@ export function LanDevicesSettings() {
                       <Switch id={controlId} aria-describedby={descriptionId} checked={value("cast_enabled", data.cast_enabled)} disabled={update.isPending} onChange={(on) => update.mutate({ cast_enabled: on })} />
                     )}
                   </SettingRow>
+                  <SettingRow nested label="AirPlay" description="HomePod、Apple TV、Mac，以及支持 AirPlay 的音箱与功放。">
+                    {({ controlId, descriptionId }) => (
+                      <Switch id={controlId} aria-describedby={descriptionId} checked={value("airplay_enabled", data.airplay_enabled)} disabled={update.isPending} onChange={(on) => update.mutate({ airplay_enabled: on })} />
+                    )}
+                  </SettingRow>
                 </>
               ) : null}
               <SettingRow label="所有成员共用" description="关掉后，每台设备只给你分配的成员使用；管理员始终能看到全部设备。同一时间一台设备只为一个人播放，别人可以确认后接管。">
@@ -87,6 +105,7 @@ function DeviceList({ settings }: { settings: LanDeviceSettingsDTO }) {
   const [adding, setAdding] = useState(false);
   const [granting, setGranting] = useState<LanDeviceDTO | null>(null);
   const [formatting, setFormatting] = useState<LanDeviceDTO | null>(null);
+  const [pairing, setPairing] = useState<LanDeviceDTO | null>(null);
   return (
     <SettingsGroup
       title="设备"
@@ -104,16 +123,20 @@ function DeviceList({ settings }: { settings: LanDeviceSettingsDTO }) {
           ) : (
             items.map((device) => {
               const actions = [
-                ...(device.format === null ? [] : [{ id: "format", label: `${device.name} 的编码格式…`, onSelect: () => setFormatting(device) }]),
+                ...(device.format === null ? [] : [{ id: "format", label: device.kind === "airplay" ? `${device.name} 的音质…` : `${device.name} 的编码格式…`, onSelect: () => setFormatting(device) }]),
+                ...(device.capabilities.airplay?.requires_pin === true && !device.capabilities.airplay.paired ? [{ id: "pair", label: `与 ${device.name} 配对…`, onSelect: () => setPairing(device) }] : []),
                 ...(settings.shared ? [] : [{ id: "grants", label: `分配 ${device.name} 给成员…`, onSelect: () => setGranting(device) }]),
                 ...(device.manual ? [{ id: "remove", label: `移除 ${device.name}`, danger: true, onSelect: () => remove.mutate(device.udn) }] : []),
               ];
+              const unavailable = device.capabilities.airplay?.unavailable_reason ?? null;
               const assigned = settings.shared ? null : device.user_ids.length === 0 ? "只有管理员可用" : `分配给 ${device.user_ids.length} 位成员`;
               return (
                 <SettingRow key={device.udn} label={device.name === "" ? "未命名设备" : device.name} description={assigned === null ? deviceDescription(device) : `${deviceDescription(device)} · ${assigned}`}>
                   {() => (
                     <span className={styles.rowEnd}>
                       <StatusTag>{kindLabels[device.kind]}</StatusTag>
+                      {unavailable === null ? null : <StatusTag tone="outline">{unavailable}</StatusTag>}
+                      {device.capabilities.airplay?.requires_pin === true && !device.capabilities.airplay.paired ? <StatusTag>待配对</StatusTag> : null}
                       {device.manual ? <StatusTag>手动添加</StatusTag> : null}
                       {actions.length === 0 ? <span className={styles.menuSpacer} aria-hidden="true" /> : <MenuButton label={`${device.name} 的更多操作`} iconOnly icon={<MoreHorizontal size={18} />} actions={actions} />}
                     </span>
@@ -127,6 +150,7 @@ function DeviceList({ settings }: { settings: LanDeviceSettingsDTO }) {
       <AddDeviceDialog open={adding} onClose={() => setAdding(false)} />
       <GrantsDialog device={granting} onClose={() => setGranting(null)} />
       <FormatDialog device={formatting} onClose={() => setFormatting(null)} />
+      <PairDialog device={pairing} onClose={() => setPairing(null)} />
     </SettingsGroup>
   );
 }
@@ -160,7 +184,7 @@ function AddDeviceDialog({ open, onClose }: { open: boolean; onClose: () => void
       <form onSubmit={submit} className={styles.form}>
         <fieldset className={styles.choices}>
           <legend className={styles.legend}>设备类型</legend>
-          {(["upnp", "cast"] as const).map((option) => (
+          {(["upnp", "cast", "airplay"] as const).map((option) => (
             <label key={option} className={styles.choice}>
               <input type="radio" name="lan-device-kind" checked={kind === option} onChange={() => setKind(option)} />
               {kindLabels[option]}
@@ -169,7 +193,11 @@ function AddDeviceDialog({ open, onClose }: { open: boolean; onClose: () => void
         </fieldset>
         <TextField label="设备地址" value={address} placeholder="192.168.1.25" autoFocus onChange={(event) => setAddress(event.target.value)} />
         <p className={styles.hint}>
-          {kind === "upnp" ? "填设备的局域网 IP；如果设备不响应查找，填它的描述地址（http://IP:端口/…xml）。" : "填设备的局域网 IP；端口不是 8009 时写成 IP:端口。"}
+          {kind === "upnp"
+            ? "填设备的局域网 IP；如果设备不响应查找，填它的描述地址（http://IP:端口/…xml）。"
+            : kind === "cast"
+              ? "填设备的局域网 IP；端口不是 8009 时写成 IP:端口。"
+              : "填设备的局域网 IP；端口不是 7000 时写成 IP:端口。"}
         </p>
       </form>
     </ConfirmDialog>
@@ -221,9 +249,88 @@ function GrantsForm({ device, onClose }: { device: LanDeviceDTO; onClose: () => 
   );
 }
 
-/** 一台 Google Cast 设备的编码与采样率上限。默认 MP3：部分 Nest 与三星音箱播放较长的 FLAC 会中断。 */
+/** 编码设置：Google Cast 选编码与采样率，AirPlay 选音质。 */
 function FormatDialog({ device, onClose }: { device: LanDeviceDTO | null; onClose: () => void }) {
-  return device === null || device.format === null ? null : <FormatForm key={device.udn} device={device} format={device.format} onClose={onClose} />;
+  if (device === null || device.format === null) return null;
+  return device.format.codec === "alac"
+    ? <AirPlayFormatForm key={device.udn} device={device} format={device.format} onClose={onClose} />
+    : <FormatForm key={device.udn} device={device} format={device.format} onClose={onClose} />;
+}
+
+const airPlayQualities = [
+  { id: "standard", label: "44.1 kHz / 16 位", rate: 44100, depth: 16 },
+  { id: "high", label: "48 kHz / 24 位（仅 AirPlay 2 设备）", rate: 48000, depth: 24 },
+] as const;
+
+/** 一台 AirPlay 设备的音质。默认 44.1 kHz/16 位：AirPlay 1 只支持它，HomePod 在 Wi-Fi 下用 24 位可能有杂音。 */
+function AirPlayFormatForm({ device, format, onClose }: { device: LanDeviceDTO; format: AirPlayFormatDTO; onClose: () => void }) {
+  const put = usePutAirPlayFormat();
+  const [quality, setQuality] = useState(format.max_bit_depth === 24 ? "high" : "standard");
+  const chosen = airPlayQualities.find((option) => option.id === quality) ?? airPlayQualities[0];
+  return (
+    <ConfirmDialog
+      open
+      title={`“${device.name}”的音质`}
+      confirmLabel="保存"
+      pending={put.isPending}
+      error={put.isError ? <FailureNotice error={put.error} context="write" messages={{ invalid_input: "这台设备只支持 44.1 kHz / 16 位。" }} /> : undefined}
+      onCancel={onClose}
+      onConfirm={() => put.mutate({ udn: device.udn, format: { codec: "alac", max_sample_rate: chosen.rate, max_bit_depth: chosen.depth } }, { onSuccess: onClose })}
+    >
+      <div className={styles.form}>
+        <fieldset className={styles.choices}>
+          <legend className={styles.legend}>音质（ALAC 无损）</legend>
+          {airPlayQualities.map((option) => (
+            <label key={option.id} className={styles.choice}>
+              <input type="radio" name="airplay-quality" checked={quality === option.id} onChange={() => setQuality(option.id)} />
+              {option.label}
+            </label>
+          ))}
+        </fieldset>
+        <p className={styles.hint}>高于上限的音乐会转换后再送给设备；HomePod 通过 Wi-Fi 播放 24 位时可能有杂音。下一首起生效。</p>
+      </div>
+    </ConfirmDialog>
+  );
+}
+
+const pairFailures = { pairing_expired: "这次配对已过期，关掉对话框重新开始。" } as const;
+
+/** Apple TV 等需要屏幕 PIN 的设备：打开对话框即请设备显示 PIN，输入后完成配对；凭据保存在服务器上，之后不再需要。 */
+function PairDialog({ device, onClose }: { device: LanDeviceDTO | null; onClose: () => void }) {
+  return device === null ? null : <PairForm key={device.udn} device={device} onClose={onClose} />;
+}
+
+function PairForm({ device, onClose }: { device: LanDeviceDTO; onClose: () => void }) {
+  const start = useStartAirPlayPairing();
+  const finish = useFinishAirPlayPairing();
+  const [pin, setPin] = useState("");
+  const { mutate: startPairing } = start;
+  useEffect(() => {
+    startPairing(device.udn);
+  }, [startPairing, device.udn]);
+  const trimmed = pin.trim();
+  const error = start.error ?? finish.error;
+  function submit(event?: FormEvent) {
+    event?.preventDefault();
+    if (trimmed === "" || finish.isPending || !start.isSuccess) return;
+    finish.mutate({ udn: device.udn, pin: trimmed }, { onSuccess: onClose });
+  }
+  return (
+    <ConfirmDialog
+      open
+      title={`与“${device.name}”配对`}
+      confirmLabel="配对"
+      pending={finish.isPending || start.isPending}
+      error={error === null ? undefined : <FailureNotice error={error} context="write" messages={pairFailures} />}
+      onCancel={onClose}
+      onConfirm={() => submit()}
+    >
+      <form onSubmit={submit} className={styles.form}>
+        <TextField label="屏幕上的 PIN" value={pin} inputMode="numeric" autoComplete="one-time-code" autoFocus onChange={(event) => setPin(event.target.value)} />
+        <p className={styles.hint}>{start.isPending ? "正在请设备显示 PIN…" : "输入设备屏幕上显示的 4 位数字。配对只需要做一次。"}</p>
+      </form>
+    </ConfirmDialog>
+  );
 }
 
 function FormatForm({ device, format, onClose }: { device: LanDeviceDTO; format: CastFormatDTO; onClose: () => void }) {

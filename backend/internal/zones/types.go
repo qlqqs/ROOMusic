@@ -11,15 +11,18 @@ import (
 )
 
 var (
-	ErrInvalidInput        = errors.New("invalid_input")
-	ErrTrackNotFound       = errors.New("track_not_found")
-	ErrQueueFull           = queue.ErrQueueFull
-	ErrZoneOffline         = errors.New("zone_offline")
-	ErrDeviceOnline        = errors.New("device_online")
-	ErrVolumeFixed         = errors.New("volume_fixed")
-	ErrRendererUnavailable = errors.New("renderer_unavailable")
-	ErrDatabaseUnavailable = errors.New("database_unavailable")
-	ErrClosed              = errors.New("zones service closed")
+	ErrDevicePairingRequired = errors.New("device_pairing_required")
+	ErrPrecisionUnavailable  = errors.New("精确对时不可用")
+	ErrDeviceUnsupported     = errors.New("device_unsupported")
+	ErrInvalidInput          = errors.New("invalid_input")
+	ErrTrackNotFound         = errors.New("track_not_found")
+	ErrQueueFull             = queue.ErrQueueFull
+	ErrZoneOffline           = errors.New("zone_offline")
+	ErrDeviceOnline          = errors.New("device_online")
+	ErrVolumeFixed           = errors.New("volume_fixed")
+	ErrRendererUnavailable   = errors.New("renderer_unavailable")
+	ErrDatabaseUnavailable   = errors.New("database_unavailable")
+	ErrClosed                = errors.New("zones service closed")
 )
 
 // Timestamp 固定输出 UTC 毫秒，避免零小数部分被标准编码器省略。
@@ -65,20 +68,21 @@ type QueueEntry struct {
 }
 
 type Device struct {
-	ExternalID      string          `json:"external_id,omitempty"`
-	MaxSampleRate   int             `json:"max_sample_rate,omitempty"`
-	FormatDeclared  *bool           `json:"format_declared,omitempty"`
-	OccupiedBy      *DeviceOccupant `json:"occupied_by,omitempty"`
-	DeviceID        string          `json:"device_id"`
-	ZoneID          string          `json:"zone_id"`
-	Name            string          `json:"name"`
-	Kind            string          `json:"kind"`
-	Online          bool            `json:"online"`
-	LastSeenAt      Timestamp       `json:"last_seen_at"`
-	Volume          float64         `json:"volume"`
-	Muted           bool            `json:"muted"`
-	Capabilities    Capabilities    `json:"capabilities"`
-	OutputSessionID *string         `json:"output_session_id"`
+	ExternalID        string          `json:"external_id,omitempty"`
+	MaxSampleRate     int             `json:"max_sample_rate,omitempty"`
+	FormatDeclared    *bool           `json:"format_declared,omitempty"`
+	UnavailableReason string          `json:"unavailable_reason,omitempty"`
+	OccupiedBy        *DeviceOccupant `json:"occupied_by,omitempty"`
+	DeviceID          string          `json:"device_id"`
+	ZoneID            string          `json:"zone_id"`
+	Name              string          `json:"name"`
+	Kind              string          `json:"kind"`
+	Online            bool            `json:"online"`
+	LastSeenAt        Timestamp       `json:"last_seen_at"`
+	Volume            float64         `json:"volume"`
+	Muted             bool            `json:"muted"`
+	Capabilities      Capabilities    `json:"capabilities"`
+	OutputSessionID   *string         `json:"output_session_id"`
 }
 
 type Fault struct {

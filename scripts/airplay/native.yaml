@@ -1,0 +1,34 @@
+services:
+  receiver:
+    # 此镜像只发布 linux/amd64。使用实际 ALSA file 插件记录解码输出。
+    image: argyrop/docker-airplay2-receiver@sha256:9a33a51777f4636ee1444940a16a0780b5515f222fba9e4fb642a7a6a839d297
+    entrypoint: ["python3", "-u", "/airplay2/ap2-receiver.py"]
+    command: ["-n", "eth0", "-m", "ROOMusic-Native", "-nv"]
+    working_dir: /airplay2
+    volumes:
+      - ./asound.conf:/etc/asound.conf:ro
+      - ${AIRPLAY_TEST_DIR:?}/audio.pcm:/capture/audio.pcm
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q ':1B58 00000000:0000 0A' /proc/net/tcp"]
+      interval: 1s
+      timeout: 2s
+      retries: 15
+    cpus: 1
+    mem_limit: 256m
+
+  sender:
+    image: python:3.13-alpine@sha256:bf12ecc0bea3f171d55145dd02c78b5eeb09f30ee2ac9cc2b4c9e4e8f5e30741
+    entrypoint: ["/airplay-probe", "native", "receiver"]
+    volumes:
+      - ${AIRPLAY_PROBE:?}:/airplay-probe:ro
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+
+networks:
+  default:
+    driver: bridge
+    # 该版本启动时同时读取接收网卡的两个地址族。
+    enable_ipv6: true

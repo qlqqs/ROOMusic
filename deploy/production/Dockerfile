@@ -39,6 +39,8 @@ RUN --mount=type=secret,id=acoustid_client --mount=type=secret,id=fanarttv_proje
     -ldflags="-s -w -X github.com/qlqq/roomusic/backend/internal/platform/buildinfo.version=${ROOMUSIC_VERSION} -X github.com/qlqq/roomusic/backend/internal/platform/buildinfo.commit=${ROOMUSIC_COMMIT}${acoustid_ldflags}${fanarttv_ldflags}" \
     -o /out/roomusic ./cmd/roomusic
 
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/roomusic-ptp ./cmd/roomusic-ptp
+
 FROM mwader/static-ffmpeg@sha256:11a44711684c0b9f754c047dcd64235b8b52deab251bd0e0a86f22faa160749c AS ffmpeg
 
 # 上游 x86_64 包是静态构建；arm64 包链接 glibc 2.28 以上（libc、libm、libstdc++、libgcc，FFmpeg 已静态链入），
@@ -76,7 +78,7 @@ RUN apk add --no-cache ca-certificates postgresql18-client \
  && pg_dump --version | grep -q '^pg_dump (PostgreSQL) 18\.' \
  && addgroup -S -g 1000 roomusic && adduser -S -D -H -u 1000 -G roomusic roomusic \
  && mkdir -p /app /data /backups && chown roomusic:roomusic /data /backups && chmod 0700 /backups
-COPY --from=build /out/roomusic /app/roomusic
+COPY --from=build /out/roomusic /out/roomusic-ptp /app/
 COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
 COPY --from=fpcalc /out/ /
 # 在运行镜像里按应用的调用方式（s16le 管道）算一次合成正弦波的指纹。

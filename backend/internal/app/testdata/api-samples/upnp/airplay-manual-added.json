@@ -1,0 +1,46 @@
+{
+  "body": {
+    "address": "192.168.144.2:7000",
+    "capabilities": {
+      "airplay": {
+        "airplay_address": "192.168.144.2:7000",
+        "device_id": "02:3F:BA:15:D9:79",
+        "fairplay": true,
+        "features": "1622055604472320",
+        "flags": "4",
+        "paired": false,
+        "ptp_required": false,
+        "public_key": "e953ee348102f56c50026bec32bd2de1c38715844384c1f7b825b5aa796fb900",
+        "raop_address": "192.168.144.2:7000",
+        "raop_encryption": "0,1",
+        "requires_password": false,
+        "requires_pin": false,
+        "timing_protocol": "PTP",
+        "timing_reason": null,
+        "unavailable_reason": null,
+        "unsupported": false
+      },
+      "format_declared": false,
+      "max_bit_depth": 16,
+      "max_sample_rate": 44100,
+      "pause": true,
+      "stream_formats": [
+        "alac"
+      ],
+      "volume": "number"
+    },
+    "format": {
+      "codec": "alac",
+      "max_bit_depth": 16,
+      "max_sample_rate": 44100
+    },
+    "kind": "airplay",
+    "manual": true,
+    "model": "ShairportSync",
+    "name": "ROOMusic-AirPlay2",
+    "online": true,
+    "udn": "airplay:02:3F:BA:15:D9:79",
+    "user_ids": []
+  },
+  "status": 200
+}

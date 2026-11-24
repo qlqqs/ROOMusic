@@ -4,6 +4,7 @@
       {
         "address": "192.168.44.2:8009",
         "capabilities": {
+          "airplay": null,
           "format_declared": true,
           "max_bit_depth": 24,
           "max_sample_rate": 96000,

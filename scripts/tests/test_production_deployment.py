@@ -140,7 +140,7 @@ class Deployment:
             self.helper('rm -rf -- "$@"', *STATE_DIRS, "postgres")
 
     def up(self):
-        result = self.compose(*UP, check=False)
+        result = self.compose(*UP, "app", check=False)
         if result.returncode:
             logs = self.compose("logs", "--no-color", "--tail", "40", check=False)
             raise AssertionError(f"Compose 启动失败\n{result.stderr}\n{logs.stdout}")

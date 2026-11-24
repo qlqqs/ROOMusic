@@ -45,7 +45,7 @@ func startCastTestReceiver(t *testing.T, fixed bool) (*fakecast.Receiver, string
 func enableCast(t *testing.T, f *upnpFixture) {
 	t.Helper()
 	settings := zonesSampleDecode[upnp.Settings](t, f.request(t, "PUT", upnpAdmin+"/settings",
-		map[string]bool{"enabled": true, "upnp_enabled": false}, &f.admin, nil), 200)
+		map[string]bool{"enabled": true, "upnp_enabled": false, "airplay_enabled": false}, &f.admin, nil), 200)
 	if !settings.Enabled || !settings.CastEnabled || !settings.Shared || settings.UPnPEnabled {
 		t.Fatalf("Cast 发现设置 = %+v", settings)
 	}
@@ -263,7 +263,7 @@ func TestPostgreSQLCastSharingAndFormats(t *testing.T) {
 		{"GET", upnpAdmin + "/settings", nil},
 		{"GET", upnpAdmin + "/devices", nil},
 		{"POST", upnpAdmin + "/devices", map[string]string{"kind": "cast", "address": ip}},
-		{"PUT", path + "/format", upnp.CastFormat{Codec: "aac", MaxSampleRate: 44100}},
+		{"PUT", path + "/format", upnp.DeviceFormat{Codec: "aac", MaxSampleRate: 44100}},
 	} {
 		requireAPIError(t, f.request(t, req.method, req.path, req.body, &a, nil), 403, "forbidden")
 	}
@@ -307,15 +307,15 @@ func TestPostgreSQLCastSharingAndFormats(t *testing.T) {
 		t.Fatalf("成员 B 接管后的原播放区 = %+v", old)
 	}
 	for _, tc := range []struct {
-		format upnp.CastFormat
+		format upnp.DeviceFormat
 		mime   string
 	}{
-		{upnp.CastFormat{Codec: "aac", MaxSampleRate: 44100}, "audio/aac"},
-		{upnp.CastFormat{Codec: "flac", MaxSampleRate: 96000}, "audio/flac"},
-		{upnp.CastFormat{Codec: "mp3", MaxSampleRate: 48000}, "audio/mpeg"},
+		{upnp.DeviceFormat{Codec: "aac", MaxSampleRate: 44100}, "audio/aac"},
+		{upnp.DeviceFormat{Codec: "flac", MaxSampleRate: 96000}, "audio/flac"},
+		{upnp.DeviceFormat{Codec: "mp3", MaxSampleRate: 48000}, "audio/mpeg"},
 	} {
 		previous = r.State().URI
-		if got := zonesSampleDecode[upnp.CastFormat](t, f.request(t, "PUT", path+"/format", tc.format, &f.admin, nil), 200); got != tc.format {
+		if got := zonesSampleDecode[upnp.DeviceFormat](t, f.request(t, "PUT", path+"/format", tc.format, &f.admin, nil), 200); got != tc.format {
 			t.Fatalf("格式 PUT = %+v，期望 %+v", got, tc.format)
 		}
 		if got := castSnapshotDevice(t, f, &b, key); got.MaxSampleRate != tc.format.MaxSampleRate {
@@ -331,7 +331,7 @@ func TestPostgreSQLCastSharingAndFormats(t *testing.T) {
 
 	status := zonesSampleDecode[struct{ Payload json.RawMessage }](t, f.request(t, "GET", insightsAdminPath, nil, &f.admin, nil), 200)
 	payload, err := schema.Decode(bytes.NewReader(status.Payload))
-	if err != nil || payload.Schema != 2 || payload.Devices30d.Cast != "1" {
+	if err != nil || payload.Schema != schema.Version || payload.Devices30d.Cast != "1" {
 		t.Fatalf("两位成员共用同一 Cast 的统计 = %+v，错误 %v", payload, err)
 	}
 }

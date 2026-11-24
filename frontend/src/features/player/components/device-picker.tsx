@@ -16,6 +16,7 @@ const MAX_NAME_LENGTH = 64;
 function stateText(row: PlaybackDeviceRow): string {
   const { device, zone } = row;
   if (!device.online) return "离线";
+  if (device.lan?.unavailableReason != null) return device.lan.unavailableReason;
   if (row.occupant !== null) return `${row.occupant} 正在使用`;
   if (zone === null || zone.current === null) return "未播放";
   return zone.intent === "play" ? zone.current.track.title : "已暂停";
@@ -125,19 +126,19 @@ function DeviceList({ titleId, onClose }: { titleId: string; onClose: () => void
     <ul role="list" className={styles.list}>
       {snapshot.devices.map((row) => {
         const { device, zone } = row;
-        const text = <><span className={styles.name}>{device.lan === null ? null : <Speaker size={14} aria-hidden="true" className={styles.kindIcon} />}<span className={styles.nameText}>{device.name}</span>{row.isLocal ? <StatusTag>本机</StatusTag> : null}{device.lan === null ? null : <StatusTag>{device.kind === "cast" ? "Google Cast" : "局域网"}</StatusTag>}</span><span className={styles.state}>{stateText(row)}</span></>;
+        const text = <><span className={styles.name}>{device.lan === null ? null : <Speaker size={14} aria-hidden="true" className={styles.kindIcon} />}<span className={styles.nameText}>{device.name}</span>{row.isLocal ? <StatusTag>本机</StatusTag> : null}{device.lan === null ? null : <StatusTag>{device.kind === "cast" ? "Google Cast" : device.kind === "airplay" ? "AirPlay" : "局域网"}</StatusTag>}</span><span className={styles.state}>{stateText(row)}</span></>;
         // 转到这台设备：把正在控制的播放区转过来；离线的设备可以转到本机接着放。
         const transferHere = device.online && !row.isTarget && source !== null && source.current !== null ? source.zoneId : null;
         const transferToLocal = !device.online && zone !== null && zone.current !== null && localZoneId !== undefined ? zone.zoneId : null;
         return <li key={device.deviceId} className={styles.row} aria-current={row.isTarget ? "true" : undefined}>
-          {device.online
+          {device.online && device.lan?.unavailableReason == null
             ? <button type="button" className={styles.select} aria-pressed={row.isTarget} onClick={() => select(row)}>{text}</button>
             : <div className={styles.select}>{text}</div>}
           <div className={styles.actions} role="group" aria-label={`${device.name}的操作`}>
             {transferHere === null ? null : <Button variant="icon" icon={<ArrowRightLeft size={16} />} label="转到这台设备" onClick={() => transferTo(row, transferHere)} />}
             {transferToLocal === null || localZoneId === undefined ? null : <Button variant="icon" icon={<ArrowRightLeft size={16} />} label="转到本机" onClick={() => transfer(transferToLocal, localZoneId)} />}
-            {/* Google Cast 的格式与采样率由管理员在“局域网设备”里按设备设置。 */}
-            {device.lan === null || device.kind === "cast" ? null : <Button variant="icon" icon={<AudioWaveform size={16} />} label="采样率上限" onClick={() => setRateRow(row)} />}
+            {/* Google Cast 与 AirPlay 的格式由管理员在“局域网设备”里按设备设置。 */}
+            {device.lan === null || device.kind !== "upnp" ? null : <Button variant="icon" icon={<AudioWaveform size={16} />} label="采样率上限" onClick={() => setRateRow(row)} />}
             <Button variant="icon" icon={<Pencil size={16} />} label="改名" onClick={() => setRenaming(row)} />
             {device.online ? null : <Button variant="icon" icon={<Trash2 size={16} />} label="删除" onClick={() => { setDeleteError(null); setDeleting(row); }} />}
           </div>
