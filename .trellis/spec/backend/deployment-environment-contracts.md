@@ -28,7 +28,7 @@
   运行镜像放在 `/usr/local/bin/fpcalc`（约 5.4 MB），构建时再核对版本，并按应用的调用方式（ffmpeg 生成合成正弦波、s16le 管道）算一次指纹；`compose.prod.yaml` 设 `ROOMUSIC_FPCALC_PATH`（绝对路径，空则在 `PATH` 中查找）。
   `scripts/fpcalc-pinned.sh` 下载并缓存到 `${XDG_CACHE_HOME:-$HOME/.cache}/roomusic/fpcalc-1.6.2/`，核对 sha256 与版本后打印路径；`--pins` 打印两架构的地址与摘要，CI 逐行在 Dockerfile 里核对。
   启动时与 ffmpeg 一起自检（合成 PCM 走一遍管道）；通过记 `playback.fingerprint.ready`（带 fpcalc 版本），不通过只记 `playback.fingerprint.unavailable`，AcoustID 显示 `fingerprint_unavailable`，其余功能不受影响。
-- 内置 AcoustID 应用密钥（M7 B3 补充）：生产镜像 Go 构建的 `RUN` 挂载可选 BuildKit secret `acoustid_client`；文件非空才读，内容只许字母数字（否则构建失败），
+- 内置 AcoustID 应用密钥（ADR 0006 决策记录“AcoustID 内置应用密钥”）：生产镜像 Go 构建的 `RUN` 挂载可选 BuildKit secret `acoustid_client`；文件非空才读，内容只许字母数字（否则构建失败），
   经 `-X github.com/qlqq/roomusic/backend/internal/sources/acoustid.bundledClientKey=` 链接进二进制。没有 secret 时构建照常，结果是要管理员填两把密钥的镜像。
   镜像历史只记未展开的命令；密钥在二进制与 `go version -m` 的链接参数里可见（客户端应用密钥都如此）。secret 内容不参与构建缓存键：本地先无后有地构建要 `--no-cache`，
   发布流水线以后若加构建缓存要另行处理。发布流水线从仓库 secret `ACOUSTID_CLIENT_KEY` 传入；CI 与冒烟构建不传。

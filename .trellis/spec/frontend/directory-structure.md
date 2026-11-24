@@ -4,7 +4,7 @@
 
 2026-10-01 的 M1a 已按下面的结构重建 `frontend/src/`。目录只为获批页面和真实消费者建立，不预建空文件夹；
 M2a 已建立 `player`，M3 已建立 `governance`，M5 ② ③ 已建立 `personal`，M5 ⑤ 已建立 `artists`，M6 C3/C4 已建立 `steward`；M7 E1 已建立 `curation`（自动整理的管理员接口、设置页的区段、概览的状态行与一次性提示）；通用 `operations`（Change Set 与审批）随对应获批阶段建立，
-基础 Release 搜索由 `catalog` 拥有，不为它新增搜索服务。阶段命名和依赖见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)。
+基础 Release 搜索由 `catalog` 拥有，不为它新增搜索服务。
 设计变量集中在 `styles/`，不复制设计工具的运行时。
 
 ## 实际布局

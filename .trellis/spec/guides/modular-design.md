@@ -113,7 +113,5 @@ repository does not decide whether the caller is an administrator.
 - Designing dynamic plugin loading, RPC, or WASM before an implemented feature
   needs an out-of-process boundary.
 
-The visual intent is summarized by the
-[architecture canvas](../../../docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx),
-while the Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`） remains
+The Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`） remains
 authoritative for behavior.

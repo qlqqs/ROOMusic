@@ -14,7 +14,7 @@ music library.
 ## 后续阶段说明
 
 Classical / Core 1 的能力路线与四类 ADR 位于
-[Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准阶段顺序与范围）。M0 与路线修订仅更新文档，
+[ADR 索引](../../../docs/architecture/architecture-decisions.md#adr-索引)。M0 与路线修订仅更新文档，
 不改变本层现有 API、表结构或权限。B0（行为保持拆包）、阶段 I（身份稳定、按组只读接口）、M2a/M2b（播放与派生）、P（播放历史）与 M3
 （修正覆盖层与受治理操作，见[受治理操作合同](./governance-contracts.md)）已完成；M4 的第一项（默认版本与版本对比，见[默认版本合同](./default-version-contracts.md)）与第二项（问题处理，见[核对合同](./issue-review-contracts.md)）已实施；
 M4 的第三项（认领，见[认领合同](./claim-contracts.md)）同月实施；播放区第一批（服务端播放区、渲染流、DSP 处理链，见[播放区协议](./playback-zone-contracts.md)）取代了浏览器本地播放与派生缓存；M4 的其余各项（扫描反馈、合并拆分）、通用审批、editor 角色和 Agent 的实施细节须经对应子任务与 ADR 项批准后再实施。Core 0 限制不是未来阶段的默认授权。
@@ -161,7 +161,6 @@ itself, runs a repository update, and returns the database row directly.
 - Core 0 requirements（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）
 - [Current environment README](../../../README.md)
 - [Current Compose services](../../../compose.dev.yaml)
-- [Architecture canvas](../../../docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx)
 
 The development Compose file provides PostgreSQL only; the Core 0 PRD keeps
 Redis and Meilisearch out of the required loop.
