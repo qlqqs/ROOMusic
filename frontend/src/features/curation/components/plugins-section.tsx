@@ -48,7 +48,6 @@ export function PluginsSection() {
       footer={
         <>
           {preview.isError ? <FailureNotice error={preview.error} context="write" title="插件没有通过检查" messages={previewFailures} /> : null}
-          {remove.isError ? <FailureNotice error={remove.error} context="write" title="插件没有删除" /> : null}
         </>
       }
     >
@@ -81,7 +80,11 @@ export function PluginsSection() {
         title={`删除插件“${deleting?.manifest.name ?? ""}”？`}
         confirmLabel="删除"
         pending={remove.isPending}
-        onCancel={() => setDeleting(null)}
+        error={remove.isError ? <FailureNotice error={remove.error} context="write" title="插件没有删除" /> : undefined}
+        onCancel={() => {
+          setDeleting(null);
+          remove.reset();
+        }}
         onConfirm={() => {
           if (deleting !== null) remove.mutate(deleting.manifest.id, { onSuccess: () => setDeleting(null) });
         }}

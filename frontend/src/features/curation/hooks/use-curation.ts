@@ -81,10 +81,16 @@ function useWriteBackSource() {
 /** 改一个源的开关：把返回的那一项写回列表。 */
 export function useSetCurationSource() {
   const writeBack = useWriteBackSource();
+  const queryClient = useQueryClient();
+  const scope = useViewerScope();
   return useMutation({
     scope: { id: "curation-sources" },
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => setCurationSource(id, enabled),
-    onSuccess: (response) => writeBack(response.data),
+    onSuccess: async (response) => {
+      await writeBack(response.data);
+      // 插件的启用状态就是它作为外部源的开关（M8）：插件卡片跟着重读。
+      if (response.data.id.startsWith("plugin:") && scope.isCurrent()) void queryClient.invalidateQueries({ queryKey: curationKeys.plugins(scope.generation) });
+    },
   });
 }
 

@@ -44,8 +44,11 @@ const keyGuides: Record<string, { label: string; url: string; linkText: string; 
 function KeyDescription({ source, sourceKey }: { source: CurationSourceDTO; sourceKey: SourceKey }) {
   const guide = keyGuides[`${source.id}.${sourceKey.name}`];
   const invalid = sourceKey.status === "invalid" ? <>{source.name} 说这把密钥无效，请换一个。</> : null;
-  // 发布版内置了项目密钥时，Fanart.tv 的项目密钥也成了可选：说明不填也能用。
-  const optional = sourceKey.optional === true && !sourceKey.configured && guide?.alwaysOptional !== true ? <>ROOMusic 已内置，不填也能用。</> : null;
+  // 可选的密钥说明不填也能用；Fanart.tv 的项目密钥可选是因为发布版内置了一把。标签里已写“可选”的不再重复。
+  const optional =
+    sourceKey.optional === true && !sourceKey.configured && guide?.alwaysOptional !== true ? (
+      <>{source.id === "fanarttv" && sourceKey.name === "project" ? "ROOMusic 已内置，不填也能用。" : "可选，不填也能用。"}</>
+    ) : null;
   if (guide === undefined)
     return (
       <>
