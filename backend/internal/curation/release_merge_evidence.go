@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -40,19 +41,40 @@ type MergeReleaseEvidence struct {
 	digest, group      string
 }
 
+const mergeLayoutTrackLimit = 300
+
+type mergeLayoutTrack struct {
+	Position   int    `json:"position"`
+	Title      string `json:"title"`
+	ExternalID string `json:"external_id"`
+}
+
+type mergeLayoutMedium struct {
+	Position       int                `json:"position"`
+	From           string             `json:"from"`
+	FromReleaseID  string             `json:"from_release_id"`
+	OriginPosition int                `json:"origin_position"`
+	Title          string             `json:"title"`
+	TrackCount     int                `json:"track_count"`
+	Tracks         []mergeLayoutTrack `json:"tracks,omitzero"`
+}
+
+type mergeLayoutEvidence struct {
+	Layout           []mergeLayoutMedium `json:"layout"`
+	LayoutTrackTotal int                 `json:"layout_track_total"`
+	TracksOmitted    bool                `json:"tracks_omitted,omitempty"`
+}
+
 type ReleaseMergeEvidence struct {
+	*mergeLayoutEvidence
 	Target            MergeReleaseEvidence `json:"target"`
 	Source            MergeReleaseEvidence `json:"source"`
 	RecordingsOverlap bool                 `json:"recordings_overlap"`
 }
 
-func releaseMergeMembers(ctx context.Context, q operations.Queryer, ids []string, exists func(string) bool) (map[string]MergeReleaseEvidence, error) {
+func releaseMergeMembers(ctx context.Context, q operations.Queryer, ids []string, entries map[string]catalog.CurationEvidence) (map[string]MergeReleaseEvidence, error) {
 	if len(ids) == 0 {
 		return nil, nil
-	}
-	entries, err := catalog.LoadCurationEvidence(ctx, q, ids, exists)
-	if err != nil {
-		return nil, err
 	}
 	members := make(map[string]MergeReleaseEvidence, len(entries))
 	for id, e := range entries {
@@ -154,13 +176,18 @@ func skipMergePair(err error) bool {
 	return false
 }
 
-func ReadReleaseMergeEvidence(ctx context.Context, q operations.Queryer, target, source string, exists func(string) bool) (ReleaseMergeEvidence, error) {
+func ReadReleaseMergeEvidence(ctx context.Context, q operations.Queryer, target, source string, exists func(string) bool, includeLayout bool) (ReleaseMergeEvidence, error) {
 	if db, ok := q.(catalog.ReadTransactionBeginner); ok {
 		return catalog.ReadWithLocalJITOff(ctx, db, func(tx *sql.Tx) (ReleaseMergeEvidence, error) {
-			return ReadReleaseMergeEvidence(ctx, tx, target, source, exists)
+			return ReadReleaseMergeEvidence(ctx, tx, target, source, exists, includeLayout)
 		})
 	}
-	m, err := releaseMergeMembers(ctx, q, []string{target, source}, exists)
+	ids := []string{target, source}
+	entries, err := catalog.LoadCurationEvidence(ctx, q, ids, exists)
+	if err != nil {
+		return ReleaseMergeEvidence{}, err
+	}
+	m, err := releaseMergeMembers(ctx, q, ids, entries)
 	if err != nil {
 		return ReleaseMergeEvidence{}, err
 	}
@@ -170,5 +197,48 @@ func ReadReleaseMergeEvidence(ctx context.Context, q operations.Queryer, target,
 	if _, ok := m[source]; !ok {
 		return ReleaseMergeEvidence{}, operations.NotFound("not_found", "来源发行不可见")
 	}
-	return mergePair(m[target], m[source]), nil
+	pair := mergePair(m[target], m[source])
+	if includeLayout {
+		plan, err := governance.NewStore(q).PreviewReleaseMerge(ctx, target, source)
+		if err != nil {
+			return ReleaseMergeEvidence{}, err
+		}
+		pair.mergeLayoutEvidence = buildMergeLayout(plan, entries)
+	}
+	return pair, nil
+}
+
+func buildMergeLayout(plan governance.ReleaseMergePreview, entries map[string]catalog.CurationEvidence) *mergeLayoutEvidence {
+	total := len(entries[plan.Target.ID].Tracks) + len(entries[plan.Source.ID].Tracks)
+	layout := &mergeLayoutEvidence{Layout: make([]mergeLayoutMedium, 0, len(plan.Media)), LayoutTrackTotal: total, TracksOmitted: total > mergeLayoutTrackLimit}
+	type discKey struct {
+		releaseID string
+		position  int
+	}
+	tracks := make(map[discKey][]mergeLayoutTrack)
+	if !layout.TracksOmitted {
+		// 目录查询已按显示碟号、碟内曲序、曲目 ID 排序。
+		for id, entry := range entries {
+			for _, t := range entry.Tracks {
+				key := discKey{id, t.Disc}
+				tracks[key] = append(tracks[key], mergeLayoutTrack{t.Position, t.EffectiveTitle, t.ExternalID})
+			}
+		}
+	}
+	for _, m := range plan.Media {
+		owner, from := plan.Target.ID, "target"
+		if m.FromRelease == plan.Source.ID {
+			owner, from = plan.Source.ID, "source"
+		}
+		disc := mergeLayoutMedium{Position: m.PositionAfter, From: from, FromReleaseID: m.FromRelease,
+			OriginPosition: m.OriginPosition, Title: m.Title, TrackCount: m.TrackCount}
+		if !layout.TracksOmitted {
+			disc.Tracks = tracks[discKey{owner, m.PositionBefore}]
+			if disc.Tracks == nil {
+				disc.Tracks = []mergeLayoutTrack{}
+			}
+		}
+		layout.Layout = append(layout.Layout, disc)
+	}
+	return layout
 }

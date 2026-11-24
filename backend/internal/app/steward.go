@@ -189,7 +189,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		}
 		var merge json.RawMessage
 		if item.Tool == "merge_releases" && len(targets) == 2 {
-			facts, err := curation.ReadReleaseMergeEvidence(ctx, database, targets[0].ID, targets[1].ID, nil)
+			facts, err := curation.ReadReleaseMergeEvidence(ctx, database, targets[0].ID, targets[1].ID, nil, true)
 			if err != nil {
 				return runtime.ReviewEvidenceFacts{}, err
 			}

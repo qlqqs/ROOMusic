@@ -48,7 +48,7 @@ open_issues：fields、grouping、missing_tracks 的待关注数量；不存在�
 专辑组 data：default_release_id、release_ids、release_count、attention_count；release_ids 沿用公开读取的最多 100 个版本，release_count 表示完整数量。
 艺人 data：name、redirected、release_count、track_count。name 包含 value 和 source，source 固定为 catalog_effective_untrusted。release_count 沿用艺人公开摘要的专辑组计数。
 facts.external：source 固定为 program_untrusted_external，data 按发行列出 release_id、links 与 pending。links 仅含 object_type、external_id、method、confidence；pending 仅含 kind、conflicts、candidates，候选仅含 external_id、title、artist、date、country、track_count、method、score。发行并入的本地候选另含 release_id、disc_count。
-facts.release_merge：发行并入时提供，source 固定为 program_untrusted_external。data 包含 target、source、recordings_overlap；双方各含 release_id、title、disc_count、track_count、external_id、可选的 operation_id、recording_count、external_disc_count、external_track_count。外部计数取自对应操作后态，缺失时为“不可用”。
+facts.release_merge：发行并入时提供，source 固定为 program_untrusted_external。data 包含 target、source、recordings_overlap；双方各含 release_id、title、disc_count、track_count、external_id、可选的 operation_id、recording_count、external_disc_count、external_track_count。外部计数取自对应操作后态，缺失时为“不可用”。data 另含 layout_track_total（合并后的总曲目数）和按合并后碟号排列的 layout。每碟含 position、from（target 或 source，先前并入的碟记 target）、from_release_id（原发行）、origin_position（原碟号）、title、track_count。总数不超过 300 首时，每碟的 tracks 按曲序、曲目 ID 排列，含 position、title（本地有效标题）、external_id（已生效的录音对应，缺失为空串）。超过 300 首时，各碟省略 tracks，并在 data 中给出 tracks_omitted=true。
 facts.external.artists：有艺人目标时列出 artist_id 和 links，没有对应时 links 为空数组。
 facts.recent_operation_count：所有目标的最近一页操作记录条数，最多 20；不含操作正文和操作者。
 preview：source 固定为 backend_preview_untrusted_values，data 是重新调用 Preview 得到的 changes，每项包含 field、before、after。

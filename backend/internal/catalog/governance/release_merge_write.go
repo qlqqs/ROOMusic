@@ -106,7 +106,7 @@ func releaseMergeExecutor(request ReleaseMergeRequest, check func(context.Contex
 		after := mergeRecordState{Source: mergeRecordedSource{s.source, s.sourceRevision + 1}, Target: s.target, Media: []mergeRecordedMedium{}}
 		for i, m := range s.media {
 			if m.FromRelease == source {
-				before.Media = append(before.Media, mergeRecordedMedium{m.MediumID, m.position})
+				before.Media = append(before.Media, mergeRecordedMedium{m.MediumID, m.PositionBefore})
 				after.Media = append(after.Media, mergeRecordedMedium{m.MediumID, plan.Media[i].PositionAfter})
 			}
 		}

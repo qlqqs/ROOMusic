@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
@@ -24,6 +25,97 @@ type releaseMergeReviewMember struct {
 	RecordingCount     int    `json:"recording_count"`
 	ExternalDiscCount  any    `json:"external_disc_count"`
 	ExternalTrackCount any    `json:"external_track_count"`
+}
+
+type releaseMergeReviewTrack struct {
+	Position   int    `json:"position"`
+	Title      string `json:"title"`
+	ExternalID string `json:"external_id"`
+}
+
+type releaseMergeReviewDisc struct {
+	Position       int                       `json:"position"`
+	From           string                    `json:"from"`
+	FromReleaseID  string                    `json:"from_release_id"`
+	OriginPosition int                       `json:"origin_position"`
+	Title          string                    `json:"title"`
+	TrackCount     int                       `json:"track_count"`
+	Tracks         []releaseMergeReviewTrack `json:"tracks"`
+}
+
+type releaseMergeReviewFacts struct {
+	Source string
+	Data   struct {
+		Target, Source    releaseMergeReviewMember
+		RecordingsOverlap *bool                    `json:"recordings_overlap"`
+		Layout            []releaseMergeReviewDisc `json:"layout"`
+		LayoutTrackTotal  int                      `json:"layout_track_total"`
+		TracksOmitted     bool                     `json:"tracks_omitted"`
+	}
+}
+
+func readReleaseMergeReview(t *testing.T, review schedulerRequest) releaseMergeReviewFacts {
+	t.Helper()
+	var content string
+	requireCurationOK(t, json.Unmarshal(review.Messages[len(review.Messages)-1].Content, &content))
+	var payload struct {
+		Evidence []struct {
+			Facts struct {
+				ReleaseMerge releaseMergeReviewFacts `json:"release_merge"`
+			}
+		}
+	}
+	requireCurationOK(t, json.Unmarshal([]byte(content), &payload))
+	if len(payload.Evidence) != 1 {
+		t.Fatalf("审查证据 %s", content)
+	}
+	return payload.Evidence[0].Facts.ReleaseMerge
+}
+
+func readStoredReleaseMergeLayout(t *testing.T, f *curationFixture, release, source string) []releaseMergeReviewDisc {
+	t.Helper()
+	rows, err := f.application.database.QueryContext(t.Context(), `
+		SELECT m.position, CASE WHEN m.origin_release_id::text=$2 THEN 'source' ELSE 'target' END,
+		       COALESCE(m.origin_release_id,m.release_id)::text, COALESCE(m.origin_position,m.position), m.title,
+		       count(t.id), COALESCE(jsonb_agg(jsonb_build_object('position',t.position,'title',t.title,
+		           'external_id',COALESCE(l.external_id,'')) ORDER BY t.position,t.id)
+		           FILTER (WHERE t.id IS NOT NULL), '[]'::jsonb)
+		FROM media m
+		LEFT JOIN track_effective t ON t.medium_id=m.id AND t.source_status='present'
+		LEFT JOIN external_links l ON l.object_id=t.id AND l.object_type='track' AND l.source='musicbrainz'
+		WHERE m.release_id=$1 GROUP BY m.id ORDER BY m.position`, release, source)
+	requireCurationOK(t, err)
+	defer rows.Close()
+	var layout []releaseMergeReviewDisc
+	for rows.Next() {
+		var disc releaseMergeReviewDisc
+		var tracks []byte
+		requireCurationOK(t, rows.Scan(&disc.Position, &disc.From, &disc.FromReleaseID, &disc.OriginPosition,
+			&disc.Title, &disc.TrackCount, &tracks))
+		requireCurationOK(t, json.Unmarshal(tracks, &disc.Tracks))
+		layout = append(layout, disc)
+	}
+	requireCurationOK(t, rows.Err())
+	return layout
+}
+
+func requireReleaseMergeReviewLayout(t *testing.T, f *curationFixture, merge releaseMergeReviewFacts, source string, discCount int) {
+	t.Helper()
+	stored := readStoredReleaseMergeLayout(t, f, f.a, source)
+	if len(merge.Data.Layout) != discCount || len(stored) != discCount || merge.Data.TracksOmitted {
+		t.Fatalf("审查碟数 %d，执行后碟数 %d，期望 %d，省略曲目 %t",
+			len(merge.Data.Layout), len(stored), discCount, merge.Data.TracksOmitted)
+	}
+	total := 0
+	for i, disc := range stored {
+		if got := merge.Data.Layout[i]; !reflect.DeepEqual(got, disc) {
+			t.Errorf("第 %d 张碟审查布局 %+v，执行后 %+v", i+1, got, disc)
+		}
+		total += disc.TrackCount
+	}
+	if merge.Data.LayoutTrackTotal != total {
+		t.Errorf("审查曲目总数 %d，执行后 %d", merge.Data.LayoutTrackTotal, total)
+	}
 }
 
 func TestPostgreSQLStewardReviewPolicyV4MergeEvidence(t *testing.T) {
@@ -47,39 +139,26 @@ func TestPostgreSQLStewardReviewPolicyV4MergeEvidence(t *testing.T) {
 			t.Fatalf("外部缓存样本 %v", files)
 		}
 
-		mustExec(t, f.application, `UPDATE tracks SET disc_number=2 WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, f.b)
+		source, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{
+			title: "两首曲目的来源发行", artist: "Artist B", tracks: []string{"present", "present"},
+		})
+		// 标签碟号用于选择并入方向，来源碟的本地位置仍为 1，执行后应为 2。
+		mustExec(t, f.application, `UPDATE tracks SET disc_number=2 WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, source)
+		track, _ := externalTrack(t, f.application, source)
+		correctTrackForCuration(t, f.curationFixture, track, 1, map[string]any{"title": setChange("修正后的曲名")})
 		targetOp := seedReleaseMergeLink(t, f.curationFixture, f.a, external, uuid.New(), 2, 3)
-		sourceOp := seedReleaseMergeLink(t, f.curationFixture, f.b, external, uuid.New(), 0, 0)
+		sourceOp := seedReleaseMergeLink(t, f.curationFixture, source, external, uuid.New(), 0, 0)
 		discoverReleaseMerge(t, f.curationFixture, external)
-		item := requireReleaseMergeItem(t, f.curationFixture, f.a, f.b, external, false)
+		item := requireReleaseMergeItem(t, f.curationFixture, f.a, source, external, false)
 		f.configure(t, &f.admin)
 		f.next(t, false).tool(t, releaseMergeProposalTool, releaseMergeProposal(item.ID))
 		review := f.next(t, true)
-		var content string
-		requireCurationOK(t, json.Unmarshal(review.Messages[len(review.Messages)-1].Content, &content))
-		var payload struct {
-			Evidence []struct {
-				Facts struct {
-					ReleaseMerge struct {
-						Source string
-						Data   struct {
-							Target, Source    releaseMergeReviewMember
-							RecordingsOverlap *bool `json:"recordings_overlap"`
-						}
-					} `json:"release_merge"`
-				}
-			}
-		}
-		requireCurationOK(t, json.Unmarshal([]byte(content), &payload))
-		if len(payload.Evidence) != 1 {
-			t.Fatalf("审查证据 %s", content)
-		}
-		merge := payload.Evidence[0].Facts.ReleaseMerge
+		merge := readReleaseMergeReview(t, review)
 		wantTarget := releaseMergeReviewMember{f.a, "Album A", 1, 1, external, targetOp, 1, float64(2), float64(3)}
-		wantSource := releaseMergeReviewMember{f.b, "Album B", 1, 1, external, sourceOp, 1, "不可用", "不可用"}
+		wantSource := releaseMergeReviewMember{source, "两首曲目的来源发行", 1, 2, external, sourceOp, 1, "不可用", "不可用"}
 		if merge.Source != "program_untrusted_external" || merge.Data.Target != wantTarget || merge.Data.Source != wantSource ||
 			merge.Data.RecordingsOverlap == nil || *merge.Data.RecordingsOverlap {
-			t.Fatalf("发行合并审查证据 %s", content)
+			t.Fatalf("发行合并审查证据 %+v", merge)
 		}
 
 		// 审查发送后移除缓存，批准时重读的证据应仍相同。
@@ -88,11 +167,42 @@ func TestPostgreSQLStewardReviewPolicyV4MergeEvidence(t *testing.T) {
 		review.review(t, "approved")
 		f.next(t, false).complete(t)
 		requireReleaseMergeResolution(t, f.curationFixture, item.ID, "model_merged")
+		requireReleaseMergeReviewLayout(t, f.curationFixture, merge, source, 2)
 		detail, err := runtime.NewStore(f.application.database).GetConversation(t.Context(), f.admin.id, conversation)
 		requireCurationOK(t, err)
 		if runtime.ReviewPolicyVersion != 4 || len(detail.Plans) != 1 || detail.Plans[0].Review == nil || detail.Plans[0].Review.PolicyVersion != 4 {
 			t.Fatalf("审查策略版本 %d，方案 %+v", runtime.ReviewPolicyVersion, detail.Plans)
 		}
+	})
+
+	t.Run("目标保留先前并入碟的来源", func(t *testing.T) {
+		f := newSchedulerFixture(t)
+		f.enable(t)
+		external, first := seedReleaseMergePair(t, f.curationFixture)
+		manualReleaseMerge(t, f.curationFixture, f.a, f.b)
+		requireReleaseMergeResolution(t, f.curationFixture, first.ID, "merged")
+
+		source, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{
+			title: "后续并入的发行", artist: "Artist A", tracks: []string{"present"},
+		})
+		mustExec(t, f.application, `UPDATE tracks SET disc_number=3 WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, source)
+		seedReleaseMergeLink(t, f.curationFixture, source, external, uuid.New(), 0, 0)
+		discoverReleaseMerge(t, f.curationFixture, external)
+		second := requireReleaseMergeItem(t, f.curationFixture, f.a, source, external, false)
+		f.configure(t, &f.admin)
+		f.next(t, false).tool(t, releaseMergeProposalTool, releaseMergeProposal(second.ID))
+		review := f.next(t, true)
+		merge := readReleaseMergeReview(t, review)
+		if len(merge.Data.Layout) != 3 {
+			t.Fatalf("后续并入的审查布局 %+v", merge.Data.Layout)
+		}
+		if disc := merge.Data.Layout[1]; disc.From != "target" || disc.FromReleaseID != f.b || disc.OriginPosition != 1 {
+			t.Errorf("先前并入的碟 %+v，期望来自目标、原发行 %s、原碟号 1", disc, f.b)
+		}
+		review.review(t, "approved")
+		f.next(t, false).complete(t)
+		requireReleaseMergeResolution(t, f.curationFixture, second.ID, "model_merged")
+		requireReleaseMergeReviewLayout(t, f.curationFixture, merge, source, 3)
 	})
 
 	t.Run("拒绝已保存的旧版批准", func(t *testing.T) {
