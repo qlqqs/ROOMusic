@@ -24,14 +24,14 @@
 - 缓存只保存 parser 原始观察，不保存 organizer 推断结果；命中后仍经槽位按序构造并暂存观察，排空后执行 CUE 对齐、碟父目录标记和 organizer。文件名轨号、碟号、艺人每轮重新推断，不因解析缓存冻结；附属目录封面候选在保存阶段按当前过滤规则列举，只有候选需要重写时才读取封面。
 - 解析成功在槽位按序应用时于扫描 holder 上 upsert，写 `seen_scan_id=本次`；不等待候选提交，因为缓存只取决于源文件与解析器版本。失败不缓存；命中项应用时登记 seen，按有界批次更新，目录切换及根排空后刷新。
 - 遍历结束、未取消且无 `walk_error` 时清理本根 `seen_scan_id IS DISTINCT FROM 本次` 的缓存项，涵盖过滤、排除、删除和读失败来源；取消或目录读失败不清理。缓存读写/清理失败只记 WARN `library.scan.parse_cache_failed`，按未命中处理，不改变扫描完整性，不额外重试或引入替代存储。
-- 缓存命中且 MIME 非空时，观察置 `ArtworkDeferred=true`；`StageObservation` 在同一 `organization_scope` 且同一 `artwork_scope` 内去重，把 `artwork` 或 `artwork_deferred` 都算封面，后来者同时清除字节、MIME 与 deferred；因此同目录不同专辑、同一 Box 的不同叶子、严格多碟的每个碟目录各按格式保留一份，同目录同专辑的不同格式版本各保留一份，同目录无专辑标签的散曲每种格式仍只留第一首。`EmbeddedArtworks()` 按碟序/曲序列出全部有字节或 deferred 的观察，`EmbeddedArtwork()` 返回其首个。
+- 缓存命中且 MIME 非空时，观察置 `ArtworkDeferred=true`；`StageObservation` 在同一 `organization_scope` 且同一 `artwork_scope` 内去重，把 `artwork` 或 `artwork_deferred` 都算封面，后来者同时清除字节、MIME 与 deferred；因此同目录不同专辑、同一 Box 的不同叶子、严格多碟的每个碟目录各按格式保留一份，同目录同专辑的不同格式版本各保留一份，无专辑证据的根目录文件，以及无专辑证据且标题与曲目艺人均来自标签的子目录物理文件，各按路径保留内嵌封面。`EmbeddedArtworks()` 按碟序/曲序列出全部有字节或 deferred 的观察，`EmbeddedArtwork()` 返回其首个。
 - 保存候选封面时，deferred 观察经路径安全校验后现读音频取封面；读取失败记 `artwork_unreadable` 后继续下一首内嵌、再下一档文件夹封面；第 1 档精确名命中时不读 deferred（`artwork_deferred_loads` 只统计实际现读次数）。受管封面存储/绑定/清理失败仍阻断完整成功。候选被跳过时不触发 deferred 读取。
 
 #### 版本号与升版本规则
 
 - `parser.CommonVersion=4`：⑦ 署名标签补齐是 ④ 合入 `94623b5` 后首次共用解析规则变更，从 1 升到 2；2026-11-15 内嵌封面解析（FLAC PICTURE、`METADATA_BLOCK_PICTURE`、WAV `id3 `、正面封面优先）覆盖多数格式，升到 3；2026-11-22 扫描观察新增外部标识并扩展共用标签读取规则，升到 4，使已有缓存重新解析；`formatVersions` 的 `.flac/.mp3/.ogg/.opus/.wav/.m4a/.ape/.wv/.aif/.aiff` 均保持 1。`CacheVersion(extension)` 返回如 `c4.f1`，未知扩展名返回空串。`artistgraph.Version=4`、`searchindex.ProjectionVersion=2` 不变，不参与解析缓存命中判定。
 - `AudioObservation` 字段、类型、含义或共用解析规则（兜底、分隔、多值、歌词、日期以及 parser 内编号推断）改变，升 `CommonVersion`，使所有格式重新解析；只改某格式读取，升该格式版本；新增格式只加版本 1，不使其他格式失效。
-- `ingest.GroupingVersion=3`（2026-11-15 第 4 档收窄为纯 Box，从 2 升到 3；此前文件夹优先分档与内嵌去重键变化从 1 升到 2），覆盖同样观察所产生的 Release 图：organizer、folder_metadata、抓轨证据、字段决定、归组证据、署名/艺人、流派、作品、搜索投影字段与封面选择。只改这些规则而不改 parser，不升解析器版本，只升归组版本；升归组版本使所有候选重写而不使解析缓存失效。
+- `ingest.GroupingVersion=4`（2026-11-24 子目录零散单曲按路径归组并保留各自的内嵌封面，从 3 升到 4；2026-11-15 第 4 档收窄为纯 Box，从 2 升到 3；此前文件夹优先分档与内嵌去重键变化从 1 升到 2），覆盖同样观察所产生的 Release 图：organizer、folder_metadata、抓轨证据、字段决定、归组证据、署名/艺人、流派、作品、搜索投影字段与封面选择。只改这些规则而不改 parser，不升解析器版本，只升归组版本；升归组版本使所有候选重写而不使解析缓存失效。
 - ④ 合入之后的合入核对：O ②/③ 升 `GroupingVersion`（同批合入合计加一）；T ⑥ 升 `CommonVersion` 与 `GroupingVersion`；T ⑦/⑧ 按格式或共用解析改动升解析器版本，并升归组版本；T ⑬ 搜索独立回填不升；M ⑩ 新格式加 1，共用解析变化另升 `CommonVersion`，CUE 回退扩展名表无须另升；M ⑨ MP3 时长规则升 `.mp3` 版本，分析器自有版本另行维护。④ 之前已合入的规则不追补版本。本次⑦仅补 parser 入口与人员表文本形态，未改同样观察的写入规则，`GroupingVersion` 保持 1；候选元数据摘要已包含 Credits（含 detail/source）、艺人证据，成员签名也包含 `ParserVersion`，无需再升候选签名或分组版本。
 
 #### 借用指纹与完整重扫

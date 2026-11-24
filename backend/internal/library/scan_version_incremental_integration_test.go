@@ -84,19 +84,12 @@ func testParseCacheVersionUpgrade(t *testing.T, format bool) {
 
 func runScanWithVersionOverlay(t *testing.T, fixture *libraryFixture, root registeredRoot, sourceRelativePath string, pattern *regexp.Regexp, versionDelta int) {
 	t.Helper()
-	var schema string
-	if err := fixture.database.QueryRow(`SELECT current_schema()`).Scan(&schema); err != nil {
-		t.Fatal(err)
-	}
-	scopedURL, err := postgrestest.ScopedURL(postgrestest.BaseURL(t), schema)
-	if err != nil {
-		t.Fatal(err)
-	}
-	packageDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := filepath.Join(packageDir, sourceRelativePath)
+	version, replacement := scanVersionReplacement(t, sourceRelativePath, pattern, versionDelta)
+	runScanWithSourceOverlay(t, fixture, root, version, map[string][]byte{sourceRelativePath: replacement})
+}
+
+func scanVersionReplacement(t *testing.T, source string, pattern *regexp.Regexp, versionDelta int) (int, []byte) {
+	t.Helper()
 	contents, err := os.ReadFile(source)
 	if err != nil {
 		t.Fatal(err)
@@ -113,12 +106,33 @@ func runScanWithVersionOverlay(t *testing.T, fixture *libraryFixture, root regis
 	replacement := append([]byte{}, contents[:match[4]]...)
 	replacement = strconv.AppendInt(replacement, int64(version), 10)
 	replacement = append(replacement, contents[match[5]:]...)
-	temporary := t.TempDir()
-	replacementPath := filepath.Join(temporary, "version.go")
-	if err := os.WriteFile(replacementPath, replacement, 0o600); err != nil {
+	return version, replacement
+}
+
+func runScanWithSourceOverlay(t *testing.T, fixture *libraryFixture, root registeredRoot, version int, sources map[string][]byte) {
+	t.Helper()
+	var schema string
+	if err := fixture.database.QueryRow(`SELECT current_schema()`).Scan(&schema); err != nil {
 		t.Fatal(err)
 	}
-	overlay, err := json.Marshal(map[string]any{"Replace": map[string]string{source: replacementPath}})
+	scopedURL, err := postgrestest.ScopedURL(postgrestest.BaseURL(t), schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packageDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	temporary := t.TempDir()
+	replace := make(map[string]string, len(sources))
+	for source, contents := range sources {
+		replacementPath := filepath.Join(temporary, filepath.Base(source))
+		if err := os.WriteFile(replacementPath, contents, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		replace[filepath.Join(packageDir, source)] = replacementPath
+	}
+	overlay, err := json.Marshal(map[string]any{"Replace": replace})
 	if err != nil {
 		t.Fatal(err)
 	}

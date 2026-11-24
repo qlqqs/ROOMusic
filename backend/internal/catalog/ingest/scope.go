@@ -22,13 +22,13 @@ func OrganizationScope(observation SourceObservation) string {
 	return "directory:" + location.dir
 }
 
-// artworkScope 按目录、专辑与格式保留内嵌封面；根内无专辑的散曲按路径区分。
+// artworkScope 按目录、专辑与格式保留内嵌封面。可能独立成曲的文件按路径保留。
 // JSON 字符串编码保留键的边界，同时避免把 NUL 写入 PostgreSQL jsonb。
 func artworkScope(observation SourceObservation) string {
 	location := locateObservation(observation)
 	album := albumEvidence(observation)
 	key := "dir:" + location.dir + "\x00" + album + "\x00" + observationFormat(observation)
-	if location.dir == "" && album == "" {
+	if album == "" && (location.dir == "" || hasTaggedTitleAndArtist(observation)) {
 		key = "path:" + NormalizedPath(observation.RelativePath)
 	}
 	encoded, _ := json.Marshal(key)

@@ -37,7 +37,7 @@ type queryer interface {
 func StageObservation(ctx context.Context, database StagingDB, scanID, rootID string, observation SourceObservation) error {
 	scope := OrganizationScope(observation)
 	observation.ArtworkScope = artworkScope(observation)
-	// 每个目录与专辑只保留一份内嵌封面，碟目录各自保留。
+	// 同一个 artworkScope 只保留第一份内嵌封面（含延迟读取）。
 	if len(observation.Artwork) > 0 || observation.ArtworkDeferred {
 		var alreadyStaged bool
 		if err := database.QueryRowContext(ctx, `SELECT EXISTS (
