@@ -1,9 +1,0 @@
-{"file": ".trellis/tasks/11-24-artist-web-search/research/repo.md", "reason": "仓库现状与锚点（A–H）"}
-{"file": ".trellis/tasks/11-24-artist-web-search/prd.md", "reason": "父任务需求与决定"}
-{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "艺人读取、重定向、写锁顺序"}
-{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "外部对应、艺人媒体写入与撤销、抑制、程序层"}
-{"file": ".trellis/spec/backend/sources-contracts.md", "reason": "Wikidata 请求与外发数据"}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移与约束写法"}
-{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "人工治理操作、幂等与撤销"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误码"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验证标准"}
