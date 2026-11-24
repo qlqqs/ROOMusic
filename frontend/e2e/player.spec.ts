@@ -515,12 +515,20 @@ test("同步歌词：手动滚动后暂停跟随并出现“回到当前行”�
   await expect(current).toContainText("第 21 行歌词");
   await expect.poll(scrollTop).toBeGreaterThan(0);
   await expect(back).toHaveCount(0);
+  // 跟随用平滑滚动，等它停下再取起点；起点取决于行高与可视区，不写死。
+  let settled = -1;
+  await expect.poll(async () => {
+    const previous = settled;
+    settled = await scrollTop();
+    return settled === previous;
+  }).toBe(true);
+  const followed = settled;
 
   // 滚轮是用户在自己浏览：暂停跟随。之后当前行变化时，滚动位置不再被拖回。
   await scroller.hover();
   await page.mouse.wheel(0, -700);
   await expect(back).toBeVisible();
-  await expect.poll(scrollTop).toBeLessThan(200);
+  await expect.poll(scrollTop).toBeLessThanOrEqual(Math.max(0, followed - 300));
   const parked = await scrollTop();
   await setMediaTime(page, 2.75);
   await expect(current).toContainText("第 28 行歌词");
