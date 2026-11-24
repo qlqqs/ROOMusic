@@ -25,6 +25,9 @@ type packageRule struct {
 // 各 httpapi 包只依赖本能力、identity 与 platform，且彼此不导入；只有 app 可以装配全部。
 // 新增包必须先在这里声明规则，测试才会通过。
 var packageRules = map[string]packageRule{
+	"plugins/runtime":                   {},
+	"plugins":                           {imports: []string{"plugins/runtime", "sources"}},
+	"plugins/httpapi":                   {imports: []string{"identity", "platform/httpserver", "plugins"}, http: true},
 	"platform/diagnostics":              {imports: []string{"platform/buildinfo", "platform/postgres"}},
 	"platform/diagnostics/stewardtools": {imports: []string{"platform/diagnostics", "steward/tool"}},
 	"backup/stewardtools":               {imports: []string{"backup", "steward/tool"}},
@@ -134,7 +137,7 @@ var packageRules = map[string]packageRule{
 	"library/httpapi":                   {imports: []string{"identity", "library", "platform/httpserver", "platform/uuid"}, http: true},
 	"playback/httpapi":                  {imports: []string{"identity", "platform/httpserver", "platform/uuid", "playback"}, http: true},
 	"listening/httpapi":                 {imports: []string{"identity", "listening", "platform/httpserver", "platform/uuid"}, http: true},
-	"app": {imports: []string{
+	"app": {imports: []string{"plugins", "plugins/httpapi",
 		"curation", "curation/program", "curation/httpapi", "curation/model", "curation/stewardtools", "steward/provider", "sources", "sources/acoustid", "playback/fingerprint", "sources/musicbrainz", "sources/coverartarchive", "sources/lrclib",
 		"sources/wikidata", "sources/commons", "sources/wikipedia", "sources/fanarttv", "sources/theaudiodb",
 		"platform/diagnostics", "platform/diagnostics/stewardtools", "backup/stewardtools", "identity/stewardtools", "playback/stewardtools", "dspsettings/stewardtools",

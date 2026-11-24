@@ -14,6 +14,7 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	71: sourcePluginRollbackFixture,
 	70: upnpPlaybackRollbackFixture,
 	69: upnpDiscoveryRollbackFixture,
 	68: artistMediaRollbackFixture,
@@ -440,6 +441,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if m.Version == 68 {
 				rollbackExec(t, db, beforeArtistMediaMigration)
 			}
+			if m.Version == 71 {
+				rollbackExec(t, db, beforeSourcePluginMigration)
+			}
 			if m.Version == 69 || m.Version == 70 {
 				rollbackExec(t, db, beforeUPnPMigration)
 			}
@@ -467,6 +471,11 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 				if err != nil || title != "人工标题" || artist != "自动艺人" || revision != 5 {
 					t.Fatalf("0065 升级夹具的有效值：title=%q artist=%q revision=%d err=%v", title, artist, revision, err)
 				}
+			}
+			if m.Version == 71 {
+				// 回退保留新版本产生的操作历史。其他表仍与升级前快照逐行比对。
+				opHistory := rollbackSnapshot(t, db).Data["operations"]
+				s0.Data["operations"], s1.Data["operations"] = opHistory, opHistory
 			}
 			if m.Version == 56 {
 				var valid bool
