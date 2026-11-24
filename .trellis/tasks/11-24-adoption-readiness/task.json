@@ -23,7 +23,8 @@
     "11-24-installable-web-app",
     "11-24-nas-install",
     "11-24-chromecast-output",
-    "11-24-airplay-output"
+    "11-24-airplay-output",
+    "11-24-insights-site-split"
   ],
   "parent": null,
   "relatedFiles": [],

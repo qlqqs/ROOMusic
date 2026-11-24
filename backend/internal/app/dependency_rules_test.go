@@ -28,7 +28,6 @@ var packageRules = map[string]packageRule{
 	"insights":                          {imports: []string{"insights/schema", "platform/egress", "sources"}, http: true},
 	"insights/httpapi":                  {imports: []string{"identity", "insights", "platform/httpserver"}, http: true},
 	"insights/schema":                   {imports: []string{"platform/uuid", "platform/buildinfo"}},
-	"insights/collector":                {imports: []string{"insights/schema"}, http: true},
 	"plugins/runtime":                   {},
 	"plugins":                           {imports: []string{"plugins/runtime", "sources"}},
 	"plugins/httpapi":                   {imports: []string{"identity", "platform/httpserver", "plugins"}, http: true},
@@ -89,10 +88,10 @@ var packageRules = map[string]packageRule{
 	"catalog/ingest":                    {imports: []string{"catalog/classical", "catalog/internal/artistgraph", "catalog/metadata", "platform/uuid", "platform/workpool", "catalog/internal/searchindex", "catalog/internal/writegate"}},
 	"catalog":                           {imports: []string{"catalog/internal/artistgraph", "catalog/internal/writegate", "catalog/internal/releasesql", "platform/uuid", "catalog/textnorm", "catalog/internal/searchindex"}},
 	"catalog/governance":                {imports: []string{"catalog/ingest", "personal/albumfavorites", "catalog/textnorm", "catalog/internal/artistgraph", "catalog", "catalog/internal/releasesql", "catalog/metadata", "operations", "platform/uuid", "catalog/internal/searchindex", "catalog/internal/writegate"}},
-	"curation":                          {imports: []string{"sources", "operations", "identity", "catalog", "catalog/artwork", "catalog/metadata", "catalog/governance", "platform/uuid"}},
+	"curation":                          {imports: []string{"sources", "operations", "identity", "catalog", "catalog/artwork", "catalog/metadata", "catalog/governance", "catalog/textnorm", "platform/uuid"}},
 	"curation/model":                    {imports: []string{"curation", "curation/program", "catalog", "catalog/governance", "operations", "platform/uuid"}},
-	"curation/stewardtools":             {imports: []string{"curation", "curation/program", "catalog", "catalog/governance", "operations", "platform/uuid", "steward/tool"}},
-	"curation/httpapi":                  {imports: []string{"curation", "identity", "operations", "platform/httpserver"}, http: true},
+	"curation/stewardtools":             {imports: []string{"curation", "curation/program", "catalog", "catalog/governance", "operations", "platform/egress", "platform/uuid", "sources", "steward/tool"}, http: true},
+	"curation/httpapi":                  {imports: []string{"curation", "identity", "operations", "platform/httpserver", "platform/uuid"}, http: true},
 	"curation/program":                  {imports: []string{"curation", "catalog", "catalog/metadata", "catalog/textnorm", "operations", "sources", "platform/uuid"}},
 	"operations":                        {imports: []string{"platform/uuid"}},
 	"operations/httpapi":                {imports: []string{"identity", "operations", "platform/httpserver", "platform/uuid"}, http: true},
@@ -166,6 +165,9 @@ func TestPackageDependencyDirections(t *testing.T) {
 	err := filepath.WalkDir(internalDirectory, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil || !entry.IsDir() {
 			return walkErr
+		}
+		if entry.Name() == "testdata" {
+			return filepath.SkipDir
 		}
 		pkg, importErr := build.ImportDir(path, 0)
 		if importErr != nil {
