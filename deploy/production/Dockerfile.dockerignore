@@ -10,3 +10,6 @@ frontend/playwright-report/
 .env*
 **/.env*
 !deploy/production/entrypoint.sh
+!LICENSE
+!THIRD-PARTY-NOTICES.md
+!deploy/production/licenses/

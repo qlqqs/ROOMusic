@@ -83,6 +83,9 @@ COPY --from=fpcalc /out/ /
 RUN /usr/local/bin/fpcalc -version | grep -q '^fpcalc version 1\.6\.2 (' \
  && /usr/local/bin/ffmpeg -v error -f lavfi -i sine=frequency=440:duration=15 -f s16le -ac 1 -ar 11025 - \
   | /usr/local/bin/fpcalc -format s16le -rate 11025 -channels 1 -length 120 -json - | grep -q '"fingerprint": *"[^"]'
+# 许可文本：ROOMusic 本身（AGPL-3.0），以及随镜像分发的 FFmpeg（GPL-3.0）、fpcalc 与 glibc（LGPL-2.1）。
+COPY LICENSE THIRD-PARTY-NOTICES.md /usr/share/doc/roomusic/
+COPY deploy/production/licenses/ /usr/share/doc/roomusic/licenses/
 COPY --chmod=0755 deploy/production/entrypoint.sh /app/entrypoint.sh
 USER 1000:1000
 WORKDIR /app

@@ -106,6 +106,7 @@ jobs:
           images: ${{ env.IMAGE }}
           labels: |
             org.opencontainers.image.title=ROOMusic
+            org.opencontainers.image.licenses=AGPL-3.0-only
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
       - name: Require AcoustID client key for publishing
         if: needs.prepare.outputs.publish == 'true'
@@ -193,6 +194,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
           annotations: |
             org.opencontainers.image.title=ROOMusic
+            org.opencontainers.image.licenses=AGPL-3.0-only
       - name: Create manifest list
         env:
           DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta.outputs.json }}

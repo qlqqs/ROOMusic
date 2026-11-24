@@ -110,3 +110,11 @@ git tag -a vX.Y.Z -m "ROOMusic vX.Y.Z" && git push origin vX.Y.Z
 - [开发与测试环境](docs/development-environment.md)：工具链、外部接口 mock、UPnP 假渲染器
 - [架构决策](docs/architecture/architecture-decisions.md)：长期规则与 ADR 索引
 - [前端设计依据](frontend/DESIGN.md)
+- [参与贡献](CONTRIBUTING.md)：提交改动的要求与贡献者许可协议
+
+## 许可证
+
+Copyright (C) 2026 qlqqs
+
+ROOMusic 以 [GNU Affero 通用公共许可证第 3 版](LICENSE)（AGPL-3.0-only）发布：可以自由使用、修改和分发；
+分发修改版，或者把修改版作为网络服务提供给他人使用时，需要以同一许可公开修改后的源码。随附的第三方程序与数据见[第三方组件与许可](THIRD-PARTY-NOTICES.md)。
