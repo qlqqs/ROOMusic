@@ -42,7 +42,7 @@ func TestPostgreSQLInsightsAdminAPI(t *testing.T) {
 	}
 	if !original.Enabled || original.ForcedOff || original.NoticeAcknowledged || original.LastAttemptAt != nil ||
 		original.LastSuccessAt != nil || original.LastError != nil || !original.FirstSendAfter.Equal(createdAt.Add(24*time.Hour)) ||
-		original.EndpointHost != "insights.roomusic.org" || original.PublicPageURL != "https://insights.roomusic.org/" {
+		original.EndpointHost != "roomusic.org" || original.PublicPageURL != "https://roomusic.org/stats" {
 		t.Fatalf("管理员初始状态不符合同：%+v", original)
 	}
 	p, err := schema.Decode(bytes.NewReader(original.Payload))
@@ -156,7 +156,7 @@ func TestPostgreSQLInsightsHeartbeatMatchesAdminPreview(t *testing.T) {
 	app := newConfiguredIntegrationTestApplication(t, nil, settings)
 	admin := app.createUser(t, "admin")
 	preview := systemDecode[insights.Status](t, app.request(t, http.MethodGet, insightsAdminPath, nil, &admin, nil))
-	if preview.EndpointHost != strings.TrimPrefix(server.URL, "http://") || preview.PublicPageURL != "https://insights.example.invalid/" {
+	if preview.EndpointHost != strings.TrimPrefix(server.URL, "http://") || preview.PublicPageURL != "https://insights.example.invalid/stats" {
 		t.Fatalf("mock 模式端点或公开页错误：%+v", preview)
 	}
 	// 先取得预览，再回拨实例年龄，并通过设置接口唤醒真实调度循环。
