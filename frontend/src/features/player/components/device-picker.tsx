@@ -1,4 +1,4 @@
-import { ArrowRightLeft, AudioWaveform, MonitorSpeaker, Pencil, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, AudioWaveform, MonitorSpeaker, Pencil, Speaker, Trash2, X } from "lucide-react";
 import { useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { failureOf, isHttpFailure } from "../../../shared/api";
 import { cx } from "../../../shared/lib/class-names";
@@ -125,7 +125,7 @@ function DeviceList({ titleId, onClose }: { titleId: string; onClose: () => void
     <ul role="list" className={styles.list}>
       {snapshot.devices.map((row) => {
         const { device, zone } = row;
-        const text = <><span className={styles.name}><span className={styles.nameText}>{device.name}</span>{row.isLocal ? <StatusTag>本机</StatusTag> : null}{device.upnp === null ? null : <StatusTag>局域网</StatusTag>}</span><span className={styles.state}>{stateText(row)}</span></>;
+        const text = <><span className={styles.name}>{device.upnp === null ? null : <Speaker size={14} aria-hidden="true" className={styles.kindIcon} />}<span className={styles.nameText}>{device.name}</span>{row.isLocal ? <StatusTag>本机</StatusTag> : null}{device.upnp === null ? null : <StatusTag>局域网</StatusTag>}</span><span className={styles.state}>{stateText(row)}</span></>;
         // 转到这台设备：把正在控制的播放区转过来；离线的设备可以转到本机接着放。
         const transferHere = device.online && !row.isTarget && source !== null && source.current !== null ? source.zoneId : null;
         const transferToLocal = !device.online && zone !== null && zone.current !== null && localZoneId !== undefined ? zone.zoneId : null;
@@ -224,8 +224,9 @@ function SampleRateDialog({ row, onClose }: { row: PlaybackDeviceRow; onClose: (
     });
   }
   return <ConfirmDialog open title={`“${row.device.name}”的采样率上限`} confirmLabel="保存" pending={pending} error={error === null ? undefined : <FailureNotice error={error} />} onCancel={onClose} onConfirm={save}>
-    <fieldset className={styles.rates}>
-      <legend className={styles.ratesNote}>高于上限的音乐会转换到上限再送给设备；下一首起生效。{row.device.upnp?.formatDeclared === false ? "这台设备没有说明它支持的格式。" : ""}</legend>
+    <p id={`${name}-note`} className={styles.ratesNote}>高于上限的音乐会转换到上限再送给设备；下一首起生效。{row.device.upnp?.formatDeclared === false ? "这台设备没有说明它支持的格式。" : ""}</p>
+    <fieldset className={styles.rates} aria-describedby={`${name}-note`}>
+      <legend className={styles.visuallyHidden}>采样率上限</legend>
       {UPNP_SAMPLE_RATES.map((value) => <label key={value} className={styles.rate}>
         <input type="radio" name={name} value={value} checked={rate === value} onChange={() => setRate(value)} />
         {(value / 1000).toLocaleString("zh-CN", { maximumFractionDigits: 1 })} kHz

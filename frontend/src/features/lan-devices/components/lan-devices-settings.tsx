@@ -19,6 +19,7 @@ function deviceDescription(device: LanDeviceDTO): string {
   const formats = device.capabilities.format_declared ? device.capabilities.stream_formats.map((format) => format.toUpperCase()).join("、") : "没有声明支持的格式，先试 FLAC";
   parts.push(`${formats}，最高 ${rateText(device.capabilities.max_sample_rate)} / ${device.capabilities.max_bit_depth} 位`);
   if (device.capabilities.volume === "fixed") parts.push("音量在设备上调");
+  parts.push(device.address);
   return parts.filter((part) => part !== null).join(" · ");
 }
 

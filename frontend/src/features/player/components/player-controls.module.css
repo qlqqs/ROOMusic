@@ -21,7 +21,7 @@
 .wave .overlay:disabled { cursor: default; }
 .wave:has(.overlay:focus-visible) { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: var(--radius-sm); }
 /* 喇叭按钮与音量弹层：对话框铺满视口且透明（同信号路径、设备列表），小卡片锚在按钮上方或下方，点外面即关闭。 */
-.volumeButton { display: inline-flex; }
+.volumeButton { display: inline-flex; align-items: center; gap: var(--space-1); }
 dialog.volumeDialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 dialog.volumeDialog::backdrop { background: transparent; }
 .volumeCard { position: absolute; left: clamp(var(--space-2), calc(var(--anchor-x, 50vw) - 28px), calc(100vw - 56px - var(--space-2))); bottom: calc(100dvh - var(--anchor-top, 100dvh) + var(--space-2)); display: grid; justify-items: center; gap: var(--space-2); width: 56px; padding: var(--space-2) 0 var(--space-1); border: 1px solid var(--color-divider); border-radius: 10px; background: var(--signal-card-bg, color-mix(in srgb, white 55%, var(--color-bg))); color: var(--text-primary); box-shadow: var(--shadow-lg); }
@@ -44,4 +44,11 @@ input[type="range"] { accent-color: var(--text-accent); min-height: 24px; }
   .large { --transport-button: 44px; justify-content: space-between; gap: 0; width: 100%; }
   .large button:where(:not(.transport dialog *)) { min-width: 44px; height: 44px; min-height: 44px; }
   .large .play, .large .play button { width: 68px; min-width: 68px; height: 68px; min-height: 68px; }
+}
+
+/* 局域网设备的固定音量提示。 */
+.deviceVolume {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  white-space: nowrap;
 }
