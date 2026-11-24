@@ -14,6 +14,7 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	72: artistManualMediaRollbackFixture,
 	71: sourcePluginRollbackFixture,
 	70: upnpPlaybackRollbackFixture,
 	69: upnpDiscoveryRollbackFixture,
@@ -438,8 +439,12 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if m.Version == 67 {
 				rollbackExec(t, db, beforeReleaseMergeMigration)
 			}
-			if m.Version == 68 {
+			if m.Version == 68 || m.Version == 72 {
 				rollbackExec(t, db, beforeArtistMediaMigration)
+			}
+			if m.Version == 72 {
+				rollbackExec(t, db, artistMediaRollbackFixture)
+				rollbackExec(t, db, beforeArtistManualMediaMigration)
 			}
 			if m.Version == 71 {
 				rollbackExec(t, db, beforeSourcePluginMigration)
@@ -450,6 +455,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
+			if m.Version == 72 {
+				assertArtistManualMediaBackfill(t, db)
+			}
 			if m.Version == 69 {
 				var enabled, shared bool
 				err := db.QueryRow("SELECT enabled,shared FROM upnp_settings WHERE id=1").Scan(&enabled, &shared)
@@ -556,6 +564,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s3 := rollbackSnapshot(t, db)
+			if m.Version == 72 {
+				assertArtistManualMediaBackfill(t, db)
+			}
 			// 再升级只比较结构和行数；种子 UUID、时间等合法非确定值不应误报。
 			countsOnly := func(snapshot postgrestest.SchemaSnapshot) postgrestest.SchemaSnapshot {
 				data := make(map[string]string, len(snapshot.Data))

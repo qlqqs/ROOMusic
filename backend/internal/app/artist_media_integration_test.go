@@ -149,6 +149,11 @@ func newArtistMediaProgram(t *testing.T, upstream mediaUpstream) *artistMediaPro
 		upstream.serve(t, w, r)
 	}))
 	t.Cleanup(server.Close)
+	f.gate = artistMediaSourceGate(f, server, "/ws/2")
+	return f
+}
+
+func artistMediaSourceGate(f *artistMediaProgram, server *httptest.Server, musicPath string) *curation.Sources {
 	opts := func(id, path string) sources.Options {
 		return sources.Options{
 			BaseURL: server.URL + path, MockHost: sources.NewMockHost(server.URL),
@@ -163,15 +168,16 @@ func newArtistMediaProgram(t *testing.T, upstream mediaUpstream) *artistMediaPro
 		}
 	}
 	audio := theaudiodb.New(opts("theaudiodb", "/theaudiodb"))
-	f.gate = curation.NewSources(f.application.database,
-		curation.SourceRegistration{Declaration: musicbrainz.Declaration(), ArtistLinks: musicbrainz.New(opts("musicbrainz", "/ws/2"))},
-		curation.SourceRegistration{Declaration: wikidata.Declaration(), ArtistLinks: wikidata.New(opts("wikidata", "/wikidata"))},
+	music := musicbrainz.New(opts("musicbrainz", musicPath))
+	data := wikidata.New(opts("wikidata", "/wikidata"))
+	return curation.NewSources(f.application.database,
+		curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Artists: music, ArtistLinks: music},
+		curation.SourceRegistration{Declaration: wikidata.Declaration(), ArtistLinks: data, WikidataArtists: data},
 		curation.SourceRegistration{Declaration: commons.Declaration(), ArtistImages: commons.New(opts("commons", "/commons"))},
 		curation.SourceRegistration{Declaration: wikipedia.Declaration(), ArtistBios: wikipedia.New(opts("wikipedia", "/wikipedia"))},
 		curation.SourceRegistration{Declaration: fanarttv.Declaration(), ArtistImages: fanarttv.New(opts("fanarttv", "/fanarttv"))},
 		curation.SourceRegistration{Declaration: theaudiodb.Declaration(), ArtistImages: audio, ArtistBios: audio},
 	).WithScanCheck(f.scanCheck).WithKeyStore(newInstanceSecrets(f.application.dataDirectory))
-	return f
 }
 
 func (f *artistMediaProgram) key(t *testing.T, source, name, value string) {
@@ -219,7 +225,7 @@ func TestPostgreSQLArtistMediaProgramPriority(t *testing.T) {
 				if detail.Image != nil {
 					t.Errorf("不应有图片，得到 %+v", detail.Image)
 				}
-			} else if detail.Image == nil || detail.Image.Source != tc.image || detail.Image.SourceURL == "" {
+			} else if detail.Image == nil || detail.Image.Source != tc.image || detail.Image.SourceURL == nil || *detail.Image.SourceURL == "" {
 				t.Errorf("图片=%+v，期望有出处的 %s 图片", detail.Image, tc.image)
 			} else if tc.image == "commons" {
 				if detail.Image.Author == nil || *detail.Image.Author != "合成摄影组" ||
@@ -232,7 +238,7 @@ func TestPostgreSQLArtistMediaProgramPriority(t *testing.T) {
 				if detail.Bio != nil {
 					t.Errorf("不应有简介，得到 %+v", detail.Bio)
 				}
-			} else if detail.Bio == nil || detail.Bio.Source != tc.bio || detail.Bio.SourceURL == "" ||
+			} else if detail.Bio == nil || detail.Bio.Source != tc.bio || detail.Bio.SourceURL == nil || *detail.Bio.SourceURL == "" ||
 				detail.Bio.Lang != tc.lang || detail.Bio.Text != tc.text {
 				t.Errorf("简介应来自 %s，语言 %s，字数 %d，得到 %+v", tc.bio, tc.lang, len([]rune(tc.text)), detail.Bio)
 			} else if tc.bio == "wikipedia" && (detail.Bio.License == nil || *detail.Bio.License != "CC BY-SA 4.0" ||
@@ -374,7 +380,8 @@ func TestPostgreSQLArtistMediaApplyRevert(t *testing.T) {
 	f.key(t, "theaudiodb", "api_key", "synthetic-audio")
 	f.run(t)
 	first := f.media(t)
-	if first.Image == nil || first.Image.Source != "fanarttv" || first.Bio == nil || first.Bio.Source != "wikipedia" {
+	if first.Image == nil || first.Image.Source != "fanarttv" || first.Image.SourceURL == nil ||
+		first.Bio == nil || first.Bio.Source != "wikipedia" || first.Bio.SourceURL == nil {
 		t.Fatalf("首轮图片=%+v，简介=%+v", first.Image, first.Bio)
 	}
 	originalImageOp := programString(t, app, "SELECT operation_id::text FROM artist_external_artworks WHERE artist_id=$1", f.artist)
@@ -421,12 +428,12 @@ func TestPostgreSQLArtistMediaApplyRevert(t *testing.T) {
 		t.Fatalf("单条撤销后的图片=%+v，简介=%+v", got.Image, got.Bio)
 	}
 	// 验证写入端也拒绝同一条目，避免只在程序层隐藏。
-	imageReq.Key, imageReq.Image.ID, imageReq.Image.Source, imageReq.Image.SourceURL, imageReq.Image.Data = uuid.New(), "fanart-thumb", first.Image.Source, first.Image.SourceURL, data
+	imageReq.Key, imageReq.Image.ID, imageReq.Image.Source, imageReq.Image.SourceURL, imageReq.Image.Data = uuid.New(), "fanart-thumb", first.Image.Source, *first.Image.SourceURL, data
 	result, err = f.writer.ApplyArtistImage(ctx, imageReq)
 	requireExternalError(t, result, err, http.StatusConflict, "nothing_to_apply", "suppressed")
 	bioReq.Key = uuid.New()
-	bioReq.Bio = sources.ArtistBio{ID: first.Bio.SourceURL, Text: first.Bio.Text, Lang: first.Bio.Lang,
-		Attribution: sources.Attribution{Source: first.Bio.Source, SourceURL: first.Bio.SourceURL}}
+	bioReq.Bio = sources.ArtistBio{ID: *first.Bio.SourceURL, Text: first.Bio.Text, Lang: first.Bio.Lang,
+		Attribution: sources.Attribution{Source: first.Bio.Source, SourceURL: *first.Bio.SourceURL}}
 	result, err = f.writer.ApplyArtistBio(ctx, bioReq)
 	requireExternalError(t, result, err, http.StatusConflict, "nothing_to_apply", "suppressed")
 
