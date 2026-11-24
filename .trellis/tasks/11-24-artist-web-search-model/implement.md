@@ -24,3 +24,8 @@ ROOMUSIC_TEST_RUN='^TestPostgreSQL(ArtistWebSearch|ArtistMedia|CurationModel|Cur
 ## 回退点
 
 - 段一、段二、测试、前端各一个提交；整分支可单独回退。
+
+## 合并注意（2026-11-24 追加）
+
+main 上 0073 已被 `0073_instance_insights` 占用（`08a47fc6`）。合并前先在分支上合入 main，把 `0073_artist_web_search{,.down}.sql` 改为 0074，
+同步改迁移往返测试、迁移版本测试与规范里的编号引用，再重跑 `ROOMUSIC_TEST_RUN='^TestPostgreSQLMigrationRollbackRoundTrip$'` 与艺人相关集成用例。
