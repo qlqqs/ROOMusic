@@ -20,6 +20,8 @@ import (
 	curationapi "github.com/qlqq/roomusic/backend/internal/curation/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/curation/model"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
+	"github.com/qlqq/roomusic/backend/internal/devices/upnp"
+	upnpapi "github.com/qlqq/roomusic/backend/internal/devices/upnp/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/dspsettings"
 	dspsettingsapi "github.com/qlqq/roomusic/backend/internal/dspsettings/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/dspsettings/irload"
@@ -158,9 +160,16 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	playbackService := newPlaybackService(database, settings, assembly)
 	renderer, closeRenderer := assembleRenderer(database, playbackService, assembly.renderer, logger, dspSettingsService)
 	zonesService := zones.NewService(database, zones.Options{Logger: logger, Renderer: renderer, IRReferences: zoneIRReferences{service: dspSettingsService}, PlayRecorder: zonePlayRecorder{service: listeningService}})
+	lanDevices := upnp.NewService(lifecycle, database, upnp.NewRegistry())
+	if database != nil && lifecycle != nil {
+		if err := lanDevices.Restore(lifecycle); err != nil {
+			logger.Error("局域网设备发现启动失败", "event", "upnp.discovery.start_failed", "module", "upnp", "error", err)
+		}
+	}
 	zonesDone := make(chan struct{})
 	if lifecycle != nil {
 		context.AfterFunc(lifecycle, func() {
+			lanDevices.Close()
 			zonesService.Close()
 			closeRenderer()
 			close(zonesDone)
@@ -310,6 +319,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	listeningapi.New(guard, listeningService).Register(mux)
 	personalapi.New(guard, personalService).Register(mux)
 	zonesapi.New(guard, zonesService).Register(mux)
+	upnpapi.New(guard, lanDevices).Register(mux)
 	dspsettingsapi.New(guard, dspSettingsService, dspsettingsapi.WithIRDeleter(zonesService)).Register(mux)
 	if assembly.backups != nil {
 		backupapi.New(assembly.backups, database, guard, lifecycle).Register(mux)

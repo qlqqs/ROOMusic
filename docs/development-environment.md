@@ -148,3 +148,16 @@ services:
       - ./temp/roomusic-upstream-mock:/mock:ro
     entrypoint: ["/mock", "-addr", "0.0.0.0:18090"]
 ```
+
+## 开发用 UPnP 假渲染器
+
+在宿主机上启动一个渲染器，终端会输出带局域网 IPv4 和实际端口的 HTTP 基址。
+
+```bash
+cd backend
+mise exec -- go run ./cmd/roomusic-fake-renderer -name 客厅 -addr 0.0.0.0:0
+```
+
+在开发实例打开管理员设置里的“局域网设备”，即可发现“客厅”。同机网卡禁用组播回送时，在输出的基址后加 `/description.xml`，用完整描述地址手动添加。另一终端可用 `-name 书房 -rel-time zero` 启动第二台，模拟持续播放时 `GetPositionInfo` 的 `RelTime` 一直为零。多网卡环境可在 `-addr` 中写要公告的局域网 IPv4。
+
+播放时用 `curl --noproxy '*' "$base/_fake/state"` 查看当前 URI、播放状态、音量、位置、拉取字节数、采样率和位深，其中 `base` 取终端输出的地址。按 Ctrl-C 会发送下线公告并结束拉流。

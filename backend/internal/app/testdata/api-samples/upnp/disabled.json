@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "upnp_disabled",
+      "message": "局域网设备开关已关闭"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}
