@@ -16,8 +16,6 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
-var tavilyURL = "https://api.tavily.com/search"
-
 // SearchResult 只向模型提供标题、地址和摘要。
 type SearchResult struct {
 	Title   string `json:"title"`
@@ -47,7 +45,7 @@ func (s *Service) Search(ctx context.Context, user identity.User, query string, 
 	}
 	address := settings.SearXNGURL
 	if settings.SearchSource == "tavily" {
-		address = tavilyURL
+		address = s.tavilyURL
 	}
 	started := time.Now()
 	defer func() { s.logRequest(ctx, settings.SearchSource, address, started, len(results), err) }()
@@ -80,7 +78,7 @@ func (s *Service) Search(ctx context.Context, user identity.User, query string, 
 		if openErr != nil {
 			return nil, failure("search_key_invalid")
 		}
-		client, err = s.newClient(egress.Options{Policy: egress.PublicOnly, Timeout: requestTimeout})
+		client, err = s.newClient(s.tavilyMockHost.EgressOptions(egress.Options{Policy: egress.PublicOnly, Timeout: requestTimeout}))
 		if err != nil {
 			return nil, failure("search_unreachable")
 		}

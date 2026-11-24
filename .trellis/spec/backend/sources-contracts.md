@@ -88,13 +88,13 @@ type Declaration struct {
   **写入发生在适配器确认结构可用之后**。数据目录为空字符串时不缓存（管家包自己构造的默认实例与部分测试装配）。
   命中缓存不占限速许可。启动时与之后每 24 小时清理过期文件。读写失败只记日志，按未命中处理。
   这些文件可以随时删除，不进备份；有结果的缓存有效期内，对话读不到外部更新的编辑。
-- **请求**：`platform/egress` 的 `PublicOnly`；`Accept: application/json`（`GetBytes` 由调用方给）；
+- **请求**：默认用 `platform/egress` 的 `PublicOnly`；`Accept: application/json`（`GetBytes` 由调用方给）；
   User-Agent 为 `ROOMusic/<构建版本或 dev> ( <buildinfo.ProjectURL> )`，不含实例信息。
   客户端工厂的形状是 `func(egress.Options) (*http.Client, error)`，每次出站调用一次并在用完后关闭空闲连接。
 - **重定向**：默认不跟随。`Options.MaxRedirects > 0` 时跟随，`Options.AllowRedirect(目标地址)` 决定每一跳是否放行。每一跳之前依次检查：
-  egress 自带的协议与次数；目标是 `https`（上一跳本身是 `http` 时允许 `http`，测试用）；不带用户名密码；端口为空或 443；`AllowRedirect` 返回真；
+  egress 自带的协议与次数；目标是 `https`（上一跳本身是 `http` 时允许 `http`，测试用）；不带用户名密码；端口为空、443 或精确匹配配置的 mock 主机和有效端口；`AllowRedirect` 返回真；
   后台的放行回调。任何一项不满足，这次调用以所属身份的失败哨兵结束（同时 `errors.Is(err, egress.ErrDenied)` 成立），**不重试、不记失败记忆**。
-  每一跳只带 `Accept` 与 `User-Agent` 两个请求头；`PublicOnly` 对每一跳照常生效；整条跳转链占一个限速许可；缓存键是最初请求的地址；
+  每一跳只带 `Accept` 与 `User-Agent` 两个请求头；当前出站策略对每一跳照常生效；整条跳转链占一个限速许可；缓存键是最初请求的地址；
   日志里的域名是最初请求的域名。包装 `CheckRedirect` 时复制工厂返回的客户端，不原地修改。
 - **`GetBytes(ctx, address, accept, maxBytes)`**：取二进制响应，不读写响应缓存；限速、调用身份、放行回调、重试、错误与失败记忆的规则与 `GetJSON` 相同
   （失败记忆同样要求有数据目录）。`Content-Length` 或实际读到的字节超过 `maxBytes` 按“响应结构不对”处理。404 是 `ErrNotFound`。
@@ -222,3 +222,11 @@ type Declaration struct {
 | 包依赖方向 | `TestPackageDependencyDirections` |
 
 自动化测试一律用本地的受控服务，不请求真实的外部源；限速、缓存与重试的等待用注入的时钟。
+
+## 外部接口 mock
+
+`ROOMUSIC_UPSTREAM_MOCK_URL` 由组合根读取。设置后，MusicBrainz、CAA、LRCLIB、AcoustID 的基础地址分别追加
+`/musicbrainz/ws/2`、`/coverartarchive`、`/lrclib`、`/acoustid`，Tavily 使用 `/tavily/search`。
+这五个客户端使用 `PublicOrAllowlist`，额外放行项只有配置地址的主机名（忽略大小写）和有效端口（HTTP 默认 80，HTTPS 默认 443）。
+CAA 的清单和图片重定向也接受此主机与端口，清单仍须跳到以 `/index.json` 结尾的地址。其他地址按原来的公网与重定向规则检查。
+未配置时沿用各服务的官方地址和 `PublicOnly`。管家的模型端点、SearXNG 和网页读取各自沿用原策略。

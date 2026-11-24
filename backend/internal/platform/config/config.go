@@ -33,6 +33,7 @@ type Server struct {
 	SecureCookies       bool
 	DataDirectory       string
 	PublicURL           string
+	UpstreamMockURL     string
 	// FFmpegPath 是 ffmpeg 可执行文件的绝对路径；空表示在 PATH 中查找。找不到或自检不过时渲染不可用，应用照常启动。
 	FFmpegPath    string
 	FPCalcPath    string
@@ -52,6 +53,10 @@ func Load() (Server, error) {
 		if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
 			return Server{}, fmt.Errorf("ROOMUSIC_PUBLIC_URL must be an absolute origin")
 		}
+	}
+	mockURL, err := configuredUpstreamMockURL()
+	if err != nil {
+		return Server{}, err
 	}
 	ffmpegPath := strings.TrimSpace(os.Getenv("ROOMUSIC_FFMPEG_PATH"))
 	if ffmpegPath != "" && !filepath.IsAbs(ffmpegPath) {
@@ -77,7 +82,7 @@ func Load() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
-	config := Server{ScanWorkers: scanWorkers, AudioAnalysis: audioAnalysis, Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, FPCalcPath: fpcalcPath}
+	config := Server{UpstreamMockURL: mockURL, ScanWorkers: scanWorkers, AudioAnalysis: audioAnalysis, Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, FPCalcPath: fpcalcPath}
 	for _, configuredRoot := range strings.Split(os.Getenv("ROOMUSIC_ALLOWED_LIBRARY_ROOTS"), ",") {
 		if root := strings.TrimSpace(configuredRoot); root != "" {
 			config.AllowedLibraryRoots = append(config.AllowedLibraryRoots, root)
@@ -138,6 +143,21 @@ func configuredAllowedOrigins(publicURL string) ([]string, error) {
 		}
 	}
 	return origins, nil
+}
+
+func configuredUpstreamMockURL() (string, error) {
+	raw := strings.TrimSpace(os.Getenv("ROOMUSIC_UPSTREAM_MOCK_URL"))
+	if raw == "" {
+		return "", nil
+	}
+	u, err := url.Parse(raw)
+	if err == nil && u.User == nil && !strings.ContainsAny(raw, "?#") {
+		origin, err := weborigin.FromHost(u.Scheme, u.Host)
+		if err == nil {
+			return origin + strings.TrimRight(u.EscapedPath(), "/"), nil
+		}
+	}
+	return "", fmt.Errorf("ROOMUSIC_UPSTREAM_MOCK_URL 必须是带主机的 HTTP(S) 基础地址，不能含凭据、查询参数或片段")
 }
 
 func configuredEnvironment() string {

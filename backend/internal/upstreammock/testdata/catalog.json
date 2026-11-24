@@ -1,0 +1,244 @@
+{
+  "artists": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "name": "纸屿",
+      "sort-name": "纸屿",
+      "type": "Group",
+      "country": "CN",
+      "disambiguation": "海岸二重奏",
+      "aliases": [
+        {
+          "name": "Paper Islet",
+          "locale": "en",
+          "primary": true
+        }
+      ]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "name": "Hollow Meridian",
+      "sort-name": "Hollow Meridian",
+      "type": "Group",
+      "country": "GB",
+      "disambiguation": "夜车合奏组",
+      "aliases": [
+        {
+          "name": "Meridian Ensemble",
+          "locale": "en",
+          "primary": true
+        }
+      ]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "name": "纸屿",
+      "sort-name": "纸屿",
+      "type": "Person",
+      "country": "CN",
+      "disambiguation": "独奏者",
+      "aliases": [
+        {
+          "name": "Folded Isle",
+          "locale": "en",
+          "primary": true
+        }
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "id": "20000000-0000-4000-8000-000000000001",
+      "title": "潮线以北",
+      "primary-type": "Album",
+      "first-release-date": "2021-05-14"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000002",
+      "title": "Clockwork Ferry",
+      "primary-type": "Single",
+      "first-release-date": "2022-08-03"
+    }
+  ],
+  "recordings": [
+    {
+      "id": "40000000-0000-4000-8000-000000000001",
+      "title": "潮汐信箱",
+      "artist": "10000000-0000-4000-8000-000000000001",
+      "isrc": "QMZ9X2400001",
+      "length": 180000
+    },
+    {
+      "id": "40000000-0000-4000-8000-000000000002",
+      "title": "细雨码头",
+      "artist": "10000000-0000-4000-8000-000000000001",
+      "isrc": "QMZ9X2400002",
+      "length": 192000
+    },
+    {
+      "id": "40000000-0000-4000-8000-000000000003",
+      "title": "折纸灯",
+      "artist": "10000000-0000-4000-8000-000000000001",
+      "isrc": "QMZ9X2400003",
+      "length": 156000
+    },
+    {
+      "id": "40000000-0000-4000-8000-000000000004",
+      "title": "Clockwork Ferry",
+      "artist": "10000000-0000-4000-8000-000000000002",
+      "isrc": "QMZ9X2400004",
+      "length": 210000
+    }
+  ],
+  "releases": [
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "title": "潮线以北",
+      "artist": "10000000-0000-4000-8000-000000000001",
+      "group": "20000000-0000-4000-8000-000000000001",
+      "country": "CN",
+      "date": "2021-05-14",
+      "barcode": "0900000000001",
+      "label": "折线合成唱片",
+      "catalog": "FOLD-001",
+      "image": "cover.png",
+      "media": [
+        {
+          "disc": "BCwmjDmGIsfPoenrs_aBAAmu1xU-",
+          "tracks": [
+            {
+              "id": "50000000-0000-4000-8000-000000000101",
+              "recording": "40000000-0000-4000-8000-000000000001"
+            },
+            {
+              "id": "50000000-0000-4000-8000-000000000102",
+              "recording": "40000000-0000-4000-8000-000000000002"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000002",
+      "title": "潮线以北",
+      "artist": "10000000-0000-4000-8000-000000000001",
+      "group": "20000000-0000-4000-8000-000000000001",
+      "country": "CN",
+      "date": "2023-03-12",
+      "barcode": "0900000000002",
+      "label": "折线合成唱片",
+      "catalog": "FOLD-002",
+      "image": "cover.png",
+      "media": [
+        {
+          "disc": "BCwmjDmGIsfPoenrs_aBAAmu1xU-",
+          "tracks": [
+            {
+              "id": "50000000-0000-4000-8000-000000000201",
+              "recording": "40000000-0000-4000-8000-000000000001"
+            },
+            {
+              "id": "50000000-0000-4000-8000-000000000202",
+              "recording": "40000000-0000-4000-8000-000000000002"
+            }
+          ]
+        },
+        {
+          "disc": "xiAfbTX2ldq_nND3B1cy9xbNvBA-",
+          "tracks": [
+            {
+              "id": "50000000-0000-4000-8000-000000000203",
+              "recording": "40000000-0000-4000-8000-000000000003"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000003",
+      "title": "Clockwork Ferry",
+      "artist": "10000000-0000-4000-8000-000000000002",
+      "group": "20000000-0000-4000-8000-000000000002",
+      "country": "GB",
+      "date": "2022-08-03",
+      "barcode": "0900000000003",
+      "label": "折线合成唱片",
+      "catalog": "FOLD-003",
+      "image": "cover.png",
+      "media": [
+        {
+          "disc": "zr4SHLI9cYN2VWjUexDcRqEYE_U-",
+          "tracks": [
+            {
+              "id": "50000000-0000-4000-8000-000000000304",
+              "recording": "40000000-0000-4000-8000-000000000004"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "lyrics": [
+    {
+      "id": 1,
+      "trackName": "潮汐信箱",
+      "artistName": "纸屿",
+      "albumName": "潮线以北",
+      "duration": 180,
+      "plainLyrics": "把潮声折进信封",
+      "syncedLyrics": "[00:00.00]把潮声折进信封"
+    },
+    {
+      "id": 2,
+      "trackName": "细雨码头",
+      "artistName": "纸屿",
+      "albumName": "潮线以北",
+      "duration": 192,
+      "plainLyrics": "细雨盖住了脚步",
+      "syncedLyrics": ""
+    },
+    {
+      "id": 3,
+      "trackName": "折纸灯",
+      "artistName": "纸屿",
+      "albumName": "潮线以北",
+      "duration": 156,
+      "plainLyrics": "纸灯照着归帆",
+      "syncedLyrics": "[00:00.00]纸灯照着归帆"
+    },
+    {
+      "id": 4,
+      "trackName": "Clockwork Ferry",
+      "artistName": "Hollow Meridian",
+      "albumName": "Clockwork Ferry",
+      "duration": 210,
+      "plainLyrics": "Brass oars mark the quiet hours",
+      "syncedLyrics": ""
+    }
+  ],
+  "fingerprints": {
+    "mock-tide": [
+      "40000000-0000-4000-8000-000000000001"
+    ],
+    "mock-ferry": [
+      "40000000-0000-4000-8000-000000000004"
+    ],
+    "mock-ambiguous": [
+      "40000000-0000-4000-8000-000000000001",
+      "40000000-0000-4000-8000-000000000003"
+    ],
+    "mock-empty": []
+  },
+  "search": [
+    {
+      "title": "纸屿的潮汐信箱",
+      "url": "https://catalog.example.invalid/paper-islet",
+      "content": "合成目录记录了纸屿的发行与录音。"
+    },
+    {
+      "title": "Clockwork Ferry",
+      "url": "https://catalog.example.invalid/clockwork-ferry",
+      "content": "Hollow Meridian 的虚构单曲。"
+    }
+  ]
+}

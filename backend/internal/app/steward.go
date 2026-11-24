@@ -37,6 +37,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/playback"
 	playbacktools "github.com/qlqq/roomusic/backend/internal/playback/stewardtools"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	stewardapi "github.com/qlqq/roomusic/backend/internal/steward/httpapi"
@@ -52,17 +53,19 @@ import (
 )
 
 type stewardConfig struct {
-	writer       *curation.Writer
-	sources      *curation.Sources
-	matcher      *program.ModelMatcher
-	music        *musicbrainz.Client
-	covers       *coverartarchive.Client
-	diagnostics  *diagnostics.Service
-	backups      *backup.Service
-	allowedRoots []string
-	audio        *playback.Service
-	progress     playback.AnalysisProgressProvider
-	dsp          *dspsettings.Service
+	tavilyEndpoint string
+	mockHost       sources.MockHost
+	writer         *curation.Writer
+	sources        *curation.Sources
+	matcher        *program.ModelMatcher
+	music          *musicbrainz.Client
+	covers         *coverartarchive.Client
+	diagnostics    *diagnostics.Service
+	backups        *backup.Service
+	allowedRoots   []string
+	audio          *playback.Service
+	progress       playback.AnalysisProgressProvider
+	dsp            *dspsettings.Service
 }
 
 func newInstanceSecrets(dataDirectory string) *secret.Store {
@@ -112,6 +115,9 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	definitions = append(definitions, librarytools.StewardTools(scans)...)
 	if len(configurations) > 0 {
 		configuration = configurations[0]
+		if configuration.tavilyEndpoint != "" {
+			webService.WithTavily(configuration.tavilyEndpoint, configuration.mockHost)
+		}
 		if configuration.covers != nil {
 			webService.WithCovers(configuration.covers)
 		}

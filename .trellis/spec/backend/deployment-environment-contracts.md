@@ -82,3 +82,10 @@
   测试因未设置 `ROOMUSIC_TEST_DATABASE_URL` 而跳过时，不得被视为 PostgreSQL 集成门禁
   通过。
 
+
+## 外部接口 mock 地址
+
+所有环境均可设置 `ROOMUSIC_UPSTREAM_MOCK_URL`。值为带主机的 HTTP(S) 绝对基础地址，可带路径前缀，不能含凭据、查询或片段。
+加载时检查协议、主机与有效端口，地址无效则启动失败。空值沿用官方外部源及 Tavily 的公网出站策略。
+启用后启动日志以 WARN 记录 `sources.mock.enabled` 和目标地址。仅四个外部音乐源与 Tavily 增加这个主机与有效端口的放行项；
+CAA 的重定向同时接受该目标，成员端点放行名单和网页抓取策略照常。运行方式见 [开发环境](../../../docs/development-environment.md#外部接口-mock)。

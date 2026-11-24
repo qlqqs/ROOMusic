@@ -45,6 +45,7 @@ var packageRules = map[string]packageRule{
 	"steward/mcp":                       {imports: []string{"platform/uuid", "identity", "platform/buildinfo", "platform/httpserver", "steward/token", "steward/tool"}, http: true},
 	"steward/memory":                    {imports: []string{"platform/uuid", "steward/tool"}},
 	"steward/runtime":                   {imports: []string{"steward/memory", "platform/uuid", "steward/provider", "steward/tool"}},
+	"upstreammock":                      {http: true},
 	"steward/secret":                    {},
 	"sources":                           {imports: []string{"platform/egress", "platform/buildinfo"}, http: true},
 	"sources/coverartarchive":           {imports: []string{"sources", "sources/musicbrainz", "platform/uuid"}},

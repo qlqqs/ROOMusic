@@ -24,6 +24,7 @@ import (
 type ClientFactory func(egress.Options) (*http.Client, error)
 
 type Options struct {
+	MockHost               MockHost
 	MaxRedirects           int
 	AllowRedirect          func(*url.URL) bool
 	DataDirectory, BaseURL string
@@ -35,6 +36,7 @@ type Options struct {
 }
 
 type Requester struct {
+	mockHost      MockHost
 	maxRedirects  int
 	allowRedirect func(*url.URL) bool
 	cache         cache
@@ -60,7 +62,7 @@ func NewRequester(d Declaration, opts Options) *Requester {
 	if opts.DataDirectory != "" {
 		dir = filepath.Join(opts.DataDirectory, "sources", "cache", d.ID)
 	}
-	return &Requester{
+	return &Requester{mockHost: opts.MockHost,
 		cache:   cache{dir: dir, source: d.ID, logger: opts.Logger, now: opts.Now, failures: make(map[string]time.Time)},
 		limiter: opts.Limiter, newClient: opts.NewClient, after: opts.After,
 		maxRedirects: opts.MaxRedirects, allowRedirect: opts.AllowRedirect,
@@ -287,7 +289,7 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 	if err := r.limiter.acquire(ctx, background); err != nil {
 		return response{}, err
 	}
-	baseClient, err := r.newClient(egress.Options{Policy: egress.PublicOnly, Timeout: spec.timeout, MaxRedirects: r.maxRedirects})
+	baseClient, err := r.newClient(r.mockHost.EgressOptions(egress.Options{Policy: egress.PublicOnly, Timeout: spec.timeout, MaxRedirects: r.maxRedirects}))
 	if err != nil {
 		r.limiter.release(false)
 		return response{}, nil
@@ -369,7 +371,7 @@ func (r *Requester) checkRedirect(target *url.URL, via []*http.Request) error {
 	if target.Scheme != "https" && !(fromHTTP && target.Scheme == "http") {
 		return &egress.Error{Code: egress.CodeSchemeNotAllowed}
 	}
-	if target.User != nil || (target.Port() != "" && target.Port() != "443") || r.allowRedirect == nil || !r.allowRedirect(target) {
+	if target.User != nil || (target.Port() != "" && target.Port() != "443" && !r.mockHost.Matches(target)) || r.allowRedirect == nil || !r.allowRedirect(target) {
 		return &egress.Error{Code: egress.CodeAddressNotAllowed}
 	}
 	return nil

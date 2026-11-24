@@ -13,6 +13,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
@@ -34,6 +35,8 @@ type EndpointClient func(context.Context, identity.User) (*http.Client, error)
 
 // Service 的客户端和时钟可在包内替换；不向用户暴露源站配置。
 type Service struct {
+	tavilyURL      string
+	tavilyMockHost sources.MockHost
 	settings       SettingsReader
 	secrets        *secret.Store
 	endpointClient EndpointClient
@@ -45,9 +48,14 @@ type Service struct {
 
 // New 装配依赖，不发出请求。
 func New(settings SettingsReader, secrets *secret.Store, endpointClient EndpointClient, logger *slog.Logger) *Service {
-	s := &Service{settings: settings, secrets: secrets, endpointClient: endpointClient, logger: logger,
+	s := &Service{tavilyURL: "https://api.tavily.com/search", settings: settings, secrets: secrets, endpointClient: endpointClient, logger: logger,
 		newClient: egress.NewClient, music: musicbrainz.New(musicbrainz.Options{Logger: logger})}
 	s.covers = coverartarchive.New(coverartarchive.Options{Logger: logger, NewClient: func(opts egress.Options) (*http.Client, error) { return s.newClient(opts) }})
+	return s
+}
+
+func (s *Service) WithTavily(endpoint string, host sources.MockHost) *Service {
+	s.tavilyURL, s.tavilyMockHost = endpoint, host
 	return s
 }
 

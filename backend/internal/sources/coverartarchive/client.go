@@ -24,6 +24,7 @@ func Declaration() sources.Declaration {
 }
 
 type Options struct {
+	MockHost                 sources.MockHost
 	DataDirectory, BaseURL   string
 	Logger                   *slog.Logger
 	NewClient                sources.ClientFactory
@@ -42,17 +43,18 @@ func New(opts Options) *Client {
 	if base == "" {
 		base = "https://coverartarchive.org"
 	}
+	allowedHost := func(u *url.URL) bool { return officialHost(u) || opts.MockHost.Matches(u) }
 	requests := sources.Options{
-		DataDirectory: opts.DataDirectory, Logger: opts.Logger, NewClient: opts.NewClient,
+		MockHost: opts.MockHost, DataDirectory: opts.DataDirectory, Logger: opts.Logger, NewClient: opts.NewClient,
 		Now: opts.Now, After: opts.After, Limiter: opts.Limiter,
-		MaxRedirects: 5, AllowRedirect: officialHost,
+		MaxRedirects: 5, AllowRedirect: allowedHost,
 	}
 	images := sources.NewRequester(Declaration(), requests)
 	requests.Limiter = opts.ManifestLimiter
 	if requests.Limiter == nil {
 		requests.Limiter = sources.DefaultLimiter(musicbrainz.Declaration())
 	}
-	requests.AllowRedirect = func(u *url.URL) bool { return officialHost(u) && strings.HasSuffix(u.Path, "/index.json") }
+	requests.AllowRedirect = func(u *url.URL) bool { return allowedHost(u) && strings.HasSuffix(u.Path, "/index.json") }
 	return &Client{baseURL: base, manifest: sources.NewRequester(Declaration(), requests), images: images}
 }
 
