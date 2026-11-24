@@ -8,8 +8,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
-// folderMetadata 是目录名解析产生的辅助证据。它只补充候选中缺失的发行字段，
-// 不参与来源身份或候选归组。
+// folderMetadata 保存从目录名识别出的专辑信息，用于补充缺失的发行字段。
+// 匹配到专辑格式的普通目录沿用专辑归组。
 type folderMetadata struct {
 	AlbumArtist string
 	Album       string

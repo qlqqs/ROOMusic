@@ -521,6 +521,39 @@ func albumEvidence(o SourceObservation) string {
 	return album
 }
 
+func hasTaggedTitleAndArtist(o SourceObservation) bool {
+	return !isCueObservation(o) &&
+		!o.InferredFields["title"] && metadata.NormalizeValue(o.Title) != "" &&
+		!o.InferredFields["artist"] && metadata.NormalizeValue(o.Artist) != ""
+}
+
+// directoryLooseSingles 在普通目录完成格式切分后检查整组。每首的标签号与文件名号
+// 必须相容，整组要么都无编号，要么每首都有相同的编号。
+func directoryLooseSingles(scope string, observations []SourceObservation, filenames map[string]filenameNumbers) bool {
+	if hasAuthoritativeAlbum(observations) {
+		return false
+	}
+	commonTrack := 0
+	for i, o := range observations {
+		if !hasTaggedTitleAndArtist(o) || o.CueSheetPath != "" {
+			return false
+		}
+		track := filenames[NormalizedPath(o.RelativePath)].Track
+		if o.TrackNumber > 0 && !o.InferredFields["track_number"] {
+			if track > 0 && track != o.TrackNumber {
+				return false
+			}
+			track = o.TrackNumber
+		}
+		if i > 0 && track != commonTrack {
+			return false
+		}
+		commonTrack = track
+	}
+	_, albumFolder := parseFolderMetadata(filepath.Base(filepath.FromSlash(scope)))
+	return !albumFolder
+}
+
 func knownAlbumArtists(observations []SourceObservation) map[string]map[string]bool {
 	result := map[string]map[string]bool{}
 	for _, observation := range observations {
@@ -758,10 +791,21 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 			}
 			continue
 		}
+		addDirectoryBucket := func(kind CandidateKind, partition string, observations []SourceObservation) {
+			if meta.kind == CandidateOrdinary && directoryLooseSingles(meta.scope, observations, filenameEvidence) {
+				for _, o := range observations {
+					// 与根目录散曲一致，推断的目录名不进入发行标题决定。
+					o.Album = ""
+					addBucket(CandidateLooseUnknown, meta.scope, NormalizedPath(o.RelativePath), o)
+				}
+				return
+			}
+			b := addBucket(kind, meta.scope, partition, observations...)
+			b.originalKind = meta.kind
+		}
 		if formats := splitContinuousFormats(group, filenameEvidence); len(formats) > 0 {
 			for format, observations := range formats {
-				b := addBucket(CandidateFormatSplit, meta.scope, "format:"+format, observations...)
-				b.originalKind = meta.kind
+				addDirectoryBucket(CandidateFormatSplit, "format:"+format, observations)
 			}
 			continue
 		}
@@ -782,7 +826,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 			}
 		}
 		if len(partCounts) <= 1 || (winner != "" && winnerCount*2 > authoritativeCount) || continuousObservations(group, filenameEvidence) {
-			addBucket(meta.kind, meta.scope, "", group...)
+			addDirectoryBucket(meta.kind, "", group)
 			continue
 		}
 		parts := splitByPartition(group, knownArtists)

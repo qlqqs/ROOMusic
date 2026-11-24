@@ -673,6 +673,115 @@ func TestOrganizeDiscNumberEvidencePriority(t *testing.T) {
 	}
 }
 
+func TestOrganizeDirectoryLooseSingles(t *testing.T) {
+	tagged := func(relative, artist string, track int) SourceObservation {
+		o := filenameObservation(relative)
+		o.Title, o.Artist = "合成曲目 "+path.Base(relative), artist
+		delete(o.InferredFields, "title")
+		delete(o.InferredFields, "artist")
+		o.FieldSources["title"], o.FieldSources["artist"] = "tag", "tag"
+		if track > 0 {
+			o.TrackNumber = track
+			delete(o.InferredFields, "track_number")
+			o.FieldSources["track_number"] = "tag"
+		}
+		return o
+	}
+	a := tagged("Singles/a.flac", "艺人甲", 0)
+	b := tagged("Singles/b.flac", "艺人乙", 0)
+	withAlbum := tagged("Singles/b.flac", "艺人乙", 0)
+	withAlbum.Album = "真实专辑"
+	delete(withAlbum.InferredFields, "album")
+	withAlbum.FieldSources["album"] = "tag"
+	inferredTitle := filenameObservation("Singles/b.flac")
+	inferredTitle.Artist = "艺人乙"
+	delete(inferredTitle.InferredFields, "artist")
+	inferredTitle.FieldSources["artist"] = "tag"
+	inferredArtist := filenameObservation("Singles/b.flac")
+	inferredArtist.Title = "合成曲目乙"
+	delete(inferredArtist.InferredFields, "title")
+	inferredArtist.FieldSources["title"] = "tag"
+
+	var formats []SourceObservation
+	for _, ext := range []string{"flac", "mp3"} {
+		first := tagged("Singles/a."+ext, "艺人甲", 1)
+		second := tagged("Singles/b."+ext, "艺人乙", 1)
+		// 让两种格式各有连续的碟轨，整组碟轨跨格式重复。
+		second.DiscNumber = 2
+		delete(second.InferredFields, "disc_number")
+		second.FieldSources["disc_number"] = "tag"
+		formats = append(formats, first, second)
+	}
+
+	rootObservation := tagged("a.flac", "艺人甲", 0)
+	rootObservation.Album = "" // 扫描器会清除根目录文件的推断专辑。
+	root := organizeSingleCandidate(t, rootObservation)
+	cases := []struct {
+		name  string
+		items []SourceObservation
+		kind  CandidateKind
+	}{
+		{"不同艺人", []SourceObservation{a, b}, CandidateLooseUnknown},
+		{"同一艺人无曲序", []SourceObservation{a, tagged("Singles/b.flac", "艺人甲", 0)}, CandidateLooseUnknown},
+		{"每首曲序都是1", []SourceObservation{tagged("Singles/a.flac", "艺人甲", 1), tagged("Singles/b.flac", "艺人乙", 1)}, CandidateLooseUnknown},
+		{"单文件", []SourceObservation{a}, CandidateLooseUnknown},
+		{"FLAC与MP3格式组各自拆开", formats, CandidateLooseUnknown},
+		{"全无标签", []SourceObservation{filenameObservation("Singles/a.flac"), filenameObservation("Singles/b.flac")}, CandidateOrdinary},
+		{"不同曲序标签", []SourceObservation{tagged("Singles/a.flac", "艺人甲", 1), tagged("Singles/b.flac", "艺人乙", 2)}, CandidateOrdinary},
+		{"不同文件名编号", []SourceObservation{tagged("Singles/01 a.flac", "艺人甲", 0), tagged("Singles/02 b.flac", "艺人乙", 0)}, CandidateOrdinary},
+		{"部分曲序缺失", []SourceObservation{a, tagged("Singles/b.flac", "艺人乙", 1)}, CandidateOrdinary},
+		{"曲序标签与文件名冲突", []SourceObservation{tagged("Singles/02 a.flac", "艺人甲", 1), tagged("Singles/b.flac", "艺人乙", 1)}, CandidateOrdinary},
+		{"目录名识别为专辑", []SourceObservation{tagged("2001 - 范特西/a.flac", "艺人甲", 0), tagged("2001 - 范特西/b.flac", "艺人乙", 0)}, CandidateOrdinary},
+		{"一首带真实专辑标签", []SourceObservation{a, withAlbum}, CandidateOrdinary},
+		{"一首的标题为推断值", []SourceObservation{a, inferredTitle}, CandidateOrdinary},
+		{"一首的艺人为推断值", []SourceObservation{a, inferredArtist}, CandidateOrdinary},
+		{"多碟目录", []SourceObservation{tagged("Album/CD1/a.flac", "艺人甲", 0), tagged("Album/CD2/b.flac", "艺人乙", 0)}, CandidateMultiDisc},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := OrganizeObservations(tc.items)
+			wantCount := 1
+			if tc.kind == CandidateLooseUnknown {
+				wantCount = len(tc.items)
+			}
+			if len(got) != wantCount {
+				t.Fatalf("候选数 = %d，期望 %d", len(got), wantCount)
+			}
+			var paths, wantPaths []string
+			for _, item := range tc.items {
+				wantPaths = append(wantPaths, item.RelativePath)
+			}
+			for _, candidate := range got {
+				if candidate.Anchor.Kind != tc.kind {
+					t.Errorf("候选种类 = %s，期望 %s", candidate.Anchor.Kind, tc.kind)
+				}
+				var members []string
+				for _, tracks := range candidate.Mediums {
+					for _, track := range tracks {
+						members = append(members, track.Observation.RelativePath)
+					}
+				}
+				paths = append(paths, members...)
+				if tc.kind != CandidateLooseUnknown {
+					continue
+				}
+				if len(members) != 1 {
+					t.Fatalf("散曲候选应恰有一首，实际来源 %v", members)
+				}
+				want := CandidateAnchor{Kind: CandidateLooseUnknown, Scope: path.Dir(members[0]), Partition: "source:" + members[0]}
+				if candidate.Anchor != want || candidate.Title != root.Title || candidate.VersionGroup != "" {
+					t.Errorf("散曲锚点、标题或版本组 = %+v/%q/%q，期望 %+v/%q/空", candidate.Anchor, candidate.Title, candidate.VersionGroup, want, root.Title)
+				}
+			}
+			slices.Sort(paths)
+			slices.Sort(wantPaths)
+			if !slices.Equal(paths, wantPaths) {
+				t.Errorf("归组来源 = %v，期望 %v", paths, wantPaths)
+			}
+		})
+	}
+}
+
 func TestOrganizeSameDirectoryFilenameDecisionTable(t *testing.T) {
 	tagged := func(format string, first, last int, album string) []SourceObservation {
 		var items []SourceObservation
