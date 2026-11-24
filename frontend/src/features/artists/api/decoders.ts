@@ -61,9 +61,10 @@ const artistNameDecoder = d.object({
 
 // 艺人图片与简介：自动整理从外部来源补上（M8），或由管理员提供（manual）。外部来源带原页面地址；图片另有作者与许可（Commons 必有许可），
 // 维基百科的简介是 CC BY-SA 4.0；管理员提供的没有地址、作者与许可。插件写入的来源是 plugin:<id>。
+// 网络搜索（web_search）是模型联网整理的，citations 是它依据的网页（标题是外部的不可信文本），其余来源为空数组。
 // 作者、许可是外部的不可信文本，只按纯文本显示；地址只在是 http(s) 时做成链接。
-export const ARTIST_IMAGE_SOURCES = ["fanarttv", "theaudiodb", "commons", "manual"] as const;
-export const ARTIST_BIO_SOURCES = ["wikipedia", "theaudiodb", "manual"] as const;
+export const ARTIST_IMAGE_SOURCES = ["fanarttv", "theaudiodb", "commons", "manual", "web_search"] as const;
+export const ARTIST_BIO_SOURCES = ["wikipedia", "theaudiodb", "manual", "web_search"] as const;
 export type PluginSource = `plugin:${string}`;
 const PLUGIN_SOURCE = /^plugin:[a-z0-9-]{3,40}$/;
 
@@ -77,6 +78,9 @@ function sourceOf<const V extends readonly string[]>(values: V): d.Decoder<V[num
 }
 
 const externalText = (max: number) => d.nullable(d.string({ min: 1, max }));
+const citationDecoder = d.object({ url: d.string({ min: 1, max: 2048 }), title: d.string({ max: 500 }) });
+const citationsDecoder = d.array(citationDecoder, { max: 5 });
+export type ArtistCitationDTO = d.Infer<typeof citationDecoder>;
 export const artistImageDecoder = d.object({
   resource: d.string({ min: 1, max: 255 }),
   source: sourceOf(ARTIST_IMAGE_SOURCES),
@@ -84,6 +88,7 @@ export const artistImageDecoder = d.object({
   author: externalText(500),
   license: externalText(200),
   license_url: externalText(2048),
+  citations: citationsDecoder,
 });
 // 简介最多 4000 个字符，按码点计（与后端按 rune 计一致），扩展区汉字算一个字。
 export const MAX_BIO_CHARS = 4000;
@@ -95,6 +100,7 @@ export const artistBioDecoder = d.object({
   source_url: externalText(2048),
   license: externalText(200),
   license_url: externalText(2048),
+  citations: citationsDecoder,
 });
 export type ArtistImageDTO = d.Infer<typeof artistImageDecoder>;
 export type ArtistBioDTO = d.Infer<typeof artistBioDecoder>;
@@ -220,6 +226,25 @@ const artistLinkPreviewDecoder = d.object({
   name_matches: d.boolean(),
 });
 
+// 管理员看到的网络搜索状态（自动整理的模型层在处理这位艺人时）：排队、处理中、搁置（什么都没找到，证据变了再试）、等你确认。
+// 等你确认时 candidates 是模型提出、审查转给人工的身份候选，每个对应一条例外；名字、简短说明、依据与引用都是外部的不可信文本。
+export const ARTIST_WEB_SEARCH_STATES = ["none", "queued", "running", "shelved", "waiting_human"] as const;
+const artistWebSearchDecoder = d.object({
+  state: d.oneOf(ARTIST_WEB_SEARCH_STATES),
+  candidates: d.array(
+    d.object({
+      exception_id: d.uuid(),
+      source: d.oneOf(["musicbrainz", "wikidata"] as const),
+      external_id: d.string({ min: 1, max: 64 }),
+      name: d.string({ min: 1, max: 1000 }),
+      description: externalText(1000),
+      note: d.string({ max: 2000 }),
+      citations: citationsDecoder,
+    }),
+    { max: 20 },
+  ),
+});
+
 export const decodeArtistPage = d.defineDecoder(artistPageDecoder);
 export const decodeArtistDetail = d.defineDecoder(artistDetailDecoder);
 export const decodeArtistNamesPage = d.defineDecoder(artistNamesPageDecoder);
@@ -244,3 +269,6 @@ export const decodeArtistLinkPreview = d.defineDecoder(artistLinkPreviewDecoder)
 export type ArtistMediaWriteDTO = d.Infer<typeof artistMediaWriteDecoder>;
 export type ArtistMediaRejectDTO = d.Infer<typeof artistMediaRejectDecoder>;
 export type ArtistLinkPreviewDTO = d.Infer<typeof artistLinkPreviewDecoder>;
+export const decodeArtistWebSearch = d.defineDecoder(artistWebSearchDecoder);
+export type ArtistWebSearchDTO = d.Infer<typeof artistWebSearchDecoder>;
+export type ArtistCandidateDTO = ArtistWebSearchDTO["candidates"][number];
