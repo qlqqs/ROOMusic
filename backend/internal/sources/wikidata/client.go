@@ -68,10 +68,7 @@ func (c *Client) ArtistLinks(ctx context.Context, links sources.ArtistLinks) (so
 				ID      string
 				Missing json.RawMessage
 				Claims  struct {
-					P18 []struct {
-						Rank     string
-						Mainsnak struct{ DataValue struct{ Value string } }
-					}
+					P18 []claim[string]
 				}
 				Sitelinks map[string]struct{ Title string }
 			}

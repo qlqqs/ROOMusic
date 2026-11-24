@@ -269,7 +269,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 				}
 			},
 		},
-		curation.SourceRegistration{Declaration: wikidata.Declaration(), ArtistLinks: data},
+		curation.SourceRegistration{Declaration: wikidata.Declaration(), ArtistLinks: data, WikidataArtists: data},
 		curation.SourceRegistration{Declaration: commons.Declaration(), ArtistImages: commonsImages},
 		curation.SourceRegistration{Declaration: wikipedia.Declaration(), ArtistBios: wiki},
 		curation.SourceRegistration{Declaration: fanarttv.Declaration(), ArtistImages: fanart},
@@ -296,6 +296,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger).WithArtists(artistGovernance)
 	operationKinds := []operations.Kind{curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
 		curation.ArtistImageOperations(curationWriter), curation.ArtistBioOperations(curationWriter),
+		curation.ArtistManualImageOperations(curationWriter), curation.ArtistManualBioOperations(curationWriter), curation.ArtistLinkOperations(curationWriter),
 		governance.AutoCorrectionOperations(curationWriter), governance.CorrectionOperations(), governance.TrackCorrectionOperations(), governance.TrackAutoCorrectionOperations(curationWriter), governance.GroupChangeOperations(curationWriter), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(),
 		governance.ReleaseMergeOperations(operations.TypeReleaseMerge, curationWriter), governance.ReleaseMergeOperations(operations.TypeReleaseAutoMerge, curationWriter)}

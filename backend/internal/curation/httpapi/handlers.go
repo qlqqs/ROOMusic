@@ -32,6 +32,7 @@ func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation
 }
 
 func (h *Handlers) Register(mux *http.ServeMux) {
+	h.registerArtistMedia(mux)
 	const base = "/api/v1/admin/curation"
 	mux.HandleFunc("GET "+base+"/sources", h.admin(h.listSources))
 	mux.HandleFunc("PUT "+base+"/sources/{id}", h.admin(h.setSource))

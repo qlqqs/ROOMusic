@@ -1,0 +1,73 @@
+{
+  "body": {
+    "artist": {
+      "album_count": 1,
+      "available": true,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "image": "28e84b8f75db28325ebb4f49a70b634ae7900e53d717a46f1271dc5d8bfd8a8b.png",
+      "initial_group": "D",
+      "name": "邓丽君",
+      "roles": [
+        "release_artist",
+        "album_artist",
+        "track_artist"
+      ],
+      "track_count": 2
+    },
+    "bio": {
+      "lang": "zh",
+      "license": null,
+      "license_url": null,
+      "source": "manual",
+      "source_url": null,
+      "text": "管理员提供的合成简介。"
+    },
+    "image": {
+      "author": null,
+      "license": null,
+      "license_url": null,
+      "resource": "28e84b8f75db28325ebb4f49a70b634ae7900e53d717a46f1271dc5d8bfd8a8b.png",
+      "source": "manual",
+      "source_url": null
+    },
+    "links": {
+      "musicbrainz": "00000000-0000-4000-8000-000000000002",
+      "wikidata": "Q900001"
+    },
+    "name_source": "auto",
+    "names": [
+      {
+        "id": "00000000-0000-4000-8000-000000000003",
+        "is_display_name": true,
+        "key_id": "00000000-0000-4000-8000-000000000004",
+        "name": "邓丽君",
+        "origin": "scan"
+      }
+    ],
+    "names_pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 1
+    },
+    "redirect_artist_id": null,
+    "revision": 12,
+    "role_counts": [
+      {
+        "present": 2,
+        "role": "release_artist",
+        "total": 3
+      },
+      {
+        "present": 2,
+        "role": "album_artist",
+        "total": 3
+      },
+      {
+        "present": 2,
+        "role": "track_artist",
+        "total": 3
+      }
+    ]
+  },
+  "status": 200
+}

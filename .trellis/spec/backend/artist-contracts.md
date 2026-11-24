@@ -74,12 +74,31 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 
 列表、搜索、收藏、治理候选等返回的 `ArtistSummary` 均有 `image: string | null`，有值时为内容寻址图片资源 ID。使用 `GET /api/v1/artworks/{id}` 读取。详情的 `artist.image` 与顶层 `image.resource` 指向同一张图。
 
-| 详情字段 | 有资料时的对象 |
+| 详情字段 | 返回值 |
 | --- | --- |
-| `image` | `{resource, source, source_url, author, license, license_url}`。前三项为字符串，其余为字符串或 null。来源为 `fanarttv`、`theaudiodb`、`commons`。 |
-| `bio` | `{text, lang, source, source_url, license, license_url}`。正文、语言、来源与原文链接为字符串，许可和许可链接为字符串或 null。语言为 `zh` 或 `en`，来源为 `wikipedia` 或 `theaudiodb`。 |
+| `image` | 缺失时为 null。有图时返回 `{resource, source, source_url, author, license, license_url}`。来源为 `manual`、`fanarttv`、`theaudiodb`、`commons` 或 `plugin:<id>`。 |
+| `bio` | 缺失时为 null。有简介时返回 `{text, lang, source, source_url, license, license_url}`。语言为 `zh` 或 `en`。来源为 `manual`、`wikipedia`、`theaudiodb` 或 `plugin:<id>`。 |
+| `links` | 固定返回对象 `{musicbrainz, wikidata}`。值分别为艺人 MBID 和 Q 号，缺少对应的来源返回 null。 |
 
-两项各自解析艺人重定向。有效艺人自身的记录优先，其次取最近并入的身份，同一合并时刻按艺人 ID 升序。旧 ID 请求仍保留该身份的摘要与 `redirect_artist_id`，其中资料取有效艺人。缺图或缺简介时对应字段显式为 `null`。即使曲库中该艺人的全部曲目暂时缺失，仍可查看已整理的资料。
+图片和简介分别先取家族内的人工资料，再取家族内的自动资料。同层优先取有效身份，再取最近并入方，同一合并时刻按艺人 ID 升序。两种外部对应各自依同样的身份顺序取值。旧 ID 的详情保留自身摘要和 `redirect_artist_id`，资料及对应解析到有效身份。艺人的全部曲目暂时缺失时仍可读取资料。
+
+人工图片的 `source_url`、`author`、`license`、`license_url` 均为 null，人工简介的 `source_url`、`license`、`license_url` 均为 null。自动资料带来源页面链接，署名和许可等可选字段有值时为字符串。拆分艺人时，人工和自动资料以及艺人外部对应都保留在写入时的有效身份上。
+
+### 管理员写入资料与对应
+
+五个接口均以 `/api/v1/artists/{id}/` 为前缀，要求同源管理员会话。四个写接口要求 `Idempotency-Key`，并通过 `expected_revision` 校验有效身份详情的 `revision`。版本变化返回 409 `revision_conflict`。请求的艺人 ID 已被并入时，成功响应的 `artist_id` 为有效身份。四种写入成功返回 HTTP 200 及 `{operation_id, artist_id, revision}`，其中 `revision` 为处理后的人工版本。
+
+| 方法与路径 | 输入 | 用途 |
+| --- | --- | --- |
+| `PUT image` | multipart 的文本字段 `expected_revision` 为整数，唯一文件字段 `image` 为 JPEG、PNG 或 WebP，最多 16 MiB | 设置或替换人工图片。 |
+| `PUT bio` | JSON `{expected_revision, text, lang}`，正文去首尾空白后为 1–4000 个 Unicode 码点，`lang` 为 `zh` 或 `en` | 设置或替换人工简介。 |
+| `POST media/reject` | JSON `{expected_revision, field}`，`field` 为 `image` 或 `bio` | 标记当前显示的资料不对。回执另带 `layer`，值为 `manual` 或 `auto`。 |
+| `POST link-preview` | JSON `{url}`，值为 MusicBrainz 艺人链接、裸 MBID、Wikidata 条目链接或裸 Q 号 | 预览确认所需的条目及名字匹配信息，无需幂等键。 |
+| `PUT links` | JSON `{expected_revision, source, external_id}`，`source` 为 `musicbrainz` 或 `wikidata`，`external_id` 为该源条目标识 | 确认该艺人的外部对应。 |
+
+预览成功返回 HTTP 200。对象中的 `source`、`external_id` 和 `name` 为字符串，`description` 为短语或 null，`musicbrainz` 为 MBID 或 null，`wikidata` 为 Q 号或 null，`name_matches` 为布尔值，表示条目名或别名与本地姓名归一化后相同。无效输入返回 400 `invalid_input`，条目不存在返回 404 `not_found`，来源关闭或不可用返回 409 `source_inactive`。
+
+图片文件的格式或尺寸无效返回 400 `invalid_input`，文件超过 16 MiB 或 multipart 请求超过 17 MiB 返回 413 `invalid_input`。
 
 ## 4. 治理与错误矩阵
 

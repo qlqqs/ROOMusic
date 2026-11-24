@@ -13,6 +13,7 @@ type article struct {
 
 type artistMedia struct {
 	QID          string             `json:"qid"`
+	NoP434       bool               `json:"no_p434"`
 	LinkWikidata bool               `json:"link_wikidata"`
 	Commons      string             `json:"commons"`
 	Image        string             `json:"image"`
@@ -40,6 +41,26 @@ func (m artistMedia) relations() []object {
 	return links
 }
 
+func wikidataTerms(a artist) (object, map[string][]object, object) {
+	labels := object{"zh": object{"language": "zh", "value": a.Name}}
+	aliases := map[string][]object{}
+	for _, alias := range a.Aliases {
+		lang, _ := alias["locale"].(string)
+		if lang != "zh" && lang != "en" {
+			continue
+		}
+		aliases[lang] = append(aliases[lang], object{"language": lang, "value": alias["name"]})
+		if alias["primary"] == true {
+			labels[lang] = object{"language": lang, "value": alias["name"]}
+		}
+	}
+	return labels, aliases, object{"zh": object{"language": "zh", "value": a.Note}}
+}
+
+func wikidataClaim(typ string, value any) []object {
+	return []object{{"mainsnak": object{"datavalue": object{"type": typ, "value": value}}, "rank": "normal"}}
+}
+
 func (s *Server) wikidata(r *http.Request, empty bool) response {
 	q := r.URL.Query()
 	switch q.Get("action") {
@@ -47,7 +68,7 @@ func (s *Server) wikidata(r *http.Request, empty bool) response {
 		found := []object{}
 		prefix := "haswbstatement:P434="
 		if id, ok := strings.CutPrefix(q.Get("srsearch"), prefix); ok && !empty && q.Get("list") == "search" {
-			if m := s.data.artist(id).Media; m.QID != "" {
+			if m := s.data.artist(id).Media; m.QID != "" && !m.NoP434 {
 				found = append(found, object{"ns": 0, "title": m.QID})
 			}
 		}
@@ -61,12 +82,21 @@ func (s *Server) wikidata(r *http.Request, empty bool) response {
 			}
 			claims, sites := object{}, object{}
 			if m.Commons != "" {
-				claims["P18"] = []object{{"mainsnak": object{"datavalue": object{"type": "string", "value": m.Commons}}, "rank": "normal"}}
+				claims["P18"] = wikidataClaim("string", m.Commons)
 			}
 			for lang, p := range m.Articles {
 				sites[lang+"wiki"] = object{"site": lang + "wiki", "title": p.Title, "url": articleURL(lang, p.Title)}
 			}
-			return ok(object{"entities": object{qid: object{"id": qid, "claims": claims, "sitelinks": sites}}})
+			if !m.NoP434 {
+				claims["P434"] = wikidataClaim("string", a.ID)
+			}
+			instance := "Q215380"
+			if a.Type == "Person" {
+				instance = "Q5"
+			}
+			claims["P31"] = wikidataClaim("wikibase-entityid", object{"entity-type": "item", "id": instance})
+			labels, aliases, descriptions := wikidataTerms(a)
+			return ok(object{"entities": object{qid: object{"id": qid, "claims": claims, "sitelinks": sites, "labels": labels, "aliases": aliases, "descriptions": descriptions}}})
 		}
 		return ok(object{"entities": object{qid: object{"id": qid, "missing": ""}}})
 	default:
