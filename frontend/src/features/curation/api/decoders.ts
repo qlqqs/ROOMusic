@@ -25,7 +25,7 @@ const settingsDecoder = d.object({
   paused: d.boolean(),
 });
 
-export const SOURCE_CAPABILITIES = ["release_lookup", "recording_lookup", "artist_lookup", "cover_art", "lyrics", "fingerprint_lookup"] as const;
+export const SOURCE_CAPABILITIES = ["release_lookup", "recording_lookup", "artist_lookup", "cover_art", "lyrics", "fingerprint_lookup", "artist_image", "artist_bio"] as const;
 export type SourceCapability = (typeof SOURCE_CAPABILITIES)[number];
 
 export const SOURCE_INACTIVE_REASONS = ["curation_disabled", "enabler_unavailable", "source_disabled", "fingerprint_unavailable", "bundled_key_rejected", "key_missing", "key_invalid"] as const;
@@ -36,6 +36,8 @@ const sourceKeyDecoder = d.object({
   configured: d.boolean(),
   last_four: d.string({ max: 4 }),
   name: d.string({ min: 1, max: 32, pattern: /^[a-z_]+$/ }),
+  // 可选的密钥（Fanart.tv 的个人密钥；发布镜像内置了项目密钥时项目密钥也是）：不填也能用。
+  optional: d.optional(d.boolean()),
   status: d.oneOf(["unchecked", "valid", "invalid"] as const),
 });
 

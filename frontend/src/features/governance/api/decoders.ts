@@ -235,6 +235,8 @@ const OPERATION_TYPES = [
   "artist_split",
   "artist_rename",
   "artist_candidate_ignore",
+  "artist_external_artwork",
+  "artist_external_bio",
 ] as const;
 export type OperationType = (typeof OPERATION_TYPES)[number];
 
@@ -289,6 +291,25 @@ const externalArtworkChangesDecoder = d.object({
     width: d.integer({ min: 1, max: 100_000 }),
     height: d.integer({ min: 1, max: 100_000 }),
   }),
+});
+// 自动整理补的艺人图片与简介（M8）：艺人没有时才写入，每位艺人一张图、一段简介；撤销就是去掉它。
+const artistExternalArtworkChangesDecoder = d.object({
+  kind: d.literal("artist_external_artwork"),
+  source: d.string({ min: 1, max: MAX_PROVIDER }),
+  external_id: d.string({ min: 1, max: 512 }),
+  artwork: d.object({
+    resource_id: d.string({ min: 1, max: 255 }),
+    mime: d.string({ min: 1, max: 100 }),
+    width: d.integer({ min: 1, max: 100_000 }),
+    height: d.integer({ min: 1, max: 100_000 }),
+  }),
+});
+const artistExternalBioChangesDecoder = d.object({
+  kind: d.literal("artist_external_bio"),
+  source: d.string({ min: 1, max: MAX_PROVIDER }),
+  external_id: d.string({ min: 1, max: 512 }),
+  lang: d.oneOf(["zh", "en"] as const),
+  length: d.integer({ min: 1, max: 4000 }),
 });
 const externalLyricsChangesDecoder = d.object({
   kind: d.literal("track_external_lyrics"),
@@ -389,6 +410,8 @@ type OperationChanges =
   | d.Infer<typeof trackAutoCorrectionChangesDecoder>
   | d.Infer<typeof externalArtworkChangesDecoder>
   | d.Infer<typeof externalLyricsChangesDecoder>
+  | d.Infer<typeof artistExternalArtworkChangesDecoder>
+  | d.Infer<typeof artistExternalBioChangesDecoder>
   | d.Infer<typeof externalLinkChangesDecoder>
   | d.Infer<typeof groupChangesDecoder>
   | d.Infer<typeof defaultChangesDecoder>
@@ -405,6 +428,8 @@ const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   if (kind === "track_auto_correction") return trackAutoCorrectionChangesDecoder(input, path);
   if (kind === "release_external_artwork") return externalArtworkChangesDecoder(input, path);
   if (kind === "track_external_lyrics") return externalLyricsChangesDecoder(input, path);
+  if (kind === "artist_external_artwork") return artistExternalArtworkChangesDecoder(input, path);
+  if (kind === "artist_external_bio") return artistExternalBioChangesDecoder(input, path);
   if (kind === "external_link") return externalLinkChangesDecoder(input, path);
   if (kind === "release_group_change") return groupChangesDecoder(input, path);
   if (kind === "release_group_default") return defaultChangesDecoder(input, path);

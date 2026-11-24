@@ -71,7 +71,7 @@ function ArtistItem({ artist, renderPlay }: { artist: ArtistSummaryDTO; renderPl
   return (
     <li className={styles.item}>
       <Link to="/artists/$artistId" params={{ artistId: artist.id }} className={styles.row} aria-labelledby={`${id}-name`} aria-describedby={described === "" ? undefined : described}>
-        <ArtistMonogram id={artist.id} name={artist.name} />
+        <ArtistMonogram id={artist.id} name={artist.name} image={artist.image} />
         <span className={styles.text}>
           <span id={`${id}-name`} className={styles.name}>
             {artist.name}

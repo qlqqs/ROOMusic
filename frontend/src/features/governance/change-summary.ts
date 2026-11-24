@@ -15,8 +15,17 @@ export function operationOriginLabel(origin: OperationOriginDTO | null | undefin
   return origin.plan_id === null || origin.plan_id === undefined ? "管家（直接执行）" : "管家（确认）";
 }
 
-// 外部源的显示名：已知的三个内置源写名字，其他的写标识本身（标识来自后端的声明，不是用户输入）。
-const sourceNames: Record<string, string> = { musicbrainz: "MusicBrainz", coverartarchive: "Cover Art Archive", lrclib: "LRCLIB" };
+// 外部源的显示名：已知的内置源写名字，其他的写标识本身（标识来自后端的声明，不是用户输入）。
+const sourceNames: Record<string, string> = {
+  musicbrainz: "MusicBrainz",
+  coverartarchive: "Cover Art Archive",
+  lrclib: "LRCLIB",
+  wikidata: "Wikidata",
+  commons: "Wikimedia Commons",
+  wikipedia: "维基百科",
+  fanarttv: "Fanart.tv",
+  theaudiodb: "TheAudioDB",
+};
 
 /** 外部源的显示名。 */
 export function sourceName(source: string): string {
@@ -50,6 +59,10 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       return "自动补封面";
     case "track_external_lyrics":
       return "自动补歌词";
+    case "artist_external_artwork":
+      return "自动补艺人图片";
+    case "artist_external_bio":
+      return "自动补艺人简介";
     case "external_link":
       return "对上外部资料";
     case "artist_merge":
@@ -72,6 +85,8 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       if (item.changes?.kind === "track_auto_correction") return "撤销曲目的自动补全";
       if (item.changes?.kind === "release_external_artwork") return "撤销自动补的封面";
       if (item.changes?.kind === "track_external_lyrics") return "撤销自动补的歌词";
+      if (item.changes?.kind === "artist_external_artwork") return "撤销自动补的艺人图片";
+      if (item.changes?.kind === "artist_external_bio") return "撤销自动补的艺人简介";
       if (item.changes?.kind === "external_link") return "解除外部对应";
       if (item.changes?.kind === "artist_merge") return "撤销合并艺人";
       if (item.changes?.kind === "artist_rename") return "撤销修改主名";
@@ -197,6 +212,14 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
     const what = `${changes.lyrics_kind === "synced" ? "同步歌词" : "歌词"}（${changes.lines} 行），来自 ${sourceName(changes.source)}`;
     return [reverse ? `去掉给《${changes.track.title}》自动补的${what}` : `给《${changes.track.title}》补了${what}`];
   }
+  if (changes.kind === "artist_external_artwork") {
+    const what = `${changes.artwork.width}×${changes.artwork.height} 的艺人图片，来自 ${sourceName(changes.source)}`;
+    return [reverse ? `去掉自动补的${what}` : `补了 ${what}`];
+  }
+  if (changes.kind === "artist_external_bio") {
+    const what = `${changes.lang === "zh" ? "中文" : "英文"}简介（${changes.length} 字），来自 ${sourceName(changes.source)}`;
+    return [reverse ? `去掉自动补的${what}` : `补了${what}`];
+  }
   // 外部对应：撤销就是去掉这些对应（专辑与曲目的对应一并去掉）。
   if (changes.kind === "external_link") {
     const source = sourceName(changes.source);
@@ -248,7 +271,8 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
 export function changeLines(item: Pick<OperationItemDTO, "changes"> & Partial<Pick<OperationItemDTO, "type">>): string[] {
   const kind = item.changes?.kind;
   const removal =
-    item.type === "revert" && (kind === "release_external_artwork" || kind === "track_external_lyrics" || kind === "external_link" || kind === "release_merge" || kind === "release_auto_merge");
+    item.type === "revert" &&
+    (kind === "release_external_artwork" || kind === "track_external_lyrics" || kind === "artist_external_artwork" || kind === "artist_external_bio" || kind === "external_link" || kind === "release_merge" || kind === "release_auto_merge");
   return linesOf(item.changes, removal);
 }
 
@@ -271,7 +295,7 @@ export function notRevertibleReason(item: Pick<OperationItemDTO, "type" | "rever
   // 曲目的人工修改：撤不了是这首曲目之后又被修改过，或已经不在库里。
   if (item.type === "track_correction") return "这首曲目之后又被修改过";
   // 外部封面与外部歌词同理：撤不了只可能是它已经不在了（恢复备份后图片文件丢失、被新的一张替换）。
-  if (item.type === "release_external_artwork" || item.type === "track_external_lyrics") return "已被替换";
+  if (item.type === "release_external_artwork" || item.type === "track_external_lyrics" || item.type === "artist_external_artwork" || item.type === "artist_external_bio") return "已被替换";
   // 外部对应从不被替换：撤不了只可能是其中某一项已经不在（被别的撤销去掉了）。
   if (item.type === "external_link") return "对应已被改动";
   // 认领的撤销不要求新版本可见（它的目的就是把修改还给旧版本），所以不写“专辑已不可见”：能不能撤销只看之后有没有修改。
