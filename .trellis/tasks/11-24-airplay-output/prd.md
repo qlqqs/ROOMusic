@@ -49,3 +49,15 @@ HomePod、Apple TV、Mac、Sonos、AirPlay 音箱与功放出现在播放设备�
 ## 不做
 
 - 多房间同步、AirPlay 视频与屏幕镜像、FairPlay 设备。
+
+## 实施与验收记录（2026-11-24）
+
+- 实现（Codex gpt-6.2-astra，三段）：① 发现、注册表、RTSP、bplist、HAP 配对与 shairport-sync 测试设施；② 推流输出、RTP/ALAC、RAOP、AirPlay 2 会话（NTP）、托管输出与接口、统计 schema 3；③ PTP（`internal/ptp`、`cmd/roomusic-ptp`）、设备差异表、回退、Compose 的 `ptp` 服务与生产镜像演练（独立网络命名空间，未占用宿主机 319/320；同时完成 Chromecast 留下的“生产镜像下发现并控制 Cast 假接收端”演练）。
+  审阅后追加：管理员设备行 `capabilities.airplay`、`timing_protocol`、`timing_reason`、`unavailable_reason` 缺值输出 `null`。
+- 许可：按 qlqq 的修正，GPL 实现可读源码但不翻译、不照抄，先记笔记（`research/airplay-notes.md`，逐条注明来源与许可）再编写；主要参考 MIT/Apache（pyatv、airplay2-sender-cpp）、RFC 5054 与 shairport-sync 中 MIT 许可的文件。
+- 测试（Codex gpt-6.2-sol）：13 个测试文件；发现 1 个缺陷（迟到的 Follow_Up 覆盖较新的 Sync），实现代理已修，回归用例通过。
+- 前端与文档（主代理）：AirPlay 协议开关、设备说明（音质、对时方式、原因码转成中文）、不可用与待配对标签、音质与 PIN 配对对话框、播放设备列表的 AirPlay 标签与不可用原因；设备合同 AirPlay 一节、部署说明（`ptp` 服务与端口占用）、开发环境说明、README。
+- 合入前实际运行：`go build ./...`；`TestPackageDependencyDirections`；`go test ./internal/ptp/... ./internal/devices/... ./internal/insights/...`；`scripts/check-production-compose.sh`；
+  `ROOMUSIC_TEST_RUN='AirPlay|PTP|Cast|UPnP|Zone|Migration|Insights|APISamples' sg docker -c ./scripts/test-integration.sh`（151 项通过，含 0076、0077 往返）；`sg docker -c 'scripts/test-airplay.sh --ptp'`（原生 PTP、端口占用、失钟、classic 四个场景通过）；
+  前端 `typecheck`、`lint`、全部 vitest（`agent-settings.test.tsx` 在全量并发下偶发超时，单独运行 36 项通过）；e2e `lan-devices.spec.ts`；390/1440 截图核对设置页与配对对话框。
+- 未做：HomePod、Apple TV、Mac、Sonos 真机；PTP 使用软件时间戳，精度只在本机隔离网络测过；`-race` 因本机没有 C 编译器未运行。
