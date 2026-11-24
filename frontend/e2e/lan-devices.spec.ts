@@ -6,7 +6,7 @@ import { expect, test } from "./support/fixtures";
 import { LAN_DEVICE_API, manualRenderer, rendererIp } from "./support/lan-devices";
 import { heading } from "./support/locators";
 
-const screenshots = resolve(import.meta.dirname, "../../temp/m8-upnp-shots");
+const screenshots = resolve(import.meta.dirname, "../../temp/lan-device-shots");
 const settingsPath = "/settings/devices";
 const playbackApi = "/api/v1/me/playback/devices";
 const rendererName = manualRenderer.name;
@@ -60,7 +60,7 @@ for (const width of [390, 1440]) {
     await expect(page.getByText(/分配给 1 位成员/)).toBeVisible();
     const member = mock.users.find((user) => user.username === "listener");
     expect(mock.callsTo("PUT", `${LAN_DEVICE_API}/settings`).map(({ body }) => body)).toEqual([{ enabled: true }, { shared: false }]);
-    expect(mock.callsTo("POST", `${LAN_DEVICE_API}/devices`).map(({ body }) => body)).toEqual([{ address: rendererIp }]);
+    expect(mock.callsTo("POST", `${LAN_DEVICE_API}/devices`).map(({ body }) => body)).toEqual([{ kind: "upnp", address: rendererIp }]);
     expect(mock.callsTo("PUT", `${LAN_DEVICE_API}/devices/${encodeURIComponent(manualRenderer.udn)}/grants`).map(({ body }) => body))
       .toEqual([{ user_ids: [member?.id] }]);
     await expectNoHorizontalOverflow(page, `局域网设备设置 ${width}px`);

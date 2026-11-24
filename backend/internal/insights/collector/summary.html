@@ -34,7 +34,8 @@ td:last-child,th:last-child{text-align:right}td{overflow-wrap:anywhere}a{color:L
 <div><h3>启用的成员数</h3>{{template "counts" .Members}}</div>
 <div><h3>启用的插件数</h3>{{template "counts" .Features.Plugins}}</div>
 <div><h3>浏览器输出端数</h3>{{template "counts" .Devices30d.browser}}</div>
-<div><h3>UPnP 输出端数</h3>{{template "counts" .Devices30d.upnp}}</div></div></section>
+<div><h3>UPnP 输出端数</h3>{{template "counts" .Devices30d.upnp}}</div>
+<div><h3>Google Cast 输出端数</h3>{{template "counts" .Devices30d.cast}}</div></div></section>
 </main><footer><p><a href="https://github.com/qlqqs/ROOMusic/blob/main/docs/insights.md">收集了什么、怎么关闭</a> · <a href="/api/v1/summary">汇总 JSON</a></p>
 <p>统计时间 {{.GeneratedAt.Format "2006-01-02 15:04 UTC"}}</p></footer></body></html>
 {{define "counts"}}{{if .}}<table><thead><tr><th>类别</th><th>实例数</th></tr></thead><tbody>{{range $k,$n := .}}<tr><td>{{$k}}</td><td>{{$n}}</td></tr>{{end}}</tbody></table>{{else}}<p>暂无上报</p>{{end}}{{end}}

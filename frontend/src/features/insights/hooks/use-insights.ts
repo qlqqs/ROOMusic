@@ -36,7 +36,8 @@ export function useAcknowledgeInsightsNotice() {
   });
 }
 
-/** 许可与源代码地址：进程不重启就不变。 */
+/** 许可与源代码地址（已登录时）：进程不重启就不变。登录页不经查询缓存，见 SourceLink。 */
 export function useAbout() {
-  return useQuery({ queryKey: insightsKeys.about, queryFn: ({ signal }) => fetchAbout(signal), select: (response) => response.data, staleTime: Number.POSITIVE_INFINITY });
+  const { generation } = useViewerScope();
+  return useQuery({ queryKey: insightsKeys.about(generation), queryFn: ({ signal }) => fetchAbout(signal), select: (response) => response.data, staleTime: Number.POSITIVE_INFINITY });
 }

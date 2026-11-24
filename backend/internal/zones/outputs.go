@@ -41,7 +41,7 @@ func (s *Service) ClaimOutput(ctx context.Context, userID, deviceID string, inpu
 			s.publishZone(userID, result.Zone)
 		}
 	}()
-	if (z.device.Kind == "upnp") != input.Managed || !z.visible() {
+	if managedKind(z.device.Kind) != input.Managed || !z.visible() {
 		return ClaimOutputResult{}, ErrNotFound
 	}
 	tracks, err := s.loadSummaries(ctx, z.persisted.Queue.Entries)
@@ -506,7 +506,7 @@ func (s *Service) accessStream(ctx context.Context, userID, zoneID string, seq i
 	z.mu.Lock()
 	defer z.mu.Unlock()
 	h := z.handleFor(&seq)
-	if z.device.Kind == "upnp" || z.output == nil || outputError(z.output) != nil || h == nil {
+	if managedKind(z.device.Kind) || z.output == nil || outputError(z.output) != nil || h == nil {
 		return nil, "", ErrStreamGone
 	}
 	if take {

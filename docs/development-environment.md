@@ -163,3 +163,13 @@ mise exec -- go run ./cmd/roomusic-fake-renderer -name 客厅 -addr 0.0.0.0:0
 在开发实例打开管理员设置里的“局域网设备”，即可发现“客厅”。同机网卡禁用组播回送时，在输出的基址后加 `/description.xml`，用完整描述地址手动添加。另一终端可用 `-name 书房 -rel-time zero` 启动第二台，模拟持续播放时 `GetPositionInfo` 的 `RelTime` 一直为零。多网卡环境可在 `-addr` 中写要公告的局域网 IPv4。
 
 播放时用 `curl --noproxy '*' "$base/_fake/state"` 查看当前 URI、播放状态、音量、位置、拉取字节数、采样率和位深，其中 `base` 取终端输出的地址。按 Ctrl-C 会发送下线公告并结束拉流。
+
+## 开发用 Google Cast 假接收端
+
+```bash
+cd backend
+mise exec -- go run ./cmd/roomusic-fake-cast -name 客厅Cast -addr 0.0.0.0:0
+```
+
+终端输出 CASTV2 端口与状态接口地址。在“局域网设备”里打开 Google Cast 即可发现；组播不回送时，按 `IP:端口` 手动添加并选择“Google Cast”。`-fixed-volume` 模拟音量只能在设备上调的接收端。
+播放时用 `curl --noproxy '*' "<状态接口地址>/_fake/state"` 查看加载的地址、播放状态、音量与拉取字节数。

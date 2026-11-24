@@ -64,12 +64,21 @@ func TestInsightsCollectorHeartbeatValidation(t *testing.T) {
 	store := newInsightsCollector(t)
 	handler := NewHandler(store)
 	valid := encodeInsightsHeartbeat(t, insightsHeartbeat(collectorFixtureID))
+	current := insightsHeartbeat(collectorFixtureID)
+	current.Schema, current.Devices30d.Cast = 2, "0"
+	validV2 := encodeInsightsHeartbeat(t, current)
+	withoutCast := strings.Replace(validV2, `,"cast":"0"`, "", 1)
 	exactLimit := valid + strings.Repeat(" ", 4096-len(valid))
 	for _, tc := range []struct {
 		name, body, contentType string
 		want                    int
 	}{
-		{"valid", valid, "application/json", http.StatusNoContent},
+		{"valid_v1", valid, "application/json", http.StatusNoContent},
+		{"valid_v2", validV2, "application/json", http.StatusNoContent},
+		{"v1_with_cast", strings.Replace(validV2, `"schema":2`, `"schema":1`, 1), "application/json", http.StatusBadRequest},
+		{"v2_missing_cast", withoutCast, "application/json", http.StatusBadRequest},
+		{"v2_null_cast", strings.Replace(validV2, `"cast":"0"`, `"cast":null`, 1), "application/json", http.StatusBadRequest},
+		{"v2_invalid_cast", strings.Replace(validV2, `"cast":"0"`, `"cast":"20+"`, 1), "application/json", http.StatusBadRequest},
 		{"exactly_4KiB", exactLimit, "application/json; charset=utf-8", http.StatusNoContent},
 		{"over_4KiB", exactLimit + " ", "application/json", http.StatusBadRequest},
 		{"unknown_field", strings.Replace(valid, `"schema":1`, `"schema":1,"client_ip":"203.0.113.20"`, 1), "application/json", http.StatusBadRequest},
@@ -123,6 +132,7 @@ func TestInsightsCollectorSummaryAndPage(t *testing.T) {
 	}
 	h := NewHandler(store)
 	newest := insightsHeartbeat(collectorFixtureID)
+	newest.Schema, newest.Devices30d.Cast = schema.Version, "1"
 	previous := newest
 	previous.Version = "1.1.0"
 	newest.InstanceID = strings.ToUpper(newest.InstanceID)
@@ -149,7 +159,7 @@ func TestInsightsCollectorSummaryAndPage(t *testing.T) {
 		Versions: distribution{"1.2.3": 1, "2.0.0": 1}, Arch: distribution{"amd64": 1, "arm64": 1}, Container: distribution{"true": 1, "false": 1},
 		Library: map[string]distribution{"tracks": {"1k-10k": 2}, "releases": {"1-999": 2}},
 		Members: distribution{"2-5": 2}, Features: FeatureSummary{AutoCuration: 1, StewardModel: 1, MCPToken: 1, LANDevices: 1, DSP: 1, ScheduledScan: 1, Plugins: distribution{"1": 1, "0": 1}},
-		Devices30d: map[string]distribution{"browser": {"2-5": 2}, "upnp": {"0": 2}},
+		Devices30d: map[string]distribution{"browser": {"2-5": 2}, "upnp": {"0": 2}, "cast": {"1": 1}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("汇总结果 = %+v，期望 %+v", got, want)

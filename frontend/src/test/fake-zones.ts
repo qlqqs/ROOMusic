@@ -55,7 +55,7 @@ export function fakeZoneServer(options: { trackOf?: (trackId: string) => PlayerT
   let after: Partial<Zone> | null = null;
   let entries: QueueEntry[] = [];
   let imported = false;
-  let device: Device = { deviceId: DEVICE_ID, zoneId: ZONE_ID, name: "测试设备", kind: "browser", online: false, lastSeenAt: Date.now(), volume: 1, muted: false, volumeControllable: true, outputSessionId: null, upnp: null };
+  let device: Device = { deviceId: DEVICE_ID, zoneId: ZONE_ID, name: "测试设备", kind: "browser", online: false, lastSeenAt: Date.now(), volume: 1, muted: false, volumeControllable: true, outputSessionId: null, lan: null };
   let zone: Zone = {
     zoneId: ZONE_ID, deviceId: DEVICE_ID, revision: 1, queueRevision: 0, queueLength: 0, mode: "sequential", settings: defaultSettings,
     current: null, hasNext: false, intent: "pause", status: "idle", fault: null, failures: {},
@@ -225,7 +225,7 @@ export function fakeZoneServer(options: { trackOf?: (trackId: string) => PlayerT
     },
     activateDevice: async () => ({ serverTime: Date.now(), device }),
     putDeviceSampleRate: async (_deviceId, rate) => {
-      if (device.upnp !== null) device = { ...device, upnp: { ...device.upnp, maxSampleRate: rate } };
+      if (device.lan !== null) device = { ...device, lan: { ...device.lan, maxSampleRate: rate } };
       return { serverTime: Date.now(), device };
     },
     deleteDevice: async () => {

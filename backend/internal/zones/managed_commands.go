@@ -56,7 +56,7 @@ func (s *Service) CommandFromOutput(ctx context.Context, userID, sessionID, comm
 	if err := outputError(out); err != nil {
 		return CommandResult{}, err
 	}
-	if z.device.Kind != "upnp" {
+	if !managedKind(z.device.Kind) {
 		return CommandResult{}, ErrInvalidInput
 	}
 	before := z.persisted.Revision

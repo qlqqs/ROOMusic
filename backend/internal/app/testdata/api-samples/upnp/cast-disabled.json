@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "cast_disabled",
+      "message": "Google Cast 发现已关闭"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

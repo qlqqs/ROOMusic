@@ -152,7 +152,7 @@ describe("局域网播放设备", () => {
       name,
       kind: "upnp",
       online: true,
-      upnp: { maxSampleRate: 48000, formatDeclared: false, occupiedBy },
+      lan: { maxSampleRate: 48000, formatDeclared: false, occupiedBy },
     });
     const free = renderer("2", "空闲音响", null);
     const mine = renderer("3", "自己的音响", ownOccupant);
@@ -163,7 +163,7 @@ describe("局域网播放设备", () => {
     const activate = vi.fn(() => activation.promise);
     const saveRate = vi.fn(async () => ({
       serverTime: Date.now(),
-      device: { ...free, upnp: { maxSampleRate: 96000, formatDeclared: false, occupiedBy: null } },
+      device: { ...free, lan: { maxSampleRate: 96000, formatDeclared: false, occupiedBy: null } },
     }));
     const { controller } = testPlayerController(server, { deps: { userId, api: {
       ...server.api,
@@ -184,7 +184,7 @@ describe("局域网播放设备", () => {
     expect(controller.getSnapshot().isLocal).toBe(true);
     const device = {
       ...busy,
-      upnp: { maxSampleRate: 48000, formatDeclared: false, occupiedBy: ownOccupant },
+      lan: { maxSampleRate: 48000, formatDeclared: false, occupiedBy: ownOccupant },
     };
     activation.resolve({ serverTime: Date.now(), device });
     await pending;
@@ -196,7 +196,7 @@ describe("局域网播放设备", () => {
     const { controller, free, saveRate } = await setup();
     await controller.setDeviceSampleRate(free.deviceId, 96000);
     expect(saveRate).toHaveBeenCalledExactlyOnceWith(free.deviceId, 96000);
-    expect(controller.getSnapshot().devices.find((row) => row.device.deviceId === free.deviceId)?.device.upnp)
+    expect(controller.getSnapshot().devices.find((row) => row.device.deviceId === free.deviceId)?.device.lan)
       .toStrictEqual({ maxSampleRate: 96000, formatDeclared: false, occupiedBy: null });
   });
 

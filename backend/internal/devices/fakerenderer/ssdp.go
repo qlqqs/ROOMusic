@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/devices/lan"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/sys/unix"
 )
@@ -35,7 +36,7 @@ func advertisedAddr(listener net.Listener) (*net.Interface, net.IP, string, erro
 		c.Close()
 	}
 	a, ok := netip.AddrFromSlice(ip)
-	if !ok || !lanIP(a.Unmap()) {
+	if !ok || !lan.IsLANAddress(a.Unmap()) {
 		return nil, nil, "", fmt.Errorf("SSDP 公告需要局域网 IPv4")
 	}
 	interfaces, err := net.Interfaces()

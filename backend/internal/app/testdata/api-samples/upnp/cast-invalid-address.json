@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_address",
+      "message": "需要局域网 IPv4 地址"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

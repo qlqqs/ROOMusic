@@ -67,7 +67,7 @@ func (s *Service) RenameDevice(ctx context.Context, userID, deviceID, name strin
 		return DeviceResult{}, ErrInvalidInput
 	}
 	return s.updateDevice(ctx, userID, deviceID, func(z *zoneRuntime, d *PersistedDevice) error {
-		if d.Kind == "upnp" {
+		if managedKind(d.Kind) {
 			return ErrInvalidInput
 		}
 		d.Name = name

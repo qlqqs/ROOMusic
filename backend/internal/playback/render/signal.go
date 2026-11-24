@@ -72,11 +72,7 @@ func (s *session) segmentSignal(d *decoder) signalPath {
 		encode.Params["bit_depth"] = s.format.BitDepth
 	} else {
 		encode.Quality, encode.Lossy = "low", true
-		if s.format.Codec == "opus" {
-			encode.Params["bitrate_kbps"] = 128
-		} else {
-			encode.Params["bitrate_kbps"] = 256
-		}
+		encode.Params["bitrate_kbps"] = bitrateKbps[s.format.Codec]
 	}
 	path.append(encode)
 	return path

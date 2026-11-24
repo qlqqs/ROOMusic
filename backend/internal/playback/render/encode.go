@@ -12,6 +12,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
+var bitrateKbps = map[string]int{"opus": 128, "aac": 256, "mp3": 320}
+
 type encoder struct {
 	process      *ffmpeg.Process
 	output       *io.PipeWriter
@@ -38,6 +40,9 @@ func newEncoder(ctx context.Context, reservation processStarter, tool *ffmpeg.To
 		args = append(args, "-channel_layout", "0x"+strconv.FormatUint(uint64(pcm.Layout), 16))
 	}
 	args = append(args, "-i", "pipe:0", "-map_metadata", "-1", "-threads", "1")
+	if bitrate := bitrateKbps[f.Codec]; bitrate != 0 {
+		args = append(args, "-b:a", strconv.Itoa(bitrate)+"k")
+	}
 	switch f.Codec {
 	case "flac":
 		args = append(args, "-c:a", "flac", "-compression_level", "5", "-f", "flac")
@@ -47,13 +52,15 @@ func newEncoder(ctx context.Context, reservation processStarter, tool *ffmpeg.To
 			sampleFormat = "s32p"
 		}
 		args = append(args, "-c:a", "alac", "-sample_fmt", sampleFormat, "-bits_per_raw_sample", strconv.Itoa(f.BitDepth))
+	case "mp3":
+		args = append(args, "-c:a", "libmp3lame", "-f", "mp3")
 	case "opus":
-		args = append(args, "-c:a", "libopus", "-b:a", "128k", "-application", "audio", "-ar", strconv.Itoa(pcm.SampleRate), "-f", "ogg", "-page_duration", "100000")
+		args = append(args, "-c:a", "libopus", "-application", "audio", "-ar", strconv.Itoa(pcm.SampleRate), "-f", "ogg", "-page_duration", "100000")
 		if f.Channels > 2 {
 			args = append(args, "-mapping_family", "1")
 		}
 	case "aac":
-		args = append(args, "-c:a", "aac", "-profile:a", "aac_low", "-b:a", "256k", "-ar", strconv.Itoa(pcm.SampleRate))
+		args = append(args, "-c:a", "aac", "-profile:a", "aac_low", "-ar", strconv.Itoa(pcm.SampleRate))
 		if f.Delivery == "stream" {
 			args = append(args, "-f", "adts")
 		}

@@ -43,3 +43,13 @@
 ## 不做
 
 - 多房间同步、Cast 屏幕上的自定义界面（自定义接收端应用）、视频。
+
+## 实施与验收记录（2026-11-24）
+
+- 实现（Codex gpt-6.2-astra）：`internal/devices/{mdns,cast,lan,fakecast}`、`cmd/roomusic-fake-cast`、zones 设备种类泛化与 `SingleTrack`、MP3 编码、迁移、接口与样本、统计 schema 2。审阅后追加：非 Cast 设备行输出 `"format": null`。
+- 测试（Codex gpt-6.2-sol）：7 个测试文件（帧、客户端、状态机、mDNS、地址规则、MP3 与采样率、假接收端端到端、共享与格式、协议关闭、迁移夹具、统计端 schema 1/2）。发现 1 个缺陷：被其他发送端接管时没有发出设备端 pause 事件；实现代理已修，`TestPostgreSQLCast` 4 项通过。
+- 前端（主代理）：协议开关、设备类型标签、手动添加选类型、Cast 编码格式对话框、播放设备列表的 Google Cast 标签（成员不显示采样率上限）；接口契约表登记匿名统计与 Cast 样本；登录页源代码链接改为不进查询缓存（修复退出后缓存非空的 3 个用例）。
+- 合入时：main 已有 `0074_artist_web_search`，本任务迁移改为 `0075_cast_devices`，回退测试里本任务的分支改为 75。
+- 本轮实际运行：`ROOMUSIC_TEST_RUN='Cast|UPnP|Migration|Insights|APISamples' sg docker -c ./scripts/test-integration.sh` 通过（含逐个迁移往返）；前端 `typecheck`、`lint`、全部 vitest（205 个文件、4837 项）通过；
+  e2e `lan-devices.spec.ts` 5 项通过；390/1440 截图核对设置页与编码格式对话框。
+- 未做：真实 Chromecast / Nest 试用；生产镜像在 `cap_drop: [ALL]` 下发现并控制假接收端的演练留到 AirPlay 子任务的部署演练一并做；`-race` 因本机没有 C 编译器未运行。

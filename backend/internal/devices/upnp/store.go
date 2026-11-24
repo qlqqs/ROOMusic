@@ -11,12 +11,12 @@ import (
 
 func (s *Service) Settings(ctx context.Context) (Settings, error) {
 	var v Settings
-	err := s.db.QueryRowContext(ctx, `SELECT enabled, shared FROM upnp_settings WHERE id=1`).Scan(&v.Enabled, &v.Shared)
+	err := s.db.QueryRowContext(ctx, `SELECT enabled, shared,upnp_enabled,cast_enabled FROM upnp_settings WHERE id=1`).Scan(&v.Enabled, &v.Shared, &v.UPnPEnabled, &v.CastEnabled)
 	return v, err
 }
 
 func (s *Service) manualDevices(ctx context.Context) ([]Device, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT udn,address,name,model,capabilities FROM upnp_manual_devices ORDER BY udn`)
+	rows, err := s.db.QueryContext(ctx, `SELECT kind,udn,address,name,model,capabilities FROM upnp_manual_devices ORDER BY udn`)
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +25,7 @@ func (s *Service) manualDevices(ctx context.Context) ([]Device, error) {
 	for rows.Next() {
 		var d Device
 		var caps []byte
-		if err := rows.Scan(&d.UDN, &d.Address, &d.Name, &d.Model, &caps); err != nil {
+		if err := rows.Scan(&d.Kind, &d.UDN, &d.Address, &d.Name, &d.Model, &caps); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(caps, &d.Capabilities); err != nil {
@@ -41,9 +41,9 @@ func (s *Service) saveManual(ctx context.Context, d Device) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO upnp_manual_devices(udn,address,name,model,capabilities)
-	VALUES ($1,$2,$3,$4,$5) ON CONFLICT (udn) DO UPDATE SET address=excluded.address,
-	name=excluded.name,model=excluded.model,capabilities=excluded.capabilities`, d.UDN, d.Address, d.Name, d.Model, caps)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO upnp_manual_devices(udn,address,name,model,capabilities,kind)
+	VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (udn) DO UPDATE SET address=excluded.address,
+	name=excluded.name,model=excluded.model,capabilities=excluded.capabilities`, d.UDN, d.Address, d.Name, d.Model, caps, d.Kind)
 	return err
 }
 

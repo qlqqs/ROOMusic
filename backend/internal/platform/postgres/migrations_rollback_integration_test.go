@@ -17,6 +17,14 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	75: `INSERT INTO playback_devices(id,user_id,kind,name,external_id,max_sample_rate)
+ VALUES ('f7400000-0000-4000-8000-000000000002','f6900000-0000-4000-8000-000000000001','cast','合成 Cast 设备','cast:migration',96000);
+ INSERT INTO playback_zones(id,user_id,device_id,position_seconds)
+ VALUES ('f7400000-0000-4000-8000-000000000003','f6900000-0000-4000-8000-000000000001','f7400000-0000-4000-8000-000000000002',18);
+ INSERT INTO cast_device_formats VALUES ('cast:migration','flac',96000);
+ INSERT INTO upnp_device_grants VALUES ('cast:migration','f6900000-0000-4000-8000-000000000001');
+ INSERT INTO upnp_manual_devices(udn,address,name,model,capabilities,kind)
+ VALUES ('cast:migration','192.168.44.2:8009','客厅','Fake','{}','cast');`,
 	74: `INSERT INTO curation_pending_items(id,target_type,artist_id,kind,status,rule_version,input_digest,evidence)
  VALUES ('e7300000-0000-4000-8000-000000000001','artist','a6800000-0000-4000-8000-000000000001','artist_identity','resolved',1,repeat('a',64),'{}');
  INSERT INTO curation_model_exceptions(pending_item_id,plan_item_id,tool,input,preview,provider,review_id,review_model,review_decision,review_source,status,decided_at,decided_by)
@@ -469,12 +477,26 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if m.Version == 71 {
 				rollbackExec(t, db, beforeSourcePluginMigration)
 			}
-			if m.Version == 69 || m.Version == 70 {
+			if m.Version == 69 || m.Version == 70 || m.Version == 75 {
 				rollbackExec(t, db, beforeUPnPMigration)
+			}
+			if m.Version == 75 {
+				rollbackExec(t, db, upnpDiscoveryRollbackFixture)
+				rollbackExec(t, db, upnpPlaybackRollbackFixture)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
+			if m.Version == 75 {
+				var settingsPreserved bool
+				var legacyKind string
+				err := db.QueryRowContext(t.Context(), `SELECT enabled AND NOT shared AND cast_enabled AND upnp_enabled,
+					(SELECT kind FROM upnp_manual_devices WHERE udn='uuid:upnp-migration') FROM upnp_settings WHERE id=1`).
+					Scan(&settingsPreserved, &legacyKind)
+				if err != nil || !settingsPreserved || legacyKind != "upnp" {
+					t.Fatalf("0075 旧设置/手动设备迁移 = %v / %q，错误 %v", settingsPreserved, legacyKind, err)
+				}
+			}
 			if strings.HasSuffix(m.Name, "_instance_insights.sql") {
 				assertInsightsMigrationSeed(t, db)
 				for _, tc := range []struct{ id, state string }{{"true", "23505"}, {"false", "23514"}} {

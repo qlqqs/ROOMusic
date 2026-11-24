@@ -323,7 +323,7 @@ func deviceOf(z *zoneRuntime) Device {
 	d := z.device
 	caps := cloneCapabilities(d.Capabilities)
 	device := Device{DeviceID: d.DeviceID, ZoneID: z.persisted.ZoneID, Name: d.Name, Kind: d.Kind, Online: z.online, LastSeenAt: timestamp(d.LastSeenAt), Volume: d.Volume, Muted: d.Muted, Capabilities: caps, OutputSessionID: cloneValue(z.outputSessionID)}
-	if d.Kind == "upnp" {
+	if managedKind(d.Kind) {
 		device.ExternalID, device.MaxSampleRate = d.ExternalID, d.MaxSampleRate
 		device.FormatDeclared, device.OccupiedBy = cloneValue(&z.formatDeclared), cloneValue(z.occupiedBy)
 		device.Online, device.OutputSessionID = z.managedVisible, nil

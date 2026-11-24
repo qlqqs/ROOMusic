@@ -114,7 +114,8 @@ import {
 import { decodeAlbumResults, decodeTrackResults, decodeSearchSuggestions } from "../features/search/api/decoders";
 import { decode as d, decodeErrorEnvelope } from "../shared/api";
 import { decodeInstalledPlugin, decodeInstalledPlugins, decodePluginPreview } from "../features/curation/api/plugins";
-import { decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings } from "../features/lan-devices/api/decoders";
+import { decodeCastFormat, decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings } from "../features/lan-devices/api/decoders";
+import { decodeAbout, decodeInsightsStatus } from "../features/insights/api/decoders";
 import { decodeTrackSummaries } from "../features/catalog/api/track-summary";
 import { listApiSampleNames, loadApiSample, loadRawApiSample } from "./api-samples";
 import {
@@ -672,6 +673,13 @@ const successContracts: Record<string, Contract> = {
   "upnp/list": { status: 200, decode: decodeLanDevices },
   "upnp/manual-added": { status: 200, decode: decodeLanDevice },
   "upnp/grants-updated": { status: 200, decode: decodeLanDeviceGrants },
+  "upnp/cast-settings": { status: 200, decode: decodeLanDeviceSettings },
+  "upnp/cast-list": { status: 200, decode: decodeLanDevices },
+  "upnp/cast-manual-added": { status: 200, decode: decodeLanDevice },
+  "upnp/cast-format": { status: 200, decode: decodeCastFormat },
+  "insights/status": { status: 200, decode: decodeInsightsStatus },
+  "insights/disabled": { status: 200, decode: decodeInsightsStatus },
+  "insights/about": { status: 200, decode: decodeAbout },
   "upnp/playback-snapshot": { status: 200, decode: decodeSnapshot, preservesWireShape: false },
   "upnp/playback-occupied": { status: 200, decode: decodeDeviceResult, preservesWireShape: false },
   "plugins/preview": { status: 200, decode: decodePluginPreview },
@@ -687,6 +695,10 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "upnp/device-busy": { status: 409, code: "device_busy" },
   "upnp/disabled": { status: 409, code: "upnp_disabled" },
   "upnp/invalid-address": { status: 400, code: "invalid_address" },
+  "upnp/cast-disabled": { status: 409, code: "cast_disabled" },
+  "upnp/cast-invalid-address": { status: 400, code: "invalid_address" },
+  "upnp/cast-invalid-format": { status: 400, code: "invalid_input" },
+  "insights/forced-off": { status: 409, code: "insights_forced_off" },
   "steward/continue-nothing": { status: 409, code: "nothing_to_continue" },
   "steward/conversation-not-found": { status: 404, code: "not_found" },
   "steward/invalid-context": { status: 400, code: "invalid_request" },
@@ -899,6 +911,7 @@ const emptyResponseContracts: Record<string, { status: number }> = {
   "dsp/responses/preset-delete": { status: 204 },
   "steward/tokens/revoked": { status: 204 },
   "upnp/manual-removed": { status: 204 },
+  "insights/notice-acknowledgement": { status: 204 },
   "plugins/delete": { status: 204 },
   "steward/events-unavailable": { status: 204 },
   "steward/memories-cleared": { status: 204 },

@@ -775,7 +775,7 @@ export class PlayerController {
     const cache = this.rowsCache;
     if (cache !== null && cache.devices === devices && cache.zones === zones && cache.localId === localId && cache.targetId === targetId) return cache.rows;
     const rows = devices.map((device) => {
-      const occupiedBy = device.upnp?.occupiedBy ?? null;
+      const occupiedBy = device.lan?.occupiedBy ?? null;
       const occupant = occupiedBy === null || occupiedBy.userId === this.deps.userId ? null : occupiedBy.displayName;
       return { device, zone: zones.get(device.zoneId) ?? null, isLocal: device.deviceId === localId, isTarget: device.zoneId === targetId, occupant };
     });

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	Version       = 1
+	Version       = 2
 	DevVersion    = "dev"
 	MaxBytes      = 4 << 10
 	Zero          = "0"
@@ -56,6 +56,7 @@ type Features struct {
 type Devices struct {
 	Browser string `json:"browser"`
 	UPnP    string `json:"upnp"`
+	Cast    string `json:"cast,omitempty"`
 }
 
 func LibraryBucket(n int) string {
@@ -106,7 +107,19 @@ var ErrInvalid = errors.New("心跳格式无效")
 func (p Payload) Validate() error {
 	library := []string{Zero, OneTo999, OneTo10k, TenTo50k, FiftyKPlus}
 	small := []string{Zero, One, TwoToFive, SixPlus}
-	if p.Schema != Version || !uuid.Valid(p.InstanceID) ||
+	switch p.Schema {
+	case 1:
+		if p.Devices30d.Cast != "" {
+			return ErrInvalid
+		}
+	case 2:
+		if !slices.Contains(small, p.Devices30d.Cast) {
+			return ErrInvalid
+		}
+	default:
+		return ErrInvalid
+	}
+	if !uuid.Valid(p.InstanceID) ||
 		len(p.Version) > 64 || (p.Version != DevVersion && !buildinfo.ValidVersion(p.Version)) ||
 		p.OS != "linux" || (p.Arch != "amd64" && p.Arch != "arm64") ||
 		!slices.Contains(library, p.Library.Tracks) || !slices.Contains(library, p.Library.Releases) ||

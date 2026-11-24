@@ -76,7 +76,7 @@ export function VolumeButton() {
   const Icon = silent ? VolumeX : snapshot.volume < 0.5 ? Volume1 : Volume2;
   if (fixed && anchor !== null) setAnchor(null);
   // 局域网设备不能由软件调音量时，提示到设备上去调（M8 U3）。
-  const deviceVolume = fixed && snapshot.device?.upnp != null;
+  const deviceVolume = fixed && snapshot.device?.lan != null;
   return <span className={styles.volumeButton} title={fixed ? (deviceVolume ? "在设备上调音量" : "这台设备不能调音量") : undefined}>
     {deviceVolume ? <span className={styles.deviceVolume}>设备音量</span> : null}
     <Button variant="icon" label={snapshot.muted ? "音量（已静音）" : "音量"} aria-haspopup="dialog" aria-expanded={anchor !== null} icon={<Icon size={16} />} disabled={fixed} onClick={(event) => setAnchor(event.currentTarget.getBoundingClientRect())} />

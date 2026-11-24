@@ -1,0 +1,7 @@
+{
+  "body": {
+    "codec": "flac",
+    "max_sample_rate": 96000
+  },
+  "status": 200
+}
