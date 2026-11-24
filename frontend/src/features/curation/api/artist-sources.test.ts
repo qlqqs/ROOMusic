@@ -25,3 +25,17 @@ it("艺人资料源保留图片和简介能力，密钥 optional 可以省略或
     expect(() => decodeCurationSource(withValue(fanart, ["keys", 1, "optional"], optional))).toThrow(d.DecodeError);
   }
 });
+
+it("解码网络搜索的模型与搜索依赖及 search_unconfigured 状态", () => {
+  const source = decodeCurationSources(sampleBody("curation/sources")).items.find(({ id }) => id === "web_search");
+  if (source === undefined) throw new Error("缺少网络搜索来源样本");
+  expect(source.requirements).toEqual([{ kind: "model", ready: false }, { kind: "search", ready: false }]);
+  const missing = {
+    ...source,
+    inactive_reason: "search_unconfigured",
+    requirements: [{ kind: "model", ready: true }, { kind: "search", ready: false }],
+  };
+  expect(decodeCurationSource(missing)).toStrictEqual(missing);
+  expect(() => decodeCurationSource(withValue(missing, ["requirements", 0, "kind"], "reviewer"))).toThrow(d.DecodeError);
+  expect(() => decodeCurationSource(withValue(missing, ["requirements", 0, "ready"], "false"))).toThrow(d.DecodeError);
+});
