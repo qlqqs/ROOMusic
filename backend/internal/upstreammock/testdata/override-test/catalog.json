@@ -1,0 +1,15 @@
+{
+  "releases": [
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "title": "测试目录覆盖的发行"
+    }
+  ],
+  "search": [
+    {
+      "title": "测试目录覆盖的搜索结果",
+      "url": "https://override.example.invalid/release",
+      "content": "测试数据的结果"
+    }
+  ]
+}
