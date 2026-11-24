@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/testsupport"
@@ -28,6 +29,10 @@ type c5Fixture struct {
 	tracks         []string
 	service        *zones.Service
 }
+
+type inactiveTimer struct{}
+
+func (inactiveTimer) Stop() bool { return false }
 
 func newC5Fixture(t *testing.T) *c5Fixture {
 	t.Helper()
@@ -59,7 +64,11 @@ func newC5Fixture(t *testing.T) *c5Fixture {
 		t.Fatal(err)
 	}
 	exec(`UPDATE catalog_projection_state SET status='ready',manifest_sealed=true,published_generation=target_generation`)
-	f.service = zones.NewService(db, zones.Options{Renderer: zonestest.NewRenderer(zonestest.Options{})})
+	f.service = zones.NewService(db, zones.Options{
+		Renderer: zonestest.NewRenderer(zonestest.Options{}),
+		// 这些用例只断言同步结果，共享服务的后台定时器会在前后快照之间改动分区。
+		AfterFunc: func(time.Duration, func()) zones.Timer { return inactiveTimer{} },
+	})
 	t.Cleanup(f.service.Close)
 	for _, d := range StewardTools(f.service, catalog.NewStore(db)) {
 		if d.MinRole != tool.RoleMember || d.Revertible {
