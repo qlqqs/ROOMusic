@@ -8,7 +8,7 @@ HomePod、Apple TV、Mac、Sonos、AirPlay 音箱与功放出现在播放设备�
 
 ## 已定（qlqq）
 
-- 完整 AirPlay 2：配对、加密、PTP 对时；参考成熟开源实现自己写，只用协议事实与可观察行为，**不翻译或照抄 GPL 代码**（OwnTone、cliairplay、saundo 只看文档与行为描述）；MIT/Apache 代码（pyatv、libraop、airplay2-sender-cpp、brutella/hap）可以参考实现思路，引用时注明出处。
+- 完整 AirPlay 2：配对、加密、PTP 对时；参考成熟开源实现自己写：GPL 实现（OwnTone、cliairplay、saundo、shairport-sync）可以读源码理解协议与行为，但不翻译、不照抄（不逐函数改写、不照搬拆分与命名、不复制注释或数据表）；先把协议事实与行为记成笔记（`research/airplay-notes.md`，注明来源与许可），再按笔记与本项目结构编写，注释写明“行为参考 <项目>”。MIT/Apache 代码（pyatv、libraop、airplay2-sender-cpp、brutella/hap）可以参考实现思路，引用时注明出处。（2026-11-24 qlqq 修正：原先只允许看文档与行为描述，过严。）
 - 主程序容器加固不放弃：PTP 放在独立的小容器，只给绑定低端口的权限。
 
 ## 主代理取的默认值
