@@ -1,0 +1,10 @@
+{"file": ".trellis/tasks/11-24-artist-web-search/research/repo.md", "reason": "仓库现状与锚点（A–H）"}
+{"file": ".trellis/tasks/11-24-artist-web-search/prd.md", "reason": "父任务需求与决定"}
+{"file": ".trellis/tasks/11-24-artist-manual-media/design.md", "reason": "前置子任务的 artist_link、人工层、依据泛化"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "模型层、待定项、例外、程序层"}
+{"file": ".trellis/spec/backend/steward-runtime-contracts.md", "reason": "后台会话、工具作用域、审查"}
+{"file": ".trellis/spec/backend/steward-web-contracts.md", "reason": "联网工具与搜索来源"}
+{"file": ".trellis/spec/backend/steward-review-contracts.md", "reason": "独立审查证据"}
+{"file": ".trellis/spec/backend/plugin-contracts.md", "reason": "插件艺人能力"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移与约束写法"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验证标准"}

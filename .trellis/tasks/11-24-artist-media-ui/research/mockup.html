@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>艺人资料与网络搜索</title>
+<style>
+  body { margin: 0; background: var(--background, #fff); color: var(--foreground, #171717); font-family: var(--font-sans, system-ui, sans-serif); }
+  .wrap { padding: 16px; display: grid; gap: 14px; max-width: 980px; margin: 0 auto; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 13px; color: var(--muted-foreground, #666); }
+  .bar .grp { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border, #e5e5e5); border-radius: calc(var(--radius, 8px)); background: var(--card, #fff); }
+  .bar .grp { flex-wrap: wrap; }
+  .bar button { white-space: nowrap; font: inherit; font-size: 12.5px; border: 0; background: none; color: var(--foreground, #171717); padding: 4px 10px; border-radius: calc(var(--radius, 8px) - 2px); cursor: pointer; }
+  .bar button:hover { background: var(--accent, #f4f4f5); color: var(--accent-foreground, #171717); }
+  .bar button[aria-pressed="true"] { background: var(--primary, #171717); color: var(--primary-foreground, #fff); }
+  .cap { font-size: 12.5px; color: var(--muted-foreground, #666); margin: 2px 2px 0; }
+
+  /* —— 以下是 ROOMusic 自己的色板，只作用在 .rm 里 —— */
+  .rm {
+    --bg: #f3f2f2; --surface: #eae9e9; --text: #201f1d; --t2: #605d5d; --accent: #b68235; --a7: #7d5411; --a1: #fff3e4; --a2: #ffe3bf;
+    --n1: #f8f4f4; --n3: #d7d3d3; --n4: #bab6b6; --n5: #9b9797; --n6: #7d7979; --hover: rgba(32,31,29,.06); --ok: #3d7548; --warn: #b3261e;
+    --sh-sm: 0 1px 2px rgba(45,43,43,.14); --sh-lg: 0 12px 32px rgba(45,43,43,.22);
+    --font: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    color-scheme: light; position: relative; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px;
+    border-radius: 10px; padding: 24px 32px 40px; border: 1px solid var(--border, #e5e5e5);
+  }
+  .rm * { box-sizing: border-box; }
+  .rm button { font: inherit; color: inherit; }
+  .rm :focus-visible { outline: 2px solid var(--a7); outline-offset: 2px; }
+  .ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; display: block; }
+
+  .back { display: inline-flex; align-items: center; gap: 2px; color: var(--t2); font-size: 13px; margin-left: -6px; padding: 0 6px; min-height: 28px; border-radius: 4px; }
+  .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 24px; align-items: end; margin-top: 12px; }
+  .info { display: grid; gap: 8px; min-width: 0; }
+  .info h1 { margin: 0; font-size: 24px; font-weight: 600; }
+  .roles { display: flex; gap: 6px; }
+  .roles a { text-decoration: none; cursor: pointer; transition: border-color .15s ease, color .15s ease; }
+  .roles a:hover { border-color: var(--n5); color: var(--text); }
+  .roles a { height: 22px; padding: 0 8px; border: 1px solid var(--n3); border-radius: 11px; color: var(--t2); font-size: 12px; display: inline-grid; place-items: center; }
+  .meta { color: var(--t2); font-size: 13px; }
+  .acts { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+  .play { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px 0 12px; border: 0; border-radius: 4px; background: var(--accent); color: #fff !important; font-size: 13px; cursor: pointer; }
+  .play .ico { fill: currentColor; width: 14px; height: 14px; }
+  .ib { width: 32px; height: 32px; display: inline-grid; place-items: center; border: 0; background: none; border-radius: 4px; color: var(--t2); cursor: pointer; position: relative; }
+  .ib:hover { background: var(--hover); color: var(--text); }
+  .ib.sm { width: 26px; height: 26px; }
+  .ib.sm .ico { width: 14px; height: 14px; }
+
+  /* 圆章 */
+  .avw { position: relative; width: 168px; height: 168px; }
+  .av { width: 168px; height: 168px; border-radius: 50%; overflow: hidden; position: relative; display: grid; place-items: center; background: hsl(28 28% 87%); color: hsl(28 38% 26%); font-size: 60px; font-weight: 500; user-select: none; }
+  .av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .32s ease; }
+  .av .mono { transition: opacity .32s ease; }
+  .veil { position: absolute; inset: 0; border: 0; border-radius: 50%; background: rgba(32,31,29,0); color: #fff; display: grid; place-items: center; cursor: pointer; transition: background .18s ease; }
+  .veil .ico { width: 26px; height: 26px; opacity: 0; transform: translateY(4px); transition: opacity .18s ease, transform .18s ease; }
+  .avw:hover .veil, .veil:focus-visible { background: rgba(32,31,29,.36); }
+  .avw:hover .veil .ico, .veil:focus-visible .ico { opacity: 1; transform: none; }
+  .avw[data-drop] .av { outline: 2px dashed var(--accent); outline-offset: 5px; }
+  .avw[data-drop] .veil { background: rgba(182,130,53,.28); }
+  .avw[data-drop] .veil .ico { opacity: 1; transform: scale(1.08); }
+  .ring { position: absolute; inset: -7px; width: 182px; height: 182px; pointer-events: none; }
+  .ring circle { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 60 512; transform-origin: 50% 50%; animation: spin 2.4s linear infinite; }
+  .ring circle.track { stroke: var(--n3); stroke-dasharray: none; animation: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .ring circle { animation: none; stroke-dasharray: 120 452; } }
+
+  /* 来源印章：圆章右下 45° 处 */
+  .seal { position: absolute; left: 127px; top: 127px; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--n3); background: var(--n1); color: var(--t2); display: grid; place-items: center; cursor: pointer; box-shadow: var(--sh-sm); transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+  .seal .ico { width: 15px; height: 15px; }
+  .seal:hover { transform: scale(1.06); border-color: var(--n5); }
+  .seal[data-kind="model"] { color: var(--a7); border-color: var(--accent-soft, #e1ad66); }
+  .seal[data-kind="pending"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .seal[data-kind="pending"]::after { content: ""; position: absolute; top: -1px; right: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--warn); border: 2px solid var(--bg); }
+  .seal[data-kind="searching"] { color: var(--a7); cursor: default; }
+
+  /* 简介 */
+  .bio { margin-top: 12px; max-width: 72ch; display: grid; gap: 4px; }
+  .bio p { margin: 0; line-height: 1.7; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; white-space: pre-line; }
+  .bio p[data-open] { display: block; }
+  .bio .row { display: flex; align-items: center; gap: 2px; margin-left: -5px; min-height: 26px; }
+  .bio .row .sep { flex: 1; }
+  .bio .adm { display: inline-flex; opacity: 0; transition: opacity .15s ease; }
+  .bio:hover .adm, .bio:focus-within .adm { opacity: 1; }
+  .bio .src[data-kind="model"] { color: var(--a7); }
+  .chev .ico { transition: transform .2s ease; }
+  .chev[aria-expanded="true"] .ico { transform: rotate(180deg); }
+  .editor { width: 100%; min-height: 120px; resize: vertical; border: 1px solid var(--n6); border-radius: 4px; background: var(--n1); padding: 8px 10px; font: inherit; line-height: 1.7; color: var(--text); }
+  .editor:focus-visible { outline: 2px solid var(--a7); outline-offset: 1px; }
+  .count { font-size: 12px; color: var(--t2); font-variant-numeric: tabular-nums; margin-left: 4px; }
+
+  /* 提示与弹层 */
+  :where([data-tip]) { position: relative; }
+  [data-tip]::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translate(-50%, 2px); white-space: nowrap; background: #2d2b2b; color: #f8f4f4; font-size: 12px; line-height: 1; padding: 6px 8px; border-radius: 4px; opacity: 0; pointer-events: none; transition: opacity .12s ease .25s, transform .12s ease .25s; z-index: 30; }
+  [data-tip]:hover::after, [data-tip]:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
+  [data-tip][data-open-pop]::after { display: none; }
+
+  .pop { position: absolute; z-index: 20; width: 300px; background: var(--n1); border-radius: 7px; box-shadow: var(--sh-lg); padding: 10px; display: grid; gap: 2px; animation: pop .14s ease-out; }
+  @keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+  @media (prefers-reduced-motion: reduce) { .pop { animation: none; } }
+  .pop .li { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 0 6px; border-radius: 4px; color: var(--text); font-size: 13px; text-decoration: none; }
+  .pop a.li:hover { background: var(--hover); }
+  .pop .li .ico { width: 15px; height: 15px; color: var(--t2); }
+  .pop .li .out { margin-left: auto; width: 13px; height: 13px; opacity: .55; }
+  .pop .li .dim { color: var(--t2); }
+  .pop .head { display: flex; align-items: center; gap: 8px; padding: 2px 6px 6px; color: var(--t2); }
+  .pop .head .ico { width: 15px; height: 15px; }
+  .pop .head[data-kind="model"] { color: var(--a7); }
+  .pop .foot { display: flex; gap: 2px; border-top: 1px solid rgba(32,31,29,.1); margin-top: 6px; padding-top: 6px; }
+  .pop .foot .sep { flex: 1; }
+  .ib.danger:hover { color: var(--warn); background: rgba(179,38,30,.08); }
+
+  .cand { display: grid; grid-template-columns: 40px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 6px; border-radius: 5px; }
+  .cand:hover { background: var(--hover); }
+  .cand img { width: 40px; height: 40px; border-radius: 50%; display: block; }
+  .cand b { font-weight: 600; font-size: 13px; display: block; }
+  .cand small { display: flex; gap: 10px; color: var(--t2); font-size: 12px; margin-top: 2px; align-items: center; font-variant-numeric: tabular-nums; }
+  .cand small span { display: inline-flex; align-items: center; gap: 3px; }
+  .cand small .ico { width: 12px; height: 12px; }
+  .ok { color: var(--ok); }
+  .ib.go:hover { color: var(--ok); background: rgba(61,117,72,.1); }
+
+  .field { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 1px solid var(--n6); border-radius: 4px; background: #fff; }
+  .field:focus-within { outline: 2px solid var(--a7); outline-offset: 1px; }
+  .field input { border: 0; outline: 0; flex: 1; min-width: 0; font: inherit; font-size: 13px; background: none; color: var(--text); }
+  .field .ico { color: var(--t2); width: 15px; height: 15px; }
+  .field[data-valid] { border-color: var(--ok); }
+  .field[data-valid] > .ico:first-child { color: var(--ok); }
+  .spin { animation: spin .8s linear infinite; }
+
+  .toast { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 12px; background: #2d2b2b; color: #f8f4f4; border-radius: 20px; box-shadow: var(--sh-lg); animation: rise .2s ease-out; z-index: 40; }
+  @keyframes rise { from { opacity: 0; transform: translate(-50%, 6px); } }
+  .toast .ico { width: 15px; height: 15px; }
+  .toast .ib { color: #f8f4f4; border-radius: 50%; }
+  .toast .ib:hover { background: rgba(248,244,244,.12); color: #fff; }
+  .toast .cd { position: absolute; inset: 2px; width: 28px; height: 28px; transform: rotate(-90deg); }
+  .toast .cd circle { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 82; stroke-dashoffset: 0; animation: cd 6s linear forwards; }
+  @keyframes cd { to { stroke-dashoffset: 82; } }
+
+  /* 设置页 */
+  .rm.set { padding: 24px 32px; }
+  .set h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+  .grpbox { background: var(--n1); border-radius: 7px; box-shadow: var(--sh-sm); margin-top: 10px; }
+  .srow { display: grid; grid-template-columns: 22px minmax(0,1fr) auto auto; gap: 12px; align-items: center; min-height: 52px; padding: 8px 16px; }
+  .srow + .srow { border-top: 1px solid rgba(32,31,29,.08); }
+  .srow > .ico { color: var(--t2); width: 18px; height: 18px; }
+  .srow[data-hl] > .ico { color: var(--a7); }
+  .srow .name { font-size: 14px; }
+  .deps { display: inline-flex; gap: 4px; }
+  .dep { position: relative; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--t2); border: 0; background: none; cursor: pointer; }
+  .dep:hover { background: var(--hover); }
+  .dep .ico { width: 15px; height: 15px; }
+  .dep::before { content: ""; position: absolute; right: 3px; bottom: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); border: 1.5px solid var(--n1); }
+  .dep[data-miss] { color: var(--n4); }
+  .dep[data-miss]::before { background: var(--warn); }
+  .key { font-size: 12.5px; color: var(--t2); font-variant-numeric: tabular-nums; display: inline-flex; gap: 6px; align-items: center; }
+  .sw { width: 36px; height: 20px; border-radius: 10px; border: 0; background: var(--n4); position: relative; cursor: pointer; transition: background .18s ease; padding: 0; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: var(--sh-sm); transition: transform .18s ease; }
+  .sw[aria-checked="true"] { background: var(--accent); }
+  .sw[aria-checked="true"]::after { transform: translateX(16px); }
+  .sw:disabled { opacity: .45; cursor: not-allowed; }
+
+  @media (max-width: 640px) {
+    .rm, .rm.set { padding: 16px; }
+    .hero { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+    .info { justify-items: center; }
+    .avw, .av { width: 128px; height: 128px; }
+    .av { font-size: 46px; }
+    .ring { width: 142px; height: 142px; }
+    .seal { left: 95px; top: 95px; width: 36px; height: 36px; }
+    .pop { left: 50% !important; transform: translateX(-50%); width: min(300px, calc(100vw - 48px)); }
+    .bio .adm { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <span class="grp" id="views"></span>
+    <span class="grp" id="states"></span>
+  </div>
+  <div class="rm" id="artist"></div>
+  <p class="cap">管理员视角下：悬停圆章可更换图片（也可把图片直接拖到圆章上），点右下角的印章看来源和操作。在页面任意位置粘贴 MusicBrainz 或 Wikidata 链接，会直接弹出对应预览。</p>
+  <div class="rm set" id="settings"></div>
+</div>
+
+<script>
+const I = {"globe":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20\"/><path d=\"M2 12h20\"/>","sparkles":"<path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"/><path d=\"M20 2v4\"/><path d=\"M22 4h-4\"/><circle cx=\"4\" cy=\"20\" r=\"2\"/>","book":"<path d=\"M12 5v16\"/><path d=\"M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z\"/>","imgplus":"<path d=\"M16 5h6\"/><path d=\"M19 2v6\"/><path d=\"M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5\"/><path d=\"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/>","link":"<path d=\"M9 17H7A5 5 0 0 1 7 7h2\"/><path d=\"M15 7h2a5 5 0 1 1 0 10h-2\"/><line x1=\"8\" x2=\"16\" y1=\"12\" y2=\"12\"/>","flag":"<path d=\"M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528\"/>","pencil":"<path d=\"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z\"/><path d=\"m15 5 4 4\"/>","undo":"<path d=\"M9 14 4 9l5-5\"/><path d=\"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","userpen":"<path d=\"M2 21a8 8 0 0 1 10.821-7.487\"/><path d=\"M21.378 16.626a1 1 0 0 0-3.004-3.004l-4.01 4.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z\"/><circle cx=\"10\" cy=\"8\" r=\"5\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","shuffle":"<path d=\"m18 14 4 4-4 4\"/><path d=\"m18 2 4 4-4 4\"/><path d=\"M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22\"/><path d=\"M2 6h1.972a4 4 0 0 1 3.6 2.2\"/><path d=\"M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45\"/>","heart":"<path d=\"M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5\"/>","more":"<circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/>","left":"<path d=\"m15 18-6-6 6-6\"/>","loader":"<path d=\"M21 12a9 9 0 1 1-6.219-8.56\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","copyright":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M14.83 14.83a4 4 0 1 1 0-5.66\"/>","out":"<path d=\"M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6\"/><path d=\"m21 3-9 9\"/><path d=\"M15 3h6v6\"/>","disc":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M6 12c0-1.7.7-3.2 1.8-4.2\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M18 12c0 1.7-.7 3.2-1.8 4.2\"/>","puzzle":"<path d=\"M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z\"/>","down":"<path d=\"m6 9 6 6 6-6\"/>","user":"<circle cx=\"12\" cy=\"8\" r=\"5\"/><path d=\"M20 21a8 8 0 0 0-16 0\"/>","image":"<path d=\"M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/><path d=\"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\"/>"};
+const ic = (n, cls = "") => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[n]}</svg>`;
+
+/* 合成的抽象头像（不是任何真实人物） */
+function portrait(h1, h2, seed) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><radialGradient id="g" cx="${30 + seed * 7}%" cy="28%" r="90%"><stop offset="0" stop-color="hsl(${h1} 45% 78%)"/><stop offset="1" stop-color="hsl(${h2} 32% 30%)"/></radialGradient></defs><rect width="200" height="200" fill="url(#g)"/><circle cx="100" cy="84" r="38" fill="hsl(${h1} 22% 22%)" opacity=".55"/><path d="M28 210c6-52 40-78 72-78s66 26 72 78z" fill="hsl(${h2} 25% 18%)" opacity=".6"/></svg>`;
+  return "data:image/svg+xml," + encodeURIComponent(svg);
+}
+const IMG = { licensed: portrait(32, 12, 1), model: portrait(200, 230, 4), manual: portrait(340, 300, 2), c1: portrait(32, 12, 1), c2: portrait(120, 160, 6), link: portrait(32, 12, 1) };
+
+const BIO = {
+  licensed: { kind: "licensed", text: "苏念，华语流行女歌手、词曲作者。2016 年起在网络发表原创作品，2019 年签约独立厂牌并发行首张录音室专辑《潮汐笔记》。作品以钢琴与弦乐编排为主，常写城市与海边的日常。2022 年凭《晚来的信》获得年度最佳新人提名，之后的巡演覆盖十余座城市。", tip: "维基百科 · CC BY-SA 4.0" },
+  model: { kind: "model", text: "苏念是一位以网络发布起步的华语独立歌手，代表作有《晚来的信》《潮汐笔记》。她的作品多为自己作词作曲，风格偏抒情流行，常与独立厂牌合作发行。以上内容由模型根据公开网页整理。", tip: "模型整理 · 3 个网页" },
+  manual: { kind: "manual", text: "苏念，华语独立歌手。代表作《晚来的信》。", tip: "管理员提供" },
+};
+
+const S = { view: "admin", state: "licensed", pop: null, open: false, toast: null, drop: false, editing: false, linkUrl: "", linkPhase: "idle", searchReady: true, web: true, wiki: true, fanart: true, plugin: false };
+const states = [["licensed", "有许可来源"], ["model", "模型整理"], ["manual", "管理员提供"], ["searching", "搜索中"], ["pending", "待确认"], ["none", "暂无资料"]];
+
+function renderBar() {
+  document.getElementById("views").innerHTML = [["admin", "管理员"], ["user", "普通账号"]].map(([k, l]) => `<button aria-pressed="${S.view === k}" data-view="${k}">${l}</button>`).join("");
+  document.getElementById("states").innerHTML = states.map(([k, l]) => `<button aria-pressed="${S.state === k}" data-state="${k}">${l}</button>`).join("");
+}
+
+const admin = () => S.view === "admin";
+const hasData = () => ["licensed", "model", "manual"].includes(S.state);
+const hasImage = () => hasData() && !S.noImg;
+const hasBio = () => hasData() && !S.noBio;
+
+function sealHTML() {
+  const st = S.state;
+  if (st === "none" || (hasData() && S.noImg)) return "";
+  if (st === "searching") return admin() ? `<span class="seal" data-kind="searching" data-tip="网络搜索中" tabindex="0">${ic("globe")}</span>` : "";
+  if (st === "pending") return admin() ? `<button class="seal" data-kind="pending" data-pop="pending" data-tip="有 2 个候选待确认" aria-label="有 2 个候选待确认" ${S.pop === "pending" ? "data-open-pop" : ""}>${ic("globe")}</button>` : "";
+  const map = { licensed: ["book", "图片来源"], model: ["sparkles", "模型整理"], manual: ["userpen", "管理员提供"] };
+  const [n, tip] = map[st];
+  return `<button class="seal" data-kind="${st}" data-pop="image" data-tip="${tip}" aria-label="${tip}" ${S.pop === "image" ? "data-open-pop" : ""}>${ic(n)}</button>`;
+}
+
+function avatarHTML() {
+  const img = hasImage() ? `<img src="${IMG[S.state]}" alt="">` : "";
+  const mono = `<span class="mono" style="opacity:${hasImage() ? 0 : 1}">苏</span>`;
+  const ring = S.state === "searching" && admin() ? `<svg class="ring" viewBox="0 0 182 182"><circle class="track" cx="91" cy="91" r="88" opacity=".5"/><circle cx="91" cy="91" r="88"/></svg>` : "";
+  const veil = admin() ? `<button class="veil" data-act="upload" aria-label="${hasImage() ? "更换图片" : "上传图片"}">${ic("imgplus")}</button>` : "";
+  return `<div class="avw" ${S.drop ? "data-drop" : ""}><div class="av">${mono}${img}${veil}</div>${ring}${sealHTML()}${popHTML()}</div>`;
+}
+
+function srcRows(kind, what) {
+  if (kind === "licensed") {
+    return what === "image"
+      ? `<a class="li" href="#" onclick="return false">${ic("image")}Wikimedia Commons${ic("out", "out")}</a><div class="li">${ic("user")}<span>Lin Chen</span></div><a class="li" href="#" onclick="return false">${ic("copyright")}CC BY 4.0${ic("out", "out")}</a>`
+      : `<a class="li" href="#" onclick="return false">${ic("book")}维基百科 · 苏念${ic("out", "out")}</a><a class="li" href="#" onclick="return false">${ic("copyright")}CC BY-SA 4.0${ic("out", "out")}</a>`;
+  }
+  if (kind === "model") {
+    return ["music.example.cn/artist/sunian", "baike.example.com/item/苏念", "indie-label.example.net/roster"].map((u) => `<a class="li" href="#" onclick="return false">${ic("globe")}<span class="dim">${u}</span>${ic("out", "out")}</a>`).join("");
+  }
+  return `<div class="li">${ic("userpen")}<span>管理员 · 11 月 20 日</span></div>`;
+}
+
+function footHTML(what) {
+  if (!admin()) return "";
+  const flagTip = what === "image" ? "图片不对" : "简介不对";
+  return `<div class="foot">
+    <button class="ib sm danger" data-act="flag-${what}" data-tip="${flagTip}" aria-label="${flagTip}">${ic("flag")}</button>
+    <button class="ib sm" data-act="linkmode" data-tip="指定对应" aria-label="指定对应">${ic("link")}</button>
+    <span class="sep"></span>
+    ${what === "image" ? `<button class="ib sm" data-act="upload" data-tip="更换图片" aria-label="更换图片">${ic("imgplus")}</button>` : `<button class="ib sm" data-act="edit" data-tip="编辑简介" aria-label="编辑简介">${ic("pencil")}</button>`}
+  </div>`;
+}
+
+function popHTML() {
+  if (S.pop === "image") {
+    const kind = S.state;
+    return `<div class="pop" role="dialog" aria-label="图片来源" style="left:110px;top:168px">${srcRows(kind, "image")}${footHTML("image")}</div>`;
+  }
+  if (S.pop === "pending") {
+    const c = (img, name, q, hit, tot) => `<div class="cand"><img src="${img}" alt=""><div><b>${name}</b><small><span>${q}</span><span data-tip="与库里 ${tot} 首中的 ${hit} 首吻合">${ic("disc")}${hit}/${tot}</span></small></div><button class="ib sm go" data-act="pick" data-tip="就是这位" aria-label="就是这位">${ic("check")}</button></div>`;
+    return `<div class="pop" role="dialog" aria-label="候选" style="left:110px;top:168px">      ${c(IMG.c1, "苏念", "Q118204551", 5, 6)}${c(IMG.c2, "苏念（演员）", "Q65020173", 0, 6)}
+      <div class="foot"><button class="ib sm danger" data-act="none-of" data-tip="都不是" aria-label="都不是">${ic("x")}</button><span class="sep"></span><button class="ib sm" data-act="linkmode" data-tip="指定对应" aria-label="指定对应">${ic("link")}</button><button class="ib sm" data-act="upload" data-tip="上传图片" aria-label="上传图片">${ic("imgplus")}</button></div></div>`;
+  }
+  if (S.pop === "link") {
+    const valid = S.linkPhase !== "idle";
+    let preview = "";
+    if (S.linkPhase === "loading") preview = `<div class="cand"><span style="width:40px;height:40px;border-radius:50%;background:var(--surface)"></span><div><b style="width:90px;height:12px;background:var(--surface);border-radius:3px"></b><small style="width:120px;height:10px;background:var(--surface);border-radius:3px;margin-top:6px"></small></div>${ic("loader", "spin")}</div>`;
+    if (S.linkPhase === "ready") preview = `<div class="cand"><img src="${IMG.link}" alt=""><div><b>苏念</b><small><span>Q118204551</span><span class="ok">${ic("check")}名字一致</span></small></div><button class="ib sm go" data-act="link-apply" data-tip="对应到这位" aria-label="对应到这位">${ic("check")}</button></div>`;
+    return `<div class="pop" role="dialog" aria-label="指定对应" style="left:110px;top:168px">
+      <label class="field" ${valid ? "data-valid" : ""}>${ic("link")}<input id="linkin" placeholder="MusicBrainz / Wikidata" value="${S.linkUrl}" aria-label="MusicBrainz 或 Wikidata 链接">${S.linkUrl ? `<button class="ib sm" data-act="link-clear" aria-label="清空" style="margin-right:-6px">${ic("x")}</button>` : ""}</label>
+      ${preview}</div>`;
+  }
+  return "";
+}
+
+function bioHTML() {
+  if (!hasBio()) return "";
+  const b = BIO[S.state];
+  if (S.editing) {
+    return `<section class="bio"><textarea class="editor" id="ed" maxlength="4000" aria-label="简介">${b.text}</textarea><div class="row"><span class="count" id="cnt">${[...b.text].length} / 4000</span><span class="sep"></span><button class="ib sm" data-act="edit-cancel" data-tip="取消" aria-label="取消">${ic("x")}</button><button class="ib sm go" data-act="edit-save" data-tip="保存" aria-label="保存">${ic("check")}</button></div></section>`;
+  }
+  const n = { licensed: "book", model: "sparkles", manual: "userpen" }[b.kind];
+  return `<section class="bio" aria-label="艺人简介"><p ${S.open ? "data-open" : ""}>${b.text}</p>
+    <div class="row">
+      <button class="ib sm src" data-kind="${b.kind}" data-pop="bio" data-tip="${b.tip}" aria-label="简介来源：${b.tip}" ${S.pop === "bio" ? "data-open-pop" : ""}>${ic(n)}</button>
+      <button class="ib sm chev" data-act="expand" aria-expanded="${S.open}" data-tip="${S.open ? "收起" : "展开"}" aria-label="${S.open ? "收起" : "展开"}">${ic("down")}</button>
+      ${admin() ? `<span class="adm"><button class="ib sm" data-act="edit" data-tip="编辑简介" aria-label="编辑简介">${ic("pencil")}</button><button class="ib sm danger" data-act="flag-bio" data-tip="简介不对" aria-label="简介不对">${ic("flag")}</button></span>` : ""}
+      <span class="sep"></span>
+    </div>
+    ${S.pop === "bio" ? `<div class="pop" role="dialog" aria-label="简介来源" style="left:-4px;margin-top:4px;position:relative">${srcRows(b.kind, "bio")}${footHTML("bio")}</div>` : ""}
+  </section>`;
+}
+
+function toastHTML() {
+  if (!S.toast) return "";
+  return `<div class="toast" role="status"><span class="sr" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">已撤销${S.toast.what === "image" ? "图片" : "简介"}，以后不再采用这个来源</span>${ic("flag")}${ic(S.toast.what === "image" ? "image" : "book")}<button class="ib" data-act="undo" data-tip="撤回" aria-label="撤回" style="margin-left:4px">${ic("undo")}<svg class="cd" viewBox="0 0 28 28"><circle cx="14" cy="14" r="13"/></svg></button></div>`;
+}
+
+function renderArtist() {
+  document.getElementById("artist").innerHTML = `
+    <span class="back">${ic("left")}艺人</span>
+    <div class="hero">${avatarHTML()}
+      <div class="info"><h1>苏念</h1><div class="roles"><a href="#" onclick="return false" data-tip="看作词的曲目">作词</a><a href="#" onclick="return false" data-tip="看作曲的曲目">作曲</a></div><div class="meta">6 张专辑 · 58 首曲目</div>
+        <div class="acts"><button class="play">${ic("play")}播放</button><button class="ib" data-tip="随机播放" aria-label="随机播放">${ic("shuffle")}</button><button class="ib" data-tip="收藏" aria-label="收藏">${ic("heart")}</button><button class="ib" data-tip="更多" aria-label="更多">${ic("more")}</button></div>
+      </div>
+    </div>
+    ${bioHTML()}${toastHTML()}`;
+  const li = document.getElementById("linkin");
+  if (li && S.linkPhase === "idle") li.focus();
+  const ed = document.getElementById("ed");
+  if (ed) { ed.focus(); ed.oninput = () => (document.getElementById("cnt").textContent = `${[...ed.value].length} / 4000`); }
+}
+
+function renderSettings() {
+  const miss = !S.searchReady;
+  document.getElementById("settings").innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap"><h2>来源</h2>
+      <span class="bar" style="font-size:12px"><span class="grp"><button aria-pressed="${S.searchReady}" data-ready="1">管家已配置</button><button aria-pressed="${!S.searchReady}" data-ready="0">未配置搜索</button></span></span></div>
+    <div class="grpbox">
+      <div class="srow">${ic("book")}<span class="name">Wikidata · Commons · 维基百科</span><span></span><button class="sw" role="switch" aria-checked="${S.wiki}" data-sw="wiki" aria-label="Wikidata、Commons 与维基百科"></button></div>
+      <div class="srow">${ic("image")}<span class="name">Fanart.tv</span><span class="key" data-tip="项目密钥">••••3f9a</span><button class="sw" role="switch" aria-checked="${S.fanart}" data-sw="fanart" aria-label="Fanart.tv"></button></div>
+      <div class="srow" data-hl>${ic("globe")}<span class="name">网络搜索</span>
+        <span class="deps">
+          <button class="dep" data-tip="${miss ? "对话模型 · 已配置" : "对话模型 · 已配置"}" aria-label="对话模型已配置">${ic("sparkles")}</button>
+          <button class="dep" ${miss ? "data-miss" : ""} data-tip="${miss ? "搜索来源未配置 · 去管家设置" : "搜索来源 · SearXNG"}" aria-label="${miss ? "搜索来源未配置，前往管家设置" : "搜索来源 SearXNG"}">${ic("search")}</button>
+        </span>
+        <button class="sw" role="switch" aria-checked="${S.web && !miss}" ${miss ? "disabled" : ""} data-sw="web" aria-label="网络搜索"></button></div>
+      <div class="srow">${ic("puzzle")}<span class="name">歌词示例</span><span></span><button class="sw" role="switch" aria-checked="${S.plugin}" data-sw="plugin" aria-label="插件：歌词示例"></button></div>
+    </div>`;
+}
+
+function render() { renderBar(); renderArtist(); renderSettings(); }
+
+let toastTimer, linkTimer;
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button, [data-pop]");
+  if (!t) { if (S.pop && !e.target.closest(".pop")) { S.pop = null; renderArtist(); } return; }
+  if (t.dataset.view) { S.view = t.dataset.view; S.pop = null; S.editing = false; return render(); }
+  if (t.dataset.state) { S.state = t.dataset.state; S.noImg = S.noBio = false; S.pop = null; S.editing = false; S.toast = null; return render(); }
+  if (t.dataset.ready) { S.searchReady = t.dataset.ready === "1"; return renderSettings(); }
+  if (t.dataset.sw) { S[t.dataset.sw] = !S[t.dataset.sw]; return renderSettings(); }
+  if (t.dataset.pop) { S.pop = S.pop === t.dataset.pop ? null : t.dataset.pop; return renderArtist(); }
+  const a = t.dataset.act;
+  if (!a) return;
+  if (a === "expand") S.open = !S.open;
+  if (a === "upload") { S.pop = null; S.drop = true; renderArtist(); setTimeout(() => { S.drop = false; S.state = "manual"; S.noImg = false; render(); }, 700); return; }
+  if (a === "flag-image" || a === "flag-bio" || a === "none-of") {
+    const what = a === "flag-bio" ? "bio" : "image";
+    S.toast = { what, prev: S.state }; S.pop = null;
+    if (a === "none-of") S.state = "none"; else if (what === "image") S.noImg = true; else S.noBio = true;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { S.toast = null; renderArtist(); }, 6000);
+  }
+  if (a === "undo" && S.toast) { S.state = S.toast.prev; S.noImg = S.noBio = false; S.toast = null; clearTimeout(toastTimer); }
+  if (a === "linkmode") { S.pop = "link"; S.linkUrl = ""; S.linkPhase = "idle"; }
+  if (a === "link-clear") { S.linkUrl = ""; S.linkPhase = "idle"; }
+  if (a === "pick" || a === "link-apply") { S.pop = null; S.state = "searching"; renderArtist(); setTimeout(() => { S.state = "licensed"; renderBar(); renderArtist(); }, 1400); return renderBar(); }
+  if (a === "edit") { S.pop = null; S.editing = true; }
+  if (a === "edit-cancel") S.editing = false;
+  if (a === "edit-save") { S.editing = false; S.state = "manual"; renderBar(); }
+  renderArtist();
+});
+
+const linkRe = /musicbrainz\.org\/artist\/[0-9a-f-]{36}|wikidata\.org\/wiki\/Q\d+/i;
+function acceptLink(v) {
+  S.linkUrl = v; S.pop = "link";
+  if (!linkRe.test(v)) { S.linkPhase = "idle"; return renderArtist(); }
+  S.linkPhase = "loading"; renderArtist();
+  clearTimeout(linkTimer); linkTimer = setTimeout(() => { S.linkPhase = "ready"; renderArtist(); }, 700);
+}
+document.addEventListener("input", (e) => { if (e.target.id === "linkin") { const v = e.target.value; if (linkRe.test(v)) acceptLink(v); else S.linkUrl = v; } });
+document.addEventListener("paste", (e) => {
+  if (!admin() || e.target.id === "ed") return;
+  const v = (e.clipboardData || window.clipboardData).getData("text");
+  if (linkRe.test(v)) { e.preventDefault(); acceptLink(v.trim()); }
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && (S.pop || S.editing)) { S.pop = null; S.editing = false; renderArtist(); } });
+const art = document.getElementById("artist");
+art.addEventListener("dragover", (e) => { if (!admin()) return; e.preventDefault(); if (!S.drop) { S.drop = true; renderArtist(); } });
+art.addEventListener("dragleave", (e) => { if (!art.contains(e.relatedTarget) && S.drop) { S.drop = false; renderArtist(); } });
+art.addEventListener("drop", (e) => { e.preventDefault(); S.drop = false; S.state = "manual"; S.noImg = false; render(); });
+render();
+</script>
+</body>
+</html>
