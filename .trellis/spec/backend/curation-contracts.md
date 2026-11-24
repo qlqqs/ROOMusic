@@ -905,7 +905,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 程序在 SQL 分页中筛选有 MusicBrainz 或 Wikidata 艺人对应的有效艺人，以及同时满足以下条件的有效艺人：家族无对应、有在库的发行艺人、专辑艺人或曲目艺人主署名、缺图或缺简介。无对应的候选先由已启用的艺人插件按名查询。模型只收到名字、别名、至多 8 个专辑名与年份、12 个曲目名，以及图片与简介的缺口。整理摘要纳入对应、名字与署名样本、资料等级、抑制标记和相关来源状态。摘要变化可重开搁置项。程序收尾已对应、补齐、目标并入或失去主署名的待定项，并将其 `open` 例外置为 `superseded`，由采纳流程处理 `accepting` 例外。
 
-迁移 0073 使用两个互斥的目标列。发行继续使用 `target_id`；艺人项使用 `target_type=artist,artist_id,kind=artist_identity`，未结束项按艺人及种类唯一。领取、到期判断与计数共用目标可见性。后台通过 `read_pending_items` 读取已领取艺人项的 `item_id,kind,artist_id,evidence`，同一模型层每日额度覆盖主模型与审查。
+迁移 0074 使用两个互斥的目标列。发行继续使用 `target_id`；艺人项使用 `target_type=artist,artist_id,kind=artist_identity`，未结束项按艺人及种类唯一。领取、到期判断与计数共用目标可见性。后台通过 `read_pending_items` 读取已领取艺人项的 `item_id,kind,artist_id,evidence`，同一模型层每日额度覆盖主模型与审查。
 
 * `resolve_artist_identity` 提交外部来源、编号和 `basis={note,citations}`，引用为 1 至 5 个 HTTP(S) 网址。程序核验条目类型、本地与外部名字或别名、家族已有对应和抑制标记，再交独立审查。MusicBrainz 类型为空时仍可核对，只拒绝 `Other` 与 `Character`。Wikidata 要求人物或音乐团体的 P31。审查通过写模型来源的 `artist_link`，同事务结束身份项。已有对应返回 `occupied`。
 * `submit_artist_media` 提交一项或两项资料，共用 1 至 5 个 `{url,title}` 网页引用。标题 schema 使用 `maxLength: 500`。标题清理为纯文本后允许空串，长度以艺人页使用的 500 个 UTF-16 码元为上限。写库前复查引用数量、URL 形状及标题长度与编码。简介去 HTML 后为 20 至 4000 个 Unicode 字符，语言为 zh 或 en。图片所在网页须在引用中，下载限 10 秒、16 MiB，校验格式和尺寸，短边至少 200 像素。图片下载和引用公网检查使用管家联网合同的出站规则。媒体操作来源为 `model/web_search`，模型名单独记录。任一项写入即以 `resolved/model_media` 结束本次待定项。程序层按更新后的缺口和输入摘要判断是否为剩余缺口创建新项。[管家联网合同](steward-web-contracts.md)
