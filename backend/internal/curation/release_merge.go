@@ -87,7 +87,7 @@ func (w *Writer) MergeReleases(ctx context.Context, r ReleaseAutoMerge) (Release
 		if err := CheckMatchItem(ctx, tx, item, conversation, r.ConfirmedBy != ""); err != nil {
 			return err
 		}
-		p, err := ReadReleaseMergeEvidence(ctx, tx, item.TargetID, candidate.ReleaseID, w.ArtworkExists)
+		p, err := ReadReleaseMergeEvidence(ctx, tx, item.TargetID, candidate.ReleaseID, w.ArtworkExists, false)
 		if err != nil {
 			return err
 		}

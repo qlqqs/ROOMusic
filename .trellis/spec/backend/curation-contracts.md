@@ -852,7 +852,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 20.3 审查与例外
 
-第 4 版审查读取双方可见发行摘要、本地碟数和曲目数、MusicBrainz 发行对应、佐证操作 ID、录音数量和交集。外部发行碟数与曲目数取自对应操作后态的 `external.disc_count` 和 `external.track_count`，旧对应缺值显示“不可用”。归组及发行并入缺少生效的对应时由后端直接转人工。执行仍受版本、期限与证据摘要约束。[管家独立审查合同](./steward-review-contracts.md)
+第 4 版审查读取双方可见发行摘要、本地碟数和曲目数、MusicBrainz 发行对应、佐证操作 ID、录音数量和交集。外部发行碟数与曲目数取自对应操作后态的 `external.disc_count` 和 `external.track_count`，旧对应缺值显示“不可用”。发行并入审查证据中的 `layout` 按治理合并计划列出碟序、原发行与原碟号，`layout_track_total` 不超过 300 首时逐曲列出位置、本地有效标题和已生效的录音对应，超过时保留碟级信息并标记 `tracks_omitted=true`。归组及发行并入缺少生效的对应时由后端直接转人工。执行仍受版本、期限与证据摘要约束。[管家独立审查合同](./steward-review-contracts.md)
 
 未通过或转人工的项按工具输入的 `item_id` 进入例外。管理员采纳时重新计算令牌，在锁内比较原预览、核对强证据，以采纳者为操作者记录模型来源和人工审查决定。操作、例外操作编号及 `resolved/human_accepted` 同时提交。前态变化返回 `exception_stale` 并重新开放例外。不采纳在同一事务写双方的 `release_merge` 标记与例外决定，按第 17 节结束待定项。
 

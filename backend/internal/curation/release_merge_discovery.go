@@ -7,6 +7,7 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 )
 
@@ -64,7 +65,11 @@ func (w *Writer) discoverReleaseMerges(ctx context.Context, tx *sql.Tx, external
 	if err != nil {
 		return err
 	}
-	members, err := releaseMergeMembers(ctx, tx, ordered, w.ArtworkExists)
+	entries, err := catalog.LoadCurationEvidence(ctx, tx, ordered, w.ArtworkExists)
+	if err != nil {
+		return err
+	}
+	members, err := releaseMergeMembers(ctx, tx, ordered, entries)
 	if err != nil {
 		return err
 	}

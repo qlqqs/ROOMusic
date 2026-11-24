@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -173,6 +174,11 @@ func TestPostgreSQLCurationMergeRevert(t *testing.T) {
 		t.Run(route, func(t *testing.T) {
 			f := newSchedulerFixture(t)
 			external, item := startReleaseMergeModel(t, f)
+			var beforeTarget, beforeSource []releaseMergeReviewDisc
+			if route == "batch" {
+				beforeTarget = readStoredReleaseMergeLayout(t, f.curationFixture, f.a, "")
+				beforeSource = readStoredReleaseMergeLayout(t, f.curationFixture, f.b, "")
+			}
 			op, batch := approveReleaseMerge(t, f, item)
 			scope := curation.Scope{Kind: "batch", ID: batch}
 			switch route {
@@ -193,6 +199,14 @@ func TestPostgreSQLCurationMergeRevert(t *testing.T) {
 			}
 			if got.Reverted != 1 || len(got.Skipped) != 0 {
 				t.Fatalf("范围撤销 %+v", got)
+			}
+			if route == "batch" {
+				if after := readStoredReleaseMergeLayout(t, f.curationFixture, f.a, ""); !reflect.DeepEqual(after, beforeTarget) {
+					t.Errorf("按批撤销后目标布局 %+v，执行前 %+v", after, beforeTarget)
+				}
+				if after := readStoredReleaseMergeLayout(t, f.curationFixture, f.b, ""); !reflect.DeepEqual(after, beforeSource) {
+					t.Errorf("按批撤销后来源布局 %+v，执行前 %+v", after, beforeSource)
+				}
 			}
 			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_suppressions s JOIN operations undo ON undo.id=s.operation_id
 				WHERE undo.reverts_operation_id=$1 AND s.subject='release_merge' AND s.target_type='release'

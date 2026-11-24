@@ -20,11 +20,13 @@ type MergeReleaseRef struct {
 }
 
 type MergePreviewMedium struct {
-	MediumID      string `json:"medium_id"`
-	FromRelease   string `json:"from_release"`
-	Title         string `json:"title"`
-	PositionAfter int    `json:"position_after"`
-	TrackCount    int    `json:"track_count"`
+	MediumID       string `json:"medium_id"`
+	FromRelease    string `json:"from_release"`
+	Title          string `json:"title"`
+	PositionAfter  int    `json:"position_after"`
+	PositionBefore int    `json:"-"`
+	OriginPosition int    `json:"-"`
+	TrackCount     int    `json:"track_count"`
 }
 
 type MergeHidden struct {
@@ -47,8 +49,7 @@ type ReleaseMergePreview struct {
 
 type mergeMedium struct {
 	MergePreviewMedium
-	position, originPosition int
-	trackDigest              string
+	trackDigest string
 }
 
 type mergeSnapshot struct {
@@ -115,7 +116,7 @@ func loadMergeSnapshot(ctx context.Context, q operations.Queryer, targetID, sour
 	defer rows.Close()
 	for rows.Next() {
 		var m mergeMedium
-		if err := rows.Scan(&m.MediumID, &m.FromRelease, &m.Title, &m.position, &m.originPosition, &m.TrackCount, &m.trackDigest); err != nil {
+		if err := rows.Scan(&m.MediumID, &m.FromRelease, &m.Title, &m.PositionBefore, &m.OriginPosition, &m.TrackCount, &m.trackDigest); err != nil {
 			return state, err
 		}
 		state.media = append(state.media, m)
@@ -167,14 +168,14 @@ func buildMergePlan(s mergeSnapshot) ReleaseMergePreview {
 	basis := make([]mediumToken, 0, len(s.media))
 	last := 0
 	for _, m := range s.media {
-		pos := m.position
+		pos := m.PositionBefore
 		if m.FromRelease != s.target.ID {
-			pos = ingest.NextMergedMediaPosition(last, m.originPosition)
+			pos = ingest.NextMergedMediaPosition(last, m.OriginPosition)
 		}
 		last = max(last, pos)
 		m.PositionAfter = pos
 		p.Media = append(p.Media, m.MergePreviewMedium)
-		basis = append(basis, mediumToken{m.MediumID, m.FromRelease, m.trackDigest, m.position, m.originPosition})
+		basis = append(basis, mediumToken{m.MediumID, m.FromRelease, m.trackDigest, m.PositionBefore, m.OriginPosition})
 	}
 	p.Token = operations.Fingerprint(map[string]any{"target": s.target.ID, "source": s.source.ID,
 		"target_group": s.target.GroupID, "source_group": s.source.GroupID, "source_group_visible": s.sourceGroupVisible, "media": basis})
