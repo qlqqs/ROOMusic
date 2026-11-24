@@ -59,6 +59,33 @@ const artistNameDecoder = d.object({
   origin: d.string({ min: 1, max: 32 }),
 });
 
+// 艺人图片与简介（M8，自动整理从外部来源补上）：都带来源与原页面地址；图片另有作者与许可（Commons 必有许可），
+// 维基百科的简介是 CC BY-SA 4.0。作者、许可是外部的不可信文本，只按纯文本显示；地址只在是 http(s) 时做成链接。
+export const ARTIST_IMAGE_SOURCES = ["fanarttv", "theaudiodb", "commons"] as const;
+export const ARTIST_BIO_SOURCES = ["wikipedia", "theaudiodb"] as const;
+const externalText = (max: number) => d.nullable(d.string({ min: 1, max }));
+export const artistImageDecoder = d.object({
+  resource: d.string({ min: 1, max: 255 }),
+  source: d.oneOf(ARTIST_IMAGE_SOURCES),
+  source_url: d.string({ min: 1, max: 2048 }),
+  author: externalText(500),
+  license: externalText(200),
+  license_url: externalText(2048),
+});
+// 简介最多 4000 个字符，按码点计（与后端按 rune 计一致），扩展区汉字算一个字。
+const MAX_BIO_CHARS = 4000;
+const bioTextDecoder = checked(d.string({ min: 1, max: MAX_BIO_CHARS * 2 }), (text) => (Array.from(text).length > MAX_BIO_CHARS ? `超过 ${MAX_BIO_CHARS} 个字符` : null));
+export const artistBioDecoder = d.object({
+  text: bioTextDecoder,
+  lang: d.oneOf(["zh", "en"] as const),
+  source: d.oneOf(ARTIST_BIO_SOURCES),
+  source_url: d.string({ min: 1, max: 2048 }),
+  license: externalText(200),
+  license_url: externalText(2048),
+});
+export type ArtistImageDTO = d.Infer<typeof artistImageDecoder>;
+export type ArtistBioDTO = d.Infer<typeof artistBioDecoder>;
+
 // 详情：revision 是人工修改版本号（合并、拆开、改名的预期版本）；name_source 是主显示名来自最常见写法（auto）还是管理员（manual）。
 // 已经被合并进别的艺人时 redirect_artist_id 是现在的艺人，页面据此跳过去。role_counts 的 total 含文件缺失的曲目，present 只算存在的。
 const artistDetailDecoder = checked(
@@ -70,6 +97,8 @@ const artistDetailDecoder = checked(
     names_pagination: paginationDecoder(ARTIST_DETAIL_NAMES),
     role_counts: d.array(d.object({ role: d.oneOf(artistRoles), total: count(), present: count() }), { max: artistRoles.length }),
     redirect_artist_id: d.nullable(d.uuid()),
+    image: d.nullable(artistImageDecoder),
+    bio: d.nullable(artistBioDecoder),
   }),
   (detail) => {
     if (detail.names.length > detail.names_pagination.page_size) return "names 多于 page_size";

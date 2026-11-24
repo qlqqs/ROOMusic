@@ -16,6 +16,7 @@ type ArtistSummary struct {
 	TrackCount   int64    `json:"track_count"`
 	Roles        []string `json:"roles"`
 	Available    bool     `json:"available"`
+	Image        *string  `json:"image"`
 }
 
 type ArtistPagination struct {
@@ -49,7 +50,27 @@ type ArtistRoleCount struct {
 	Present int64  `json:"present"`
 }
 
+type ArtistImage struct {
+	Resource   string  `json:"resource"`
+	Source     string  `json:"source"`
+	SourceURL  string  `json:"source_url"`
+	Author     *string `json:"author"`
+	License    *string `json:"license"`
+	LicenseURL *string `json:"license_url"`
+}
+
+type ArtistBio struct {
+	Text       string  `json:"text"`
+	Lang       string  `json:"lang"`
+	Source     string  `json:"source"`
+	SourceURL  string  `json:"source_url"`
+	License    *string `json:"license"`
+	LicenseURL *string `json:"license_url"`
+}
+
 type ArtistDetail struct {
+	Image            *ArtistImage      `json:"image"`
+	Bio              *ArtistBio        `json:"bio"`
 	Artist           ArtistSummary     `json:"artist"`
 	Revision         int64             `json:"revision"`
 	NameSource       string            `json:"name_source"`

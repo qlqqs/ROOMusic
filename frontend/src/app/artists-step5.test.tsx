@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { artistDataOf, artistTestId, primaryArtistId, seedArtist } from "../test/artist-data";
+import { artistBio, artistImage } from "../test/artist-media-data";
 import { installArtistsApi, installFakeApi, installFakeSession } from "../test/fake-api";
 import { jsonResponse } from "../test/http";
 import { renderApp } from "../test/render-app";
@@ -230,4 +231,25 @@ describe("艺人浏览与详情（⑤）", () => {
     expect(history.location.search).not.toContain("tracks_page");
     expect(api.requestsTo("GET", `/api/v1/artists/${id}/tracks`).at(-1)?.path).toContain("page=1");
   });
+});
+
+it("艺人列表使用摘要图片，艺人页头使用详情图片并显示简介与图片署名", async () => {
+  const { data } = setup();
+  const detail = getDetail(data);
+  detail.artist.image = "artist-list-portrait";
+  detail.image = artistImage;
+  detail.bio = artistBio;
+  renderApp({ path: "/artists" });
+
+  const link = await screen.findByRole("link", { name: detail.artist.name });
+  expect(within(link).getByAltText("").getAttribute("src")).toBe("/api/v1/artworks/artist-list-portrait");
+  await userEvent.click(link);
+
+  const title = await screen.findByRole("heading", { name: detail.artist.name, level: 1 });
+  const header = title.closest("header");
+  if (header === null) throw new Error("找不到艺人页头");
+  const scope = within(header);
+  expect(scope.getByAltText("").getAttribute("src")).toBe("/api/v1/artworks/m8-artist-portrait");
+  expect(scope.getByText(artistBio.text)).toBeTruthy();
+  expect(scope.getByRole("link", { name: "Wikimedia Commons" })).toBeTruthy();
 });

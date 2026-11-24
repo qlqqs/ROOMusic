@@ -110,6 +110,55 @@ func describeArtistRecords(ctx context.Context, q operations.Queryer, records []
 		out[r.ID] = d
 		historical[r.ID] = name
 	}
+	infos, err := LoadOperationArtists(ctx, q, ids)
+	if err != nil {
+		return nil, err
+	}
+	plans := map[string]*artistRevertPlan{}
+	for _, record := range records {
+		d := out[record.ID]
+		if info, ok := infos[strings.ToLower(record.TargetID)]; ok {
+			if info.Name != "" {
+				if change, ok := d.Changes.(*artistChangeDescription); ok {
+					if plan := decodeArtistRevert(record, change); plan != nil {
+						plans[record.ID] = plan
+					}
+				}
+			}
+			d.Artist = info.Summary(historical[record.ID])
+		}
+		out[record.ID] = d
+	}
+	candidates, err := artistRevertible(ctx, q, plans)
+	if err != nil {
+		return nil, err
+	}
+	for id := range candidates {
+		d := out[id]
+		d.Revertible = true
+		out[id] = d
+	}
+	return out, nil
+}
+
+// OperationArtist 保存操作目标当前的安全摘要及目录未就绪时的初始名。
+type OperationArtist struct {
+	operations.ArtistInfo
+	InitialName string
+}
+
+func (a OperationArtist) Summary(historical string) *operations.ArtistInfo {
+	if a.Name == "" {
+		a.Name = historical
+		if a.Name == "" {
+			a.Name = a.InitialName
+		}
+	}
+	return &a.ArtistInfo
+}
+
+// LoadOperationArtists 在同一快照中读取发布状态、可见性与重定向。
+func LoadOperationArtists(ctx context.Context, q operations.Queryer, ids []string) (map[string]OperationArtist, error) {
 	rows, err := q.QueryContext(ctx, `WITH readiness AS (
  SELECT COALESCE((SELECT status='ready' AND manifest_sealed AND target_generation=published_generation
  AND target_generation>0 AND textnorm_version=published_textnorm_version AND search_projection_version=published_search_projection_version
@@ -125,8 +174,7 @@ func describeArtistRecords(ctx context.Context, q operations.Queryer, records []
 		return nil, err
 	}
 	defer rows.Close()
-	infos := map[string]operations.ArtistInfo{}
-	initials := map[string]string{}
+	infos := map[string]OperationArtist{}
 	for rows.Next() {
 		var info operations.ArtistInfo
 		var name sql.NullString
@@ -135,43 +183,12 @@ func describeArtistRecords(ctx context.Context, q operations.Queryer, records []
 			return nil, err
 		}
 		info.Name = name.String
-		infos[info.ID] = info
-		initials[info.ID] = initial
+		infos[info.ID] = OperationArtist{ArtistInfo: info, InitialName: initial}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	plans := map[string]*artistRevertPlan{}
-	for _, record := range records {
-		d := out[record.ID]
-		if info, ok := infos[strings.ToLower(record.TargetID)]; ok {
-			if info.Name != "" {
-				if change, ok := d.Changes.(*artistChangeDescription); ok {
-					if plan := decodeArtistRevert(record, change); plan != nil {
-						plans[record.ID] = plan
-					}
-				}
-			}
-			if info.Name == "" {
-				info.Name = historical[record.ID]
-				if info.Name == "" {
-					info.Name = initials[info.ID]
-				}
-			}
-			d.Artist = &info
-		}
-		out[record.ID] = d
-	}
-	candidates, err := artistRevertible(ctx, q, plans)
-	if err != nil {
-		return nil, err
-	}
-	for id := range candidates {
-		d := out[id]
-		d.Revertible = true
-		out[id] = d
-	}
-	return out, nil
+	return infos, nil
 }
 
 // ArtistOperations 为艺人操作装配收藏解析和自动合并标记写入能力。

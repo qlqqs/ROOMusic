@@ -4,7 +4,7 @@ package catalog
 // 先去重来源，再按实际曲目取并集；曲目只属于一个发行，UNION 后 count(*) 即轨数。
 // 角色最多九项，分别用存在性判断保留全角色参与，不从计数集合反推或丢弃角色。
 // artistParticipationCTE 仍供含 missing 的详情和参与明细使用，不改变那些读取的合同。
-const artistSummarySQL = `WITH summary_release_subjects AS MATERIALIZED (
+const artistSummarySQL = `WITH ` + ArtistMediaFamilyCTE + `, summary_release_subjects AS MATERIALIZED (
  SELECT DISTINCT artist_id,release_id FROM artist_effective_credits
  WHERE artist_id=ANY($1::uuid[]) AND release_id IS NOT NULL
 ), summary_track_subjects AS MATERIALIZED (
@@ -24,6 +24,9 @@ const artistSummarySQL = `WITH summary_release_subjects AS MATERIALIZED (
  WHERE EXISTS (SELECT 1 FROM artist_effective_credits e WHERE e.artist_id=a.id AND e.role=roles.role AND (
  EXISTS (SELECT 1 FROM tracks t WHERE t.id=e.track_id AND t.source_status='present') OR
  EXISTS (SELECT 1 FROM media m JOIN tracks t ON t.medium_id=m.id WHERE m.release_id=e.release_id AND t.source_status='present')))
- ORDER BY ` + artistRoleOrder + `))
+ ORDER BY ` + artistRoleOrder + `)),
+ (SELECT m.storage_key FROM artist_media_family f JOIN artist_external_artworks m ON m.artist_id=f.artist_id
+  WHERE f.canonical_id=COALESCE(o.redirect_artist_id,a.id) ORDER BY ` + artistMediaOrder + ` LIMIT 1)
  FROM artists a JOIN artist_profiles p ON p.artist_id=a.id LEFT JOIN counts c ON c.artist_id=a.id
+ LEFT JOIN artist_overrides o ON o.artist_id=a.id
  WHERE a.id=ANY($1::uuid[])`

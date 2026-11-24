@@ -98,7 +98,9 @@ export function ArtistDetailView({ artistId, search, onRedirect, renderHeaderAct
   }
   const { artist } = data;
   return (
-    <Page title={artist.name} header={<ArtistHeader artist={artist} compactTitle={artist.name.length > 80} actions={renderHeaderActions(data)} />}>
+    <Page title={artist.name} header={
+        <ArtistHeader artist={artist} compactTitle={artist.name.length > 80} actions={renderHeaderActions(data)} image={data.image} bio={data.bio} />
+      }>
       <NamesSection detail={data} search={search} />
       <AlbumsSection artistId={artist.id} search={search} />
       <TracksSection detail={data} search={search} renderTrackActions={renderTrackActions} renderTrackRowsScope={renderTrackRowsScope} />

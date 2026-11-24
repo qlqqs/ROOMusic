@@ -23,7 +23,7 @@ function groupNote(settings: CurationSettingsDTO | undefined): string | null {
 /** 一个源的说明：它提供什么，加上这一行自己不生效的原因；只用来识别的源说明结果记在哪里。 */
 function sourceDescription(source: CurationSourceDTO): string {
   const parts = [capabilitiesText(source)];
-  if (!writesOwnChanges(source)) parts.push("对上的结果记在 MusicBrainz 名下");
+  if (!writesOwnChanges(source)) parts.push(source.capabilities.includes("fingerprint_lookup") ? "对上的结果记在 MusicBrainz 名下" : "查到的图片与简介记在提供它们的源名下");
   const reason = sourceInactiveText(source.inactive_reason);
   return reason === null ? parts.join("；") : `${parts.join("；")}；${reason}`;
 }
@@ -58,7 +58,7 @@ export function CurationSourcesSection({ settings, refresh }: { settings: Curati
       footer={
         <>
           {setSource.isError ? <FailureNotice error={setSource.error} context="write" title="外部源的开关没有改成" /> : null}
-          {setKey.isError ? <FailureNotice error={setKey.error} context="write" title={`${keyLabel(setKey.variables.name)}没有${setKey.variables.key === null ? "清除" : "保存"}`} /> : null}
+          {setKey.isError ? <FailureNotice error={setKey.error} context="write" title={`${keyLabel(setKey.variables.id, setKey.variables.name)}没有${setKey.variables.key === null ? "清除" : "保存"}`} /> : null}
           <ScopeRevertResult state={revert.state} onDismiss={revert.reset} />
         </>
       }

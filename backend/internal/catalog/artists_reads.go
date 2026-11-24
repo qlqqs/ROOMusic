@@ -94,6 +94,9 @@ func (s *Store) LoadArtist(ctx context.Context, id string) (ArtistDetail, error)
 			return ArtistDetail{}, fmt.Errorf("%w: missing artist profile", ErrQuery)
 		}
 		result := ArtistDetail{Artist: summary, Names: []ArtistName{}, RoleCounts: []ArtistRoleCount{}}
+		if err := snapshot.readArtistMedia(ctx, canonical, &result); err != nil {
+			return result, err
+		}
 		if canonical != id {
 			result.RedirectArtistID = &canonical
 		}

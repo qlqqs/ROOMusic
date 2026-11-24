@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decode as d, decodeErrorEnvelope } from "../../../shared/api";
 import { loadApiSample, sampleBody } from "../../../test/api-samples";
+import { artistBio, artistImage } from "../../../test/artist-media-data";
 import { withValue, without } from "../../../test/mutate";
 import {
   decodeArtistAlbumsPage, decodeArtistDetail, decodeArtistNamesPage, decodeArtistPage,
@@ -12,6 +13,7 @@ const contracts: readonly [string, Decoder][] = [
   ["list-name", decodeArtistPage], ["list-album-count", decodeArtistPage], ["list-initial", decodeArtistPage],
   ["list-role", decodeArtistPage], ["list-empty", decodeArtistPage], ["list-out-of-range", decodeArtistPage],
   ["detail", decodeArtistDetail], ["detail-redirect", decodeArtistDetail], ["detail-unavailable", decodeArtistDetail],
+  ["detail-with-media", decodeArtistDetail],
   ["names", decodeArtistNamesPage], ["names-out-of-range", decodeArtistNamesPage],
   ["albums", decodeArtistAlbumsPage], ["role-tracks", decodeArtistTracksPage], ["role-tracks-missing", decodeArtistTracksPage],
   ["queue", decodeArtistQueue], ["queue-random", decodeArtistQueue], ["queue-empty", decodeArtistQueue],
@@ -186,4 +188,55 @@ describe("艺人播放队列合同", () => {
   it.each([2, 10_001])("不能把只返回1条的短队列标记truncated来冒充完整候选窗口（total=%s）", (total) => {
     expect(() => decodeArtistQueue({ ...queueOf(1), total, truncated: true })).toThrow(d.DecodeError);
   });
+});
+
+describe("M8 艺人图片与简介合同", () => {
+  const mediaDetail = { ...detail, artist: { ...detail.artist, image: artistImage.resource }, image: artistImage, bio: artistBio };
+  const list = decodeArtistPage(sampleBody("artists/list-name"));
+
+  it("列表摘要保留图片 ID 或 null，拒绝缺字段和非法 ID", () => {
+    for (const image of [artistImage.resource, null]) {
+      const body = withValue(list, ["items", 0, "image"], image);
+      expect(decodeArtistPage(body)).toStrictEqual(body);
+    }
+    for (const image of ["", "x".repeat(256), 23]) {
+      expect(() => decodeArtistPage(withValue(list, ["items", 0, "image"], image))).toThrow(d.DecodeError);
+    }
+    expect(() => decodeArtistPage(without(list, ["items", 0, "image"]))).toThrow(d.DecodeError);
+  });
+
+  it("保留完整图片与简介、各允许的来源及可空署名", () => {
+    expect(decodeArtistDetail(mediaDetail)).toStrictEqual(mediaDetail);
+    const noMedia = { ...mediaDetail, artist: { ...mediaDetail.artist, image: null }, image: null, bio: null };
+    expect(decodeArtistDetail(noMedia)).toStrictEqual(noMedia);
+    for (const source of ["fanarttv", "theaudiodb", "commons"]) {
+      const image = { ...artistImage, source, author: null, license: null, license_url: null };
+      expect(decodeArtistDetail({ ...mediaDetail, image }).image).toEqual(image);
+    }
+    const bio = { ...artistBio, source: "theaudiodb", lang: "en", license: null, license_url: null };
+    expect(decodeArtistDetail({ ...mediaDetail, bio }).bio).toEqual(bio);
+  });
+
+  it.each([
+    ["image", "source", "wikipedia"], ["image", "resource", "a".repeat(256)], ["image", "author", "a".repeat(501)],
+    ["image", "license", "a".repeat(201)], ["image", "source_url", "a".repeat(2049)],
+    ["bio", "source", "commons"], ["bio", "lang", "ja"], ["bio", "text", "字".repeat(4001)],
+    ["bio", "license", "a".repeat(201)], ["bio", "license_url", "a".repeat(2049)],
+  ])("拒绝非法 %s.%s", (field, key, value) => {
+    expect(() => decodeArtistDetail(withValue(mediaDetail, [field, key], value))).toThrow(d.DecodeError);
+  });
+
+  it("图片与简介对象的字段必须齐备，包括可空的署名字段", () => {
+    for (const field of ["image", "bio"] as const) {
+      expect(() => decodeArtistDetail(without(mediaDetail, [field]))).toThrow(d.DecodeError);
+      for (const key of Object.keys(mediaDetail[field])) {
+        expect(() => decodeArtistDetail(without(mediaDetail, [field, key])), `${field}.${key}`).toThrow(d.DecodeError);
+      }
+    }
+  });
+});
+
+it("接受后端长度上限内含非 BMP 字符的简介", () => {
+  const bio = { ...artistBio, text: "𠮷".repeat(4000) };
+  expect(decodeArtistDetail({ ...detail, bio }).bio).toEqual(bio);
 });

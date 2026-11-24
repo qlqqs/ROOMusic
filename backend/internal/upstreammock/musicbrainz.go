@@ -76,6 +76,9 @@ func (d dataset) recordingEntity(v recording, inc includes) object {
 }
 func (d dataset) artistEntity(a artist, inc includes) object {
 	row := object{"id": a.ID, "name": a.Name, "sort-name": a.Sort, "country": a.Country, "type": a.Type, "disambiguation": a.Note}
+	if inc.has("url-rels") {
+		row["relations"] = a.Media.relations()
+	}
 	if inc.has("aliases") {
 		row["aliases"] = a.Aliases
 	}

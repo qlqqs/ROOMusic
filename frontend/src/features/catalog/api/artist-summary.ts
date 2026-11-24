@@ -44,6 +44,7 @@ export function initialGroupLabel(group: ArtistInitialGroup): string {
 
 // album_count 是参与的可见专辑数（按组去重），track_count 是参与的当前存在的曲目数，两者都按全部角色统计；
 // available 为 false 时这位艺人现在没有存在的曲目（身份与收藏保留）。
+// image 是自动整理补上的艺人图片的资源 ID（经 /api/v1/artworks/{id} 读取），没有时为 null。
 export const artistSummaryDecoder = d.object({
   id: d.uuid(),
   name: d.string(),
@@ -52,6 +53,7 @@ export const artistSummaryDecoder = d.object({
   track_count: d.integer({ min: 0 }),
   roles: d.array(d.oneOf(artistRoles), { max: artistRoles.length }),
   available: d.boolean(),
+  image: d.nullable(d.string({ min: 1, max: 255 })),
 });
 
 export type ArtistSummaryDTO = d.Infer<typeof artistSummaryDecoder>;

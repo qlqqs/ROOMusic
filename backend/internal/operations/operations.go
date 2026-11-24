@@ -46,6 +46,8 @@ const (
 	TypeReleaseMerge           = "release_merge"
 	TypeReleaseAutoMerge       = "release_auto_merge"
 	TypeRevert                 = "revert"
+	TypeArtistExternalArtwork  = "artist_external_artwork"
+	TypeArtistExternalBio      = "artist_external_bio"
 	TypeArtistMerge            = "artist_merge"
 	TypeArtistSplit            = "artist_split"
 	TypeArtistRename           = "artist_rename"

@@ -15,13 +15,14 @@ import (
 var builtin embed.FS
 
 type artist struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name"`
-	Sort    string   `json:"sort-name"`
-	Type    string   `json:"type"`
-	Country string   `json:"country"`
-	Note    string   `json:"disambiguation"`
-	Aliases []object `json:"aliases"`
+	ID      string      `json:"id"`
+	Name    string      `json:"name"`
+	Sort    string      `json:"sort-name"`
+	Type    string      `json:"type"`
+	Country string      `json:"country"`
+	Note    string      `json:"disambiguation"`
+	Aliases []object    `json:"aliases"`
+	Media   artistMedia `json:"media"`
 }
 type group struct {
 	ID    string `json:"id"`
@@ -89,18 +90,25 @@ func loadData(dir string) (dataset, error) {
 		return data, fmt.Errorf("catalog.json: %w", err)
 	}
 	data.covers = map[string][]byte{}
+	var images []string
 	for _, rel := range data.Releases {
-		if rel.Image == "" || data.covers[rel.Image] != nil {
+		images = append(images, rel.Image)
+	}
+	for _, a := range data.Artists {
+		images = append(images, a.Media.Image)
+	}
+	for _, name := range images {
+		if name == "" || data.covers[name] != nil {
 			continue
 		}
-		img, err := fs.ReadFile(files, rel.Image)
+		img, err := fs.ReadFile(files, name)
 		if err != nil {
 			return data, err
 		}
 		if len(bytes.TrimSpace(img)) == 0 {
-			return data, fmt.Errorf("空封面 %s", rel.Image)
+			return data, fmt.Errorf("图片为空 %s", name)
 		}
-		data.covers[rel.Image] = img
+		data.covers[name] = img
 	}
 	return data, nil
 }

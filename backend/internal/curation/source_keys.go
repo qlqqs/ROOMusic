@@ -18,6 +18,7 @@ type KeyStore interface {
 type SourceKeySettings struct {
 	Name       string `json:"name"`
 	Configured bool   `json:"configured"`
+	Optional   bool   `json:"optional,omitempty"`
 	LastFour   string `json:"last_four"`
 	Status     string `json:"status"`
 }
@@ -75,7 +76,7 @@ func (s *Sources) SetKey(ctx context.Context, id, name, actorID, key string) (So
 	if err != nil {
 		return SourceSettings{}, err
 	}
-	return committedSourceState(ctx, tx, r)
+	return s.committedSourceState(ctx, tx, r)
 }
 
 func (s *Sources) ClearKey(ctx context.Context, id, name, actorID string) (SourceSettings, error) {
@@ -96,7 +97,7 @@ func (s *Sources) ClearKey(ctx context.Context, id, name, actorID string) (Sourc
 	if err != nil {
 		return SourceSettings{}, err
 	}
-	return committedSourceState(ctx, tx, r)
+	return s.committedSourceState(ctx, tx, r)
 }
 
 func loadKeySettings(ctx context.Context, tx *sql.Tx, d sources.Declaration) ([]SourceKeySettings, error) {
@@ -116,6 +117,7 @@ func loadKeySettings(ctx context.Context, tx *sql.Tx, d sources.Declaration) ([]
 		if err := rows.Scan(&key.Name, &key.Configured, &key.LastFour, &key.Status); err != nil {
 			return nil, err
 		}
+		key.Optional = slices.Contains(d.OptionalKeys, key.Name)
 		keys = append(keys, key)
 	}
 	return keys, rows.Err()
@@ -132,7 +134,7 @@ func (s *Sources) Key(ctx context.Context, id, name string) (string, error) {
 	if _, err := s.namedKey(id, name); err != nil {
 		return "", err
 	}
-	keys, err := s.readKeys(ctx, id, []string{name})
+	keys, err := s.readKeys(ctx, id, []string{name}, nil)
 	return keys[name], err
 }
 
@@ -141,11 +143,11 @@ func (s *Sources) Keys(ctx context.Context, id string) (map[string]string, error
 	if err != nil {
 		return nil, err
 	}
-	return s.readKeys(ctx, id, r.Declaration.Keys)
+	return s.readKeys(ctx, id, r.Declaration.Keys, r.Declaration.OptionalKeys)
 }
 
 // 每次出站前在同一数据库快照中取出所需密钥，按本次密文回写结果。
-func (s *Sources) readKeys(ctx context.Context, id string, names []string) (map[string]string, error) {
+func (s *Sources) readKeys(ctx context.Context, id string, names, optional []string) (map[string]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT name,ciphertext,status FROM curation_source_keys
  WHERE source=$1 AND name=ANY($2::text[])`, id, names)
 	if err != nil {
@@ -164,12 +166,15 @@ func (s *Sources) readKeys(ctx context.Context, id string, names []string) (map[
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if len(stored) != len(names) {
-		return nil, disabledSource("key_missing")
-	}
 	out := make(map[string]string, len(names))
 	for _, name := range names {
-		key := stored[name]
+		key, exists := stored[name]
+		if !exists {
+			if slices.Contains(optional, name) {
+				continue
+			}
+			return nil, disabledSource("key_missing")
+		}
 		if key.status == "invalid" {
 			return nil, disabledSource("key_invalid")
 		}
@@ -183,8 +188,12 @@ func (s *Sources) readKeys(ctx context.Context, id string, names []string) (map[
 		out[name] = string(plain)
 	}
 	if used, ok := ctx.Value(keyUseContext{}).(map[string]keyUse); ok {
-		for name, key := range stored {
-			used[name] = key
+		for _, name := range names {
+			if key, ok := stored[name]; ok {
+				used[name] = key
+			} else {
+				delete(used, name)
+			}
 		}
 	}
 	return out, nil

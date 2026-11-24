@@ -4,6 +4,7 @@
       "album_count": 1,
       "available": true,
       "id": "00000000-0000-4000-8000-000000000001",
+      "image": null,
       "initial_group": "D",
       "name": "邓丽君",
       "roles": [
@@ -13,6 +14,8 @@
       ],
       "track_count": 2
     },
+    "bio": null,
+    "image": null,
     "name_source": "auto",
     "names": [
       {

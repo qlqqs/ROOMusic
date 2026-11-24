@@ -1,0 +1,66 @@
+/* 简介：正文宽度限制在易读的行长，左对齐；折叠时最多 4 行。 */
+.bio {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  max-width: 72ch;
+  min-width: 0;
+}
+
+.text {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--fs-14);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.text[data-expanded] {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+.toggle {
+  min-height: 28px;
+  margin-inline-start: -6px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--color-hover);
+  color: var(--text-primary);
+}
+
+.credits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-3);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  overflow-wrap: anywhere;
+}
+
+.credits a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.credits a:hover {
+  color: var(--text-primary);
+}

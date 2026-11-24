@@ -58,7 +58,7 @@ cp fonts-noto-cjk/usr/share/fontconfig/conf.avail/70-fonts-noto-cjk.conf ~/.conf
 ROOMUSIC_UPSTREAM_MOCK_URL=http://127.0.0.1:18090 mise exec -- make dev
 ```
 
-后端启动时会警告并列出 mock 地址。MusicBrainz、Cover Art Archive、LRCLIB、AcoustID 和 Tavily 会连接该地址。AcoustID 的应用密钥、用户密钥和 Tavily 搜索密钥按设置页要求填写虚构值即可。模型与 SearXNG 的地址分别在管家设置中填写：
+后端启动时会警告并列出 mock 地址。MusicBrainz、Cover Art Archive、LRCLIB、AcoustID、Tavily，以及五个艺人资料源 Wikidata、Wikimedia Commons、维基百科、Fanart.tv、TheAudioDB 都会连接该地址。AcoustID 的应用密钥和用户密钥、Fanart.tv 项目密钥（个人密钥可选）、TheAudioDB 密钥及 Tavily 搜索密钥按设置页要求填写虚构值即可。模型与 SearXNG 的地址分别在管家设置中填写：
 
 | 用途 | 基础地址 |
 | --- | --- |
@@ -93,6 +93,17 @@ make mock-upstream MOCK_ADDR=127.0.0.1:18091 MOCK_ARGS='-scenario lrclib=slow -s
 ### 合成数据与模型脚本
 
 `backend/internal/upstreammock/testdata/catalog.json` 列出所有固定 ID、碟片曲序、时长、歌词和指纹。例如发行《潮线以北》的单碟版 MBID 为 `30000000-0000-4000-8000-000000000001`，第一首《潮汐信箱》时长 180 秒、ISRC 为 `QMZ9X2400001`。指纹 `mock-tide` 命中该录音，`mock-ambiguous` 有两个候选，`mock-empty` 返回空结果。这些指纹用于接口调用。试用扫描可给合成曲库打上相应 MBID。
+
+艺人资料样本的 MBID 前缀均为 `10000000-0000-4000-8000-`。库中已有艺人 MBID 对应且开启自动整理后，可用以下样本核对图片与简介的回退。
+
+| MBID 尾段 | 艺人 | mock 提供的资料 |
+| --- | --- | --- |
+| `000000000001` | 纸屿（海岸二重奏） | Fanart.tv 两张不同赞数的头像、TheAudioDB 图片及中英文简介、Wikidata Q900001 的 Commons 图片和中英文维基百科条目 |
+| `000000000002` | Hollow Meridian | 仅 TheAudioDB 图片及中英文简介，中文带脚注标记 |
+| `000000000003` | 纸屿（独奏者） | 所有资料源均为空 |
+| `000000000004` | 盐风小组 | 仅 Commons 图片，MusicBrainz 无链接，Wikidata 的 P434 反查指向 Q900004 |
+
+五个源的基础路径分别为 `/wikidata`、`/commons`、`/wikipedia`、`/fanarttv` 和 `/theaudiodb`。图片请求也留在 mock 服务。用 `/_mock/scenarios/fanarttv` 切换故障后，可查看该艺人的图片是否从下一来源补上。已有图片可在整理记录中撤销；相同来源条目的抑制标记会一并生效。TheAudioDB 路径中的密钥在 `/_mock/requests` 中显示为 `***`。
 
 将 `backend/internal/upstreammock/testdata/` 复制到 `temp/mock-data/`，编辑 `catalog.json` 以及其中引用的图片。示例脚本可保存为 `temp/mock-script.json`：
 

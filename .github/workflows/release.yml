@@ -116,6 +116,14 @@ jobs:
             echo "::error::发布镜像前必须设置仓库 secret ACOUSTID_CLIENT_KEY"
             exit 1
           fi
+      - name: Check optional Fanart.tv project key
+        if: needs.prepare.outputs.publish == 'true'
+        env:
+          FANARTTV_PROJECT: ${{ secrets.FANARTTV_PROJECT_KEY }}
+        run: |
+          if [[ -z "$FANARTTV_PROJECT" ]]; then
+            echo "::warning::未配置 FANARTTV_PROJECT_KEY，管理员可在外部源设置中填写 Fanart.tv 项目密钥"
+          fi
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v7
@@ -126,7 +134,9 @@ jobs:
           build-args: |
             ROOMUSIC_VERSION=${{ needs.prepare.outputs.version }}
             ROOMUSIC_COMMIT=${{ github.sha }}
-          secrets: acoustid_client=${{ secrets.ACOUSTID_CLIENT_KEY }}
+          secrets: |
+            acoustid_client=${{ secrets.ACOUSTID_CLIENT_KEY }}
+            fanarttv_project=${{ secrets.FANARTTV_PROJECT_KEY }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=${{ needs.prepare.outputs.publish }}
       - name: Export digest

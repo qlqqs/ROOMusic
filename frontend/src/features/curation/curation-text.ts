@@ -29,6 +29,8 @@ const capabilityText: Record<SourceCapability, string> = {
   cover_art: "封面",
   lyrics: "歌词",
   fingerprint_lookup: "声学指纹",
+  artist_image: "艺人图片",
+  artist_bio: "艺人简介",
 };
 
 /** 一个源能提供什么，如“发行、录音、艺人”。 */
@@ -57,9 +59,12 @@ export function sourceInactiveText(reason: SourceInactiveReason | null): string 
   }
 }
 
-/** 只用来识别、自己不写入任何内容的源（AcoustID）：经它对上的结果记在 MusicBrainz 名下，没有“来自它的改动”可看或可撤。 */
+/**
+ * 只用来识别、自己不写入任何内容的源（AcoustID 的指纹、Wikidata 的艺人条目）：经它对上的结果记在别的源名下，
+ * 没有“来自它的改动”可看或可撤。
+ */
 export function writesOwnChanges(source: CurationSourceDTO): boolean {
-  return source.capabilities.some((capability) => capability !== "fingerprint_lookup");
+  return source.capabilities.some((capability) => capability !== "fingerprint_lookup" && capability !== "artist_lookup");
 }
 
 /** 打开总开关前列出：每个开着的源会收到什么（ADR 0006 第 8 节）。 */
@@ -68,6 +73,11 @@ export const sentToSource: Record<string, string> = {
   coverartarchive: "外部编号",
   lrclib: "曲目标题、艺人、专辑名、时长",
   acoustid: "由音频算出的声学指纹（不能还原成音频）与时长，以及应用密钥与你填入的用户密钥",
+  wikidata: "艺人的 MusicBrainz 编号与 Wikidata 条目编号",
+  commons: "Wikidata 给出的图片文件名",
+  wikipedia: "维基百科的条目名",
+  fanarttv: "艺人的 MusicBrainz 编号，以及项目密钥与你填入的个人密钥",
+  theaudiodb: "艺人的 MusicBrainz 编号与你填入的密钥",
 };
 
 /** 范围撤销里跳过的原因；未知的码给兜底文案，临时性失败提示可以再试。 */

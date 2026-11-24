@@ -23,9 +23,11 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
+	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 	"github.com/qlqq/roomusic/backend/internal/personal"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
 const artistLargeSamplesDirectoryEnv = "ROOMUSIC_ARTIST_LARGE_SAMPLES_DIR"
@@ -42,6 +44,7 @@ func TestPostgreSQLArtistAPIResponseSamples(t *testing.T) {
 	recordArtistCandidateSamples(t, f.samples)
 	recordArtistQueueLimit(t, f.samples)
 	recordArtistCorrectionSearchSamples(t, f.samples)
+	recordArtistMediaSamples(f)
 	for _, name := range strings.Fields(artistRequiredSamples) {
 		if _, ok := f.samples.samples[name]; !ok {
 			t.Fatalf("缺少艺人场景样本：%s", name)
@@ -53,6 +56,53 @@ func TestPostgreSQLArtistAPIResponseSamples(t *testing.T) {
 		}
 	}
 	f.samples.finish()
+}
+
+// 在治理样本之后补资料，避免整理记录改变治理列表的分页与计数。
+func recordArtistMediaSamples(f *artistSamples) {
+	f.t.Helper()
+	t := f.t
+	ctx := t.Context()
+	writer := curation.NewWriter(f.app.database, f.app.dataDirectory, nil)
+	if _, err := writer.SetSettings(ctx, f.admin.id, true); err != nil {
+		t.Fatal(err)
+	}
+	imageData, err := os.ReadFile(filepath.Join("..", "upstreammock", "testdata", "cover.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	image := sources.ArtistImage{ID: "Sample.png", Data: imageData, Attribution: sources.Attribution{
+		Source: "commons", SourceURL: "https://commons.wikimedia.org/wiki/File:Sample.png",
+		Author: "样本摄影组", License: "CC BY 4.0", LicenseURL: "https://creativecommons.org/licenses/by/4.0/",
+	}}
+	bio := sources.ArtistBio{ID: "zh:Sample", Lang: "zh", Text: "这位虚构的艺人曾以沿岸生活为题创作音乐。", Attribution: sources.Attribution{
+		Source: "wikipedia", SourceURL: "https://zh.wikipedia.org/wiki/Sample", License: "CC BY-SA 4.0", LicenseURL: "https://creativecommons.org/licenses/by-sa/4.0/",
+	}}
+	for _, tc := range []struct {
+		artist, name, mbid, text string
+		available                bool
+	}{
+		{f.missing, "artists/detail-unavailable", artistMediaMBID, bio.Text, false},
+		{f.primary, "artists/detail-with-media", "10000000-0000-4000-8000-000000000002", "这段合成简介展示艺人的资料与署名。", true},
+	} {
+		linkArtistMedia(t, f.app, tc.artist, tc.mbid)
+		bio.Text = tc.text
+		if _, err := writer.ApplyArtistImage(ctx, curation.ArtistImageRequest{ArtistID: tc.artist, MBID: tc.mbid, Key: uuid.New(), Image: image}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := writer.ApplyArtistBio(ctx, curation.ArtistBioRequest{ArtistID: tc.artist, MBID: tc.mbid, Key: uuid.New(), Bio: bio}); err != nil {
+			t.Fatal(err)
+		}
+		sample := f.get(tc.name, "/api/v1/artists/"+tc.artist)
+		summary := sample["artist"].(map[string]any)
+		picture, hasImage := sample["image"].(map[string]any)
+		lead, hasBio := sample["bio"].(map[string]any)
+		if summary["available"] != tc.available || !hasImage || !hasBio ||
+			summary["image"] == nil || summary["image"] != picture["resource"] ||
+			picture["license"] != image.License || lead["text"] != bio.Text || lead["license"] != bio.License {
+			t.Fatalf("%s 的可用状态或资料不符：%v", tc.name, sample)
+		}
+	}
 }
 
 // 同时供默认、搜索、个人套件排除独立艺人增量；比较和清理必须使用同一边界。
@@ -356,13 +406,19 @@ func recordArtistReadSamples(f *artistSamples) {
 		}
 	}
 	detail := f.get("artists/detail", base)
-	if detail["artist"].(map[string]any)["name"] != "邓丽君" {
-		f.t.Fatal("艺人详情错误")
+	summary := detail["artist"].(map[string]any)
+	if summary["name"] != "邓丽君" || summary["available"] != true {
+		f.t.Fatal("可用艺人的摘要错误")
 	}
-	missing := f.get("artists/detail-unavailable", "/api/v1/artists/"+f.missing)
-	if missing["artist"].(map[string]any)["available"] != false {
-		f.t.Fatal("不可用艺人被隐藏或当作可用")
+	for _, field := range []string{"image", "bio"} {
+		if value, exists := detail[field]; !exists || value != nil {
+			f.t.Fatalf("无资料的详情应含 %s: null，得到 %v", field, detail)
+		}
 	}
+	if value, exists := summary["image"]; !exists || value != nil {
+		f.t.Fatalf("无资料的摘要应含 image: null，得到 %v", summary)
+	}
+
 	for _, tc := range []struct {
 		name, path string
 		total      int
@@ -857,7 +913,7 @@ search/artist-correction-normalized-albums-old search/artist-correction-normaliz
 search/artist-correction-normalized-artists
 artists/list-preparing artists/detail-preparing artists/queue-preparing
 artists/list-name artists/list-album-count artists/list-role artists/list-initial artists/list-empty artists/list-out-of-range
-artists/detail artists/detail-unavailable artists/detail-redirect artists/names artists/names-out-of-range
+artists/detail artists/detail-unavailable artists/detail-with-media artists/detail-redirect artists/names artists/names-out-of-range
 artists/albums artists/role-tracks artists/role-tracks-missing artists/queue artists/queue-empty artists/queue-random
 governance/artist-merge governance/artist-merge-replayed governance/artist-split-preview-aliases governance/artist-split-preview-albums
 governance/artist-split-new governance/artist-split-restored-id governance/artist-name-set governance/artist-name-auto

@@ -17,6 +17,8 @@ const (
 	CoverArt          Capability = "cover_art"
 	LyricsLookup      Capability = "lyrics"
 	FingerprintLookup Capability = "fingerprint_lookup"
+	ArtistImageLookup Capability = "artist_image"
+	ArtistBioLookup   Capability = "artist_bio"
 )
 
 type Declaration struct {
@@ -24,6 +26,7 @@ type Declaration struct {
 	Capabilities   []Capability
 	DefaultEnabled bool
 	Keys           []string
+	OptionalKeys   []string
 	MinInterval    time.Duration
 }
 

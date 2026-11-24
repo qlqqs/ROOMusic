@@ -240,6 +240,12 @@ func (w *Worker) runPasses(ctx context.Context) error {
 	if err := w.closeBatch(ctx); err != nil {
 		return err
 	}
+	if err := w.walkArtistMedia(ctx, checkPriority); err != nil {
+		return err
+	}
+	if err := w.closeBatch(ctx); err != nil {
+		return err
+	}
 	if err := w.writer.AdvanceReleaseMergeQueues(ctx, StoredRuleVersion); err != nil {
 		return err
 	}

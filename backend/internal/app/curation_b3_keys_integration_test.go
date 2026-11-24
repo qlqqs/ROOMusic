@@ -86,7 +86,7 @@ func b3SourceList(t *testing.T, app *integrationTestApplication, admin *integrat
 		if err := json.Unmarshal(payload, &object); err != nil {
 			t.Fatal(err)
 		}
-		if _, present := object["keys"]; present != (item.ID == "acoustid") {
+		if _, present := object["keys"]; present != (item.ID == "acoustid" || item.ID == "fanarttv" || item.ID == "theaudiodb") {
 			t.Errorf("源 %s 的 keys 字段出现=%t", item.ID, present)
 		}
 		if bytes.Contains(payload, []byte(b3AppKey)) || bytes.Contains(payload, []byte(b3UserKey)) {
@@ -94,8 +94,8 @@ func b3SourceList(t *testing.T, app *integrationTestApplication, admin *integrat
 		}
 		items[item.ID] = item
 	}
-	if len(items) != 4 {
-		t.Fatalf("源列表长度=%d，期望 4", len(items))
+	if len(items) != 9 {
+		t.Fatalf("源列表长度=%d，期望 9", len(items))
 	}
 	return items
 }

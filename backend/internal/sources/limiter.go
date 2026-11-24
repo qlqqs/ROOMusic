@@ -104,3 +104,10 @@ func (l *Limiter) release(outbound bool) {
 	l.busy = false
 	l.notify()
 }
+
+// startSerial 记下出站时刻，等响应读完再释放许可。
+func (l *Limiter) startSerial() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.next = l.now().Add(l.interval)
+}

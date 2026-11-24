@@ -56,6 +56,8 @@ const titles = {
   track_auto_correction: "撤销这次曲目的自动补全？",
   release_external_artwork: "去掉这张自动补的封面？",
   track_external_lyrics: "去掉这份自动补的歌词？",
+  artist_external_artwork: "去掉这张自动补的艺人图片？",
+  artist_external_bio: "去掉这段自动补的艺人简介？",
   external_link: "解除这次外部对应？",
   artist_merge: "撤销这次艺人合并？",
   artist_rename: "撤销这次改名？",

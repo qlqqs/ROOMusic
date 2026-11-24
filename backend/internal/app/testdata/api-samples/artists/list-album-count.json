@@ -5,6 +5,7 @@
         "album_count": 2,
         "available": true,
         "id": "00000000-0000-4000-8000-000000000001",
+        "image": null,
         "initial_group": "T",
         "name": "同名艺人",
         "roles": [
@@ -18,6 +19,7 @@
         "album_count": 1,
         "available": true,
         "id": "00000000-0000-4000-8000-000000000002",
+        "image": null,
         "initial_group": "T",
         "name": "Teresa Teng",
         "roles": [
@@ -31,6 +33,7 @@
         "album_count": 1,
         "available": true,
         "id": "00000000-0000-4000-8000-000000000003",
+        "image": null,
         "initial_group": "Z",
         "name": "作曲者",
         "roles": [
@@ -42,6 +45,7 @@
         "album_count": 1,
         "available": true,
         "id": "00000000-0000-4000-8000-000000000004",
+        "image": null,
         "initial_group": "Z",
         "name": "制作人",
         "roles": [
@@ -53,6 +57,7 @@
         "album_count": 1,
         "available": true,
         "id": "00000000-0000-4000-8000-000000000005",
+        "image": null,
         "initial_group": "Z",
         "name": "指挥者",
         "roles": [
@@ -64,6 +69,7 @@
         "album_count": 1,
         "available": true,
         "id": "00000000-0000-4000-8000-000000000006",
+        "image": null,
         "initial_group": "Y",
         "name": "演奏者",
         "roles": [
@@ -75,6 +81,7 @@
         "album_count": 1,
         "available": true,
         "id": "00000000-0000-4000-8000-000000000007",
+        "image": null,
         "initial_group": "D",
         "name": "邓丽君",
         "roles": [

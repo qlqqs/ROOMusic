@@ -23,9 +23,14 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/acoustid"
+	"github.com/qlqq/roomusic/backend/internal/sources/commons"
 	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
+	"github.com/qlqq/roomusic/backend/internal/sources/fanarttv"
 	"github.com/qlqq/roomusic/backend/internal/sources/lrclib"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
+	"github.com/qlqq/roomusic/backend/internal/sources/theaudiodb"
+	"github.com/qlqq/roomusic/backend/internal/sources/wikidata"
+	"github.com/qlqq/roomusic/backend/internal/sources/wikipedia"
 	"github.com/qlqq/roomusic/backend/internal/upstreammock"
 )
 
@@ -91,8 +96,72 @@ func mockLookups() []mockLookup {
 	}
 }
 
+func mockArtistMediaLookups() []mockLookup {
+	const saltWindMBID = "10000000-0000-4000-8000-000000000004"
+	keys := func(context.Context) (map[string]string, error) {
+		return map[string]string{"project": "mock-project", "personal": "mock-personal", "api_key": "mock-audio"}, nil
+	}
+	return []mockLookup{
+		{"wikidata", "/wikidata", "", func(opts sources.Options) func(context.Context) (bool, error) {
+			client := wikidata.New(opts)
+			return func(ctx context.Context) (bool, error) {
+				got, err := client.ArtistLinks(ctx, sources.ArtistLinks{MBID: saltWindMBID})
+				return got.WikidataID == "Q900004" && got.CommonsFile == "Salt Wind Trio.png", err
+			}
+		}, sources.ErrNotFound},
+		{"commons", "/commons", "", func(opts sources.Options) func(context.Context) (bool, error) {
+			client := commons.New(opts)
+			return func(ctx context.Context) (bool, error) {
+				got, err := client.ArtistImage(ctx, sources.ArtistLinks{CommonsFile: "Salt Wind Trio.png"})
+				if err != nil {
+					return false, err
+				}
+				_, err = artwork.ValidateImage(got.Data)
+				return got.Author == "合成影像小组" && got.License == "CC BY 4.0" && got.LicenseURL != "", err
+			}
+		}, sources.ErrNotFound},
+		{"wikipedia", "/wikipedia", "", func(opts sources.Options) func(context.Context) (bool, error) {
+			client := wikipedia.New(opts)
+			return func(ctx context.Context) (bool, error) {
+				got, err := client.ArtistBio(ctx, sources.ArtistLinks{WikipediaZH: "纸屿（二重奏）"}, "zh")
+				return got.Lang == "zh" && got.License == "CC BY-SA 4.0" &&
+					got.Text == "纸屿是一支虚构的海岸二重奏，以录制潮声与木吉他合奏为特色。", err
+			}
+		}, sources.ErrNotFound},
+		{"fanarttv", "/fanarttv", "", func(opts sources.Options) func(context.Context) (bool, error) {
+			opts.Keys = keys
+			client := fanarttv.New(opts)
+			return func(ctx context.Context) (bool, error) {
+				got, err := client.ArtistImage(ctx, sources.ArtistLinks{MBID: mediaMBID})
+				if err != nil {
+					return false, err
+				}
+				_, err = artwork.ValidateImage(got.Data)
+				return got.ID == "9100012" && got.Source == "fanarttv", err
+			}
+		}, sources.ErrNotFound},
+		{"theaudiodb", "/theaudiodb", "", func(opts sources.Options) func(context.Context) (bool, error) {
+			opts.Keys = keys
+			client := theaudiodb.New(opts)
+			return func(ctx context.Context) (bool, error) {
+				links := sources.ArtistLinks{MBID: mediaMBID}
+				bio, err := client.ArtistBio(ctx, links, "zh")
+				if err != nil {
+					return false, err
+				}
+				image, err := client.ArtistImage(ctx, links)
+				if err != nil {
+					return false, err
+				}
+				_, err = artwork.ValidateImage(image.Data)
+				return bio.ID == "920001" && bio.Text == "纸屿以海岸为主题创作音乐。" && image.Source == "theaudiodb", err
+			}
+		}, sources.ErrNotFound},
+	}
+}
+
 func TestUpstreamMockSourceScenarios(t *testing.T) {
-	for _, lookup := range mockLookups() {
+	for _, lookup := range append(mockLookups(), mockArtistMediaLookups()...) {
 		t.Run(lookup.service, func(t *testing.T) {
 			t.Parallel()
 			for _, scenario := range []string{"ok", "slow", "not_found", "unavailable", "rate_limited", "timeout", "malformed", "drop", "offline"} {
