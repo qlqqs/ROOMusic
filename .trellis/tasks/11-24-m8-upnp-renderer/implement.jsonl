@@ -1,9 +1,0 @@
-{"file": ".trellis/tasks/11-24-m8-upnp-renderer/research/repo.md", "reason": "播放区、输出端、流、鉴权、部署与前端的现状与锚点"}
-{"file": ".trellis/tasks/11-24-m8-upnp-renderer/research/protocol.md", "reason": "SSDP、AVTransport、RenderingControl、流头部与设备差异"}
-{"file": ".trellis/spec/backend/playback-zone-contracts.md", "reason": "播放区与输出端协议"}
-{"file": ".trellis/spec/backend/playback-zone-service-contracts.md", "reason": "zones.Service 的输出端方法与装配"}
-{"file": ".trellis/spec/backend/zones-data-contracts.md", "reason": "设备与播放区的存储"}
-{"file": ".trellis/spec/backend/playback-render-contracts.md", "reason": "渲染会话、节流与格式协商"}
-{"file": ".trellis/spec/backend/identity-origin-contracts.md", "reason": "鉴权与来源校验"}
-{"file": ".trellis/spec/backend/deployment-environment-contracts.md", "reason": "环境变量与 Compose 约定"}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移写法"}
