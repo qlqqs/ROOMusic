@@ -1,19 +1,71 @@
 # 艺人图片与简介
 
-## Goal
+父任务 `11-24-m8-devices-artists-plugins`，决定 W5。现状调研：`research/repo.md`；外部接口：`research/external-apis.md`。
+技术设计见 `design.md`，执行顺序见 `implement.md`。前置：`11-24-m8-mock-upstream` 合入（本任务往 mock 里加艺人来源的路由）。
 
-艺人图片与简介：默认 Wikidata、Commons、维基百科，填密钥后启用 Fanart.tv 与 TheAudioDB；接入自动整理与艺人页
+## 目标
 
-## Requirements
+打开自动整理后，已对上 MusicBrainz 的艺人自动补上图片与简介；艺人页与艺人列表显示它们，并注明来源与许可。
+和外部封面、歌词一样只补空缺、记在整理记录里、可以撤销。
 
-- TBD
+用户价值：艺人页不再只有一个名字缩写的圆章；不用手动找图、写简介。
 
-## Acceptance Criteria
+## 现状
 
-- [ ] TBD
+- 艺人没有图片与简介字段；艺人页与列表用按 ID 取色的缩写圆章（`frontend/src/features/artists/components/artist-monogram.tsx`）。
+- M7 G 已把“本地艺人 ↔ MusicBrainz 艺人 MBID”写进 `external_links`（程序层写入，可撤销）。这是取资料的唯一入口。
+- MusicBrainz 客户端不解码 url-rels（`backend/internal/sources/musicbrainz/finders.go:132-138`）。
+- B2 外部封面的整套做法（外部表、内容寻址存储、跳过规则、抑制标记、撤销、`/api/v1/artworks/{id}` 读取）可以照搬，但写入目标固定为发行，要另写以艺人为目标的一份。
 
-## Notes
+## 需求
 
-- Keep `prd.md` focused on requirements, constraints, and acceptance criteria.
-- Lightweight tasks can remain PRD-only.
-- For complex tasks, add `design.md` for technical design and `implement.md` for execution planning before `task.py start`.
+- R1 五个新来源，都是内置适配器，在“设置 › 自动整理 › 外部源”里与现有四个并列：
+  - Wikidata、Wikimedia Commons、维基百科：默认开，不要密钥。
+  - Fanart.tv：需要项目密钥。发布镜像可内置 ROOMusic 的项目密钥（发布流水线可选 secret，缺了不让发布失败）；没有内置时管理员可填项目密钥；个人密钥可选。
+  - TheAudioDB：管理员填入密钥后启用。
+- R2 找资料的路线只从已有的艺人 MBID 出发：MusicBrainz 艺人的 url-rels 取 Wikidata 与维基百科链接；没有链接时按 P434 反查 Wikidata；
+  Fanart.tv、TheAudioDB 按 MBID 查。没有 MBID 对应的艺人不按名字搜索（弱相似不做权威判断）。
+- R3 图片：选一张方形头像。优先级 Fanart.tv `artistthumb`（点赞最多）→ TheAudioDB `strArtistThumb` → Commons（Wikidata P18）。
+  Commons 图片要有可用的许可（extmetadata 的 `LicenseShortName` 不为空），取标准宽度 960 的缩略图。下载后进内容寻址存储，经现有图片接口读取。
+- R4 简介：维基百科中文（`Accept-Language: zh-cn`，简体）→ TheAudioDB `strBiographyCN`（去掉脚注残留）→ 维基百科英文 → TheAudioDB `strBiography`。
+  存纯文本的导语段，最多 4000 字，记语言、来源、原文链接与许可。
+- R5 署名：图片与简介都带来源名、原页面链接；Commons 图片另带作者与许可（有链接时带链接）；维基百科简介标 “CC BY-SA 4.0”、链接原条目。艺人页显示这些信息。
+- R6 写入走自动整理：只补空缺（已有图片或简介的不覆盖）；每次写入有整理记录，可单条、按批、按来源撤销；撤销后同一图片或同一来源条目不再被写入；
+  总开关、源开关、`inactive_reason` 规则与现有外部源一致。艺人被合并时资料跟随有效艺人（读取时解析重定向）。
+- R7 读取：`ArtistSummary` 加可选的 `image`（图片资源 ID），`ArtistDetail` 加可选的 `image`（含署名）与 `bio`（文字、语言、署名）。没有资料时字段为 `null`，旧前端不受影响。
+- R8 前端：艺人页页头用图片替代圆章（加载失败回到圆章），名字下方显示简介（默认折叠到 4 行，可展开），简介与图片的署名放在简介下方；
+  艺人列表行的小圆章有图时显示图片。整理记录、撤销对话框认得两种新操作类型。设置页的外部源列表显示五个新源，能力与“发给外部的数据”文案补全。
+- R9 mock 服务器加五个来源的路由与合成数据，开发与试用实例可以离线走通。
+
+## 验收
+
+- A1 程序层：有 MBID 对应的艺人在一轮整理后补上图片与简介；记录的来源、批次、署名完整；没有对应的艺人不发请求。
+- A2 优先级与回退：按 R3、R4 的顺序取；前一个来源没有结果、未启用或出错时用下一个；全都没有时记为已尝试，证据变化（例如新填密钥、对应变了）后再试。
+- A3 撤销：单条与按来源撤销后图片与简介消失，文件引用计数正确；重跑不再写入被撤销的同一项，但可以写入其他来源的。
+- A4 闸门：总开关关闭时不发任何外部请求；TheAudioDB 没填密钥时是 `key_missing`；Fanart.tv 有内置项目密钥时不填也可用。
+- A5 读取接口：样本更新，`ArtistSummary`/`ArtistDetail` 的新字段在有与没有时都与样本一致；合并后的艺人读取到被并入方的资料（如果并入方自己没有）。
+- A6 维基媒体请求带项目 UA 与 `Accept-Encoding: gzip`，遵守 `Retry-After`；Commons 只请求标准宽度。
+- A7 前端：艺人页与列表在有图、无图、图片加载失败、长简介、无简介五种情况下正确；390 与 1440 两种宽度截图无溢出（用中文字体核对）。
+- A8 mock：五个来源的 `ok` 与故障情景都能让开发实例走通 A1、A2。
+
+## 不做
+
+- 本地的艺人图片文件（如艺人目录里的 `artist.jpg`）：艺人与目录不是一一对应，另议。
+- 人工上传或改写图片与简介；在多张图片之间挑选。
+- 没有 MBID 对应的艺人按名字搜索。
+- 定期刷新已补上的资料。
+- 背景大图、logo、横幅。
+- Last.fm（条款禁止使用图片）、Spotify、网易云（没有开放接口）。
+
+## 规划决定
+
+路线：人工选择，qlqq 于 2026-11-24 预先授权“规划完直接实现”（父任务 W1）；来源分层由 qlqq 选定（W5），其余默认值由主代理取定，交付时列出。
+
+| 编号 | 决定 | 理由 |
+| --- | --- | --- |
+| K1 | 只从 MBID 对应出发 | 按名字搜同名艺人会对错，违背“弱相似不做权威判断” |
+| K2 | Fanart.tv 照 AcoustID 的做法内置项目密钥，但发布时缺 secret 只警告 | 官方要求项目密钥由开发方注册；不能因为还没注册就卡住发布 |
+| K3 | 图片优先 Fanart.tv，其次 TheAudioDB，最后 Commons | 前两者是专门为播放器整理的方形头像；Commons 照片构图与年代参差，但不要密钥、许可清楚 |
+| K4 | 简介优先中文维基百科 | 界面是中文；TheAudioDB 的中文是从维基百科搬来的，繁简混杂 |
+| K5 | 简介存纯文本导语段 | 不渲染外部 HTML；导语段足够做简介 |
+| K6 | 只补空缺，不定期刷新 | 与 B2 封面、歌词一致；刷新会带来覆盖与撤销的新语义 |

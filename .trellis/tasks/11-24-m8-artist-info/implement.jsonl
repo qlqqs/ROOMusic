@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/11-24-m8-artist-info/research/repo.md", "reason": "仓库现状与可照搬的 B2 机制、锚点"}
+{"file": ".trellis/tasks/11-24-m8-artist-info/research/external-apis.md", "reason": "五个来源的接口、密钥、限速、许可"}
+{"file": ".trellis/spec/backend/sources-contracts.md", "reason": "新增源的写法、请求器、限速缓存、发给外部的数据"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "闸门、外部对应、外部封面与歌词的写入与撤销、后台循环"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "艺人读取、重定向、写锁顺序"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移与约束写法"}
+{"file": ".trellis/spec/backend/deployment-environment-contracts.md", "reason": "内置密钥的 ldflags 与发布 secret"}
