@@ -33,6 +33,7 @@ func Declaration() sources.Declaration {
 }
 
 type Options struct {
+	MockHost               sources.MockHost
 	DataDirectory, BaseURL string
 	Logger                 *slog.Logger
 	NewClient              sources.ClientFactory
@@ -60,7 +61,7 @@ func New(opts Options) *Client {
 		logger = slog.Default()
 	}
 	requests := sources.NewRequester(Declaration(), sources.Options{
-		DataDirectory: opts.DataDirectory, Logger: opts.Logger, NewClient: opts.NewClient, Limiter: opts.Limiter, Now: opts.Now, After: opts.After,
+		MockHost: opts.MockHost, DataDirectory: opts.DataDirectory, Logger: opts.Logger, NewClient: opts.NewClient, Limiter: opts.Limiter, Now: opts.Now, After: opts.After,
 	})
 	return &Client{
 		address:          base + "/v2/lookup",

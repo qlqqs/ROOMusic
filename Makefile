@@ -1,4 +1,4 @@
-.PHONY: dev dev-reset backend-test backend-build frontend-install frontend-check frontend-build frontend-e2e
+.PHONY: dev dev-reset backend-test backend-build frontend-install frontend-check frontend-build frontend-e2e mock-upstream
 
 dev:
 	./scripts/dev.sh
@@ -25,3 +25,7 @@ frontend-build:
 # 首次运行前需要安装浏览器：cd frontend && npx playwright install --with-deps chromium
 frontend-e2e:
 	cd frontend && npm run test:e2e
+
+MOCK_ADDR ?= 127.0.0.1:18090
+mock-upstream:
+	cd backend && mise exec -- go run ./cmd/roomusic-upstream-mock -addr "$(MOCK_ADDR)" $(MOCK_ARGS)

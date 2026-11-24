@@ -49,3 +49,91 @@ cp fonts-noto-cjk/usr/share/fontconfig/conf.avail/70-fonts-noto-cjk.conf ~/.conf
 应用端口（Vite、Go 后端）绑定 `0.0.0.0`，便于局域网设备访问；开发和测试的 PostgreSQL 只绑定 `127.0.0.1`。开发使用独立端口，测试由脚本选取空闲端口。开发、测试与生产的 PostgreSQL 使用同一个钉死镜像。测试容器限制 CPU 与内存，数据库集成和端到端测试串行运行。
 
 仅清理当前测试项目及其临时目录，不执行全局 prune。测试仅使用合成数据，不访问现有实例的配置、凭据或数据。
+
+## 外部接口 mock
+
+在仓库根目录运行 `make mock-upstream`，默认监听 `127.0.0.1:18090`。另一个终端运行：
+
+```bash
+ROOMUSIC_UPSTREAM_MOCK_URL=http://127.0.0.1:18090 mise exec -- make dev
+```
+
+后端启动时会警告并列出 mock 地址。MusicBrainz、Cover Art Archive、LRCLIB、AcoustID 和 Tavily 会连接该地址。AcoustID 的应用密钥、用户密钥和 Tavily 搜索密钥按设置页要求填写虚构值即可。模型与 SearXNG 的地址分别在管家设置中填写：
+
+| 用途 | 基础地址 |
+| --- | --- |
+| OpenAI 兼容（自动检测优先选 Responses） | `http://127.0.0.1:18090/openai/v1` |
+| 单独试用 Chat Completions 的探测回退 | `http://127.0.0.1:18090/openai/chat/v1` |
+| Anthropic Messages | `http://127.0.0.1:18090/anthropic` |
+| SearXNG | `http://127.0.0.1:18090/searxng` |
+
+默认模型是 `mock-model` 与 `mock-reviewer`。管理员可以使用回环端点，成员的模型和 SearXNG 端点沿用实例的成员放行名单。
+
+### 切换情景与查看请求
+
+```bash
+mock=http://127.0.0.1:18090
+curl "$mock/_mock/scenarios"
+curl -X PUT "$mock/_mock/scenarios/musicbrainz" --json '{"scenario":"unavailable","retry_after":5}'
+curl -i "$mock/musicbrainz/ws/2/release/30000000-0000-4000-8000-000000000001"
+curl "$mock/_mock/requests?service=musicbrainz&limit=10"
+curl -X POST "$mock/_mock/reset"
+```
+
+环境里设了 `http_proxy` 等代理变量时，对回环地址的请求也会走代理，`curl` 加 `--noproxy '*'` 或设置 `NO_PROXY=127.0.0.1,localhost`。
+
+每个服务可独立选择 `ok`、`not_found`、`unavailable`、`rate_limited`、`timeout`、`slow`、`malformed`、`drop`。限流和不可用的 `retry_after` 单位为秒，默认 2；`slow` 的 `delay_ms` 单位为毫秒，默认 3000。请求记录按最新在前返回，最多保留 500 条，`status: 0` 表示尚未发出响应头。重置清空记录并将全部情景恢复为 `ok`。后端命中已有响应缓存时不会发出请求，试验故障可选一个尚未查询的发行或使用新的开发数据目录。
+
+启动时也可指定端口和初始情景：
+
+```bash
+make mock-upstream MOCK_ADDR=127.0.0.1:18091 MOCK_ARGS='-scenario lrclib=slow -scenario tavily=rate_limited'
+```
+
+### 合成数据与模型脚本
+
+`backend/internal/upstreammock/testdata/catalog.json` 列出所有固定 ID、碟片曲序、时长、歌词和指纹。例如发行《潮线以北》的单碟版 MBID 为 `30000000-0000-4000-8000-000000000001`，第一首《潮汐信箱》时长 180 秒、ISRC 为 `QMZ9X2400001`。指纹 `mock-tide` 命中该录音，`mock-ambiguous` 有两个候选，`mock-empty` 返回空结果。这些指纹用于接口调用。试用扫描可给合成曲库打上相应 MBID。
+
+将 `backend/internal/upstreammock/testdata/` 复制到 `temp/mock-data/`，编辑 `catalog.json` 以及其中引用的图片。示例脚本可保存为 `temp/mock-script.json`：
+
+```json
+{
+  "models": ["mock-model", "mock-reviewer"],
+  "rules": [
+    {
+      "when": {"last_user_contains": "试查发行", "tool_available": "search_music_metadata"},
+      "reply": {"tool_calls": [{"name": "search_music_metadata", "arguments": {"entity": "release", "query": "潮线以北", "limit": 1}}]}
+    },
+    {
+      "when": {"tool_result_contains": "潮线以北"},
+      "reply": {"text": "找到了《潮线以北》。"}
+    }
+  ]
+}
+```
+
+`when` 中的条件同时成立时命中，按文件顺序取首条；`model` 可限定模型名。运行目标会切换到 `backend/`，所以自定义参数写成：
+
+```bash
+make mock-upstream MOCK_ARGS='-data ../temp/mock-data -script ../temp/mock-script.json'
+```
+
+### Compose 试用实例
+
+在与试用容器同架构的 Linux 宿主机上，用项目工具链构建独立二进制：
+
+```bash
+mkdir -p temp
+(cd backend && CGO_ENABLED=0 mise exec -- go build -o ../temp/roomusic-upstream-mock ./cmd/roomusic-upstream-mock)
+```
+
+如果试用 Compose 文件在项目根目录，可在试用项目中加入以下服务。应用与 mock 加入同一个项目网络，应用服务的环境变量设为 `ROOMUSIC_UPSTREAM_MOCK_URL=http://upstream-mock:18090`。模型和 SearXNG 设置中的主机也使用 `upstream-mock:18090`。
+
+```yaml
+services:
+  upstream-mock:
+    image: alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db9275e198ad
+    volumes:
+      - ./temp/roomusic-upstream-mock:/mock:ro
+    entrypoint: ["/mock", "-addr", "0.0.0.0:18090"]
+```

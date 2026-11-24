@@ -1,0 +1,24 @@
+{
+  "models": ["fixture-model", "fixture-reviewer"],
+  "rules": [
+    {
+      "when": {
+        "model": "fixture-model",
+        "last_user_contains": "试查发行",
+        "tool_available": "search_music_metadata"
+      },
+      "reply": {
+        "tool_calls": [
+          {
+            "name": "search_music_metadata",
+            "arguments": {"entity": "release", "query": "潮线以北", "limit": 1}
+          }
+        ]
+      }
+    },
+    {
+      "when": {"tool_result_contains": "潮线以北"},
+      "reply": {"text": "已找到合成发行《潮线以北》。"}
+    }
+  ]
+}

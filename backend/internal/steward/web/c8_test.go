@@ -245,11 +245,9 @@ func TestC8SearchErrorsPrivacyAndAvailable(t *testing.T) {
 			}))
 			defer server.Close()
 			settings.value.SearXNGURL = server.URL + "/base"
-			previous := tavilyURL
-			tavilyURL = server.URL
-			t.Cleanup(func() { tavilyURL = previous })
 			var logs bytes.Buffer
 			s := New(settings, secrets, func(context.Context, identity.User) (*http.Client, error) { return server.Client(), nil }, slog.New(slog.NewJSONHandler(&logs, nil)))
+			s.tavilyURL = server.URL
 			s.newClient = func(o egress.Options) (*http.Client, error) { return server.Client(), nil }
 			results, err := s.Search(context.Background(), identity.User{ID: "user"}, query, 3)
 			if tc.code != "" {
@@ -392,9 +390,7 @@ func TestC8SearchTestAllErrorShapes(t *testing.T) {
 			settings := &c8Settings{runtime.UserSettings{SearchSource: tc.source, SearXNGURL: server.URL, SearchKey: &runtime.EncryptedKey{Ciphertext: ciphertext}}}
 			s := New(settings, secrets, func(context.Context, identity.User) (*http.Client, error) { return server.Client(), nil }, nil)
 			s.newClient = func(egress.Options) (*http.Client, error) { return server.Client(), nil }
-			old := tavilyURL
-			tavilyURL = server.URL
-			defer func() { tavilyURL = old }()
+			s.tavilyURL = server.URL
 			result := s.TestSearch(context.Background(), identity.User{ID: "user"})
 			raw, _ := json.Marshal(result)
 			var body map[string]any

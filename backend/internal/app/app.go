@@ -41,6 +41,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/playback/fingerprint"
 	playbackapi "github.com/qlqq/roomusic/backend/internal/playback/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/acoustid"
 	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
 	"github.com/qlqq/roomusic/backend/internal/sources/lrclib"
@@ -176,6 +177,18 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
+	var mockHost sources.MockHost
+	var tavilyEndpoint string
+	if base := settings.UpstreamMockURL; base != "" {
+		mockHost = sources.NewMockHost(base)
+		assembly.music.BaseURL, assembly.music.MockHost = base+"/musicbrainz/ws/2", mockHost
+		assembly.covers.BaseURL, assembly.covers.MockHost = base+"/coverartarchive", mockHost
+		assembly.lyrics.BaseURL, assembly.lyrics.MockHost = base+"/lrclib", mockHost
+		assembly.acoustid.BaseURL, assembly.acoustid.MockHost = base+"/acoustid", mockHost
+		tavilyEndpoint = base + "/tavily/search"
+		const message = "所有外部音乐源与 Tavily 已指向 mock 服务"
+		logger.Warn(message, "event", "sources.mock.enabled", "module", "sources", "message", message, "url", base)
+	}
 	assembly.music.DataDirectory, assembly.music.Logger = settings.DataDirectory, logger
 	assembly.covers.DataDirectory, assembly.covers.Logger = settings.DataDirectory, logger
 	assembly.lyrics.DataDirectory, assembly.lyrics.Logger = settings.DataDirectory, logger
@@ -252,7 +265,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	}
 	progress := playback.NewAnalysisProgressProvider(database, analysis.Version, analysisWorker)
 	matcher := program.NewModelMatcher(database, curationWriter, sourceGate)
-	supervisor, launcher := registerSteward(lifecycle, mux, database, guard, instanceSecrets, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{writer: curationWriter, sources: sourceGate, matcher: matcher, music: music, covers: covers, diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
+	supervisor, launcher := registerSteward(lifecycle, mux, database, guard, instanceSecrets, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{tavilyEndpoint: tavilyEndpoint, mockHost: mockHost, writer: curationWriter, sources: sourceGate, matcher: matcher, music: music, covers: covers, diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
 	scheduler := model.NewScheduler(database, curationWriter, sourceGate, launcher, logger, assembly.model)
 	modelDone := make(chan struct{})
 	if database != nil && launcher != nil && !assembly.disableModel {
