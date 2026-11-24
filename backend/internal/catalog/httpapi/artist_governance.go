@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -9,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/identity"
@@ -64,19 +62,8 @@ func (h *ArtistGovernanceHandlers) authorize(w http.ResponseWriter, r *http.Requ
 	return
 }
 func decodeArtistCommand(w http.ResponseWriter, r *http.Request, destination any) bool {
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
-	if err != nil || !utf8.Valid(raw) {
-		httpserver.WriteError(w, r, 400, "invalid_json", "请求格式无效或超过预算")
-		return false
-	}
-	if err := uniqueArtistJSON(raw); err != nil {
-		httpserver.WriteError(w, r, 400, "invalid_json", "请求格式无效")
-		return false
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		httpserver.WriteError(w, r, 400, "invalid_json", "请求格式无效")
+	raw, ok := httpserver.DecodeCommand(w, r, destination)
+	if !ok {
 		return false
 	}
 	// auto 是明确清除意图，不接受带 null 的 name 伪装成没有字段。
@@ -89,57 +76,6 @@ func decodeArtistCommand(w http.ResponseWriter, r *http.Request, destination any
 		}
 	}
 	return true
-}
-func uniqueArtistJSON(raw []byte) error {
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.UseNumber()
-	token, err := d.Token()
-	if err != nil || token != json.Delim('{') {
-		return errors.New("expected object")
-	}
-	if err := artistJSONContainer(d, '{'); err != nil {
-		return err
-	}
-	if _, err = d.Token(); err != io.EOF {
-		return errors.New("trailing JSON")
-	}
-	return nil
-}
-func artistJSONContainer(d *json.Decoder, kind json.Delim) error {
-	keys := map[string]bool{}
-	for d.More() {
-		if kind == '{' {
-			token, err := d.Token()
-			if err != nil {
-				return err
-			}
-			key, ok := token.(string)
-			if !ok || keys[key] {
-				return errors.New("duplicate JSON key")
-			}
-			keys[key] = true
-		}
-		token, err := d.Token()
-		if err != nil {
-			return err
-		}
-		if delimiter, ok := token.(json.Delim); ok {
-			if delimiter != '{' && delimiter != '[' {
-				return errors.New("invalid JSON")
-			}
-			if err := artistJSONContainer(d, delimiter); err != nil {
-				return err
-			}
-		}
-	}
-	end, err := d.Token()
-	if err != nil {
-		return err
-	}
-	if (kind == '{' && end != json.Delim('}')) || (kind == '[' && end != json.Delim(']')) {
-		return errors.New("invalid JSON")
-	}
-	return nil
 }
 func (h *ArtistGovernanceHandlers) run(w http.ResponseWriter, r *http.Request, actor, key, kind, fingerprint string, execute operations.Executor) {
 	result, err := operations.Run(r.Context(), h.base.database, operations.Spec{ActorID: actor, Key: key, Type: kind, Fingerprint: fingerprint, RequestID: r.Header.Get("X-Request-ID")}, execute)

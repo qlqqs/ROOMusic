@@ -50,8 +50,8 @@ func decodeTrackSummaryIDs(w http.ResponseWriter, r *http.Request) ([]string, bo
 		httpserver.WriteError(w, r, http.StatusBadRequest, "invalid_input", "曲目标识列表无效")
 		return nil, false
 	}
-	// 复用同包严格对象检查，拒绝重复字段（包括转义后等价的字段名），不采用最后一个值。
-	if uniqueArtistJSON(raw) != nil {
+	// 复用严格对象检查，拒绝重复字段（包括转义后等价的字段名），不采用最后一个值。
+	if httpserver.UniqueJSONObject(raw) != nil {
 		return invalid()
 	}
 	var fields map[string]json.RawMessage

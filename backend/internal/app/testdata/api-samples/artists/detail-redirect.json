@@ -12,6 +12,10 @@
     },
     "bio": null,
     "image": null,
+    "links": {
+      "musicbrainz": null,
+      "wikidata": null
+    },
     "name_source": "auto",
     "names": [],
     "names_pagination": {

@@ -12,9 +12,18 @@ import (
 	"golang.org/x/net/html"
 )
 
-// ArtistLinks 保存从已对位的 MBID 推出的条目号、文件名与维基百科标题。
+// ArtistLinks 保存已确认的艺人条目及据此查到的文件名和维基百科标题。
 type ArtistLinks struct {
 	Name, MBID, WikidataID, CommonsFile, WikipediaZH, WikipediaEN string
+}
+
+type WikidataArtist struct {
+	Name, Description, WikidataID, MBID string
+	Aliases, InstanceOf                 []string
+}
+
+type WikidataArtistFinder interface {
+	ArtistByID(context.Context, string) (WikidataArtist, error)
 }
 
 type ArtistLinkFinder interface {
@@ -121,6 +130,6 @@ func BioText(value string) string {
 	return ""
 }
 
-var wikidataID = regexp.MustCompile(`^Q[1-9][0-9]*$`)
+var wikidataID = regexp.MustCompile(`^Q[1-9][0-9]{0,11}$`)
 
 func ValidWikidataID(id string) bool { return wikidataID.MatchString(id) }

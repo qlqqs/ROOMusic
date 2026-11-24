@@ -28,11 +28,17 @@ func (w *Worker) artistLinks(ctx context.Context, e artistEvidence, p artistProv
 	var retry bool
 	needLinks := !e.Image && p.active["commons"] || !e.Bio && p.active["wikipedia"]
 	for _, mbid := range e.MBIDs {
-		entry := sources.ArtistLinks{MBID: mbid}
-		if needLinks {
+		links = append(links, sources.ArtistLinks{MBID: mbid})
+	}
+	for _, id := range e.WikidataIDs {
+		links = append(links, sources.ArtistLinks{WikidataID: id})
+	}
+	for i, entry := range links {
+		// 已指定 Q 号时，Commons 与维基百科以该条目为依据；其他来源仍可使用 MBID。
+		if needLinks && (entry.MBID == "" || len(e.WikidataIDs) == 0) {
 			for _, id := range []string{"musicbrainz", "wikidata"} {
 				finder, ok := w.sources.ArtistLinkFinder(id)
-				if !ok || !p.active[id] {
+				if !ok || !p.active[id] || (id == "musicbrainz" && entry.MBID == "") {
 					continue
 				}
 				found, err := finder.ArtistLinks(ctx, entry)
@@ -44,9 +50,16 @@ func (w *Worker) artistLinks(ctx context.Context, e artistEvidence, p artistProv
 			}
 		}
 		entry.Name = e.Name
-		links = append(links, entry)
+		links[i] = entry
 	}
 	return links, retry, nil
+}
+
+func mediaLink(link sources.ArtistLinks) curation.ArtistMediaLink {
+	if link.MBID != "" {
+		return curation.ArtistMediaLink{Source: "musicbrainz", ExternalID: link.MBID}
+	}
+	return curation.ArtistMediaLink{Source: "wikidata", ExternalID: link.WikidataID}
 }
 
 func (e artistEvidence) suppressed(kind, provider, externalID string) bool {
@@ -80,13 +93,13 @@ func (w *Worker) artistImage(ctx context.Context, u *unit, e artistEvidence, p a
 			continue
 		}
 		for _, link := range links {
-			if id == "commons" && link.CommonsFile == "" {
+			if (id == "commons" && link.CommonsFile == "") || ((id == "fanarttv" || id == "theaudiodb") && link.MBID == "") {
 				continue
 			}
 			img, err := f.ArtistImage(ctx, link)
 			if err == nil && img.ID != "" && !e.suppressed("artist_image", id, img.ID) {
 				filled, err = u.writeArtist(ctx, id, "image/"+id+"/"+img.ID, func(batch, key string) (curation.ExternalApplied, error) {
-					return w.writer.ApplyArtistImage(ctx, curation.ArtistImageRequest{ArtistID: e.ID, MBID: link.MBID, Image: img, BatchID: batch, Key: key})
+					return w.writer.ApplyArtistImage(ctx, curation.ArtistImageRequest{ArtistID: e.ID, Link: mediaLink(link), Image: img, BatchID: batch, Key: key})
 				})
 				if filled {
 					return true, false, nil
@@ -113,13 +126,13 @@ func (w *Worker) artistBio(ctx context.Context, u *unit, e artistEvidence, p art
 					continue
 				}
 				for _, link := range links {
-					if id == "wikipedia" && (lang == "zh" && link.WikipediaZH == "" || lang == "en" && link.WikipediaEN == "") {
+					if (id == "wikipedia" && (lang == "zh" && link.WikipediaZH == "" || lang == "en" && link.WikipediaEN == "")) || (id == "theaudiodb" && link.MBID == "") {
 						continue
 					}
 					bio, err := f.ArtistBio(ctx, link, lang)
 					if err == nil && bio.ID != "" && !e.suppressed("artist_bio", id, bio.ID) {
 						filled, err = u.writeArtist(ctx, id, "bio/"+id+"/"+bio.ID, func(batch, key string) (curation.ExternalApplied, error) {
-							return w.writer.ApplyArtistBio(ctx, curation.ArtistBioRequest{ArtistID: e.ID, MBID: link.MBID, Bio: bio, BatchID: batch, Key: key})
+							return w.writer.ApplyArtistBio(ctx, curation.ArtistBioRequest{ArtistID: e.ID, Link: mediaLink(link), Bio: bio, BatchID: batch, Key: key})
 						})
 						if filled {
 							return true, false, nil

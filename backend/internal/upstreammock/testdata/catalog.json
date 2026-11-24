@@ -84,6 +84,27 @@
         "commons": "Salt Wind Trio.png",
         "image": "cover.png"
       }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000005",
+      "name": "浅海回声",
+      "sort-name": "浅海回声",
+      "type": "Group",
+      "country": "CN",
+      "disambiguation": "潮间带合奏组",
+      "aliases": [{ "name": "Shallow Echo", "locale": "en", "primary": true }],
+      "media": {
+        "qid": "Q900005",
+        "no_p434": true,
+        "commons": "Shallow Echo rehearsal.png",
+        "image": "cover.png",
+        "articles": {
+          "zh": {
+            "title": "浅海回声",
+            "intro": "浅海回声是虚构的潮间带合奏组。"
+          }
+        }
+      }
     }
   ],
   "groups": [

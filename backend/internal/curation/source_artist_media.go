@@ -7,6 +7,18 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
+func (s *Sources) WikidataArtist(ctx context.Context, id string) (sources.WikidataArtist, error) {
+	r, ok := s.lookup("wikidata")
+	if !ok || r.WikidataArtists == nil {
+		return sources.WikidataArtist{}, sources.ErrUnavailable
+	}
+	ctx, err := (guardedFinders{r, s}).background(ctx)
+	if err != nil {
+		return sources.WikidataArtist{}, err
+	}
+	return r.WikidataArtists.ArtistByID(ctx, id)
+}
+
 type guardedArtistMedia struct{ guardedFinders }
 
 func (s *Sources) ArtistLinkFinder(id string) (sources.ArtistLinkFinder, bool) {

@@ -11,6 +11,7 @@ import { ArtistPlayActions } from "./artist-playback";
 import { TrackActions } from "./track-actions";
 import { TrackFavoritesScope } from "./track-favorites-scope";
 import { playerTrackOfSummary } from "./track-playback";
+import { useArtistMediaRefresh } from "./use-artist-media-refresh";
 import { useArtistDataRefresh } from "./use-artist-refresh";
 
 /** 艺人页一行的动作：与历史、收藏、歌单、搜索结果同一套（播放、心形、“更多”）。缺失的曲目不能播放，仍可收藏、加入歌单。 */
@@ -63,6 +64,7 @@ export function ArtistDetailPage({ artistId, search }: { artistId: string; searc
   const navigate = useNavigate();
   const refresh = useArtistDataRefresh();
   const commands = useArtistCommands({ refresh });
+  const refreshMedia = useArtistMediaRefresh();
   const onRedirect = useCallback((target: string) => void navigate({ to: "/artists/$artistId", params: { artistId: target }, replace: true }), [navigate]);
   // 插槽保持同一个函数引用，表格的列定义才不会每次重建。换艺人时用 key 重新开始：结果与对话框的开合不带到另一位。
   const renderHeaderActions = useCallback(
@@ -80,6 +82,7 @@ export function ArtistDetailPage({ artistId, search }: { artistId: string; searc
       renderHeaderActions={renderHeaderActions}
       renderTrackActions={renderTrackActions}
       renderTrackRowsScope={renderTrackRowsScope}
+      onMediaChanged={isAdmin ? refreshMedia : undefined}
     />
   );
 }

@@ -11,14 +11,16 @@ type PanelProps = {
    * 翻页之类的操作用它把读屏与键盘焦点带到这个区块的顶部。
    */
   headingRef?: Ref<HTMLHeadingElement>;
+  /** 区块的锚点（页内链接跳到这里）。 */
+  id?: string | undefined;
   children: ReactNode;
 };
 
 /** 页面里的一个区块：细线分隔、h2 标题，不做装饰性卡片。 */
-export function Panel({ title, action, headingRef, children }: PanelProps) {
+export function Panel({ title, action, headingRef, id, children }: PanelProps) {
   const headingId = useId();
   return (
-    <section className={styles.panel} aria-labelledby={headingId} data-panel="">
+    <section id={id} className={styles.panel} aria-labelledby={headingId} data-panel="">
       <div className={styles.header}>
         <h2 id={headingId} ref={headingRef} tabIndex={headingRef === undefined ? undefined : -1}>
           {title}

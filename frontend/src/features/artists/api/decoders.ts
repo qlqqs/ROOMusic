@@ -59,32 +59,52 @@ const artistNameDecoder = d.object({
   origin: d.string({ min: 1, max: 32 }),
 });
 
-// 艺人图片与简介（M8，自动整理从外部来源补上）：都带来源与原页面地址；图片另有作者与许可（Commons 必有许可），
-// 维基百科的简介是 CC BY-SA 4.0。作者、许可是外部的不可信文本，只按纯文本显示；地址只在是 http(s) 时做成链接。
-export const ARTIST_IMAGE_SOURCES = ["fanarttv", "theaudiodb", "commons"] as const;
-export const ARTIST_BIO_SOURCES = ["wikipedia", "theaudiodb"] as const;
+// 艺人图片与简介：自动整理从外部来源补上（M8），或由管理员提供（manual）。外部来源带原页面地址；图片另有作者与许可（Commons 必有许可），
+// 维基百科的简介是 CC BY-SA 4.0；管理员提供的没有地址、作者与许可。插件写入的来源是 plugin:<id>。
+// 作者、许可是外部的不可信文本，只按纯文本显示；地址只在是 http(s) 时做成链接。
+export const ARTIST_IMAGE_SOURCES = ["fanarttv", "theaudiodb", "commons", "manual"] as const;
+export const ARTIST_BIO_SOURCES = ["wikipedia", "theaudiodb", "manual"] as const;
+export type PluginSource = `plugin:${string}`;
+const PLUGIN_SOURCE = /^plugin:[a-z0-9-]{3,40}$/;
+
+/** 固定来源之一，或插件来源 plugin:<id>。 */
+function sourceOf<const V extends readonly string[]>(values: V): d.Decoder<V[number] | PluginSource> {
+  const fixed = d.oneOf(values);
+  return (input, path) => {
+    if (typeof input === "string" && PLUGIN_SOURCE.test(input)) return input as PluginSource;
+    return fixed(input, path);
+  };
+}
+
 const externalText = (max: number) => d.nullable(d.string({ min: 1, max }));
 export const artistImageDecoder = d.object({
   resource: d.string({ min: 1, max: 255 }),
-  source: d.oneOf(ARTIST_IMAGE_SOURCES),
-  source_url: d.string({ min: 1, max: 2048 }),
+  source: sourceOf(ARTIST_IMAGE_SOURCES),
+  source_url: externalText(2048),
   author: externalText(500),
   license: externalText(200),
   license_url: externalText(2048),
 });
 // 简介最多 4000 个字符，按码点计（与后端按 rune 计一致），扩展区汉字算一个字。
-const MAX_BIO_CHARS = 4000;
+export const MAX_BIO_CHARS = 4000;
 const bioTextDecoder = checked(d.string({ min: 1, max: MAX_BIO_CHARS * 2 }), (text) => (Array.from(text).length > MAX_BIO_CHARS ? `超过 ${MAX_BIO_CHARS} 个字符` : null));
 export const artistBioDecoder = d.object({
   text: bioTextDecoder,
   lang: d.oneOf(["zh", "en"] as const),
-  source: d.oneOf(ARTIST_BIO_SOURCES),
-  source_url: d.string({ min: 1, max: 2048 }),
+  source: sourceOf(ARTIST_BIO_SOURCES),
+  source_url: externalText(2048),
   license: externalText(200),
   license_url: externalText(2048),
 });
 export type ArtistImageDTO = d.Infer<typeof artistImageDecoder>;
 export type ArtistBioDTO = d.Infer<typeof artistBioDecoder>;
+
+// 艺人当前对应的外部条目（自动整理按发行写入，或管理员指定）：MusicBrainz 是 MBID，Wikidata 是 Q 号。
+const artistLinksDecoder = d.object({
+  musicbrainz: d.nullable(d.uuid()),
+  wikidata: d.nullable(d.string({ pattern: /^Q[1-9][0-9]{0,11}$/ })),
+});
+export type ArtistLinksDTO = d.Infer<typeof artistLinksDecoder>;
 
 // 详情：revision 是人工修改版本号（合并、拆开、改名的预期版本）；name_source 是主显示名来自最常见写法（auto）还是管理员（manual）。
 // 已经被合并进别的艺人时 redirect_artist_id 是现在的艺人，页面据此跳过去。role_counts 的 total 含文件缺失的曲目，present 只算存在的。
@@ -99,6 +119,7 @@ const artistDetailDecoder = checked(
     redirect_artist_id: d.nullable(d.uuid()),
     image: d.nullable(artistImageDecoder),
     bio: d.nullable(artistBioDecoder),
+    links: artistLinksDecoder,
   }),
   (detail) => {
     if (detail.names.length > detail.names_pagination.page_size) return "names 多于 page_size";
@@ -176,6 +197,29 @@ const artistQueueDecoder = checked(
   },
 );
 
+// 管理员对艺人资料的写入（上传图片、写简介、标记不对、指定对应）：成功时给出操作 ID、写入的有效身份与写入后的人工修改版本号。
+const artistMediaWriteDecoder = d.object({
+  operation_id: d.uuid(),
+  artist_id: d.uuid(),
+  revision: d.integer({ min: 1 }),
+});
+const artistMediaRejectDecoder = d.object({
+  operation_id: d.uuid(),
+  artist_id: d.uuid(),
+  revision: d.integer({ min: 1 }),
+  layer: d.oneOf(["manual", "auto"] as const),
+});
+// 指定对应前的预览：条目的名字与简介短语是外部的不可信文本；name_matches 表示与本地艺人的某个名字一致。
+const artistLinkPreviewDecoder = d.object({
+  source: d.oneOf(["musicbrainz", "wikidata"] as const),
+  external_id: d.string({ min: 1, max: 64 }),
+  name: d.string({ min: 1, max: 1000 }),
+  description: externalText(1000),
+  musicbrainz: d.nullable(d.uuid()),
+  wikidata: d.nullable(d.string({ pattern: /^Q[1-9][0-9]{0,11}$/ })),
+  name_matches: d.boolean(),
+});
+
 export const decodeArtistPage = d.defineDecoder(artistPageDecoder);
 export const decodeArtistDetail = d.defineDecoder(artistDetailDecoder);
 export const decodeArtistNamesPage = d.defineDecoder(artistNamesPageDecoder);
@@ -194,3 +238,9 @@ export type ArtistParticipationAlbumsPageDTO = d.Infer<typeof artistParticipatio
 export type ArtistParticipationAlbumDTO = ArtistParticipationAlbumsPageDTO["items"][number];
 export type ArtistTracksPageDTO = d.Infer<typeof artistTracksPageDecoder>;
 export type ArtistQueueDTO = d.Infer<typeof artistQueueDecoder>;
+export const decodeArtistMediaWrite = d.defineDecoder(artistMediaWriteDecoder);
+export const decodeArtistMediaReject = d.defineDecoder(artistMediaRejectDecoder);
+export const decodeArtistLinkPreview = d.defineDecoder(artistLinkPreviewDecoder);
+export type ArtistMediaWriteDTO = d.Infer<typeof artistMediaWriteDecoder>;
+export type ArtistMediaRejectDTO = d.Infer<typeof artistMediaRejectDecoder>;
+export type ArtistLinkPreviewDTO = d.Infer<typeof artistLinkPreviewDecoder>;

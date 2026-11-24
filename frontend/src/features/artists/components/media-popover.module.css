@@ -1,0 +1,85 @@
+/* 艺人页的小弹层：纸面浅底、大阴影、7px 圆角；行高 30px，图标在前。 */
+.popover {
+  position: absolute;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  width: 300px;
+  max-width: calc(100vw - 2 * var(--layout-page-inset-x));
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  background: var(--color-neutral-100);
+  box-shadow: var(--shadow-lg);
+  text-align: start;
+  animation: appear 0.14s ease-out;
+}
+
+.popover:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popover {
+    animation: none;
+  }
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 0 6px;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--fs-13);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+a.row:hover {
+  background: var(--color-hover);
+}
+
+a.row:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 0;
+}
+
+.rowIcon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.rowText {
+  min-width: 0;
+  flex: 1;
+}
+
+.external {
+  flex: none;
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-divider);
+}
+
+.spacer {
+  flex: 1;
+}

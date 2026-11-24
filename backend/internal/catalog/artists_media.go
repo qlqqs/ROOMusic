@@ -25,14 +25,29 @@ const ArtistMediaFamilyCTE = `artist_media_family(canonical_id,artist_id,merged_
  LEFT JOIN operations op ON op.id=o.redirect_operation_id WHERE o.redirect_artist_id IS NOT NULL
 )`
 
-const artistMediaOrder = `(f.artist_id=f.canonical_id) DESC, f.merged_at DESC NULLS LAST, f.artist_id`
+// ArtistMediaOrder 在同层内先取有效身份，再按并入时间选择资料。
+const ArtistMediaOrder = `(f.artist_id=f.canonical_id) DESC, f.merged_at DESC NULLS LAST, f.artist_id`
+
+// ArtistImageRowsSQL 供摘要、详情与“标记不对”共用两层图片的字段。
+const ArtistImageRowsSQL = `SELECT artist_id,operation_id,storage_key,'manual'::text AS source,
+ NULL::text AS source_url,NULL::text AS author,NULL::text AS license,NULL::text AS license_url
+ FROM artist_manual_artworks
+ UNION ALL SELECT artist_id,operation_id,storage_key,source,source_url,author,license,license_url
+ FROM artist_external_artworks`
+
+// ArtistBioRowsSQL 供详情与“标记不对”共用两层简介的字段。
+const ArtistBioRowsSQL = `SELECT artist_id,operation_id,text,lang,'manual'::text AS source,
+ NULL::text AS source_url,NULL::text AS license,NULL::text AS license_url FROM artist_manual_bios
+ UNION ALL SELECT artist_id,operation_id,text,lang,source,source_url,license,license_url FROM artist_external_bios`
+
+const artistLayerOrder = `(m.source='manual') DESC, ` + ArtistMediaOrder
 
 func (s *Store) readArtistMedia(ctx context.Context, canonical string, result *ArtistDetail) error {
 	var image ArtistImage
 	err := s.database.QueryRowContext(ctx, `WITH `+ArtistMediaFamilyCTE+`
  SELECT m.storage_key,m.source,m.source_url,m.author,m.license,m.license_url
- FROM artist_media_family f JOIN artist_external_artworks m ON m.artist_id=f.artist_id
- WHERE f.canonical_id=$1::uuid ORDER BY `+artistMediaOrder+` LIMIT 1`, canonical).
+ FROM artist_media_family f JOIN (`+ArtistImageRowsSQL+`) m ON m.artist_id=f.artist_id
+ WHERE f.canonical_id=$1::uuid ORDER BY `+artistLayerOrder+` LIMIT 1`, canonical).
 		Scan(&image.Resource, &image.Source, &image.SourceURL, &image.Author, &image.License, &image.LicenseURL)
 	if err == nil {
 		result.Image = &image
@@ -42,13 +57,20 @@ func (s *Store) readArtistMedia(ctx context.Context, canonical string, result *A
 	var bio ArtistBio
 	err = s.database.QueryRowContext(ctx, `WITH `+ArtistMediaFamilyCTE+`
  SELECT m.text,m.lang,m.source,m.source_url,m.license,m.license_url
- FROM artist_media_family f JOIN artist_external_bios m ON m.artist_id=f.artist_id
- WHERE f.canonical_id=$1::uuid ORDER BY `+artistMediaOrder+` LIMIT 1`, canonical).
+ FROM artist_media_family f JOIN (`+ArtistBioRowsSQL+`) m ON m.artist_id=f.artist_id
+ WHERE f.canonical_id=$1::uuid ORDER BY `+artistLayerOrder+` LIMIT 1`, canonical).
 		Scan(&bio.Text, &bio.Lang, &bio.Source, &bio.SourceURL, &bio.License, &bio.LicenseURL)
 	if err == nil {
 		result.Bio = &bio
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	return nil
+	return s.database.QueryRowContext(ctx, `WITH `+ArtistMediaFamilyCTE+`, links AS (
+ SELECT DISTINCT ON (l.source) l.source,l.external_id
+ FROM artist_media_family f JOIN external_links l ON l.object_id=f.artist_id
+ WHERE f.canonical_id=$1::uuid AND l.object_type='artist' AND l.source IN ('musicbrainz','wikidata')
+ ORDER BY l.source,`+ArtistMediaOrder+`
+ ) SELECT max(external_id) FILTER (WHERE source='musicbrainz'),
+          max(external_id) FILTER (WHERE source='wikidata') FROM links`, canonical).
+		Scan(&result.Links.MusicBrainz, &result.Links.Wikidata)
 }

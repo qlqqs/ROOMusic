@@ -12,6 +12,12 @@ import (
 
 type externalLinkKind struct{}
 
+type externalLinkChanges struct {
+	Kind string `json:"kind"`
+	linkState
+	SkippedArtistLinks int `json:"skipped_artist_links,omitempty"`
+}
+
 func ExternalLinkOperations(_ *Writer) operations.Kind { return externalLinkKind{} }
 func (externalLinkKind) Type() string                  { return operations.TypeExternalLink }
 
@@ -39,6 +45,7 @@ func (externalLinkKind) Revert(ctx context.Context, tx *sql.Tx, operationID stri
 	if err != nil {
 		return operations.Outcome{}, err
 	}
+	skipped := 0
 	for _, l := range s.Links {
 		owner, err := previousLink(tx.QueryRowContext(ctx, `SELECT `+linkColumns+` FROM external_links WHERE source=$1 AND object_type=$2 AND object_id=$3 FOR UPDATE`, s.Source, l.ObjectType, l.ObjectID))
 		if err != nil {
@@ -48,6 +55,17 @@ func (externalLinkKind) Revert(ctx context.Context, tx *sql.Tx, operationID stri
 			return operations.Outcome{}, operations.Conflict("revert_conflict", "外部对应已移除")
 		}
 		if owner.OperationID != original.ID {
+			if l.ObjectType == "artist" && owner.OperationID != "" {
+				var artistLink bool
+				err := tx.QueryRowContext(ctx, "SELECT operation_type='artist_link' FROM operations WHERE id=$1", owner.OperationID).Scan(&artistLink)
+				if err != nil {
+					return operations.Outcome{}, err
+				}
+				if artistLink {
+					skipped++
+					continue
+				}
+			}
 			message := "外部对应已被改写"
 			if owner.OperationID != "" {
 				message += "，操作 " + owner.OperationID
@@ -62,6 +80,9 @@ func (externalLinkKind) Revert(ctx context.Context, tx *sql.Tx, operationID stri
 		}
 	}
 	out, err := externalOutcome(ctx, release, original.After, map[string]any{})
+	if skipped > 0 {
+		out.After = map[string]int{"skipped_artist_links": skipped}
+	}
 	out.ResponseRevision = release.EditRevision()
 	return out, err
 }
@@ -93,10 +114,16 @@ func (externalLinkKind) Describe(ctx context.Context, q operations.Queryer, reco
 			raw = r.Before
 		}
 		if s, err := readLinkState(raw); err == nil {
-			d.Changes = struct {
-				Kind string `json:"kind"`
-				linkState
-			}{operations.TypeExternalLink, s}
+			change := externalLinkChanges{Kind: operations.TypeExternalLink, linkState: s}
+			if r.Type == operations.TypeRevert {
+				var result struct {
+					Skipped int `json:"skipped_artist_links"`
+				}
+				if err := json.Unmarshal(r.After, &result); err == nil {
+					change.SkippedArtistLinks = result.Skipped
+				}
+			}
+			d.Changes = change
 			if r.Type != operations.TypeRevert && r.RevertedByID == "" {
 				d.Revertible = true
 				for _, l := range s.Links {
@@ -113,31 +140,69 @@ func (externalLinkKind) Describe(ctx context.Context, q operations.Queryer, reco
 	if err != nil {
 		return nil, err
 	}
-	rows, err := q.QueryContext(ctx, `SELECT DISTINCT o.owner::text FROM jsonb_to_recordset($1::jsonb) AS o(source text,object_type text,object_id uuid,owner uuid)
- LEFT JOIN external_links l USING(source,object_type,object_id) WHERE l.operation_id IS DISTINCT FROM o.owner`, raw)
+	rows, err := q.QueryContext(ctx, `SELECT o.owner::text,
+		count(*) FILTER (WHERE o.object_type='artist' AND writer.operation_type='artist_link'),
+		bool_and(COALESCE(o.object_type='artist' AND writer.operation_type='artist_link',false))
+ FROM jsonb_to_recordset($1::jsonb) AS o(source text,object_type text,object_id uuid,owner uuid)
+ LEFT JOIN external_links l USING(source,object_type,object_id)
+ LEFT JOIN operations writer ON writer.id=l.operation_id
+ WHERE l.operation_id IS DISTINCT FROM o.owner GROUP BY o.owner`, raw)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var id string
-		if err := rows.Scan(&id); err != nil {
+		var skipped int
+		var revertible bool
+		if err := rows.Scan(&id, &skipped, &revertible); err != nil {
 			return nil, err
 		}
 		d := descriptions[id]
-		d.Revertible = false
+		d.Revertible = revertible
+		change := d.Changes.(externalLinkChanges)
+		change.SkippedArtistLinks = skipped
+		d.Changes = change
 		descriptions[id] = d
 	}
 	return descriptions, rows.Err()
 }
 
-func (externalLinkKind) PreviewRevert(_ context.Context, _ operations.Queryer, record operations.Record) ([]operations.PreviewChange, error) {
+func (externalLinkKind) PreviewRevert(ctx context.Context, q operations.Queryer, record operations.Record) ([]operations.PreviewChange, error) {
 	s, err := readLinkState(record.After)
 	if err != nil {
 		return nil, err
 	}
+	var artistIDs []string
+	for _, l := range s.Links {
+		if l.ObjectType == "artist" {
+			artistIDs = append(artistIDs, l.ObjectID)
+		}
+	}
+	skipped := map[string]bool{}
+	if len(artistIDs) > 0 {
+		rows, err := q.QueryContext(ctx, `SELECT l.object_id::text FROM external_links l JOIN operations o ON o.id=l.operation_id
+			WHERE l.object_type='artist' AND l.source=$1 AND l.object_id=ANY($2::uuid[]) AND o.operation_type='artist_link'`, s.Source, artistIDs)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return nil, err
+			}
+			skipped[id] = true
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
 	changes := make([]operations.PreviewChange, 0, len(s.Links))
 	for _, l := range s.Links {
+		if l.ObjectType == "artist" && skipped[l.ObjectID] {
+			continue
+		}
 		changes = append(changes, operations.PreviewChange{Field: l.key(), Before: externalIdentity{s.Source, l.ExternalID}, After: nil})
 	}
 	return changes, nil

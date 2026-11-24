@@ -14,24 +14,26 @@ import (
 )
 
 type artistEvidence struct {
-	ID, Name   string
-	MBIDs      []string
-	Image, Bio bool
-	Markers    []string
+	ID, Name           string
+	MBIDs, WikidataIDs []string
+	Image, Bio         bool
+	Markers            []string
 }
 
 // 先按有效艺人分页，同一页一次取齐被并入身份的对应、已有资料和撤销标记。
 func (w *Worker) artistMediaPage(ctx context.Context, after string) ([]artistEvidence, error) {
 	rows, err := w.db.QueryContext(ctx, `WITH `+catalog.ArtistMediaFamilyCTE+`, page AS (
         SELECT DISTINCT f.canonical_id FROM external_links l JOIN artist_media_family f ON f.artist_id=l.object_id
-        WHERE l.source='musicbrainz' AND l.object_type='artist' AND f.canonical_id>COALESCE(NULLIF($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
+        WHERE l.source IN ('musicbrainz','wikidata') AND l.object_type='artist' AND f.canonical_id>COALESCE(NULLIF($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
         ORDER BY f.canonical_id LIMIT $2
     ), family AS MATERIALIZED (
-        SELECT f.canonical_id,f.artist_id FROM artist_media_family f JOIN page p USING(canonical_id)
-    )
+        SELECT f.* FROM artist_media_family f JOIN page p USING(canonical_id)
+    ), `+curation.ArtistMediaLinksCTE+`
     SELECT p.canonical_id::text,a.initial_name,
-        (SELECT jsonb_agg(DISTINCT external_id ORDER BY external_id) FROM family f JOIN external_links l ON l.object_id=f.artist_id
-         WHERE f.canonical_id=p.canonical_id AND l.source='musicbrainz' AND l.object_type='artist'),
+        (SELECT COALESCE(jsonb_agg(DISTINCT external_id ORDER BY external_id),'[]') FROM media_links l
+         WHERE l.canonical_id=p.canonical_id AND l.source='musicbrainz'),
+        (SELECT COALESCE(jsonb_agg(DISTINCT external_id ORDER BY external_id),'[]') FROM media_links l
+         WHERE l.canonical_id=p.canonical_id AND l.source='wikidata'),
         EXISTS(SELECT FROM family f JOIN artist_external_artworks a USING(artist_id) WHERE f.canonical_id=p.canonical_id),
         EXISTS(SELECT FROM family f JOIN artist_external_bios b USING(artist_id) WHERE f.canonical_id=p.canonical_id),
         (SELECT COALESCE(jsonb_agg(DISTINCT s.subject||':'||s.value_hash ORDER BY s.subject||':'||s.value_hash),'[]') FROM family f
@@ -45,11 +47,14 @@ func (w *Worker) artistMediaPage(ctx context.Context, after string) ([]artistEvi
 	var page []artistEvidence
 	for rows.Next() {
 		var e artistEvidence
-		var ids, markers []byte
-		if err := rows.Scan(&e.ID, &e.Name, &ids, &e.Image, &e.Bio, &markers); err != nil {
+		var ids, qids, markers []byte
+		if err := rows.Scan(&e.ID, &e.Name, &ids, &qids, &e.Image, &e.Bio, &markers); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(ids, &e.MBIDs); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(qids, &e.WikidataIDs); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(markers, &e.Markers); err != nil {

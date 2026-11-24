@@ -53,7 +53,7 @@ type ArtistRoleCount struct {
 type ArtistImage struct {
 	Resource   string  `json:"resource"`
 	Source     string  `json:"source"`
-	SourceURL  string  `json:"source_url"`
+	SourceURL  *string `json:"source_url"`
 	Author     *string `json:"author"`
 	License    *string `json:"license"`
 	LicenseURL *string `json:"license_url"`
@@ -63,12 +63,18 @@ type ArtistBio struct {
 	Text       string  `json:"text"`
 	Lang       string  `json:"lang"`
 	Source     string  `json:"source"`
-	SourceURL  string  `json:"source_url"`
+	SourceURL  *string `json:"source_url"`
 	License    *string `json:"license"`
 	LicenseURL *string `json:"license_url"`
 }
 
+type ArtistLinks struct {
+	MusicBrainz *string `json:"musicbrainz"`
+	Wikidata    *string `json:"wikidata"`
+}
+
 type ArtistDetail struct {
+	Links            ArtistLinks       `json:"links"`
 	Image            *ArtistImage      `json:"image"`
 	Bio              *ArtistBio        `json:"bio"`
 	Artist           ArtistSummary     `json:"artist"`

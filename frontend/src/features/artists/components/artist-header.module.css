@@ -63,7 +63,7 @@
   }
 }
 
-/* 角色标签：细边的小胶囊，只是文字说明，不能点。 */
+/* 角色：细边的小胶囊，点了跳到下方这个角色的曲目。 */
 .roles {
   display: flex;
   flex-wrap: wrap;
@@ -74,7 +74,7 @@
   list-style: none;
 }
 
-.roles li {
+.role {
   display: inline-grid;
   place-items: center;
   height: 22px;
@@ -83,6 +83,20 @@
   border-radius: 11px;
   color: var(--text-secondary);
   font-size: var(--fs-12);
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.role:hover {
+  border-color: var(--color-neutral-500);
+  color: var(--text-primary);
+}
+
+.role:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 
 .meta {

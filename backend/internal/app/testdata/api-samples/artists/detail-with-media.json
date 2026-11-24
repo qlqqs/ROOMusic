@@ -30,12 +30,16 @@
       "source": "commons",
       "source_url": "https://commons.wikimedia.org/wiki/File:Sample.png"
     },
+    "links": {
+      "musicbrainz": "00000000-0000-4000-8000-000000000002",
+      "wikidata": null
+    },
     "name_source": "auto",
     "names": [
       {
-        "id": "00000000-0000-4000-8000-000000000002",
+        "id": "00000000-0000-4000-8000-000000000003",
         "is_display_name": true,
-        "key_id": "00000000-0000-4000-8000-000000000003",
+        "key_id": "00000000-0000-4000-8000-000000000004",
         "name": "邓丽君",
         "origin": "scan"
       }

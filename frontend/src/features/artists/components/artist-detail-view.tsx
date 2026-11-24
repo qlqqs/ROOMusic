@@ -19,6 +19,7 @@ import {
 } from "../../catalog";
 import { artistTrackRoles, type ArtistAlbumDTO, type ArtistDetailDTO, type ArtistTrackRole } from "../api/decoders";
 import type { ArtistDetailSearch } from "../artist-search";
+import { useArtistMedia } from "../hooks/use-artist-media";
 import { isArtistCatalogPreparing, useArtist, useArtistAlbums, useArtistNames, useArtistTracks } from "../hooks/use-artists";
 import { ArtistHeader } from "./artist-header";
 import { ArtistPreparing } from "./artist-preparing";
@@ -39,6 +40,11 @@ type ArtistDetailViewProps = {
   renderTrackActions: (item: TrackSummaryDTO) => ReactNode;
   /** 包住一页曲目行的范围（这一页的收藏状态一次读出）：由 app 提供；传入稳定的函数引用。 */
   renderTrackRowsScope?: ((items: readonly TrackSummaryDTO[], children: ReactNode) => ReactNode) | undefined;
+  /**
+   * 管理员：图片、简介与对应写入之后刷新别处缓存的函数（艺人与搜索）。给了就显示管理员的写入入口；普通成员不给。
+   * 后端仍独立鉴权。
+   */
+  onMediaChanged?: (() => Promise<unknown>) | undefined;
 };
 
 /** 翻页的链接在列表下方：把这一栏的标题滚进视野并聚焦（与其他列表相同）。 */
@@ -65,7 +71,7 @@ function ArtistNotFound() {
  * 艺人页：页头（圆章、主名、角色、概况与操作区）、其他名字、作为专辑艺人的专辑，以及按角色分栏的参与曲目（曲目艺人、作曲、指挥、演奏、制作人）。
  * 专辑、曲目与名字各自翻页，页码与选中的角色都在地址里。已经合并进别的艺人时跳到现在的艺人页；艺人数据还在整理时只说一句。
  */
-export function ArtistDetailView({ artistId, search, onRedirect, renderHeaderActions, renderTrackActions, renderTrackRowsScope }: ArtistDetailViewProps) {
+export function ArtistDetailView({ artistId, search, onRedirect, renderHeaderActions, renderTrackActions, renderTrackRowsScope, onMediaChanged }: ArtistDetailViewProps) {
   const detail = useArtist(artistId);
   // 正在重新读取时不按缓存里的旧结果跳走（旧的重定向可能已经被拆开撤掉），等读到最新的再决定。
   const redirect = detail.isFetching ? null : (detail.data?.redirect_artist_id ?? null);
@@ -98,13 +104,38 @@ export function ArtistDetailView({ artistId, search, onRedirect, renderHeaderAct
   }
   const { artist } = data;
   return (
-    <Page title={artist.name} header={
-        <ArtistHeader artist={artist} compactTitle={artist.name.length > 80} actions={renderHeaderActions(data)} image={data.image} bio={data.bio} />
-      }>
+    <Page
+      title={artist.name}
+      header={
+        onMediaChanged === undefined ? (
+          <ArtistHeader artist={artist} compactTitle={artist.name.length > 80} actions={renderHeaderActions(data)} trackRoles={trackRolesOf(data)} image={data.image} bio={data.bio} links={data.links} />
+        ) : (
+          <AdminArtistHeader key={artist.id} detail={data} actions={renderHeaderActions(data)} onMediaChanged={onMediaChanged} />
+        )
+      }
+    >
       <NamesSection detail={data} search={search} />
       <AlbumsSection artistId={artist.id} search={search} />
       <TracksSection detail={data} search={search} renderTrackActions={renderTrackActions} renderTrackRowsScope={renderTrackRowsScope} />
     </Page>
+  );
+}
+
+/** 管理员的页头：多了图片、简介与对应的写入（换艺人时用 key 重新开始，等待中的标记随之提交）。 */
+function AdminArtistHeader({ detail, actions, onMediaChanged }: { detail: ArtistDetailDTO; actions: ReactNode; onMediaChanged: () => Promise<unknown> }) {
+  const media = useArtistMedia({ artistId: detail.artist.id, revision: detail.revision, refresh: onMediaChanged });
+  const { artist } = detail;
+  return (
+    <ArtistHeader
+      artist={artist}
+      compactTitle={artist.name.length > 80}
+      actions={actions}
+      trackRoles={trackRolesOf(detail)}
+      image={detail.image}
+      bio={detail.bio}
+      links={detail.links}
+      media={media}
+    />
   );
 }
 
@@ -282,7 +313,7 @@ function RoleTracks({ detail, roles, role, search, renderTrackActions, renderTra
   );
   const total = detail.role_counts.find((count) => count.role === role)?.total ?? 0;
   return (
-    <Panel title="参与的曲目" headingRef={headingRef}>
+    <Panel title="参与的曲目" headingRef={headingRef} id="artist-tracks">
       {roles.length > 1 ? (
         <nav aria-label="按角色">
           <ul className={styles.roles}>
