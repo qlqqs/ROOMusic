@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decode as d } from "../../../shared/api";
 import { sampleBody } from "../../../test/api-samples";
+import { artistMediaOperations } from "../../../test/artist-media-operations";
 import { withValue, without } from "../../../test/mutate";
 import {
   CORRECTABLE_FIELDS,
@@ -410,5 +411,33 @@ describe("自动整理（M7 A）的样本", () => {
 
   it("自动修改的撤销响应：版本号是发行的人工修改版本号（自动层的撤销不改它）", () => {
     expect(decodeRevertResult(sampleBody("operations/auto-reverted"))).toMatchObject({ target_type: "release", revision: 1 });
+  });
+});
+
+describe("M8 艺人资料操作记录", () => {
+  const body = { items: artistMediaOperations, pagination: { page: 1, page_size: 20, total: 2 } };
+
+  it("两种新增改动和撤销快照完整解码", () => {
+    expect(decodeOperationPage(body)).toStrictEqual(body);
+    const reverted = {
+      ...body,
+      items: body.items.map((item) => ({ ...item, type: "revert", reverts: item.id, revertible: false })),
+    };
+    expect(decodeOperationPage(reverted)).toStrictEqual(reverted);
+  });
+
+  it("拒绝非法图片尺寸、简介语言与长度，以及缺少的变更字段", () => {
+    for (const [path, value] of [
+      [[0, "artwork", "width"], 0],
+      [[0, "artwork", "resource_id"], "x".repeat(256)],
+      [[1, "lang"], "ja"],
+      [[1, "length"], 4001],
+    ] as const) {
+      const [index, ...fields] = path;
+      expect(() => decodeOperationPage(withValue(body, ["items", index, "changes", ...fields], value))).toThrow(d.DecodeError);
+    }
+    for (const [index, field] of [[0, "artwork"], [1, "external_id"]] as const) {
+      expect(() => decodeOperationPage(without(body, ["items", index, "changes", field]))).toThrow(d.DecodeError);
+    }
   });
 });

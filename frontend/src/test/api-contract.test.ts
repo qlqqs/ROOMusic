@@ -226,6 +226,7 @@ const successContracts: Record<string, Contract> = {
   "artists/albums": { status: 200, decode: decodeArtistAlbumsPage },
   "artists/detail-redirect": { status: 200, decode: decodeArtistDetail },
   "artists/detail-unavailable": { status: 200, decode: decodeArtistDetail },
+  "artists/detail-with-media": { status: 200, decode: decodeArtistDetail },
   "artists/detail": { status: 200, decode: decodeArtistDetail },
   "artists/list-album-count": { status: 200, decode: decodeArtistPage },
   "artists/list-empty": { status: 200, decode: decodeArtistPage },

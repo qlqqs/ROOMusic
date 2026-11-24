@@ -31,7 +31,7 @@ export const primaryArtistId = () => firstDetail().artist.id;
 /** 真实响应样本只读。详情缺失的列表项按相同合同显式构造，不模拟身份图或数据库事务。 */
 export function seedArtist(data: ArtistData, summary: ArtistSummary, options: Partial<Omit<ArtistDetailDTO, "artist">> = {}): ArtistDetailDTO {
   const names: ArtistNameDTO[] = [{ id: artistTestId(data.details.size * 2 + 100), key_id: artistTestId(data.details.size * 2 + 101), name: summary.name, is_display_name: true, origin: "scan" }];
-  const detail: ArtistDetailDTO = { artist: structuredClone(summary), revision: 1, name_source: "auto", names, names_pagination: { page: 1, page_size: 20, total: names.length }, role_counts: [], redirect_artist_id: null, ...options };
+  const detail: ArtistDetailDTO = { artist: structuredClone(summary), revision: 1, name_source: "auto", names, names_pagination: { page: 1, page_size: 20, total: names.length }, role_counts: [], redirect_artist_id: null, image: null, bio: null, ...options };
   data.details.set(summary.id, detail);
   data.names.set(summary.id, structuredClone(detail.names));
   return detail;

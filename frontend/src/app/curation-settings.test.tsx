@@ -1,7 +1,9 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { decodeCurationSources } from "../features/curation/api/decoders";
 import type { OperationChangesDTO } from "../features/governance/api/decoders";
+import { sampleBody } from "../test/api-samples";
 import { albumGroup, failure } from "../test/catalog-data";
 import { enableCuration, refreshSources, seedBatch, seedException, seedSuppression, type CurationData } from "../test/curation-data";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
@@ -590,5 +592,87 @@ describe("例外（E2）", () => {
     renderApp({ path: "/settings/curation" });
     const table = await within(await group("例外")).findByRole("table", { name: "等你处理的例外" });
     expect(within(table).queryByRole("link", { name: /查看过程/ })).toBeNull();
+  });
+});
+
+describe("M8 艺人资料外部源", () => {
+  function setupArtistSources() {
+    const { curation } = setup();
+    curation.sources = decodeCurationSources(sampleBody("curation/sources")).items;
+    return curation;
+  }
+
+  it("显示五个来源的能力、三把密钥的标签和说明，Wikidata 没有改动菜单", async () => {
+    setupArtistSources();
+    renderApp({ path: "/settings/curation" });
+    const sources = within(await group("外部源"));
+    for (const [name, capability] of [
+      ["Wikidata", /艺人/],
+      ["Wikimedia Commons", /^艺人图片$/],
+      ["Wikipedia", /^艺人简介$/],
+      ["Fanart.tv", /^艺人图片$/],
+      ["TheAudioDB", /^艺人图片、艺人简介$/],
+    ] as const) {
+      expect(await sources.findByRole("switch", { name, description: capability })).toBeTruthy();
+    }
+    expect(sources.queryByRole("button", { name: "Wikidata 的更多操作" })).toBeNull();
+    await userEvent.click(sources.getByRole("button", { name: "Wikimedia Commons 的更多操作" }));
+    expect(await screen.findByRole("menuitem", { name: "查看来自 Wikimedia Commons 的改动" })).toBeTruthy();
+
+    for (const [provider, name, guide, link, address] of [
+      ["Fanart.tv", "项目密钥", "在 Fanart.tv 的申请页面免费申请。", "申请页面", "https://fanart.tv/get-an-api-key/"],
+      ["Fanart.tv", "个人密钥（可选）", "登录 Fanart.tv 后在这个页面取得；填了以后新上传的图片能更早用上。", "这个页面", "https://fanart.tv/get-an-api-key/"],
+      ["TheAudioDB", "API 密钥", "在这个页面查看：免费的测试密钥是 123，订阅后可以换成自己的密钥。", "这个页面", "https://www.theaudiodb.com/free_music_api"],
+    ] as const) {
+      const form = sources.getByRole("form", { name: `${provider} 的${name}` });
+      const input = within(form).getByLabelText(name);
+      const descriptionId = input.getAttribute("aria-describedby");
+      const description = descriptionId === null ? null : document.getElementById(descriptionId);
+      if (description === null) throw new Error(`找不到${name}的说明`);
+      expect(description.textContent).toBe(guide);
+      expect(within(description).getByRole("link", { name: link }).getAttribute("href")).toBe(address);
+    }
+  });
+
+  it("打开整理前说明五个艺人资料源会收到哪些数据", async () => {
+    setupArtistSources();
+    renderApp({ path: "/settings/curation" });
+    await userEvent.click(await screen.findByRole("switch", { name: "自动整理" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "打开自动整理？" }));
+    for (const [name, data] of [
+      ["Wikidata", "MusicBrainz 编号与 Wikidata 条目编号"],
+      ["Wikimedia Commons", "图片文件名"],
+      ["Wikipedia", "条目名"],
+      ["Fanart.tv", "项目密钥与你填入的个人密钥"],
+      ["TheAudioDB", "MusicBrainz 编号与你填入的密钥"],
+    ] as const) {
+      expect(dialog.getByText(name, { exact: true }).closest("li")?.textContent).toContain(data);
+    }
+  });
+
+  it("Wikidata 的来源说明不把查得的结果归入 MusicBrainz", async () => {
+    setupArtistSources();
+    renderApp({ path: "/settings/curation" });
+    const sources = within(await group("外部源"));
+    const wikidata = await sources.findByRole("switch", { name: "Wikidata", description: /艺人/ });
+    const descriptionId = wikidata.getAttribute("aria-describedby");
+    expect(document.getElementById(descriptionId ?? "")?.textContent).not.toContain("记在 MusicBrainz 名下");
+  });
+
+  it("内置 Fanart.tv 项目密钥可用时，设置页标明项目密钥可选", async () => {
+    const curation = setupArtistSources();
+    const fanart = curation.sources.find(({ id }) => id === "fanarttv");
+    const project = fanart?.keys?.find(({ name }) => name === "project");
+    if (fanart === undefined || project === undefined) throw new Error("找不到 Fanart.tv 项目密钥样本");
+    project.optional = true;
+    enableCuration(curation);
+    curation.sources = curation.sources.map((source) => source.id === fanart.id ? { ...source, active: true, inactive_reason: null } : source);
+    renderApp({ path: "/settings/curation" });
+    const sources = within(await group("外部源"));
+    const form = await sources.findByRole("form", { name: /^Fanart\.tv 的项目密钥/ });
+    const input = within(form).getByLabelText<HTMLInputElement>(/^项目密钥/, { selector: "input" });
+    const label = input.labels?.[0]?.textContent;
+    const description = document.getElementById(input.getAttribute("aria-describedby") ?? "")?.textContent;
+    expect(`${label} ${description}`).toMatch(/可选|内置|不填/);
   });
 });

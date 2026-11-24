@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { artistMediaOperations } from "../test/artist-media-operations";
 import { albumGroup } from "../test/catalog-data";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
 import { installCatalogApi } from "../test/fake-catalog";
@@ -479,5 +480,31 @@ describe("专辑详情：修改记录", () => {
     await screen.findByText("Track 01");
     expect(screen.queryByText("修改记录")).toBeNull();
     expect(api.requestsTo("GET", "/api/v1/operations")).toHaveLength(0);
+  });
+});
+
+describe("M8 艺人资料操作", () => {
+  it.each([
+    ["自动补艺人图片", "补了 960×640 的艺人图片，来自 Wikimedia Commons", "去掉这张自动补的艺人图片？", "去掉自动补的960×640 的艺人图片，来自 Wikimedia Commons"],
+    ["自动补艺人简介", "补了中文简介（38 字），来自 维基百科", "去掉这段自动补的艺人简介？", "去掉自动补的中文简介（38 字），来自 维基百科"],
+  ])("%s 显示标题、变更说明和撤销确认", async (title, summary, confirmationTitle, effect) => {
+    const { api } = setup();
+    api.on("GET", "/api/v1/operations", () => jsonResponse(200, {
+      items: artistMediaOperations,
+      pagination: { page: 1, page_size: 20, total: 2 },
+    }));
+    renderApp({ path: "/settings/operations" });
+
+    const table = within(await screen.findByRole("table", { name: "操作记录" }));
+    const row = within(table.getByRole("row", { name: new RegExp(title) }));
+    expect(row.getByText(title, { exact: true })).toBeTruthy();
+    expect(row.getByText(summary, { exact: true })).toBeTruthy();
+    expect(row.getByRole("link", { name: "测试艺人" }).getAttribute("href")).toBe("/artists/00000000-0000-4000-8000-000000000001");
+
+    await userEvent.click(row.getByRole("button", { name: /^撤销/ }));
+    const dialog = within(await screen.findByRole("dialog", { name: confirmationTitle }));
+    expect(dialog.getByText(/“测试艺人”会改回/).textContent).toContain(title);
+    expect(dialog.getByText(effect, { exact: true })).toBeTruthy();
+    expect(dialog.getByRole("button", { name: "撤销" })).toBeTruthy();
   });
 });
