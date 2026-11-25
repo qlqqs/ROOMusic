@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 71
+- **Total Sessions**: 72
 - **Last Active**: 2026-11-25
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~486 | Active |
+| `journal-2.md` | ~509 | Active |
 | `journal-1.md` | ~1972 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 72 | 2026-11-25 | 我的评分页与管家评分工具 | `cf611311`, `84c3baa6` | `main` |
 | 71 | 2026-11-25 | Subsonic 与网页端评分 | `ea71440a`, `b5c443c0`, `21e18fac`, `9c77e1b1` | `main` |
 | 70 | 2026-11-25 | OpenSubsonic 规划增补与 foundation 实现 | `830580e6`, `04337fa3`, `7615dbce`, `a4d766a7` | `main` |
 | 69 | 2026-11-25 | 局域网设备：协议审查、SlimProto 单台与编组、软件替代验证、服务器端漂移补偿 | `a664d7c2`, `81418dac`, `6cdb2516`, `d91f13f3`, `deb95e5c`, `40382704` | `main` |
