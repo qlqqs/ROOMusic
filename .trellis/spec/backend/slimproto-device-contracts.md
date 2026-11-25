@@ -101,8 +101,9 @@
 
 | 位置 | 职责 |
 | --- | --- |
-| `zones`：`group_dispatcher.go`、`group_stream.go`、`groups.go` | 渲染一次，共享分块缓冲分发给每台成员各自的令牌与读位置；上限 `max(8 MiB, 30 秒码率)`；超限或 8 秒内未来取流的成员单独剔除；成员二次 GET 得 `ErrStreamGone`。`ManagedGroupStream`、`GroupMembers`、`ReportGroupMember`；可选接口 `GroupOutputs{AcquireMember, ReleaseMember}` 由 `upnp` 实现 |
-| `devices/slimproto`：`group.go`、`group_members.go`、`group_timing.go` | 协调器。编组时替换主输出的单设备循环，是唯一给各台 `Player` 写命令的协程；不持任何 zones 锁；排空每台事件通道 |
+| `zones/group_dispatcher.go`、`group_stream.go`、`groups.go` | 一次渲染，共享分块缓冲上限为 `max(8 MiB, 30 秒码率)`，每台设备独立令牌与读位置。主设备直读；`Options.NewMemberStreamFilter` 为每条非主设备流创建过滤器，未注入时所有读者直读。`ManagedGroupStream` 返回成员的 `GroupMemberStream.Drift`；主设备为 nil。超限、8 秒未取流、过滤失败均单独剔除，二次 GET 得 `ErrStreamGone`。名册与回报走 `GroupMembers`、`ReportGroupMember`，占用走 `GroupOutputs{AcquireMember, ReleaseMember}` |
+| `playback/render/member_filter.go`、`drift_frames.go`、`drift_sinc.go` | 首次 GET 共用渲染工具一次预约两个 ffmpeg 名额，按共享 FLAC 的 16/24 位整数 PCM 解码和重编码，沿用 FLAC 编码参数（高于 48 kHz 时块长 4096）。每个完整调整块长 L ≥ 2000 个输出帧，消耗 L±1 个源帧。第 i 帧按源位置 i×(L±1)/L 分声道插值，使用 32 抽头 Kaiser 窗 sinc（β=8、1024 个分相间隔，系数线性插值）。计算后四舍五入并裁剪回原位深。块间保留真实上下文，块外及不足一块的尾段逐位直通。块的右边界记录累计净调整，块内按最近整数换算播放点 |
+| `devices/slimproto/group.go`、`group_members.go`、`group_timing.go` | 协调器在 `strm s` 时把采样率与补偿器存入对应流，接续流随 `STMs` 晋升。编组时替换主输出的单设备循环，独占各台的命令发送，排空各台事件通道 |
 | `devices/upnp/group.go` | 成员占用进 `owners`（复用 `Acquire` 循环与接管）；`Acquire` 的“同一用户同一设备在用”判断不含成员占用；主输出关闭前等全部成员归还 |
 
 ### 8.2 时钟
@@ -111,12 +112,16 @@
 - 入组与起播前 2 秒内以 250 ms 间隔发 `strm t` 预热，之后每秒一次。
 - `strm u` 的目标换算成该台 jiffies：不能为 0（为 0 时取 1），必须在 10 秒窗口内，否则不下发并重新开流。
 
+- 成员每秒采一个新的播放点，以“源时间轴落后量 + 已播放净删帧的时长”为因变量。最近 60 秒内至少有 15 个不同播放点且跨度达到 20 秒时，带截距做线性回归，斜率乘以一百万得到 ppm。之后每隔至少 10 秒更新一次，限幅 ±500 ppm。新流发送 `strm s` 前立即对其调用 `SetRate(ppm float64)`；预取流也接收后续速率更新。
+- 换流、暂停后继续、成员同步微调或成功发送硬修正时重新积累样本，已有 ppm 随成员保留。成员脱离租约或重新入组时从零估计。
+- 前馈按输出帧数累积小数帧，满一帧后与 `Adjust(frames)` 的净欠量合并。偏移欠量用 2000 帧调整块，纯前馈用累计到下一整帧的间隔。实时成员流一次最多预读约 3 秒 PCM；更慢的速率先直通间隔前段，再在完整末段拉伸，保留小数余量。两类调整共用每 2000 个输出帧最多插删一帧的上限。
+
 ### 8.3 流程与取值
 
 | 场景 | 做法 |
 | --- | --- |
 | 开新流 | 每台 `strm q` → `strm s` autostart `0`（各自令牌路径）→ 全部 `STMl` 后，T = 现在 + 300 ms + (最大微调 − 本台微调)，每台 `strm u (T 的本台 jiffies)`；8 秒内未到 `STMl` 的成员标 `dropped` |
-| 维持同步 | 每秒比较各台表观开始时刻 `播放点时刻 − elapsed + 微调`，基准为最超前者；落后 10 ms–10 s 的发 `strm a 落后毫秒数`，同一台修正后冷却 1 秒；播放点超过 3 秒未更新的成员本轮跳过 |
+| 维持同步 | 每秒以主设备的表观开始时刻为基准（播放点时刻 − 源 elapsed + 微调）。成员 elapsed 换成输出帧号，按 `Source(output)` 换回源时间轴。原始偏差绝对值 ≤ 20 ms 时，将落后帧数加上从播放点到成员渲染头预计累积的漂移，再扣除 `Pending(output)`（已请求未写出及已写出尚未播到的净调整）。补偿器的 `RenderState(output int64) (head, pending int64)` 同时读取这两个计数。剩余偏差绝对值 > 0.5 ms 才 `Adjust(frames)`，正值删帧追赶、负值插帧等待。原始偏差绝对值 > 20 ms 或成员无补偿器时，落后 10 ms–10 s 的成员收 `strm a` 跳过相应时长，超前 10 ms–10 s 的成员收带正毫秒间隔的 `strm p`，播放该时长的静音后自行继续，无需等待 `STMp`。任一命令发送成功后，抵消该播放点的净待调整量。主设备始终免调；任一所需播放点超过 3 秒未更新则跳过，同一成员修正间隔至少 1 秒，须得到新的播放点 |
 | 暂停 / 继续 | 全组 `strm p`；继续时与开新流用同一套时刻：T = 现在 + 300 ms + (最大微调 − 本台微调)，每台 `strm u`；任一台没有确认暂停（STMp）时回报 `stream_lost` 重新开流。不按 STMp 的 elapsed 差错开：elapsed 按输出块累加、粒度粗，实测会把亚毫秒的差拉到 35 ms（2026-11-25） |
 | 接续流（格式变化） | 全部活动成员都 Delivered 且都报 `STMd` 后，原成员 `strm s` autostart `1` 接在缓冲后面；在格式边界重新加入的成员没有旧缓冲，用 autostart `0` 按统一时刻接入 |
 | 回报 | 参考成员为主设备；主设备连接仍在但当前流单独故障时，由剩余活动成员临时回报位置；全部 `STMu` 才回报 `ended`；单台 `STMn`/`DSCO`/`STMo` 只剔除那一台 |
@@ -126,7 +131,8 @@
 
 - 单元（`testing/synctest` 驱动生产循环的时钟）：时钟估计、`strm u`/`strm a` 的取值、暂停继续、接续流门槛、单台故障剔除、主设备掉线。
 - PostgreSQL 集成：编组接口、容量与角色守卫、成员区守卫、组音量、微调、重启恢复；分发器的字节一致与慢读者隔离；迁移 0079 往返。
-- 真实播放器：`sg docker -c scripts/test-slimproto-sync.sh`，两台 Squeezelite 接按计划出声时刻计时的读取程序，比较每秒脉冲的时刻差。
-- 跳帧可听性：`sg docker -c scripts/test-slimproto-skip.sh`，成员 +800 ppm，播放正弦、和弦、白噪声三段，按每次 `strm a` 导出两台同时段 WAV 与 `report.json` 到 `temp/slimproto-skip/<时间戳>/`（保留）。只导出与测量，不判定能否听出。Squeezelite 跳帧直接移动读指针、不淡化，2026-11-25 实测正弦与和弦切点的样本跳变高出段内 p99 12.7–25.3 dB、8 kHz 以上能量高出基线 74–91 dB，白噪声段无可测差别。
+- 真实播放器：`sg docker -c scripts/test-slimproto-sync.sh`，两台 Squeezelite 接按计划出声时刻计时的读取程序，比较每秒脉冲的时刻差。成员 +100 ppm 的验收从开播 60 秒后计稳态，要求 p95 ≤ 1 ms、峰值 ≤ 2 ms，预热期（开播 60 秒内）峰值 ≤ 15 ms，全程无跳帧或带间隔的静音命令。
+- 跳帧可听性：`sg docker -c scripts/test-slimproto-skip.sh`，成员 +300 ppm，播放正弦、和弦、白噪声三段，核对主设备逐帧一致和成员调整块的跳变与 8 kHz 以上能量，导出代表性调整块的同时段 WAV 与 `report.json` 到 `temp/slimproto-skip/<时间戳>/`。Squeezelite 跳帧直接移动读指针、不淡化，2026-11-25 实测正弦与和弦切点的样本跳变高出段内 p99 12.7–25.3 dB、8 kHz 以上能量高出基线 74–91 dB，白噪声段无可测差别。
 - 版本矩阵：`sg docker -c scripts/test-slimproto-versions.sh [MICRO_VERSION]`，从上游固定提交构建 piCorePlayer 9/10/11.1（1468/1476/1524）、moOde 10.3.7（1541）、Debian 13（1517）与现行 1613，逐个跑单台套件和 60 秒、+300 ppm 的编组套件。两个原入口接受 `ROOMUSIC_SLIMPROTO_PLAYER_IMAGE` 传入现成镜像，不传时自建自删。
-- 已知：1524 首轮无漂移编组出现一次 44 ms 峰值后两边交替修正，单行复测 p95 0.355 ms 通过，根因未定（夹具单机串行 12 个套件，读取程序可能被调度延迟）。
+- 读端计时（`scripts/slimproto/sync-clock.py`）：读线程晚醒后追读时，只把观察到空管道后实际等待 PCM 的时间计为欠供，累计超过 5 ms 才移动计划出声时刻。旧实现把调度迟到整段记成欠载并重置该台时钟，两台各自重置的差会伪装成同步偏差、触发硬修正（2026-11-25 定因：只暂停读进程 200 ms，1.6 ms 的实际阻塞被记成 178 ms）。1524 首轮的 44 ms 峰值与补偿分支早期的无漂移超限都属于此类。
+- 验收调整（任务 `11-25-slimproto-drift-compensation` D8–D11）：带限插值的样本间峰值会让相邻差超过源的 p99，不作为咔哒判据；改为与同核理想分数延迟参考逐样本比对（16 位 ≤ 1 LSB、24 位 ≤ 4 LSB）加 8 kHz 以上能量 ≤ +6 dB。+300 ppm 超出补偿器在预热期（首估 20 秒 + 约 20 秒缓冲）的追赶能力，开播 90 秒内允许一次硬修正。

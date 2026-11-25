@@ -134,6 +134,10 @@ func (g *groupCoordinator) open(stream *zones.Stream, prefetch bool) error {
 		if err != nil {
 			return err
 		}
+		// 播放器收到 s 后即可 GET，预取的下一流也从第一块开始使用已估计的速率。
+		if setter, ok := reader.Drift.(zones.DriftRateSetter); ok {
+			setter.SetRate(p.ppm)
+		}
 		if err = p.Player.send(frame); err != nil {
 			if err = g.drop(p, "offline"); err != nil {
 				return err
@@ -141,7 +145,7 @@ func (g *groupCoordinator) open(stream *zones.Stream, prefetch bool) error {
 			continue
 		}
 		p.awaiting++
-		opened := &outputStream{seq: stream.Seq, path: reader.Path}
+		opened := &outputStream{seq: stream.Seq, path: reader.Path, rate: rate, drift: reader.Drift}
 		if prefetch && !joining {
 			p.next = opened
 		} else {
@@ -389,6 +393,7 @@ func (g *groupCoordinator) event(p *groupPeer, ev playerEvent) error {
 	case "STMn", "STMo", "DSCO":
 		return g.drop(p, "dropped")
 	case "STMs":
+		p.resetDriftSamples()
 		if p.current.started && p.next != nil {
 			p.current, p.next = p.next, nil
 		}
@@ -429,7 +434,7 @@ func (g *groupCoordinator) event(p *groupPeer, ev playerEvent) error {
 	}
 	if p == g.reference {
 		g.current, g.next = p.current, p.next
-		g.seconds, g.anchor = p.elapsed.Seconds(), p.point
+		g.seconds, g.anchor = p.sourceElapsed().Seconds(), p.point
 		if p.ended {
 			g.anchor = time.Time{}
 		}

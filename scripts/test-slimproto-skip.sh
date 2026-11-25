@@ -45,6 +45,7 @@ echo "PCM、WAV 与报告目录：$result"
 SLIMPROTO_FFMPEG=$("$root/scripts/ffmpeg-pinned.sh")
 (cd "$root/backend" && CGO_ENABLED=0 GOOS=linux mise exec -- go build -o "$work/roomusic" ./cmd/roomusic)
 python3 -B "$fixtures/skip-analysis.py" generate "$work" "$SLIMPROTO_FFMPEG"
+mv "$work/source.s32le" "$result/"
 docker build -q -t "$ROOMUSIC_SQUEEZELITE_IMAGE" -f "$root/deploy/production/squeezelite.Dockerfile" "$root/deploy/production" >/dev/null
 image_built=1
 
@@ -54,7 +55,7 @@ for name in receiver member; do
   mkfifo "$work/$name/audio.fifo"
   touch "$work/$name/player.log"
   ppm=0
-  if [[ $name == member ]]; then ppm=800; fi
+  if [[ $name == member ]]; then ppm=300; fi
   echo "$ppm" > "$work/$name/ppm"
   python3 -B "$fixtures/sync-clock.py" "$work/$name" --record &
   clocks+=("$!")
@@ -64,9 +65,9 @@ done
 started=1
 "${compose[@]}" up -d --wait app
 python3 -Bu "$fixtures/sync-playback.py" record "$work" "${compose[@]}"
-# 保留曲尾修正之后的几秒，供两台截取相同时段。
+# 保留曲尾后三秒，供两台导出同一时段的试听片段。
 sleep 3
 "${compose[@]}" stop -t 2 receiver member
 for clock in "${clocks[@]}"; do wait "$clock"; done
 clocks=()
-python3 -Bu "$fixtures/skip-analysis.py" analyze "$work" "$result"
+python3 -Bu "$fixtures/skip-analysis.py" analyze "$result"

@@ -26,6 +26,9 @@ type groupPeer struct {
 	point, attached, nextPoll, warmUntil, corrected time.Time
 	joinBy, scheduled                               time.Time
 	elapsed                                         time.Duration
+	ppm                                             float64
+	driftSamples                                    []lagSample
+	rateUpdated                                     time.Time
 }
 
 type groupEvent struct {
@@ -64,6 +67,8 @@ func (g *groupCoordinator) detach(p *groupPeer) {
 	} else {
 		lease.Release()
 	}
+	p.ppm = 0
+	p.resetDriftSamples()
 	p.MemberLease = MemberLease{}
 	p.current, p.next = nil, nil
 }
@@ -170,6 +175,9 @@ func (g *groupCoordinator) members() error {
 				return err
 			}
 		}
+		if p.SyncDelayMS != m.SyncDelayMS {
+			p.resetDriftSamples()
+		}
 		previous := p.State
 		p.GroupMember = m
 		if p.current != nil && (m.State == "busy" || m.State == "offline" || (m.State == "dropped" && previous != m.State)) {
@@ -217,7 +225,7 @@ func (g *groupCoordinator) drop(p *groupPeer, state string) error {
 			if other.current != nil {
 				g.reference = other
 				g.current, g.next = other.current, other.next
-				g.seconds, g.anchor = other.elapsed.Seconds(), other.point
+				g.seconds, g.anchor = other.sourceElapsed().Seconds(), other.point
 				return nil
 			}
 		}

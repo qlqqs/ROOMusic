@@ -15,17 +15,17 @@ FRAME_BYTES = 8
 READ_FRAMES = 64
 PULSE_THRESHOLD = 1 << 28
 RATE_CHANGE = re.compile(r"track start sample rate: (\d+)")
-SKIP = re.compile(r"skip ahead interval: (\d+)")
+INTERVAL = re.compile(r"(skip ahead|pause) interval: (\d+)")
 # 每条记录保存首帧出声纳秒、帧数、名义采样率及 ppm，块内每一帧可按采样间距还原。
 FRAME_SPAN = struct.Struct("<qIIi")
 
 
-def capture(directory, pipe, player, spans, emit, audio):
+def capture(ppm, pipe, player, spans, emit, audio, detect_pulses):
     pipe_size = fcntl.fcntl(pipe, fcntl.F_SETPIPE_SZ, 4096)
-    ppm = int((directory / "ppm").read_text())
     rate = 44100
     start = time.monotonic_ns()
     frames = pulse_frames = pulse_at = 0
+    fifo_late_ns = 0
     emit("clock", start, pipe_bytes=pipe_size, ppm=ppm)
 
     while True:
@@ -35,13 +35,19 @@ def capture(directory, pipe, player, spans, emit, audio):
                 if new_rate != rate:
                     start += round(frames * NANOSECOND * 1_000_000 / (rate * (1_000_000 + ppm)))
                     rate, frames = new_rate, 0
-            if skip := SKIP.search(line):
-                emit("correction", time.monotonic_ns(), milliseconds=int(skip[1]))
+            if interval := INTERVAL.search(line):
+                command = "a" if interval[1] == "skip ahead" else "p"
+                milliseconds = int(interval[2])
+                if command == "a" or milliseconds > 0:
+                    emit("correction", time.monotonic_ns(), command=command, milliseconds=milliseconds)
 
         step = NANOSECOND * 1_000_000 / (rate * (1_000_000 + ppm))
         first = start + round(frames * step)
-        time.sleep(max(0, first - time.monotonic_ns()) / NANOSECOND)
+        delay = first - time.monotonic_ns()
+        if delay > 0:
+            time.sleep(delay / NANOSECOND)
         ready, _, _ = select.select([pipe], [], [], 0)
+        wait_start = time.monotonic_ns()
         data = pipe.read(READ_FRAMES * FRAME_BYTES)
         if not data:
             return
@@ -49,13 +55,21 @@ def capture(directory, pipe, player, spans, emit, audio):
         if remainder:
             raise RuntimeError(f"PCM 帧不完整（{len(data)} 字节）")
         now = time.monotonic_ns()
-        if not ready and now - first > 5_000_000:
-            emit("underrun", now, late_ns=now - first)
-            start, first, frames = now, now, 0
+        # 读线程晚醒后会连续追读多块。只有在空管道上等 PCM 的时间能推迟出声。
+        # 逐块扣除收到的音频时长，使持续供数过慢的短等待也能累计到欠载门限。
+        if not ready:
+            fifo_late_ns += now - wait_start
+        fifo_late_ns = min(fifo_late_ns, max(0, now - first))
+        if fifo_late_ns > 5_000_000:
+            emit("underrun", now, late_ns=fifo_late_ns)
+            first += fifo_late_ns
+            start, frames, fifo_late_ns = first, 0, 0
+        fifo_late_ns = max(0, fifo_late_ns - round(count * step))
         spans.write(FRAME_SPAN.pack(first, count, rate, ppm))
 
         if audio is not None:
             audio.write(data)
+        if not detect_pulses:
             frames += count
             continue
         left = memoryview(data).cast("i")[::2]
@@ -74,14 +88,16 @@ def capture(directory, pipe, player, spans, emit, audio):
 def run(directory, record):
     with (directory / "player.log").open() as player, \
             (directory / "events.jsonl").open("w", buffering=1) as events, \
-            (directory / "frames.bin").open("wb") as spans, \
-            ((directory / "audio.raw").open("wb") if record else nullcontext()) as audio:
+            (directory / "frames.bin").open("wb") as spans:
         def emit(kind, at, **fields):
             events.write(json.dumps({"kind": kind, "at_ns": at, **fields}) + "\n")
 
         while True:
             with (directory / "audio.fifo").open("rb", buffering=0) as pipe:
-                capture(directory, pipe, player, spans, emit, audio)
+                ppm = int((directory / "ppm").read_text())
+                # 同步套件同时保留漂移成员的 PCM，供逐帧计数及核对脉冲间净量。
+                with ((directory / "audio.raw").open("wb") if record or ppm else nullcontext()) as audio:
+                    capture(ppm, pipe, player, spans, emit, audio, detect_pulses=not record)
             spans.flush()
             if record:
                 return

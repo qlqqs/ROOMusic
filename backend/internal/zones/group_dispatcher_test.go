@@ -141,6 +141,13 @@ func TestZonesGroupDispatcherCloseEndsReaders(t *testing.T) {
 			t.Fatal("关闭前读者已结束")
 		}
 		d.close()
+		for _, reader := range d.readers {
+			body := UPnPStreamBody{reader: reader, delivered: &reader.delivered}
+			body.FinishDelivery()
+		}
+		if len(d.drops) != 0 {
+			t.Fatalf("分发器关闭后结束 HTTP 交付不应报告剔除，收到 %q", <-d.drops)
+		}
 		for range d.readers {
 			err := <-results
 			if err != io.EOF {
@@ -162,15 +169,15 @@ func (groupTestRenderSession) Format() StreamFormat {
 }
 func (groupTestRenderSession) Close() {}
 
-func TestZonesManagedGroupStreamReadersAndDelivery(t *testing.T) {
-	s := NewService(nil, Options{})
+// NewTestManagedGroup 让 HTTP 层测试使用真实的托管输出和分发器。
+func NewTestManagedGroup(t *testing.T, options Options, source io.Reader, ids ...string) (*Service, func() GroupStreamInfo) {
+	t.Helper()
+	s := NewService(nil, options)
 	t.Cleanup(s.Close)
 	userID, sessionID := uuid.New(), uuid.New()
-	ids := []string{"leader", "member-1", "member-2", "member-3"}
-	audio := bytes.Repeat([]byte("fLaC\x00\xffgroup"), 9000)
 	h := &renderHandle{
 		groupIDs: ids,
-		session:  groupTestRenderSession{source: bytes.NewReader(audio)},
+		session:  groupTestRenderSession{source: source},
 		stream:   &Stream{Seq: 1, MimeType: "audio/flac"},
 		done:     make(chan struct{}),
 	}
@@ -184,7 +191,7 @@ func TestZonesManagedGroupStreamReadersAndDelivery(t *testing.T) {
 		z.mu.Unlock()
 	})
 
-	streamInfo := func() GroupStreamInfo {
+	return s, func() GroupStreamInfo {
 		t.Helper()
 		info, err := s.ManagedGroupStream(userID, sessionID, 1)
 		if err != nil || len(info.Members) != len(ids) {
@@ -192,6 +199,12 @@ func TestZonesManagedGroupStreamReadersAndDelivery(t *testing.T) {
 		}
 		return info
 	}
+}
+
+func TestZonesManagedGroupStreamReadersAndDelivery(t *testing.T) {
+	ids := []string{"leader", "member-1", "member-2", "member-3"}
+	audio := bytes.Repeat([]byte("fLaC\x00\xffgroup"), 9000)
+	s, streamInfo := NewTestManagedGroup(t, Options{}, bytes.NewReader(audio), ids...)
 	members := streamInfo().Members
 	seen := make(map[string]bool)
 	readers := make([]UPnPStreamBody, len(members))

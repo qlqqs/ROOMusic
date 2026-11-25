@@ -196,14 +196,15 @@ type CommandResult struct {
 // Timer 与时钟、随机数和 ID 一起注入，不需要真实等待即可驱动边界。
 type Timer interface{ Stop() bool }
 type Options struct {
-	Logger       *slog.Logger
-	Renderer     Renderer
-	PlayRecorder PlayRecorder
-	IRReferences IRReferences
-	Now          func() time.Time
-	AfterFunc    func(time.Duration, func()) Timer
-	Random       func() float64
-	NewID        func() string
+	NewMemberStreamFilter func(StreamFormat) MemberStreamFilter
+	Logger                *slog.Logger
+	Renderer              Renderer
+	PlayRecorder          PlayRecorder
+	IRReferences          IRReferences
+	Now                   func() time.Time
+	AfterFunc             func(time.Duration, func()) Timer
+	Random                func() float64
+	NewID                 func() string
 }
 
 // OutputState 是输出端管理器与控制面的窄接点，不实现认领或租约协议。

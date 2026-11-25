@@ -1,11 +1,36 @@
 package zones
 
 import (
+	"context"
 	"crypto/rand"
+	"io"
 	"slices"
 )
 
+// DriftCompensator 的单位是当前流的样本帧，输出位置表示已播放的帧数。
+type DriftCompensator interface {
+	// Adjust 追加净调整，正数删帧，负数插帧。
+	Adjust(frames int64)
+	// Source 返回已播放到的源帧数，包含该位置已生效的调整。
+	Source(output int64) int64
+	// Pending 包括尚未写出和已写出但播放头尚未越过的净调整。
+	Pending(output int64) int64
+}
+
+// DriftRateSetter 是支持前馈的成员流能力，正 ppm 表示每百万输出帧应删除的源帧数。
+type DriftRateSetter interface {
+	SetRate(ppm float64)
+}
+
+// 每条成员流独占一个过滤器。首次 GET 在区锁外运行 Filter。
+// 过滤失败时可关闭 source 以剔除读者，同时解除输入和输出背压。
+type MemberStreamFilter interface {
+	DriftCompensator
+	Filter(ctx context.Context, source io.ReadCloser, output io.Writer) error
+}
+
 type GroupMemberStream struct {
+	Drift              DriftCompensator
 	DeviceID, Path     string
 	Delivered, Dropped bool
 }
@@ -38,8 +63,12 @@ func (s *Service) ManagedGroupStream(userID, sessionID string, seq int64) (Group
 // 只有首次签发才取走渲染 Body；后续查询与 HEAD 均不影响各读者的位置。
 func (s *Service) groupStreamInfo(out *outputSession, h *renderHandle) GroupStreamInfo {
 	if h.group == nil {
-		g := &groupStream{groupDispatcher: newGroupDispatcher(h.groupIDs, h.session.Format())}
-		for _, r := range g.readers {
+		format := h.session.Format()
+		g := &groupStream{groupDispatcher: newGroupDispatcher(h.groupIDs, format)}
+		for i, r := range g.readers {
+			if i > 0 && s.options.NewMemberStreamFilter != nil {
+				r.filter = s.options.NewMemberStreamFilter(format)
+			}
 			t := s.newStreamToken(out, h)
 			t.reader = r
 			g.tokens = append(g.tokens, t)
@@ -62,7 +91,7 @@ func (s *Service) groupStreamInfo(out *outputSession, h *renderHandle) GroupStre
 			continue
 		}
 		r := t.reader
-		info.Members = append(info.Members, GroupMemberStream{r.id, "/upnp/streams/" + t.key, r.delivered.Load(), r.dropped})
+		info.Members = append(info.Members, GroupMemberStream{DeviceID: r.id, Path: "/upnp/streams/" + t.key, Delivered: r.delivered.Load(), Dropped: r.dropped, Drift: r.filter})
 	}
 	if completed, ok := h.session.(interface{ CompletedDuration() float64 }); ok && g.readers[0].delivered.Load() {
 		info.DurationSeconds = completed.CompletedDuration()
@@ -111,6 +140,23 @@ func (t *upnpStreamToken) openGroup(take bool) (UPnPStreamBody, error) {
 		r.taken = true
 		body.Body = r
 		body.reader = r
+		if r.filter != nil {
+			ctx, cancel := context.WithCancel(t.service.ctx)
+			reader, writer := io.Pipe()
+			body.Body = reader
+			r.cancelFilter = func() {
+				cancel()
+				reader.CloseWithError(ErrStreamGone)
+			}
+			t.service.workers.Go(func() {
+				defer cancel()
+				err := r.filter.Filter(ctx, r, writer)
+				if err != nil {
+					r.Close()
+				}
+				writer.CloseWithError(err)
+			})
+		}
 	}
 	return body, nil
 }
