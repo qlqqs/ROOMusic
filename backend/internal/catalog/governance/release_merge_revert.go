@@ -100,7 +100,7 @@ func (k releaseMergeKind) Revert(ctx context.Context, tx *sql.Tx, id string, r o
 	if err := ingest.LayoutMergedMedia(ctx, tx, target); err != nil {
 		return empty, err
 	}
-	if err := albumfavorites.RestoreMergedAlbumFavorites(ctx, tx, before.Target.GroupID, before.Favorites); err != nil {
+	if err := albumfavorites.RestoreMergedAlbumState(ctx, tx, before.Target.GroupID, before.Favorites, before.Ratings); err != nil {
 		return empty, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE releases SET edit_revision=edit_revision+1 WHERE id=$1`, source); err != nil {

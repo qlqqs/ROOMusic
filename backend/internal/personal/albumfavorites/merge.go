@@ -25,13 +25,31 @@ func CountAlbumFavorites(ctx context.Context, db interface {
 	return count, err
 }
 
-// MoveMergedAlbumFavorites 在收藏状态锁内读取前态，和扫描共用同一转移语义。
-func MoveMergedAlbumFavorites(ctx context.Context, tx *sql.Tx, source, target string) ([]MergedAlbumFavorite, error) {
-	from := []string{source}
-	users, err := lockFavoriteSources(ctx, tx, from)
-	if err != nil {
-		return nil, err
+// MoveMergedAlbumState 按收藏与评分的用户并集一次加锁，随后读取前态并转移。
+func MoveMergedAlbumState(ctx context.Context, tx *sql.Tx, source, target string) ([]MergedAlbumFavorite, []MergedAlbumRating, error) {
+	from, to := []string{source}, []string{target}
+	users, err := lockAlbumSources(ctx, tx, from)
+	if err != nil || len(users) == 0 {
+		return nil, nil, err
 	}
+	favorites, err := mergedFavoriteSnapshot(ctx, tx, source, target, users)
+	if err != nil {
+		return nil, nil, err
+	}
+	ratings, err := mergedRatingSnapshot(ctx, tx, source, target, users)
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err := moveLockedAlbumFavorites(ctx, tx, from, to, users); err != nil {
+		return nil, nil, err
+	}
+	if err := moveLockedAlbumRatings(ctx, tx, from, to, users); err != nil {
+		return nil, nil, err
+	}
+	return favorites, ratings, nil
+}
+
+func mergedFavoriteSnapshot(ctx context.Context, tx *sql.Tx, source, target string, users []string) ([]MergedAlbumFavorite, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT f.user_id::text, f.group_id::text, f.created_at, f.saved_title, f.saved_artist,
 		EXISTS(SELECT 1 FROM favorite_albums t WHERE t.user_id=f.user_id AND t.group_id=$2::uuid)
 		FROM favorite_albums f WHERE f.group_id=$1::uuid AND f.user_id=ANY($3::uuid[]) ORDER BY f.user_id`, source, target, users)
@@ -50,24 +68,36 @@ func MoveMergedAlbumFavorites(ctx context.Context, tx *sql.Tx, source, target st
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if _, err = moveLockedAlbumFavorites(ctx, tx, from, []string{target}, users); err != nil {
-		return nil, err
-	}
 	return before, nil
 }
 
-// RestoreMergedAlbumFavorites 保留目标后来重新收藏的快照，只清理仍与复制值相同的目标行。
-func RestoreMergedAlbumFavorites(ctx context.Context, tx *sql.Tx, target string, before []MergedAlbumFavorite) error {
-	if len(before) == 0 {
-		return nil
-	}
-	users := make([]string, 0, len(before))
-	for _, f := range before {
+// RestoreMergedAlbumState 共用用户锁，之后分别按各自的快照恢复。
+func RestoreMergedAlbumState(ctx context.Context, tx *sql.Tx, target string, favorites []MergedAlbumFavorite, ratings []MergedAlbumRating) error {
+	users := make([]string, 0, len(favorites)+len(ratings))
+	for _, f := range favorites {
 		users = append(users, f.UserID)
+	}
+	for _, r := range ratings {
+		users = append(users, r.UserID)
+	}
+	if len(users) == 0 {
+		return nil
 	}
 	if _, err := tx.ExecContext(ctx, `SELECT user_id FROM personal_favorite_state WHERE user_id=ANY($1::uuid[]) ORDER BY user_id FOR UPDATE`, users); err != nil {
 		return err
 	}
+	if len(favorites) > 0 {
+		if err := restoreMergedAlbumFavorites(ctx, tx, target, favorites); err != nil {
+			return err
+		}
+	}
+	if len(ratings) > 0 {
+		return restoreMergedAlbumRatings(ctx, tx, target, ratings)
+	}
+	return nil
+}
+
+func restoreMergedAlbumFavorites(ctx context.Context, tx *sql.Tx, target string, before []MergedAlbumFavorite) error {
 	raw, err := json.Marshal(before)
 	if err != nil {
 		return err
