@@ -1,0 +1,46 @@
+{
+  "groups": [
+    {
+      "release_group": "120da7c5-dd0f-38cd-abcd-3c3b8f0dcde9",
+      "editions": 20,
+      "same_track_count_pairs": 137,
+      "comparable_pairs": 137,
+      "pass_current": 31,
+      "pass_four_seconds": 31,
+      "pass_two_seconds": 29,
+      "pass_fraction": {
+        "current": 0.22627737226277372,
+        "four_seconds": 0.22627737226277372,
+        "two_seconds": 0.2116788321167883
+      }
+    },
+    {
+      "release_group": "8beb26c6-8fe0-36d8-921e-f6bb2161b757",
+      "editions": 2,
+      "same_track_count_pairs": 1,
+      "comparable_pairs": 1,
+      "pass_current": 1,
+      "pass_four_seconds": 1,
+      "pass_two_seconds": 1,
+      "pass_fraction": {
+        "current": 1,
+        "four_seconds": 1,
+        "two_seconds": 1
+      }
+    }
+  ],
+  "method": "同组同曲目数，每对按发行编号字典序以第一版模拟本地、时长四舍五入至秒。至少一半曲目双方时长已知才能计入分母。全部可比曲目通过才算通过。",
+  "total": {
+    "editions": 22,
+    "same_track_count_pairs": 138,
+    "comparable_pairs": 138,
+    "pass_current": 32,
+    "pass_four_seconds": 32,
+    "pass_two_seconds": 30,
+    "pass_fraction": {
+      "current": 0.2318840579710145,
+      "four_seconds": 0.2318840579710145,
+      "two_seconds": 0.21739130434782608
+    }
+  }
+}

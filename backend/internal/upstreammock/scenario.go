@@ -9,9 +9,10 @@ import (
 )
 
 type Scenario struct {
-	Name       string `json:"scenario"`
-	RetryAfter int    `json:"retry_after"`
-	DelayMS    int    `json:"delay_ms"`
+	Name          string `json:"scenario"`
+	RetryAfter    int    `json:"retry_after"`
+	DelayMS       int    `json:"delay_ms"`
+	MinIntervalMS int    `json:"min_interval_ms,omitempty"`
 }
 
 func defaultScenario() Scenario { return Scenario{Name: "ok", RetryAfter: 2, DelayMS: 3000} }
@@ -20,6 +21,8 @@ func (s *Server) reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.scenarios = map[string]Scenario{}
+	s.counters = make(map[string]map[string]int)
+	s.lastRequest = make(map[string]time.Time)
 	for _, service := range []string{"insights", "plugins", "musicbrainz", "coverartarchive", "lrclib", "acoustid", "wikidata", "commons", "wikipedia", "fanarttv", "theaudiodb", "openai", "anthropic", "tavily", "searxng"} {
 		s.scenarios[service] = defaultScenario()
 	}
@@ -34,6 +37,10 @@ func (s *Server) setScenario(service string, sc Scenario) error {
 		return fmt.Errorf("未知服务 %q", service)
 	}
 	switch sc.Name {
+	case "rate_threshold":
+		if sc.MinIntervalMS <= 0 || int64(sc.MinIntervalMS) > int64((1<<63-1)/time.Millisecond) {
+			return fmt.Errorf("min_interval_ms 必须是有效的正毫秒数")
+		}
 	case "ok", "not_found", "unavailable", "rate_limited", "timeout", "slow", "malformed", "drop":
 	default:
 		return fmt.Errorf("未知情景 %q", sc.Name)
@@ -41,6 +48,7 @@ func (s *Server) setScenario(service string, sc Scenario) error {
 	if sc.RetryAfter < 0 || sc.DelayMS < 0 || int64(sc.DelayMS) > int64((1<<63-1)/time.Millisecond) {
 		return fmt.Errorf("情景等待时间无效")
 	}
+	delete(s.lastRequest, service)
 	s.scenarios[service] = sc
 	return nil
 }

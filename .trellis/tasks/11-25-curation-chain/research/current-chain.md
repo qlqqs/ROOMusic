@@ -121,3 +121,16 @@
 - ADR 0006《外部数据源与自动整理》：原则（第 3 节）、分层（第 4 节）、撤销（第 5 节）、匹配依据与“唯一候选加一项独立佐证”（第 6 节）、强证据与发行合并由模型提出（第 7 节）、后台模型与审查（第 9 节）、默认关与不反复重试（第 10 节）。
 - 产品合同的永久约束：弱相似不能做跨目录的权威合并（`.trellis/spec/guides/product-goals.md` “Permanent Invariants”）。
 - 归档任务 `11-22-auto-curation-sources` 及其子任务是本链路的来源。
+
+## 13. 度量基线证实的问题（子任务 M，2026-11-25）
+
+基线见 `../../11-25-curation-chain-m-metrics/research/baseline-2026-11-25.md`。理想模型下完成 78/92，错连 12、错改 2；
+模型选第一个候选时完成 59/92，错连 97、错改 4。
+
+- 第 6 节的疑点证实：扫描把缺失艺人记为 `display_fallback`，占位判断不认（`library/scanner.go:978`、`catalog/curation_evidence.go:229`），程序不补曲目艺人（子任务 A）。
+- 标签里的 MusicBrainz 发行编号指向另一张专辑、只有曲序与时长相同时，`tag_id` 照样采信，写错发行、发行组、录音对应与厂牌；“标题与艺人都对不上”的冲突条件不覆盖这一步（`curation/program/match_album.go:33, 68`，子任务 C）。
+- 文字搜索只取 10 条，正确版本排在后面时看不到（`sources/musicbrainz/finders.go:78`，子任务 C）。
+- 合辑的搜索用本地有效署名，扫描已清掉合辑的占位专辑艺人，没有按 Various Artists 查（`catalog/ingest/compilation.go:6`、`curation/program/match_lookup.go:269`，子任务 C）。
+- 模型提交编号时后端不因时长不符拒绝同曲数的候选（`curation/program/model_matcher.go:173`）；模型选第一个候选时新增的 85 条错连有 83 条由此写入（子任务 E，D4）。
+- 繁简写法不同时受控服务查不到；真实 MusicBrainz 是否互通由子任务 C 实测。
+
