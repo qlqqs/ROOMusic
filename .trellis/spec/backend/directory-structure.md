@@ -26,7 +26,7 @@ backend/
 │   │   │   └── postgrestest/       # 仅测试使用：隔离 schema 的测试库
 │   │   ├── workpool/               # 固定并发、有界有序流水线与按输入顺序返回的 Map（只依赖标准库）
 │   │   └── uuid/                   # UUID 生成与格式校验
-│   ├── subsonic/                   # Subsonic/OpenSubsonic 兼容接口：protocol（外壳与编码）、auth（客户端鉴权与密码副本）、httpapi（/rest/ 分发与设置接口），见 subsonic-contracts.md
+│   ├── subsonic/                   # Subsonic/OpenSubsonic 兼容接口：包根（目录到协议实体的转换）、protocol（外壳与编码）、auth（客户端鉴权与密码副本）、httpapi（/rest/ 分发、浏览、封面与设置接口），见 subsonic-contracts.md
 │   ├── sources/                    # 外部源的共用部分：声明、能力接口、限速、缓存、带重试的请求（不依赖数据库与业务包）
 │   │   ├── musicbrainz/            # MusicBrainz 适配器
 │   │   ├── coverartarchive/        # Cover Art Archive 适配器：图片清单、选主封面、下载
