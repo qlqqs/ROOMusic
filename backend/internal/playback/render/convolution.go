@@ -48,18 +48,18 @@ func buildConvolution(ir LoadedIR, format chain.Format) (chain.Stage, error) {
 		Node: chain.Wrap(conv, format, format, step, true)}, nil
 }
 
-func (s *session) loadConvolution(plan *renderPlan) error {
+func (r *Renderer) loadConvolution(ctx context.Context, userID string, plan *renderPlan) error {
 	settings := plan.convolution
 	if !settings.Enabled || settings.IRID == nil {
 		return nil
 	}
 	var err error
-	if s.owner.options.IRs == nil {
+	if r.options.IRs == nil {
 		err = ErrUnavailable
 	} else {
 		var ir LoadedIR
-		ir, err = s.owner.options.IRs.Load(s.ctx, s.spec.UserID, *settings.IRID, plan.userFormat())
-		if err == nil && s.ctx.Err() == nil {
+		ir, err = r.options.IRs.Load(ctx, userID, *settings.IRID, plan.userFormat())
+		if err == nil && ctx.Err() == nil {
 			var stage chain.Stage
 			stage, err = buildConvolution(ir, plan.userFormat())
 			if err == nil {
@@ -67,12 +67,12 @@ func (s *session) loadConvolution(plan *renderPlan) error {
 			}
 		}
 	}
-	if s.ctx.Err() != nil {
-		return s.ctx.Err()
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 	if err != nil {
-		// 不记录名称、原文件、cfg、进程诊断或底层错误；失败只省略本节点。
-		s.owner.options.Logger.Warn("卷积暂时用不了，已跳过", "event", "playback.convolution.unavailable", "module", "playback")
+		// 不记录名称、资源路径、进程诊断或底层错误。
+		r.options.Logger.Warn("卷积暂时用不了，已跳过", "event", "playback.convolution.unavailable", "module", "playback")
 	}
 	return nil
 }

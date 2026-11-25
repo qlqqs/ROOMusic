@@ -30,6 +30,16 @@ func hasProcessing(f processingFacts) bool {
 	return f.nonExact || f.sourceConversion || f.leveling || f.headroom || f.stages
 }
 
+// HasProcessing 判定客户端是否启用了需要解码原文件的处理。
+func HasProcessing(s zones.ZoneSettings) bool {
+	rate, _ := zones.DecodeSettingsDocument[zones.SampleRateSettings](s.SampleRate)
+	mix, _ := zones.DecodeSettingsDocument[zones.DownmixSettings](s.Downmix)
+	peq, _ := zones.DecodeSettingsDocument[zones.PEQSettings](s.PEQ)
+	conv, _ := s.Convolution.DecodeConvolution()
+	return hasProcessing(processingFacts{leveling: s.Leveling != "off", headroom: s.Headroom.Enabled,
+		sourceConversion: rate.Strategy != "none", stages: mix.Enabled || peq.Enabled || (conv.Enabled && conv.IRID != nil)})
+}
+
 func trackLayout(t Track) uint32 {
 	if t.Layout != 0 {
 		return t.Layout

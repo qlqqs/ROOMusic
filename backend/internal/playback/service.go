@@ -61,12 +61,6 @@ type resolved struct {
 	rootPath string
 }
 
-// resolve 按固定顺序核对：曲目存在且 present → 目录仍启用 → 在格式表中 → 目录仍在配置允许范围内。
-// 错误是 ErrTrackNotFound、ErrRootDisabled、ErrNotDirectlyPlayable、ErrSourceUnavailable 或 ErrDatabase 之一。
-func (service *Service) resolve(ctx context.Context, trackID string) (resolved, error) {
-	return service.resolveFormat(ctx, trackID, service.deliveryFormat)
-}
-
 // deliveryFormat 保留旧接口的直出格式限制，不受渲染能力装配影响。
 func (service *Service) deliveryFormat(source catalog.TrackSource) (Format, error) {
 	format, ok := service.findFormat(source.SourceKind, source.Codec)
@@ -120,7 +114,46 @@ func (r resolved) openSource() (*openedSource, error) {
 // 错误是 ErrTrackNotFound、ErrRootDisabled、ErrNotDirectlyPlayable、ErrSourceUnavailable、ErrSourceChanged、
 // 或 ErrDatabase 之一。
 func (service *Service) Prepare(ctx context.Context, trackID string) (*Prepared, error) {
-	target, err := service.resolve(ctx, trackID)
+	return service.openPrepared(ctx, trackID, service.deliveryFormat)
+}
+
+// OpenSource 交付已核对的完整原文件。CUE 曲目只能从渲染入口按区间读取。
+func (service *Service) OpenSource(ctx context.Context, trackID string) (*Prepared, error) {
+	return service.openPrepared(ctx, trackID, func(source catalog.TrackSource) (Format, error) {
+		if source.SourceKind == "cue_virtual" {
+			return Format{}, ErrNotDirectlyPlayable
+		}
+		if f, ok := service.findFormat(source.SourceKind, source.Codec); ok {
+			return f, nil
+		}
+		for _, f := range renderFormatTable {
+			if f.SourceKind == source.SourceKind && f.Codec == source.Codec {
+				f.Delivery = DeliveryOriginal
+				switch f.container {
+				case containerMP4:
+					f.MIMEType = "audio/mp4"
+				case containerAPE:
+					f.MIMEType = "audio/ape"
+				case containerWavPack:
+					f.MIMEType = "audio/wavpack"
+				case containerAIFF:
+					f.MIMEType = "audio/aiff"
+				case containerWAV:
+					f.MIMEType = "audio/wav"
+				case containerDSF:
+					f.MIMEType = "audio/dsf"
+				case containerDFF:
+					f.MIMEType = "audio/dff"
+				}
+				return f, nil
+			}
+		}
+		return Format{}, ErrNotDirectlyPlayable
+	})
+}
+
+func (service *Service) openPrepared(ctx context.Context, trackID string, selectFormat func(catalog.TrackSource) (Format, error)) (*Prepared, error) {
+	target, err := service.resolveFormat(ctx, trackID, selectFormat)
 	if err != nil {
 		return nil, err
 	}

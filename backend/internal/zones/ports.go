@@ -13,9 +13,22 @@ type Renderer interface {
 	Open(ctx context.Context, spec RenderSpec) (RenderSession, error)
 }
 
+type TrackRender struct {
+	UserID, TrackID string
+	Settings        ZoneSettings
+	Codec           string
+	BitRate         int
+	StartSeconds    float64
+}
+
+type SingleTrackRenderer interface {
+	RenderTrack(ctx context.Context, spec TrackRender) (io.ReadCloser, StreamFormat, error)
+}
+
 type StreamFormat struct {
 	Codec, MimeType, Quality       string
 	SampleRate, BitDepth, Channels int
+	BitRate                        int    `json:"-"`
 	Layout                         uint32 `json:"-"`
 	Delivery                       string `json:"-"` // stream（长流）、hls 或 push（进程内 PCM）。
 	// 协商时携带的设备上限，不属于对外 Stream.format；0 表示未声明。

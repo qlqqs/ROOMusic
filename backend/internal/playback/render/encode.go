@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
+	"math"
 	"strconv"
 	"sync/atomic"
 
@@ -74,7 +75,11 @@ func encoderArgs(f zones.StreamFormat, pcm chain.Format) []string {
 		args = append(args, "-channel_layout", "0x"+strconv.FormatUint(uint64(pcm.Layout), 16))
 	}
 	args = append(args, "-i", "pipe:0", "-map_metadata", "-1", "-threads", "1")
-	if bitrate := bitrateKbps[f.Codec]; bitrate != 0 {
+	bitrate := f.BitRate
+	if bitrate == 0 {
+		bitrate = bitrateKbps[f.Codec]
+	}
+	if bitrate != 0 {
 		args = append(args, "-b:a", strconv.Itoa(bitrate)+"k")
 	}
 	switch f.Codec {
@@ -184,4 +189,47 @@ func wavHeader(f zones.StreamFormat) []byte {
 	copy(b[20+fmtSize:], "data")
 	binary.LittleEndian.PutUint32(b[24+fmtSize:], 0xffffffff)
 	return b
+}
+
+// pcmOutput 统一处理输入块和最后的滤波尾帧，两种交付路径复用同一量化器。
+type pcmOutput struct {
+	chain         *chain.Chain
+	integer, clip bool
+}
+
+func (p pcmOutput) block(dst []byte, input *chain.Buffer) (*chain.Buffer, []byte, int) {
+	var out *chain.Buffer
+	if input == nil {
+		out = p.chain.Drain()
+	} else {
+		out = p.chain.Process(input)
+	}
+	if out == nil || out.Frames == 0 {
+		return out, dst[:0], 0
+	}
+	encoded, clipped := p.encodePCM(dst[:0], out)
+	return out, encoded, clipped
+}
+func (p pcmOutput) encodePCM(dst []byte, b *chain.Buffer) ([]byte, int) {
+	if p.integer {
+		return p.chain.Quantize(dst, b)
+	}
+	channels := p.chain.OutputFormat().Channels
+	needed := b.Frames * channels * 4
+	if cap(dst) < needed {
+		dst = make([]byte, needed)
+	} else {
+		dst = dst[:needed]
+	}
+	clipped := 0
+	for frame := range b.Frames {
+		for channel := range channels {
+			sample := b.Samples[channel][frame]
+			if p.clip && math.Abs(sample) > 1 {
+				clipped++
+			}
+			binary.LittleEndian.PutUint32(dst[(frame*channels+channel)*4:], math.Float32bits(float32(sample)))
+		}
+	}
+	return dst, clipped
 }
