@@ -43,11 +43,12 @@ func userIDFromPath(w http.ResponseWriter, r *http.Request) (string, bool) {
 
 // Handlers 汇集身份相关的 HTTP handler。
 type Handlers struct {
-	sessionRevoked func(string)
-	database       *sql.DB
-	guard          *identity.Guard
-	throttle       *identity.LoginThrottle
-	logger         *slog.Logger
+	sessionRevoked   func(string)
+	passwordObserver identity.PasswordObserver
+	database         *sql.DB
+	guard            *identity.Guard
+	throttle         *identity.LoginThrottle
+	logger           *slog.Logger
 }
 
 // New 返回身份 handler。
@@ -159,7 +160,7 @@ func (handlers *Handlers) login(responseWriter http.ResponseWriter, request *htt
 		return
 	}
 	source := identity.SourceOf(request.RemoteAddr)
-	result, attempt, err := identity.Login(request.Context(), handlers.database, handlers.throttle, input.Username, input.Password, source)
+	result, attempt, err := identity.Login(request.Context(), handlers.database, handlers.throttle, input.Username, input.Password, source, handlers.passwordObserver)
 	var throttled *identity.ThrottledError
 	switch {
 	case errors.Is(err, identity.ErrInvalidCredentials):
@@ -170,7 +171,7 @@ func (handlers *Handlers) login(responseWriter http.ResponseWriter, request *htt
 		if throttled.Started {
 			handlers.logger.WarnContext(request.Context(), "登录来源开始等待", "event", "identity.login.throttled",
 				"module", "identity", "request_id", request.Header.Get("X-Request-ID"), "scope", "source",
-				"source", source, "retry_after_seconds", retryAfterSeconds(throttled.RetryAfter))
+				"source", source, "retry_after_seconds", identity.RetryAfterSeconds(throttled.RetryAfter))
 		}
 		writeThrottledError(responseWriter, request, throttled, "登录失败次数太多，请过几分钟再试")
 		return
@@ -182,16 +183,8 @@ func (handlers *Handlers) login(responseWriter http.ResponseWriter, request *htt
 	httpserver.WriteJSON(responseWriter, 200, map[string]string{"id": result.User.ID, "username": result.User.Username, "role": result.User.Role})
 }
 
-func retryAfterSeconds(wait time.Duration) int64 {
-	seconds := int64(wait / time.Second)
-	if wait%time.Second != 0 {
-		seconds++
-	}
-	return max(1, seconds)
-}
-
 func writeThrottledError(w http.ResponseWriter, r *http.Request, err *identity.ThrottledError, message string) {
-	w.Header().Set("Retry-After", strconv.FormatInt(retryAfterSeconds(err.RetryAfter), 10))
+	w.Header().Set("Retry-After", strconv.FormatInt(identity.RetryAfterSeconds(err.RetryAfter), 10))
 	httpserver.WriteError(w, r, http.StatusTooManyRequests, "too_many_attempts", message)
 }
 
@@ -208,7 +201,7 @@ func (handlers *Handlers) logLoginFailure(r *http.Request, username, source stri
 	handlers.logger.InfoContext(r.Context(), "登录凭据核对失败", append(fields, "event", "identity.login.failed")...)
 	if wait := attempt.LockedFor(); wait > 0 {
 		handlers.logger.WarnContext(r.Context(), "登录账号开始等待", append(fields, "event", "identity.login.throttled",
-			"scope", "account", "retry_after_seconds", retryAfterSeconds(wait))...)
+			"scope", "account", "retry_after_seconds", identity.RetryAfterSeconds(wait))...)
 	}
 }
 
@@ -273,12 +266,28 @@ func (handlers *Handlers) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := uuid.New()
-	_, err = handlers.database.ExecContext(r.Context(), "INSERT INTO users(id,username,password_hash,role) VALUES($1::uuid,$2,$3,'user')", id, in.Username, hash)
+	tx, err := handlers.database.BeginTx(r.Context(), nil)
+	if err != nil {
+		httpserver.WriteError(w, r, 503, "database_unavailable", "无法创建用户")
+		return
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(r.Context(), "INSERT INTO users(id,username,password_hash,role) VALUES($1::uuid,$2,$3,'user')", id, in.Username, hash)
 	if err != nil {
 		if isUniqueViolation(err) {
 			httpserver.WriteError(w, r, 409, "username_taken", "用户名已存在")
 			return
 		}
+		httpserver.WriteError(w, r, 503, "database_unavailable", "无法创建用户")
+		return
+	}
+	if handlers.passwordObserver != nil {
+		if err := handlers.passwordObserver.ObservePassword(r.Context(), tx, id, in.Password); err != nil {
+			httpserver.WriteError(w, r, 503, "database_unavailable", "无法创建用户")
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		httpserver.WriteError(w, r, 503, "database_unavailable", "无法创建用户")
 		return
 	}
@@ -350,5 +359,11 @@ func writeUserManagementError(w http.ResponseWriter, r *http.Request, err error)
 // WithSessionRevoked 在装配时注入登出、停用与吊销会话后的应用通知。
 func (handlers *Handlers) WithSessionRevoked(callback func(string)) *Handlers {
 	handlers.sessionRevoked = callback
+	return handlers
+}
+
+// WithPasswordObserver 注入密码校验与变更事务的观察者。
+func (handlers *Handlers) WithPasswordObserver(observer identity.PasswordObserver) *Handlers {
+	handlers.passwordObserver = observer
 	return handlers
 }

@@ -18,10 +18,10 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
+	"github.com/qlqq/roomusic/backend/internal/platform/secret"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/steward/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
-	"github.com/qlqq/roomusic/backend/internal/steward/secret"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 	"github.com/qlqq/roomusic/backend/internal/steward/web"
 )

@@ -51,7 +51,7 @@ func Middleware(logger *slog.Logger, next http.Handler) http.Handler {
 			if recovered := recover(); recovered != nil {
 				status = http.StatusInternalServerError
 				level = slog.LevelError
-				logHTTPCompleted(logger, level, requestID, request.Method, routeTemplate, status, recorded.bytes, time.Since(started), observation.actorID)
+				logHTTPCompleted(logger, level, requestID, request.Method, routeTemplate, status, recorded.bytes, time.Since(started), observation)
 				panic(recovered)
 			}
 			if status >= 500 {
@@ -59,7 +59,7 @@ func Middleware(logger *slog.Logger, next http.Handler) http.Handler {
 			} else if status >= 400 {
 				level = slog.LevelWarn
 			}
-			logHTTPCompleted(logger, level, requestID, request.Method, routeTemplate, status, recorded.bytes, time.Since(started), observation.actorID)
+			logHTTPCompleted(logger, level, requestID, request.Method, routeTemplate, status, recorded.bytes, time.Since(started), observation)
 		}()
 		next.ServeHTTP(recorded, request)
 	})
@@ -68,7 +68,8 @@ func Middleware(logger *slog.Logger, next http.Handler) http.Handler {
 type requestObservationKey struct{}
 
 type requestObservation struct {
-	actorID string
+	actorID          string
+	subsonicEndpoint string
 }
 
 // SetActor 把已认证的用户 ID 记录到请求观察里，供完成日志写入 actor_id。请求没有经过 Middleware 时什么也不做。
@@ -78,7 +79,14 @@ func SetActor(request *http.Request, actorID string) {
 	}
 }
 
-func logHTTPCompleted(logger *slog.Logger, level slog.Level, requestID, method, routeTemplate string, status, responseBytes int, duration time.Duration, actorID string) {
+// SetSubsonicEndpoint 仅接收处理器注册的接口名或固定的未知标记。
+func SetSubsonicEndpoint(request *http.Request, name string) {
+	if observation, ok := request.Context().Value(requestObservationKey{}).(*requestObservation); ok {
+		observation.subsonicEndpoint = name
+	}
+}
+
+func logHTTPCompleted(logger *slog.Logger, level slog.Level, requestID, method, routeTemplate string, status, responseBytes int, duration time.Duration, observation *requestObservation) {
 	if duration < 0 {
 		duration = 0
 	}
@@ -93,7 +101,10 @@ func logHTTPCompleted(logger *slog.Logger, level slog.Level, requestID, method, 
 		slog.Int("response_bytes", responseBytes),
 		slog.Int64("duration_ms", duration.Milliseconds()),
 	}
-	if actorID != "" {
+	if observation.subsonicEndpoint != "" {
+		attrs = append(attrs, slog.String("subsonic_endpoint", observation.subsonicEndpoint))
+	}
+	if actorID := observation.actorID; actorID != "" {
 		attrs = append(attrs, slog.String("actor_id", actorID))
 	}
 	logger.LogAttrs(context.Background(), level, "http request completed", attrs...)

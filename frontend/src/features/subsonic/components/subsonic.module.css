@@ -1,0 +1,45 @@
+/* 只读的值与复制图标：值完整显示并换行，图标紧跟其后。 */
+.copyValue {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  user-select: all;
+}
+
+/* 确认密码的对话框：与修改密码同宽，标题、说明与按钮行的样式一致。 */
+.dialog {
+  width: min(440px, calc(100vw - 2 * var(--space-4)));
+}
+
+.content {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.title {
+  font-size: var(--fs-16);
+}
+
+.lead {
+  font-size: var(--fs-13);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}

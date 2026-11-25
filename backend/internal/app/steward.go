@@ -35,6 +35,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/diagnostics"
 	diagnostictools "github.com/qlqq/roomusic/backend/internal/platform/diagnostics/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
+	"github.com/qlqq/roomusic/backend/internal/platform/secret"
 	"github.com/qlqq/roomusic/backend/internal/playback"
 	playbacktools "github.com/qlqq/roomusic/backend/internal/playback/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/sources"
@@ -44,7 +45,6 @@ import (
 	stewardmcp "github.com/qlqq/roomusic/backend/internal/steward/mcp"
 	"github.com/qlqq/roomusic/backend/internal/steward/memory"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
-	"github.com/qlqq/roomusic/backend/internal/steward/secret"
 	"github.com/qlqq/roomusic/backend/internal/steward/token"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 	"github.com/qlqq/roomusic/backend/internal/steward/web"
@@ -53,6 +53,7 @@ import (
 )
 
 type stewardConfig struct {
+	forgetPassword func(string)
 	tavilyEndpoint string
 	mockHost       sources.MockHost
 	writer         *curation.Writer
@@ -127,7 +128,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		definitions = append(definitions, librarytools.ConfigTools(scans, configuration.allowedRoots, logger)...)
 		definitions = append(definitions, diagnostictools.StewardTools(configuration.diagnostics)...)
 		definitions = append(definitions, backuptools.StewardTools(configuration.backups, database, logger)...)
-		definitions = append(definitions, identitytools.StewardTools(database, logger, func(userID string) { supervisor.CancelUser(userID) })...)
+		definitions = append(definitions, identitytools.StewardTools(database, logger, func(userID string) { supervisor.CancelUser(userID) }, configuration.forgetPassword)...)
 		definitions = append(definitions, playbacktools.StewardTools(configuration.audio, catalog.NewStore(database), configuration.progress)...)
 		definitions = append(definitions, zonestools.SettingsTools(playback, logger)...)
 		definitions = append(definitions, dsptools.StewardTools(configuration.dsp, playback, logger)...)

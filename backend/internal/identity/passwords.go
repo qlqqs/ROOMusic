@@ -27,26 +27,14 @@ func (e *PasswordHashError) Unwrap() error { return e.Err }
 type ResetResult struct{ Disabled bool }
 
 // ChangeOwnPassword 验证当前密码，原子修改密码并保留当前会话、撤销其他会话。
-func ChangeOwnPassword(ctx context.Context, db *sql.DB, throttle *LoginThrottle, userID string, sessionTokenHash []byte, current, next string) error {
+func ChangeOwnPassword(ctx context.Context, db *sql.DB, throttle *LoginThrottle, userID string, sessionTokenHash []byte, current, next string, observers ...PasswordObserver) error {
 	if !ValidPassword(next) {
 		return ErrInvalidPassword
 	}
-	var previousHash string
-	err := db.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE id=$1::uuid AND disabled_at IS NULL`, userID).Scan(&previousHash)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrSessionEnded
-	}
-	if err != nil {
-		return fmt.Errorf("read current password: %w", err)
-	}
-	attempt, err := throttle.BeginPassword(userID, passwordFingerprint(previousHash))
+	previousHash, attempt, err := checkCurrentPassword(ctx, db, throttle, userID, current)
 	if err != nil {
 		return err
 	}
-	if !VerifyPassword(previousHash, current) {
-		return ErrWrongCurrentPassword
-	}
-	// 核对正确不算失败，即使后续事务或哈希生成失败，也不占用尝试额度。
 	defer attempt.Succeeded()
 	hash, err := HashPassword(next)
 	if err != nil {
@@ -75,6 +63,9 @@ func ChangeOwnPassword(ctx context.Context, db *sql.DB, throttle *LoginThrottle,
 	if err := setPasswordTx(ctx, tx, userID, hash, sessionTokenHash); err != nil {
 		return err
 	}
+	if err := observePassword(ctx, tx, userID, next, observers); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit password change: %w", err)
 	}
@@ -82,7 +73,7 @@ func ChangeOwnPassword(ctx context.Context, db *sql.DB, throttle *LoginThrottle,
 }
 
 // ChangeAdminOwnPassword 修改管理员自己的密码，不核对旧密码并保留当前会话。
-func ChangeAdminOwnPassword(ctx context.Context, db *sql.DB, userID string, sessionTokenHash []byte, next string) error {
+func ChangeAdminOwnPassword(ctx context.Context, db *sql.DB, userID string, sessionTokenHash []byte, next string, observers ...PasswordObserver) error {
 	if !ValidPassword(next) {
 		return ErrInvalidPassword
 	}
@@ -109,6 +100,9 @@ func ChangeAdminOwnPassword(ctx context.Context, db *sql.DB, userID string, sess
 	if err := setPasswordTx(ctx, tx, userID, hash, sessionTokenHash); err != nil {
 		return err
 	}
+	if err := observePassword(ctx, tx, userID, next, observers); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit password change: %w", err)
 	}
@@ -128,16 +122,16 @@ func lockOwnSessionTx(ctx context.Context, tx *sql.Tx, userID string, sessionTok
 }
 
 // ResetPassword 按用户 ID 重置密码，同时撤销该用户的所有会话。
-func ResetPassword(ctx context.Context, db *sql.DB, userID, next string) (ResetResult, error) {
-	return resetPassword(ctx, db, userID, next, false)
+func ResetPassword(ctx context.Context, db *sql.DB, userID, next string, observers ...PasswordObserver) (ResetResult, error) {
+	return resetPassword(ctx, db, userID, next, false, observers)
 }
 
 // ResetPasswordByUsername 精确匹配用户名并重置密码，同时撤销所有会话。
 func ResetPasswordByUsername(ctx context.Context, db *sql.DB, username, next string) (ResetResult, error) {
-	return resetPassword(ctx, db, username, next, true)
+	return resetPassword(ctx, db, username, next, true, nil)
 }
 
-func resetPassword(ctx context.Context, db *sql.DB, target, next string, byUsername bool) (ResetResult, error) {
+func resetPassword(ctx context.Context, db *sql.DB, target, next string, byUsername bool, observers []PasswordObserver) (ResetResult, error) {
 	var result ResetResult
 	if !ValidPassword(next) {
 		return result, ErrInvalidPassword
@@ -155,7 +149,7 @@ func resetPassword(ctx context.Context, db *sql.DB, target, next string, byUsern
 	if byUsername {
 		err = tx.QueryRowContext(ctx, `SELECT id::text,disabled_at IS NOT NULL FROM users WHERE username=$1 FOR UPDATE`, target).Scan(&userID, &result.Disabled)
 	} else {
-		err = tx.QueryRowContext(ctx, `SELECT disabled_at IS NOT NULL FROM users WHERE id=$1::uuid FOR UPDATE`, target).Scan(&result.Disabled)
+		err = tx.QueryRowContext(ctx, `SELECT id::text,disabled_at IS NOT NULL FROM users WHERE id=$1::uuid FOR UPDATE`, target).Scan(&userID, &result.Disabled)
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return ResetResult{}, ErrUserNotFound
@@ -164,6 +158,9 @@ func resetPassword(ctx context.Context, db *sql.DB, target, next string, byUsern
 		return ResetResult{}, fmt.Errorf("lock password reset user: %w", err)
 	}
 	if err := setPasswordTx(ctx, tx, userID, hash, nil); err != nil {
+		return ResetResult{}, err
+	}
+	if err := observePassword(ctx, tx, userID, next, observers); err != nil {
 		return ResetResult{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -194,4 +191,50 @@ func setPasswordTx(ctx context.Context, tx *sql.Tx, userID, hash string, keepTok
 		return fmt.Errorf("revoke password sessions: %w", err)
 	}
 	return nil
+}
+
+func checkCurrentPassword(ctx context.Context, db *sql.DB, throttle *LoginThrottle, userID, current string) (string, *Attempt, error) {
+	var previousHash string
+	err := db.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE id=$1::uuid AND disabled_at IS NULL`, userID).Scan(&previousHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil, ErrSessionEnded
+	}
+	if err != nil {
+		return "", nil, fmt.Errorf("read current password: %w", err)
+	}
+	attempt, err := throttle.BeginPassword(userID, passwordFingerprint(previousHash))
+	if err != nil {
+		return "", nil, err
+	}
+	if !VerifyPassword(previousHash, current) {
+		return "", nil, ErrWrongCurrentPassword
+	}
+	return previousHash, attempt, nil
+}
+
+// ConfirmPassword 使用本人改密的限流与会话复核，在同一事务内通知观察者。
+func ConfirmPassword(ctx context.Context, db *sql.DB, throttle *LoginThrottle, userID string, tokenHash []byte, password string, onVerified func(context.Context, *sql.Tx, string, string) error) error {
+	hash, attempt, err := checkCurrentPassword(ctx, db, throttle, userID, password)
+	if err != nil {
+		return err
+	}
+	defer attempt.Succeeded()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := lockVerifiedPassword(ctx, tx, userID, hash); err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			return ErrWrongCurrentPassword
+		}
+		return err
+	}
+	if err := lockOwnSessionTx(ctx, tx, userID, tokenHash); err != nil {
+		return err
+	}
+	if err := onVerified(ctx, tx, userID, password); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

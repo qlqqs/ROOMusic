@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "subsonic_disabled",
+      "message": "Subsonic 接口已关闭"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

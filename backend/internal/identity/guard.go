@@ -246,7 +246,7 @@ func HashPassword(password string) (string, error) {
 // VerifyPassword 校验密码；同时兼容 bcrypt 迁移前的旧 SHA-256 哈希。
 func VerifyPassword(encodedHash, password string) bool {
 	if strings.HasPrefix(encodedHash, "$2a$") || strings.HasPrefix(encodedHash, "$2b$") || strings.HasPrefix(encodedHash, "$2y$") {
-		return bcrypt.CompareHashAndPassword([]byte(encodedHash), []byte(password)) == nil
+		return len(password) <= MaxPasswordLength && bcrypt.CompareHashAndPassword([]byte(encodedHash), []byte(password)) == nil
 	}
 	// Keep validating hashes created before the bcrypt migration. New hashes
 	// are always bcrypt; this branch only provides a safe transition path.

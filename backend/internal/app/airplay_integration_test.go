@@ -25,8 +25,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/devices/upnp"
 	"github.com/qlqq/roomusic/backend/internal/insights/schema"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
+	"github.com/qlqq/roomusic/backend/internal/platform/secret"
 	"github.com/qlqq/roomusic/backend/internal/ptp"
-	"github.com/qlqq/roomusic/backend/internal/steward/secret"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 

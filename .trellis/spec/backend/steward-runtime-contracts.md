@@ -340,8 +340,8 @@ ReleaseConversation 和启动恢复只中断 running 调用，不中断 awaiting
 | --- | --- | --- |
 | `steward/tool` | `Definition`、`Registry`、`Invoke`、schema 子集 | `identity` |
 | `platform/egress` | 出站 HTTP 客户端与地址策略（M7 B1 起从管家包迁到平台层，与外部源共用） | 无内部包；可用 `net/http` |
-| `steward/secret` | 实例密钥文件、加解密 | 无 |
-| `steward/web` | 搜索、网页正文、MusicBrainz 与封面清单 | `steward/runtime`（只读设置端口）、`steward/secret`、`platform/egress`、`sources`、`sources/musicbrainz`、`steward/tool`、`platform/buildinfo`、`platform/uuid` |
+| `platform/secret` | 实例密钥文件、加解密（2026-11-25 从 `steward/secret` 移来，供管家、AirPlay 凭据与 Subsonic 共用） | 无 |
+| `steward/web` | 搜索、网页正文、MusicBrainz 与封面清单 | `steward/runtime`（只读设置端口）、`platform/secret`、`platform/egress`、`sources`、`sources/musicbrainz`、`steward/tool`、`platform/buildinfo`、`platform/uuid` |
 | `steward/provider` | 三种协议适配、流解析、探测、地址预设 | `platform/egress`；可用 `net/http` |
 | `steward/runtime` | 循环、历史摘要、设置/会话/消息/工具调用/放行名单存储 | `platform/uuid`、`steward/provider`、`steward/tool`、`steward/memory` |
 | `steward/memory` | 本人记忆存储、限额与三个工具 | `platform/uuid`、`steward/tool` |
@@ -999,7 +999,7 @@ JSON 错误信封只给上表的固定消息；适配器脱敏后的 `Message` �
 添加返回 `AllowlistEntry = {host, port, added_by: UUID|null, created_at}`（样本 allowlist-added），重复添加保留原添加者与时间；
 列表按主机、端口排序（样本 allowlist）；删除不存在的项 `404 not_found`（样本 allowlist-deleted）。
 
-密钥（`steward/secret`）：
+密钥（`platform/secret`）：
 
 | 项 | 实现 |
 | --- | --- |
@@ -1095,7 +1095,7 @@ C5 的独立测试交接（实现阶段不新增测试）：
 | 文件 | 需要数据库 | 覆盖 |
 | --- | --- | --- |
 | `steward/tool/registry_test.go` | 否 | 列表按身份过滤、每次调用重新鉴权；四种调用错误码；schema 子集的接受与拒绝；非法注册；截断后仍是合法 JSON |
-| `steward/secret/secret_test.go` | 否 | 密钥文件生成（32 字节、0600）与加解密往返；绑定不符、篡改、密钥被替换统一得到 `ErrCannotOpen`；`LastFour`；密钥文件不存在时解密不创建文件 |
+| `platform/secret/secret_test.go` | 否 | 密钥文件生成（32 字节、0600）与加解密往返；绑定不符、篡改、密钥被替换统一得到 `ErrCannotOpen`；`LastFour`；密钥文件不存在时解密不创建文件 |
 | `platform/egress/client_test.go` | 否 | `IsPublicIP` 的网段表；解析到私有地址与混合结果被拒绝；放行名单与不限策略；重定向后按实际目的地重新判断；重定向次数与协议限制 |
 | `steward/provider/protocol_test.go` | 否 | 两种协议的文本、用量（有与无）、请求不含多余字段；单个与并行工具调用的分片与整块累积；Messages 思考块与工具结果往返；OpenAI 工具结果的线上格式；HTTP 与流内错误的分类及密钥隐藏；取消阻塞中的读取会释放连接；预设识别不发请求；探测的协议、模型列表与三种工具结论 |
 | `steward/provider/regressions_test.go` | 否 | 输出上限字段按端点取 `max_tokens`/`max_completion_tokens`；两种协议截断在工具参数中间；超时分类 |
@@ -1115,7 +1115,7 @@ C5 的独立测试交接（实现阶段不新增测试）：
 
 ```bash
 # 不需要数据库的包，在 backend/ 下
-mise exec -- go test ./internal/steward/tool/... ./internal/steward/secret/... ./internal/platform/egress/... ./internal/steward/provider/...
+mise exec -- go test ./internal/steward/tool/... ./internal/platform/secret/... ./internal/platform/egress/... ./internal/steward/provider/...
 mise exec -- go test ./internal/steward/runtime/... -run 'TestRun|TestSourceWrapper'
 mise exec -- go test ./internal/app/... -run 'TestRoutesResolveToRegisteredPatterns|TestPackageDependencyDirections'
 

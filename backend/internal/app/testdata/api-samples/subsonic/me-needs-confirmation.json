@@ -1,0 +1,8 @@
+{
+  "body": {
+    "enabled": true,
+    "ready": false,
+    "username": "subsonic-web-listener"
+  },
+  "status": 200
+}

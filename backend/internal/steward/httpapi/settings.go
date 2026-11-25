@@ -13,9 +13,9 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
+	"github.com/qlqq/roomusic/backend/internal/platform/secret"
 	"github.com/qlqq/roomusic/backend/internal/steward/provider"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
-	"github.com/qlqq/roomusic/backend/internal/steward/secret"
 )
 
 const modelKeyPurpose = "steward.model"

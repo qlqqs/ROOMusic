@@ -9,7 +9,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/devices/airplay/hap"
 	"github.com/qlqq/roomusic/backend/internal/devices/airplay/rtsp"
-	"github.com/qlqq/roomusic/backend/internal/steward/secret"
+	"github.com/qlqq/roomusic/backend/internal/platform/secret"
 )
 
 type CredentialStore struct {

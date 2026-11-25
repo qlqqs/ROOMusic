@@ -10,10 +10,10 @@ import (
 
 var (
 	uriPattern        = regexp.MustCompile(`(?i)[a-z][a-z0-9+.-]*://[^\s<>"']+`)
-	credentialPattern = regexp.MustCompile(`(?i)(?:\b(?:[a-z0-9_]*_)?(?:host|hostaddr|dbname|user|password|secret|token|key|authorization|cookie|sslmode|database_url|dsn)["']?\s*[:=]|\b(?:authorization\s*:\s*)?(?:basic|token|bearer)\s+\S+|\bsk-(?:ant-)?[a-z0-9_-]+|[^\s/:@]+:[^\s/@]+@[^\s/]+)`)
+	credentialPattern = regexp.MustCompile(`(?i)(?:\b(?:[a-z0-9_]*_)?(?:u|p|t|s|host|hostaddr|dbname|user|password|secret|token|key|authorization|cookie|sslmode|database_url|dsn)["']?\s*[:=]|\b(?:authorization\s*:\s*)?(?:basic|token|bearer)\s+\S+|\bsk-(?:ant-)?[a-z0-9_-]+|[^\s/:@]+:[^\s/@]+@[^\s/]+)`)
 	// 只在词首识别绝对路径；保留 MIME 与普通相对路径中的斜杠。空格属于路径直到分隔符。
 	pathPattern        = regexp.MustCompile(`(^|[\s=:"'(\[（：])(?:[A-Za-z]:[\\/]|/|\\\\)[^\r\n<>"'|,;)]*`)
-	routePattern       = regexp.MustCompile(`^(?:[A-Z]+ )?/api(?:/[a-zA-Z0-9_{}.-]+)*/?$|^(?:[A-Z]+ )?/(?:healthz|readyz|metrics)/?$`)
+	routePattern       = regexp.MustCompile(`^(?:[A-Z]+ )?/api(?:/[a-zA-Z0-9_{}.-]+)*/?$|^(?:[A-Z]+ )?/(?:healthz|readyz|metrics)/?$|^/rest/$`)
 	clientRoutePattern = regexp.MustCompile(`^/$|^(/(\$[A-Za-z][A-Za-z0-9]*|\$|[a-z]+(-[a-z]+)*))+/?$`)
 )
 

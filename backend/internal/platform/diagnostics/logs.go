@@ -188,7 +188,7 @@ func safeLogKey(key string) (text, number bool) {
 		return true, false
 	}
 	switch key {
-	case "event", "module", "level", "msg", "kind", "status", "reason", "tool", "mode", "source_kind", "outcome", "error_code", "error_kind", "route_template", "client_route", "method", "mime_type", "category", "stage", "trigger", "direction", "capability", "phase", "yield_status", "operation":
+	case "event", "module", "level", "msg", "kind", "status", "reason", "tool", "mode", "source_kind", "outcome", "error_code", "error_kind", "route_template", "subsonic_endpoint", "client_route", "method", "mime_type", "category", "stage", "trigger", "direction", "capability", "phase", "yield_status", "operation":
 		return true, key == "status"
 	case "count", "total", "bytes", "duration_ms", "response_bytes", "status_code", "exit_code", "keep_days", "keep_count",
 		"conversations", "analyzed", "completed", "written", "batch_size", "skipped_current", "batch_ms", "yield_ms", "elapsed_ms", "eta_ms", "live_updated",
