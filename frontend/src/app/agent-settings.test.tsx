@@ -66,6 +66,13 @@ describe("设置 › Agent › 名字", () => {
   });
 });
 
+it("在模式组选择 Steward 只提交默认模式", async () => {
+  const { api } = await openAgent({ settings: settingsOf({ default_mode: "assistant" }) });
+  const modes = within(await screen.findByRole("region", { name: "模式" }));
+  await userEvent.click(modes.getByRole("radio", { name: "Steward" }));
+  await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body)).toEqual([{ default_mode: "steward" }]));
+});
+
 describe("设置 › Agent › 联网搜索（C8）", () => {
   const searchTestPath = "/api/v1/me/steward/settings/search-test";
   const source = (name: RegExp) => group("联网搜索").getByRole("radio", { name });
@@ -436,10 +443,10 @@ describe("设置 › Agent › 成员（管理员）", () => {
     expect(screen.getByRole("heading", { level: 2, name: "访问令牌" })).toBeTruthy();
   });
 
-  it("各组依次是名字、模型、联网搜索、记忆、访问令牌与管理员的成员段", async () => {
+  it("各组依次是名字、模式、模型、联网搜索、记忆、访问令牌与管理员的成员段", async () => {
     await openAgent();
     await screen.findByLabelText("接口地址");
-    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["名字", "模型", "联网搜索", "记忆", "访问令牌", "成员", "成员可以连接的内网地址"]);
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["名字", "模式", "模型", "联网搜索", "记忆", "访问令牌", "成员", "成员可以连接的内网地址"]);
   });
 });
 

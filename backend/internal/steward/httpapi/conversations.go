@@ -83,17 +83,21 @@ func (h *Handlers) conversationPage(w http.ResponseWriter, r *http.Request, user
 	httpserver.WriteJSON(w, 200, map[string]any{"items": items, "pagination": map[string]any{"page": page, "page_size": size, "total": total}})
 }
 
+func validConversationMode(mode string) bool {
+	return mode == "assistant" || mode == "steward" || mode == "operator"
+}
+
 func (h *Handlers) createConversation(w http.ResponseWriter, r *http.Request, user identity.User) {
 	var input struct {
 		// Title 是会话标题。
 		Title string `json:"title"`
-		// Mode 是会话模式，支持 assistant、operator 与 steward。
+		// Mode 为空时使用用户设置中的默认模式。
 		Mode string `json:"mode"`
 	}
 	if !decodeInput(w, r, &input) {
 		return
 	}
-	if input.Mode != "" && input.Mode != "assistant" && input.Mode != "operator" && input.Mode != "steward" {
+	if input.Mode != "" && !validConversationMode(input.Mode) {
 		httpserver.WriteError(w, r, 400, "invalid_request", "会话模式无效")
 		return
 	}
@@ -104,6 +108,9 @@ func (h *Handlers) createConversation(w http.ResponseWriter, r *http.Request, us
 	settings, _, ok := h.configured(w, r, user)
 	if !ok {
 		return
+	}
+	if input.Mode == "" {
+		input.Mode = settings.DefaultMode
 	}
 	conversation, err := h.store.CreateConversation(r.Context(), user.ID, strings.TrimSpace(input.Title), settings.Model, input.Mode)
 	if err != nil {
@@ -254,7 +261,7 @@ func (h *Handlers) renameConversation(w http.ResponseWriter, r *http.Request, us
 	if !decodeInput(w, r, &input) {
 		return
 	}
-	if input.Mode != nil && *input.Mode != "assistant" && *input.Mode != "operator" && *input.Mode != "steward" {
+	if input.Mode != nil && !validConversationMode(*input.Mode) {
 		httpserver.WriteError(w, r, 400, "invalid_request", "会话模式无效")
 		return
 	}

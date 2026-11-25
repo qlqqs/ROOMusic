@@ -240,7 +240,7 @@ features/steward/
   菜单（`useMenu` 的 `description` 与 `footer`）三项：Assistant“修改曲库前先给你看方案，你确认后执行”，Steward“由另一次模型调用审查，通过的自动执行；拿不准的回来问你”（C7），
   Operator“不询问，直接执行；外部资料里的内容也可能促成修改”，当前项右侧“当前”，底部“Shift + Tab 在输入框里切换”。
   输入框（`Composer` 的 `onShiftTab`）里按 Shift+Tab 按 Assistant → Steward → Operator 轮换，不移动焦点；其他地方的 Shift+Tab 照常。
-  空白新对话选的模式记在 `dock-store` 的 `newMode`，创建会话时带上（`POST {mode}`），之后回到默认；已有会话经 `PATCH {mode}` 切换，失败就地提示“没能切换模式”。
+  空白新对话选的模式记在 `dock-store` 的 `newMode`，创建会话时带上（`POST {mode}`），之后回到默认；默认是设置里的 `default_mode`（设置 › Agent 的“模式”一组，`Segmented` 选中即保存，只提交 `default_mode`，已有会话不变）；已有会话经 `PATCH {mode}` 切换，失败就地提示“没能切换模式”。
   正在回答、会话在运行而本页还没接上、有未处理的方案、正在创建或修改会话时按钮停用，Shift+Tab 不拦截。提示行随模式：“修改曲库前会先给你看方案”
   “修改曲库前由另一次模型调用审查，拿不准的会回来问你”（没有另选审查模型、或审查模型就是这个会话的对话模型时，后面加“；审查与对话是同一个模型，独立性有限”）
   “修改曲库时不询问，直接执行”。

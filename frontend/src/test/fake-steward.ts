@@ -362,7 +362,7 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
     const patch = request.body as Record<string, unknown>;
     const before = current() as Record<string, unknown> & { overrides: Record<string, unknown> };
     const next: Record<string, unknown> & { overrides: Record<string, unknown> } = { ...before, updated_at: "2026-11-16T00:00:01Z" };
-    for (const field of ["endpoint", "protocol", "model", "review_model", "display_name", "overrides", "search_source", "searxng_url"]) if (patch[field] !== undefined) next[field] = patch[field];
+    for (const field of ["endpoint", "protocol", "model", "review_model", "display_name", "default_mode", "overrides", "search_source", "searxng_url"]) if (patch[field] !== undefined) next[field] = patch[field];
     if (patch["search_key"] === null) Object.assign(next, { search_key_saved: false, search_key_last_four: "", search_key_needs_reentry: false });
     else if (typeof patch["search_key"] === "string") Object.assign(next, { search_key_saved: true, search_key_last_four: patch["search_key"].slice(-4), search_key_needs_reentry: false });
     let keyChanged = false;

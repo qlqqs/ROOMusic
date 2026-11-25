@@ -1167,6 +1167,16 @@ describe("自动整理的会话（M7 D）", () => {
 describe("模式", () => {
   const modeButton = (scope: ReturnType<typeof within>) => scope.getByRole("button", { name: /^模式：/ });
 
+  it("空白新对话显示并提交设置中的默认模式 Operator", async () => {
+    const { api } = setup({ settings: settingsOf({ display_name: "小蓝", default_mode: "operator" }) });
+    renderApp({ path: "/" });
+    const panel = await openPanel();
+    const input = await panel.findByRole("textbox", { name: "问问小蓝" });
+    expect(modeButton(panel).getAttribute("aria-label")).toBe("模式：Operator");
+    await userEvent.type(input, "你好{Enter}");
+    await waitFor(() => expect(api.requestsTo("POST", "/api/v1/me/steward/conversations")[0]?.body).toMatchObject({ mode: "operator" }));
+  });
+
   it("空白新对话：输入框里 Shift+Tab 在 Assistant、Steward、Operator 之间轮换，提示行随之变化；发第一条消息时带上选的模式", async () => {
     const { api } = setup({ settings: settingsOf({ display_name: "小蓝", review_model: "" }) });
     renderApp({ path: "/" });

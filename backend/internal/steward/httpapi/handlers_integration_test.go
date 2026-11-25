@@ -252,6 +252,45 @@ func TestPostgreSQLStewardHTTPSettingsPrivacyNamesAndIsolation(t *testing.T) {
 	}
 	assertPrivateLogs(t, f)
 }
+func TestPostgreSQLStewardHTTPDefaultModeSettings(t *testing.T) {
+	f := newAPIFixture(t)
+	const path = "me/steward/settings"
+	for _, patch := range []map[string]string{{"default_mode": "operator"}, {"display_name": "x"}} {
+		apiStatus(t, f.request("admin", "PUT", path, patch), 200, "")
+		w := f.request("admin", "GET", path, nil)
+		apiStatus(t, w, 200, "")
+		var settings settingsResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &settings); err != nil {
+			t.Fatal(err)
+		}
+		if settings.DefaultMode != "operator" {
+			t.Fatalf("after PUT %v: default_mode=%q want=operator", patch, settings.DefaultMode)
+		}
+	}
+	apiStatus(t, f.request("admin", "PUT", path, map[string]string{"default_mode": "bogus"}), 400, "invalid_input")
+}
+func TestPostgreSQLStewardHTTPDefaultModeConversation(t *testing.T) {
+	f := newAPIFixture(t)
+	f.configure(t, "admin", "http://127.0.0.1:1", "openai")
+	apiStatus(t, f.request("admin", "PUT", "me/steward/settings", map[string]string{"default_mode": "steward"}), 200, "")
+	for _, tc := range []struct {
+		body map[string]string
+		want string
+	}{
+		{map[string]string{}, "steward"},
+		{map[string]string{"mode": "assistant"}, "assistant"},
+	} {
+		w := f.request("admin", "POST", "me/steward/conversations", tc.body)
+		apiStatus(t, w, 201, "")
+		var conversation conversationResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &conversation); err != nil {
+			t.Fatal(err)
+		}
+		if conversation.Mode != tc.want {
+			t.Fatalf("after POST %v: mode=%q want=%q", tc.body, conversation.Mode, tc.want)
+		}
+	}
+}
 func TestPostgreSQLStewardHTTPConversationOwnershipCRUD(t *testing.T) {
 	f := newAPIFixture(t)
 	f.allowEndpoint(t, "http://127.0.0.1:1")

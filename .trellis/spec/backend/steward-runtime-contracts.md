@@ -310,7 +310,7 @@ GetConversation 使用 READ COMMITTED 事务与 FOR UPDATE 会话锁，读取与
 用户新消息在追加事务内将未过期 pending 方案 superseded，已经过期的保持 expired。两类失效都为项保存 not_executed 工具结果。
 ReleaseConversation 和启动恢复只中断 running 调用，不中断 awaiting_confirmation。普通 continue 遇到 pending 时重新发 plan/done，
 不请求模型；重放在尚有 awaiting_confirmation 的助手步骤之前停止，避免缺少工具结果。
-新建默认 assistant；新建/PATCH 接受 assistant/operator/steward。PATCH 模式需要会话空闲且无 pending 方案。
+新建时省略模式或传空字符串，使用个人设置的 `default_mode`。新建/PATCH 接受 assistant/operator/steward。PATCH 模式需要会话空闲且无 pending 方案。
 
 ### 错误矩阵
 
@@ -568,16 +568,17 @@ UUID 校验格式并转小写；分页默认 `page=1/page_size=20`，页码最�
 
 ```text
 Settings = {endpoint, key_last_four, key_saved, key_needs_reentry, protocol: ""|"openai"|"messages"|"responses", model, review_model, display_name,
+            default_mode: "assistant"|"steward"|"operator",
             probe_result: ProbeResult|null, probed_at: time|null, overrides: Overrides, updated_at: time|null, unread_conversation_count: int}
 Overrides = {protocol?: "openai"|"messages"|"responses", model?: string, tool_support?: "supported"|"unsupported"|"unconfirmed"}
 ProbeResult = {provider_name?, protocol?, models: [{id, display_name?}], tool_support, failures?: [{step: "endpoint"|"models"|"tools", protocol?, error: {kind, status_code?, message}}]}
 ```
 
-- 从未保存过时各字段为空值、`updated_at: null`（样本 settings-empty）。响应里永远没有密钥明文与密文。
+- 从未保存过时 `default_mode` 为 `assistant`，`updated_at: null`（样本 settings-empty）。响应里永远没有密钥明文与密文。
 - `key_saved`：库里有密文。`key_needs_reentry`：密文用当前实例密钥解不开（实例密钥文件换了或丢了）；其余设置保留。
 - `key_last_four`：密钥最后四个 Unicode 字符，不足四个时是全部。
 
-`PUT` 请求 `{endpoint?, key?, protocol?, model?, review_model?, display_name?, overrides?}`，省略的键保留原值；`key` 以外的键写 `null` 等同省略：
+`PUT` 请求 `{endpoint?, key?, protocol?, model?, review_model?, display_name?, default_mode?, overrides?}`，省略的键保留原值；`key` 以外的键写 `null` 等同省略：
 
 | 字段 | 校验 |
 | --- | --- |
@@ -587,6 +588,7 @@ ProbeResult = {provider_name?, protocol?, models: [{id, display_name?}], tool_su
 | `model` | 去首尾空白 |
 | `review_model` | 去首尾空白，空串跟随本次对话模型；省略保留，不改变主模型探测结果 |
 | `display_name` | 去首尾空白，≤ 20 个字符；空表示默认名字 |
+| `default_mode` | `assistant`、`steward` 或 `operator`，其他值返回 `400 invalid_input`。仅改此字段不会取消运行 |
 | `overrides` | 给出时整体替换已有覆盖项（`{}` 清空）；`model` 给出时非空 |
 
 - 允许只保存名字而不配置端点（样本 settings-name）；完整保存见样本 settings-saved。
@@ -625,7 +627,7 @@ ProbeResult = {provider_name?, protocol?, models: [{id, display_name?}], tool_su
 4. 预检失败时不连接，报告为 `{models: [], tool_support: "unconfirmed", failures: [{step: "endpoint", error: {kind, message}}]}`，
    `kind` 是 `egress_denied`、`timeout` 或 `unreachable`。
 5. 预检通过后执行 `provider.Probe`（第 6 节）。
-6. 成功时保存：合并后的 `endpoint`、`model` 与密钥变更，本次的 `probe_result`、`probed_at`，`overrides` 重置为 `{}`，`protocol` 写成识别出的协议。
+6. 成功时保存：合并后的 `endpoint`、`model` 与密钥变更，本次的 `probe_result`、`probed_at`，`overrides` 重置为 `{}`，`protocol` 写成识别出的协议。保留 `default_mode` 原值。
    失败时什么都不保存，原设置与原探测结论保持不变。
 
 响应：
@@ -655,7 +657,7 @@ ToolCall = {id, name, input, output: JSON|null, truncated, untrusted, status: "r
 | 接口 | 请求 | 说明 |
 | --- | --- | --- |
 | 列表 | 查询 `page`（默认 1）、`page_size`（默认 20，最大 100） | 按 `updated_at` 倒序、`id` 升序；`pagination: {page, page_size, total}`（样本 conversations）；参数无效 `400 invalid_pagination` |
-| 新建 | `{title?, mode?}`，`mode` 接受省略、`""`、`"assistant"`、`"operator"` 或 `"steward"`，默认 assistant | 要求已配置（否则 409/422，见 4.2）；`title` 去首尾空白；`model` 记下当时的生效模型，不随设置变化，只能用下面的 `PATCH` 改（样本 conversation-created） |
+| 新建 | `{title?, mode?}`，`mode` 接受 `"assistant"`、`"steward"` 或 `"operator"`，省略或传 `""` 时使用个人设置的 `default_mode` | 要求已配置（否则 409/422，见 4.2）；`title` 去首尾空白；`model` 记下当时的生效模型，不随设置变化，只能用下面的 `PATCH` 改（样本 conversation-created） |
 | 读取 | — | 会话字段加 `messages`（按 `sequence` 升序）、`pending_plan`（没有时 null）和 `plans`（全部方案及结果）。`content` 只投影上面三种块，适配器的不透明块（思考块等）不返回 |
 | 改标题、模型、模式 | `{title?, model?, mode?}`，至少给一个，否则 `400 invalid_input` | 省略的字段保留原值；两者都去首尾空白，`title` 可以为空；`model` 为空字符串表示使用默认模型（发消息时取当时的生效模型），不校验模型是否存在；只有修改 mode 才要求会话空闲且没有 pending 方案；不在 assistant/operator/steward 中的模式返回 400 invalid_request。响应 `{title, model, mode}` 是修改后的值（样本 conversation-renamed、conversation-model-updated、conversation-model-default） |
 | 删除 | — | 级联删除消息与工具调用；正在运行时 `409 conversation_busy`（样本 conversation-deleted） |
@@ -1009,7 +1011,7 @@ JSON 错误信封只给上表的固定消息；适配器脱敏后的 `Message` �
 | 解不开时 | 统一返回 `secret.ErrCannotOpen`；设置里 `key_needs_reentry: true`，新建会话、发消息、沿用已存密钥的探测返回 `409 steward_not_configured`；提交新密钥或 `key: null` 即可恢复 |
 | 使用 | 每次发消息或探测时解密，只放进本次请求的认证头；保存新密钥时解密旧密钥用于比较是否变化。适配器的错误信息里出现密钥（原文或其 JSON 转义形式）时替换为“[已隐藏]”，形如认证头的片段替换为“[请求头已隐藏]” |
 
-## 9. 数据表（迁移 0051、0053、0057，带 down）
+## 9. 数据表（迁移 0051、0053、0057、0080，带 down）
 
 C10 步骤 1 的 `0057_steward_memory.sql` / `.down.sql` 只增加/删除会话上可空的
 `last_read_at timestamptz`、`last_run_finished_at timestamptz`。未读判定见 4.7，不回填历史会话为未读。
@@ -1019,7 +1021,7 @@ C10 步骤 1 的 `0057_steward_memory.sql` / `.down.sql` 只增加/删除会话�
 
 | 表 | 列与约束 |
 | --- | --- |
-| `steward_user_settings` | `user_id` 主键 → `users` 级联删除；`endpoint`、`protocol`（`''/openai/messages/responses`）、`model`、`review_model`（0055）、`display_name` 默认空；`key_ciphertext bytea` 可空；`key_last_four`（≤ 4 字符，没有密文时必须为空）；`probe_result jsonb` 与 `probed_at` 同时为空或同时非空；`overrides jsonb` 默认 `{}`；`updated_at` |
+| `steward_user_settings` | `user_id` 主键 → `users` 级联删除；`endpoint`、`protocol`（`''/openai/messages/responses`）、`model`、`review_model`（0055）、`display_name` 默认空；`key_ciphertext bytea` 可空；`key_last_four`（≤ 4 字符，没有密文时必须为空）；`probe_result jsonb` 与 `probed_at` 同时为空或同时非空；`overrides jsonb` 默认 `{}`；`updated_at`。`default_mode`（0080）为非空文本，只允许 `assistant`、`steward`、`operator`，默认 `assistant` |
 | `steward_instance_settings` | 单行（`id = 1`，迁移时插入）；`members_enabled` 默认 `true` |
 | `steward_egress_allowlist` | 主键 `(host, port)`；`host` 非空；`port` 1–65535；`added_by` → `users`，用户删除后置空；`created_at` |
 | `steward_conversations` | `id` 主键；`user_id` → `users` 级联删除；`title` 默认空；`mode`（`assistant/steward/operator`，默认 `assistant`）；`model`；`status`（`idle/running`）；`created_at`、`updated_at`；索引 `(user_id, updated_at DESC, id)` |
@@ -1030,7 +1032,7 @@ C10 步骤 1 的 `0057_steward_memory.sql` / `.down.sql` 只增加/删除会话�
 - 工具调用随助手消息在同一事务里按模型给出的顺序写入 `position`，读取时按 `(消息 sequence, position)` 排序。
 - 设置的读改写走 `Store.UpdateUserSettings`：一个事务里先插入默认行（已有则跳过）再 `SELECT … FOR UPDATE`，回调返回错误时整体回滚。
   `UserSettingsInput.ClearKey`、`ClearProbe` 分别清除密钥与探测结论；`Key`、`Probe`、`Overrides` 为 `nil` 时保留原值。
-- 接口只创建 `assistant` 会话。0051 回退脚本按依赖顺序删除六张表；0053 只新增可空 context，down 只删除该列。
+- 0051 回退脚本按依赖顺序删除六张表；0053 只新增可空 context，down 只删除该列。
 
 ## 10. 错误码
 

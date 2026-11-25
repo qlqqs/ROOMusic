@@ -1,5 +1,6 @@
 {
   "body": {
+    "default_mode": "assistant",
     "display_name": "合成管家",
     "endpoint": "",
     "key_last_four": "",
