@@ -223,3 +223,11 @@ PUT/DELETE 不需幂等键。READ COMMITTED 事务先确保本人 state，再锁
 - 样本：`api-samples/ratings/*` 由 `TestPostgreSQLPersonalAPIResponseSamples` 录制，前端 `api-contract.test.ts` 登记。
 
 错误做法：评分沿用收藏的 `revision` 递增，或扫描转移时先锁收藏用户、再锁评分用户。正确做法：共用锁但不递增版本，并按用户并集一次加锁。
+
+### 9.6 我的评分：列表与队列（迁移 0083）
+
+- `RatedTracks/RatedAlbums/RatedArtists(ctx,userID,RatedListParams{MinRating,Sort,Page})`、`RatedTrackQueue(ctx,userID,minRating,sort)`；只读快照，先在评分表取总数与本页引用，再经曲库公开投影补摘要（专辑同收藏用 `PersonalAlbum`，不可用时显示评分时记下的名字）。
+- 排序：`rating` = `rating DESC, rated_at DESC, 目标 ID`；`recent` = `rated_at DESC, 目标 ID`。艺人先 `DISTINCT ON (resolved_artist_id)` 取 `rated_at` 最新（同时间按原 artist_id）的一行，再筛选、算 total、排序、分页；不能先分页后合并。
+- 网页端 GET `/api/v1/me/ratings/{tracks,albums,artists}`（`min_rating`、`sort`、`page`、`page_size` 默认 50 最大 100）→ `{items:[{track|album|artist(+available),rating,rated_at}],pagination}`，不带 revision；GET `/api/v1/me/ratings/tracks/queue`（只收 `min_rating`、`sort`）→ 收藏队列的计数形状，不带 revision。错误：`invalid_rating`、`invalid_sort`、`invalid_query`（重复或未知参数）、`invalid_pagination`。
+- 路由：`/tracks`、`/tracks/{track_id}` 与 `/tracks/queue` 分在两个子 mux，队列路径上的其他方法返回准确的 405，PUT/DELETE 单曲评分不受影响。
+- 索引：曲目和专辑各有 highest 与 `(user_id,rated_at DESC,目标 ID)` 的 recent 索引（专辑 highest 来自 0082，其余来自 0083），分页沿索引走到 `LIMIT`。艺人要先按 `resolved_artist_id` 去重才能筛选排序，必然读完该用户的全部艺人评分（每人通常数千行内），所以不建按评分或时间排的艺人索引，只要求扫描以 `user_id` 为索引条件；规划器在主键和 `rating_artists_user_resolved_idx` 之间自选。`TestPostgreSQLRatingListPaginationExplain` 断言这些计划。

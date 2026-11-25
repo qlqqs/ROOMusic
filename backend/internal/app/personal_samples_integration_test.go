@@ -23,6 +23,7 @@ func TestPostgreSQLPersonalAPIResponseSamples(t *testing.T) {
 	recordPersonalRestoreSamples(t, f, recorder)
 	recordPersonalLimitSamples(t, recorder)
 	recordPersonalRatingSamples(t, f, recorder)
+	recordPersonalRatingViewSamples(t, f, recorder)
 	finishPersonalSamples(t, recorder)
 }
 
@@ -102,6 +103,32 @@ func recordPersonalRatingSamples(t *testing.T, f *personalFixture, s *apiSampleR
 	record("artist-put", "PUT", artistURL, map[string]int{"rating": 3})
 	record("artist-lookup", "POST", lookupURL, map[string]any{"artist_ids": []string{oldArtist, unrated}})
 	record("artist-delete", "DELETE", artistURL, nil)
+}
+
+func recordPersonalRatingViewSamples(t *testing.T, f *personalFixture, s *apiSampleRecorder) {
+	t.Helper()
+	s.record("ratings/tracks-empty", f.call("GET", ratingsURL+"/tracks", nil), 200)
+	set := func(path string, rating int) {
+		t.Helper()
+		requireRatingHTTP(t, f.call("PUT", ratingsURL+path, map[string]int{"rating": rating}), 200)
+	}
+	set("/tracks/"+f.tracks[0], 5)
+	set("/tracks/"+f.tracks[1], 4)
+	set("/albums/"+f.groups[1], 4)
+
+	artist := uuid.New()
+	mustExec(t, f.app, `INSERT INTO artists(id,initial_name) VALUES($1,'合成评分艺人')`, artist)
+	mustExec(t, f.app, `INSERT INTO artist_profiles(artist_id,auto_display_name,effective_display_name,sort_key,initial_group,version)
+		VALUES($1,'合成评分艺人','合成评分艺人','合成评分艺人','#',1)`, artist)
+	set("/artists/"+artist, 3)
+	mustExec(t, f.app, `UPDATE tracks SET source_status='missing' WHERE id=$1`, f.tracks[0])
+
+	s.record("ratings/tracks", f.call("GET", ratingsURL+"/tracks?min_rating=4", nil), 200)
+	s.record("ratings/albums", f.call("GET", ratingsURL+"/albums", nil), 200)
+	s.record("ratings/artists", f.call("GET", ratingsURL+"/artists", nil), 200)
+	s.record("ratings/queue", f.call("GET", ratingsURL+"/tracks/queue?min_rating=4", nil), 200)
+	s.record("errors/rating-invalid-rating", f.call("GET", ratingsURL+"/tracks?min_rating=6", nil), 400)
+	s.record("errors/rating-invalid-sort", f.call("GET", ratingsURL+"/tracks?sort=highest", nil), 400)
 }
 
 func recordPersonalPlaylistSamples(t *testing.T, f *personalFixture, s *apiSampleRecorder) {
@@ -293,6 +320,8 @@ favorites/track-delete favorites/track-delete-repeated favorites/album-put favor
 favorites/lookup favorites/lookup-empty favorites/queue favorites/queue-empty favorites/queue-missing
 ratings/track-put ratings/track-delete ratings/album-put ratings/artist-put ratings/artist-delete
 ratings/lookup ratings/lookup-empty ratings/artist-lookup
+ratings/tracks ratings/tracks-empty ratings/albums ratings/artists ratings/queue
+errors/rating-invalid-rating errors/rating-invalid-sort
 playlists/list playlists/list-empty playlists/list-unknown-duration playlists/create playlists/create-with-tracks
 playlists/create-replayed playlists/detail playlists/detail-over-limit playlists/rename playlists/rename-noop
 playlists/delete playlists/delete-replayed playlists/items playlists/items-next-page playlists/items-missing

@@ -134,3 +134,11 @@
 - 浮层 fixed 定位在打开它的元素旁（菜单选中时焦点已回到“更多操作”，取 `document.activeElement` 作锚点），打开时焦点在星级上（div 不受 React `autoFocus` 管，挂载后手动 `focus()`）；
   写入成功后停 600ms 再关并还焦点，失败时不关。Esc、外部按下、Tab 离开、滚动或缩放时关闭。
 - 测试：`fake-personal.ts` 带一个内存评分替身；交互用例在 `rating-interactions.test.tsx`。
+
+## 我的评分（`/me/ratings`，2026-11-25）
+
+- 地址：`tab`（tracks 默认，不写）、`min`（2–5，1 默认不写）、`sort`（recent，rating 默认不写）、`page`（≥2）；`router.tsx` 的 `validateSearch` 把不合法的值写成 undefined。换栏、换筛选、换排序都回到第 1 页。
+- `RatingsView`（personal）给出三栏、工具行与列表；app 的 `RatingsPage` 经插槽给曲目栏的“播放全部”（`PersonalPlayAll` 的来源 `{kind:"ratings",minRating,sort}`，播放来源键 `"ratings"`）与每行动作。侧栏“我的音乐”在“我的收藏”之后，图标 `Award`（“我的收藏”已用星）。
+- 筛选 `RatingFilter`：五颗星的 radiogroup（读屏名“筛选”，每颗“N 星及以上”，第 1 颗“全部评过分的”），方向键与 Home/End 移动并选中，点当前那颗回到全部；和评分的星级形状相同但不共用状态。排序是一个图标按钮，读屏名“排序：按评分”/“排序：最近评分”。
+- 每项可直接改评分：列表查询键在 `[personal,"ratings","list",…]` 下，评分写入让评分的全部查询失效，本页按新值重新读取，条目移位或被筛掉（不像收藏页保留已取消的行）。曲目行宽屏放可改的星级、隐藏动作里的只读小星；窄屏只留只读小星，改分走“评分…”。专辑卡片与艺人行用 `size="sm"`（固定 24px 一颗，320px 两列卡片放得下）。
+- 空状态：没有筛选时“还没有评过分的曲目”并说在哪里打分；有筛选时“没有 4 星及以上的专辑”并给“看全部评过分的”。

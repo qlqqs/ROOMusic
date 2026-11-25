@@ -3,6 +3,7 @@ import { useViewerScope } from "../../auth";
 import type { FavoriteAlbumsPageDTO, FavoriteArtistsPageDTO, FavoriteTracksPageDTO, PersonalQueueDTO } from "../api/decoders";
 import { fetchFavoriteAlbums, fetchFavoriteArtists, fetchFavoriteTracks, fetchFavoriteTracksQueue } from "../api/favorites";
 import { fetchPlaylistQueue } from "../api/playlists";
+import { fetchRatedTracksQueue, type RatingSort } from "../api/ratings";
 import { personalKeys } from "../query-keys";
 
 /** 收藏每页的条目数（后端默认 50，上限 100）；专辑与曲目两栏相同。 */
@@ -46,10 +47,10 @@ export function useFavoriteArtists(page: number, revision: number | null) {
 
 export type PersonalQueueCallbacks = { onLoaded: (queue: PersonalQueueDTO) => void };
 
-export type PersonalQueueSource = { kind: "favorites" } | { kind: "playlist"; playlistId: string };
+export type PersonalQueueSource = { kind: "favorites" } | { kind: "playlist"; playlistId: string } | { kind: "ratings"; minRating: number; sort: RatingSort };
 
 /**
- * “播放全部”的候选（收藏的曲目，或一个歌单）：每次按下都向服务端读一次最新的，不沿用旧缓存，也不在后台预取；
+ * “播放全部”的候选（收藏的曲目、一个歌单，或当前筛选与排序下评过分的曲目）：每次按下都向服务端读一次最新的，不沿用旧缓存，也不在后台预取；
  * 结果只在发起时的会话仍是当前会话时交给调用方。能否播放、怎样放进队列由 app 决定，personal 不知道播放器。
  */
 export function usePersonalQueue(source: PersonalQueueSource) {
@@ -60,6 +61,11 @@ export function usePersonalQueue(source: PersonalQueueSource) {
     mutationFn: async (): Promise<PersonalQueueDTO> => {
       if (source.kind === "favorites") {
         const response = await queryClient.fetchQuery({ queryKey: personalKeys.favoriteQueue(generation), queryFn: ({ signal }) => fetchFavoriteTracksQueue(signal), staleTime: 0, gcTime: 0 });
+        return response.data;
+      }
+      if (source.kind === "ratings") {
+        const filter = { minRating: source.minRating, sort: source.sort };
+        const response = await queryClient.fetchQuery({ queryKey: personalKeys.ratingQueue(generation, filter), queryFn: ({ signal }) => fetchRatedTracksQueue(filter, signal), staleTime: 0, gcTime: 0 });
         return response.data;
       }
       const response = await queryClient.fetchQuery({

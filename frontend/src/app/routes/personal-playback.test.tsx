@@ -25,7 +25,7 @@ afterEach(() => {
 const favoriteSample = decodeFavoriteQueue(sampleBody("favorites/queue"));
 const playlistSample = decodePlaylistQueue(sampleBody("playlists/queue"));
 const playlistId = playlistSample.playlist.id;
-const sources: { name: string; source: PersonalQueueSource; path: string }[] = [
+const sources: { name: string; source: Exclude<PersonalQueueSource, { kind: "ratings" }>; path: string }[] = [
   { name: "收藏", source: { kind: "favorites" }, path: "/api/v1/me/favorites/tracks/queue" },
   { name: "歌单", source: { kind: "playlist", playlistId }, path: `/api/v1/me/playlists/${playlistId}/queue` },
 ];
@@ -42,7 +42,7 @@ function track(index: number, unsupported = false): TrackSummaryDTO {
 }
 
 // 这里只构造已经由服务端限量的响应窗口；后端如何过滤、取前一万首仍由其集成测试证明。
-function queueResponse(source: PersonalQueueSource, items: TrackSummaryDTO[], missing = 0, omitted = 0): FavoriteQueueDTO | PlaylistQueueDTO {
+function queueResponse(source: Exclude<PersonalQueueSource, { kind: "ratings" }>, items: TrackSummaryDTO[], missing = 0, omitted = 0): FavoriteQueueDTO | PlaylistQueueDTO {
   const total = items.length + missing + omitted;
   const counts = {
     items, total, missing_count: missing, eligible_count: items.length + omitted,
