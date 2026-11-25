@@ -15,8 +15,8 @@ project="roomusic-compose-test-slimproto-sync-${suffix,,}"
 compose=(docker compose --env-file /dev/null -p "$project" -f "$fixtures/compose.yaml" -f "$fixtures/sync.yaml")
 
 export SLIMPROTO_WORK="$work" SLIMPROTO_RUN_USER="$(id -u):$(id -g)" SLIMPROTO_FFMPEG=
-export ROOMUSIC_SQUEEZELITE_IMAGE="$project-player:local"
-export ROOMUSIC_SLIMPROTO_NETEM_IMAGE="$project-netem:local"
+export ROOMUSIC_SQUEEZELITE_IMAGE="${ROOMUSIC_SLIMPROTO_PLAYER_IMAGE:-$project-player:local}"
+export ROOMUSIC_SLIMPROTO_NETEM_IMAGE="${ROOMUSIC_SLIMPROTO_PLAYER_IMAGE:-$project-netem:local}"
 clocks=() images=() started=
 
 cleanup() {
@@ -31,6 +31,8 @@ cleanup() {
         echo "--- $name ---" >&2
         grep -E 'strm command [^t]|STAT: STM[^t]|autostart|track start|streaming|skip .*frames|bytes received|disconnect' \
           "$work/$name/player.log" | tail -40 >&2 || true
+        # 保留整个阶段的计时器重启、欠载和修正；脉冲只需末尾几条。
+        grep -E '"kind": "(clock|underrun|correction)"' "$work/$name/events.jsonl" >&2 || true
         tail -8 "$work/$name/events.jsonl" >&2 || true
       done
     fi
@@ -51,11 +53,13 @@ trap 'exit 143' TERM
 SLIMPROTO_FFMPEG=$("$root/scripts/ffmpeg-pinned.sh")
 (cd "$root/backend" && CGO_ENABLED=0 GOOS=linux mise exec -- go build -o "$work/roomusic" ./cmd/roomusic)
 python3 -B "$fixtures/sync-playback.py" generate "$work/music" "$SLIMPROTO_FFMPEG" "$duration"
-docker build -q -t "$ROOMUSIC_SQUEEZELITE_IMAGE" -f "$root/deploy/production/squeezelite.Dockerfile" "$root/deploy/production" >/dev/null
-images+=("$ROOMUSIC_SQUEEZELITE_IMAGE")
-docker build -q --build-arg "SQUEEZELITE_IMAGE=$ROOMUSIC_SQUEEZELITE_IMAGE" \
-  -t "$ROOMUSIC_SLIMPROTO_NETEM_IMAGE" -f "$fixtures/sync.Dockerfile" "$fixtures" >/dev/null
-images+=("$ROOMUSIC_SLIMPROTO_NETEM_IMAGE")
+if [[ -z "${ROOMUSIC_SLIMPROTO_PLAYER_IMAGE:-}" ]]; then
+  docker build -q -t "$ROOMUSIC_SQUEEZELITE_IMAGE" -f "$root/deploy/production/squeezelite.Dockerfile" "$root/deploy/production" >/dev/null
+  images+=("$ROOMUSIC_SQUEEZELITE_IMAGE")
+  docker build -q --build-arg "SQUEEZELITE_IMAGE=$ROOMUSIC_SQUEEZELITE_IMAGE" \
+    -t "$ROOMUSIC_SLIMPROTO_NETEM_IMAGE" -f "$fixtures/sync.Dockerfile" "$fixtures" >/dev/null
+  images+=("$ROOMUSIC_SLIMPROTO_NETEM_IMAGE")
+fi
 
 for name in receiver member; do
   mkdir "$work/$name"
