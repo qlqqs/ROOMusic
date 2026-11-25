@@ -124,7 +124,7 @@
 
 ## 13. 度量基线证实的问题（子任务 M，2026-11-25）
 
-基线见 `../../11-25-curation-chain-m-metrics/research/baseline-2026-11-25.md`。理想模型下完成 78/92，错连 12、错改 2；
+基线见 `m-baseline/baseline-2026-11-25.md`。理想模型下完成 78/92，错连 12、错改 2；
 模型选第一个候选时完成 59/92，错连 97、错改 4。
 
 - 第 6 节的疑点证实：扫描把缺失艺人记为 `display_fallback`，占位判断不认（`library/scanner.go:978`、`catalog/curation_evidence.go:229`），程序不补曲目艺人（子任务 A）。
