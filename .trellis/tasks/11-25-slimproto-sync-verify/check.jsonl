@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/backend/slimproto-device-contracts.md", "reason": "SlimProto 协议、编组时钟与 strm a 修正规则，§8.4 测试"}
-{"file": ".trellis/tasks/archive/2026-11/11-25-slimproto-sync-groups/prd.md", "reason": "编组测量的既有结果与决定"}
-{"file": "docs/development-environment.md", "reason": "测试与 Docker 隔离约定"}
