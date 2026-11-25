@@ -24,6 +24,10 @@ func TestRoutesResolveToRegisteredPatterns(t *testing.T) {
 		{http.MethodPost, "/api/v1/auth/logout", "POST /api/v1/auth/logout"},
 		{http.MethodGet, "/api/v1/auth/me", "GET /api/v1/auth/me"},
 		{http.MethodPost, "/api/v1/auth/password", "POST /api/v1/auth/password"},
+		{http.MethodGet, "/api/v1/me/subsonic", "GET /api/v1/me/subsonic"},
+		{http.MethodPost, "/api/v1/me/subsonic/confirm-password", "POST /api/v1/me/subsonic/confirm-password"},
+		{http.MethodGet, "/api/v1/admin/subsonic", "GET /api/v1/admin/subsonic"},
+		{http.MethodPut, "/api/v1/admin/subsonic", "PUT /api/v1/admin/subsonic"},
 		{http.MethodGet, "/api/v1/users", "GET /api/v1/users"},
 		{http.MethodPost, "/api/v1/users", "POST /api/v1/users"},
 		{http.MethodPatch, "/api/v1/users/" + id, "PATCH /api/v1/users/{id}"},
@@ -112,6 +116,19 @@ func TestDiagnosticRoutesResolveToRegisteredPatterns(t *testing.T) {
 		want := route.method + " " + route.path
 		if _, pattern := application.mux.Handler(request); pattern != want {
 			t.Errorf("%s resolved to %q", want, pattern)
+		}
+	}
+}
+
+func TestSubsonicRoutesResolveToPrefix(t *testing.T) {
+	application := New(t.Context(), config.Server{}, nil, testFrontend(), nil)
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, "/rest/ping.view"},
+		{http.MethodPost, "/rest/ping"},
+	} {
+		request := httptest.NewRequest(route.method, route.path, nil)
+		if _, pattern := application.mux.Handler(request); pattern != "/rest/" {
+			t.Errorf("%s %s 解析为 %q，期望 /rest/", route.method, route.path, pattern)
 		}
 	}
 }

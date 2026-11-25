@@ -1383,6 +1383,9 @@ func (recorder *apiSampleRecorder) ownsSample(name string) bool {
 	if strings.HasPrefix(name, "playback-zones/") {
 		return recorder.scope == "playback-zones"
 	}
+	if strings.HasPrefix(name, "subsonic/") {
+		return recorder.scope == "subsonic"
+	}
 	if isSystemAPISample(name) {
 		return recorder.scope == "system"
 	}

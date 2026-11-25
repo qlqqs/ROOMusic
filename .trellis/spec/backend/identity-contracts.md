@@ -106,6 +106,14 @@ func (t *LoginThrottle) Begin(username, source string, fingerprint [8]byte) (*At
   比较用 `strings.EqualFold`，路由里的 UUID 可能是大写。
 - 两个接口同成员写操作一样不带 `Idempotency-Key`、不写操作记录（R4）。前端对结果不明的改密码与重置不自动重试。
 
+### 密码观察者（2026-11-25）
+
+- `PasswordObserver.ObservePassword(ctx, tx, userID, password)` 在登录、本人改密（成员与管理员）、管理员建用户、管理员重置密码的事务里调用，位置在密码哈希写入之后、提交之前；返回错误则整个事务回滚。
+- 登录因此改为：`CheckLogin` 核对密码与限流后，开事务 `FOR SHARE` 复核账号未停用且哈希未变，再写会话并通知观察者。复核失败按 `invalid_credentials` 处理。
+- `CheckLogin` 与 `ConfirmPassword` 供 Subsonic 复用网页登录与当前密码核对的限流；`identity` 不导入 `subsonic`，由 `app` 经 `WithPasswordObserver` 注入。
+- `VerifyPassword` 对超过 `MaxPasswordLength` 的输入直接返回 false，不交给 bcrypt。
+- 目前唯一的观察者是 Subsonic 的密码副本，规则见 [Subsonic 兼容接口合同](./subsonic-contracts.md) 第 3 节。
+
 ### 命令行恢复（2026-11-05）
 
 - `roomusic reset-password <用户名>`（`cmd/roomusic/reset_password.go`，运维入口：生产在部署目录执行 `docker compose exec app /app/roomusic reset-password <用户名>`，开发 `scripts/reset-password.sh`（读取 `.env.dev`，拒绝生产配置））。

@@ -28,9 +28,9 @@ func (handlers *Handlers) changePassword(w http.ResponseWriter, r *http.Request)
 	cookie, _ := r.Cookie(identity.SessionCookieName)
 	sessionTokenHash := identity.HashSessionToken(cookie.Value)
 	if user.Role == "admin" {
-		err = identity.ChangeAdminOwnPassword(r.Context(), handlers.database, user.ID, sessionTokenHash, input.NewPassword)
+		err = identity.ChangeAdminOwnPassword(r.Context(), handlers.database, user.ID, sessionTokenHash, input.NewPassword, handlers.passwordObserver)
 	} else {
-		err = identity.ChangeOwnPassword(r.Context(), handlers.database, handlers.throttle, user.ID, sessionTokenHash, input.CurrentPassword, input.NewPassword)
+		err = identity.ChangeOwnPassword(r.Context(), handlers.database, handlers.throttle, user.ID, sessionTokenHash, input.CurrentPassword, input.NewPassword, handlers.passwordObserver)
 	}
 	if err != nil {
 		handlers.writePasswordError(w, r, err, "无法修改密码")
@@ -64,7 +64,7 @@ func (handlers *Handlers) resetPassword(w http.ResponseWriter, r *http.Request) 
 	if !httpserver.DecodeJSON(w, r, &input) {
 		return
 	}
-	if _, err := identity.ResetPassword(r.Context(), handlers.database, id, input.Password); err != nil {
+	if _, err := identity.ResetPassword(r.Context(), handlers.database, id, input.Password, handlers.passwordObserver); err != nil {
 		handlers.writePasswordError(w, r, err, "无法重置密码")
 		return
 	}

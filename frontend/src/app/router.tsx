@@ -40,6 +40,7 @@ const CurationPage = lazyRouteComponent(() => import("./routes/curation-page"), 
 const BackupsPage = lazyRouteComponent(() => import("./routes/backups-page"), "BackupsPage");
 const LanDevicesPage = lazyRouteComponent(() => import("./routes/lan-devices-page"), "LanDevicesPage");
 const InsightsPage = lazyRouteComponent(() => import("./routes/insights-page"), "InsightsPage");
+const ClientsPage = lazyRouteComponent(() => import("./routes/clients-page"), "ClientsPage");
 const AboutPage = lazyRouteComponent(() => import("./routes/about-page"), "AboutPage");
 // 管家的整页对话连同 Markdown 依赖按需加载。
 const StewardPage = lazyRouteComponent(() => import("./routes/steward-page"), "StewardRoutePage");
@@ -503,6 +504,18 @@ function LanDevicesRoute() {
 
 const lanDevicesRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/devices", component: LanDevicesRoute });
 
+function ClientsRoute() {
+  return (
+    <AdminGate>
+      <LazyPage>
+        <ClientsPage />
+      </LazyPage>
+    </AdminGate>
+  );
+}
+
+const clientsRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/clients", component: ClientsRoute });
+
 function InsightsRoute() {
   return (
     <AdminGate>
@@ -545,7 +558,7 @@ const routeTree = rootRoute.addChildren([
     artistCandidatesRoute,
     stewardRoute,
     stewardConversationRoute,
-    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, agentSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, curationRoute, operationsRoute, backupsRoute, lanDevicesRoute, insightsRoute, aboutRoute]),
+    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, agentSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, curationRoute, operationsRoute, backupsRoute, lanDevicesRoute, clientsRoute, insightsRoute, aboutRoute]),
     notFoundRoute,
   ]),
 ]);

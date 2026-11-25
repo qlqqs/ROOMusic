@@ -272,3 +272,11 @@ func (t *LoginThrottle) makeSourceRoom(now time.Time) {
 	}
 	delete(t.sources, oldest)
 }
+
+func RetryAfterSeconds(wait time.Duration) int64 {
+	seconds := int64(wait / time.Second)
+	if wait%time.Second != 0 {
+		seconds++
+	}
+	return max(1, seconds)
+}

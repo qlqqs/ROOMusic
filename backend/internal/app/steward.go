@@ -53,6 +53,7 @@ import (
 )
 
 type stewardConfig struct {
+	forgetPassword func(string)
 	tavilyEndpoint string
 	mockHost       sources.MockHost
 	writer         *curation.Writer
@@ -127,7 +128,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		definitions = append(definitions, librarytools.ConfigTools(scans, configuration.allowedRoots, logger)...)
 		definitions = append(definitions, diagnostictools.StewardTools(configuration.diagnostics)...)
 		definitions = append(definitions, backuptools.StewardTools(configuration.backups, database, logger)...)
-		definitions = append(definitions, identitytools.StewardTools(database, logger, func(userID string) { supervisor.CancelUser(userID) })...)
+		definitions = append(definitions, identitytools.StewardTools(database, logger, func(userID string) { supervisor.CancelUser(userID) }, configuration.forgetPassword)...)
 		definitions = append(definitions, playbacktools.StewardTools(configuration.audio, catalog.NewStore(database), configuration.progress)...)
 		definitions = append(definitions, zonestools.SettingsTools(playback, logger)...)
 		definitions = append(definitions, dsptools.StewardTools(configuration.dsp, playback, logger)...)

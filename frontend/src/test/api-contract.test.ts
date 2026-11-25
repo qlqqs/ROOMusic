@@ -116,6 +116,7 @@ import { decode as d, decodeErrorEnvelope } from "../shared/api";
 import { decodeInstalledPlugin, decodeInstalledPlugins, decodePluginPreview } from "../features/curation/api/plugins";
 import { decodeAirPlayFormat, decodeCastFormat, decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings, decodeSlimProtoFormat } from "../features/lan-devices/api/decoders";
 import { decodeAbout, decodeInsightsStatus } from "../features/insights/api/decoders";
+import { decodeSubsonicConnection, decodeSubsonicSettings } from "../features/subsonic/api/decoders";
 import { decodeTrackSummaries } from "../features/catalog/api/track-summary";
 import { listApiSampleNames, loadApiSample, loadRawApiSample } from "./api-samples";
 import {
@@ -693,6 +694,10 @@ const successContracts: Record<string, Contract> = {
   "insights/status": { status: 200, decode: decodeInsightsStatus },
   "insights/disabled": { status: 200, decode: decodeInsightsStatus },
   "insights/about": { status: 200, decode: decodeAbout },
+  "subsonic/me-ready": { status: 200, decode: decodeSubsonicConnection },
+  "subsonic/me-needs-confirmation": { status: 200, decode: decodeSubsonicConnection },
+  "subsonic/admin-get": { status: 200, decode: decodeSubsonicSettings },
+  "subsonic/admin-put": { status: 200, decode: decodeSubsonicSettings },
   "diagnostics/admin": { status: 200, decode: decodeDiagnosticsReport, preservesWireShape: false },
   "upnp/playback-snapshot": { status: 200, decode: decodeSnapshot, preservesWireShape: false },
   "upnp/playback-occupied": { status: 200, decode: decodeDeviceResult, preservesWireShape: false },
@@ -714,6 +719,10 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "upnp/cast-invalid-format": { status: 400, code: "invalid_input" },
   "upnp/airplay-pair-expired": { status: 409, code: "pairing_expired" },
   "insights/forced-off": { status: 409, code: "insights_forced_off" },
+  "subsonic/errors/current-password-incorrect": { status: 403, code: "current_password_incorrect" },
+  "subsonic/errors/invalid-input": { status: 400, code: "invalid_input" },
+  "subsonic/errors/subsonic-disabled": { status: 409, code: "subsonic_disabled" },
+  "subsonic/errors/too-many-attempts": { status: 429, code: "too_many_attempts" },
   "diagnostics/invalid-client-error": { status: 400, code: "invalid_client_error" },
   "diagnostics/client-errors-throttled": { status: 429, code: "client_errors_throttled" },
   "steward/continue-nothing": { status: 409, code: "nothing_to_continue" },
@@ -932,6 +941,7 @@ const emptyResponseContracts: Record<string, { status: number }> = {
   "steward/tokens/revoked": { status: 204 },
   "upnp/manual-removed": { status: 204 },
   "insights/notice-acknowledgement": { status: 204 },
+  "subsonic/confirm-password": { status: 204 },
   "upnp/airplay-pair-start": { status: 204 },
   "upnp/airplay-pair-finish": { status: 204 },
   "plugins/delete": { status: 204 },

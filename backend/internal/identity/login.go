@@ -47,18 +47,18 @@ func passwordFingerprint(hash string) [8]byte {
 	return [8]byte(digest[:8])
 }
 
-// Login 在查库前检查来源，查库成功后预计数，再核对密码并创建会话。
-// 凭据错误时仍返回 Attempt，供 HTTP 边界记录失败与等待开始事件。
-func Login(ctx context.Context, db *sql.DB, throttle *LoginThrottle, username, password, source string) (LoginResult, *Attempt, error) {
+// CheckLogin 在核对凭据前共用网页登录的来源与账号计数。成功时返回核对过的哈希，
+// 供调用方在写入会话或密码副本前复核；底层故障不计作凭据错误。
+func CheckLogin(ctx context.Context, db *sql.DB, throttle *LoginThrottle, username, source, dummyInput string, verify func(User, string) (bool, error)) (User, string, *Attempt, error) {
 	if err := throttle.checkSource(source); err != nil {
-		return LoginResult{}, nil, err
+		return User{}, "", nil, err
 	}
 	user := User{Username: username}
 	var hash string
 	err := db.QueryRowContext(ctx, "SELECT id::text,password_hash,role FROM users WHERE username=$1 AND disabled_at IS NULL", username).Scan(&user.ID, &hash, &user.Role)
 	found := err == nil
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return LoginResult{}, nil, fmt.Errorf("read login user: %w", err)
+		return User{}, "", nil, fmt.Errorf("read login user: %w", err)
 	}
 	var fingerprint [8]byte
 	if found {
@@ -66,23 +66,61 @@ func Login(ctx context.Context, db *sql.DB, throttle *LoginThrottle, username, p
 	}
 	attempt, err := throttle.Begin(username, source, fingerprint)
 	if err != nil {
-		return LoginResult{}, nil, err
+		return User{}, "", nil, err
 	}
 	if !found {
-		if err := compareDummyPassword(password); err != nil {
+		if err := compareDummyPassword(dummyInput); err != nil {
 			attempt.Succeeded()
-			return LoginResult{}, nil, err
+			return User{}, "", nil, err
 		}
-		return LoginResult{}, attempt, ErrInvalidCredentials
+		return User{}, "", attempt, ErrInvalidCredentials
 	}
-	if !VerifyPassword(hash, password) {
-		return LoginResult{}, attempt, ErrInvalidCredentials
+	valid, err := verify(user, hash)
+	if err != nil {
+		attempt.Succeeded()
+		return User{}, "", nil, err
+	}
+	if !valid {
+		return User{}, "", attempt, ErrInvalidCredentials
 	}
 	attempt.Succeeded()
-	token := GenerateSessionToken()
-	_, err = db.ExecContext(ctx, "INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2::uuid,NOW()+INTERVAL '24 hours')", HashSessionToken(token), user.ID)
+	return user, hash, attempt, nil
+}
+
+// Login 核对密码后，在同一事务中记录会话和密码观察结果。
+func Login(ctx context.Context, db *sql.DB, throttle *LoginThrottle, username, password, source string, observers ...PasswordObserver) (LoginResult, *Attempt, error) {
+	user, hash, attempt, err := CheckLogin(ctx, db, throttle, username, source, password, func(_ User, hash string) (bool, error) {
+		return VerifyPassword(hash, password), nil
+	})
 	if err != nil {
+		return LoginResult{}, attempt, err
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return LoginResult{}, nil, err
+	}
+	defer tx.Rollback()
+	if err := lockVerifiedPassword(ctx, tx, user.ID, hash); err != nil {
+		return LoginResult{}, attempt, err
+	}
+	token := GenerateSessionToken()
+	if _, err = tx.ExecContext(ctx, "INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2::uuid,NOW()+INTERVAL '24 hours')", HashSessionToken(token), user.ID); err != nil {
 		return LoginResult{}, nil, fmt.Errorf("create login session: %w", err)
 	}
+	if err := observePassword(ctx, tx, user.ID, password, observers); err != nil {
+		return LoginResult{}, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return LoginResult{}, nil, err
+	}
 	return LoginResult{User: user, Token: token}, attempt, nil
+}
+
+func lockVerifiedPassword(ctx context.Context, tx *sql.Tx, id, hash string) error {
+	var current string
+	err := tx.QueryRowContext(ctx, "SELECT password_hash FROM users WHERE id=$1 AND disabled_at IS NULL FOR SHARE", id).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && hash != current) {
+		return ErrInvalidCredentials
+	}
+	return err
 }

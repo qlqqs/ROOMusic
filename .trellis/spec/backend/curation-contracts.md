@@ -544,7 +544,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
   7. `key_invalid`：都填了，有一把无效
 - 第 4、5 条由 `SourceRegistration.Unavailable func() string` 给出（空串表示可用；`app` 装配 AcoustID 时按指纹工具与 `BundledKeyRejected()` 返回）。
 - 加密用唯一的实例密钥存储（`app` 里只建一个，交给管家与闸门），绑定 `instance` 与 `curation.source_key.<源>.<名>`；解密失败当作无效。
-  `curation` 只依赖一个 `Seal`/`Open` 小接口，不导入 `steward/secret`。
+  `curation` 只依赖一个 `Seal`/`Open` 小接口，不导入 `platform/secret`。
 - **回写**：
   - 真正出站成功时，把这次用到的、仍是同一密文的 `unchecked` 改成 `valid`；缓存命中不算。
   - `InvalidKeyError{Name}` 只把那一把、并且仍是这次密文的标为 `invalid`（compare-and-set，换上的新密钥不会被旧请求标坏）。

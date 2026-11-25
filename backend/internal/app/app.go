@@ -66,6 +66,8 @@ import (
 	stewardapi "github.com/qlqq/roomusic/backend/internal/steward/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/token"
+	subsonicauth "github.com/qlqq/roomusic/backend/internal/subsonic/auth"
+	subsonicapi "github.com/qlqq/roomusic/backend/internal/subsonic/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 	zonesapi "github.com/qlqq/roomusic/backend/internal/zones/httpapi"
 )
@@ -182,6 +184,10 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	}
 	zonesService := zones.NewService(database, zoneOptions)
 	instanceSecrets := newInstanceSecrets(settings.DataDirectory)
+	if assembly.loginThrottle == nil {
+		assembly.loginThrottle = identity.NewLoginThrottle(nil)
+	}
+	subsonic := subsonicauth.New(database, instanceSecrets, assembly.loginThrottle, logger)
 	lanDevices := upnp.NewService(lifecycle, database, upnp.NewRegistryWithLogger(logger), airplay.NewCredentialStore(database, instanceSecrets), settings.PTPAddress)
 	lanDevices.AttachOutput(zonesService, settings.LANURL, settings.Address, logger)
 	zonesService.SetManagedOutputs(lanDevices)
@@ -381,7 +387,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	matcher := program.NewModelMatcher(database, curationWriter, sourceGate)
 	diagnosticService := newDiagnostics(database, settings, libraryService, assembly)
 	diagnosticsapi.Register(mux, guard, diagnosticService, logger)
-	supervisor, launcher := registerSteward(lifecycle, mux, database, guard, instanceSecrets, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{tavilyEndpoint: tavilyEndpoint, mockHost: mockHost, writer: curationWriter, sources: sourceGate, matcher: matcher, music: music, covers: covers, diagnostics: diagnosticService, backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
+	supervisor, launcher := registerSteward(lifecycle, mux, database, guard, instanceSecrets, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{forgetPassword: subsonic.Forget, tavilyEndpoint: tavilyEndpoint, mockHost: mockHost, writer: curationWriter, sources: sourceGate, matcher: matcher, music: music, covers: covers, diagnostics: diagnosticService, backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
 	scheduler := model.NewScheduler(database, curationWriter, sourceGate, launcher, logger, assembly.model)
 	modelDone := make(chan struct{})
 	if database != nil && launcher != nil && !assembly.disableModel {
@@ -425,7 +431,9 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	} else {
 		close(catalogDone)
 	}
-	identityapi.New(database, guard, assembly.loginThrottle, logger).WithSessionRevoked(func(userID string) {
+	subsonicapi.Register(mux, subsonic, guard, buildinfo.Current().Version)
+	identityapi.New(database, guard, assembly.loginThrottle, logger).WithPasswordObserver(subsonic).WithSessionRevoked(func(userID string) {
+		subsonic.Forget(userID)
 		lanDevices.SessionRevoked(userID)
 		if supervisor != nil {
 			supervisor.CancelUser(userID)
