@@ -1,6 +1,6 @@
 # 我的评分页与管家评分工具：设计
 
-评分表、写入与查询的设计见 `11-25-subsonic-rating/design.md`。本文只写列表、页面和管家工具。
+评分表、写入、锁与整理规则见 `.trellis/spec/backend/personal-contracts.md` §9（评分子任务已合入）。迁移编号用 0083。本文只写列表、页面和管家工具。
 
 ## 服务（`personal`）
 

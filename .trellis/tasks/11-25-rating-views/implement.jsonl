@@ -1,5 +1,3 @@
-{"file": ".trellis/tasks/11-25-subsonic-rating/prd.md", "reason": "评分核心的需求与已定规则"}
-{"file": ".trellis/tasks/11-25-subsonic-rating/design.md", "reason": "评分表结构、艺人等价锚点规则与写入服务"}
 {"file": ".trellis/spec/backend/directory-structure.md", "reason": "后端目录与包边界，personal 只经曲库公开投影读取"}
 {"file": ".trellis/spec/backend/personal-contracts.md", "reason": "收藏列表、队列与艺人收藏读取，评分列表照此实现"}
 {"file": ".trellis/spec/backend/database-guidelines.md", "reason": "只读快照、索引与迁移约定"}
@@ -7,3 +5,4 @@
 {"file": ".trellis/spec/backend/error-handling.md", "reason": "错误码与安全错误约定"}
 {"file": ".trellis/spec/frontend/personal-guidelines.md", "reason": "收藏页与个人列表的前端做法"}
 {"file": ".trellis/spec/frontend/playback-and-personal-state.md", "reason": "播放全部与个人状态同步"}
+{"file": ".trellis/spec/backend/subsonic-contracts.md", "reason": "Subsonic 包结构与 setRating"}
