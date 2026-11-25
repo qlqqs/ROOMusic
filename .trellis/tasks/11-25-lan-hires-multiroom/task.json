@@ -23,7 +23,8 @@
     "11-25-slimproto-squeezelite",
     "11-25-slimproto-sync-groups",
     "11-25-snapcast-multiroom",
-    "11-25-slimproto-sync-verify"
+    "11-25-slimproto-sync-verify",
+    "11-25-slimproto-drift-compensation"
   ],
   "parent": null,
   "relatedFiles": [],
