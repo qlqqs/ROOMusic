@@ -84,7 +84,7 @@ func TestPostgreSQLCurationProgramEndToEnd(t *testing.T) {
 	}
 	clock.advance(t, time.Minute)
 	getJSON(t, app, &admin, curationBase+"/progress", &after)
-	if after.State != "idle" || after.Releases != (curation.ReleaseProgress{Total: 1, Processed: 1, Matched: 1}) || after.Pending.WaitingModel != 0 || after.Batch != nil || after.LastPassFinishedAt == nil || after.RuleVersion != program.StoredRuleVersion {
+	if after.State != "idle" || after.Releases != (curation.ReleaseProgress{Total: 1, Processed: 1, Matched: 1}) || after.Pending.WaitingModel != 0 || after.Batch != nil || after.LastPassFinishedAt == nil || after.RuleVersion != program.MatchRuleVersion {
 		t.Fatal(after)
 	}
 	mu.Lock()

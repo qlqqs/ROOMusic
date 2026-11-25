@@ -98,7 +98,7 @@ func TestPostgreSQLCurationCProgress(t *testing.T) {
 	tryLater := newVisible("稍后重试")
 	outdated := newVisible("旧规则")
 	unprocessed := newVisible("未处理")
-	const version = 101
+	const version = 102
 	for _, row := range []struct {
 		id, subject, status string
 		version             int16
@@ -137,6 +137,9 @@ func TestPostgreSQLCurationCProgress(t *testing.T) {
 	want := curation.Progress{State: "unavailable", RuleVersion: version,
 		Releases: curation.ReleaseProgress{Total: 6, Processed: 3, Matched: 1, Uncertain: 1, NoMatch: 1, TryLater: 1},
 		Pending:  curation.PendingProgress{WaitingModel: 1}}
+	for i, id := range [...]string{"release", "artwork", "lyrics", "artist_media", "fingerprint"} {
+		want.Queues[i] = curation.QueueProgress{ID: id, State: "unavailable"}
+	}
 	if got != want {
 		t.Fatalf("进度=%+v，期望 %+v", got, want)
 	}
@@ -169,8 +172,10 @@ func TestPostgreSQLCurationCProgress(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(plan.String(), "curation_work_states_progress_idx") {
-		t.Errorf("进度计数未走 curation_work_states_progress_idx：\n%s", plan.String())
+	// 当前规则和保留旧对应通过 OR 联接，规划器可从主题复合主键进入。
+	if !strings.Contains(plan.String(), "curation_work_states_progress_idx") &&
+		!strings.Contains(plan.String(), "curation_work_states_pkey") {
+		t.Errorf("进度计数未使用工作状态索引：\n%s", plan.String())
 	}
 }
 

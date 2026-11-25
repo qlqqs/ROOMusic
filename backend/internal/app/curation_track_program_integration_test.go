@@ -128,7 +128,7 @@ func TestPostgreSQLCurationTrackFieldsBackfillOnce(t *testing.T) {
 			before := seedTrackFieldBackfill(t, f, track, r)
 			f.source.hook = func(method string) error {
 				if method == "ReleaseByID" {
-					if tc.marker != "" && f.source.calls[method] > 1 {
+					if tc.marker != "" && f.source.callCount(method) > 1 {
 						// 多余读取立即返回，让工作者结束本轮后直接核对调用次数。
 						return sources.ErrTryLater
 					}

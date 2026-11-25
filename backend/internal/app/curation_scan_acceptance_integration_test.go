@@ -230,6 +230,7 @@ func TestPostgreSQLCurationDisabledBeforeFirstEnable(t *testing.T) {
 		if n := hits.Load(); n != 0 {
 			t.Fatalf("总开关关闭时 AcoustID 收到 %d 次请求", n)
 		}
+		confirmProgramRelease(t, app, &admin, id)
 		b3Enable(t, app, admin)
 		clock.advance(t, time.Minute)
 		b3RequireReleaseResult(t, app, id, "matched", "acoustid", "used", "")

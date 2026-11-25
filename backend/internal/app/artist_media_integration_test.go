@@ -208,7 +208,7 @@ func TestPostgreSQLArtistMediaProgramPriority(t *testing.T) {
 		{"unlicensed_commons_and_audiodb_english", mediaUpstream{commonsImage: true, noLicense: true, audioEN: "AudioDB lead."},
 			"", "theaudiodb", "en", "AudioDB lead.", "done"},
 		{"temporary_failure_with_unfilled_gap", mediaUpstream{fanartStatus: 503, wikiZH: "中文导语。"},
-			"", "wikipedia", "zh", "中文导语。", "try_later"},
+			"", "wikipedia", "zh", "中文导语。", "pending"},
 		{"all_active_sources_empty", mediaUpstream{}, "", "", "", "", "no_match"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -246,8 +246,18 @@ func TestPostgreSQLArtistMediaProgramPriority(t *testing.T) {
 				t.Errorf("维基百科许可不完整：%+v", detail.Bio)
 			}
 			state := f.stateFor(t, "artist_media", f.artist)
-			if state.Status != tc.state || (state.NextAttemptAt != nil) != (tc.state == "try_later") {
+			if state.Status != tc.state || state.NextAttemptAt != nil {
 				t.Errorf("艺人工作状态=%+v，期望 %s", state, tc.state)
+			}
+			if tc.state == "pending" {
+				requireUnattemptedProgramState(t, state)
+				queues, err := f.worker.QueueProgress(t.Context())
+				requireCurationOK(t, err)
+				q := queues[3]
+				if q.ID != "artist_media" || q.State != "paused" || q.Source == nil || *q.Source != "fanarttv" ||
+					q.PauseReason == nil || *q.PauseReason != "rate_limited" || q.RetryAt == nil {
+					t.Fatalf("艺人资料来源退避 %+v", q)
+				}
 			}
 			want := 0
 			if tc.image != "" {

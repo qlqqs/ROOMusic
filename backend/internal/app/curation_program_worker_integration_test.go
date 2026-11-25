@@ -67,7 +67,11 @@ func TestPostgreSQLCurationProgramGates(t *testing.T) {
 			if f.worker.State() != want || !maps.Equal(calls, f.source.calls) {
 				t.Fatalf("状态 %s 调用 %v，期望 %s %v", f.worker.State(), f.source.calls, want, calls)
 			}
-			f.assertCount(t, 0, `SELECT count(*) FROM curation_work_states`)
+			if name == "pause_during_lookup" || name == "scan_during_lookup" {
+				requireUnattemptedProgramState(t, f.stateFor(t, "release", f.a))
+			} else {
+				f.assertCount(t, 0, `SELECT count(*) FROM curation_work_states`)
+			}
 			f.assertCount(t, 0, `SELECT count(*) FROM curation_batches`)
 			if name == "scan" {
 				f.scan.Store(false)
@@ -90,7 +94,7 @@ func TestPostgreSQLCurationProgramSourceSwitches(t *testing.T) {
 	if len(f.source.calls) != 0 {
 		t.Fatal(f.source.calls)
 	}
-	f.assertCount(t, 0, `SELECT count(*) FROM curation_work_states`)
+	requireUnattemptedProgramState(t, f.stateFor(t, "release", f.a))
 	f.sourceEnabled(t, "lrclib", true)
 	f.clock.advance(t, time.Minute)
 	if !maps.Equal(f.source.calls, map[string]int{"LyricsFor": 1}) || f.stateFor(t, "lyrics", track).Status != "done" {
@@ -99,9 +103,10 @@ func TestPostgreSQLCurationProgramSourceSwitches(t *testing.T) {
 	f.sourceEnabled(t, "musicbrainz", true)
 	f.clock.advance(t, time.Minute)
 	f.assertRelease(t, f.a, "matched", "tag_id")
-	if f.source.calls["Covers"] != 0 || f.stateFor(t, "artwork", f.a).Status != "" {
+	if f.source.calls["Covers"] != 0 {
 		t.Fatal("关闭的封面主题执行了")
 	}
+	requireUnattemptedProgramState(t, f.stateFor(t, "artwork", f.a))
 	f.sourceEnabled(t, "coverartarchive", true)
 	f.clock.advance(t, time.Minute)
 	if f.source.calls["Covers"] != 2 || f.stateFor(t, "artwork", f.a).Status != "no_match" {
@@ -114,17 +119,21 @@ func TestPostgreSQLCurationProgramRetry(t *testing.T) {
 	f.enable(t)
 	f.tagged(t)
 	f.source.hook = func(method string) error {
-		if method == "ReleaseByID" && f.source.calls[method] <= 2 {
+		if method == "ReleaseByID" && f.source.callCount(method) <= 2 {
 			return sources.ErrTryLater
 		}
 		return nil
 	}
 	f.run(t)
-	for i, delay := range []time.Duration{10 * time.Minute, 20 * time.Minute} {
-		s := f.stateFor(t, "release", f.a)
+	for i, delay := range []time.Duration{2 * time.Second, 4 * time.Second} {
+		requireUnattemptedProgramState(t, f.stateFor(t, "release", f.a))
+		queues, err := f.worker.QueueProgress(t.Context())
+		requireCurationOK(t, err)
 		now := f.clock.options().Now()
-		if s.Status != "try_later" || s.Attempts != 0 || s.Generation != 0 || s.RetryCount != i+1 || s.NextAttemptAt == nil || !s.NextAttemptAt.Equal(now.Add(delay)) {
-			t.Fatalf("第 %d 次退避 %+v", i+1, s)
+		q := queues[0]
+		if q.ID != "release" || q.State != "paused" || q.PauseReason == nil || *q.PauseReason != "source_unavailable" ||
+			q.Source == nil || *q.Source != "musicbrainz" || q.RetryAt == nil || !q.RetryAt.Equal(now.Add(delay)) {
+			t.Fatalf("第 %d 次退避 %+v", i+1, q)
 		}
 		f.clock.advance(t, delay-time.Second)
 		if f.source.calls["ReleaseByID"] != i+1 {
@@ -232,9 +241,7 @@ func TestPostgreSQLCurationProgramRestart(t *testing.T) {
 	owner := f.linkOwner(t, f.a)
 	batch := programString(t, f.application, `SELECT batch_id FROM operations WHERE id=$1`, owner)
 	f.assertCount(t, 1, `SELECT count(*) FROM curation_batches WHERE id=$1 AND closed_at IS NULL`, batch)
-	if f.stateFor(t, "release", f.a).Status != "" {
-		t.Fatal("中断后已有结论")
-	}
+	requireUnattemptedProgramState(t, f.stateFor(t, "release", f.a))
 	f.gate.WithScanCheck(f.scanCheck)
 	f.run(t)
 	s := f.assertRelease(t, f.a, "matched", "tag_id")
@@ -325,9 +332,7 @@ func interruptProgramArtwork(t *testing.T, f *programFixture) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("未到达封面中断点")
 	}
-	if s := f.stateFor(t, "artwork", f.a); s.Status != "" {
-		t.Fatal(s)
-	}
+	requireUnattemptedProgramState(t, f.stateFor(t, "artwork", f.a))
 	f.gate.WithScanCheck(f.scanCheck)
 }
 
@@ -416,6 +421,12 @@ func TestPostgreSQLCurationProgramRealRescan(t *testing.T) {
 	runScan(t, f.application, &f.admin)
 	id := programString(t, f.application, `SELECT id FROM releases WHERE relative_directory=$1`, album)
 	f.run(t)
+	requireUnattemptedProgramState(t, f.stateFor(t, "release", id))
+	if len(f.source.calls) != 0 {
+		t.Fatalf("首次扫描后仍需确认，出站记录 %v", f.source.calls)
+	}
+	confirmProgramRelease(t, f.application, &f.admin, id)
+	f.clock.advance(t, time.Minute)
 	first := f.assertRelease(t, id, "unlisted", "search")
 	before := maps.Clone(f.source.calls)
 	if before["SearchReleases"] < 2 {
@@ -433,9 +444,27 @@ func TestPostgreSQLCurationProgramRealRescan(t *testing.T) {
 	// 成员集合变化时扫描可能生成新的发行，核对当前可见发行的待定证据。
 	scanned := claimRescanEnvironment{application: f.application}
 	visible, _ := scanned.releaseIDs(t, album)
+	if !maps.Equal(before, f.source.calls) {
+		t.Fatalf("新成员尚未确认，出站记录 %v → %v", before, f.source.calls)
+	}
+	confirmProgramRelease(t, f.application, &f.admin, visible)
+	f.clock.advance(t, time.Minute)
 	changed := f.assertRelease(t, visible, "unlisted", "search")
 	f.assertCount(t, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, visible)
 	if changed.InputDigest == first.InputDigest || f.source.calls["SearchReleases"] != before["SearchReleases"]+2 {
 		t.Fatalf("增加曲目后状态 %+v，调用 %v", changed, f.source.calls)
 	}
+}
+
+func requireUnattemptedProgramState(t *testing.T, s curation.WorkState) {
+	t.Helper()
+	if s.Status != "pending" || s.Attempts != 0 || s.Generation != 0 || s.RetryCount != 0 || s.NextAttemptAt != nil {
+		t.Fatalf("尚未处理的工作状态 %+v", s)
+	}
+}
+
+func confirmProgramRelease(t *testing.T, app *integrationTestApplication, admin *integrationTestUser, id string) {
+	t.Helper()
+	mustExec(t, app, `UPDATE releases SET curation_changed_at=now()-interval '60 seconds' WHERE id=$1`, id)
+	runScan(t, app, admin)
 }

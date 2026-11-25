@@ -78,12 +78,41 @@ const modelProgressDecoder = d.object({
   today: d.object({ date: d.string({ pattern: /^\d{4}-\d{2}-\d{2}$/ }), input_tokens: count(), output_tokens: count() }),
   unavailable_reason: d.nullable(d.oneOf(MODEL_UNAVAILABLE_REASONS)),
 });
+// 五条程序队列的进度（整理链 B）：固定顺序为识别、封面、歌词、艺人资料、声纹。remaining 含在途与等待中的项，ready 是现在能领取的；
+// 速度按最近 5 分钟实测，没有样本时为 null；来源被限流或不可用时带来源与预计恢复时刻。
+export const PROGRAM_QUEUE_IDS = ["release", "artwork", "lyrics", "artist_media", "fingerprint"] as const;
+// unavailable：没有装配程序层（例如测试或关闭了程序整理）时的占位状态。
+export const QUEUE_STATES = ["running", "idle", "paused", "disabled", "waiting_for_scan", "unavailable"] as const;
+export const QUEUE_PAUSE_REASONS = [
+  "disabled",
+  "paused",
+  "waiting_for_scan",
+  "waiting_for_stability",
+  "waiting_for_fingerprint",
+  "source_disabled",
+  "rate_limited",
+  "source_unavailable",
+] as const;
+const rate = () => d.nullable(d.number({ min: 0 }));
+const queueDecoder = d.object({
+  id: d.oneOf(PROGRAM_QUEUE_IDS),
+  state: d.oneOf(QUEUE_STATES),
+  remaining: count(),
+  ready: count(),
+  successful_requests_per_second: rate(),
+  completed_items_per_second: rate(),
+  eta_seconds: d.nullable(count()),
+  pause_reason: d.nullable(d.oneOf(QUEUE_PAUSE_REASONS)),
+  source: d.nullable(d.string({ min: 1, max: 64 })),
+  retry_at: d.nullable(d.timestamp()),
+});
 // 后台的进度：releases 只算可见发行；processed 是按当前规则版本处理过的（输入变了、还没重新处理的仍算在内）。
 const progressDecoder = d.object({
   batch: d.nullable(d.object({ id: d.uuid(), opened_at: d.timestamp(), operations: count() })),
   last_pass_finished_at: d.nullable(d.timestamp()),
   model: modelProgressDecoder,
   pending: d.object({ waiting_model: count() }),
+  queues: d.array(queueDecoder, { min: PROGRAM_QUEUE_IDS.length, max: PROGRAM_QUEUE_IDS.length }),
   // unlisted（外部库未收录）与 no_usable_candidates（候选都被撤销或已被占用）来自整理链 C。
   releases: d.object({
     matched: count(),

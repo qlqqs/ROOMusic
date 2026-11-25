@@ -252,6 +252,9 @@ func (service *Service) finalizeScan(ctx context.Context, connection *sql.Conn, 
 			return "", err
 		}
 	}
+	if err := finishCurationObservation(ctx, transaction, scanID, rootIDs, feedback, status == "succeeded"); err != nil {
+		return "", err
+	}
 	var errorMessage any
 	if status == "failed" {
 		errorMessage = "scan_failed"
@@ -352,7 +355,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 			return err
 		}
 		relative := safeRelativePath(root.Path, path)
-		slot := scanSlot{relative: relative}
+		slot := scanSlot{relative: relative, observedSize: -1}
 		held := func(kind, message, heldKind string) error {
 			slot.diagnostics = []scanDiagnostic{{kind, message}}
 			slot.heldKind = heldKind
@@ -412,7 +415,9 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 		if !fileInfo.Mode().IsRegular() {
 			return held("non_regular_file", "音频来源不是普通文件", heldKind)
 		}
+		slot.observedSize = fileInfo.Size()
 		if extension == ".cue" {
+			feedback.observeFile(root.ID, relative, fileInfo.Size(), false, false)
 			slot, err := pipeline.prepareCue(slot, path)
 			if err != nil {
 				return err
@@ -514,6 +519,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 					captureProcessingError(diagnosticError)
 				}
 			}
+			feedback.checkHeldFiles(root)
 			if !pipeline.walkErrorSeen && ctx.Err() == nil {
 				if err := ingest.CleanupCandidateStates(ctx, executor, scanID, root.ID); err != nil {
 					service.warnCandidateState(scanID, root.ID, "cleanup")
@@ -789,6 +795,7 @@ func (service *Service) persistStagedCandidatesWithOptions(ctx context.Context, 
 					}
 					candidate.JoinGroupID = groupIDs[versionGroup]
 				}
+				feedback.checkCandidate(root, candidate)
 				signature, signatureErr := candidateSignature(root, candidate)
 				candidateKey := ingest.CandidateIdentity(root.ID, candidate.Anchor)
 				if signatureErr == nil && options.Mode == ScanModeIncremental {

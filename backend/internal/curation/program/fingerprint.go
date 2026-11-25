@@ -92,7 +92,13 @@ type fingerprintHit struct {
 
 func (fp *FingerprintStep) match(ctx context.Context, mode string, e catalog.CurationEvidence, f sources.ReleaseFinder, rf sources.RecordingFinder) (MatchResult, string, error) {
 	tracks := sampleFour(e.SortedTracks())
-	prints, err := fp.sample(ctx, tracks)
+	var prints []sampledFingerprint
+	var err error
+	if attempt := currentAttempt(ctx); attempt != nil {
+		prints, err = attempt.worker.queuedSamples(ctx, attempt.item, tracks)
+	} else {
+		prints, err = fp.sample(ctx, tracks)
+	}
 	if err != nil {
 		return MatchResult{}, "used", err
 	}
@@ -103,7 +109,7 @@ func (fp *FingerprintStep) match(ctx context.Context, mode string, e catalog.Cur
 			return MatchResult{}, "unavailable", nil
 		}
 		if err != nil {
-			return MatchResult{}, "used", err
+			return MatchResult{}, "used", sourceFailure(ctx, "acoustid", err)
 		}
 		hit := fingerprintHit{trackID: sample.trackID, scores: make(map[string]float64)}
 		for _, m := range matches {

@@ -60,6 +60,10 @@ func TestPostgreSQLCurationMetrics(t *testing.T) {
 	for i, s := range samples {
 		writeMetricSample(t, app.allowedRoot, s)
 		runScan(t, app, &admin)
+		// 扫描以 PostgreSQL 时钟判断静默期。推进观测时间后走同一个增量扫描入口确认。
+		mustExec(t, app, `UPDATE releases SET curation_changed_at=now()-interval '60 seconds'
+			WHERE NOT curation_confirmed AND curation_changed_at IS NOT NULL`)
+		runScan(t, app, &admin)
 		e := metricScannedEntry(t, app, s)
 		target := metricsModelTarget{SampleID: s.ID, ReleaseID: s.Expect.Release, GroupID: s.Expect.Group, Fields: s.Expect.Fields}
 		if len(s.Expect.Recordings) == 1 {
@@ -166,7 +170,7 @@ func metricDrain(t *testing.T, app *integrationTestApplication, admin *integrati
 	for round := 1; round <= 12; round++ {
 		before := metricCheckpoint(t, app)
 		tick := time.Unix(0, clock.now.Add(int64(time.Minute))).UTC()
-		// 程序完整跑完一轮后才让模型返回。防止模型改证据与程序页内处理交错。
+		// 所有程序队列结束这一轮后才让模型返回，保留程序和模型的原有归因边界。
 		func() {
 			endpoint.gate.Lock()
 			defer endpoint.gate.Unlock()
@@ -189,7 +193,11 @@ func metricDrain(t *testing.T, app *integrationTestApplication, admin *integrati
 			}
 			time.Sleep(15 * time.Millisecond)
 		}
-		if p.State == "idle" && p.LastPassFinishedAt != nil && p.LastPassFinishedAt.Equal(tick) &&
+		programDrained := p.State == "idle"
+		for _, q := range p.Queues {
+			programDrained = programDrained && q.Ready == 0 && q.State != "running"
+		}
+		if programDrained && p.LastPassFinishedAt != nil && p.LastPassFinishedAt.Equal(tick) &&
 			p.Releases.Total == p.Releases.Processed && metricCheckpoint(t, app) == before {
 			return
 		}

@@ -16,7 +16,7 @@ type WorkState struct {
 	IdentityDigest, GapDigest                               string
 	InputDigest, Status                                     string
 	Attempts, Generation, RetryCount                        int
-	NextAttemptAt                                           *time.Time
+	NextAttemptAt, ManualRequestedAt                        *time.Time
 	Result                                                  json.RawMessage
 	UpdatedAt                                               time.Time
 }
@@ -55,7 +55,7 @@ type Execer interface {
 
 func LoadWorkStates(ctx context.Context, q operations.Queryer, subject string, targetIDs []string) (map[string]WorkState, error) {
 	rows, err := q.QueryContext(ctx, `SELECT subject,target_id::text,rule_version,input_digest,status,attempts,generation,retry_count,next_attempt_at,result,updated_at,
- COALESCE(local_rule_version,0),COALESCE(match_rule_version,0),COALESCE(requery_match_version,0),COALESCE(identity_digest,''),COALESCE(gap_digest,'')
+ COALESCE(local_rule_version,0),COALESCE(match_rule_version,0),COALESCE(requery_match_version,0),COALESCE(identity_digest,''),COALESCE(gap_digest,''),manual_requested_at
  FROM curation_work_states WHERE subject=$1 AND target_id=ANY($2::uuid[])`, subject, targetIDs)
 	if err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func LoadWorkStates(ctx context.Context, q operations.Queryer, subject string, t
 	states := make(map[string]WorkState)
 	for rows.Next() {
 		var s WorkState
-		if err := rows.Scan(&s.Subject, &s.TargetID, &s.RuleVersion, &s.InputDigest, &s.Status, &s.Attempts, &s.Generation, &s.RetryCount, &s.NextAttemptAt, &s.Result, &s.UpdatedAt, &s.LocalRuleVersion, &s.MatchRuleVersion, &s.RequeryMatchVersion, &s.IdentityDigest, &s.GapDigest); err != nil {
+		if err := rows.Scan(&s.Subject, &s.TargetID, &s.RuleVersion, &s.InputDigest, &s.Status, &s.Attempts, &s.Generation, &s.RetryCount, &s.NextAttemptAt, &s.Result, &s.UpdatedAt, &s.LocalRuleVersion, &s.MatchRuleVersion, &s.RequeryMatchVersion, &s.IdentityDigest, &s.GapDigest, &s.ManualRequestedAt); err != nil {
 			return nil, err
 		}
 		states[s.TargetID] = s
@@ -76,10 +76,14 @@ func SaveWorkState(ctx context.Context, q Execer, s WorkState) error {
 	_, err := q.ExecContext(ctx, `INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status,attempts,generation,retry_count,next_attempt_at,result,local_rule_version,match_rule_version,requery_match_version,identity_digest,gap_digest)
  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10::jsonb,'{}'),NULLIF($11::smallint,0),NULLIF($12::smallint,0),NULLIF($13::smallint,0),NULLIF($14,''),NULLIF($15,''))
  ON CONFLICT(subject,target_id) DO UPDATE SET rule_version=excluded.rule_version,input_digest=excluded.input_digest,status=excluded.status,
- attempts=excluded.attempts,generation=excluded.generation,retry_count=excluded.retry_count,next_attempt_at=excluded.next_attempt_at,result=excluded.result,updated_at=now(),
+ attempts=excluded.attempts,generation=excluded.generation,retry_count=excluded.retry_count,result=excluded.result,updated_at=now(),
  local_rule_version=excluded.local_rule_version,match_rule_version=excluded.match_rule_version,requery_match_version=excluded.requery_match_version,
- identity_digest=excluded.identity_digest,gap_digest=excluded.gap_digest`,
-		s.Subject, s.TargetID, s.RuleVersion, s.InputDigest, s.Status, s.Attempts, s.Generation, s.RetryCount, s.NextAttemptAt, s.Result, s.LocalRuleVersion, s.MatchRuleVersion, s.RequeryMatchVersion, s.IdentityDigest, s.GapDigest)
+ identity_digest=excluded.identity_digest,gap_digest=excluded.gap_digest,
+ needs_work=curation_work_states.manual_requested_at IS DISTINCT FROM $16::timestamptz,
+ manual_requested_at=CASE WHEN curation_work_states.manual_requested_at IS DISTINCT FROM $16 THEN curation_work_states.manual_requested_at END,
+ next_attempt_at=CASE WHEN curation_work_states.manual_requested_at IS DISTINCT FROM $16 AND excluded.status='unlisted'
+ THEN curation_work_states.next_attempt_at ELSE excluded.next_attempt_at END`,
+		s.Subject, s.TargetID, s.RuleVersion, s.InputDigest, s.Status, s.Attempts, s.Generation, s.RetryCount, s.NextAttemptAt, s.Result, s.LocalRuleVersion, s.MatchRuleVersion, s.RequeryMatchVersion, s.IdentityDigest, s.GapDigest, s.ManualRequestedAt)
 	return err
 }
 

@@ -207,7 +207,7 @@ func TestPostgreSQLB3AcoustIDProgram(t *testing.T) {
 			item := b3SourceList(t, app, &admin)["acoustid"]
 			switch {
 			case tc.code != 0:
-				b3RequireReleaseResult(t, app, release, "uncertain", "search", "unavailable", "search_only")
+				b3RequireReleaseResult(t, app, release, "uncertain", "search", "unavailable", "list_truncated")
 				b3Reason(t, item, "key_invalid")
 				for _, key := range item.Keys {
 					want := "unchecked"

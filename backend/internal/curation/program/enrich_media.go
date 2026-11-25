@@ -251,7 +251,7 @@ func (w *Worker) mediaFallback(ctx context.Context, u *unit, cap sources.Capabil
 	if len(ids) == 0 {
 		return run(builtin)
 	}
-	var retry bool
+	var failures mediaFailures
 	last := ""
 	for _, id := range append([]string{builtin}, ids...) {
 		u.provider = id
@@ -263,15 +263,15 @@ func (w *Worker) mediaFallback(ctx context.Context, u *unit, cap sources.Capabil
 			}
 			continue
 		}
-		if abort := artistSourceError(err, &retry); abort != nil {
+		if abort := failures.record(ctx, id, 1, err); abort != nil {
 			return "", abort
 		}
 	}
 	if last != "" {
 		u.provider = last
 	}
-	if retry {
-		return "", sources.ErrTryLater
+	if retry := failures.retryAbove(0); retry != nil {
+		return "", retry
 	}
 	if last == "" {
 		return "", operations.Conflict("source_disabled", "没有启用的资料源")

@@ -62,6 +62,25 @@ func (e CurationEvidence) GapOrder() [4]int {
 	return order
 }
 
+// HasSearchID 区分带外部编号的发行与仅靠文字、曲目结构识别的发行。
+func (e CurationEvidence) HasSearchID() bool {
+	if e.ExternalID != "" || e.GroupExternalID != "" || e.ExternalGroupID != "" ||
+		len(e.SearchBarcodes()) > 0 || e.Authenticity["catalog_number"].SearchValue(e.CatalogNumber) != "" {
+		return true
+	}
+	for _, t := range e.Tracks {
+		if t.OtherIdentifier || t.ExternalID != "" || t.CueISRC != "" {
+			return true
+		}
+		for _, ids := range t.Identifiers {
+			if len(ids) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (e CurationEvidence) Classification() CurationClassification {
 	c := CurationClassification{GapOrder: e.GapOrder()}
 	title, artist := e.effectiveIdentityAuth()
@@ -70,25 +89,17 @@ func (e CurationEvidence) Classification() CurationClassification {
 	if single {
 		tag = "mb_recording"
 	}
-	hasID := e.ExternalID != "" || e.GroupExternalID != "" || e.ExternalGroupID != "" ||
-		len(e.SearchBarcodes()) > 0 || e.Authenticity["catalog_number"].SearchValue(e.CatalogNumber) != ""
 	tagged := false
 	for _, t := range e.Tracks {
 		if (!single || len(e.Tracks) == 1) && slices.ContainsFunc(t.Identifiers[tag], func(id string) bool { return id != "" }) {
 			tagged = true
-		}
-		hasID = hasID || t.OtherIdentifier || t.ExternalID != "" || t.CueISRC != ""
-		for _, ids := range t.Identifiers {
-			if len(ids) > 0 {
-				hasID = true
-				break
-			}
+			break
 		}
 	}
 	switch {
 	case tagged:
 		c.Class = TaggedID
-	case title == metadata.Placeholder && artist == metadata.Placeholder && !hasID && len(e.DiscTOCs()) == 0:
+	case title == metadata.Placeholder && artist == metadata.Placeholder && !e.HasSearchID() && len(e.DiscTOCs()) == 0:
 		c.Class = Insufficient
 	case c.GapOrder != [4]int{}:
 		c.Class = HasGaps

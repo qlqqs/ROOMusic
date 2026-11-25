@@ -43,6 +43,7 @@ type rootCount struct {
 	complete bool
 }
 type scanFeedback struct {
+	observedFiles             map[scanFileKey]scanFileObservation
 	progress                  ScanProgress
 	root                      RootProgress
 	counts                    []rootCount
