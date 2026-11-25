@@ -380,3 +380,30 @@ A1–A13 证据对照写入父任务 acceptance.md；路线图、决定索引、
 ### Status
 
 [OK] **Completed**
+
+
+## Session 68: 走查遗留五项
+<!-- trellis-session: v=2 fp=b62d2d9c45a42475 -->
+
+**Date**: 2026-11-25
+**Task**: 走查遗留五项
+**Branch**: `main`
+
+### Summary
+
+混合目录无专辑标签曲目归“未知专辑”、AAC 不记位深、艺人页“参与的专辑”、桌面常驻音量条、未配置时手机不占管家标签
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f378a820` | feat: 收拾界面走查遗留的五处问题 |
+| `9e984f34` | chore(task): 走查遗留五项的规划记录 |
+
+### Testing
+
+- [OK] vitest 全量 4855 通过（agent-settings 一例整套并行时超时、单独通过）；Playwright 受影响 11 个文件 403 通过；Go ingest/parser 单测与两项定向集成测试通过（测试代理执行）
+
+### Status
+
+[OK] **Completed**

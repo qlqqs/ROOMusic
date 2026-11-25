@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 67
-- **Last Active**: 2026-11-24
+- **Total Sessions**: 68
+- **Last Active**: 2026-11-25
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~382 | Active |
+| `journal-2.md` | ~409 | Active |
 | `journal-1.md` | ~1972 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 68 | 2026-11-25 | 走查遗留五项 | `f378a820`, `9e984f34` | `main` |
 | 67 | 2026-11-24 | 界面细节走查与优化 | `c33f0a0e`, `7587c8ee` | `main` |
 | 66 | 2026-11-16 | 管家 C11：验收对照与文档同步 | `ae7b1ba5` | `steward-c11-acceptance` |
 | 65 | 2026-11-16 | 管家 C10：记忆、历史摘要与后台运行 | `e525bcdf` | `steward-c10-memory` |
