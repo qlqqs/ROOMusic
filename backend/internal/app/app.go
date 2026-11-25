@@ -49,6 +49,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
 	"github.com/qlqq/roomusic/backend/internal/playback/fingerprint"
 	playbackapi "github.com/qlqq/roomusic/backend/internal/playback/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/playback/render"
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
 	"github.com/qlqq/roomusic/backend/internal/plugins"
 	pluginapi "github.com/qlqq/roomusic/backend/internal/plugins/httpapi"
@@ -175,7 +176,11 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	listeningService := listening.NewService(database)
 	playbackService := newPlaybackService(database, settings, assembly)
 	renderer, closeRenderer := assembleRenderer(database, playbackService, assembly.renderer, logger, dspSettingsService)
-	zonesService := zones.NewService(database, zones.Options{Logger: logger, Renderer: renderer, IRReferences: zoneIRReferences{service: dspSettingsService}, PlayRecorder: zonePlayRecorder{service: listeningService}})
+	zoneOptions := zones.Options{Logger: logger, Renderer: renderer, IRReferences: zoneIRReferences{service: dspSettingsService}, PlayRecorder: zonePlayRecorder{service: listeningService}}
+	if renderer != nil {
+		zoneOptions.NewMemberStreamFilter = render.NewMemberStreamFilter(assembly.renderer)
+	}
+	zonesService := zones.NewService(database, zoneOptions)
 	instanceSecrets := newInstanceSecrets(settings.DataDirectory)
 	lanDevices := upnp.NewService(lifecycle, database, upnp.NewRegistryWithLogger(logger), airplay.NewCredentialStore(database, instanceSecrets), settings.PTPAddress)
 	lanDevices.AttachOutput(zonesService, settings.LANURL, settings.Address, logger)

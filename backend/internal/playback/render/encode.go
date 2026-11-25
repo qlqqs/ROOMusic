@@ -30,6 +30,40 @@ func newEncoder(ctx context.Context, reservation processStarter, tool *ffmpeg.To
 		close(e.done)
 		return e, nil
 	}
+	args := encoderArgs(f, pcm)
+	p, err := reservation.Start(ctx, ffmpeg.StartOptions{Args: args, Stdin: true})
+	if err != nil {
+		return nil, err
+	}
+	e.process = p
+	go func() {
+		defer close(e.done)
+		defer p.Close()
+		var copyErr error
+		if hls != nil {
+			copyErr = hls.split(p.Stdout())
+		} else {
+			_, copyErr = io.Copy(e, p.Stdout())
+		}
+		if copyErr != nil {
+			_ = p.Close()
+		}
+		waitErr := p.Wait()
+		if copyErr == nil {
+			copyErr = waitErr
+		}
+		if copyErr != nil && ctx.Err() == nil {
+			fail(copyErr)
+		}
+		if hls != nil && copyErr == nil && ctx.Err() == nil {
+			hls.finish()
+		}
+		_ = output.CloseWithError(copyErr)
+	}()
+	return e, nil
+}
+
+func encoderArgs(f zones.StreamFormat, pcm chain.Format) []string {
 	input := "f32le"
 	if f.BitDepth != 0 {
 		input = "s" + strconv.Itoa(f.BitDepth) + "le"
@@ -74,37 +108,7 @@ func newEncoder(ctx context.Context, reservation processStarter, tool *ffmpeg.To
 	if f.Delivery == "hls" {
 		args = append(args, "-f", "mp4", "-movflags", "+empty_moov+default_base_moof+skip_trailer", "-frag_duration", "4000000")
 	}
-	args = append(args, "-flush_packets", "1", "pipe:1")
-	p, err := reservation.Start(ctx, ffmpeg.StartOptions{Args: args, Stdin: true})
-	if err != nil {
-		return nil, err
-	}
-	e.process = p
-	go func() {
-		defer close(e.done)
-		defer p.Close()
-		var copyErr error
-		if hls != nil {
-			copyErr = hls.split(p.Stdout())
-		} else {
-			_, copyErr = io.Copy(e, p.Stdout())
-		}
-		if copyErr != nil {
-			_ = p.Close()
-		}
-		waitErr := p.Wait()
-		if copyErr == nil {
-			copyErr = waitErr
-		}
-		if copyErr != nil && ctx.Err() == nil {
-			fail(copyErr)
-		}
-		if hls != nil && copyErr == nil && ctx.Err() == nil {
-			hls.finish()
-		}
-		_ = output.CloseWithError(copyErr)
-	}()
-	return e, nil
+	return append(args, "-flush_packets", "1", "pipe:1")
 }
 
 // Write 用于所有非 HLS 长流输出：先计入编码字节（含 WAV 头部与 PCM），再传给客户端。

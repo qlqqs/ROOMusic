@@ -1,6 +1,25 @@
 package slimproto
 
-import "time"
+import (
+	"math"
+	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/zones"
+)
+
+const (
+	driftDeadband   = 500 * time.Microsecond
+	driftFallback   = 20 * time.Millisecond
+	fallbackMinimum = 10 * time.Millisecond
+	skipMaximum     = 10 * time.Second
+
+	driftMinSpan    = 20 * time.Second // 首次回归所需的实测时间跨度。
+	driftMinSamples = 15               // 每个样本来自一个新的成员播放点。
+	driftRatePeriod = 10 * time.Second // 两次前馈更新的最短间隔。
+	driftWindow     = 60 * time.Second // 仅拟合最近一分钟内的同流样本。
+	driftPPMUnit    = 1e6              // 一秒内每微秒的相对漂移为 1 ppm。
+	driftMaxPPM     = 500              // 每 2000 个输出帧最多调整一帧。
+)
 
 func (g *groupCoordinator) poll(p *groupPeer, now time.Time) error {
 	if err := p.Player.command("strm", control('t')); err != nil {
@@ -103,6 +122,7 @@ func (g *groupCoordinator) schedule(now time.Time, resume bool) error {
 			}
 			continue
 		}
+		p.resetDriftSamples()
 		p.point, p.scheduled = time.Time{}, target.at
 		p.paused = false
 	}
@@ -122,33 +142,134 @@ func (p *groupPeer) comparable(now time.Time, seq int64) bool {
 	return p.current != nil && p.current.seq == seq && p.current.started && !p.paused && !p.ended && !p.point.IsZero() && now.Sub(p.point) <= pointLifetime
 }
 
+func (p *groupPeer) outputFrame() int64 {
+	return int64(math.Round(p.elapsed.Seconds() * float64(p.current.rate)))
+}
+
+func frameDuration(frames int64, rate int) time.Duration {
+	return time.Duration(math.Round(float64(frames) * float64(time.Second) / float64(rate)))
+}
+
+func (p *groupPeer) sourceElapsed() time.Duration {
+	if p.current.drift == nil {
+		return p.elapsed
+	}
+	output := p.outputFrame()
+	// 只换算插删造成的差值，保留毫秒回报在非整帧采样率下的小数余量。
+	return p.elapsed + frameDuration(p.current.drift.Source(output)-output, p.current.rate)
+}
+
 func (p *groupPeer) apparentStart() time.Time {
-	return p.point.Add(-p.elapsed + time.Duration(p.SyncDelayMS)*time.Millisecond)
+	return p.point.Add(-p.sourceElapsed() + time.Duration(p.SyncDelayMS)*time.Millisecond)
+}
+
+type lagSample struct {
+	at  time.Time
+	lag time.Duration
+}
+
+func (p *groupPeer) resetDriftSamples() {
+	p.driftSamples = p.driftSamples[:0]
+	p.rateUpdated = time.Time{}
+}
+
+func (p *groupPeer) observeDrift(at time.Time, rawLag time.Duration) {
+	setter, ok := p.current.drift.(zones.DriftRateSetter)
+	if !ok {
+		return
+	}
+	samples := p.driftSamples
+	if len(samples) > 0 && !at.After(samples[len(samples)-1].at) {
+		return
+	}
+	for len(samples) > 0 && at.Sub(samples[0].at) > driftWindow {
+		samples = samples[1:]
+	}
+	samples = append(samples, lagSample{at, rawLag})
+	p.driftSamples = samples
+	if len(samples) < driftMinSamples || at.Sub(samples[0].at) < driftMinSpan || at.Sub(p.rateUpdated) < driftRatePeriod {
+		return
+	}
+	// 以窗口起点为原点，带截距拟合。恒定的起播偏差只改变截距。
+	var sx, sy, sxx, sxy float64
+	for _, sample := range samples {
+		x := sample.at.Sub(samples[0].at).Seconds()
+		y := sample.lag.Seconds()
+		sx += x
+		sy += y
+		sxx += x * x
+		sxy += x * y
+	}
+	n := float64(len(samples))
+	ppm := driftPPMUnit * (sxy - sx*sy/n) / (sxx - sx*sx/n)
+	p.ppm = min(driftMaxPPM, max(-driftMaxPPM, ppm))
+	p.rateUpdated = at
+	setter.SetRate(p.ppm)
+	if p.next != nil {
+		if next, ok := p.next.drift.(zones.DriftRateSetter); ok {
+			next.SetRate(p.ppm)
+		}
+	}
 }
 
 func (g *groupCoordinator) correct(now time.Time) error {
-	var earliest time.Time
-	for _, p := range g.peers {
-		if p.comparable(now, g.current.seq) {
-			start := p.apparentStart()
-			if earliest.IsZero() || start.Before(earliest) {
-				earliest = start
-			}
-		}
+	if g.current == nil || !g.leader.comparable(now, g.current.seq) {
+		return nil
 	}
+	start := g.leader.apparentStart()
 	for _, p := range g.peers {
-		if !p.comparable(now, g.current.seq) || now.Sub(p.corrected) < time.Second || !p.point.After(p.corrected) {
+		if p == g.leader || !p.comparable(now, g.current.seq) || now.Sub(p.corrected) < time.Second || !p.point.After(p.corrected) {
 			continue
 		}
-		lag := p.apparentStart().Sub(earliest)
-		if lag >= 10*time.Millisecond && lag <= 10*time.Second {
-			if err := p.Player.command("strm", controlMS('a', uint32(lag.Milliseconds()))); err != nil {
+		lag := p.apparentStart().Sub(start)
+		drift := p.current.drift
+		interval := lag.Abs()
+		if drift == nil || interval > driftFallback {
+			if interval < fallbackMinimum || interval > skipMaximum {
+				continue
+			}
+			command := byte('a')
+			if lag < 0 {
+				// 带正间隔的 p 插入静音，播放器自行继续，无需等待 STMp。
+				command = 'p'
+			}
+			ms := uint32(interval.Milliseconds())
+			if err := p.Player.command("strm", controlMS(command, ms)); err != nil {
 				if err = g.drop(p, "offline"); err != nil {
 					return err
 				}
+				continue
 			}
-			p.corrected = now
+			p.resetDriftSamples()
+			if drift != nil {
+				// 协议命令已经按偏差修正，抵消该播放点尚未生效的净调整。
+				if pending := drift.Pending(p.outputFrame()); pending != 0 {
+					drift.Adjust(-pending)
+				}
+			}
+		} else {
+			output := p.outputFrame()
+			rate := p.current.rate
+			// 加回已播净调整等价于使用原始输出 elapsed；保留毫秒回报的小数余量。
+			rawLag := p.point.Add(-p.elapsed + time.Duration(p.SyncDelayMS)*time.Millisecond).Sub(start)
+			p.observeDrift(p.point, rawLag)
+			// 新请求最早作用于渲染头。把目标外推到那里，再扣全部在途调整，
+			// 否则反馈会抵消缓冲区内为未来漂移准备的前馈量。
+			var pending int64
+			if renderer, ok := drift.(interface{ RenderState(int64) (int64, int64) }); ok {
+				var head int64
+				head, pending = renderer.RenderState(output)
+				ahead := max(0, head-output)
+				lag += time.Duration(math.Round(float64(time.Second) * float64(ahead) / float64(rate) * p.ppm / driftPPMUnit))
+			} else {
+				pending = drift.Pending(output)
+			}
+			if (lag - frameDuration(pending, rate)).Abs() <= driftDeadband {
+				continue
+			}
+			drift.Adjust(int64(math.Round(lag.Seconds()*float64(rate))) - pending)
 		}
+		p.corrected = now
 	}
 	return nil
 }
@@ -164,12 +285,12 @@ func (g *groupCoordinator) joinNext(p *groupPeer, now time.Time) error {
 	ref := g.reference
 	var at time.Time
 	if p.current.seq == g.current.seq {
-		at = ref.point.Add(-ref.elapsed)
+		at = ref.point.Add(-ref.sourceElapsed())
 	} else {
 		if g.current.duration <= 0 || ref.point.IsZero() || ref.paused {
 			return nil
 		}
-		at = ref.point.Add(time.Duration(g.current.duration*float64(time.Second)) - ref.elapsed)
+		at = ref.point.Add(time.Duration(g.current.duration*float64(time.Second)) - ref.sourceElapsed())
 	}
 	at = at.Add(time.Duration(ref.SyncDelayMS-p.SyncDelayMS) * time.Millisecond)
 	if at.Sub(now) > time.Second {

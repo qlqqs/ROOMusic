@@ -27,6 +27,8 @@ type groupChunk struct {
 	retained int
 }
 type groupReader struct {
+	filter         MemberStreamFilter
+	cancelFilter   func()
 	dispatch       *groupDispatcher
 	id             string
 	pos            int64
@@ -128,6 +130,9 @@ func (r *groupReader) Read(p []byte) (int, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for r.pos == d.end && !r.dropped && !d.closed && d.terminal == nil {
+		if r.delivered.Load() {
+			return 0, io.EOF
+		}
 		d.ready.Wait()
 	}
 	if d.closed {
@@ -147,16 +152,38 @@ func (r *groupReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+func (r *groupReader) stopFilterLocked() {
+	if r.cancelFilter != nil {
+		r.cancelFilter()
+		r.cancelFilter = nil
+	}
+}
+
 func (r *groupReader) dropLocked(report bool) {
 	if r.dropped {
 		return
 	}
 	r.dropped = true
 	close(r.done)
+	r.stopFilterLocked()
 	// 每台最多投递一次，队列按成员数分配。
 	if report {
 		r.dispatch.drops <- r.id
 	}
+}
+
+func (r *groupReader) Close() error {
+	d := r.dispatch
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.closed && !r.dropped && !r.delivered.Load() {
+		r.dropLocked(true)
+		d.trimLocked()
+	} else {
+		r.stopFilterLocked()
+	}
+	d.ready.Broadcast()
+	return nil
 }
 
 func (d *groupDispatcher) expire() {

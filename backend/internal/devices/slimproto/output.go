@@ -33,6 +33,8 @@ type Output struct {
 }
 
 type outputStream struct {
+	rate             int
+	drift            zones.DriftCompensator
 	seq              int64
 	path             string
 	decoded, started bool

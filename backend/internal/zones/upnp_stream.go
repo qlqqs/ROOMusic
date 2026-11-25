@@ -72,21 +72,11 @@ type UPnPStreamBody struct {
 
 func (b UPnPStreamBody) MarkDelivered() { b.delivered.Store(true) }
 
-// FinishDelivery 在客户端中断时唤醒其读者，立即释放该成员保留的块。
+// FinishDelivery 在 HTTP 取流结束时停止成员过滤器；未完成的交付交由分发器剔除。
 func (b UPnPStreamBody) FinishDelivery() {
-	r := b.reader
-	if r == nil || r.delivered.Load() {
-		return
+	if b.reader != nil {
+		b.reader.Close()
 	}
-	d := r.dispatch
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.closed || r.dropped {
-		return
-	}
-	r.dropLocked(true)
-	d.trimLocked()
-	d.ready.Broadcast()
 }
 
 // OpenUPnPStream 在播放区锁内核对令牌、续流并取走唯一 reader。HEAD 只读取 MIME。
