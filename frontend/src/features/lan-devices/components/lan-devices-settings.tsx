@@ -1,9 +1,9 @@
-import { MoreHorizontal, Plus } from "lucide-react";
+import { MoreHorizontal, Plus, TriangleAlert } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useMembers } from "../../members";
 import { Button, ConfirmDialog, FailureNotice, MenuButton, QueryContent, SettingRow, SettingsGroup, Skeleton, StatusTag, Switch, TextField } from "../../../shared/ui";
-import type { AirPlayFormatDTO, CastFormatDTO, LanDeviceDTO, LanDeviceSettingsDTO } from "../api/decoders";
-import { useAddLanDevice, useFinishAirPlayPairing, useLanDevices, useLanDeviceSettings, usePutAirPlayFormat, usePutCastFormat, usePutLanDeviceGrants, useRemoveLanDevice, useStartAirPlayPairing, useUpdateLanDeviceSettings } from "../hooks/use-lan-devices";
+import type { AirPlayFormatDTO, CastFormatDTO, LanDeviceDTO, LanDeviceSettingsChange, LanDeviceSettingsDTO, SlimProtoFormatDTO } from "../api/decoders";
+import { useAddLanDevice, useFinishAirPlayPairing, useLanDevices, useLanDeviceSettings, usePutAirPlayFormat, usePutCastFormat, usePutSlimProtoFormat, usePutLanDeviceGrants, useRemoveLanDevice, useStartAirPlayPairing, useUpdateLanDeviceSettings } from "../hooks/use-lan-devices";
 import styles from "./lan-devices-settings.module.css";
 
 const addFailures = {
@@ -12,7 +12,9 @@ const addFailures = {
   airplay: { invalid_address: "需要设备的局域网 IP，可以带端口（例如 192.168.1.25 或 192.168.1.25:7000）。", airplay_disabled: "AirPlay 已关闭，先在上面打开。" },
 } as const;
 
-const kindLabels = { upnp: "UPnP/DLNA", cast: "Google Cast", airplay: "AirPlay" } as const;
+type ManualKind = keyof typeof addFailures;
+
+const kindLabels = { upnp: "UPnP/DLNA", cast: "Google Cast", airplay: "AirPlay", slimproto: "SlimProto" } as const;
 const codecLabels = { mp3: "MP3", aac: "AAC", flac: "FLAC" } as const;
 
 /** AirPlay 精确对时（PTP）不可用的原因码。 */
@@ -31,17 +33,21 @@ function rateText(rate: number): string {
 function deviceDescription(device: LanDeviceDTO): string {
   const parts = [device.model === "" ? null : device.model, device.online ? "在线" : "离线"];
   const airplay = device.capabilities.airplay;
-  if (device.format !== null && device.format.codec === "alac") {
+  const slim = device.capabilities.slimproto ?? null;
+  if (device.kind === "slimproto") {
+    if (slim !== null && slim.firmware !== "") parts.push(`${slim.model_name === "" ? "播放器" : slim.model_name} ${slim.firmware}`);
+    parts.push(slim?.unsupported === true ? "播放器不支持 FLAC，暂时不能使用" : `FLAC，最高 ${rateText(device.capabilities.max_sample_rate)} / ${device.capabilities.max_bit_depth} 位`);
+  } else if (device.format !== null && device.format.codec === "alac") {
     parts.push(`ALAC，最高 ${rateText(device.format.max_sample_rate)} / ${device.format.max_bit_depth} 位`);
     if (airplay?.timing_protocol != null) parts.push(airplay.timing_protocol === "PTP" ? "精确对时" : "兼容模式");
     if (airplay?.timing_reason != null) parts.push(timingReasons[airplay.timing_reason] ?? "精确对时暂不可用");
-  } else if (device.format !== null) {
+  } else if (device.format !== null && !("volume" in device.format)) {
     parts.push(`${codecLabels[device.format.codec]}，最高 ${rateText(device.format.max_sample_rate)}，曲目之间可能有短暂停顿`);
   } else {
     const formats = device.capabilities.format_declared ? device.capabilities.stream_formats.map((format) => format.toUpperCase()).join("、") : "没有声明支持的格式，先试 FLAC";
     parts.push(`${formats}，最高 ${rateText(device.capabilities.max_sample_rate)} / ${device.capabilities.max_bit_depth} 位`);
   }
-  if (device.capabilities.volume === "fixed") parts.push("音量在设备上调");
+  if (device.capabilities.volume === "fixed") parts.push(device.kind === "slimproto" ? "固定音量，在功放或解码器上调" : "音量在设备上调");
   parts.push(device.address);
   return parts.filter((part) => part !== null).join(" · ");
 }
@@ -54,7 +60,7 @@ export function LanDevicesSettings() {
   const settings = useLanDeviceSettings();
   const update = useUpdateLanDeviceSettings();
   const pending = update.isPending ? update.variables : undefined;
-  const value = (key: keyof LanDeviceSettingsDTO, current: boolean) => pending?.[key] ?? current;
+  const value = (key: keyof LanDeviceSettingsChange, current: boolean) => pending?.[key] ?? current;
   return (
     <>
       <SettingsGroup title="局域网设备" footer={update.isError ? <FailureNotice error={update.error} context="write" title="开关没有改成" /> : undefined}>
@@ -81,6 +87,22 @@ export function LanDevicesSettings() {
                   <SettingRow nested label="AirPlay" description="HomePod、Apple TV、Mac，以及支持 AirPlay 的音箱与功放。">
                     {({ controlId, descriptionId }) => (
                       <Switch id={controlId} aria-describedby={descriptionId} checked={value("airplay_enabled", data.airplay_enabled)} disabled={update.isPending} onChange={(on) => update.mutate({ airplay_enabled: on })} />
+                    )}
+                  </SettingRow>
+                  <SettingRow
+                    nested
+                    label="SlimProto"
+                    description={
+                      data.slimproto_unavailable === "port_in_use" && data.slimproto_enabled
+                        ? "端口 3483 被本机其他程序占用（例如 Lyrion Music Server），暂时用不了；端口空出来后自动恢复。"
+                        : "piCorePlayer、moOde 等装了 Squeezelite 的播放器，无损高码率。播放器会自己连上来，服务器地址填这台机器。"
+                    }
+                  >
+                    {({ controlId, descriptionId }) => (
+                      <span className={styles.rowEnd}>
+                        {data.slimproto_unavailable === "port_in_use" && data.slimproto_enabled ? <TriangleAlert size={16} className={styles.warning} aria-hidden="true" /> : null}
+                        <Switch id={controlId} aria-describedby={descriptionId} checked={value("slimproto_enabled", data.slimproto_enabled)} disabled={update.isPending} onChange={(on) => update.mutate({ slimproto_enabled: on })} />
+                      </span>
                     )}
                   </SettingRow>
                 </>
@@ -123,7 +145,7 @@ function DeviceList({ settings }: { settings: LanDeviceSettingsDTO }) {
           ) : (
             items.map((device) => {
               const actions = [
-                ...(device.format === null ? [] : [{ id: "format", label: device.kind === "airplay" ? `${device.name} 的音质…` : `${device.name} 的编码格式…`, onSelect: () => setFormatting(device) }]),
+                ...(device.format === null ? [] : [{ id: "format", label: device.kind === "cast" ? `${device.name} 的编码格式…` : `${device.name} 的音质…`, onSelect: () => setFormatting(device) }]),
                 ...(device.capabilities.airplay?.requires_pin === true && !device.capabilities.airplay.paired ? [{ id: "pair", label: `与 ${device.name} 配对…`, onSelect: () => setPairing(device) }] : []),
                 ...(settings.shared ? [] : [{ id: "grants", label: `分配 ${device.name} 给成员…`, onSelect: () => setGranting(device) }]),
                 ...(device.manual ? [{ id: "remove", label: `移除 ${device.name}`, danger: true, onSelect: () => remove.mutate(device.udn) }] : []),
@@ -137,6 +159,7 @@ function DeviceList({ settings }: { settings: LanDeviceSettingsDTO }) {
                       <StatusTag>{kindLabels[device.kind]}</StatusTag>
                       {unavailable === null ? null : <StatusTag tone="outline">{unavailable}</StatusTag>}
                       {device.capabilities.airplay?.requires_pin === true && !device.capabilities.airplay.paired ? <StatusTag>待配对</StatusTag> : null}
+                      {device.capabilities.slimproto?.unsupported === true ? <StatusTag tone="outline">不支持</StatusTag> : null}
                       {device.manual ? <StatusTag>手动添加</StatusTag> : null}
                       {actions.length === 0 ? <span className={styles.menuSpacer} aria-hidden="true" /> : <MenuButton label={`${device.name} 的更多操作`} iconOnly icon={<MoreHorizontal size={18} />} actions={actions} />}
                     </span>
@@ -157,7 +180,7 @@ function DeviceList({ settings }: { settings: LanDeviceSettingsDTO }) {
 
 function AddDeviceDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const add = useAddLanDevice();
-  const [kind, setKind] = useState<LanDeviceDTO["kind"]>("upnp");
+  const [kind, setKind] = useState<ManualKind>("upnp");
   const [address, setAddress] = useState("");
   const trimmed = address.trim();
   function close() {
@@ -249,12 +272,66 @@ function GrantsForm({ device, onClose }: { device: LanDeviceDTO; onClose: () => 
   );
 }
 
-/** 编码设置：Google Cast 选编码与采样率，AirPlay 选音质。 */
+/** 编码设置：Google Cast 选编码与采样率，AirPlay 与 SlimProto 选音质。格式的形状按设备种类区分（Cast 与 SlimProto 都可能是 FLAC）。 */
 function FormatDialog({ device, onClose }: { device: LanDeviceDTO | null; onClose: () => void }) {
   if (device === null || device.format === null) return null;
-  return device.format.codec === "alac"
-    ? <AirPlayFormatForm key={device.udn} device={device} format={device.format} onClose={onClose} />
-    : <FormatForm key={device.udn} device={device} format={device.format} onClose={onClose} />;
+  const format = device.format;
+  if (device.kind === "airplay" && format.codec === "alac") return <AirPlayFormatForm key={device.udn} device={device} format={format} onClose={onClose} />;
+  if (device.kind === "slimproto" && "volume" in format) return <SlimProtoFormatForm key={device.udn} device={device} format={format} onClose={onClose} />;
+  if (device.kind === "cast" && format.codec !== "alac" && !("volume" in format)) return <FormatForm key={device.udn} device={device} format={format} onClose={onClose} />;
+  return null;
+}
+
+/** SlimProto 可选的采样率上限；实际只列出不超过播放器声明值的那些，服务器封顶 768 kHz。 */
+const slimProtoRates = [44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000] as const;
+const slimProtoCeiling = 768000;
+
+/** 一台 SlimProto 播放器的音质：采样率上限（默认跟随播放器声明）与音量方式。接功放或用解码器调音量时选固定音量，播放器按原电平输出。 */
+function SlimProtoFormatForm({ device, format, onClose }: { device: LanDeviceDTO; format: SlimProtoFormatDTO; onClose: () => void }) {
+  const put = usePutSlimProtoFormat();
+  const declared = Math.min(device.capabilities.slimproto?.declared_max_sample_rate ?? device.capabilities.max_sample_rate, slimProtoCeiling);
+  const rates = slimProtoRates.filter((rate) => rate <= declared);
+  const [rate, setRate] = useState<number | null>(format.max_sample_rate);
+  const [volume, setVolume] = useState(format.volume);
+  return (
+    <ConfirmDialog
+      open
+      title={`“${device.name}”的音质`}
+      confirmLabel="保存"
+      pending={put.isPending}
+      error={put.isError ? <FailureNotice error={put.error} context="write" messages={{ invalid_input: "这台播放器不支持这个采样率。" }} /> : undefined}
+      onCancel={onClose}
+      onConfirm={() => put.mutate({ udn: device.udn, format: { codec: "flac", max_sample_rate: rate, volume } }, { onSuccess: onClose })}
+    >
+      <div className={styles.form}>
+        <fieldset className={styles.choices}>
+          <legend className={styles.legend}>采样率上限（FLAC 无损）</legend>
+          <label className={styles.choice}>
+            <input type="radio" name="slimproto-rate" checked={rate === null} onChange={() => setRate(null)} />
+            跟随播放器（{rateText(declared)}）
+          </label>
+          {rates.map((option) => (
+            <label key={option} className={styles.choice}>
+              <input type="radio" name="slimproto-rate" checked={rate === option} onChange={() => setRate(option)} />
+              {rateText(option)}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className={styles.choices}>
+          <legend className={styles.legend}>音量</legend>
+          <label className={styles.choice}>
+            <input type="radio" name="slimproto-volume" checked={volume === "number"} onChange={() => setVolume("number")} />
+            在 ROOMusic 里调
+          </label>
+          <label className={styles.choice}>
+            <input type="radio" name="slimproto-volume" checked={volume === "fixed"} onChange={() => setVolume("fixed")} />
+            固定，在功放或解码器上调
+          </label>
+        </fieldset>
+        <p className={styles.hint}>高于上限的音乐会转换后再送给播放器，DSD 转成 PCM。采样率下一首起生效，音量方式立即生效。</p>
+      </div>
+    </ConfirmDialog>
+  );
 }
 
 const airPlayQualities = [

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/devices/airplay"
 	"github.com/qlqq/roomusic/backend/internal/devices/cast"
@@ -86,7 +87,7 @@ func respond(w http.ResponseWriter, r *http.Request, result any, err error) {
 		status, code, message = 409, "pairing_expired", err.Error()
 	case errors.Is(err, upnp.ErrPairingRejected):
 		status, code, message = 422, "pairing_rejected", err.Error()
-	case errors.Is(err, upnp.ErrPairingInput), errors.Is(err, upnp.ErrAirPlayFormat), errors.Is(err, upnp.ErrFormat), errors.Is(err, upnp.ErrKind):
+	case errors.Is(err, upnp.ErrPairingInput), errors.Is(err, upnp.ErrAirPlayFormat), errors.Is(err, upnp.ErrSlimProtoFormat), errors.Is(err, upnp.ErrFormat), errors.Is(err, upnp.ErrKind):
 		status, code, message = 400, "invalid_input", err.Error()
 	case errors.Is(err, upnp.ErrGrantUser):
 		status, code, message = 400, "invalid_input", upnp.ErrGrantUser.Error()
@@ -158,11 +159,37 @@ func (h *Handlers) grants(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) format(w http.ResponseWriter, r *http.Request) {
-	var body upnp.DeviceFormat
-	if !decode(w, r, &body) {
-		return
+	key := r.PathValue("udn")
+	var format upnp.DeviceFormat
+	if strings.HasPrefix(key, "slim:") {
+		var body struct {
+			Codec         string `json:"codec"`
+			MaxSampleRate *int   `json:"max_sample_rate"`
+			Volume        string `json:"volume"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		format.Codec, format.Volume = body.Codec, body.Volume
+		if body.MaxSampleRate != nil {
+			if *body.MaxSampleRate <= 0 {
+				respond(w, r, nil, upnp.ErrSlimProtoFormat)
+				return
+			}
+			format.MaxSampleRate = *body.MaxSampleRate
+		}
+	} else {
+		var body struct {
+			Codec         string `json:"codec"`
+			MaxSampleRate int    `json:"max_sample_rate"`
+			MaxBitDepth   int    `json:"max_bit_depth"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		format = upnp.DeviceFormat{Codec: body.Codec, MaxSampleRate: body.MaxSampleRate, MaxBitDepth: body.MaxBitDepth}
 	}
-	result, err := h.service.SetFormat(r.Context(), r.PathValue("udn"), body)
+	result, err := h.service.SetFormat(r.Context(), key, format)
 	respond(w, r, result, err)
 }
 

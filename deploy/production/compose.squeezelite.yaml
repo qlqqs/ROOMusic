@@ -1,0 +1,12 @@
+# 与生产 Compose 一起使用。先在部署目录构建边车镜像：
+# docker build -f squeezelite.Dockerfile -t roomusic-squeezelite:2.0.0-1613 .（用法见 README.md 的“Squeezelite 播放器”）
+# 可将 ROOMUSIC_SQUEEZELITE_IMAGE 换成带 Squeezelite 入口的其他镜像。
+services:
+  squeezelite:
+    image: ${ROOMUSIC_SQUEEZELITE_IMAGE:-roomusic-squeezelite:2.0.0-1613}
+    container_name: ${ROOMUSIC_SQUEEZELITE_CONTAINER_NAME:-roomusic-squeezelite}
+    network_mode: host
+    devices:
+      - /dev/snd:/dev/snd
+    command: ["-s", "127.0.0.1", "-n", "${ROOMUSIC_SQUEEZELITE_NAME:-ROOMusic USB DAC}", "-o", "${ROOMUSIC_SQUEEZELITE_OUTPUT:-default}"]
+    restart: unless-stopped

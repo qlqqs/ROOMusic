@@ -276,7 +276,7 @@ export const deviceDecoder: d.Decoder<Device> = (input, path) => {
     muted: d.boolean(),
     capabilities: d.object({ volume: capabilitiesVolumeDecoder }),
     output_session_id: d.nullable(d.uuid()),
-    // 服务器托管的局域网设备（upnp、cast、airplay）才有下面几项。
+    // 服务器托管的局域网设备（upnp、cast、airplay、slimproto）才有下面几项。
     max_sample_rate: d.optional(d.integer({ min: 1 })),
     format_declared: d.optional(d.boolean()),
     occupied_by: d.optional(d.nullable(d.object({ user_id: d.uuid(), display_name: d.string({ min: 1, max: 200 }) }))),
@@ -294,7 +294,7 @@ export const deviceDecoder: d.Decoder<Device> = (input, path) => {
     volumeControllable: raw.capabilities.volume !== "fixed",
     outputSessionId: raw.output_session_id,
     lan:
-      raw.kind === "upnp" || raw.kind === "cast" || raw.kind === "airplay"
+      raw.kind === "upnp" || raw.kind === "cast" || raw.kind === "airplay" || raw.kind === "slimproto"
         ? {
             maxSampleRate: raw.max_sample_rate ?? 48000,
             formatDeclared: raw.format_declared ?? true,

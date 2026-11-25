@@ -1,0 +1,14 @@
+services:
+  squeezelite:
+    container_name: !reset null
+    # 在测试项目内复现边车与 ROOMusic 共用回环地址的拓扑。
+    network_mode: service:app
+    devices: !reset []
+    command: ["-s", "127.0.0.1", "-n", "${ROOMUSIC_SQUEEZELITE_NAME:-ROOMusic USB DAC}", "-m", "02:00:00:00:34:84", "-o", "-"]
+    entrypoint: ["/bin/sh", "-c", "exec /usr/bin/squeezelite \"$$@\" >/capture/audio.fifo 2>>/capture/player.log", "--"]
+    user: ${SLIMPROTO_RUN_USER:?}
+    volumes:
+      - ${SLIMPROTO_WORK:?}/sidecar:/capture
+    restart: "no"
+    cpus: 1
+    mem_limit: 128m

@@ -49,7 +49,9 @@ func (s *Service) managedOutputs() ManagedOutputs {
 	return s.managed
 }
 
-func managedKind(kind string) bool { return kind == "upnp" || kind == "cast" || kind == "airplay" }
+func managedKind(kind string) bool {
+	return kind == "upnp" || kind == "cast" || kind == "airplay" || kind == "slimproto"
+}
 
 func (z *zoneRuntime) visible() bool { return !managedKind(z.device.Kind) || z.managedVisible }
 
@@ -59,6 +61,15 @@ func limitSampleRate(c Capabilities, rate int) Capabilities {
 		c.StreamFormats[i].MaxSampleRate = &rate
 	}
 	return c
+}
+
+// RefreshManagedDevices 把管理员保存的新格式交给正在运行的输出，在下一条流协商时生效。
+func (s *Service) RefreshManagedDevices(ctx context.Context, userID string) error {
+	u, err := s.user(ctx, userID)
+	if err != nil {
+		return err
+	}
+	return s.syncManaged(ctx, userID, u)
 }
 
 // 查询注册表时不持设备或用户锁，适配器在另一请求中可能正在认领输出。
@@ -142,7 +153,7 @@ func (s *Service) refreshManaged(ctx context.Context, userID string, z *zoneRunt
 	defer z.mu.Unlock()
 	d := z.device
 	d.Name = managedName(item.Name)
-	if item.Kind == "cast" || item.Kind == "airplay" {
+	if item.Kind == "cast" || item.Kind == "airplay" || item.Kind == "slimproto" {
 		d.MaxSampleRate = item.MaxSampleRate
 	}
 	d.Capabilities = limitSampleRate(item.Capabilities, d.MaxSampleRate)
@@ -160,7 +171,13 @@ func (s *Service) refreshManaged(ctx context.Context, userID string, z *zoneRunt
 		z.device, z.formatDeclared, z.occupiedBy, z.managedVisible = d, item.FormatDeclared, cloneValue(item.OccupiedBy), true
 		s.publishDevice(userID, deviceOf(z))
 		if formatChanged && z.session != nil {
-			s.scheduleRebuild(userID, z)
+			if item.Kind == "slimproto" {
+				if z.nextHandle != nil {
+					s.scheduleNextRebuild(userID, z, z.nextHandle, 0)
+				}
+			} else {
+				s.scheduleRebuild(userID, z)
+			}
 		}
 		if newlyVisible {
 			tracks, err := s.loadSummaries(ctx, z.persisted.Queue.Entries)

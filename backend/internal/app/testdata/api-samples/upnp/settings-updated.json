@@ -4,6 +4,8 @@
     "cast_enabled": true,
     "enabled": true,
     "shared": false,
+    "slimproto_enabled": true,
+    "slimproto_unavailable": null,
     "upnp_enabled": true
   },
   "status": 200

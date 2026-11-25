@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:18.1-alpine3.23@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29
+    environment:
+      POSTGRES_DB: slimproto_probe
+      POSTGRES_USER: slimproto_probe
+      POSTGRES_HOST_AUTH_METHOD: trust
+    tmpfs: [/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "slimproto_probe", "-d", "slimproto_probe"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+    cpus: 1
+    mem_limit: 256m
+
+  app:
+    image: alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db9275e198ad
+    entrypoint: ["/roomusic"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ROOMUSIC_ENV: development
+      ROOMUSIC_HTTP_ADDR: "0.0.0.0:8080"
+      ROOMUSIC_PUBLIC_URL: http://app:8080
+      ROOMUSIC_ALLOWED_LIBRARY_ROOTS: /music
+      ROOMUSIC_DATA_DIR: /tmp/data
+      ROOMUSIC_DATABASE_URL: postgres://slimproto_probe@postgres:5432/slimproto_probe?sslmode=disable
+      ROOMUSIC_FFMPEG_PATH: /ffmpeg
+      ROOMUSIC_AUDIO_ANALYSIS: "off"
+    volumes:
+      - ${SLIMPROTO_WORK:?}/roomusic:/roomusic:ro
+      - ${SLIMPROTO_WORK:?}/music:/music:ro
+      - ${SLIMPROTO_FFMPEG:?}:/ffmpeg:ro
+    ports: ["0.0.0.0::8080"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]
+      interval: 1s
+      timeout: 2s
+      retries: 40
+    user: "65534:65534"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 2
+    mem_limit: 512m
+
+  receiver:
+    image: ${ROOMUSIC_SQUEEZELITE_IMAGE:?}
+    # 直接以播放器为 PID 1，确保 A5 发出的 SIGKILL 作用于播放器进程。
+    entrypoint: ["/bin/sh", "-c", "exec /usr/bin/squeezelite \"$$@\" >/capture/audio.fifo 2>>/capture/player.log", "--"]
+    # 声明支持 705.6 kHz，按默认缓冲验证高采样率交付。-a 32 设置标准输出位深。
+    command: ["-n", "ROOMusic SlimProto Probe", "-m", "02:00:00:00:34:83", "-o", "-", "-a", "32", "-r", "705600,384000,352800,192000,96000,48000,44100", "-d", "slimproto=debug", "-d", "decode=info", "-d", "output=info"]
+    user: ${SLIMPROTO_RUN_USER:?}
+    volumes:
+      - ${SLIMPROTO_WORK:?}/receiver:/capture
+    cpus: 1
+    mem_limit: 128m
+
+  flac-probe:
+    image: python:3.13-alpine@sha256:bf12ecc0bea3f171d55145dd02c78b5eeb09f30ee2ac9cc2b4c9e4e8f5e30741
+    network_mode: service:app
+    entrypoint: ["python3", "-u", "/flac-probe.py"]
+    volumes:
+      - ./flac-probe.py:/flac-probe.py:ro
+      - ${SLIMPROTO_WORK:?}/receiver:/capture
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/flac-probe-ready"]
+      interval: 1s
+      timeout: 2s
+      retries: 10
+    cap_drop: [ALL]
+    cap_add: [NET_RAW]
+    security_opt: [no-new-privileges:true]
+    cpus: 1
+    mem_limit: 64m
+
+networks:
+  default:
+    driver: bridge

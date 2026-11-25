@@ -123,6 +123,10 @@ contentFeatures.dlna.org: DLNA.ORG_OP=00;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=0170000000
 - 对时：独立的 `ptp` 服务（`cmd/roomusic-ptp`，见部署合同）在 UDP 319/320 上运行 PTP，应用经 `ROOMUSIC_PTP_ADDR` 读取。必须 PTP 的型号（设备差异表，如 HomePod、Sonos Era）在时钟不可用时 `unsupported`，激活返回 `409 device_unsupported`；播放中失去时钟时自动重建为兼容会话。
 - 测试：`scripts/test-airplay.sh` 在独立 Docker 网络里用 shairport-sync（AirPlay 2 带 nqptp，与 classic）做真实接收端，覆盖原生 PTP、端口占用回退、播放中失去时钟与 AirPlay 1。
 
+## SlimProto
+
+与本合同共用设置、可见性、分配、占用与托管输出规则，其余见 [SlimProto 播放器合同](./slimproto-device-contracts.md)。
+
 ## 网卡变化、对时样本与锁（2026-11-25 审查修复）
 
 来源：任务 `11-25-lan-protocol-audit`（审查记录 `research/audit.md`，修复项 F1–F9）。

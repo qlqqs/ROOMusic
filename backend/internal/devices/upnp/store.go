@@ -11,7 +11,8 @@ import (
 
 func (s *Service) Settings(ctx context.Context) (Settings, error) {
 	var v Settings
-	err := s.db.QueryRowContext(ctx, `SELECT enabled, shared,upnp_enabled,cast_enabled,airplay_enabled FROM upnp_settings WHERE id=1`).Scan(&v.Enabled, &v.Shared, &v.UPnPEnabled, &v.CastEnabled, &v.AirPlayEnabled)
+	err := s.db.QueryRowContext(ctx, `SELECT enabled, shared,upnp_enabled,cast_enabled,airplay_enabled,slimproto_enabled FROM upnp_settings WHERE id=1`).Scan(&v.Enabled, &v.Shared, &v.UPnPEnabled, &v.CastEnabled, &v.AirPlayEnabled, &v.SlimProtoEnabled)
+	v.SlimProtoUnavailable = s.slimUnavailable()
 	return v, err
 }
 

@@ -45,7 +45,13 @@ func newEncoder(ctx context.Context, reservation processStarter, tool *ffmpeg.To
 	}
 	switch f.Codec {
 	case "flac":
-		args = append(args, "-c:a", "flac", "-compression_level", "5", "-f", "flac")
+		args = append(args, "-c:a", "flac", "-compression_level", "5")
+		// ffmpeg 默认块大小随采样率增大。高于 48 kHz 时可能超过 Squeezelite
+		// 按块预留的解码缓冲（352.8 kHz 起为 32768 帧）。48 kHz 及以下默认最多 4608 帧，保持默认。
+		if pcm.SampleRate > 48000 {
+			args = append(args, "-frame_size", "4096")
+		}
+		args = append(args, "-f", "flac")
 	case "alac":
 		sampleFormat := "s16p"
 		if f.BitDepth == 24 {

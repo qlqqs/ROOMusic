@@ -48,12 +48,18 @@ ROOMusic 由两个容器组成：应用和数据库（PostgreSQL）。在 NAS �
 
 | 入站端口 | 使用场景 |
 | --- | --- |
-| TCP `ROOMUSIC_HTTP_PORT`（默认 8090） | UPnP 和 Cast 接收端从 ROOMusic 拉取音频 |
+| TCP `ROOMUSIC_HTTP_PORT`（默认 8090） | UPnP、Cast 接收端与 SlimProto 播放器从 ROOMusic 拉取音频 |
 | UDP 5353 | AirPlay 和 Cast 的 mDNS 组播发现与应答 |
 | UDP 1900 | UPnP 设备的 SSDP 组播公告 |
 | UDP 临时端口 | UPnP 设备向 M-SEARCH 的源端口发送单播回包。只放行目的端口 1900 会漏掉这些回包 |
 | UDP 随机高端口 | AirPlay 在会话建立时协商本机计时和控制端口，接收端向这些端口发送计时请求和重传请求 |
 | UDP 319、320 | AirPlay 使用 PTP 精密计时时，分别接收事件报文和通用报文 |
+| TCP 3483、UDP 3483 | SlimProto 播放器（Squeezelite）连接控制端口；UDP 用于播放器广播查找服务器 |
+
+### Squeezelite 播放器
+
+piCorePlayer、moOde 等装了 Squeezelite 的播放器会自动找到 ROOMusic（需要在“设置 › 局域网设备”打开 SlimProto）。播放器原来连着别的服务器时，在播放器的设置里把服务器地址改成 NAS 的局域网 IP。
+NAS 上同时运行 Lyrion Music Server 时，两者会抢 3483 端口，设置页会提示。把 USB 解码器直接插在 NAS 上的用法见[生产部署说明](../deploy/production/README.md)的“Squeezelite 播放器”一节。
 
 ## 飞牛 fnOS
 

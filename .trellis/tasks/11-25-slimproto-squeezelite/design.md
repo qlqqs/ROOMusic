@@ -108,7 +108,7 @@
 设备投影：`Device{Kind:"slimproto", UDN:"slim:<mac>", Name, Model, Address: 播放器 IP, LocalAddress: 连接本机地址, Capabilities{Pause:true, Volume:"number"|"fixed", StreamFormats:["flac"], FormatDeclared:true, MaxSampleRate, MaxBitDepth:24, SlimProto:{model_name, firmware, declared_max_sample_rate, unsupported}}}`。
 
 - 能力串没有 `flc` 时 `unsupported:true`，`Acquire` 返回 `409 device_unsupported`（复用现有错误码）。
-- `MaxSampleRate` 取格式设置与播放器声明的较小值，再封顶 768000。固定版本的 ffmpeg 实测能编码到 768000（`research/ffmpeg-flac-rates.md`）；655350 以上不在 FLAC 的 streamable subset 里，播放器能否解码由真实播放器测试确认，失败则封顶改回 384000。
+- `MaxSampleRate` 取格式设置与播放器声明的较小值，再封顶 768000。渲染的 FLAC 编码在输出高于 48 kHz 时固定 `-frame_size 4096`：Squeezelite 按块预留 200 KiB 解码缓冲，ffmpeg 默认块大小在 352.8 kHz 起为 32768 帧，装不下（`research/ffmpeg-flac-rates.md`）。
 
 `deviceKind` 增加前缀 `slim:` → `slimproto`；`startProtocols` 的协议列表加 `slimproto`；`Acquire` 增加 `slimproto` 分支，启动 `slimproto.Output`，写法与 Cast 分支一致。
 
@@ -139,7 +139,7 @@
 
 - 单元测试：帧编解码（半包、粘包、超长、未知命令）、HELO 与能力串、STAT、命令构造的字节、jiffies 回绕、时钟估计器、音量换算、发现应答的来源过滤。
 - 进程内假播放器（`slimproto` 包内的测试辅助）：能完成 HELO、回 STAT、按 `strm s` 发 HTTP 请求并读流，用于 `upnp` 层与 `Output` 的集成测试，覆盖开流、暂停、继续、接续流、断线。
-- 真实播放器：`scripts/test-slimproto.sh` 在独立 Compose 项目与网络里跑 ROOMusic 测试实例加一台 Squeezelite（Alpine 的 `squeezelite` 包）。Squeezelite 用 `-o - -r <采样率>` 输出到标准输出，接一个按名义采样率读取的计时程序（Python，记录读出的字节数与时刻）。覆盖：广播发现（不带 `-s`）、96k、192k 与 705.6k 原采样率交付（705.6k 验证 streamable subset 以外的 FLAC）、上限调低、同格式无缝与换采样率接续、暂停继续、杀掉播放器后离线。
+- 真实播放器：`scripts/test-slimproto.sh` 在独立 Compose 项目与网络里跑 ROOMusic 测试实例加一台 Squeezelite（Alpine 的 `squeezelite` 包）。Squeezelite 用 `-o - -r <采样率>` 输出到标准输出，接一个按名义采样率读取的计时程序（Python，记录读出的字节数与时刻）。覆盖：广播发现（不带 `-s`）、96k、192k、352.8k 与 705.6k 原采样率交付（默认缓冲，验证固定块大小）、上限调低、同格式无缝与换采样率接续、暂停继续、杀掉播放器后离线。
 - 3483 占用：测试里先占住端口再启动，核对 `port_in_use` 与其他协议照常。
 
 ## 7. 兼容与回滚
