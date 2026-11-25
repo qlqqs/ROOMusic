@@ -1,5 +1,0 @@
-{"file": ".trellis/spec/backend/library-scan-grouping.md", "reason": "同目录归组与散曲规则"}
-{"file": ".trellis/spec/backend/library-scan-incremental.md", "reason": "解析与归组版本号升级规则"}
-{"file": ".trellis/spec/backend/index.md", "reason": "后端规范索引"}
-{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范索引"}
-{"file": ".trellis/spec/frontend/component-catalog.md", "reason": "播放栏与组件约定"}
