@@ -1,6 +1,6 @@
 # 在 NAS 上安装
 
-ROOMusic 由两个容器组成：应用和数据库（PostgreSQL）。在 NAS 的 Docker 界面里新建一个“项目”（有的叫 Compose、应用），粘贴一份 Compose，填好音乐目录就能启动。
+ROOMusic 由三个容器组成：应用、数据库（PostgreSQL）和为 AirPlay 2 对时的 `ptp`。在 NAS 的 Docker 界面里新建一个“项目”（有的叫 Compose、应用），粘贴一份 Compose，填好音乐目录就能启动。
 不需要命令行，也不需要运行任何脚本。
 
 ## 开始之前

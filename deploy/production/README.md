@@ -1,6 +1,6 @@
 # 部署说明
 
-ROOMusic 生产环境只包含应用和 PostgreSQL 18 两个容器，默认固定名称为 `roomusic-app`、`roomusic-postgres`。应用自带备份和 ffmpeg。Linux 上应用默认使用宿主机网络以发现局域网渲染器，数据库在独立的项目网络内，仅向宿主机回环地址发布端口。
+ROOMusic 生产环境包含应用、PostgreSQL 18 和为 AirPlay 2 对时的 `ptp` 三个容器，默认固定名称为 `roomusic-app`、`roomusic-postgres`、`roomusic-ptp`。应用自带备份和 ffmpeg。Linux 上应用默认使用宿主机网络以发现局域网渲染器，数据库在独立的项目网络内，仅向宿主机回环地址发布端口。
 宿主机需要 Docker Engine 24 或更新版本，以及 Docker Compose v2.20.1 或更新版本。下文命令都在部署目录里执行。
 
 数据全部存放在部署目录的宿主机文件夹中，不创建 Docker 数据卷。
@@ -106,6 +106,8 @@ docker compose exec app /app/roomusic --version
 从旧版包含 `init` 的 Compose 切换时，先更新部署文件，并执行一次 `docker compose up -d --wait --remove-orphans`，清除该项目遗留的初始化容器；已有目录和密码继续复用。固定名称变更会重建应用和数据库容器，安排在维护窗口执行。
 
 要固定或降级版本，把 `.env` 里的 `ROOMUSIC_VERSION` 改成具体版本（不带 `v`），再执行同样的命令。
+
+升级后会自动删除旧的 ALAC 转码缓存。
 
 应用启动时会比较自己的数据库结构和数据库里的现状：
 

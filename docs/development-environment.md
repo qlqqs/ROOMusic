@@ -24,6 +24,48 @@ mise exec -- node --version
   这时手动提交源任务目录的删除（以及被改写的父子任务 `task.json`）：`git add -A .trellis/tasks/<任务目录>` 后提交。
   spec 与文档引用归档文档时写成不带链接的路径文字，并注明“本机归档”。
 
+## 本地开发
+
+Go 和 Node 在宿主机运行，PostgreSQL 由根目录的 `compose.dev.yaml` 提供，只监听 `127.0.0.1`；Vite 与 Go 后端监听 `0.0.0.0`，局域网设备可以访问。
+
+```bash
+mise install
+cp .env.dev.example .env.dev # 填写本地 PostgreSQL 密码
+make dev                    # PostgreSQL + Go 后端（8080）+ Vite（5173）
+```
+
+前端修改热更新，Go 和迁移文件修改会自动重启后端；后端启动后很快退出时按 1、2、4…秒退避重启，最长间隔 30 秒。`Ctrl-C` 一起停止。开发和生产可以在同一台机器上同时运行，互不影响。
+
+- `make dev-reset`：清空开发库的业务数据，保留迁移。
+- `./scripts/reset-password.sh <用户名>`：开发环境重置密码。
+- 播放 ALAC 需要 ffmpeg：运行 `./scripts/ffmpeg-pinned.sh` 取出固定版本，或使用系统自带的 ffmpeg，并把路径写进 `ROOMUSIC_FFMPEG_PATH`。
+
+前端构建产物不提交：`npm run build` 写入被忽略的 `backend/cmd/roomusic/web/dist`，生产镜像构建时会重新生成。本地直接运行 Go 后端而没有构建前端时，接口照常可用，页面返回“前端未构建”的提示。
+
+## 测试
+
+```bash
+(cd backend && go test ./...)                 # 后端单元测试，没有测试库时跳过集成测试
+./scripts/test-integration.sh                 # 用一次性 PostgreSQL 18 跑集成测试
+(cd frontend && npm ci && npm run lint && npm run typecheck && npm run test)
+(cd frontend && npm run test:e2e)             # Playwright，不需要启动后端
+```
+
+## 发布
+
+先在 `main` 上提交更新说明 `docs/releases/vX.Y.Z.md`，再检查并打标签：
+
+```bash
+scripts/release-check.sh vX.Y.Z               # 只读检查，缺少或为空的更新说明会失败
+git tag -a vX.Y.Z -m "ROOMusic vX.Y.Z" && git push origin vX.Y.Z
+```
+
+更新说明写给使用者：开头一句概括本版，再列出功能变化和修复；有数据库迁移、配置调整、降级影响或首次扫描变慢时，
+另写“升级注意”。镜像地址和完整变更链接由发布流程追加，不用手写。
+
+推送标签后，GitHub Actions 会确认该提交在 `main` 上的 CI 已经通过，然后构建 amd64 和 arm64 镜像，推送到
+`ghcr.io/qlqqs/roomusic`，并以这份更新说明发布 Release。
+
 ## 浏览器测试与截图
 
 Playwright 只用 Chromium。本机缺 Chromium 的系统库（`libatk` 等）时，`apt-get download` 后 `dpkg -x` 解到 `temp/` 下，
