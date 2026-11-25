@@ -249,8 +249,7 @@ it("外部源里的可选插件密钥不应标为 ROOMusic 内置", async () => 
   curation.sources.push(enabledSourceWithOptionalKey);
   renderApp({ path: "/settings/curation" });
 
-  const form = await within(await sourcesCard()).findByRole("form", { name: `${name} 的personal` });
-  const key = within(form).getByLabelText("personal");
+  const key = await within(await sourcesCard()).findByRole("button", { name: `填写 ${name} 的personal` });
   expect(descriptionOf(key) ?? "", "可选插件密钥由管理员自行配置").not.toContain("ROOMusic 已内置");
 });
 

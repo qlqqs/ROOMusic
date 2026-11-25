@@ -1,7 +1,6 @@
 package postgres
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
@@ -11,24 +10,15 @@ import (
 )
 
 func TestPostgreSQLC8Migration56ConstraintsAndRoundTrip(t *testing.T) {
-	ctx := context.Background()
-	db, err := Open(ctx, postgrestest.NewSchema(t, "c8_migration_"))
+	available, err := loadMigrations(migrations.Files)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
-	up, err := migrations.Files.ReadFile("0056_steward_web.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	down, err := migrations.Files.ReadFile("0056_steward_web.down.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	initial, err := postgrestest.Snapshot(ctx, db)
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := openMigrationTestDatabase(t)
+	previous := migrationPrefix(available, 55)
+	current := migrationPrefix(available, 56)
+	rollbackApply(t, db, current)
+	initial := rollbackSnapshot(t, db)
 	user, conversation := uuid.New(), uuid.New()
 	if _, err = db.Exec(`INSERT INTO users(id,username,password_hash,role) VALUES($1,'c8-migration','synthetic','admin')`, user); err != nil {
 		t.Fatal(err)
@@ -56,9 +46,7 @@ func TestPostgreSQLC8Migration56ConstraintsAndRoundTrip(t *testing.T) {
 			t.Fatalf("约束接受了 %s", statement)
 		}
 	}
-	if _, err = db.Exec(string(down)); err != nil {
-		t.Fatal(err)
-	}
+	rollbackApply(t, db, previous)
 	var protocol string
 	var probe, overrides []byte
 	if err = db.QueryRow(`SELECT protocol,probe_result,overrides FROM steward_user_settings WHERE user_id=$1`, user).Scan(&protocol, &probe, &overrides); err != nil {
@@ -73,9 +61,7 @@ func TestPostgreSQLC8Migration56ConstraintsAndRoundTrip(t *testing.T) {
 	if _, err = db.Exec(`UPDATE steward_user_settings SET protocol='responses'`); err == nil {
 		t.Fatal("回退未恢复旧协议约束")
 	}
-	if _, err = db.Exec(string(up)); err != nil {
-		t.Fatal(err)
-	}
+	rollbackApply(t, db, current)
 	var source string
 	if err = db.QueryRow(`SELECT search_source,probe_result FROM steward_user_settings WHERE user_id=$1`, user).Scan(&source, &probe); err != nil {
 		t.Fatal(err)
@@ -84,12 +70,8 @@ func TestPostgreSQLC8Migration56ConstraintsAndRoundTrip(t *testing.T) {
 	if source != "none" || p["native_search"] != "unknown" || p["responses_available"] != false {
 		t.Fatalf("升级默认值=%s %s", source, probe)
 	}
-	db.Exec(`DELETE FROM users WHERE id=$1`, user)
-	after, err := postgrestest.Snapshot(ctx, db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if diff := postgrestest.Diff(initial, after); len(diff) != 0 {
+	rollbackExec(t, db, `DELETE FROM users WHERE id=$1`, user)
+	if diff := postgrestest.Diff(initial, rollbackSnapshot(t, db)); len(diff) != 0 {
 		t.Fatalf("结构往返变化=%v", diff)
 	}
 }
