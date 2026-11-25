@@ -21,7 +21,7 @@ export function unavailableRatingText(failed: boolean): string {
 
 type RatingControlProps = {
   target: RatingTarget;
-  size?: "md" | "lg";
+  size?: "sm" | "md" | "lg";
   /** 写入失败的那句话：默认显示在星级旁边；“screen-reader”只给读屏。 */
   message?: "visible" | "screen-reader";
   /** 头部用：窄屏时星级排到操作行下面单独一行，宽屏时与心形之间一条细线。 */

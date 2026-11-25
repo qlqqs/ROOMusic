@@ -52,6 +52,10 @@
   color: var(--color-accent-400);
 }
 
+.sm .star {
+  width: 24px;
+}
+
 .lg {
   height: 40px;
 }

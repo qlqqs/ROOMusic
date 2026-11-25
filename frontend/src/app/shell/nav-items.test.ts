@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { visibleNavGroups } from "./nav-items";
 
 const listening = { label: "聆听", items: ["概览", "专辑", "艺人"] };
-const myMusic = { label: "我的音乐", items: ["我喜欢的音乐", "我的收藏", "播放历史", "我的歌单"] };
+const myMusic = { label: "我的音乐", items: ["我喜欢的音乐", "我的收藏", "我的评分", "播放历史", "我的歌单"] };
 
 describe("聆听、我的音乐与管理导航", () => {
   it("普通成员看到聆听与我的音乐两组", () => {

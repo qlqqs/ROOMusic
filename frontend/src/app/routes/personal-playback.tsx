@@ -30,7 +30,7 @@ function playableOf(queue: PersonalQueueDTO, table: CapabilityTable) {
 }
 
 /**
- * 收藏的曲目、或一个歌单的“播放全部”：每次按下都向服务端读一次（先去掉文件缺失的，再按顺序取前 10,000 首），
+ * 收藏的曲目、一个歌单或当前筛选下评过分的曲目的“播放全部”：每次按下都向服务端读一次（先去掉文件缺失的，再按顺序取前 10,000 首），
  * 去掉这个浏览器放不了的，替换当前队列开始播放；原来的队列满了也不影响。一首都不能播放、读取失败或身份变了时，当前队列不变。
  */
 export function PersonalPlayAll({ source, label = "播放全部", trailing }: { source: PersonalQueueSource; label?: string; /** 跟在按钮后面的操作（歌单的“···”）。 */ trailing?: ReactNode }) {
@@ -59,7 +59,7 @@ export function PersonalPlayAll({ source, label = "播放全部", trailing }: { 
           return;
         }
         // 侧栏据此在这个歌单（或“我喜欢的音乐”）旁标出正在播放。
-        recordOrigin({ key: source.kind === "playlist" ? `playlist:${source.playlistId}` : "favorites", trackIds: tracks.map((track) => track.trackId) });
+        recordOrigin({ key: source.kind === "playlist" ? `playlist:${source.playlistId}` : source.kind, trackIds: tracks.map((track) => track.trackId) });
         setNotice(personalQueueNotice(tracks.length, data, unsupported));
         setQuiet(unsupported === 0 && data.missing_count === 0 && data.omitted_count === 0);
       },

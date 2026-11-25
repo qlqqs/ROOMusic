@@ -8,7 +8,7 @@ export function RatingBadge({ kind, id }: { kind: FavoriteKind; id: string }) {
   const rating = useRatingStatus().ratingOf(kind, id);
   if (rating === undefined || rating === 0) return null;
   return (
-    <span className={styles.badge} role="img" aria-label={`${rating} 星`}>
+    <span className={styles.badge} role="img" aria-label={`${rating} 星`} data-rating-badge="">
       {Array.from({ length: rating }, (_, index) => (
         <Star key={index} size={10} strokeWidth={1.5} aria-hidden="true" />
       ))}

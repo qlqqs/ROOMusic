@@ -35,6 +35,10 @@ export const personalKeys = {
     viewerQueryKey(generation, "personal", "ratings", "lookup", lookupIdsKey(ids)),
   ratingArtistLookup: (generation: number, artistIds: readonly string[]) =>
     viewerQueryKey(generation, "personal", "ratings", "lookup", { artistIds: [...new Set(artistIds.map((id) => id.toLowerCase()))].sort() }),
+  /** “我的评分”的一页：评分写入后随评分的全部查询失效，按新值重新读取。 */
+  ratedList: (generation: number, kind: FavoriteKind, params: { minRating: number; sort: string; page: number; pageSize: number }) =>
+    viewerQueryKey(generation, "personal", "ratings", "list", kind, params),
+  ratingQueue: (generation: number, filter: { minRating: number; sort: string }) => viewerQueryKey(generation, "personal", "ratings", "queue", filter),
   /** 评分的写操作（前缀）：批量状态据此叠加进行中的写入。 */
   ratingWrites: (generation: number) => viewerQueryKey(generation, "personal", "rating-write"),
   ratingWrite: (generation: number, kind: FavoriteKind, id: string) => viewerQueryKey(generation, "personal", "rating-write", kind, id.toLowerCase()),

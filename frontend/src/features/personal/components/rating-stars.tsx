@@ -20,7 +20,8 @@ type RatingStarsProps = {
   unavailableText: string;
   /** 写入进行中：显示新值，不能再改。 */
   busy?: boolean;
-  size?: "md" | "lg";
+  /** sm 固定 24px 一颗（专辑卡片两列时也放得下）；md 在触屏上放大到 34px；lg 是浮层里的大号。 */
+  size?: "sm" | "md" | "lg";
   /** 写入一个值（0 是清除）；只在值确实变化时调用。 */
   onCommit: (rating: number) => void;
   autoFocus?: boolean;
@@ -108,7 +109,7 @@ export function RatingStars({ label, value, unavailableText, busy = false, size 
             }}
             onClick={() => commit(star === current ? 0 : star)}
           >
-            <Star size={size === "lg" ? 22 : 15} strokeWidth={1.7} aria-hidden="true" />
+            <Star size={size === "lg" ? 22 : size === "sm" ? 14 : 15} strokeWidth={1.7} aria-hidden="true" />
           </span>
         ))}
       </div>

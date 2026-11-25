@@ -210,6 +210,44 @@ function queueCountsProblem(queue: QueueCounts): string | null {
 
 const favoriteQueueDecoder = checked(d.object({ ...queueCountsShape, revision: count() }), queueCountsProblem);
 
+// ---- 我的评分（列表与“播放全部”）----
+
+// 评分列表不带集合版本：评分改了，本页按新值重新读取（条目会移位或被筛掉），不返回 409。
+const ratedFields = { rating: ratingValue(), rated_at: d.timestamp() };
+
+const ratedTracksPageDecoder = checked(
+  d.object({
+    items: d.array(d.object({ track: trackSummaryDecoder, ...ratedFields }), { max: MAX_FAVORITES_PAGE_SIZE }),
+    pagination: paginationDecoder(MAX_FAVORITES_PAGE_SIZE),
+  }),
+  (page) => pageProblem(page) ?? duplicateProblem(page.items.map((item) => item.track.track_id), "items"),
+);
+
+// 专辑的显示同收藏：暂时不可用时标题与艺人是评分时记下的值。
+const ratedAlbumsPageDecoder = checked(
+  d.object({
+    items: d.array(d.object({ album: personalAlbumDecoder, ...ratedFields }), { max: MAX_FAVORITES_PAGE_SIZE }),
+    pagination: paginationDecoder(MAX_FAVORITES_PAGE_SIZE),
+  }),
+  (page) => pageProblem(page) ?? duplicateProblem(page.items.map((item) => item.album.group_id), "items"),
+);
+
+// 艺人按合并后的艺人一行，rating 是等价锚点里最近一次的评分。
+const ratedArtistsPageDecoder = checked(
+  d.object({
+    items: d.array(
+      checked(d.object({ artist: artistSummaryDecoder, available: d.boolean(), ...ratedFields }), (item) =>
+        item.available === item.artist.available ? null : "available 与 artist.available 不一致",
+      ),
+      { max: MAX_FAVORITES_PAGE_SIZE },
+    ),
+    pagination: paginationDecoder(MAX_FAVORITES_PAGE_SIZE),
+  }),
+  (page) => pageProblem(page) ?? duplicateProblem(page.items.map((item) => item.artist.id), "items"),
+);
+
+const ratingQueueDecoder = checked(d.object(queueCountsShape), queueCountsProblem);
+
 // ---- 歌单 ----
 
 // 歌单的状态：撤销可以让曲目数暂时超过上限，over_limit_count 就是超出的数量。
@@ -362,6 +400,10 @@ export const decodeFavoriteLookup = d.defineDecoder(favoriteLookupDecoder);
 export const decodeFavoriteQueue = d.defineDecoder(favoriteQueueDecoder);
 export const decodeRatingResult = d.defineDecoder(ratingResultDecoder);
 export const decodeRatingLookup = d.defineDecoder(ratingLookupDecoder);
+export const decodeRatedTracksPage = d.defineDecoder(ratedTracksPageDecoder);
+export const decodeRatedAlbumsPage = d.defineDecoder(ratedAlbumsPageDecoder);
+export const decodeRatedArtistsPage = d.defineDecoder(ratedArtistsPageDecoder);
+export const decodeRatingQueue = d.defineDecoder(ratingQueueDecoder);
 export const decodePlaylistsPage = d.defineDecoder(playlistsPageDecoder);
 export const decodePlaylistCreated = d.defineDecoder(playlistCreatedDecoder);
 export const decodePlaylistDetail = d.defineDecoder(playlistDetailDecoder);
@@ -387,6 +429,12 @@ export type FavoriteLookupDTO = d.Infer<typeof favoriteLookupDecoder>;
 export type FavoriteQueueDTO = d.Infer<typeof favoriteQueueDecoder>;
 export type RatingResultDTO = d.Infer<typeof ratingResultDecoder>;
 export type RatingLookupDTO = d.Infer<typeof ratingLookupDecoder>;
+export type RatedTracksPageDTO = d.Infer<typeof ratedTracksPageDecoder>;
+export type RatedTrackDTO = RatedTracksPageDTO["items"][number];
+export type RatedAlbumsPageDTO = d.Infer<typeof ratedAlbumsPageDecoder>;
+export type RatedAlbumDTO = RatedAlbumsPageDTO["items"][number];
+export type RatedArtistsPageDTO = d.Infer<typeof ratedArtistsPageDecoder>;
+export type RatedArtistDTO = RatedArtistsPageDTO["items"][number];
 export type PlaylistStateDTO = d.Infer<typeof playlistStateDecoder>;
 export type PlaylistSummaryDTO = d.Infer<typeof playlistSummaryDecoder>;
 export type PlaylistsPageDTO = d.Infer<typeof playlistsPageDecoder>;
