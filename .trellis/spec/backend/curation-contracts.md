@@ -929,7 +929,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ## 22. 规则版本、识别摘要与发行分类（整理链 A，2026-11-25）
 
-依据 ADR 0006 第 16.2 节。设计细节见归档任务 `11-25-curation-chain-a-authenticity` 的 `design.md`。
+依据 ADR 0006 第 16.2 节。
 
 ### 22.1 三种规则版本
 
