@@ -1,7 +1,7 @@
 # 整理链 C：程序匹配规则与终止状态
 
-状态：规划中。父任务：`.trellis/tasks/11-25-curation-chain`。需求、原则与总体设计见父任务的 `prd.md`、`design.md`，
-现状与审查发现见父任务的 `research/`。本文件是启动前的范围说明，启动时再补全（复杂的加 `design.md`、`implement.md`）。
+状态：实施中（2026-11-25）。父任务：`.trellis/tasks/11-25-curation-chain`。需求、原则与总体设计见父任务的 `prd.md`、`design.md`，
+现状与审查发现见父任务的 `research/`。设计见本目录 `design.md`（实现代理先写、主代理审阅后实施），执行见 `implement.md`。
 
 ## 目标
 
