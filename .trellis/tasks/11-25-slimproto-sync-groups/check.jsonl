@@ -1,4 +1,0 @@
-{"file": ".trellis/tasks/11-25-slimproto-sync-groups/prd.md", "reason": "验收"}
-{"file": ".trellis/tasks/11-25-slimproto-sync-groups/design.md", "reason": "接口与测试要点"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试与门禁"}
-{"file": ".trellis/spec/backend/database-verification.md", "reason": "迁移往返"}
