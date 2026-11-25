@@ -1,0 +1,13 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "后端目录与包边界"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误处理约定"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "日志字段与脱敏"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量要求"}
+{"file": ".trellis/tasks/11-25-opensubsonic-api/prd.md", "reason": "父任务需求与已定决定"}
+{"file": ".trellis/tasks/11-25-opensubsonic-api/design.md", "reason": "Subsonic 共用协议约定"}
+{"file": ".trellis/spec/backend/identity-contracts.md", "reason": "用户、密码、限流"}
+{"file": ".trellis/spec/backend/identity-origin-contracts.md", "reason": "同源与认证边界"}
+{"file": ".trellis/spec/backend/steward-config-contracts.md", "reason": "实例密钥与加密存储"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移约定"}
+{"file": ".trellis/spec/backend/diagnostics-contracts.md", "reason": "诊断导出脱敏"}
+{"file": ".trellis/spec/frontend/interface-layout-guidelines.md", "reason": "设置页布局"}
+{"file": ".trellis/tasks/11-25-subsonic-foundation/prd.md", "reason": "本子任务需求"}

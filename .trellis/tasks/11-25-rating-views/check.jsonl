@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量要求"}
+{"file": ".trellis/spec/backend/database-verification.md", "reason": "EXPLAIN 与数据库验证方法"}
+{"file": ".trellis/spec/backend/steward-runtime-contracts.md", "reason": "工具身份、分页上限与输出排除字段核对"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量要求"}
+{"file": ".trellis/tasks/11-25-rating-views/prd.md", "reason": "验收标准"}

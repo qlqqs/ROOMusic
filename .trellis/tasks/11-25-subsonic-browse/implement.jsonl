@@ -1,0 +1,14 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "后端目录与包边界"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误处理约定"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "日志字段与脱敏"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量要求"}
+{"file": ".trellis/tasks/11-25-opensubsonic-api/prd.md", "reason": "父任务需求与已定决定"}
+{"file": ".trellis/tasks/11-25-opensubsonic-api/design.md", "reason": "Subsonic 共用协议约定"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "目录读取接口"}
+{"file": ".trellis/spec/backend/catalog-summary-contracts.md", "reason": "曲目与专辑摘要"}
+{"file": ".trellis/spec/backend/search-contracts.md", "reason": "搜索"}
+{"file": ".trellis/spec/backend/genre-contracts.md", "reason": "流派"}
+{"file": ".trellis/spec/backend/default-version-contracts.md", "reason": "默认版本"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "艺人"}
+{"file": ".trellis/spec/backend/listening-contracts.md", "reason": "播放次数与最近播放"}
+{"file": ".trellis/tasks/11-25-subsonic-browse/prd.md", "reason": "本子任务需求"}

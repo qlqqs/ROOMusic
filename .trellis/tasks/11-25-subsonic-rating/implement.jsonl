@@ -1,0 +1,9 @@
+{"file": ".trellis/tasks/11-25-opensubsonic-api/prd.md", "reason": "父任务需求与已定决定"}
+{"file": ".trellis/tasks/11-25-opensubsonic-api/design.md", "reason": "Subsonic 共用协议约定"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "后端目录与包边界"}
+{"file": ".trellis/spec/backend/personal-contracts.md", "reason": "收藏的表结构、锁序、扫描转移与艺人解析，评分照此实现"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "事务、锁与迁移约定"}
+{"file": ".trellis/spec/backend/release-merge-contracts.md", "reason": "专辑合并与撤销的记录格式、收藏搬迁"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误处理约定"}
+{"file": ".trellis/spec/frontend/personal-guidelines.md", "reason": "心形与个人状态的前端做法"}
+{"file": ".trellis/spec/frontend/playback-and-personal-state.md", "reason": "个人状态的查询与同步"}
