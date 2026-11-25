@@ -24,8 +24,7 @@ M7 子任务 A（2026-11）给后台自动整理准备好写入、记录与撤�
 
 | 条款 | 将改为 | 子任务 |
 | --- | --- | --- |
-| 17.2–17.4 待定项每批 5 项交管家运行、审查转人工与没通过的成为例外等管理员处理 | 三档识别兜底；通过完整结构核对的外部编号免审；例外改为“未采用的建议”，不计待办；无佐证的发现先联网求证 | E |
-| 第 21 节与“网络搜索与身份待定项” | 联网兜底单独的每日上限；模型巡检给出规范身份 | D、E |
+| 第 21 节与“网络搜索与身份待定项” | 模型巡检给出规范身份（联网兜底与子额度已由第 26 节落地） | D |
 
 ## 2. 数据模型（迁移 0058）
 
@@ -668,6 +667,9 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 17.2 调度、停止与收尾
 
+2026-11-25 起由第 26 节修订：任务分档、D4 免审、未采用的建议。下文与第 26 节不一致处以第 26 节为准。
+
+
 应用在管家恢复完成后启动 `model.Scheduler.Run(ctx)`。调度器先关闭遗留 model 批次，作废遗留后台方案，将处理中的项放回队列并清除领取与重审信息，保留未处理次数。默认每分钟轮询。启动与每步开始前检查开关、开启者仍是有效管理员、暂停、扫描、待定项目标所需来源、开启者的管家配置和每日额度。每一步还核对开启者身份与启动时相同。
 
 先处理已到期的重审会话，使用其待审后台方案。方案已作废或归属已变更则释放待定项。新会话归开启者，按创建时间和 ID 领取最多五个到期且目标有效的项。发行需可见且 MusicBrainz 启用，艺人需为有效身份且网络搜索可用，行锁使用 `SKIP LOCKED`。第一条消息只携带程序产生的项 ID、种类与冲突代码。候选和证据经工具的不可信输出返回。模型批次在首次写入时打开，运行收尾时关闭。
@@ -1124,3 +1126,46 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | `successful_requests_per_second`、`completed_items_per_second` | 最近 5 分钟实测；没有样本为 null；声纹没有请求速度 |
 | `eta_seconds` | 剩余项数除以实测项速度，加上来源冷却的剩余时间；无法估计为 null，排空为 0 |
 | `pause_reason`、`source`、`retry_at` | `disabled`、`paused`、`waiting_for_scan`、`waiting_for_stability`、`waiting_for_fingerprint`、`source_disabled`、`rate_limited`、`source_unavailable`；来源暂停时带来源与预计恢复时刻 |
+
+## 26. 模型兜底（整理链 E，2026-11-25，审查策略第 5 版）
+
+依据 ADR 0006 第 16.6 节。迁移 0091。模型用量不是优化目标，限制只为防写错与防失控。
+
+### 26.1 任务
+
+| 任务 | 领取 | 运行形态与上限 | 去向 |
+| --- | --- | --- | --- |
+| 第一档选择 | 有可用候选的 `release_match`、`recording_match`，发行与录音分批 | 一次主模型请求，不带工具与原生搜索；首条消息含本地真实性、逐碟曲序与时长、每个候选的完整曲目；严格 JSON：`select`（只接受发给该项的编号）或 `upgrade` | 选定的交 26.2；升级进 `waiting_route/lookup` |
+| 第二档自己查 | `waiting_route/lookup`（第一档升级与 C 的零候选），`LookupTierReady` 为真才启动 | 管家后台运行，按艺人打包，`search_music_metadata`、`get_music_metadata`、提交任何 MB 编号、放弃；每项 20 次工具调用、15 万 token | 放弃或触限：网络搜索可用转 `web`，否则 `FinishUnlisted` |
+| 核对判断 | `verify_artist_credit`（C 的署名提案）、`verify_artist_merge`、`verify_name`；`release_merge` 单独打包 | 只开放提交判断；身份取同一/不同/拿不准，纠正取错字/写法差异/译名差异/拿不准；沿用管家单次运行的总保护 | 写法或译名差异不改；有主张而缺证据转联网 |
+| 联网兜底 | `waiting_route/web`、第二档放弃、无外部对应的 `artist_identity`、待求证的建议；按艺人在库专辑组数降序 | `web_search` 或原生搜索、`fetch_page`、提交；每项 30 次工具调用、30 万 token；单独的每日上限 `web_daily_token_limit` | 无结果或触限即结束；发行识别无对应调用 `FinishUnlisted` |
+
+- 每日上限（总的与联网的）在项边界检查（`BeforeModelItem`），已开始的项可以完成。单项上限按每次请求后实际的 usage 与工具调用次数累计，超过即停止该项的新调用。
+- 联网用量同时计入总用量；`curation_model_usage` 加联网输入、输出列。
+
+### 26.2 外部编号的写入（D4）
+
+- `ModelMatcher.Plan` 生成完整结构核对：专辑按碟与位置一一配对，外部明细完整，总数与各碟曲数相等且多于 4 首，至少一对可比，所有可比时长都在容差内；散放单曲要求时长、标题、艺人规范化后都相等。
+- 通过的由后端直接写入，记录 `verification=album_structure|recording_duration_text`，不送审。没通过的送独立审查，记录 `verification=independent_review`；
+  审查批准后后端再复判，时长或真实文字的反证仍在、又没有独立正面证据时拒绝。核对与审查都在第一笔写入之前。
+
+### 26.3 佐证与写入
+
+| 佐证 | 后端核实 | 级别（第 24 节） |
+| --- | --- | --- |
+| 外部 | 按准确对象编号读回外部发行、录音或艺人，比较具体字段、署名位置与别名 | 3；事实类字段（年份、厂牌、目录号、条码）只收外部对象实际给出的值 |
+| 库内 | 重读真实标签或人工确定的事实：两艺人各有规范化同名且曲目数相等的发行，或同一发行不同曲目的同一署名位置；名字纠正按独立记录的多数写法（过半，平票无结论） | 2，来源 `library_evidence` |
+| 带引用的网页 | 绑定本项实际的搜索结果，后端经安全取页读回正文并核对摘录确实在页中 | 2，来源 `web_search` |
+
+- 只有模型自己的判断（即使多次一致）不写入。没有佐证、网络搜索可用时先转联网求证；仍没有的记为未采用的建议。
+- 艺人合并新入口经 `operations.Run` 与 `CurationMergeExecutor`；两个名字曾在同一首曲目上并列署名即拒绝。发行合并只接受结构或外部强证据。
+- 纠正与补空分开：纠正要求身份已由结构确认、外部或库内给出不同的值、模型判断为错字且审查通过；规范化后相同、繁简、大小写、标点与外部源的特殊写法不改。
+
+### 26.4 未采用的建议
+
+- 复用 `curation_model_exceptions`：新增 `reason_code`（`review_rejected`、`review_uncertain`、`verification_declined`、`no_evidence`、`unverified_fact`）、`reasons`、`evidence`、`can_accept`；审查之前就结束的 `review` 为空。
+  判断为不同身份、写法或译名差异的以 `tool=observation, can_accept=false` 留档。
+- 写建议、结清原待定项与相关提案同一事务。迁移把旧的 `waiting_human` 待定项结清为 `resolved/suggestion_recorded`，例外保持 `open` 可手动采纳。
+- 手动采纳与不采纳沿用 `POST /exceptions/{id}/accept|decline`；不采纳才写“不再提出”。进度的 `waiting_human` 固定为 0，建议不计入待办。
+- 接口：`GET/PUT /settings` 增 `web_daily_token_limit`（null 不限，PUT 缺省保留）；`GET /progress` 的 `model` 增 `web_daily_token_limit`、`web_today`、`web_limit_reached`、`web_retry_at`；
+  `GET /exceptions` 每项增上述四个字段，`review` 可空，`kind` 增三种 `verify_*`，`tool` 增 `submit_artist_media`、`submit_verification`、`observation`。

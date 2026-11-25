@@ -90,6 +90,8 @@ func SaveWorkState(ctx context.Context, q Execer, s WorkState) error {
 type PendingItem struct {
 	ConversationID                                          string
 	ClaimedAt, NextAttemptAt                                *time.Time
+	ItemToolCalls                                           int
+	ItemTokens                                              int64
 	Attempts, ReviewRetries                                 int
 	ShelvedReason                                           *string
 	ID, TargetType, TargetID, ArtistID, Kind, Status, Route string
@@ -102,19 +104,33 @@ type PendingItem struct {
 	ResolvedAt                                              *time.Time
 }
 
+// 程序再见到同一组候选时，保留模型已升级的路线及待求证事实。
+const sameModelInputsSQL = `(COALESCE(p.identity_digest,p.input_digest)=COALESCE(excluded.identity_digest,excluded.input_digest)
+ AND p.candidates=excluded.candidates AND p.conflicts=excluded.conflicts)`
+
 func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
 	target, insert := item.TargetID, `INSERT INTO curation_pending_items AS p(target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,match_rule_version,identity_digest,route)
- VALUES('release',$1,$2,CASE WHEN $10 IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''),NULLIF($10,''))
- ON CONFLICT(target_type,target_id,kind) WHERE status <> 'resolved'`
+ SELECT 'release',$1,$2,CASE WHEN $10 IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''),NULLIF($10,'')
+ WHERE NOT EXISTS (SELECT FROM curation_pending_items old WHERE old.target_type='release' AND old.target_id=$1 AND old.kind=$2
+ AND old.resolution='suggestion_recorded' AND COALESCE(old.identity_digest,old.input_digest)=COALESCE(NULLIF($9,''),$4)
+ AND old.candidates=COALESCE($6::jsonb,'[]') AND old.conflicts=COALESCE($7::jsonb,'[]'))
+ ON CONFLICT(target_type,target_id,kind) WHERE status <> 'resolved' AND kind NOT IN ('verify_artist_credit','verify_artist_merge','verify_name')`
 	if item.TargetType == "artist" {
 		target, insert = item.ArtistID, `INSERT INTO curation_pending_items AS p(target_type,artist_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,match_rule_version,identity_digest,route)
- VALUES('artist',$1,$2,CASE WHEN $10 IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''),NULLIF($10,''))
+ SELECT 'artist',$1,$2,CASE WHEN $10 IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''),NULLIF($10,'')
+ WHERE NOT EXISTS (SELECT FROM curation_pending_items old WHERE old.target_type='artist' AND old.artist_id=$1 AND old.kind=$2
+ AND old.resolution IN ('suggestion_recorded','no_result') AND old.input_digest=$4 AND old.candidates=COALESCE($6::jsonb,'[]')
+ AND old.conflicts=COALESCE($7::jsonb,'[]'))
  ON CONFLICT(artist_id,kind) WHERE status <> 'resolved' AND target_type='artist'`
 	}
 	_, err := q.ExecContext(ctx, insert+` DO UPDATE SET rule_version=excluded.rule_version,input_digest=excluded.input_digest,
  match_rule_version=excluded.match_rule_version,identity_digest=excluded.identity_digest,
- evidence=excluded.evidence,candidates=excluded.candidates,conflicts=excluded.conflicts,updated_at=now(),
- route=excluded.route,status=CASE WHEN p.status='in_progress' THEN p.status ELSE excluded.status END,
+ evidence=CASE WHEN `+sameModelInputsSQL+` AND p.evidence ? 'unverified_facts'
+ THEN excluded.evidence || jsonb_build_object('unverified_facts',p.evidence->'unverified_facts') ELSE excluded.evidence END,
+ candidates=excluded.candidates,conflicts=excluded.conflicts,updated_at=now(),
+ route=CASE WHEN `+sameModelInputsSQL+` AND p.route IN ('lookup','web') THEN p.route ELSE excluded.route END,
+ status=CASE WHEN p.status='in_progress' THEN p.status WHEN `+sameModelInputsSQL+` AND p.route IN ('lookup','web')
+ THEN 'waiting_route' ELSE excluded.status END,
  attempts=CASE WHEN p.status='shelved' THEN 0 ELSE p.attempts END,
  shelved_reason=CASE WHEN p.status='in_progress' THEN p.shelved_reason END,
  conversation_id=CASE WHEN p.status='in_progress' THEN p.conversation_id END,

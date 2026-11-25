@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"maps"
 	"slices"
 	"testing"
@@ -16,12 +15,21 @@ type metricScore struct {
 }
 
 type metricDetail struct {
-	ID       string         `json:"id"`
-	Shape    string         `json:"shape"`
-	Complete bool           `json:"complete"`
-	Match    metricMatch    `json:"match"`
-	Requests map[string]int `json:"requests"`
-	Reasons  []metricIssue  `json:"reasons"`
+	ID         string            `json:"id"`
+	Shape      string            `json:"shape"`
+	Complete   bool              `json:"complete"`
+	Match      metricMatch       `json:"match"`
+	Requests   map[string]int    `json:"requests"`
+	Reasons    []metricIssue     `json:"reasons"`
+	ModelItems []metricModelItem `json:"model_items,omitempty"`
+}
+
+type metricModelItem struct {
+	Kind         string   `json:"kind"`
+	Route        []string `json:"route,omitempty"`
+	Status       string   `json:"status"`
+	Resolution   string   `json:"resolution,omitempty"`
+	Verification string   `json:"verification,omitempty"`
 }
 
 type metricMatch struct {
@@ -67,7 +75,7 @@ func metricReadRows(t *testing.T, app *integrationTestApplication, q string, rea
 
 type metricObject struct{ kind, id string }
 
-func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries []metricEntry) []metricScore {
+func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries []metricEntry, routes map[string][]string) []metricScore {
 	t.Helper()
 	scores := make([]metricScore, len(entries))
 	releaseIndex := map[string]int{}
@@ -218,24 +226,29 @@ func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries [
 		scores[a].issue(issue)
 		scores[b].issue(issue)
 	})
-	// 发行、散放单曲分别以发行与录音匹配项计入。艺人项只计待办与例外。
+	// 识别的进项数只统计发行和录音匹配；各类模型项均保存经过的路线和结案结果。
 	entered := map[metricObject]bool{}
-	metricReadRows(t, app, `SELECT coalesce(p.target_id,p.artist_id),p.kind,p.status,
+	metricReadRows(t, app, `SELECT coalesce(p.target_id,p.artist_id),p.id,p.kind,p.status,coalesce(p.resolution,''),
+		coalesce((SELECT o.after_state->>'method' FROM operations o WHERE o.operation_type='external_link'
+			AND o.target_id=p.target_id AND o.origin->>'conversation_id'=p.conversation_id::text LIMIT 1),''),
 		(SELECT count(*) FROM curation_model_exceptions x WHERE x.pending_item_id=p.id AND x.status IN ('open','accepting'))
-		FROM curation_pending_items p`, func(rows *sql.Rows) {
-		var id, kind, status string
+		FROM curation_pending_items p ORDER BY p.created_at,p.kind,p.id`, func(rows *sql.Rows) {
+		var id, itemID, kind, status, resolution, verification string
 		var exceptions int
-		requireCurationOK(t, rows.Scan(&id, &kind, &status, &exceptions))
+		requireCurationOK(t, rows.Scan(&id, &itemID, &kind, &status, &resolution, &verification, &exceptions))
 		involved := owners[id]
 		if len(involved) == 0 {
 			t.Fatalf("待定项 %s 的目标 %s 缺少样本", kind, id)
 		}
 		owner := slices.Min(involved)
+		if len(routes[itemID]) > 0 {
+			scores[owner].ModelItems = append(scores[owner].ModelItems, metricModelItem{kind, routes[itemID], status, resolution, verification})
+		}
 		target := metricObject{"release", id}
 		if kind == "recording_match" {
 			target.kind = "track"
 		}
-		if kind != "artist_identity" && status != "waiting_route" && !entered[target] {
+		if (kind == "release_match" || kind == "recording_match") && len(routes[itemID]) > 0 && !entered[target] {
 			scores[owner].Entered++
 			entered[target] = true
 		}
@@ -244,18 +257,13 @@ func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries [
 			scores[owner].OpenPending++
 		}
 		scores[owner].OpenExceptions += exceptions
-		if open || exceptions > 0 {
+		if open {
 			for _, i := range involved {
 				label := entries[owner].sample.ID
 				if kind == "artist_identity" {
 					label = artistNames[id]
 				}
-				if open {
-					scores[i].issue(metricIssue{Kind: "open_pending", Target: label, Field: kind, Expected: "已结束", Actual: status})
-				}
-				if exceptions > 0 {
-					scores[i].issue(metricIssue{Kind: "open_exception", Target: label, Field: kind, Expected: "0", Actual: fmt.Sprint(exceptions)})
-				}
+				scores[i].issue(metricIssue{Kind: "open_pending", Target: label, Field: kind, Expected: "已结束", Actual: status})
 			}
 		}
 	})

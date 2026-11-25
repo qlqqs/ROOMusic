@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -33,13 +34,13 @@ func StewardTools(w *curation.Writer, m *program.ModelMatcher, mockHost ...sourc
 	available := func(ctx context.Context, c tool.Caller) bool { return c.Source == tool.SourceCuration }
 	return []tool.Definition{
 		a.backgroundMergeReleases(),
-		a.identityTool(available), a.mediaTool(available),
+		a.verificationTool(available), a.identityTool(available), a.mediaTool(available),
 		{Name: "read_pending_items", Description: "读取本次自动整理领取的待定项、冲突与候选资料", Scope: tool.ScopeRead, Untrusted: true, MinRole: tool.RoleAdmin, Available: available,
 			Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_ids":{"type":"array","items":` + idSchema + `}}}`), Output: json.RawMessage(`{"type":"array","items":{"type":"object"}}`), Handler: a.read},
 		{Name: "resolve_release_match", Description: "按 MusicBrainz 编号核对待定项，建立发行与曲目的对应并补全空缺", Scope: tool.ScopeShared, Revertible: true, MinRole: tool.RoleAdmin, Available: available,
 			Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_id":` + idSchema + `,"external_id":` + idSchema + `,"basis":{"type":"object","additionalProperties":false,"properties":{"note":` + noteSchema + `},"required":["note"]}},"required":["item_id","external_id","basis"]}`), Output: json.RawMessage(`{"type":"object"}`), Handler: a.resolve, Preview: a.preview},
-		{Name: "shelve_pending_item", Description: "搁置本次运行无法判定的待定项并记录原因", Scope: tool.ScopePersonal, MinRole: tool.RoleAdmin, Available: available,
-			Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_id":` + idSchema + `,"reason":` + noteSchema + `},"required":["item_id","reason"]}`), Output: json.RawMessage(`{"type":"object"}`), Handler: a.shelve},
+		{Name: "shelve_pending_item", Description: "放弃当前档并记录原因，后端按路线升级或结束当前项", Scope: tool.ScopePersonal, MinRole: tool.RoleAdmin, Available: available,
+			Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_id":` + idSchema + `,"reason":` + noteSchema + `,"fact":{"type":"object","additionalProperties":false,"properties":{"field":{"type":"string","enum":["year","label","catalog_number","barcode"]},"value":{"type":"string","minLength":1,"maxLength":4096}},"required":["field","value"]}},"required":["item_id","reason"]}`), Output: json.RawMessage(`{"type":"object"}`), Handler: a.shelve},
 	}
 }
 
@@ -71,6 +72,18 @@ func (a adapter) claimed(ctx context.Context, c tool.Caller) (*curation.ModelRun
 		return nil, nil, &tool.Error{Code: tool.CodePermissionDenied, Message: "当前操作者已不是自动整理开启者"}
 	}
 	items, err := a.writer.ClaimedItems(ctx, run.ConversationID)
+	if err != nil {
+		return nil, nil, err
+	}
+	items = slices.DeleteFunc(items, func(p curation.PendingItem) bool {
+		if run.PendingItemID != "" && p.ID != run.PendingItemID {
+			return true
+		}
+		return run.ClaimDigests != nil && run.ClaimDigests[p.ID] != p.ModelClaimDigest()
+	})
+	if len(items) == 0 && run.ClaimDigests != nil {
+		return nil, nil, toolError(operations.Conflict("item_stale", "领取时的证据已变化或已结清"))
+	}
 	return run, items, err
 }
 func selectItem(items []curation.PendingItem, id string, byRelease bool) (curation.PendingItem, error) {
@@ -161,7 +174,11 @@ func (a adapter) preview(ctx context.Context, c tool.Caller, raw json.RawMessage
 	if err != nil {
 		return tool.Preview{}, err
 	}
-	p := tool.Preview{Target: plan.Target, Summary: "建立 MusicBrainz 对应"}
+	facts, err := json.Marshal(plan.Verification)
+	if err != nil {
+		return tool.Preview{}, err
+	}
+	p := tool.Preview{Target: plan.Target, Summary: "建立 MusicBrainz 对应", Verification: facts, BackgroundDirect: plan.Verification.Direct, Contradicted: plan.Verification.Contradicted}
 	for _, v := range plan.Changes {
 		p.Changes = append(p.Changes, tool.Change{Field: v.Field, Before: v.Before, After: v.After})
 	}
@@ -183,12 +200,15 @@ func (a adapter) resolve(ctx context.Context, c tool.Caller, raw json.RawMessage
 	if err != nil {
 		return nil, err
 	}
+	if !plan.Verification.Direct && (c.ReviewID == "" || c.ReviewDecision != "approved") {
+		return nil, &tool.Error{Code: tool.CodeApprovalRequired, Message: "此编号需要独立审查"}
+	}
 	ctx = bindItem(ctx, run, c, item)
 	batch, err := run.Batch(ctx)
 	if err != nil {
 		return nil, toolError(err)
 	}
-	result, err := a.matcher.Apply(ctx, plan, program.ApplyOptions{Source: modelSource(run, in.Basis.Note), Key: c.IdempotencyKey, Batch: batch, PendingItemID: item.ID})
+	result, err := a.matcher.Apply(ctx, plan, program.ApplyOptions{Source: modelSource(run, in.Basis.Note), Key: c.IdempotencyKey, Batch: batch, PendingItemID: item.ID, ApprovedReviewID: c.ReviewID})
 	if err != nil {
 		return nil, toolError(err)
 	}
@@ -196,8 +216,9 @@ func (a adapter) resolve(ctx context.Context, c tool.Caller, raw json.RawMessage
 }
 func (a adapter) shelve(ctx context.Context, c tool.Caller, raw json.RawMessage) (json.RawMessage, error) {
 	var in struct {
-		ID     string `json:"item_id"`
-		Reason string `json:"reason"`
+		ID     string                      `json:"item_id"`
+		Reason string                      `json:"reason"`
+		Fact   *curation.FactualSuggestion `json:"fact,omitempty"`
 	}
 	if json.Unmarshal(raw, &in) != nil {
 		return nil, invalid()
@@ -211,8 +232,19 @@ func (a adapter) shelve(ctx context.Context, c tool.Caller, raw json.RawMessage)
 		return nil, err
 	}
 	ctx = bindItem(ctx, run, c, item)
-	if err := a.writer.ShelvePendingItem(ctx, item.ID, run.ConversationID, in.Reason); err != nil {
+	if run.Abandon == nil {
+		return nil, invalid()
+	}
+	if in.Fact != nil {
+		if (run.TaskKind != "lookup" && run.TaskKind != "web") || (item.Kind != "release_match" && item.Kind != "recording_match") {
+			return nil, invalid()
+		}
+		if err := a.writer.StageFactualSuggestion(ctx, item, *in.Fact, run.Model, in.Reason); err != nil {
+			return nil, toolError(err)
+		}
+	}
+	if err := run.Abandon(ctx, item.ID, in.Reason); err != nil {
 		return nil, toolError(err)
 	}
-	return json.Marshal(map[string]string{"item_id": item.ID, "status": "shelved"})
+	return json.Marshal(map[string]string{"item_id": item.ID, "status": "finished_tier"})
 }

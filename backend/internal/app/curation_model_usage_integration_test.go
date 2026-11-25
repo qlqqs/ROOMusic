@@ -23,58 +23,35 @@ func TestPostgreSQLCurationModelDailyLimit(t *testing.T) {
 		t.Fatalf("普通对话被计入整理用量 %+v", usage)
 	}
 
-	item := f.pending(t, f.a)
+	release, _, item := f.matchFixture(t)
 	const highInput = 120001
-	const limit = highInput + 13 + 13 + 7*3
+	const limit = highInput + 7
 	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "daily_token_limit": limit})
 	first := f.next(t, false)
-	conversation := f.item(t, item.ID).ConversationID
 	second := f.pending(t, f.b)
-	// 为本次运行准备可压缩的历史；六个保留回合之外还有首个用户回合。
-	store := runtime.NewStore(f.application.database)
-	detail, err := store.GetConversation(t.Context(), f.admin.id, conversation)
-	requireCurationOK(t, err)
-	for range 6 {
-		_, err = store.AppendMessage(t.Context(), f.admin.id, conversation, runtime.MessageInput{Role: "user", Content: detail.Messages[0].Content})
-		requireCurationOK(t, err)
-	}
 	first.inputTokens = highInput
-	first.tool(t, "correct_release", schedulerCorrection(f.a, 1, "edition", setChange("合成版本")))
+	first.selectCandidate(t, item.ID, f.remote.ID)
 	review := f.next(t, true)
 	if usage := f.progress(t).Today; usage.InputTokens != highInput || usage.OutputTokens != 7 {
 		t.Fatalf("主模型用量 %+v", usage)
-	}
-	review.review(t, "approved")
-	summary := f.next(t, false)
-	if !strings.Contains(string(summary.Messages[0].Content), "对话摘要整理器") {
-		t.Fatalf("未收到摘要请求")
-	}
-	if usage := f.progress(t).Today; usage.InputTokens != highInput+13 || usage.OutputTokens != 14 {
-		t.Fatalf("审查后用量 %+v", usage)
-	}
-	summary.complete(t)
-	// 摘要用量恰好达到上限。本项仍可继续提交，第二项等到次日。
-	finish := f.next(t, false)
-	if usage := f.progress(t).Today; usage.InputTokens != highInput+26 || usage.OutputTokens != 21 {
-		t.Fatalf("摘要后用量 %+v", usage)
 	}
 	checkpoint, err := f.writer.BeforeModelItem(t.Context(), f.admin.id, f.clock.options().Now())
 	requireCurationOK(t, err)
 	nextDay := f.clock.options().Now().Add(24 * time.Hour)
 	if checkpoint.Reason != "limit_reached" || checkpoint.RetryAt == nil || !checkpoint.RetryAt.Equal(nextDay) {
-		t.Fatalf("此时开始下一项应等到次日：%+v", checkpoint)
+		t.Fatalf("达到上限后下一项应等到次日：%+v", checkpoint)
 	}
-	finish.tool(t, "shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "资料不足"})
-	f.next(t, false).complete(t)
-	schedulerWait(t, "当前项提交后达到上限", func() bool { return f.progress(t).State == "limit_reached" })
-	if got := f.item(t, item.ID); got.Status != "shelved" {
-		t.Fatalf("已开始的项未能提交：%+v", got)
+	review.review(t, "approved")
+	schedulerWait(t, "当前项完成后停在日限", func() bool { return f.progress(t).State == "limit_reached" })
+	if got := f.item(t, item.ID); got.Resolution == nil || *got.Resolution != "model_matched" {
+		t.Fatalf("达到上限后已开始的项未能写入：%+v", got)
 	}
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1`, release)
 	if got := f.item(t, second.ID); got.Status != "waiting_model" || got.ConversationID != "" || got.Attempts != 0 {
 		t.Fatalf("下一项应原样留在队列：%+v", got)
 	}
 	got := f.progress(t)
-	if got.Today.InputTokens != highInput+52 || got.Today.OutputTokens != 35 || got.Today.Date != "2026-01-02" {
+	if got.Today.InputTokens != highInput+13 || got.Today.OutputTokens != 14 || got.Today.Date != "2026-01-02" {
 		t.Fatalf("当日上限及总用量 %+v", got)
 	}
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM steward_conversations WHERE kind='curation'`)
@@ -149,4 +126,50 @@ func TestPostgreSQLCurationModelRestartRecovery(t *testing.T) {
 	}
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM steward_plans WHERE id=$1 AND status='superseded'`, plan.ID)
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_batches WHERE id=$1 AND closed_at IS NOT NULL`, batch)
+}
+
+func TestPostgreSQL整理自查的摘要计入当天总额度(t *testing.T) {
+	gate := &testLookupGate{}
+	gate.ready.Store(true)
+	f := newSchedulerFixtureWithSources(t, gate, nil)
+	f.configure(t, &f.admin)
+	_, _, item := f.matchFixture(t)
+	item = modelRouteFixture(t, f, item, "lookup")
+	const input = 120001
+	const limit = input + 13 + 14
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "daily_token_limit": limit})
+	first := f.next(t, false)
+	conversation := f.item(t, item.ID).ConversationID
+	store := runtime.NewStore(f.application.database)
+	detail, err := store.GetConversation(t.Context(), f.admin.id, conversation)
+	requireCurationOK(t, err)
+	for range 7 {
+		_, err = store.AppendMessage(t.Context(), f.admin.id, conversation, runtime.MessageInput{Role: "user", Content: detail.Messages[0].Content})
+		requireCurationOK(t, err)
+	}
+	first.inputTokens = input
+	first.tool(t, "get_music_metadata", map[string]any{"entity": "release", "mbid": f.remote.ID})
+	summary := f.next(t, false)
+	if !strings.Contains(string(summary.Messages[0].Content), "对话摘要整理器") {
+		t.Fatal("未收到压缩自查历史的摘要请求")
+	}
+	if got := f.progress(t).Today; got.InputTokens != input || got.OutputTokens != 7 {
+		t.Fatalf("摘要前用量 %+v", got)
+	}
+	summary.complete(t)
+	submission := f.next(t, false)
+	if got := f.progress(t).Today; got.InputTokens != input+13 || got.OutputTokens != 14 {
+		t.Fatalf("摘要后用量 %+v", got)
+	}
+	checkpoint, err := f.writer.BeforeModelItem(t.Context(), f.admin.id, f.clock.options().Now())
+	requireCurationOK(t, err)
+	if checkpoint.Reason != "limit_reached" {
+		t.Fatalf("摘要应耗完剩余的日额度：%+v", checkpoint)
+	}
+	submission.tool(t, "resolve_release_match", f.matchProposal(item.ID))
+	f.next(t, true).review(t, "approved")
+	modelWaitResolution(t, f, item.ID, "model_matched")
+	if got := f.progress(t).Today; got.InputTokens != input+39 || got.OutputTokens != 28 {
+		t.Fatalf("自查、摘要与审查总用量 %+v", got)
+	}
 }

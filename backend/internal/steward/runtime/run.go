@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/steward/provider"
@@ -171,6 +172,10 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 			end = RunEnd{Reason: stop}
 			return nil
 		}
+		if params.Selection != nil {
+			end = RunEnd{Reason: EndCompleted}
+			return nil
+		}
 		detail, err = r.store.GetConversation(ctx, userID, params.ConversationID)
 		if err != nil {
 			return err
@@ -244,13 +249,20 @@ func (s *runState) prepare(ctx context.Context) ([]provider.Message, error) {
 	if s.params.Continue {
 		return s.prepareHistory(ctx, s.history)
 	}
-	input, err := messageInput(textMessage(provider.RoleUser, s.params.Text), provider.Usage{}, nil)
+	content := textMessage(provider.RoleUser, s.params.Text)
+	content.BackgroundItemID = s.params.BackgroundItemID
+	content.BackgroundClaims = s.params.BackgroundClaims
+	input, err := messageInput(content, provider.Usage{}, nil)
 	if err != nil {
 		return nil, err
 	}
 	input.Context = s.params.Context
 	if _, err := s.store.AppendMessage(ctx, s.params.Caller.User.ID, s.params.ConversationID, input); err != nil {
 		return nil, err
+	}
+	if s.params.Selection != nil {
+		// 第一档只比较这一批的完整候选；历史仍在后台会话中供审计和重审读取。
+		return []provider.Message{content.Message}, nil
 	}
 	detail, err := s.store.GetConversation(ctx, s.params.Caller.User.ID, s.params.ConversationID)
 	if err != nil {
@@ -277,15 +289,30 @@ func (s *runState) beforeStep(ctx context.Context) (RunEnd, error) {
 	}
 	if s.params.BeforeStep != nil {
 		err := s.params.BeforeStep(ctx)
-		if errors.Is(err, ErrRunStopped) {
-			return RunEnd{Reason: EndCurationStopped}, nil
-		}
-		return RunEnd{}, err
+		return backgroundEnd(err)
 	}
 	return RunEnd{}, nil
 }
 
+func backgroundEnd(err error) (RunEnd, error) {
+	switch {
+	case errors.Is(err, ErrRunStopped):
+		return RunEnd{Reason: EndCurationStopped}, nil
+	case errors.Is(err, ErrItemCompleted):
+		return RunEnd{Reason: EndCompleted}, nil
+	case errors.Is(err, ErrItemLimit):
+		return RunEnd{Reason: EndItemLimit}, nil
+	default:
+		return RunEnd{}, err
+	}
+}
+
 func (s *runState) run(ctx context.Context) (RunEnd, error) {
+	if s.params.OnToolCalls != nil {
+		if end, err := s.beforeStep(ctx); err != nil || end.Reason != "" {
+			return end, err
+		}
+	}
 	messages, err := s.prepare(ctx)
 	if err != nil {
 		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
@@ -294,7 +321,11 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 		return RunEnd{}, err
 	}
 	var definitions []provider.ToolDefinition
-	for s.step < maxSteps {
+	limit := maxSteps
+	if s.params.Background && s.params.StepLimit > 0 {
+		limit = s.params.StepLimit
+	}
+	for s.step < limit {
 		if end, err := s.beforeStep(ctx); err != nil || end.Reason != "" {
 			return end, err
 		}
@@ -313,9 +344,25 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 			}
 		}
 		s.step++
-		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: systemPromptWithMode(s.params.DisplayName, s.conversation.Mode) + s.params.SystemSuffix + s.memoryBlock,
-			Messages: messages, Tools: definitions, MaxOutputTokens: maxOutputTokens, NativeSearch: s.params.NativeSearch})
+		modelTools := definitions
+		if s.params.Selection != nil {
+			modelTools = nil
+		}
+		prompt := systemPromptWithMode(s.params.DisplayName, s.conversation.Mode)
+		if s.params.Background {
+			prompt = systemPromptWithName(s.params.DisplayName)
+		}
+		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: prompt + s.params.SystemSuffix + s.memoryBlock,
+			Messages: messages, Tools: modelTools, MaxOutputTokens: maxOutputTokens, NativeSearch: s.params.NativeSearch})
 		s.recordUsage(ctx, UsageMain, step.usage)
+		var itemEnd RunEnd
+		if s.params.OnToolCalls != nil {
+			var countErr error
+			itemEnd, countErr = backgroundEnd(s.params.OnToolCalls(ctx, len(step.calls)+nativeSearchCount(step.content.Searches)))
+			if countErr != nil {
+				return RunEnd{}, countErr
+			}
+		}
 		if err != nil {
 			// 中断时只保存已生成的文本，不留下没有结果的半截工具请求。
 			var blocks []provider.ContentBlock
@@ -340,6 +387,23 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 			}
 			return modelFailure(ctx, err), nil
 		}
+		// 选择模型只产生文本。保留原答复，把校验过的后台操作作为单独的执行记录。
+		if s.params.Selection != nil {
+			if len(step.calls) == 0 && step.finish.Reason == provider.FinishNormal {
+				var reply strings.Builder
+				for _, block := range step.content.Content {
+					if block.Type == provider.BlockText {
+						reply.WriteString(block.Text)
+					}
+				}
+				actions, parseErr := s.params.Selection(reply.String())
+				if parseErr == nil {
+					step.content.BackendActions, step.calls = actions, actions
+				}
+			} else {
+				itemEnd = RunEnd{Reason: EndCompleted}
+			}
+		}
 		inputCalls := make([]ToolCallInput, 0, len(step.calls))
 		for _, call := range step.calls {
 			inputCalls = append(inputCalls, ToolCallInput{Name: call.Name, Input: call.Arguments,
@@ -356,15 +420,30 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 			return RunEnd{}, err
 		}
 		messages = append(messages, modelMessage(step.content))
-		var stop EndReason
-		if s.inputTokens+s.outputTokens >= maxRunTokens || step.finish.Reason == provider.FinishOutputLimit {
+		stop := itemEnd.Reason
+		if stop == "" && (s.inputTokens+s.outputTokens >= maxRunTokens || step.finish.Reason == provider.FinishOutputLimit) {
 			stop = EndTokenLimit
+		}
+		if stop == "" && s.params.OnToolCalls != nil {
+			end, err := s.beforeStep(ctx)
+			if err != nil {
+				return RunEnd{}, err
+			}
+			stop = end.Reason
 		}
 		toolMessages, stop, err := s.executeCalls(ctx, step.calls, stored.ToolCalls, stop)
 		if err != nil {
 			return RunEnd{Reason: stop}, err
 		}
-		if stop == "" && s.step < maxSteps && (len(step.calls) > 0 || step.finish.Reason == provider.FinishPause) && (s.conversation.Mode == "steward" || (!s.summaryFailed && step.usage.InputTokens != nil && *step.usage.InputTokens > summaryInputThreshold)) {
+		if s.params.Selection != nil && stop == "" {
+			stop = EndCompleted
+		}
+		if stop == "" && s.params.OnToolCalls != nil {
+			if end, err := s.beforeStep(ctx); err != nil || end.Reason != "" {
+				return end, err
+			}
+		}
+		if stop == "" && s.step < limit && (len(step.calls) > 0 || step.finish.Reason == provider.FinishPause) && (s.conversation.Mode == "steward" || (!s.summaryFailed && step.usage.InputTokens != nil && *step.usage.InputTokens > summaryInputThreshold)) {
 			detail, readErr := s.store.GetConversation(ctx, s.params.Caller.User.ID, s.params.ConversationID)
 			if readErr != nil {
 				return RunEnd{}, readErr
@@ -387,6 +466,18 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 		}
 	}
 	return RunEnd{Reason: EndStepLimit}, nil
+}
+
+func nativeSearchCount(searches []provider.Search) int {
+	seen := make(map[string]bool)
+	n := 0
+	for _, search := range searches {
+		if search.SearchID == "" || !seen[search.SearchID] {
+			n++
+		}
+		seen[search.SearchID] = true
+	}
+	return n
 }
 
 type modelStep struct {
@@ -514,7 +605,7 @@ func modelFailure(ctx context.Context, err error) RunEnd {
 
 func (s *runState) sharedDirect(name string) bool {
 	if s.params.Background {
-		return slices.Contains(s.params.BackgroundDirectTools, name)
+		return false
 	}
 	return s.conversation.Mode == "operator" || (s.conversation.Mode == "assistant" && s.definitions[name].Revertible && slices.Contains(s.conversation.AutoApprovedTools, name))
 }

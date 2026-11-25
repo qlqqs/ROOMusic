@@ -10,7 +10,8 @@
     },
     "inactive_reason": null,
     "model": "sample-model",
-    "paused": true
+    "paused": true,
+    "web_daily_token_limit": 240000
   },
   "status": 200
 }

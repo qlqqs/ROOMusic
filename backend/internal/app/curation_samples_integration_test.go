@@ -50,7 +50,7 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 	record("curation/suppressions", "GET", curationBase+"/suppressions?release_id="+f.b, nil)
 	record("curation/batches", "GET", curationBase+"/batches", nil)
 	record("curation/batch", "GET", curationBase+"/batches/"+batch, nil)
-	record("curation/settings-paused", "PUT", curationBase+"/settings", map[string]bool{"paused": true})
+	record("curation/settings-paused", "PUT", curationBase+"/settings", map[string]any{"paused": true, "web_daily_token_limit": 240000})
 	record("curation/progress", "GET", curationBase+"/progress", nil)
 
 	record("curation/settings-model", "PUT", curationBase+"/settings", map[string]any{"model": "sample-model", "daily_token_limit": nil})
@@ -82,7 +82,36 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 		return id
 	}
 	first := makeException("合成标题甲")
+	input, err := json.Marshal(schedulerCorrection(f.a, 1, "label", setChange("岸风唱片")))
+	requireCurationOK(t, err)
+	unverified, err := f.writer.RecordSuggestion(ctx, curation.ModelException{
+		PendingItemID: itemID, ConversationID: &c.ID, Tool: "correct_release", Provider: "sample-model",
+		Input:   input,
+		Preview: []byte(`{"changes":[{"field":"label","before":null,"after":"岸风唱片"}]}`), ReasonCode: "unverified_fact",
+		Reasons: []string{"开放库没有可核实的厂牌"}, Evidence: []byte(`{"field":"label","value":"岸风唱片"}`),
+	})
+	requireCurationOK(t, err)
+	mustExec(t, f.application, `UPDATE curation_model_exceptions SET created_at=now()-interval '1 second' WHERE id=$1`, unverified)
+	observationItem := uuid.New()
+	const reason = "保留原有标点"
+	mustExec(t, f.application, `INSERT INTO curation_pending_items(id,target_type,target_id,kind,status,rule_version,input_digest,evidence,conversation_id,claimed_at)
+		VALUES($1,'release',$2,'verify_name','in_progress',1,'sample-style','{}',$3,now())`, observationItem, f.a, c.ID)
+	input, err = json.Marshal(curation.VerificationInput{ItemID: observationItem, Verdict: "style", Reason: reason})
+	requireCurationOK(t, err)
+	observation, err := f.writer.RecordSuggestion(ctx, curation.ModelException{
+		PendingItemID: observationItem, ConversationID: &c.ID, Tool: "observation", Provider: "sample-model",
+		Input: input, Preview: []byte(`{"changes":[]}`), ReasonCode: "verification_declined",
+		Reasons: []string{reason}, Evidence: []byte(`{"field":"title","before":"Album A","after":"Album: A"}`),
+	})
+	requireCurationOK(t, err)
+	mustExec(t, f.application, `UPDATE curation_model_exceptions SET created_at=now()-interval '2 seconds' WHERE id=$1`, observation)
 	record("curation/exceptions", "GET", curationBase+"/exceptions", nil)
+	for _, id := range []string{unverified, observation} {
+		r := f.application.request(t, http.MethodPost, curationBase+"/exceptions/"+id+"/decline", nil, &f.admin, nil)
+		if r.Code != http.StatusOK {
+			t.Fatalf("关闭建议 HTTP %d %s", r.Code, r.Body)
+		}
+	}
 	second := makeException("合成标题乙")
 	base := curationBase + "/exceptions/"
 	record("curation/exception-accepted", "POST", base+first+"/accept", nil)
@@ -111,7 +140,7 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 	record("operations/track-auto-list", "GET", "/api/v1/operations?provider=track-sample", nil)
 	record("operations/track-auto-reverted", "POST", revertPath(applied.OperationID), nil)
 	mustExec(t, f.application, `UPDATE curation_pending_items SET status='in_progress',conversation_id=$2,claimed_at=now() WHERE id=$1`, itemID, c.ID)
-	input, err := json.Marshal(map[string]any{"release_id": f.a, "track_id": trackID, "expected_revision": 1, "changes": map[string]any{"title": setChange("待核对曲名")}, "basis": map[string]string{"source": "external", "note": "合成曲目资料"}})
+	input, err = json.Marshal(map[string]any{"release_id": f.a, "track_id": trackID, "expected_revision": 1, "changes": map[string]any{"title": setChange("待核对曲名")}, "basis": map[string]string{"source": "external", "note": "合成曲目资料"}})
 	if err != nil {
 		t.Fatal(err)
 	}

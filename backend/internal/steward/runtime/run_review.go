@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -19,6 +21,39 @@ func pendingPlan(plan Plan) Plan {
 	}
 	plan.Items = items
 	return plan
+}
+
+// 一项身份只能绑定一个候选。主模型同时提交不同候选时，整组按歧义留档。
+func competingArtistIdentities(plan Plan) map[string]bool {
+	if !plan.Background {
+		return nil
+	}
+	type identity struct {
+		ItemID     string `json:"item_id"`
+		Source     string `json:"source"`
+		ExternalID string `json:"external_id"`
+	}
+	inputs := make(map[string]identity)
+	first := make(map[string]identity)
+	ambiguous := make(map[string]bool)
+	for _, item := range plan.Items {
+		var in identity
+		if item.Tool != "resolve_artist_identity" || json.Unmarshal(item.Input, &in) != nil || in.ItemID == "" {
+			continue
+		}
+		in.ItemID = strings.ToLower(in.ItemID)
+		in.ExternalID = strings.ToLower(in.ExternalID)
+		if other, ok := first[in.ItemID]; ok && in != other {
+			ambiguous[in.ItemID] = true
+		}
+		first[in.ItemID] = in
+		inputs[item.ID] = in
+	}
+	conflicts := make(map[string]bool)
+	for id, in := range inputs {
+		conflicts[id] = ambiguous[in.ItemID]
+	}
+	return conflicts
 }
 
 func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Message, EndReason, error) {
@@ -54,12 +89,15 @@ func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Messag
 		if ctx.Err() != nil {
 			return nil, EndCancelled, nil
 		}
-		if errors.Is(err, errStructuralEvidence) {
-			results[item.ID] = ReviewItem{ItemID: item.ID, Decision: "needs_human_confirmation", Risk: "high", Reasons: []string{err.Error()}, Source: "policy"}
-			continue
-		}
-		if errors.Is(err, ErrReviewEvidenceUnsupported) {
-			results[item.ID] = ReviewItem{ItemID: item.ID, Decision: "needs_human_confirmation", Risk: "high", Reasons: []string{"工具未登记后端证据读取方式，需要人工确认"}, Source: "policy"}
+		if errors.Is(err, errStructuralEvidence) || errors.Is(err, ErrReviewEvidenceUnsupported) {
+			reason := errStructuralEvidence.Error()
+			if errors.Is(err, ErrReviewEvidenceUnsupported) {
+				reason = "工具未登记后端证据读取方式，需要人工确认"
+			}
+			if plan.Background {
+				reason = strings.TrimSuffix(reason, "，需要人工确认")
+			}
+			results[item.ID] = ReviewItem{ItemID: item.ID, Decision: "needs_human_confirmation", Risk: "high", Reasons: []string{reason}, Source: "policy"}
 			continue
 		}
 		if err != nil {
@@ -77,10 +115,24 @@ func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Messag
 		review.EvidenceDigest, reviewErr = digestJSON(evidence)
 	}
 	if reviewErr == nil && len(eligible) > 0 {
+		if s.params.OnToolCalls != nil {
+			if end, err := s.beforeStep(ctx); err != nil || end.Reason != "" {
+				return nil, end.Reason, err
+			}
+		}
 		var returned []ReviewItem
-		returned, review.Usage, reviewErr = callReview(ctx, s.params.Provider, model, eligible, evidence)
+		returned, review.Usage, reviewErr = callReview(ctx, s.params.Provider, model, eligible, evidence, plan.Background)
 		s.reportUsage(ctx, UsageReview, review.Usage)
 		for _, item := range returned {
+			if s.params.Background && item.Decision == "approved" {
+				for _, check := range evidence {
+					if check.ItemID == item.ItemID && check.contradicted {
+						item.Decision, item.Source = "rejected", "policy"
+						item.Reasons = append(item.Reasons, "后端核对发现明确反证，缺少能解释该反证的独立依据")
+						break
+					}
+				}
+			}
 			results[item.ItemID] = item
 		}
 	}
@@ -88,6 +140,7 @@ func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Messag
 		return nil, EndCancelled, nil
 	}
 	if reviewErr == nil {
+		competing := competingArtistIdentities(plan)
 		for _, item := range plan.Items {
 			if item.Decision != "pending" {
 				continue
@@ -95,10 +148,17 @@ func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Messag
 			result := results[item.ID]
 			if policy := reviewPolicy(plan, item); policy != nil {
 				result = *policy
+			} else if competing[item.ID] && result.Decision == "approved" {
+				result.Decision, result.Source = "needs_human_confirmation", "policy"
+				result.Reasons = append(result.Reasons, "同一艺人项同时提出不同身份，候选存在歧义")
 			} else if result.Decision == "approved" && result.Risk == "high" {
 				result.Decision = "needs_human_confirmation"
 				result.Source = "policy"
-				result.Reasons = append(result.Reasons, "高风险批准需要人工确认")
+				reason := "高风险批准需要人工确认"
+				if plan.Background {
+					reason = "高风险修改未采用"
+				}
+				result.Reasons = append(result.Reasons, reason)
 			}
 			review.Items = append(review.Items, result)
 		}
@@ -125,6 +185,11 @@ func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Messag
 	}
 	logger.InfoContext(context.WithoutCancel(ctx), "管家审查结束", "event", "steward.review.finished", "review_id", review.ID, "plan_id", plan.ID, "model", model, "duration_ms", time.Since(started).Milliseconds(), "status", review.Status, "input_tokens", review.Usage.InputTokens, "output_tokens", review.Usage.OutputTokens, "approved", counts["approved"], "rejected", counts["rejected"], "needs_human_confirmation", counts["needs_human_confirmation"])
 	s.sink(Event{Type: EventReviewFinished, Step: s.step, Review: &review})
+	if s.params.OnToolCalls != nil {
+		if end, err := s.beforeStep(ctx); err != nil || end.Reason != "" {
+			return nil, end.Reason, err
+		}
+	}
 	if review.Status == "unavailable" {
 		return nil, EndReviewUnavailable, nil
 	}
@@ -173,9 +238,6 @@ func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Messag
 		} else {
 			item.Decision = "rejected_by_review"
 			if s.params.Background {
-				if result.Decision == "needs_human_confirmation" {
-					item.Decision = "escalated"
-				}
 				if s.params.Escalate == nil {
 					return nil, "", ErrInvalidInput
 				}

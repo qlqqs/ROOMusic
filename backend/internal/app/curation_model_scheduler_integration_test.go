@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -27,7 +28,11 @@ const stewardBase = "/api/v1/me/steward"
 type schedulerRequest struct {
 	Model      string
 	ToolChoice json.RawMessage `json:"tool_choice"`
-	Messages   []struct {
+	Tools      []struct {
+		Type     string
+		Function struct{ Name string }
+	}
+	Messages []struct {
 		Role    string
 		Content json.RawMessage
 	}
@@ -60,6 +65,20 @@ func (q schedulerRequest) complete(t *testing.T) {
 	q.reply <- q.frame(t, map[string]string{"content": "完成"}, "stop")
 }
 
+func (q schedulerRequest) selectCandidate(t *testing.T, itemID, externalID string) {
+	t.Helper()
+	if len(q.Tools) != 0 {
+		t.Fatalf("第一档附带了工具：%+v", q.Tools)
+	}
+	decision := map[string]string{"item_id": itemID, "decision": "upgrade"}
+	if externalID != "" {
+		decision["decision"], decision["external_id"] = "select", externalID
+	}
+	raw, err := json.Marshal(map[string]any{"items": []any{decision}})
+	requireCurationOK(t, err)
+	q.reply <- q.frame(t, map[string]string{"content": string(raw)}, "stop")
+}
+
 func (q schedulerRequest) review(t *testing.T, decision string) {
 	t.Helper()
 	var content string
@@ -86,6 +105,11 @@ type schedulerFixture struct {
 
 func newSchedulerFixture(t *testing.T, opts ...Option) *schedulerFixture {
 	t.Helper()
+	return newSchedulerFixtureWithSources(t, nil, nil, opts...)
+}
+
+func newSchedulerFixtureWithSources(t *testing.T, lookup model.LookupQueue, fakeSource http.Handler, opts ...Option) *schedulerFixture {
+	t.Helper()
 	f := &schedulerFixture{clock: newProgramClock(), requests: make(chan schedulerRequest), remote: b3NewRemoteRelease()}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/mb/release/"+unavailableMusicBrainzID {
@@ -99,7 +123,11 @@ func newSchedulerFixture(t *testing.T, opts ...Option) *schedulerFixture {
 			return
 		}
 		if !strings.HasSuffix(r.URL.Path, "/chat/completions") {
-			http.NotFound(w, r)
+			if fakeSource != nil {
+				fakeSource.ServeHTTP(w, r)
+			} else {
+				http.NotFound(w, r)
+			}
 			return
 		}
 		q := schedulerRequest{reply: make(chan string, 1)}
@@ -127,9 +155,10 @@ func newSchedulerFixture(t *testing.T, opts ...Option) *schedulerFixture {
 	src := func(path string) sources.Options {
 		return sources.Options{BaseURL: server.URL + path, NewClient: b3HTTPClient(server), Limiter: sources.NewLimiter(0, nil, nil)}
 	}
-	opts = append(opts, WithCurationModel(true, model.Options{Now: f.clock.options().Now, PollInterval: 20 * time.Millisecond}),
+	opts = append(opts, WithCurationModel(true, model.Options{Now: f.clock.options().Now, PollInterval: 20 * time.Millisecond, Lookup: lookup}),
 		WithCurationSources(src("/mb"), coverartarchive.Options{BaseURL: server.URL + "/covers", NewClient: b3HTTPClient(server), Limiter: sources.NewLimiter(0, nil, nil), ManifestLimiter: sources.NewLimiter(0, nil, nil)}, src("/lyrics")))
-	g := newGroupEnvironment(t, opts...)
+	logger := slog.New(slog.NewTextHandler(t.Output(), &slog.HandlerOptions{Level: slog.LevelError}))
+	g := newGroupEnvironmentForApp(t, newIntegrationTestApplicationWithLogger(t, logger, opts...))
 	f.curationFixture = &curationFixture{&operationsEnvironment{g}, curation.NewWriter(g.application.database, g.application.dataDirectory, nil)}
 	return f
 }
@@ -155,9 +184,18 @@ func (f *schedulerFixture) next(t *testing.T, review bool) schedulerRequest {
 		}
 		return q
 	case <-time.After(5 * time.Second):
-		t.Fatalf("未收到模型请求（审查=%t）", review)
+		t.Fatalf("未收到模型请求（审查=%t）；后台工具 %s", review, f.modelToolResults(t))
 		return schedulerRequest{}
 	}
+}
+
+func (f *schedulerFixture) modelToolResults(t *testing.T) string {
+	t.Helper()
+	return programString(t, f.application, `SELECT coalesce(json_agg(r)::text,'[]') FROM (
+		SELECT calls.tool_name,calls.status,calls.error_code,calls.output FROM steward_tool_calls calls
+		JOIN steward_messages m ON m.id=calls.message_id JOIN steward_conversations c ON c.id=m.conversation_id
+		WHERE c.kind='curation' ORDER BY c.created_at DESC,m.sequence DESC,calls.position DESC LIMIT 8
+	) r`)
 }
 
 func (f *schedulerFixture) progress(t *testing.T) curation.ModelProgress {
@@ -169,9 +207,22 @@ func (f *schedulerFixture) progress(t *testing.T) curation.ModelProgress {
 
 func (f *schedulerFixture) pending(t *testing.T, target string) curation.PendingItem {
 	t.Helper()
+
+	candidates, err := json.Marshal([]map[string]string{{"external_id": f.remote.ID}})
+	requireCurationOK(t, err)
+	requireCurationOK(t, curation.UpsertPendingItem(t.Context(), f.application.database, curation.PendingItem{
+		TargetID: target, Kind: "release_match", RuleVersion: program.StoredRuleVersion, InputDigest: modelDigestForTarget(t, f, target),
+		Evidence: []byte(`{"title":"合成资料"}`), Candidates: candidates, Conflicts: []byte(`["search_only"]`),
+	}))
+	id := programString(t, f.application, `SELECT id FROM curation_pending_items WHERE target_id=$1 AND kind='release_match' AND status<>'resolved'`, target)
+	return f.item(t, id)
+}
+
+func modelDigestForTarget(t *testing.T, f *schedulerFixture, target string) string {
+	t.Helper()
 	rows, err := catalog.LoadCurationEvidence(t.Context(), f.application.database, []string{target}, f.writer.ArtworkExists)
 	requireCurationOK(t, err)
-	return modelPending(t, f.curationFixture, target, "release_match", program.ReleaseDigest(rows[target]))
+	return program.ReleaseDigest(rows[target])
 }
 
 func (f *schedulerFixture) item(t *testing.T, id string) curation.PendingItem {
@@ -233,14 +284,10 @@ func TestPostgreSQLCurationModelShelveAndReopen(t *testing.T) {
 	f.configure(t, &f.admin)
 	item := f.pending(t, f.a)
 	f.enable(t)
-	f.next(t, false).tool(t, "shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "候选缺少介质信息"})
-	last := f.next(t, false)
-	got := f.item(t, item.ID)
-	if got.Status != "shelved" || got.ShelvedReason == nil || *got.ShelvedReason != "候选缺少介质信息" {
-		t.Fatalf("搁置后 %+v", got)
+	for range 3 {
+		f.next(t, false).complete(t)
 	}
-	f.pause(t)
-	last.complete(t)
+	schedulerWait(t, "没有有效决定的项第三次后搁置", func() bool { return f.item(t, item.ID).Status == "shelved" })
 	requireCurationOK(t, curation.UpsertPendingItem(t.Context(), f.application.database, item))
 	if got := f.item(t, item.ID); got.Status != "shelved" {
 		t.Fatalf("证据相同后 %+v", got)

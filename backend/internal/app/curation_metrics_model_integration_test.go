@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -20,8 +20,8 @@ import (
 )
 
 type metricsModelTarget struct {
-	SampleID, ReleaseID, GroupID, RecordingID, ArtistID string
-	Fields                                              map[string]string
+	SampleID, ReleaseID, GroupID, RecordingID, ArtistID, SearchTitle string
+	Fields                                                           map[string]string
 }
 
 type metricsModelUsage struct {
@@ -38,6 +38,7 @@ type metricsModel struct {
 	mu      sync.Mutex
 	targets map[string]metricsModelTarget
 	counts  map[string]map[string]metricsModelUsage
+	routes  map[string][]string
 }
 
 func newMetricsModel(t *testing.T) *metricsModel {
@@ -50,7 +51,7 @@ func newMetricsModel(t *testing.T) *metricsModel {
 	default:
 		t.Fatalf("未知度量模型模式 %q", mode)
 	}
-	m := &metricsModel{mode: mode, targets: map[string]metricsModelTarget{}, counts: map[string]map[string]metricsModelUsage{}}
+	m := &metricsModel{mode: mode, targets: map[string]metricsModelTarget{}, counts: map[string]map[string]metricsModelUsage{}, routes: map[string][]string{}}
 	m.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/chat/completions") {
 			http.NotFound(w, r)
@@ -118,7 +119,11 @@ func (m *metricsModel) usage() map[string]map[string]metricsModelUsage {
 }
 
 type metricsChatRequest struct {
-	Model    string
+	Model string
+	Tools []struct {
+		Type     string
+		Function struct{ Name string }
+	}
 	Messages []struct {
 		Role, Content string
 		ToolCalls     []struct{ Function struct{ Name string } } `json:"tool_calls"`
@@ -132,6 +137,7 @@ type metricsToolCall struct {
 
 type metricsModelReply struct {
 	category  string
+	text      string
 	sampleIDs []string
 	calls     []metricsToolCall
 }
@@ -159,7 +165,7 @@ func (m *metricsModel) respond(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	wire, used, err := metricsFrame(rep.calls, len(body))
+	wire, used, err := metricsFrame(rep.text, rep.calls, len(body))
 	if err != nil {
 		return err
 	}
@@ -187,8 +193,8 @@ func (m *metricsModel) respond(w http.ResponseWriter, r *http.Request) error {
 }
 
 // 将 SSE 帧与结束标记一并计入响应字节；用量字段的位数也计入，迭代到自洽。
-func metricsFrame(calls []metricsToolCall, inputBytes int) ([]byte, metricsModelUsage, error) {
-	delta := map[string]any{"content": "处理完成"}
+func metricsFrame(content string, calls []metricsToolCall, inputBytes int) ([]byte, metricsModelUsage, error) {
+	delta := map[string]any{"content": content}
 	reason := "stop"
 	if len(calls) != 0 {
 		var functions []any
@@ -221,13 +227,31 @@ func metricsFrame(calls []metricsToolCall, inputBytes int) ([]byte, metricsModel
 type metricsPending struct {
 	ID         string `json:"item_id"`
 	Kind       string
+	ReleaseID  string `json:"release_id"`
+	ArtistID   string `json:"artist_id"`
 	Candidates []struct {
 		ID string `json:"external_id"`
 	}
-	Evidence struct{ Names []string }
+	Evidence struct {
+		Names                       []string
+		Title, Artist, Field, After string
+		Tracks                      json.RawMessage
+	}
 }
 
-var metricsPendingLine = regexp.MustCompile(`(?m)^item_id=([a-f0-9-]{36}) kind=([^ ]+) `)
+func metricsPendingItems(content string) ([]metricsPending, bool, error) {
+	_, body, ok := strings.Cut(content, "<roomusic-source type=\"curation_pending\" trust=\"untrusted\">")
+	if !ok {
+		return nil, false, nil
+	}
+	body, _, ok = strings.Cut(body, "</roomusic-source>")
+	if !ok {
+		return nil, true, fmt.Errorf("待定项资料缺少结束标签")
+	}
+	var items []metricsPending
+	err := json.Unmarshal([]byte(body), &items)
+	return items, true, err
+}
 
 func metricsToolBody(content, name string) (string, bool) {
 	prefix := `<roomusic-source kind="tool" name="` + name + `">`
@@ -238,102 +262,174 @@ func metricsToolBody(content, name string) (string, bool) {
 	return strings.TrimSpace(html.UnescapeString(strings.TrimSuffix(body, "</roomusic-source>"))), true
 }
 
-func (m *metricsModel) pendingReply(ctx context.Context, q metricsChatRequest) (metricsModelReply, error) {
-	rep := metricsModelReply{category: "pending_step"}
-	targets := map[string]metricsModelTarget{}
+func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (metricsModelReply, error) {
+	rep := metricsModelReply{text: "处理完成"}
 	var pending []metricsPending
-	var lastTool string
-	var firstArtist string
+	var lastTool, lastResult string
 	for _, msg := range q.Messages {
 		switch msg.Role {
 		case "user":
-			for _, fields := range metricsPendingLine.FindAllStringSubmatch(msg.Content, -1) {
-				var id string
-				if err := m.db.QueryRowContext(ctx, `SELECT coalesce(target_id,artist_id)::text FROM curation_pending_items WHERE id=$1`, fields[1]).Scan(&id); err != nil {
-					return rep, err
-				}
-				target, ok := m.targets[id]
-				if !ok {
-					return rep, fmt.Errorf("待定项 %s 本地目标 %s 没有样本标注", fields[1], id)
-				}
-				targets[fields[1]] = target
-				rep.sampleIDs = append(rep.sampleIDs, target.SampleID)
-				if fields[2] == "artist_identity" {
-					rep.category = "artist_identity"
-				}
+			items, found, err := metricsPendingItems(msg.Content)
+			if err != nil {
+				return rep, err
+			}
+			if found {
+				pending, lastTool, lastResult = items, "", ""
 			}
 		case "assistant":
 			for _, tc := range msg.ToolCalls {
 				lastTool = tc.Function.Name
 			}
 		case "tool":
-			if body, ok := metricsToolBody(msg.Content, "read_pending_items"); ok {
-				if err := json.Unmarshal([]byte(body), &pending); err != nil {
-					return rep, fmt.Errorf("待定项读取结果：%w", err)
-				}
-			}
-			if body, ok := metricsToolBody(msg.Content, "web_search"); ok {
-				var response struct{ Results []struct{ URL string } }
-				if err := json.Unmarshal([]byte(body), &response); err != nil {
-					return rep, err
-				}
-				for _, result := range response.Results {
-					id, ok := strings.CutPrefix(result.URL, "https://musicbrainz.org/artist/")
-					if ok && uuid.Valid(id) {
-						firstArtist = id
-						break
-					}
-				}
-			}
+			lastResult, _ = metricsToolBody(msg.Content, lastTool)
 		}
 	}
-	if lastTool == "" {
-		rep.calls = []metricsToolCall{{"read_pending_items", map[string]any{}}}
-		return rep, nil
+	if len(pending) == 0 {
+		return rep, fmt.Errorf("首条消息缺少待定项")
 	}
-	if lastTool != "read_pending_items" && lastTool != "web_search" {
-		return rep, nil
+	hasTool := func(name string) bool {
+		return slices.ContainsFunc(q.Tools, func(t struct {
+			Type     string
+			Function struct{ Name string }
+		}) bool {
+			return t.Function.Name == name
+		})
 	}
+	switch {
+	case len(q.Tools) == 0:
+		rep.category = "select"
+	case hasTool("search_music_metadata"):
+		rep.category = "lookup"
+	case hasTool("web_search"):
+		rep.category = "web"
+	default:
+		rep.category = "verify"
+	}
+	var decisions []map[string]string
 	for _, item := range pending {
-		if item.Kind == "artist_identity" && lastTool == "read_pending_items" && len(item.Evidence.Names) > 0 {
-			rep.calls = []metricsToolCall{{"web_search", map[string]string{"q": strings.Join(item.Evidence.Names, " ")}}}
-			return rep, nil
+		id := item.ReleaseID
+		if id == "" {
+			id = item.ArtistID
+		}
+		target, ok := m.targets[id]
+		if !ok {
+			return rep, fmt.Errorf("待定项 %s 本地目标 %s 没有样本标注", item.ID, id)
+		}
+		rep.sampleIDs = append(rep.sampleIDs, target.SampleID)
+		route := m.routes[item.ID]
+		if len(route) == 0 || route[len(route)-1] != rep.category {
+			m.routes[item.ID] = append(route, rep.category)
+		}
+		if rep.category == "select" {
+			decision := map[string]string{"item_id": item.ID, "decision": "upgrade"}
+			for _, candidate := range item.Candidates {
+				if m.mode == "first_candidate" || candidate.ID == target.ReleaseID || candidate.ID == target.RecordingID {
+					decision["decision"], decision["external_id"] = "select", candidate.ID
+					break
+				}
+			}
+			decisions = append(decisions, decision)
+			continue
+		}
+		if call := m.nextTool(item, target, rep.category, lastTool, lastResult); call.name != "" {
+			rep.calls = append(rep.calls, call)
 		}
 	}
-	for _, item := range pending {
-		target := targets[item.ID]
-		selected := target.ReleaseID
-		switch item.Kind {
-		case "recording_match":
-			selected = target.RecordingID
-		case "artist_identity":
-			selected = target.ArtistID
-		case "release_match":
-		default:
-			selected = ""
-		}
-		if m.mode == "first_candidate" {
-			selected = ""
-			if item.Kind == "artist_identity" {
-				selected = firstArtist
-			} else if len(item.Candidates) > 0 {
-				selected = item.Candidates[0].ID
-			}
-		}
-		call := metricsToolCall{"shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "当前证据无法确认对应。"}}
-		if selected != "" {
-			basis := map[string]any{"note": "已核对本批待定项。"}
-			args := map[string]any{"item_id": item.ID, "external_id": selected, "basis": basis}
-			call = metricsToolCall{"resolve_release_match", args}
-			if item.Kind == "artist_identity" {
-				call.name = "resolve_artist_identity"
-				args["source"] = "musicbrainz"
-				basis["citations"] = []string{"https://musicbrainz.org/artist/" + selected}
-			}
-		}
-		rep.calls = append(rep.calls, call)
+	if rep.category == "select" {
+		raw, err := json.Marshal(map[string]any{"items": decisions})
+		rep.text = string(raw)
+		return rep, err
 	}
 	return rep, nil
+}
+
+func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, stage, lastTool, result string) metricsToolCall {
+	abandon := metricsToolCall{"shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "当前证据无法确认对应。"}}
+	match := func(id string) metricsToolCall {
+		return metricsToolCall{"resolve_release_match", map[string]any{"item_id": item.ID, "external_id": id, "basis": map[string]string{"note": "已读取外部候选。"}}}
+	}
+	switch stage {
+	case "lookup":
+		entity, field, title, expected := "release", "release", item.Evidence.Title, target.ReleaseID
+		if item.Kind == "recording_match" {
+			entity, field, expected = "recording", "recording", target.RecordingID
+			var tracks []struct{ Title string }
+			if json.Unmarshal(item.Evidence.Tracks, &tracks) == nil && len(tracks) > 0 {
+				title = tracks[0].Title
+			}
+		}
+		switch lastTool {
+		case "":
+			if m.mode == "oracle" && target.SearchTitle != "" {
+				title = target.SearchTitle
+			}
+			query := field + ":" + fmt.Sprintf("%q", title)
+			if title == "" {
+				query = "artist:" + fmt.Sprintf("%q", item.Evidence.Artist)
+			}
+			if title == "" && item.Evidence.Artist == "" {
+				return abandon
+			}
+			return metricsToolCall{"search_music_metadata", map[string]any{"entity": entity, "query": query, "limit": 10}}
+		case "search_music_metadata":
+			var found struct{ Results []struct{ MBID string } }
+			_ = json.Unmarshal([]byte(result), &found)
+			for _, candidate := range found.Results {
+				if m.mode == "first_candidate" || candidate.MBID == expected {
+					include := []string{"artist-credits"}
+					if entity == "release" {
+						include = append(include, "recordings")
+					}
+					return metricsToolCall{"get_music_metadata", map[string]any{"entity": entity, "mbid": candidate.MBID, "include": include}}
+				}
+			}
+		case "get_music_metadata":
+			var found struct{ Metadata struct{ MBID string } }
+			if json.Unmarshal([]byte(result), &found) == nil && uuid.Valid(found.Metadata.MBID) {
+				return match(found.Metadata.MBID)
+			}
+		case "resolve_release_match":
+			return metricsToolCall{}
+		}
+	case "web":
+		switch lastTool {
+		case "":
+			query := strings.TrimSpace(item.Evidence.Artist + " " + item.Evidence.Title + " " + strings.Join(item.Evidence.Names, " "))
+			if query == "" {
+				query = "未标记的本地发行"
+			}
+			return metricsToolCall{"web_search", map[string]string{"q": query}}
+		case "web_search":
+			var found struct{ Results []struct{ URL string } }
+			_ = json.Unmarshal([]byte(result), &found)
+			for _, candidate := range found.Results {
+				id, ok := strings.CutPrefix(candidate.URL, "https://musicbrainz.org/artist/")
+				if item.Kind == "artist_identity" && ok && uuid.Valid(id) && (m.mode == "first_candidate" || id == target.ArtistID) {
+					return metricsToolCall{"resolve_artist_identity", map[string]any{"item_id": item.ID, "source": "musicbrainz", "external_id": id,
+						"basis": map[string]any{"note": "网页搜索查到艺人。", "citations": []string{candidate.URL}}}}
+				}
+			}
+		case "resolve_artist_identity":
+			return metricsToolCall{}
+		}
+	case "verify":
+		if lastTool != "" {
+			return metricsToolCall{}
+		}
+		verdict := "uncertain"
+		switch item.Kind {
+		case "verify_name":
+			if item.Evidence.After != "" && item.Evidence.After == target.Fields[item.Evidence.Field] {
+				verdict = "typo"
+			}
+		case "verify_artist_credit", "verify_artist_merge":
+			verdict = "different"
+		default:
+			return abandon
+		}
+		return metricsToolCall{"submit_verification", map[string]string{"item_id": item.ID, "verdict": verdict, "reason": "按照合成样本的标注核对。"}}
+	}
+	return abandon
 }
 
 type metricsReviewEvidence struct {
@@ -394,7 +490,7 @@ func (m *metricsModel) reviewReply(ctx context.Context, q metricsChatRequest) (m
 }
 
 func (m *metricsModel) checkPreview(ctx context.Context, expected metricsModelTarget, tool string, e metricsReviewEvidence) (bool, error) {
-	linked := false
+	linked := tool == "submit_verification" && len(e.Preview.Data) > 0
 	for _, ch := range e.Preview.Data {
 		switch ch.Field {
 		case "external_link":

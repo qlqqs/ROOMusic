@@ -532,7 +532,7 @@ describe("例外（E2）", () => {
     const section = await group("例外");
     const table = await within(section).findByRole("table", { name: "等你处理的例外" });
     expect(within(table).getByText("标题：旧标题 → 新标题")).toBeTruthy();
-    expect(within(table).getByText("审查转给你确认（风险中）")).toBeTruthy();
+    expect(within(table).getByText("审查拿不准（风险中）")).toBeTruthy();
     expect(within(table).getByText("标题需要人工核对")).toBeTruthy();
     expect(within(table).getByRole("link", { name: /查看过程/ }).getAttribute("href")).toBe(`/steward/${exception.conversation_id ?? ""}`);
     await user.click(within(table).getByRole("button", { name: /^采纳/ }));

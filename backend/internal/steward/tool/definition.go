@@ -84,9 +84,13 @@ type Change struct {
 
 // Preview 是只读计算的展示快照，执行器仍负责最终校验。
 type Preview struct {
-	Target  string   `json:"target"`
-	Changes []Change `json:"changes"`
-	Summary string   `json:"summary"`
+	// 后台核对结果仅由后端预览生成，写入前仍须复核。
+	BackgroundDirect bool            `json:"-"`
+	Contradicted     bool            `json:"-"`
+	Verification     json.RawMessage `json:"verification,omitempty"`
+	Target           string          `json:"target"`
+	Changes          []Change        `json:"changes"`
+	Summary          string          `json:"summary"`
 }
 
 // Basis 只说明模型提供的依据，不授予执行权限。

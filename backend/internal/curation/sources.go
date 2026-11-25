@@ -332,3 +332,11 @@ func (s *Sources) MatchFallbackReadiness(ctx context.Context) (model, web bool, 
 	}
 	return model, web, tx.Commit()
 }
+
+// ScanRunning 让无需外部来源的模型核对共用扫描闸门。
+func (s *Sources) ScanRunning(ctx context.Context) (bool, error) {
+	if s.scanCheck == nil {
+		return false, nil
+	}
+	return s.scanCheck(ctx)
+}

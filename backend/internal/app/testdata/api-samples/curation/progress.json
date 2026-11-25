@@ -17,7 +17,15 @@
         "input_tokens": 0,
         "output_tokens": 0
       },
-      "unavailable_reason": null
+      "unavailable_reason": null,
+      "web_daily_token_limit": 240000,
+      "web_limit_reached": false,
+      "web_retry_at": null,
+      "web_today": {
+        "date": "2026-01-02",
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
     },
     "pending": {
       "waiting_model": 0

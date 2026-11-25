@@ -82,7 +82,9 @@ func (r *metricSummary) add(e metricEntry, s metricScore, model map[string]metri
 
 func metricReport(t *testing.T, app *integrationTestApplication, entries []metricEntry, model *metricsModel) {
 	t.Helper()
-	scores := metricScoreEntries(t, app, entries)
+	model.mu.Lock()
+	scores := metricScoreEntries(t, app, entries, model.routes)
+	model.mu.Unlock()
 	usage := model.usage()
 	details := make([]metricDetail, 0, len(entries))
 	groups := map[string]*metricSummary{}

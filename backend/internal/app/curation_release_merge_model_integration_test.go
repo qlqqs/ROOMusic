@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
@@ -42,12 +41,7 @@ func approveReleaseMerge(t *testing.T, f *schedulerFixture, item curation.Pendin
 	t.Helper()
 	f.next(t, false).tool(t, releaseMergeProposalTool, releaseMergeProposal(item.ID))
 	f.next(t, true).review(t, "approved")
-	last := f.next(t, false)
-	if result := last.lastToolResult(t); !strings.Contains(result, "operation_id") {
-		t.Fatalf("模型合并结果 %s", result)
-	}
-	last.complete(t)
-	requireReleaseMergeResolution(t, f.curationFixture, item.ID, "model_merged")
+	modelWaitResolution(t, f, item.ID, "model_merged")
 	op = programString(t, f.application, `SELECT operation_id FROM release_merges WHERE source_release_id=$1 AND target_release_id=$2`, f.b, f.a)
 	batch = programString(t, f.application, `SELECT batch_id FROM operations WHERE id=$1`, op)
 	schedulerWait(t, "关闭发行合并的模型批次", func() bool {
@@ -59,8 +53,7 @@ func approveReleaseMerge(t *testing.T, f *schedulerFixture, item curation.Pendin
 func TestPostgreSQLCurationModelMergeReleases(t *testing.T) {
 	t.Run("模型提出并经审查写入", func(t *testing.T) {
 		f := newSchedulerFixture(t)
-		want := []string{"correct_release", "correct_track", "get_music_metadata", "merge_releases", "read_pending_items",
-			"resolve_release_match", "search_music_metadata", "shelve_pending_item"}
+		want := []string{"get_music_metadata", "merge_releases", "resolve_release_match", "search_music_metadata", "shelve_pending_item", "submit_verification"}
 		for _, name := range want {
 			if !backgroundToolAllowed(name) {
 				t.Errorf("后台白名单缺少 %s", name)
@@ -71,7 +64,7 @@ func TestPostgreSQLCurationModelMergeReleases(t *testing.T) {
 			dedicated = append(dedicated, tool.Name)
 		}
 		slices.Sort(dedicated)
-		if !slices.Equal(dedicated, []string{"merge_releases", "read_pending_items", "resolve_artist_identity", "resolve_release_match", "shelve_pending_item", "submit_artist_media"}) {
+		if !slices.Equal(dedicated, []string{"merge_releases", "read_pending_items", "resolve_artist_identity", "resolve_release_match", "shelve_pending_item", "submit_artist_media", "submit_verification"}) {
 			t.Fatalf("后台专用工具 %v", dedicated)
 		}
 		_, item := startReleaseMergeModel(t, f)
@@ -80,7 +73,7 @@ func TestPostgreSQLCurationModelMergeReleases(t *testing.T) {
 			JOIN steward_reviews r ON r.id::text=o.origin->>'review_id'
 			WHERE o.id=$1 AND b.id=$2 AND b.tier='model' AND b.actor_id=$3 AND o.actor_id=$3 AND o.target_id=$4
 			AND o.operation_type='release_auto_merge' AND o.origin->>'source'='curation' AND o.origin->>'provider_kind'='model'
-			AND o.origin->>'provider'='test-main' AND o.origin->>'review_decision'='approved' AND r.policy_version=4`, op, batch, f.admin.id, f.a)
+			AND o.origin->>'provider'='test-main' AND o.origin->>'review_decision'='approved' AND r.policy_version=5`, op, batch, f.admin.id, f.a)
 		b3RequireCount(t, f.application, 2, `SELECT count(*) FROM operations_release_targets WHERE operation_id=$1 AND release_id IN ($2,$3)`, op, f.a, f.b)
 		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions`)
 	})
@@ -234,7 +227,7 @@ func TestPostgreSQLCurationExceptionMergeAcceptDecline(t *testing.T) {
 					WHERE o.id=$1 AND o.actor_id=$2 AND o.batch_id IS NULL AND o.operation_type='release_auto_merge'
 					AND o.origin->>'provider_kind'='model' AND o.origin->>'provider'='test-main' AND o.origin->>'review_decision'='human'
 					AND o.origin->>'review_id'=$3 AND m.target_release_id=$4 AND m.source_release_id=$5`, e.OperationIDs[0], reviewer.id, ex.Review.ID, f.a, f.b)
-				requireReleaseMergeResolution(t, f.curationFixture, item.ID, "human_accepted")
+				modelWaitResolution(t, f, item.ID, "human_accepted")
 			case "stale":
 				before, err := f.writer.PreviewReleaseMerge(t.Context(), item)
 				requireCurationOK(t, err)
@@ -250,7 +243,7 @@ func TestPostgreSQLCurationExceptionMergeAcceptDecline(t *testing.T) {
 				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_merges`)
 			case "decline":
 				readExceptionDecision(t, f.decide(t, &reviewer, ex.ID, "decline"), "declined", reviewer.id)
-				requireReleaseMergeResolution(t, f.curationFixture, item.ID, "human_declined")
+				modelWaitResolution(t, f, item.ID, "suggestion_recorded")
 				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_suppressions WHERE subject='release_merge'
 					AND target_type='release' AND target_id=$1 AND value->>'release_id'=$2 AND created_by=$3`, min(f.a, f.b), max(f.a, f.b), reviewer.id)
 				discoverReleaseMerge(t, f.curationFixture, external)

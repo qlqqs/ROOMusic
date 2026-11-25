@@ -106,9 +106,12 @@ func readPlanItems(ctx context.Context, tx *sql.Tx, planID string) ([]PlanItem, 
 		if err := json.Unmarshal(preview, &item.Preview); err != nil {
 			return nil, err
 		}
-		var message provider.Message
+		var message messageContent
 		if err := json.Unmarshal(content, &message); err != nil {
 			return nil, err
+		}
+		if position < len(message.BackendActions) {
+			item.CallID = message.BackendActions[position].ID
 		}
 		index := 0
 		for _, block := range message.Content {

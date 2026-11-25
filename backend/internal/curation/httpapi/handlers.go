@@ -131,10 +131,11 @@ func (h *Handlers) settings(w http.ResponseWriter, r *http.Request, _ identity.U
 
 func (h *Handlers) setSettings(w http.ResponseWriter, r *http.Request, actor identity.User) {
 	var body struct {
-		Enabled         *bool           `json:"enabled"`
-		Paused          *bool           `json:"paused"`
-		Model           json.RawMessage `json:"model"`
-		DailyTokenLimit json.RawMessage `json:"daily_token_limit"`
+		Enabled            *bool           `json:"enabled"`
+		Paused             *bool           `json:"paused"`
+		Model              json.RawMessage `json:"model"`
+		DailyTokenLimit    json.RawMessage `json:"daily_token_limit"`
+		WebDailyTokenLimit json.RawMessage `json:"web_daily_token_limit"`
 	}
 	if !decode(w, r, &body) {
 		return
@@ -147,6 +148,11 @@ func (h *Handlers) setSettings(w http.ResponseWriter, r *http.Request, actor ide
 	patch.SetDailyTokenLimit = body.DailyTokenLimit != nil
 	if patch.SetDailyTokenLimit && json.Unmarshal(body.DailyTokenLimit, &patch.DailyTokenLimit) != nil {
 		h.respond(w, r, nil, operations.Invalid("invalid_input", "每日用量上限无效"))
+		return
+	}
+	patch.SetWebDailyTokenLimit = body.WebDailyTokenLimit != nil
+	if patch.SetWebDailyTokenLimit && json.Unmarshal(body.WebDailyTokenLimit, &patch.WebDailyTokenLimit) != nil {
+		h.respond(w, r, nil, operations.Invalid("invalid_input", "联网每日用量上限无效"))
 		return
 	}
 	s, err := h.writer.UpdateModelSettings(r.Context(), actor.ID, body.Enabled, body.Paused, patch)

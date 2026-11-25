@@ -3,10 +3,12 @@
     "items": [
       {
         "artist": null,
+        "can_accept": true,
         "conversation_id": "00000000-0000-4000-8000-000000000001",
-        "created_at": "2026-01-01T00:00:00Z",
+        "created_at": "2026-01-01T00:00:02Z",
         "decided_at": null,
         "decided_by": null,
+        "evidence": {},
         "id": "00000000-0000-4000-8000-000000000002",
         "input": {
           "basis": {
@@ -33,6 +35,10 @@
             }
           ]
         },
+        "reason_code": "review_uncertain",
+        "reasons": [
+          "发行资料需要人工核对"
+        ],
         "release": {
           "artist": "Artist A",
           "id": "00000000-0000-4000-8000-000000000003",
@@ -50,11 +56,99 @@
         },
         "status": "open",
         "tool": "correct_release"
+      },
+      {
+        "artist": null,
+        "can_accept": true,
+        "conversation_id": "00000000-0000-4000-8000-000000000001",
+        "created_at": "2026-01-01T00:00:01Z",
+        "decided_at": null,
+        "decided_by": null,
+        "evidence": {
+          "field": "label",
+          "value": "岸风唱片"
+        },
+        "id": "00000000-0000-4000-8000-000000000006",
+        "input": {
+          "basis": {
+            "note": "合成发行资料",
+            "source": "external"
+          },
+          "changes": {
+            "label": {
+              "mode": "set",
+              "value": "岸风唱片"
+            }
+          },
+          "expected_revision": 1,
+          "release_id": "00000000-0000-4000-8000-000000000003"
+        },
+        "kind": "release_match",
+        "operation_ids": [],
+        "pending_item_id": "00000000-0000-4000-8000-000000000004",
+        "preview": {
+          "changes": [
+            {
+              "after": "岸风唱片",
+              "before": null,
+              "field": "label"
+            }
+          ]
+        },
+        "reason_code": "unverified_fact",
+        "reasons": [
+          "开放库没有可核实的厂牌"
+        ],
+        "release": {
+          "artist": "Artist A",
+          "id": "00000000-0000-4000-8000-000000000003",
+          "title": "Album A"
+        },
+        "review": null,
+        "status": "open",
+        "tool": "correct_release"
+      },
+      {
+        "artist": null,
+        "can_accept": false,
+        "conversation_id": "00000000-0000-4000-8000-000000000001",
+        "created_at": "2026-01-01T00:00:00Z",
+        "decided_at": null,
+        "decided_by": null,
+        "evidence": {
+          "after": "Album: A",
+          "before": "Album A",
+          "field": "title"
+        },
+        "id": "00000000-0000-4000-8000-000000000007",
+        "input": {
+          "item_id": "00000000-0000-4000-8000-000000000008",
+          "reason": "保留原有标点",
+          "verdict": "style"
+        },
+        "kind": "verify_name",
+        "operation_ids": [],
+        "pending_item_id": "00000000-0000-4000-8000-000000000008",
+        "preview": {
+          "changes": []
+        },
+        "reason_code": "verification_declined",
+        "reasons": [
+          "保留原有标点"
+        ],
+        "release": {
+          "artist": "Artist A",
+          "id": "00000000-0000-4000-8000-000000000003",
+          "title": "Album A"
+        },
+        "review": null,
+        "status": "open",
+        "tool": "observation"
       }
     ],
     "page": 1,
     "page_size": 50,
-    "total": 1
+    "total": 3
   },
   "status": 200
 }

@@ -45,7 +45,7 @@ func TestPostgreSQLCurationModelStopConditions(t *testing.T) {
 		{"enabler_changed", runtime.EndCurationStopped}, {"endpoint_cleared", runtime.EndCancelled},
 		{"key_changed", runtime.EndCancelled}, {"limit", runtime.EndCompleted},
 		{"scan", runtime.EndCurationStopped}, {"musicbrainz_disabled", runtime.EndCurationStopped},
-		{"logout", runtime.EndCompleted}, {"paused_on_final_step", runtime.EndCompleted},
+		{"logout", runtime.EndCompleted}, {"paused_on_final_step", runtime.EndCurationStopped},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newSchedulerFixture(t)
@@ -91,15 +91,8 @@ func TestPostgreSQLCurationModelStopConditions(t *testing.T) {
 			switch {
 			case tc.reason == runtime.EndCancelled:
 				// 端点与密钥变化应在模型服务仍挂起时立即结束运行。
-			case tc.name == "paused_on_final_step":
-				first.complete(t)
 			default:
-				first.tool(t, "read_pending_items", map[string]any{})
-				if tc.name == "logout" || tc.name == "limit" {
-					next := f.next(t, false)
-					next.tool(t, "shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "资料不足"})
-					f.next(t, false).complete(t)
-				}
+				first.selectCandidate(t, item.ID, "")
 			}
 			reason := schedulerEnd(t, sub)
 			if reason != tc.reason {
@@ -119,8 +112,8 @@ func TestPostgreSQLCurationModelStopConditions(t *testing.T) {
 				f.pause(t)
 				resumed.complete(t)
 			case "logout", "limit":
-				if got := f.item(t, item.ID); got.Status != "shelved" {
-					t.Fatalf("%s 后本项的工具未生效：%+v", tc.name, got)
+				if got := f.item(t, item.ID); got.Status != "waiting_route" || got.Route != "lookup" {
+					t.Fatalf("%s 后本项未能升级：%+v", tc.name, got)
 				}
 			default:
 				schedulerWait(t, "释放领取", func() bool { return f.item(t, item.ID).Status == "waiting_model" })

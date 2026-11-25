@@ -146,6 +146,13 @@ func (f *artistWebSearchFixture) addArtist(t *testing.T, name string) string {
 
 func (f *artistWebSearchFixture) pendingArtist(t *testing.T, artist, name string) curation.PendingItem {
 	t.Helper()
+	if f.requests != nil {
+		// 受控模型测试不启动程序，用已完成的发行识别夹具满足艺人领项门槛。
+		mustExec(t, f.application, curation.ArtistReleaseCreditsSQL+`
+			INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status)
+			SELECT DISTINCT 'release',release_id,1,'合成识别结论','no_match' FROM credits WHERE artist_id=$1
+			ON CONFLICT(subject,target_id) DO NOTHING`, artist)
+	}
 	evidence, err := json.Marshal(map[string]any{
 		"names": []string{name}, "albums": []any{}, "tracks": []string{}, "gaps": map[string]bool{"image": true, "bio": true},
 	})
@@ -283,9 +290,18 @@ func TestPostgreSQLArtistWebSearchBackgroundSearchGate(t *testing.T) {
 			}
 			f.update(t, http.MethodPut, curationBase+"/sources/web_search", map[string]bool{"enabled": tc.enabled})
 			release, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{title: "合成待定发行", artist: "合成组合", tracks: []string{"present"}})
-			modelPending(t, f.curationFixture, release, "release_match", "合成发行证据")
+			item := modelPending(t, f.curationFixture, release, "release_match", modelDigestForTarget(t, f.schedulerFixture, release))
+			modelRouteFixture(t, f.schedulerFixture, item, "web")
 			f.enable(t)
-
+			if !tc.fetchTool {
+				modelWaitResolution(t, f.schedulerFixture, item.ID, "unlisted")
+				select {
+				case <-requests:
+					t.Fatal("联网不可用时发出了模型请求")
+				default:
+				}
+				return
+			}
 			select {
 			case tools := <-requests:
 				has := func(name string) bool {
@@ -294,7 +310,7 @@ func TestPostgreSQLArtistWebSearchBackgroundSearchGate(t *testing.T) {
 				native := slices.ContainsFunc(tools, func(tool wireTool) bool {
 					return tool.Type == "web_search" || strings.HasPrefix(tool.Type, "web_search_")
 				})
-				if !has("read_pending_items") || has("web_search") != tc.searchTool || has("fetch_page") != tc.fetchTool || native != tc.native {
+				if has("read_pending_items") || has("search_music_metadata") || has("web_search") != tc.searchTool || has("fetch_page") != tc.fetchTool || native != tc.native {
 					t.Fatalf("后台模型请求工具 %+v，期望 web_search=%t，fetch_page=%t，原生搜索=%t", tools, tc.searchTool, tc.fetchTool, tc.native)
 				}
 			case <-time.After(5 * time.Second):
@@ -355,8 +371,8 @@ func TestPostgreSQLArtistWebSearchIdentityRejectionsAndStates(t *testing.T) {
 		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1`, item.ID)
 	}
 	next.tool(t, "shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "三个合成候选均无法采纳"})
-	f.next(t, false).complete(t)
-	f.status(t, artist, "shelved", 0)
+	f.waitArtistResolution(t, item.ID, "no_result")
+	f.status(t, artist, "none", 0)
 	conversation, err := runtime.NewStore(f.application.database).GetConversation(t.Context(), f.admin.id, conversationID)
 	requireCurationOK(t, err)
 	if len(conversation.Plans) != 0 {
@@ -376,9 +392,9 @@ func TestPostgreSQLArtistWebSearchMusicBrainzWithoutType(t *testing.T) {
 	artist := f.addArtist(t, webSearchArtistName)
 	item := f.pendingArtist(t, artist, webSearchArtistName)
 	f.enable(t)
+	f.next(t, false).tool(t, "web_search", map[string]string{"q": webSearchArtistName})
 	f.next(t, false).tool(t, "resolve_artist_identity", webSearchIdentityProposal(item.ID, "musicbrainz", webSearchSoloMBID, f.endpoint+"/searxng/artists/coast"))
 	f.next(t, true).review(t, "approved")
-	f.next(t, false).complete(t)
 	f.waitArtistResolution(t, item.ID, "model_linked")
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links l JOIN operations o ON o.id=l.operation_id
 		WHERE l.object_type='artist' AND l.object_id=$1 AND l.source='musicbrainz' AND l.external_id=$2

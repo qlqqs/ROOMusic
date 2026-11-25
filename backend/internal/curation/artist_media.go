@@ -251,14 +251,9 @@ func (r artistMediaWrite) apply(ctx context.Context, insert func(context.Context
 			return operations.Outcome{}, err
 		}
 		if itemID != "" {
-			var claimed bool
-			err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM curation_pending_items WHERE id=$1 AND kind='artist_identity'
-			  AND artist_id=$2 AND conversation_id=$3 AND status='in_progress' FOR SHARE)`, itemID, r.artistID, conversation).Scan(&claimed)
-			if err != nil {
+			run, _ := ModelRunFrom(ctx)
+			if err := checkClaimedTarget(ctx, tx, run, r.artistID, "artist_id", "artist_identity"); err != nil {
 				return operations.Outcome{}, err
-			}
-			if !claimed {
-				return operations.Outcome{}, operations.Conflict("out_of_batch", "待定项不属于本次运行")
 			}
 		}
 		rowsSQL := catalog.ArtistImageRowsSQL

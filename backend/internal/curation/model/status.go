@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
@@ -11,15 +12,15 @@ import (
 
 type schedulingConditions struct {
 	curation.ModelProgress
-	targets []string
+	sources []string
 }
 
 // 按待定项目标检查来源。没有注册网络搜索的调度器仍可处理发行项。
 func (s *Scheduler) targetSources(ctx context.Context, p *schedulingConditions) error {
-	for _, source := range []struct{ id, target string }{{"musicbrainz", "release"}, {"web_search", "artist"}} {
-		err := s.sources.Check(ctx, source.id)
+	for _, source := range []string{"musicbrainz", "web_search"} {
+		err := s.sources.Check(ctx, source)
 		if err == nil {
-			p.targets = append(p.targets, source.target)
+			p.sources = append(p.sources, source)
 			continue
 		}
 		var failure *operations.Failure
@@ -36,18 +37,34 @@ func (s *Scheduler) targetSources(ctx context.Context, p *schedulingConditions) 
 		case "curation_disabled":
 			p.State = "disabled"
 			return nil
-		case "not_found", "source_disabled":
+		case "not_found", "source_disabled", "search_unconfigured":
 			continue
 		default:
 			return err
 		}
 	}
-	if len(p.targets) == 0 {
-		reason := "source_disabled"
-		p.State = "unavailable"
-		p.UnavailableReason = &reason
+	// 库内核对也受扫描闸门约束，即使两个出站源都关闭。
+	if len(p.sources) == 0 {
+		running, err := s.sources.ScanRunning(ctx)
+		if err != nil {
+			return err
+		}
+		if running {
+			p.State = "waiting_for_scan"
+		}
 	}
 	return nil
+}
+
+func (p schedulingConditions) allows(kind TaskKind) bool {
+	switch kind {
+	case SelectCandidate, LookupCandidate:
+		return slices.Contains(p.sources, "musicbrainz")
+	case WebFallback:
+		return slices.Contains(p.sources, "web_search")
+	default:
+		return true
+	}
 }
 
 func (s *Scheduler) conditions(ctx context.Context, checkBudget bool) (p schedulingConditions, actor string, err error) {
@@ -55,10 +72,15 @@ func (s *Scheduler) conditions(ctx context.Context, checkBudget bool) (p schedul
 	if err != nil {
 		return p, "", err
 	}
-	p.Model, p.DailyTokenLimit = settings.Model, settings.DailyTokenLimit
+	p.Model, p.DailyTokenLimit, p.WebDailyTokenLimit = settings.Model, settings.DailyTokenLimit, settings.WebDailyTokenLimit
 	now := s.options.Now()
 	if checkBudget {
-		p.Today, err = s.writer.TodayUsage(ctx, now)
+		p.Today, p.WebToday, err = s.writer.DailyUsage(ctx, now)
+		p.WebLimitReached = p.WebToday.AtLimit(p.WebDailyTokenLimit)
+		if p.WebLimitReached {
+			retry := curation.NextBudgetDay(now)
+			p.WebRetryAt = &retry
+		}
 		if err != nil {
 			return p, "", err
 		}
@@ -92,7 +114,7 @@ func (s *Scheduler) conditions(ctx context.Context, checkBudget bool) (p schedul
 		switch {
 		case reason != "":
 			unavailable(reason)
-		case checkBudget && p.DailyTokenLimit != nil && p.Today.InputTokens+p.Today.OutputTokens >= *p.DailyTokenLimit:
+		case checkBudget && p.Today.AtLimit(p.DailyTokenLimit):
 			p.State = "limit_reached"
 		case cooling:
 			unavailable("provider_error")
@@ -111,8 +133,8 @@ func (s *Scheduler) ModelStatus(ctx context.Context) (curation.ModelProgress, er
 	}
 	var waitingReview bool
 	err = s.db.QueryRowContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
- SELECT count(*) FILTER (WHERE status='waiting_model'),count(*) FILTER (WHERE status='in_progress'),
- count(*) FILTER (WHERE status='waiting_human'),count(*) FILTER (WHERE status='shelved'),
+ SELECT count(*) FILTER (WHERE status IN ('waiting_model','waiting_route')),count(*) FILTER (WHERE status='in_progress'),
+ 0,count(*) FILTER (WHERE status='shelved'),
  count(*) FILTER (WHERE status='in_progress' AND next_attempt_at IS NOT NULL)>0
  FROM curation_pending_items p WHERE `+curation.PendingTargetVisibleSQL).Scan(&p.Items.WaitingModel, &p.Items.InProgress, &p.Items.WaitingHuman, &p.Items.Shelved, &waitingReview)
 	if p.State == "idle" || p.State == "limit_reached" {

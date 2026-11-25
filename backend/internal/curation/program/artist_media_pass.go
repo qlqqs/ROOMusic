@@ -21,6 +21,7 @@ type artistEvidence struct {
 	NoLink                             bool
 	hasCredits, waitingForRecognition  bool
 	pendingStatus                      string
+	finishedForInput                   bool
 	albumAuth, trackAuth               []metadata.Authenticity
 }
 
@@ -40,6 +41,10 @@ func (e artistEvidence) resolution() string {
 func (e artistEvidence) shouldClose() bool {
 	reason := e.resolution()
 	return !e.waitingForRecognition && e.pendingStatus != "" && reason != "" && !(reason == "filled" && e.pendingStatus == "in_progress")
+}
+
+func (e artistEvidence) missingWebItem(providers artistProviders) bool {
+	return e.NoLink && providers.active["web_search"] && e.resolution() == "" && e.pendingStatus == "" && !e.finishedForInput
 }
 
 const artistMediaCandidatesSQL = `SELECT a.id FROM artists a
@@ -117,7 +122,11 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 			ON recognition.subject='release' AND recognition.target_id=c.release_id
 			WHERE c.canonical_id=p.canonical_id AND `+curation.ReleaseRecognitionPendingSQL+`),
 		COALESCE((SELECT status FROM curation_pending_items pi WHERE pi.artist_id=p.canonical_id
-			AND pi.target_type='artist' AND pi.kind='artist_identity' AND pi.status<>'resolved'),'')
+			AND pi.target_type='artist' AND pi.kind='artist_identity' AND pi.status<>'resolved'),''),
+		EXISTS(SELECT FROM curation_pending_items pi JOIN curation_work_states w
+			ON w.subject='artist_media' AND w.target_id=pi.artist_id AND w.input_digest=pi.input_digest
+			WHERE pi.artist_id=p.canonical_id AND pi.kind='artist_identity' AND pi.status='resolved'
+			AND pi.resolution IN ('no_result','suggestion_recorded') AND pi.candidates='[]' AND pi.conflicts='[]')
 	FROM page p JOIN artists a ON a.id=p.canonical_id LEFT JOIN artist_profiles profile ON profile.artist_id=p.canonical_id
 	ORDER BY p.canonical_id`, args...)
 	if err != nil {
@@ -128,7 +137,7 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 	for rows.Next() {
 		var e artistEvidence
 		var ids, qids, markers, names []byte
-		if err := rows.Scan(&e.ID, &e.Name, &ids, &qids, &e.ImageRank, &e.BioRank, &markers, &names, &e.Albums, &e.Tracks, &e.hasCredits, &e.waitingForRecognition, &e.pendingStatus); err != nil {
+		if err := rows.Scan(&e.ID, &e.Name, &ids, &qids, &e.ImageRank, &e.BioRank, &markers, &names, &e.Albums, &e.Tracks, &e.hasCredits, &e.waitingForRecognition, &e.pendingStatus, &e.finishedForInput); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(ids, &e.MBIDs); err != nil {
@@ -304,8 +313,7 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 	}
 	input := digest([]any{e, providers.digest})
 	// 模型写入一项资料后结束原项，程序用当前缺口和摘要建立下一项。
-	missingItem := e.NoLink && providers.active["web_search"] && e.resolution() == "" && e.pendingStatus == ""
-	if !missingItem && !needsWork(subject, state, input, w.opts.Now(), false) {
+	if !e.missingWebItem(providers) && !needsWork(subject, state, input, w.opts.Now(), false) {
 		return nil
 	}
 	if err := w.ready(ctx); err != nil {

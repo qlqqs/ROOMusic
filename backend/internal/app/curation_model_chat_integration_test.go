@@ -33,32 +33,21 @@ func finishSchedulerChat(t *testing.T, done <-chan *httptest.ResponseRecorder) {
 	}
 }
 
-func TestPostgreSQLCurationModelCorrectReleaseAutoLayer(t *testing.T) {
+func TestPostgreSQL整理第一档禁用字段修改且对话可审查(t *testing.T) {
 	f := newSchedulerFixture(t)
 	f.configure(t, &f.admin)
 	_, revision := f.correct(t, f.a, 1, map[string]any{"label": setChange("人工厂牌")})
-	f.pending(t, f.a)
+	item := f.pending(t, f.a)
 	f.enable(t)
 	q := f.next(t, false)
-	for _, tc := range []struct {
-		target, field, code string
-		value               any
-	}{
-		{f.a, "edition", "invalid_correction", clearChange}, {f.b, "edition", "out_of_batch", setChange("批外版本")}, {f.a, "label", "manual_override", setChange("替换厂牌")},
-	} {
-		q.tool(t, "correct_release", schedulerCorrection(tc.target, revision, tc.field, tc.value))
-		q = f.next(t, false)
-		if result := q.lastToolResult(t); !strings.Contains(result, tc.code) {
-			t.Fatalf("预期 %s，工具返回 %s", tc.code, result)
-		}
+	if len(q.Tools) != 0 {
+		t.Fatalf("第一档附带工具 %+v", q.Tools)
 	}
 	q.tool(t, "correct_release", schedulerCorrection(f.a, revision, "edition", setChange("模型版本")))
-	f.next(t, true).review(t, "approved")
-	last := f.next(t, false)
-	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM release_auto_values WHERE release_id=$1 AND field='edition' AND text_value='模型版本'`, f.a)
-	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_corrections WHERE release_id=$1 AND field='edition'`, f.a)
+	schedulerWait(t, "无效工具答复释放项目", func() bool { return f.item(t, item.ID).Attempts > 0 })
 	f.pause(t)
-	last.complete(t)
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1 AND field='edition'`, f.a)
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM steward_reviews`)
 	chat := f.startChat(t)
 	f.next(t, false).tool(t, "correct_release", schedulerCorrection(f.a, revision, "edition", setChange("对话版本")))
 	f.next(t, true).review(t, "approved")

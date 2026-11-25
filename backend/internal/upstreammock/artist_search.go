@@ -7,6 +7,10 @@ var artistPortrait []byte
 
 const artistIntro = "海岸来信是为测试创作的独立音乐组合，作品以潮汐和沿岸生活为主题。"
 
+const artistDirectoryHTML = `<!doctype html><html lang="zh-CN"><head><title>沿岸音乐名录</title></head><body>
+<p>纸屿二重奏（Wikidata Q900001）与同名独奏者分别录制潮声作品。</p>
+<p>` + artistIntro + `</p><img src="portrait.png" alt="海岸来信"></body></html>`
+
 func artistSearchPage(base string) object {
 	return object{"title": "沿岸音乐名录", "url": base + "/searxng/artists/coast", "content": "纸屿二重奏（Wikidata Q900001）与同名独奏者分别录制潮声作品。" + artistIntro, "image": base + "/searxng/artists/portrait.png"}
 }

@@ -39,10 +39,13 @@ type providerHistory struct {
 }
 
 type messageContent struct {
-	Origin       providerOrigin        `json:"-"`
-	Searches     []provider.Search     `json:"searches,omitempty"`
-	Citations    []provider.Citation   `json:"citations,omitempty"`
-	FinishReason provider.FinishReason `json:"finish_reason,omitempty"`
+	BackgroundClaims map[string]string     `json:"background_claims,omitempty"`
+	BackgroundItemID string                `json:"background_item_id,omitempty"`
+	BackendActions   []provider.ToolCall   `json:"backend_actions,omitempty"`
+	Origin           providerOrigin        `json:"-"`
+	Searches         []provider.Search     `json:"searches,omitempty"`
+	Citations        []provider.Citation   `json:"citations,omitempty"`
+	FinishReason     provider.FinishReason `json:"finish_reason,omitempty"`
 	provider.Message
 	Source *toolSource `json:"source,omitempty"`
 }
@@ -99,6 +102,7 @@ func replayMessagesFor(messages []Message, origin providerOrigin) ([]provider.Me
 	result := make([]provider.Message, 0, len(messages))
 	var pending []provider.ToolCall
 	results := make(map[string]bool)
+	backendActions := make(map[string]bool)
 	flush := func() {
 		for _, call := range pending {
 			if !results[call.ID] {
@@ -133,6 +137,13 @@ func replayMessagesFor(messages []Message, origin providerOrigin) ([]provider.Me
 		var content messageContent
 		if err := json.Unmarshal(stored.Content, &content); err != nil {
 			return nil, fmt.Errorf("读取管家历史消息: %w", err)
+		}
+		// 选择答复的后端操作不是模型工具调用，其结果不以孤立的 tool 消息重放。
+		for _, action := range content.BackendActions {
+			backendActions[action.ID] = true
+		}
+		if content.Role == provider.RoleTool && len(content.Content) == 1 && content.Content[0].ToolResult != nil && backendActions[content.Content[0].ToolResult.CallID] {
+			continue
 		}
 		// 旧 content 中的未绑定块不能跨端点回传；文字和本地工具历史仍保留。
 		visible := make([]provider.ContentBlock, 0, len(content.Content))

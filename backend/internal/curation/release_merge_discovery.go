@@ -78,7 +78,16 @@ func (w *Writer) discoverReleaseMerges(ctx context.Context, tx *sql.Tx, external
 	for i := 0; i+1 < len(ordered) && len(pairs) == 0; i++ {
 		for _, id := range ordered[i+1:] {
 			p := mergePair(members[ordered[i]], members[id])
-			err := p.check(ctx, tx)
+			var finished bool
+			err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM curation_pending_items WHERE target_type='release'
+    AND target_id=$1 AND kind='release_merge' AND resolution='suggestion_recorded' AND input_digest=$2)`, p.Target.ReleaseID, p.inputDigest()).Scan(&finished)
+			if err != nil {
+				return err
+			}
+			if finished {
+				continue
+			}
+			err = p.check(ctx, tx)
 			if err == nil {
 				_, err = governance.NewStore(tx).PreviewReleaseMerge(ctx, p.Target.ReleaseID, id)
 			}

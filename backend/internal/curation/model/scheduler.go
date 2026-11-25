@@ -5,14 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/curation/program"
+	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
 var ErrStopped = errors.New("后台整理条件已变更")
@@ -40,6 +40,8 @@ type Run interface {
 }
 
 type RunParams struct {
+	Items              []curation.PendingItem
+	OnToolCalls        func(context.Context, int) error
 	Run                curation.ModelRun
 	Text, ReviewPlanID string
 	BeforeStep         func(context.Context) error
@@ -112,8 +114,8 @@ func (s *Scheduler) Run(ctx context.Context) {
 }
 
 func (s *Scheduler) poll(ctx context.Context) error {
-	progress, actor, err := s.conditions(ctx, false)
-	if err != nil || progress.State != "idle" {
+	progress, actor, err := s.conditions(ctx, true)
+	if err != nil || (progress.State != "idle" && progress.State != "limit_reached") {
 		return err
 	}
 	now := s.options.Now()
@@ -134,14 +136,22 @@ func (s *Scheduler) poll(ctx context.Context) error {
 		}
 		items, err = s.writer.ClaimedItems(ctx, conversation)
 	case errors.Is(err, sql.ErrNoRows):
+		if !progress.allows(WebFallback) {
+			if err := s.finishDisabledWeb(ctx, actor, progress.Model, now); err != nil {
+				return err
+			}
+		}
 		var checkpoint curation.ModelItemCheckpoint
 		checkpoint, err = s.writer.BeforeModelItem(ctx, actor, now)
 		if err != nil || checkpoint.Reason != "" {
 			return err
 		}
+		if err = s.writer.MaterializeVerificationItems(ctx); err != nil {
+			return err
+		}
 		var kind TaskKind
 		var releaseID string
-		kind, releaseID, err = s.nextKind(ctx, now, progress.targets)
+		kind, releaseID, err = s.nextKind(ctx, now, progress)
 		if err != nil || kind == "" {
 			return err
 		}
@@ -149,12 +159,7 @@ func (s *Scheduler) poll(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		limit := s.options.BatchSize
-		// 当前处理器按会话领取。配置日额度时把领取边界放在单项，运行内可完成该项的所有步骤。
-		if progress.DailyTokenLimit != nil || kind == LookupCandidate {
-			limit = 1
-		}
-		items, err = s.writer.ClaimModelKind(ctx, conversation, now, limit, progress.targets, string(kind), releaseID)
+		items, err = s.writer.ClaimModelKind(ctx, conversation, now, s.options.BatchSize, []string{"release", "artist"}, string(kind), releaseID)
 		if err != nil || len(items) == 0 {
 			return errors.Join(err, s.launcher.DeleteConversation(ctx, actor, conversation))
 		}
@@ -162,38 +167,86 @@ func (s *Scheduler) poll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if len(items) == 0 || !batchSourcesReady(items, progress.targets) {
+	if len(items) == 0 {
 		return s.release(ctx, conversation, false, nil)
 	}
-	if items[0].Route == "lookup" {
-		if s.options.Lookup == nil {
-			return s.release(ctx, conversation, false, nil)
-		}
-		ready, err := s.options.Lookup.LookupTierReady(ctx, items[0].TargetID, now)
-		if err != nil || !ready {
+	kind := taskKind(items[0])
+	if !progress.allows(kind) {
+		return s.release(ctx, conversation, false, nil)
+	}
+	if plan == "" && kind == SelectCandidate {
+		matcher := program.NewModelMatcher(s.db, s.writer, s.sources)
+		if err := matcher.PrepareSelection(ctx, items); err != nil {
 			return errors.Join(err, s.release(ctx, conversation, false, nil))
 		}
-		ctx = s.options.Lookup.LookupTierContext(ctx)
-	}
-	return s.runBatch(ctx, actor, progress.Model, conversation, plan, items, retries)
-}
-
-func firstMessage(items []curation.PendingItem) string {
-	var msg strings.Builder
-	msg.WriteString("请先调用 read_pending_items 读取本批证据与候选，再逐项核对。\n")
-	for _, item := range items {
-		fmt.Fprintf(&msg, "item_id=%s kind=%s conflicts=%s\n", item.ID, item.Kind, item.Conflicts)
-	}
-	return msg.String()
-}
-
-func batchSourcesReady(items []curation.PendingItem, targets []string) bool {
-	for _, p := range items {
-		if !slices.Contains(targets, p.TargetType) {
-			return false
+		ready := items[:0]
+		for _, p := range items {
+			if string(p.Candidates) == "[]" {
+				if err := s.writer.AdvanceModelItem(ctx, p, conversation, "lookup"); err != nil {
+					return errors.Join(err, s.release(ctx, conversation, false, nil))
+				}
+			} else {
+				ready = append(ready, p)
+			}
 		}
+		items = ready
 	}
-	return true
+	// 选择的一批共用同一次主调用。多步任务在同艺人会话内逐项启动。
+	for len(items) > 0 {
+		n := 1
+		if plan != "" {
+			n = len(items)
+		} else if kind == SelectCandidate {
+			n, err = selectionBatchSize(items)
+			if err != nil {
+				return errors.Join(err, s.release(ctx, conversation, false, nil))
+			}
+			if n == 0 {
+				if err := s.writer.AdvanceModelItem(ctx, items[0], conversation, "lookup"); err != nil {
+					return errors.Join(err, s.release(ctx, conversation, false, nil))
+				}
+				items = items[1:]
+				continue
+			}
+		}
+		active, rest := items[:n], items[n:]
+		if plan == "" {
+			if err := s.itemCheckpoint(ctx, actor, active); err != nil {
+				released := s.writer.ReleaseModelItems(ctx, conversation, itemIDs(items), false, nil)
+				if errors.Is(err, ErrStopped) {
+					return released
+				}
+				return errors.Join(err, released)
+			}
+		}
+		runCtx := ctx
+		if kind == LookupCandidate {
+			if s.options.Lookup == nil {
+				return s.release(ctx, conversation, false, nil)
+			}
+			ready, err := s.options.Lookup.LookupTierReady(ctx, active[0].TargetID, s.options.Now())
+			if err != nil || !ready {
+				if releaseErr := s.writer.ReleaseModelItems(ctx, conversation, itemIDs(active), false, nil); releaseErr != nil {
+					return errors.Join(err, releaseErr)
+				}
+				if err != nil {
+					return errors.Join(err, s.release(ctx, conversation, false, nil))
+				}
+				items = rest
+				continue
+			}
+			runCtx = s.options.Lookup.LookupTierContext(ctx)
+		}
+		reason, err := s.runBatch(runCtx, actor, progress.Model, conversation, plan, active, retries)
+		if err != nil || reason != "completed" {
+			if len(rest) > 0 {
+				err = errors.Join(err, s.writer.ReleaseModelItems(ctx, conversation, itemIDs(rest), false, nil))
+			}
+			return err
+		}
+		items = rest
+	}
+	return nil
 }
 
 func (s *Scheduler) checkRunConditions(ctx context.Context, actor string, items []curation.PendingItem) error {
@@ -201,20 +254,21 @@ func (s *Scheduler) checkRunConditions(ctx context.Context, actor string, items 
 	if err != nil {
 		return err
 	}
-	if enabler != actor || progress.State != "idle" || !batchSourcesReady(items, progress.targets) {
+	if enabler != actor || progress.State != "idle" || !progress.allows(taskKind(items[0])) {
 		return ErrStopped
 	}
 	return nil
 }
 
-func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, plan string, items []curation.PendingItem, retries int) error {
+func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, plan string, items []curation.PendingItem, retries int) (string, error) {
 	s.mu.Lock()
 	s.running = true
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); s.running = false; s.mu.Unlock() }()
 	var batch string
 	var batchMu sync.Mutex
-	params := RunParams{ReviewPlanID: plan, Run: curation.ModelRun{ActorID: actor, Model: model, ConversationID: conversation, Batch: func(ctx context.Context) (string, error) {
+	kind := taskKind(items[0])
+	params := RunParams{Items: items, ReviewPlanID: plan, Run: curation.ModelRun{TaskKind: string(kind), ActorID: actor, Model: model, ConversationID: conversation, Batch: func(ctx context.Context) (string, error) {
 		batchMu.Lock()
 		defer batchMu.Unlock()
 		if batch == "" {
@@ -227,9 +281,32 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		return batch, nil
 	}}}
 	if plan == "" {
-		params.Text = firstMessage(items)
+		var err error
+		params.Text, err = s.taskMessage(ctx, items)
+		if err != nil {
+			return "internal_error", errors.Join(err, s.release(ctx, conversation, false, nil))
+		}
+	}
+	if len(items) == 1 {
+		params.Run.PendingItemID = items[0].ID
+	}
+	params.Run.Abandon = func(ctx context.Context, id, reason string) error {
+		for _, p := range items {
+			if id == p.ID {
+				if err := s.checkRunConditions(ctx, actor, items); err != nil {
+					return err
+				}
+				return s.abandon(ctx, p, model, conversation, reason)
+			}
+		}
+		return ErrStopped
 	}
 	var usageErr error
+	trackedID := ""
+	if kind == LookupCandidate || kind == WebFallback {
+		trackedID = items[0].ID
+	}
+	calls, tokens := items[0].ItemToolCalls, items[0].ItemTokens
 	startingItem := plan == ""
 	params.BeforeStep = func(ctx context.Context) error {
 		if usageErr != nil {
@@ -239,22 +316,47 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 			return err
 		}
 		if startingItem {
-			checkpoint, err := s.writer.BeforeModelItem(ctx, actor, s.options.Now())
+			if err := s.itemCheckpoint(ctx, actor, items); err != nil {
+				return err
+			}
+			startingItem = false
+		}
+		if itemLimit(kind, calls, tokens) {
+			return ErrItemLimit
+		}
+		if len(items) == 1 {
+			current, err := s.writer.PendingItem(ctx, items[0].ID)
 			if err != nil {
 				return err
 			}
-			if checkpoint.Reason != "" {
-				return ErrStopped
+			if current.Status != "in_progress" || current.ConversationID != conversation {
+				return ErrItemCompleted
 			}
-			startingItem = false
 		}
 		return nil
 	}
 	params.Usage = func(ctx context.Context, in, out int64) {
-		if err := s.writer.AddModelUsage(ctx, s.options.Now(), in, out); err != nil {
+		tokens += in + out
+		err := s.writer.RecordItemUsage(ctx, s.options.Now(), trackedID, conversation, kind == WebFallback, in, out)
+		if err != nil {
 			usageErr = err
 			s.logger.ErrorContext(ctx, "记录后台模型用量失败", "conversation_id", conversation, "error", err)
 		}
+	}
+	params.OnToolCalls = func(ctx context.Context, n int) error {
+		if usageErr != nil {
+			return usageErr
+		}
+		if trackedID != "" && n > 0 {
+			if err := s.writer.AddItemCalls(ctx, trackedID, conversation, n); err != nil {
+				return err
+			}
+			calls += n
+		}
+		if itemLimit(kind, calls, tokens) {
+			return ErrItemLimit
+		}
+		return nil
 	}
 	params.Escalate = func(ctx context.Context, e curation.ModelException) (string, error) {
 		var target struct {
@@ -265,17 +367,10 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 			return "", err
 		}
 		for _, p := range items {
-			var matches bool
-			switch e.Tool {
-			case "resolve_artist_identity":
-				matches = p.Kind == "artist_identity" && strings.EqualFold(target.ItemID, p.ID)
-			case "resolve_release_match", "merge_releases":
-				matches = p.TargetType == "release" && strings.EqualFold(target.ItemID, p.ID)
-			case "correct_release", "correct_track":
-				matches = p.TargetType == "release" && strings.EqualFold(target.ReleaseID, p.TargetID)
-			}
+			matches := strings.EqualFold(target.ItemID, p.ID) || ((e.Tool == "correct_release" || e.Tool == "correct_track") && p.TargetType == "release" && strings.EqualFold(target.ReleaseID, p.TargetID))
 			if matches {
 				e.PendingItemID, e.ConversationID, e.Provider = p.ID, &conversation, model
+				e.ExpectedClaimDigest = p.ModelClaimDigest()
 				return s.writer.CreateException(ctx, e)
 			}
 		}
@@ -288,6 +383,9 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		reason, err = r.Wait(context.WithoutCancel(ctx))
 	}
 	now := s.options.Now()
+	if itemLimit(kind, calls, tokens) && reason != "provider_error" && reason != "cancelled" && reason != "review_unavailable" {
+		reason = "item_limit"
+	}
 	s.recordEnd(reason, now)
 	// 收尾遇到暂时的数据库故障时，先完成本会话，再领取新项。
 	itemsFinished := false
@@ -295,7 +393,7 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		var finishErr error
 		if !itemsFinished {
-			finishErr = s.finish(cleanup, actor, conversation, reason, retries, now, items)
+			finishErr = s.finish(cleanup, actor, model, conversation, reason, retries, now, items)
 			itemsFinished = finishErr == nil
 		}
 		if itemsFinished && batch != "" {
@@ -303,12 +401,12 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		}
 		cancel()
 		if finishErr == nil || ctx.Err() != nil {
-			return errors.Join(err, usageErr, finishErr)
+			return reason, errors.Join(err, usageErr, finishErr)
 		}
 		s.logger.ErrorContext(ctx, "后台整理收尾失败", "conversation_id", conversation, "error", finishErr)
 		select {
 		case <-ctx.Done():
-			return errors.Join(err, usageErr, finishErr)
+			return reason, errors.Join(err, usageErr, finishErr)
 		case <-time.After(s.options.PollInterval):
 		}
 	}
@@ -333,8 +431,35 @@ func (s *Scheduler) recordEnd(reason string, now time.Time) {
 	s.mu.Unlock()
 }
 
-func (s *Scheduler) finish(ctx context.Context, actor, id, reason string, retries int, now time.Time, items []curation.PendingItem) error {
+func (s *Scheduler) finish(ctx context.Context, actor, model, id, reason string, retries int, now time.Time, items []curation.PendingItem) error {
 	switch reason {
+	case "item_limit":
+		if err := s.checkRunConditions(ctx, actor, items); err != nil {
+			if errors.Is(err, ErrStopped) {
+				return s.release(ctx, id, false, nil)
+			}
+			return err
+		}
+		if err := s.launcher.ResolvePlans(ctx, id); err != nil {
+			return err
+		}
+		p, err := s.writer.PendingItem(ctx, items[0].ID)
+		if err != nil {
+			return err
+		}
+		if p.Status != "in_progress" || p.ConversationID != id {
+			return nil
+		}
+		if p.ModelClaimDigest() != items[0].ModelClaimDigest() {
+			return s.release(ctx, id, false, nil)
+		}
+		run := curation.ModelRun{ActorID: actor, ConversationID: id, PendingItemID: p.ID}
+		err = s.abandon(curation.WithModelRun(ctx, &run), p, model, id, "item_limit")
+		var failure *operations.Failure
+		if errors.As(err, &failure) && failure.Code == "item_stale" {
+			return s.release(ctx, id, false, nil)
+		}
+		return err
 	case "review_unavailable":
 		if retries < min(3, len(s.options.ReviewBackoff)) {
 			items, err := s.writer.ClaimedItems(ctx, id)
@@ -354,7 +479,7 @@ func (s *Scheduler) finish(ctx context.Context, actor, id, reason string, retrie
 	case "completed", "step_limit", "token_limit":
 		err := s.checkRunConditions(ctx, actor, items)
 		if err == nil {
-			return s.writer.ReleaseClaimed(ctx, id, true, nil)
+			return s.writer.ReleaseModelItems(ctx, id, itemIDs(items), true, nil)
 		}
 		if !errors.Is(err, ErrStopped) {
 			return err

@@ -14,13 +14,24 @@ import (
 
 func (f *schedulerFixture) proposeException(t *testing.T, tool string, input any) curation.ModelException {
 	t.Helper()
-	f.next(t, false).tool(t, tool, input)
-	f.next(t, true).review(t, "needs_human_confirmation")
-	last := f.next(t, false)
-	if result := last.lastToolResult(t); !strings.Contains(result, "escalated_to_human") {
-		t.Fatalf("未转交人工 %s", result)
+	q := f.next(t, false)
+	if tool == "resolve_release_match" {
+		var match struct {
+			ItemID string `json:"item_id"`
+		}
+		raw, err := json.Marshal(input)
+		requireCurationOK(t, err)
+		requireCurationOK(t, json.Unmarshal(raw, &match))
+		q.selectCandidate(t, match.ItemID, f.remote.ID)
+	} else {
+		q.tool(t, tool, input)
 	}
-	last.complete(t)
+	f.next(t, true).review(t, "needs_human_confirmation")
+	schedulerWait(t, "审查不确定后保留建议", func() bool {
+		_, total, err := f.writer.ListExceptions(t.Context(), "open", 1, 10)
+		requireCurationOK(t, err)
+		return total == 1
+	})
 	items, total, err := f.writer.ListExceptions(t.Context(), "open", 1, 10)
 	requireCurationOK(t, err)
 	if total != 1 || len(items) != 1 || items[0].Tool != tool {
@@ -56,6 +67,7 @@ func (f *schedulerFixture) matchFixture(t *testing.T) (string, string, curation.
 	release, group := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{title: "合成正式专辑", artist: "合成正式艺人", tracks: []string{"present", "present"}})
 	track := programString(t, f.application, `SELECT t.id FROM tracks t JOIN media m ON t.medium_id=m.id WHERE m.release_id=$1 AND t.position=1`, release)
 	programTag(t, f.application, track, "mb_release", f.remote.ID)
+	mustExec(t, f.application, `UPDATE tracks SET duration_seconds=CASE position WHEN 1 THEN 12 ELSE 16 END WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, release)
 	return release, group, f.pending(t, release)
 }
 
@@ -69,12 +81,20 @@ func TestPostgreSQLCurationExceptionAcceptDecline(t *testing.T) {
 			f := newSchedulerFixture(t)
 			f.configure(t, &f.admin)
 			reviewer := f.application.createUser(t, "admin")
-			item := f.pending(t, f.a)
 			f.enable(t)
-			input := schedulerCorrection(f.a, 1, "edition", setChange("合成版本"))
-			ex := f.proposeException(t, "correct_release", input)
-			// 字段决定会重新开放待定项；先暂停，再逐步重启以检查不再提出。
 			f.pause(t)
+			conversation := modelConversation(t, f.curationFixture)
+			item := modelClaim(t, f.curationFixture, conversation, f.pending(t, f.a))
+			raw, err := json.Marshal(schedulerCorrection(f.a, 1, "edition", setChange("合成版本")))
+			requireCurationOK(t, err)
+			id, err := f.writer.CreateException(t.Context(), curation.ModelException{
+				PendingItemID: item.ID, PlanItemID: uuid.New(), ConversationID: &conversation, Tool: "correct_release", Provider: "test-main",
+				Input: raw, Preview: []byte(`{"changes":[{"field":"edition","before":null,"after":"合成版本"}]}`),
+				Review: curation.ExceptionReview{ID: uuid.New(), Model: "test-review", Decision: "needs_human_confirmation", Source: "model", Reasons: []string{"合成审查理由"}},
+			})
+			requireCurationOK(t, err)
+			ex, err := f.writer.Exception(t.Context(), id)
+			requireCurationOK(t, err)
 			switch action {
 			case "accept":
 				e := readExceptionDecision(t, f.decide(t, &reviewer, ex.ID, "accept"), "accepted", reviewer.id)
@@ -90,21 +110,11 @@ func TestPostgreSQLCurationExceptionAcceptDecline(t *testing.T) {
 				readExceptionDecision(t, f.decide(t, &reviewer, ex.ID, "decline"), "declined", reviewer.id)
 				requireAPIError(t, f.decide(t, &reviewer, ex.ID, "accept"), 409, "exception_decided")
 				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_suppressions WHERE target_id=$1 AND subject='edition' AND created_by=$2`, f.a, reviewer.id)
-				if got := f.item(t, item.ID); got.Status != "waiting_model" {
-					t.Fatalf("拒绝字段后 %+v", got)
-				}
+				modelWaitResolution(t, f, item.ID, "suggestion_recorded")
 				programWrite := autoRequest(f.a, "musicbrainz", "", map[string]any{"edition": "合成版本"})
 				programWrite.OnlyEmpty = true
-				_, err := f.writer.Apply(t.Context(), programWrite)
+				_, err = f.writer.Apply(t.Context(), programWrite)
 				curationCRequireProblem(t, err, 409, "nothing_to_apply")
-				f.update(t, "PUT", curationBase+"/settings", map[string]bool{"paused": false})
-				f.next(t, false).tool(t, "correct_release", input)
-				q := f.next(t, false)
-				if result := q.lastToolResult(t); !strings.Contains(result, "nothing_to_apply") {
-					t.Fatalf("模型重复提出字段 %s", result)
-				}
-				f.pause(t)
-				q.complete(t)
 				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1`, f.a)
 			}
 		})
@@ -145,7 +155,7 @@ func TestPostgreSQLCurationExceptionAcceptDecline(t *testing.T) {
 					b3RequireCount(t, f.application, 1, `SELECT count(*) FROM operations WHERE id=$1 AND actor_id=$2 AND batch_id IS NULL AND origin->>'provider_kind'='model' AND origin->>'review_id'=$3 AND origin->>'review_decision'='human'`, id, reviewer.id, ex.Review.ID)
 				}
 				got := f.item(t, item.ID)
-				if got.Status != "resolved" || got.Resolution == nil || *got.Resolution != "human_accepted" {
+				if got.Status != "resolved" || got.Resolution == nil || *got.Resolution != "suggestion_recorded" {
 					t.Fatalf("采纳匹配后 %+v", got)
 				}
 				requireAPIError(t, f.decide(t, &reviewer, ex.ID, "accept"), 409, "exception_decided")
@@ -153,7 +163,7 @@ func TestPostgreSQLCurationExceptionAcceptDecline(t *testing.T) {
 			}
 			readExceptionDecision(t, f.decide(t, &reviewer, ex.ID, "decline"), "declined", reviewer.id)
 			got := f.item(t, item.ID)
-			if got.Status != "resolved" || got.Resolution == nil || *got.Resolution != "human_declined" {
+			if got.Status != "resolved" || got.Resolution == nil || *got.Resolution != "suggestion_recorded" {
 				t.Fatalf("拒绝匹配后 %+v", got)
 			}
 			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_suppressions WHERE target_id=$1 AND subject='external_link' AND created_by=$2`, release, reviewer.id)
@@ -163,14 +173,9 @@ func TestPostgreSQLCurationExceptionAcceptDecline(t *testing.T) {
 			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1`, release)
 			nextItem := f.pending(t, release)
 			f.configure(t, &f.admin)
-			q := f.next(t, false)
-			q.tool(t, "resolve_release_match", f.matchProposal(nextItem.ID))
-			next := f.next(t, false)
-			if result := next.lastToolResult(t); !strings.Contains(result, "suppressed") {
-				t.Fatalf("模型重复提出对应 %s", result)
-			}
-			f.pause(t)
-			next.complete(t)
+			f.next(t, false).selectCandidate(t, nextItem.ID, f.remote.ID)
+			schedulerWait(t, "抑制后的候选已释放", func() bool { return f.item(t, nextItem.ID).Status != "in_progress" })
+			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE operation_type='external_link' AND target_id=$1`, release)
 		})
 	}
 }

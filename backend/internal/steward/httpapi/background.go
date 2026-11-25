@@ -14,12 +14,17 @@ import (
 
 // BackgroundParams 由调度器提供本次整理批次、首条消息或待重审方案。
 type BackgroundParams struct {
+	ClaimDigests     map[string]string
 	UserID           string
+	ItemID           string
 	ConversationID   string
 	Model            string
 	Text             string
 	ReviewPlanID     string
 	SystemSuffix     string
+	Selection        func(string) ([]provider.ToolCall, error)
+	OnToolCalls      func(context.Context, int) error
+	StepLimit        int
 	WebSearchEnabled func(context.Context) bool
 	BeforeStep       func(context.Context) error
 	Usage            func(context.Context, runtime.UsageKind, provider.Usage)
@@ -96,7 +101,7 @@ func (h *Handlers) StartBackground(ctx context.Context, p BackgroundParams) (*ru
 		}
 	}
 	run, err := h.supervisor.Start(ctx, runtime.RunParams{
-		Background: true, BackgroundDirectTools: []string{"submit_artist_media"}, NativeSearch: nativeSearch, ConversationID: p.ConversationID, Text: p.Text, ReviewPlanID: p.ReviewPlanID,
+		Background: true, BackgroundItemID: p.ItemID, BackgroundClaims: p.ClaimDigests, Selection: p.Selection, OnToolCalls: p.OnToolCalls, StepLimit: p.StepLimit, NativeSearch: nativeSearch, ConversationID: p.ConversationID, Text: p.Text, ReviewPlanID: p.ReviewPlanID,
 		Caller:   tool.Caller{User: user, Source: tool.SourceCuration, Mode: "steward"},
 		Provider: model, Model: p.Model, ReviewModel: settings.ReviewModel, Protocol: provider.Protocol(settings.Protocol),
 		Endpoint: settings.Endpoint, DisplayName: settings.DisplayName, SkipMemory: true, SystemSuffix: p.SystemSuffix,

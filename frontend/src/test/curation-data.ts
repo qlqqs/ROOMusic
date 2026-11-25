@@ -49,7 +49,7 @@ const ADMIN = { id: "00000000-0000-4000-8000-000000000002", username: "curator" 
 export function curationDataOf(governance: GovernanceData | null = null): CurationData {
   return {
     governance,
-    settings: { active: false, enabled: false, enabled_at: null, enabled_by: null, inactive_reason: "disabled", paused: false, model: "", daily_token_limit: 10_000_000 },
+    settings: { active: false, enabled: false, enabled_at: null, enabled_by: null, inactive_reason: "disabled", paused: false, model: "", daily_token_limit: 10_000_000, web_daily_token_limit: null },
     sources: [
       { active: false, capabilities: ["release_lookup", "recording_lookup", "artist_lookup"], enabled: true, id: "musicbrainz", inactive_reason: "curation_disabled", name: "MusicBrainz" },
       { active: false, capabilities: ["cover_art"], enabled: true, id: "coverartarchive", inactive_reason: "curation_disabled", name: "Cover Art Archive" },
@@ -113,18 +113,22 @@ export function respondToCurationSettings(data: CurationData): ApiResult {
 }
 
 export function respondToUpdateCurationSettings(data: CurationData, body: unknown): ApiResult {
-  const change = typeof body === "object" && body !== null ? (body as { enabled?: unknown; paused?: unknown; model?: unknown; daily_token_limit?: unknown }) : {};
+  const change = typeof body === "object" && body !== null ? (body as { enabled?: unknown; paused?: unknown; model?: unknown; daily_token_limit?: unknown; web_daily_token_limit?: unknown }) : {};
   const enabled = typeof change.enabled === "boolean" ? change.enabled : undefined;
   const paused = typeof change.paused === "boolean" ? change.paused : undefined;
   const model = typeof change.model === "string" ? change.model : undefined;
   const hasLimit = "daily_token_limit" in change;
   const limit = change.daily_token_limit;
   if (hasLimit && limit !== null && !(typeof limit === "number" && Number.isInteger(limit) && limit >= 1 && limit <= 1e12)) return failure(400, "invalid_input", "每日上限无效");
+  const hasWebLimit = "web_daily_token_limit" in change;
+  const webLimit = change.web_daily_token_limit;
+  if (hasWebLimit && webLimit !== null && !(typeof webLimit === "number" && Number.isInteger(webLimit) && webLimit >= 1 && webLimit <= 1e12)) return failure(400, "invalid_input", "联网每日上限无效");
   if (model !== undefined && new TextEncoder().encode(model).length > 200) return failure(400, "invalid_input", "模型名太长");
-  if (enabled === undefined && paused === undefined && model === undefined && !hasLimit) return failure(400, "invalid_input", "至少要改一项设置");
+  if (enabled === undefined && paused === undefined && model === undefined && !hasLimit && !hasWebLimit) return failure(400, "invalid_input", "至少要改一项设置");
   const settings = { ...data.settings };
   if (model !== undefined) settings.model = model;
   if (hasLimit) settings.daily_token_limit = limit as number | null;
+  if (hasWebLimit) settings.web_daily_token_limit = webLimit as number | null;
   if (enabled !== undefined) {
     if (enabled && !settings.enabled) {
       settings.enabled_by = ADMIN;
@@ -314,6 +318,10 @@ function modelProgressOf(data: CurationData): CurationModelProgressDTO {
     state,
     today: { date: "2026-01-05", ...data.model.today },
     unavailable_reason: state === "unavailable" ? data.model.unavailableReason : null,
+    web_daily_token_limit: data.settings.web_daily_token_limit,
+    web_limit_reached: false,
+    web_retry_at: null,
+    web_today: { date: "2026-01-05", input_tokens: 0, output_tokens: 0 },
   };
 }
 
@@ -328,6 +336,10 @@ export function seedException(data: CurationData, patch: Partial<CurationExcepti
     decided_at: null,
     decided_by: null,
     id: `00000000-0000-4000-a000-${n}`,
+    reason_code: "review_rejected",
+    reasons: [],
+    evidence: {},
+    can_accept: true,
     input: { release_id: `00000000-0000-4000-b000-${n}`, changes: { title: { mode: "set", value: "新标题" } }, expected_revision: 1, basis: { note: "外部资料" } },
     kind: "release_match",
     operation_ids: [],

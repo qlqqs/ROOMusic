@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
@@ -20,12 +21,16 @@ type ModelItemCounts struct {
 }
 
 type ModelProgress struct {
-	State             string          `json:"state"`
-	UnavailableReason *string         `json:"unavailable_reason"`
-	Model             string          `json:"model"`
-	Today             ModelUsage      `json:"today"`
-	DailyTokenLimit   *int64          `json:"daily_token_limit"`
-	Items             ModelItemCounts `json:"items"`
+	WebDailyTokenLimit *int64          `json:"web_daily_token_limit"`
+	WebToday           ModelUsage      `json:"web_today"`
+	WebLimitReached    bool            `json:"web_limit_reached"`
+	WebRetryAt         *time.Time      `json:"web_retry_at"`
+	State              string          `json:"state"`
+	UnavailableReason  *string         `json:"unavailable_reason"`
+	Model              string          `json:"model"`
+	Today              ModelUsage      `json:"today"`
+	DailyTokenLimit    *int64          `json:"daily_token_limit"`
+	Items              ModelItemCounts `json:"items"`
 }
 
 type ModelStatus interface {

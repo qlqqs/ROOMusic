@@ -22,6 +22,7 @@ import (
 	curationapi "github.com/qlqq/roomusic/backend/internal/curation/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/curation/model"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
+	curationtools "github.com/qlqq/roomusic/backend/internal/curation/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/devices/airplay"
 	"github.com/qlqq/roomusic/backend/internal/devices/upnp"
 	upnpapi "github.com/qlqq/roomusic/backend/internal/devices/upnp/httpapi"
@@ -400,7 +401,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	} else {
 		close(modelDone)
 	}
-	resolver := model.NewExceptionResolver(database, curationWriter, matcher)
+	resolver := model.NewExceptionResolver(database, curationWriter, matcher, curationtools.MediaConfirmationPreparer(mockHost))
 	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), sourceGate, programStatus, scheduler, resolver, curation.RuleVersions{LocalRule: program.LocalRuleVersion, ExternalMatchRule: program.MatchRuleVersion, PatrolPrompt: program.PatrolPromptVersion}, guard, logger).Register(mux)
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		AnalysisProgress: progress,

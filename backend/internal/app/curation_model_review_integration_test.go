@@ -35,24 +35,21 @@ func TestPostgreSQLCurationModelResolveMatchProgramChain(t *testing.T) {
 	f.enable(t)
 	curationCApplyLinks(t, f.curationFixture, curationCLinkRequest(f.b, "", curationCLink("release_group", f.groupB, f.remote.Group)))
 	item := f.pending(t, target)
-	candidates, err := json.Marshal([]map[string]string{{"external_id": f.remote.ID, "title": "合成正式专辑"}})
-	requireCurationOK(t, err)
-	mustExec(t, f.application, `UPDATE curation_pending_items SET candidates=$2 WHERE id=$1`, item.ID, candidates)
 	f.configure(t, &f.admin)
-	f.next(t, false).tool(t, "read_pending_items", map[string]any{})
-	selectMatch := f.next(t, false)
-	seen := selectMatch.lastToolResult(t)
-	if !strings.Contains(seen, item.ID) || !strings.Contains(seen, f.remote.ID) {
-		t.Fatalf("读取待定项返回 %s", seen)
+	request := f.next(t, false)
+	var content string
+	requireCurationOK(t, json.Unmarshal(request.Messages[len(request.Messages)-1].Content, &content))
+	items, found, err := metricsPendingItems(content)
+	requireCurationOK(t, err)
+	if !found || len(items) != 1 || items[0].ID != item.ID || len(items[0].Candidates) != 1 || items[0].Candidates[0].ID != f.remote.ID {
+		t.Fatalf("首条消息缺少候选：%s", content)
 	}
-	selectMatch.tool(t, "resolve_release_match", map[string]any{"item_id": item.ID, "external_id": f.remote.ID, "basis": map[string]string{"note": "两首录音与候选一致"}})
+	request.selectCandidate(t, item.ID, f.remote.ID)
 	f.next(t, true).review(t, "approved")
-	last := f.next(t, false)
-	resolved := f.item(t, item.ID)
-	if resolved.Status != "resolved" || resolved.Resolution == nil || *resolved.Resolution != "model_matched" {
-		t.Fatalf("审查通过后待定项 %+v，工具结果 %s", resolved, last.lastToolResult(t))
-	}
-	last.complete(t)
+	schedulerWait(t, "审查通过后写入对应", func() bool {
+		p := f.item(t, item.ID)
+		return p.Status == "resolved" && p.Resolution != nil && *p.Resolution == "model_matched"
+	})
 	batch := programString(t, f.application, `SELECT id FROM curation_batches WHERE tier='model'`)
 	schedulerWait(t, "关闭模型批次", func() bool {
 		return countRows(t, f.application, `SELECT count(*) FROM curation_batches WHERE id=$1 AND closed_at IS NOT NULL`, batch) == 1
@@ -77,44 +74,42 @@ func TestPostgreSQLCurationModelResolveMatchProgramChain(t *testing.T) {
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1`, target)
 }
 
-func TestPostgreSQLCurationModelReviewPaths(t *testing.T) {
-	for _, tc := range []struct{ review, decision, code string }{
-		{"approved", "accepted", ""}, {"rejected", "rejected_by_review", "rejected_by_review"}, {"needs_human_confirmation", "escalated", "escalated_to_human"},
+func TestPostgreSQL整理审查未采用即结项(t *testing.T) {
+	for _, tc := range []struct{ name, review, reason string }{
+		{"拒绝", "rejected", "review_rejected"}, {"拿不准", "needs_human_confirmation", "review_uncertain"},
 	} {
-		t.Run(tc.review, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			f := newSchedulerFixture(t)
 			f.configure(t, &f.admin)
-			item := f.pending(t, f.a)
+			release, _, item := f.matchFixture(t)
 			f.enable(t)
-			f.next(t, false).tool(t, "correct_release", schedulerCorrection(f.a, 1, "edition", setChange("合成版本")))
+			f.next(t, false).selectCandidate(t, item.ID, f.remote.ID)
 			review := f.next(t, true)
 			conversation := f.item(t, item.ID).ConversationID
 			review.review(t, tc.review)
-			last := f.next(t, false)
+			schedulerWait(t, "建议保存并结项", func() bool {
+				p := f.progress(t)
+				return p.State == "idle" && p.Items.WaitingModel == 0 && p.Items.InProgress == 0
+			})
 			detail, err := runtime.NewStore(f.application.database).GetConversation(t.Context(), f.admin.id, conversation)
 			requireCurationOK(t, err)
-			if len(detail.Plans) != 1 || len(detail.Plans[0].Items) != 1 || detail.Plans[0].Items[0].Decision != tc.decision {
+			if len(detail.Plans) != 1 || len(detail.Plans[0].Items) != 1 || detail.Plans[0].Items[0].Decision != "rejected_by_review" ||
+				!strings.Contains(string(detail.Plans[0].Items[0].Result), "rejected_by_review") {
 				t.Fatalf("方案取舍 %+v", detail.Plans)
 			}
 			exceptions, total, err := f.writer.ListExceptions(t.Context(), "open", 1, 10)
 			requireCurationOK(t, err)
-			if tc.review == "approved" {
-				if total != 0 {
-					t.Fatalf("批准后例外 %+v", exceptions)
-				}
-				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM release_auto_values WHERE release_id=$1 AND field='edition' AND text_value='合成版本'`, f.a)
-			} else {
-				if total != 1 || len(exceptions) != 1 {
-					t.Fatalf("例外 %+v", exceptions)
-				}
-				ex := exceptions[0]
-				if ex.PendingItemID != item.ID || ex.Review.Decision != tc.review || len(ex.Review.Reasons) != 1 || ex.Review.Reasons[0] != "合成审查理由" || f.item(t, item.ID).Status != "waiting_human" || !strings.Contains(last.lastToolResult(t), tc.code) {
-					t.Fatalf("例外 %+v，运行收到 %s", ex, last.lastToolResult(t))
-				}
-				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations`)
+			if total != 1 {
+				t.Fatalf("建议 %+v", exceptions)
 			}
-			f.pause(t)
-			last.complete(t)
+			ex := exceptions[0]
+			finished := f.item(t, item.ID)
+			if ex.PendingItemID != item.ID || ex.ReasonCode != tc.reason || !ex.CanAccept || ex.Review.Decision != tc.review ||
+				len(ex.Reasons) != 1 || ex.Reasons[0] != "合成审查理由" || finished.Status != "resolved" ||
+				finished.Resolution == nil || *finished.Resolution != "suggestion_recorded" || f.progress(t).Items.WaitingHuman != 0 {
+				t.Fatalf("建议 %+v，结项 %+v", ex, finished)
+			}
+			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE target_id=$1`, release)
 		})
 	}
 }
@@ -122,9 +117,9 @@ func TestPostgreSQLCurationModelReviewPaths(t *testing.T) {
 func TestPostgreSQLCurationModelReviewUnavailableBackoff(t *testing.T) {
 	f := newSchedulerFixture(t)
 	f.configure(t, &f.admin)
-	item := f.pending(t, f.a)
+	_, _, item := f.matchFixture(t)
 	f.enable(t)
-	f.next(t, false).tool(t, "correct_release", schedulerCorrection(f.a, 1, "edition", setChange("合成版本")))
+	f.next(t, false).selectCandidate(t, item.ID, f.remote.ID)
 	conversation := f.item(t, item.ID).ConversationID
 	delays := []time.Duration{5 * time.Minute, 30 * time.Minute, 2 * time.Hour, 24 * time.Hour}
 	for i, delay := range delays {
@@ -136,6 +131,7 @@ func TestPostgreSQLCurationModelReviewUnavailableBackoff(t *testing.T) {
 			return got.NextAttemptAt != nil && got.NextAttemptAt.Equal(want)
 		})
 		got := f.item(t, item.ID)
+		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE target_id=$1`, item.TargetID)
 		if i < 3 {
 			if got.Status != "in_progress" || got.ConversationID != conversation || int(got.ReviewRetries) != i+1 {
 				t.Fatalf("第 %d 次退避 %+v", i+1, got)
