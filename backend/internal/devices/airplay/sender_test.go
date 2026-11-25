@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"net/netip"
 	"net/textproto"
 	"slices"
@@ -18,6 +20,7 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/devices/airplay/rtp"
+	"github.com/qlqq/roomusic/backend/internal/devices/airplay/rtsp"
 	"github.com/qlqq/roomusic/backend/internal/devices/lan"
 )
 
@@ -25,9 +28,11 @@ type classicFixture struct {
 	listener       net.Listener
 	audio, control *net.UDPConn
 	commands       chan string
+	heartbeatCodes []int
+	heartbeats     int
 }
 
-func newClassicFixture(t *testing.T) *classicFixture {
+func newClassicFixture(t *testing.T, heartbeatCodes ...int) *classicFixture {
 	t.Helper()
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
@@ -52,7 +57,7 @@ func newClassicFixture(t *testing.T) *classicFixture {
 			t.Cleanup(func() { c.Close() })
 			return c
 		}
-		f := &classicFixture{listener: listener, audio: openUDP(), control: openUDP(), commands: make(chan string, 16)}
+		f := &classicFixture{listener: listener, audio: openUDP(), control: openUDP(), commands: make(chan string, 16), heartbeatCodes: heartbeatCodes}
 		var worker sync.WaitGroup
 		worker.Go(func() {
 			for {
@@ -74,6 +79,7 @@ func (f *classicFixture) serve(conn net.Conn, t *testing.T) {
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(5 * time.Second))
 	r := textproto.NewReader(bufio.NewReader(conn))
+	setup := true
 	for {
 		line, err := r.ReadLine()
 		if err != nil {
@@ -93,7 +99,18 @@ func (f *classicFixture) serve(conn net.Conn, t *testing.T) {
 			return
 		}
 		extra := ""
+		status := http.StatusOK
 		switch parts[0] {
+		case "OPTIONS":
+			if !setup && f.heartbeats < len(f.heartbeatCodes) {
+				status = f.heartbeatCodes[f.heartbeats]
+				f.heartbeats++
+			}
+			setup = false
+			if status == 0 {
+				// 故意不回复这一次心跳，接收端对后续请求仍可正常响应。
+				continue
+			}
 		case "ANNOUNCE":
 			n, err := strconv.Atoi(h.Get("Content-Length"))
 			if err != nil || n <= 0 || n > 4096 {
@@ -126,7 +143,7 @@ func (f *classicFixture) serve(conn net.Conn, t *testing.T) {
 			}
 			extra = "Audio-Latency: 11025\r\n"
 		}
-		if _, err := fmt.Fprintf(conn, "RTSP/1.0 200 OK\r\nCSeq: %s\r\n%sContent-Length: 0\r\n\r\n", h.Get("CSeq"), extra); err != nil {
+		if _, err := fmt.Fprintf(conn, "RTSP/1.0 %d %s\r\nCSeq: %s\r\n%sContent-Length: 0\r\n\r\n", status, http.StatusText(status), h.Get("CSeq"), extra); err != nil {
 			t.Error(err)
 			return
 		}
@@ -134,6 +151,67 @@ func (f *classicFixture) serve(conn net.Conn, t *testing.T) {
 		if parts[0] == "TEARDOWN" {
 			return
 		}
+	}
+}
+
+func newHeartbeatTestSender(t *testing.T, codes ...int) (*Sender, *classicFixture) {
+	t.Helper()
+	f := newClassicFixture(t, codes...)
+	device := Device{Info: Info{RAOPAddress: f.listener.Addr().String()}}
+	cfg := SenderConfig{SampleRate: 44100, BitDepth: 16}
+	media, err := openMedia(t.Context(), device, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 手动触发心跳，避免后台计时器插入额外请求。
+	s := &Sender{device: device, cfg: cfg, media: media, done: make(chan struct{}), wake: make(chan struct{}, 1)}
+	t.Cleanup(func() { _ = s.Close() })
+	for _, method := range []string{"OPTIONS", "ANNOUNCE", "SETUP", "RECORD"} {
+		f.expect(t, method)
+	}
+	return s, f
+}
+
+func TestAirPlayHeartbeatConsecutiveFailures(t *testing.T) {
+	const failure = http.StatusServiceUnavailable
+	codes := []int{failure, failure, http.StatusOK, failure, failure, failure}
+	s, f := newHeartbeatTestSender(t, codes...)
+	for i := range codes {
+		s.heartbeat()
+		f.expect(t, "OPTIONS")
+		select {
+		case <-s.Done():
+			if i != len(codes)-1 {
+				t.Fatalf("第 %d 次心跳提前结束会话：%v", i+1, s.Err())
+			}
+			var status *rtsp.StatusError
+			if !errors.As(s.Err(), &status) || status.Code != failure {
+				t.Fatalf("会话结束错误 = %v，期望 RTSP %d", s.Err(), failure)
+			}
+		default:
+			if i == len(codes)-1 {
+				t.Fatal("连续第三次心跳失败后会话仍然存活")
+			}
+		}
+	}
+}
+
+func TestAirPlayHeartbeatRecoversAfterTimeout(t *testing.T) {
+	s, f := newHeartbeatTestSender(t, 0, http.StatusOK)
+	s.heartbeat()
+	select {
+	case <-s.Done():
+		t.Fatalf("一次心跳超时就结束了会话：%v", s.Err())
+	default:
+	}
+	s.heartbeat()
+	select {
+	case method := <-f.commands:
+		if method != "OPTIONS" {
+			t.Fatalf("超时后收到 %s，期望 OPTIONS", method)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("一次心跳超时后，接收端没有收到下一次 OPTIONS")
 	}
 }
 

@@ -95,6 +95,11 @@ func lanTestListener(t *testing.T) net.Listener {
 
 func newUPnPTestRenderer(t *testing.T, relTime string) *upnpTestRenderer {
 	t.Helper()
+	return newUPnPTestRendererWithActionHook(t, relTime, nil)
+}
+
+func newUPnPTestRendererWithActionHook(t *testing.T, relTime string, before func(string, *http.Request)) *upnpTestRenderer {
+	t.Helper()
 	l := lanTestListener(t)
 	udn := "uuid:" + uuid.New()
 	r, err := fakerenderer.New(fakerenderer.Options{UDN: udn, Name: upnpTestDeviceName, RelTime: relTime})
@@ -112,6 +117,9 @@ func newUPnPTestRenderer(t *testing.T, relTime string) *upnpTestRenderer {
 			f.mu.Lock()
 			f.actions = append(f.actions, action)
 			f.mu.Unlock()
+		}
+		if before != nil {
+			before(action, req)
 		}
 		if action == "GetVolume" && f.getVolumeFails.Load() {
 			http.Error(w, "合成音量读取失败", http.StatusServiceUnavailable)
