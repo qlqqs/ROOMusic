@@ -8,6 +8,7 @@ import { peqDocumentDecoder } from "../peq/document";
 import {
   crossfadeDurations,
   downmixModes,
+  groupMemberStates,
   levelingModes,
   playbackFailureReasons,
   sampleRateFilters,
@@ -17,6 +18,7 @@ import {
   type Capabilities,
   type CrossfadeSeconds,
   type Device,
+  type DeviceGroup,
   type PlaybackFailureReason,
   type PlaybackSettings,
   type PlayerEvent,
@@ -26,6 +28,7 @@ import {
   type SignalStep,
   type Snapshot,
   type Zone,
+  type ZoneGroup,
   type ZoneQueue,
   type ZoneStream,
 } from "./model";
@@ -215,6 +218,19 @@ const eventDecoder: d.Decoder<PlayerEvent | null> = (input, path) => {
   }
 };
 
+/** 每组最多 8 台（含主设备），这里只防异常响应。 */
+const MAX_GROUP_MEMBERS = 16;
+
+const zoneGroupDecoder: d.Decoder<ZoneGroup> = (input, path) => {
+  const raw = d.object({ members: d.array(d.object({ device_id: d.uuid(), state: lenient(groupMemberStates, "waiting") }), { max: MAX_GROUP_MEMBERS }) })(input, path);
+  return { members: raw.members.map((member) => ({ deviceId: member.device_id, state: member.state })) };
+};
+
+const deviceGroupDecoder: d.Decoder<DeviceGroup> = (input, path) => {
+  const raw = d.object({ zone_id: d.uuid(), role: lenient(["leader", "member"] as const, "member") })(input, path);
+  return { zoneId: raw.zone_id, role: raw.role };
+};
+
 export const zoneDecoder: d.Decoder<Zone> = (input, path) => {
   const raw = d.object({
     zone_id: d.uuid(),
@@ -236,6 +252,8 @@ export const zoneDecoder: d.Decoder<Zone> = (input, path) => {
     paused_at: d.nullable(time()),
     signal: d.nullable(signalDecoder),
     event: d.nullable(eventDecoder),
+    // 没有编组接口的旧服务器不发这一项。
+    group: d.optional(d.nullable(zoneGroupDecoder)),
   })(input, path);
   const failures: Record<string, PlaybackFailureReason> = {};
   for (const failure of raw.failures) failures[failure.entry_id] = failure.reason;
@@ -259,6 +277,7 @@ export const zoneDecoder: d.Decoder<Zone> = (input, path) => {
     pausedAt: raw.paused_at,
     signal: raw.signal,
     event: raw.event,
+    group: raw.group === undefined || raw.group === null || raw.group.members.length === 0 ? null : raw.group,
   };
 };
 
@@ -281,6 +300,9 @@ export const deviceDecoder: d.Decoder<Device> = (input, path) => {
     format_declared: d.optional(d.boolean()),
     occupied_by: d.optional(d.nullable(d.object({ user_id: d.uuid(), display_name: d.string({ min: 1, max: 200 }) }))),
     unavailable_reason: d.optional(d.string({ min: 1, max: 200 })),
+    // 不在组里时省略；同步微调只在 SlimProto 设备上出现。
+    group: d.optional(deviceGroupDecoder),
+    sync_delay_ms: d.optional(d.integer()),
   })(input, path);
   return {
     deviceId: raw.device_id,
@@ -302,6 +324,8 @@ export const deviceDecoder: d.Decoder<Device> = (input, path) => {
             unavailableReason: raw.unavailable_reason ?? null,
           }
         : null,
+    group: raw.group ?? null,
+    syncDelayMs: raw.sync_delay_ms ?? null,
   };
 };
 
@@ -352,6 +376,8 @@ export type DeviceResult = { serverTime: number; device: Device };
 export type RegisterResult = { serverTime: number; device: Device; zone: Zone };
 export type ClaimResult = { serverTime: number; sessionId: string; device: Device; zone: Zone };
 export type ReportResult = { serverTime: number; device: Device; zone: Zone };
+/** 组音量的结果：组内每台设备（主设备在前）。 */
+export type GroupVolumeResult = { serverTime: number; devices: readonly Device[] };
 
 const commandResultDecoder: d.Decoder<CommandResult> = (input, path) => {
   const raw = d.object({
@@ -379,6 +405,11 @@ const claimResultDecoder: d.Decoder<ClaimResult> = (input, path) => {
   return { serverTime: raw.server_time, sessionId: raw.session_id, device: raw.device, zone: raw.zone };
 };
 
+const groupVolumeResultDecoder: d.Decoder<GroupVolumeResult> = (input, path) => {
+  const raw = d.object({ server_time: time(), devices: d.array(deviceDecoder, { max: MAX_GROUP_MEMBERS }) })(input, path);
+  return { serverTime: raw.server_time, devices: raw.devices };
+};
+
 export const decodeSnapshot = d.defineDecoder(snapshotDecoder);
 export const decodeZoneQueue = d.defineDecoder(zoneQueueDecoder);
 export const decodeCommandResult = d.defineDecoder(commandResultDecoder);
@@ -386,6 +417,9 @@ export const decodeDeviceResult = d.defineDecoder(deviceResultDecoder);
 export const decodeRegisterResult = d.defineDecoder(deviceZoneDecoder);
 export const decodeClaimResult = d.defineDecoder(claimResultDecoder);
 export const decodeReportResult = d.defineDecoder(deviceZoneDecoder);
+/** 加入与移出组员：被加入或移出的设备与主设备的播放区。 */
+export const decodeGroupMemberResult = d.defineDecoder(deviceZoneDecoder);
+export const decodeGroupVolumeResult = d.defineDecoder(groupVolumeResultDecoder);
 
 /** 事件流里的一条事件（合同 §5）；不认识的事件类型是 null。 */
 export type StreamEvent =

@@ -45,6 +45,7 @@
       },
       "failures": [],
       "fault": null,
+      "group": null,
       "has_next": false,
       "intent": "pause",
       "mode": "sequential",

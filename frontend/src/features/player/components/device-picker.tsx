@@ -1,4 +1,4 @@
-import { ArrowRightLeft, AudioWaveform, MonitorSpeaker, Pencil, Speaker, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, AudioWaveform, Group, MonitorSpeaker, Pencil, Speaker, Trash2, Unlink, X } from "lucide-react";
 import { useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { failureOf, isHttpFailure } from "../../../shared/api";
 import { cx } from "../../../shared/lib/class-names";
@@ -6,16 +6,18 @@ import { Button, ConfirmDialog, FailureNotice, ModalDialog, StatusTag, TextField
 import { usePlayer, usePlayerSelector } from "../player-provider";
 import type { PlaybackDeviceRow } from "../zones/controller";
 import { UPNP_SAMPLE_RATES } from "../zones/model";
+import { GroupDialog } from "./group-panel";
 import { rejectionLabels } from "./player-labels";
 import styles from "./device-picker.module.css";
 
-const failureMessages = { zone_offline: rejectionLabels.zone_offline, device_online: "这台设备在线，不能删除。" } as const;
+const failureMessages = { zone_offline: rejectionLabels.zone_offline, device_grouped: rejectionLabels.device_grouped, device_online: "这台设备在线，不能删除。" } as const;
 const MAX_NAME_LENGTH = 64;
 
-/** 一行的第二行：离线、别人正在用（局域网设备）、没有曲目、正在放的曲名或“已暂停”。 */
-function stateText(row: PlaybackDeviceRow): string {
+/** 一行的第二行：离线、在别的设备的组里、别人正在用（局域网设备）、没有曲目、正在放的曲名或“已暂停”。 */
+function stateText(row: PlaybackDeviceRow, leaderName: string | null): string {
   const { device, zone } = row;
   if (!device.online) return "离线";
+  if (leaderName !== null) return `在「${leaderName}」的组里`;
   if (device.lan?.unavailableReason != null) return device.lan.unavailableReason;
   if (row.occupant !== null) return `${row.occupant} 正在使用`;
   if (zone === null || zone.current === null) return "未播放";
@@ -62,6 +64,7 @@ function DeviceList({ titleId, onClose }: { titleId: string; onClose: () => void
   const [takeover, setTakeover] = useState<{ row: PlaybackDeviceRow; who: string; then: () => Promise<void> } | null>(null);
   const [takeoverPending, setTakeoverPending] = useState(false);
   const [rateRow, setRateRow] = useState<PlaybackDeviceRow | null>(null);
+  const [groupLeader, setGroupLeader] = useState<string | null>(null);
 
   function activate(row: PlaybackDeviceRow, then: () => Promise<void>) {
     setError(null);
@@ -107,6 +110,10 @@ function DeviceList({ titleId, onClose }: { titleId: string; onClose: () => void
     setError(null);
     engine.transfer(sourceZoneId, targetZoneId).then(onClose, setError);
   }
+  function leaveGroup(leaderZoneId: string, deviceId: string) {
+    setError(null);
+    engine.removeGroupMember(leaderZoneId, deviceId).catch(setError);
+  }
   function confirmDelete() {
     if (deleting === null) return;
     setDeletePending(true);
@@ -126,15 +133,22 @@ function DeviceList({ titleId, onClose }: { titleId: string; onClose: () => void
     <ul role="list" className={styles.list}>
       {snapshot.devices.map((row) => {
         const { device, zone } = row;
-        const text = <><span className={styles.name}>{device.lan === null ? null : <Speaker size={14} aria-hidden="true" className={styles.kindIcon} />}<span className={styles.nameText}>{device.name}</span>{row.isLocal ? <StatusTag>本机</StatusTag> : null}{device.lan === null ? null : <StatusTag>{device.kind === "cast" ? "Google Cast" : device.kind === "airplay" ? "AirPlay" : device.kind === "slimproto" ? "SlimProto" : "局域网"}</StatusTag>}</span><span className={styles.state}>{stateText(row)}</span></>;
+        // 作为成员在别的设备的组里：不能单独选用，只能移出组。
+        const memberOf = device.group?.role === "member" ? device.group.zoneId : null;
+        const leaderName = memberOf === null ? null : (snapshot.devices.find((item) => item.device.zoneId === memberOf)?.device.name ?? "另一台设备");
+        const groupSize = zone?.group == null ? 0 : zone.group.members.length + 1;
+        const canGroup = device.kind === "slimproto" && device.online && memberOf === null && (row.isTarget || groupSize > 0);
+        const text = <><span className={styles.name}>{device.lan === null ? null : <Speaker size={14} aria-hidden="true" className={styles.kindIcon} />}<span className={styles.nameText}>{device.name}</span>{row.isLocal ? <StatusTag>本机</StatusTag> : null}{device.lan === null ? null : <StatusTag>{device.kind === "cast" ? "Google Cast" : device.kind === "airplay" ? "AirPlay" : device.kind === "slimproto" ? "SlimProto" : "局域网"}</StatusTag>}</span><span className={styles.state}>{stateText(row, leaderName)}</span></>;
         // 转到这台设备：把正在控制的播放区转过来；离线的设备可以转到本机接着放。
-        const transferHere = device.online && !row.isTarget && source !== null && source.current !== null ? source.zoneId : null;
+        const transferHere = device.online && !row.isTarget && memberOf === null && source !== null && source.current !== null ? source.zoneId : null;
         const transferToLocal = !device.online && zone !== null && zone.current !== null && localZoneId !== undefined ? zone.zoneId : null;
         return <li key={device.deviceId} className={styles.row} aria-current={row.isTarget ? "true" : undefined}>
-          {device.online && device.lan?.unavailableReason == null
+          {device.online && device.lan?.unavailableReason == null && memberOf === null
             ? <button type="button" className={styles.select} aria-pressed={row.isTarget} onClick={() => select(row)}>{text}</button>
             : <div className={styles.select}>{text}</div>}
           <div className={styles.actions} role="group" aria-label={`${device.name}的操作`}>
+            {canGroup ? <span className={styles.groupButton} data-grouped={groupSize > 0 ? "" : undefined}><Button variant="icon" icon={<Group size={16} />} label={groupSize > 0 ? `编组（${groupSize} 台）` : "编组"} onClick={() => setGroupLeader(device.deviceId)} /></span> : null}
+            {memberOf === null ? null : <Button variant="icon" icon={<Unlink size={16} />} label="移出组" onClick={() => leaveGroup(memberOf, device.deviceId)} />}
             {transferHere === null ? null : <Button variant="icon" icon={<ArrowRightLeft size={16} />} label="转到这台设备" onClick={() => transferTo(row, transferHere)} />}
             {transferToLocal === null || localZoneId === undefined ? null : <Button variant="icon" icon={<ArrowRightLeft size={16} />} label="转到本机" onClick={() => transfer(transferToLocal, localZoneId)} />}
             {/* Google Cast 与 AirPlay 的格式由管理员在“局域网设备”里按设备设置。 */}
@@ -146,6 +160,7 @@ function DeviceList({ titleId, onClose }: { titleId: string; onClose: () => void
       })}
     </ul>
     <RenameDialog row={renaming} onClose={() => setRenaming(null)} />
+    <GroupDialog leaderDeviceId={groupLeader} onClose={() => setGroupLeader(null)} />
     <ConfirmDialog
       open={takeover !== null}
       title={`接管“${takeover?.row.device.name ?? ""}”？`}

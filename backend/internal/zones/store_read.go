@@ -33,6 +33,9 @@ func loadUser(ctx context.Context, database *sql.DB, userID string, logger *slog
 	if err := loadEntries(ctx, tx, userID, &state); err != nil {
 		return UserState{}, err
 	}
+	if err := loadGroupMembers(ctx, tx, userID, &state); err != nil {
+		return UserState{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return UserState{}, fmt.Errorf("commit playback snapshot: %w", err)
 	}
@@ -41,7 +44,7 @@ func loadUser(ctx context.Context, database *sql.DB, userID string, logger *slog
 
 func loadDevices(ctx context.Context, tx *sql.Tx, userID string, state *UserState) error {
 	rows, err := tx.QueryContext(ctx, `
-SELECT id, kind, name, capabilities, volume, muted, created_at, last_seen_at, COALESCE(external_id,''), COALESCE(max_sample_rate,0), volume_display_only
+SELECT id, kind, name, capabilities, volume, muted, created_at, last_seen_at, COALESCE(external_id,''), COALESCE(max_sample_rate,0), volume_display_only, sync_delay_ms
 FROM playback_devices WHERE user_id=$1::uuid ORDER BY created_at, id`, userID)
 	if err != nil {
 		return fmt.Errorf("load playback devices: %w", err)
@@ -53,7 +56,7 @@ FROM playback_devices WHERE user_id=$1::uuid ORDER BY created_at, id`, userID)
 		}}
 		var capabilities []byte
 		if err := rows.Scan(&device.DeviceID, &device.Kind, &device.Name, &capabilities,
-			&device.Volume, &device.Muted, &device.CreatedAt, &device.LastSeenAt, &device.ExternalID, &device.MaxSampleRate, &device.VolumeDisplayOnly); err != nil {
+			&device.Volume, &device.Muted, &device.CreatedAt, &device.LastSeenAt, &device.ExternalID, &device.MaxSampleRate, &device.VolumeDisplayOnly, &device.SyncDelayMS); err != nil {
 			return fmt.Errorf("scan playback device: %w", err)
 		}
 		if err := json.Unmarshal(capabilities, &device.Capabilities); err != nil {

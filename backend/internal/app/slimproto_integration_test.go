@@ -29,9 +29,14 @@ func slimProtoAdminDevices(t *testing.T, f *upnpFixture) []upnp.AdminDevice {
 
 func slimProtoDevice(t *testing.T, f *upnpFixture, user *integrationTestUser) zones.Device {
 	t.Helper()
+	return slimProtoDeviceByKey(t, f, user, slimProtoTestKey)
+}
+
+func slimProtoDeviceByKey(t *testing.T, f *upnpFixture, user *integrationTestUser, key string) zones.Device {
+	t.Helper()
 	var d zones.Device
 	f.wait(t, 3*time.Second, "SlimProto 设备上线", func() bool {
-		d, _ = deviceFor(f.snapshot(t, user), slimProtoTestKey)
+		d, _ = deviceFor(f.snapshot(t, user), key)
 		return d.Online
 	})
 	return d
@@ -41,13 +46,18 @@ type slimProtoTestPlayer struct{ *slimtest.Player }
 
 func startSlimProtoTestPlayer(t *testing.T, f *upnpFixture, rate int, codecs string) *slimProtoTestPlayer {
 	t.Helper()
+	return startSlimProtoTestPlayerWithMAC(t, f, rate, codecs, 1)
+}
+
+func startSlimProtoTestPlayerWithMAC(t *testing.T, f *upnpFixture, rate int, codecs string, lastMACByte byte) *slimProtoTestPlayer {
+	t.Helper()
 	host, _, err := net.SplitHostPort(f.server.Listener.Addr().String())
 	if err != nil {
 		t.Fatal(err)
 	}
 	p := &slimProtoTestPlayer{slimtest.Dial(t, net.JoinHostPort(host, "3483"))}
 	helo := make([]byte, 36)
-	copy(helo, []byte{12, 0, 2, 0, 0, 0, 0, 1})
+	copy(helo, []byte{12, 0, 2, 0, 0, 0, 0, lastMACByte})
 	caps := fmt.Sprintf("Model=squeezelite,ModelName=SqueezeLite,Firmware=2.0.0,MaxSampleRate=%d,%s", rate, codecs)
 	p.Send(t, "HELO", append(helo, caps...))
 	p.expectControl(t, 'q')

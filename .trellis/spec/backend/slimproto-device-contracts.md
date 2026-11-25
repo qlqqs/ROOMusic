@@ -6,7 +6,7 @@
 
 ## 1. 范围
 
-- 只做单台播放：发现、连接、FLAC 长流、暂停继续、跳转、音量、断线。多台同步编组另见任务 `11-25-slimproto-sync-groups`。
+- 单台播放：发现、连接、FLAC 长流、暂停继续、跳转、音量、断线（§3）。多台同步编组见 §8 与[播放区协议：托管的局域网输出与编组 §11](./playback-zone-lan-contracts.md#11-编组slimproto-多台同步)。
 - 不做：PCM 裸流、DoP/原生 DSD 直通（DSD 来源按 [DSD 合同](./dsd-contracts.md) 转成 PCM）、设备端暂停与继续的映射（Squeezelite 没有这类上行报文）、手动添加、备用端口、Lyrion 的 CLI 与 JSON-RPC。
 
 ## 2. 签名
@@ -35,7 +35,7 @@
 
 ### 3.3 开流与状态
 
-- `strm s`：autostart `1`，格式 `f`，PCM 字段全 `?`，threshold 255 KB，采样率 ≥ 176400 时 output_threshold 20，server_port 为 HTTP 端口，server_ip 为本连接的本机 IPv4，请求串 `GET /upnp/streams/{token} HTTP/1.0`。
+- `strm s`：单台 autostart `1`（编组见 §8），格式 `f`，PCM 字段全 `?`，threshold 255 KB，采样率 ≥ 176400 时 output_threshold 20，server_port 为 HTTP 端口，server_ip 为本连接的本机 IPv4，请求串 `GET /upnp/streams/{token} HTTP/1.0`。
 - STMs 回报 `playing`；`strm p`/`strm u` 以 STMp/STMr 为准；跳转与上下首为 `strm q` 后重新开流；取消预取发 `strm f`。
 - 同格式曲目在一条长流里。格式变化时，只有当前流已交付完（`Delivered`）、收到 STMd、且播放区给出接续流，才对接续流发 `strm s`；接续流的 STMs 晋升 `seq`。STMu 且没有接续流时回报 `ended`。
 - 位置：本条流起始偏移加 `elapsed_ms`（Squeezelite 已扣除声卡缓冲），播放中每秒回报。
@@ -91,3 +91,38 @@
 错误：前端按 codec 区分设备格式。Cast 与 SlimProto 都可能是 "flac"。
 正确：按设备 kind 选格式解码器（frontend/src/features/lan-devices/api/decoders.ts）。
 ```
+
+## 8. 编组同步
+
+来源：任务 `11-25-slimproto-sync-groups`（机制调研 `research/sync-algorithm.md`，规划 `research/group-model-plan.md`）。接口、不变式与错误见[播放区协议 §11](./playback-zone-lan-contracts.md#11-编组slimproto-多台同步)。
+
+### 8.1 结构
+
+| 位置 | 职责 |
+| --- | --- |
+| `zones`：`group_dispatcher.go`、`group_stream.go`、`groups.go` | 渲染一次，共享分块缓冲分发给每台成员各自的令牌与读位置；上限 `max(8 MiB, 30 秒码率)`；超限或 8 秒内未来取流的成员单独剔除；成员二次 GET 得 `ErrStreamGone`。`ManagedGroupStream`、`GroupMembers`、`ReportGroupMember`；可选接口 `GroupOutputs{AcquireMember, ReleaseMember}` 由 `upnp` 实现 |
+| `devices/slimproto`：`group.go`、`group_members.go`、`group_timing.go` | 协调器。编组时替换主输出的单设备循环，是唯一给各台 `Player` 写命令的协程；不持任何 zones 锁；排空每台事件通道 |
+| `devices/upnp/group.go` | 成员占用进 `owners`（复用 `Acquire` 循环与接管）；`Acquire` 的“同一用户同一设备在用”判断不含成员占用；主输出关闭前等全部成员归还 |
+
+### 8.2 时钟
+
+- 每个 STAT 计算 `服务器接收时刻 − jiffies`（32 位回绕展开），更小的偏移立即采用为零点；漂移超过 1 ms 时按窗口上调（≤ 5 ms 或窗口满）。估计器在 `Player` 内，单台播放的位置外推也用它。
+- 入组与起播前 2 秒内以 250 ms 间隔发 `strm t` 预热，之后每秒一次。
+- `strm u` 的目标换算成该台 jiffies：不能为 0（为 0 时取 1），必须在 10 秒窗口内，否则不下发并重新开流。
+
+### 8.3 流程与取值
+
+| 场景 | 做法 |
+| --- | --- |
+| 开新流 | 每台 `strm q` → `strm s` autostart `0`（各自令牌路径）→ 全部 `STMl` 后，T = 现在 + 300 ms + (最大微调 − 本台微调)，每台 `strm u (T 的本台 jiffies)`；8 秒内未到 `STMl` 的成员标 `dropped` |
+| 维持同步 | 每秒比较各台表观开始时刻 `播放点时刻 − elapsed + 微调`，基准为最超前者；落后 10 ms–10 s 的发 `strm a 落后毫秒数`，同一台修正后冷却 1 秒；播放点超过 3 秒未更新的成员本轮跳过 |
+| 暂停 / 继续 | 全组 `strm p`；继续时与开新流用同一套时刻：T = 现在 + 300 ms + (最大微调 − 本台微调)，每台 `strm u`；任一台没有确认暂停（STMp）时回报 `stream_lost` 重新开流。不按 STMp 的 elapsed 差错开：elapsed 按输出块累加、粒度粗，实测会把亚毫秒的差拉到 35 ms（2026-11-25） |
+| 接续流（格式变化） | 全部活动成员都 Delivered 且都报 `STMd` 后，原成员 `strm s` autostart `1` 接在缓冲后面；在格式边界重新加入的成员没有旧缓冲，用 autostart `0` 按统一时刻接入 |
+| 回报 | 参考成员为主设备；主设备连接仍在但当前流单独故障时，由剩余活动成员临时回报位置；全部 `STMu` 才回报 `ended`；单台 `STMn`/`DSCO`/`STMo` 只剔除那一台 |
+| 掉线 | 成员 5 秒无 STAT 或连接断开即 `offline`，其余继续；下一次开流前对 `waiting`/`dropped`/`offline` 成员尝试重新入组，只认领空闲设备（被占用为 `busy`）；主设备掉线整组暂停 |
+
+### 8.4 测试
+
+- 单元（`testing/synctest` 驱动生产循环的时钟）：时钟估计、`strm u`/`strm a` 的取值、暂停继续、接续流门槛、单台故障剔除、主设备掉线。
+- PostgreSQL 集成：编组接口、容量与角色守卫、成员区守卫、组音量、微调、重启恢复；分发器的字节一致与慢读者隔离；迁移 0079 往返。
+- 真实播放器：`sg docker -c scripts/test-slimproto-sync.sh`，两台 Squeezelite 接按计划出声时刻计时的读取程序，比较每秒脉冲的时刻差。

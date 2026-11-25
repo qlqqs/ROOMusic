@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "group_unsupported",
+      "message": "当前设备或输出不支持编组"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

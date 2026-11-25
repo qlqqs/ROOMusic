@@ -1,0 +1,16 @@
+services:
+  receiver:
+    command: ["-s", "app", "-n", "ROOMusic Sync Leader", "-m", "02:00:00:00:34:83", "-o", "-", "-a", "32", "-r", "44100,48000", "-d", "slimproto=debug", "-d", "decode=info", "-d", "output=info"]
+    cap_drop: [ALL]
+
+  member:
+    image: ${ROOMUSIC_SLIMPROTO_NETEM_IMAGE:?}
+    entrypoint: ["/bin/sh", "-c", "exec /usr/bin/squeezelite \"$$@\" >/capture/audio.fifo 2>>/capture/player.log", "--"]
+    command: ["-s", "app", "-n", "ROOMusic Sync Member", "-m", "02:00:00:00:34:84", "-o", "-", "-a", "32", "-r", "44100,48000", "-d", "slimproto=debug", "-d", "decode=info", "-d", "output=info"]
+    user: ${SLIMPROTO_RUN_USER:?}
+    volumes:
+      - ${SLIMPROTO_WORK:?}/member:/capture
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
+    cpus: 1
+    mem_limit: 128m

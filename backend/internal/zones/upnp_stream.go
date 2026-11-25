@@ -2,7 +2,7 @@ package zones
 
 import (
 	"context"
-	"crypto/rand"
+
 	"sync/atomic"
 )
 
@@ -14,6 +14,7 @@ type UPnPStreamInfo struct {
 }
 
 type upnpStreamToken struct {
+	reader    *groupReader
 	key       string
 	artworkID string
 	service   *Service
@@ -43,13 +44,13 @@ func (s *Service) ManagedStream(userID, sessionID string, seq int64) (UPnPStream
 	if outputError(out) != nil || (z.device.Kind != "upnp" && z.device.Kind != "cast" && z.device.Kind != "slimproto") || h == nil || h.session.HLS() != nil {
 		return UPnPStreamInfo{}, ErrStreamGone
 	}
+	if len(h.groupIDs) > 0 {
+		info := s.groupStreamInfo(out, h)
+		leader := info.Members[0]
+		return UPnPStreamInfo{Path: leader.Path, Delivered: leader.Delivered, DurationSeconds: info.DurationSeconds}, nil
+	}
 	if h.upnp == nil {
-		t := &upnpStreamToken{key: rand.Text(), service: s, output: out, handle: h}
-		if len(h.stream.Segments) > 0 {
-			if art := h.stream.Segments[0].Track.Release.Artwork; art != nil {
-				t.artworkID = art.ResourceID
-			}
-		}
+		t := s.newStreamToken(out, h)
 		h.upnp = t
 		s.upnpStreams.Store(t.key, t)
 	}
@@ -65,10 +66,28 @@ type UPnPStreamBody struct {
 	StreamBody
 	ArtworkID string
 	Done      <-chan struct{}
+	reader    *groupReader
 	delivered *atomic.Bool
 }
 
 func (b UPnPStreamBody) MarkDelivered() { b.delivered.Store(true) }
+
+// FinishDelivery 在客户端中断时唤醒其读者，立即释放该成员保留的块。
+func (b UPnPStreamBody) FinishDelivery() {
+	r := b.reader
+	if r == nil || r.delivered.Load() {
+		return
+	}
+	d := r.dispatch
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.closed || r.dropped {
+		return
+	}
+	r.dropLocked(true)
+	d.trimLocked()
+	d.ready.Broadcast()
+}
 
 // OpenUPnPStream 在播放区锁内核对令牌、续流并取走唯一 reader。HEAD 只读取 MIME。
 func (s *Service) OpenUPnPStream(ctx context.Context, key string, take bool) (UPnPStreamBody, error) {
@@ -89,11 +108,17 @@ func (s *Service) OpenUPnPStream(ctx context.Context, key string, take bool) (UP
 		}
 	}()
 	h := t.handle
-	if h == nil || outputError(out) != nil || h.upnp != t {
+	if h == nil || outputError(out) != nil {
+		return UPnPStreamBody{}, ErrStreamGone
+	}
+	if t.reader != nil {
+		return t.openGroup(take)
+	}
+	if h.upnp != t {
 		return UPnPStreamBody{}, ErrStreamGone
 	}
 	if take && h.taken {
-		if z.rebuild != nil || h.rebuild != nil {
+		if len(z.group) > 0 || z.rebuild != nil || h.rebuild != nil {
 			return UPnPStreamBody{}, ErrStreamGone
 		}
 		// 已获取的 Body 不能倒带。按当前播放头走 stream_lost 的恢复路径，

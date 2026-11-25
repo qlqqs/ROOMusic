@@ -28,8 +28,12 @@ func (s *Service) prepareManagedCommand(ctx context.Context, userID string, u *u
 		return ErrNotFound
 	}
 	source.mu.Lock()
+	grouped := source.leaderZoneID != ""
 	visible := source.visible()
 	source.mu.Unlock()
+	if grouped && startsOutput(c.Command) {
+		return ErrDeviceGrouped
+	}
 	if !visible {
 		return ErrNotFound
 	}

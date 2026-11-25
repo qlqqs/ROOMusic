@@ -17,6 +17,10 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	79: `UPDATE playback_devices SET sync_delay_ms=-500 WHERE id='f7900000-0000-4000-8000-000000000001';
+ UPDATE playback_devices SET sync_delay_ms=500 WHERE id='f7900000-0000-4000-8000-000000000002';
+ INSERT INTO playback_group_members(device_id,user_id,leader_zone_id,ordinal)
+ VALUES ('f7900000-0000-4000-8000-000000000002','f6900000-0000-4000-8000-000000000001','f7900000-0000-4000-8000-000000000003',1);`,
 	78: `UPDATE upnp_settings SET slimproto_enabled=false WHERE id=1;
  INSERT INTO playback_devices(id,user_id,kind,name,external_id,max_sample_rate)
  VALUES ('f7800000-0000-4000-8000-000000000001','f6900000-0000-4000-8000-000000000001','slimproto','合成 SlimProto 播放器','slim:02:00:00:00:00:01',384000);
@@ -495,12 +499,20 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if m.Version == 71 {
 				rollbackExec(t, db, beforeSourcePluginMigration)
 			}
-			if m.Version == 69 || m.Version == 70 || m.Version == 75 || m.Version == 76 || m.Version == 77 || m.Version == 78 {
+			if m.Version == 69 || m.Version == 70 || m.Version == 75 || m.Version == 76 || m.Version == 77 || m.Version == 78 || m.Version == 79 {
 				rollbackExec(t, db, beforeUPnPMigration)
 			}
 			if m.Version == 75 || m.Version == 76 || m.Version == 77 || m.Version == 78 {
 				rollbackExec(t, db, upnpDiscoveryRollbackFixture)
 				rollbackExec(t, db, upnpPlaybackRollbackFixture)
+			}
+			if m.Version == 79 {
+				rollbackExec(t, db, `INSERT INTO playback_devices(id,user_id,kind,name,external_id,max_sample_rate) VALUES
+ ('f7900000-0000-4000-8000-000000000001','f6900000-0000-4000-8000-000000000001','slimproto','合成主设备','slim:02:00:00:00:00:01',96000),
+ ('f7900000-0000-4000-8000-000000000002','f6900000-0000-4000-8000-000000000001','slimproto','合成成员设备','slim:02:00:00:00:00:02',48000);
+ INSERT INTO playback_zones(id,user_id,device_id,position_seconds) VALUES
+ ('f7900000-0000-4000-8000-000000000003','f6900000-0000-4000-8000-000000000001','f7900000-0000-4000-8000-000000000001',12),
+ ('f7900000-0000-4000-8000-000000000004','f6900000-0000-4000-8000-000000000001','f7900000-0000-4000-8000-000000000002',24);`)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))

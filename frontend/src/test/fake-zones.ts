@@ -55,11 +55,11 @@ export function fakeZoneServer(options: { trackOf?: (trackId: string) => PlayerT
   let after: Partial<Zone> | null = null;
   let entries: QueueEntry[] = [];
   let imported = false;
-  let device: Device = { deviceId: DEVICE_ID, zoneId: ZONE_ID, name: "测试设备", kind: "browser", online: false, lastSeenAt: Date.now(), volume: 1, muted: false, volumeControllable: true, outputSessionId: null, lan: null };
+  let device: Device = { deviceId: DEVICE_ID, zoneId: ZONE_ID, name: "测试设备", kind: "browser", online: false, lastSeenAt: Date.now(), volume: 1, muted: false, volumeControllable: true, outputSessionId: null, lan: null, group: null, syncDelayMs: null };
   let zone: Zone = {
     zoneId: ZONE_ID, deviceId: DEVICE_ID, revision: 1, queueRevision: 0, queueLength: 0, mode: "sequential", settings: defaultSettings,
     current: null, hasNext: false, intent: "pause", status: "idle", fault: null, failures: {},
-    position: { seconds: 0, at: Date.now(), durationSeconds: null, seekable: false }, stream: null, nextStream: null, pausedAt: null, signal: null, event: null,
+    position: { seconds: 0, at: Date.now(), durationSeconds: null, seekable: false }, stream: null, nextStream: null, pausedAt: null, signal: null, event: null, group: null,
   };
 
   const newEntries = (trackIds: readonly string[]): QueueEntry[] => trackIds.map((trackId) => ({ entryId: `entry-${++entryCounter}`, track: trackOf(trackId) }));
@@ -231,6 +231,19 @@ export function fakeZoneServer(options: { trackOf?: (trackId: string) => PlayerT
     deleteDevice: async () => {
       if (device.online) throw new ApiError({ kind: "http", status: 409, code: "device_online", message: "设备在线", requestId: "fake" });
     },
+    // 替身只有一台浏览器设备，不能编组。
+    addGroupMember: async () => {
+      throw new ApiError({ kind: "http", status: 409, code: "group_unsupported", message: "group_unsupported", requestId: "fake" });
+    },
+    removeGroupMember: async () => {
+      throw new ApiError({ kind: "http", status: 404, code: "not_found", message: "not_found", requestId: "fake" });
+    },
+    putGroupVolume: async () => {
+      throw new ApiError({ kind: "http", status: 409, code: "group_unsupported", message: "group_unsupported", requestId: "fake" });
+    },
+    putSyncDelay: async () => {
+      throw new ApiError({ kind: "http", status: 409, code: "group_unsupported", message: "group_unsupported", requestId: "fake" });
+    },
     claimOutput: async (_deviceId, body) => {
       claims.push(body);
       device = { ...device, online: true, outputSessionId: "00000000-0000-4000-8000-00000000f001", volumeControllable: body.capabilities.volume !== "fixed" };
@@ -353,6 +366,10 @@ export function delegatingZoneApi(current: () => FakeZoneServer): ZoneApi {
     activateDevice: (deviceId, takeover) => current().api.activateDevice(deviceId, takeover),
     putDeviceSampleRate: (deviceId, rate) => current().api.putDeviceSampleRate(deviceId, rate),
     deleteDevice: (deviceId) => current().api.deleteDevice(deviceId),
+    addGroupMember: (zoneId, deviceId, takeover) => current().api.addGroupMember(zoneId, deviceId, takeover),
+    removeGroupMember: (zoneId, deviceId) => current().api.removeGroupMember(zoneId, deviceId),
+    putGroupVolume: (zoneId, volume) => current().api.putGroupVolume(zoneId, volume),
+    putSyncDelay: (deviceId, ms) => current().api.putSyncDelay(deviceId, ms),
     claimOutput: (deviceId, body) => current().api.claimOutput(deviceId, body),
     postOutputReport: (sessionId, body) => current().api.postOutputReport(sessionId, body),
     releaseOutput: (sessionId, body) => current().api.releaseOutput(sessionId, body),

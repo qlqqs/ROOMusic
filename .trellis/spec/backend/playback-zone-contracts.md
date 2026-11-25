@@ -20,11 +20,11 @@
 每个成员的一台设备对应一个播放区。浏览器或原生设备由客户端登记，在线且可见的局域网渲染器由服务端投影。服务端生成设备与播放区 ID。播放区持有队列、模式、播放设置与传输状态。
 
 ```text
-Device = {device_id, zone_id, name, kind: "browser"|"native"|"upnp", online, last_seen_at, volume: 0..1, muted,
+Device = {device_id, zone_id, name, kind: "browser"|"native"|"upnp"|"cast"|"airplay"|"slimproto", online, last_seen_at, volume: 0..1, muted,
           capabilities: Capabilities, output_session_id: UUID?}
 Snapshot = {server_time, protocol: 1, devices: Device[], zones: Zone[]}          // 按设备创建时间升序
 QueueEntry = {entry_id: UUID, track: TrackSummary}   // 与 POST /tracks/summaries 同一投影，按曲目当前的发行与组给出
-Zone = {zone_id, device_id, revision, queue_revision, queue_length,
+Zone = {zone_id, device_id, revision, queue_revision, queue_length, group: ZoneGroup?,
         mode: "sequential"|"repeat_all"|"repeat_one"|"shuffle", settings: Settings,
         current: QueueEntry?, has_next, intent: "play"|"pause",
         status: "idle"|"loading"|"playing"|"paused"|"buffering",
@@ -206,28 +206,7 @@ Capabilities = {stream_formats: [{codec, mime_type, lossless, max_sample_rate: i
 
 ## 7. 信号路径与 Headroom
 
-`Zone.signal` 是正在放的那首的信号路径（播放头到达分段起点时更新）；没有流时为 `null`。样本 events/zone-signal。
-
-```text
-Signal = {quality, steps: Step[], clipping?: bool, processing_speed?: number}   // 两个可选键不适用时省略（不是 null）
-Step = {kind, quality, lossy: bool, compat: bool, params}
-quality ∈ "lossless" > "enhanced" > "high" > "low"（从好到差；Signal.quality 取最差的一步）
-```
-
-| `kind` | `params` | 评级 |
-| --- | --- | --- |
-| `source` | `{codec, sample_rate, channels, bit_depth?}` | 无损源 `lossless`；`mp3/aac/vorbis/opus/wavpack_hybrid` 为 `low`、有损 |
-| `sample_rate` | `{from_rate:int, to_rate:int, filter:string}` | 用户转换 `enhanced`；设备/有损约束 `high`、兼容转换；仅链 ② 产生 |
-| `downmix` | `{from_channels, to_channels, from_layout, to_layout, by:"roomusic", mode:"matrix"\|"select"}` | `high`、兼容转换；`select` 为纯选择；兼容旧 `by:"ffmpeg"` |
-| `leveling` | `{gain_db, basis}` | `enhanced`；电平化不为“关”时出现 |
-| `headroom` | `{gain_db}` | `enhanced`；开启时出现 |
-| `dither` | `{bits, kind: "tpdf"}` | `enhanced`；降位深时 `high`、兼容转换；逐位直通时不出现 |
-| `encode` | 无损 `{codec, sample_rate, bit_depth}`；有损 `{codec, sample_rate, bitrate_kbps}` | 无损 `lossless`；有损 `low`、有损 |
-
-- 交叉渐变是瞬时的，不进信号路径；输出设备一步由客户端按设备名补上。
-- **Headroom**：`db` ∈ [−30, 0]、步进 0.1，否则 `400 invalid_input`。开启时在处理链开头乘 `10^(db/20)`，整条流不再逐位、量化时加抖动，无损档按 24 位输出。改动经 `set_settings`（样本 set-settings-headroom）。
-- **削波指示**：只在 `clip_indicator` 开时统计（无损档在量化钳位处，有损档在交给编码器前统计 |x| > 1）。有削波立即 `clipping: true`，最后一次削波约 450 ms 后变回 `false`。
-- **处理速度**：处理的音频时长 / 解码、处理链与量化花的墙钟时长，一位小数，变化且距上次 ≥ 1 秒才更新。
+见[播放区协议：信号路径与 Headroom](./playback-zone-signal-contracts.md#7-信号路径与-headroom)。
 
 ## 8. 错误码
 
@@ -262,16 +241,6 @@ quality ∈ "lossless" > "enhanced" > "high" > "low"（从好到差；Signal.qua
 | 设备自动清理 | 30 天没上线，每小时扫一次 |
 | 控制目标回退（客户端） | 暂停超过 15 分钟或离线 |
 
-## 10. 托管的局域网输出
+## 10. 托管的局域网输出与编组
 
-设备首次可见时，快照与 SSE 首帧包含成员自己的设备与播放区。UPnP 行的 `external_id` 是物理设备 UDN，`online` 表示发现在线，`output_session_id` 为 null。撤销可见性后，SSE 发送 `device_removed`，设备重新可见时恢复自己的播放区与队列。管理员分配、共享与发现接口见 [局域网设备合同](./upnp-device-contracts.md)。
-
-| 接口 | 请求与响应 |
-| --- | --- |
-| POST /devices/{device_id}/activate | 选择设备为控制目标。传 `{}` 或 `{"takeover":true}`，200 返回 `{server_time,device}`。同一成员重复选择复用当前占用 |
-| PUT /devices/{device_id}/sample-rate | 传 `{"max_sample_rate":96000}`。允许 44100、48000、96000、192000 Hz，返回 `{server_time,device}`。活跃流重新协商 |
-| POST /zones/{zone_id}/commands | `play_tracks`、`play_entry`、`play`、`next`、`previous`、`retry` 与 `transfer` 接受可选布尔字段 `takeover`。转移认领目标，成功后释放已经清空的源设备 |
-
-UPnP 行带 `max_sample_rate` 和 `format_declared`，每个 `capabilities.stream_formats[]` 带协商上限与 24 位位深。占用时另有 `occupied_by:{user_id,display_name}`。设备已由其他成员占用时返回 409，`error.code=device_busy`，`error.message` 含占用者显示名，顶层带 `request_id`。传 `takeover:true` 会暂停旧区的输出。重新使用失去分配的设备 ID 时返回 404。实体设备面板暂停或继续时，区事件带 `kind:"pause"|"play"` 与 `source:"device"`。
-
-请求与响应示例见 `backend/internal/app/testdata/api-samples/upnp/playback-snapshot.json`、`playback-occupied.json` 与 `device-busy.json`。
+见[播放区协议：托管的局域网输出与编组](./playback-zone-lan-contracts.md)。

@@ -145,7 +145,7 @@ G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间�
 - SRC 后插入 `chain.Wrap(downmix.New(matrix), in, out, step, true)`。矩阵清 Exact；用户节点接续其格式。
 - 关闭、mono 设备或未知布局需缩减时，Tail 选择前 N 声道，保留 Exact/SourceBits。已知掩码取低位，未知为 0，mono 用 `0x4`。
 - 解码删除 `-ac`；编码声明布局，多声道 WAV 写扩展头掩码。
-- 信号 params 见[播放区协议 §7](./playback-zone-contracts.md#7-信号路径与-headroom)；未知布局显示声道数。
+- 信号 params 见[播放区协议 §7](./playback-zone-signal-contracts.md#7-信号路径与-headroom)；未知布局显示声道数。
 - 设置及验证见[合同 §9](./zones-data-contracts.md#9-降混设置文档0046)。
 
 错误：ffmpeg 与链重复混合。正确：仅矩阵或 Tail 缩减，交付格式等于链输出。

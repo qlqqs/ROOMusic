@@ -25,6 +25,9 @@ button.select { cursor: pointer; }
 .row[aria-current] .nameText { color: var(--text-accent); font-weight: 600; }
 .state { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-12); color: var(--text-secondary); }
 .actions { display: flex; flex-wrap: nowrap; gap: 2px; }
+/* 已编组的主设备：编组图标用强调色（读屏名写出台数）。 */
+.groupButton { display: inline-flex; }
+.groupButton[data-grouped] svg { color: var(--text-accent); }
 
 .renameDialog { width: min(400px, calc(100vw - 2 * var(--space-4))); }
 .renameForm { display: grid; gap: var(--space-3); padding: var(--space-4); }

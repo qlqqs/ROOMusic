@@ -14,6 +14,9 @@ var (
 	ErrDevicePairingRequired = errors.New("device_pairing_required")
 	ErrPrecisionUnavailable  = errors.New("精确对时不可用")
 	ErrDeviceUnsupported     = errors.New("device_unsupported")
+	ErrDeviceGrouped         = errors.New("device_grouped")
+	ErrGroupUnsupported      = errors.New("group_unsupported")
+	ErrGroupFull             = errors.New("group_full")
 	ErrInvalidInput          = errors.New("invalid_input")
 	ErrTrackNotFound         = errors.New("track_not_found")
 	ErrQueueFull             = queue.ErrQueueFull
@@ -68,6 +71,8 @@ type QueueEntry struct {
 }
 
 type Device struct {
+	Group             *DeviceGroup    `json:"group,omitempty"`
+	SyncDelayMS       *int            `json:"sync_delay_ms,omitempty"`
 	ExternalID        string          `json:"external_id,omitempty"`
 	MaxSampleRate     int             `json:"max_sample_rate,omitempty"`
 	FormatDeclared    *bool           `json:"format_declared,omitempty"`
@@ -129,6 +134,7 @@ type ZoneEvent struct {
 	Dropped  *int   `json:"dropped,omitempty"`
 }
 type Zone struct {
+	Group         *ZoneGroup   `json:"group"`
 	ZoneID        string       `json:"zone_id"`
 	DeviceID      string       `json:"device_id"`
 	Revision      int64        `json:"revision"`

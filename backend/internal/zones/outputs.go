@@ -44,6 +44,9 @@ func (s *Service) ClaimOutput(ctx context.Context, userID, deviceID string, inpu
 	if managedKind(z.device.Kind) != input.Managed || !z.visible() {
 		return ClaimOutputResult{}, ErrNotFound
 	}
+	if z.leaderZoneID != "" {
+		return ClaimOutputResult{}, ErrDeviceGrouped
+	}
 	tracks, err := s.loadSummaries(ctx, z.persisted.Queue.Entries)
 	if err != nil {
 		return ClaimOutputResult{}, err

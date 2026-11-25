@@ -46,6 +46,7 @@
       },
       "failures": [],
       "fault": null,
+      "group": null,
       "has_next": true,
       "intent": "play",
       "mode": "repeat_all",

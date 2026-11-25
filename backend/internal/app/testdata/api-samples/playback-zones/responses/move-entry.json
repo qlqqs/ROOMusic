@@ -50,6 +50,7 @@
       },
       "failures": [],
       "fault": null,
+      "group": null,
       "has_next": true,
       "intent": "pause",
       "mode": "sequential",

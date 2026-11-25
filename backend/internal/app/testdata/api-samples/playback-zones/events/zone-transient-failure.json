@@ -45,6 +45,7 @@
       "fault": {
         "kind": "transient"
       },
+      "group": null,
       "has_next": true,
       "intent": "pause",
       "mode": "repeat_all",

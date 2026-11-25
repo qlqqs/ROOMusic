@@ -122,14 +122,18 @@ func TestSlimProtoParseStatus(t *testing.T) {
 func TestSlimProtoStreamCommands(t *testing.T) {
 	const request = "GET /upnp/streams/test HTTP/1.0\r\nHost: 192.168.1.23:4660\r\n\r\n"
 	for _, tc := range []struct {
-		rate      int
-		threshold byte
-	}{{96000, 0}, {176400, 20}, {384000, 20}} {
+		rate                                int
+		auto, streamThreshold, outThreshold byte
+	}{
+		{96000, '1', 255, 0},
+		{176400, '0', 37, 20},
+		{384000, '1', 255, 20},
+	} {
 		want := []byte{0, byte(28 + len(request)), 's', 't', 'r', 'm',
-			's', '1', 'f', '?', '?', '?', '?', 255, 0, 0, '0', 0, tc.threshold, 0,
+			's', tc.auto, 'f', '?', '?', '?', '?', tc.streamThreshold, 0, 0, '0', 0, tc.outThreshold, 0,
 			0, 0, 0, 0, 0x12, 0x34, 192, 168, 1, 23}
 		want = append(want, request...)
-		got, err := startStream(netip.MustParseAddr("192.168.1.23"), 0x1234, "/upnp/streams/test", tc.rate)
+		got, err := startStream(netip.MustParseAddr("192.168.1.23"), 0x1234, "/upnp/streams/test", tc.rate, tc.auto, tc.streamThreshold)
 		if err != nil || !bytes.Equal(got, want) {
 			t.Fatalf("%d Hz strm s = %x %v，期望 %x", tc.rate, got, err, want)
 		}
@@ -144,6 +148,18 @@ func TestSlimProtoStreamCommands(t *testing.T) {
 	}
 	if _, err := startStream(netip.MustParseAddr("192.168.1.23"), 4660, "/"+strings.Repeat("x", 4096), 44100); err == nil {
 		t.Fatal("接受了超过播放器帧上限的 HTTP 请求")
+	}
+}
+
+func TestSlimProtoTimedStreamCommands(t *testing.T) {
+	for _, command := range []byte("uap") {
+		var want [30]byte
+		copy(want[:], []byte{0, 28, 's', 't', 'r', 'm', command})
+		copy(want[20:24], []byte{0xfe, 0xdc, 0xba, 0x98})
+		got, err := encodeFrame("strm", controlMS(command, 0xfedcba98))
+		if err != nil || !bytes.Equal(got, want[:]) {
+			t.Fatalf("定时 strm %c = %x %v，期望 %x", command, got, err, want)
+		}
 	}
 }
 

@@ -114,6 +114,10 @@ func (s *Service) VisibleDevices(ctx context.Context, userID string) ([]zones.Ma
 }
 
 func (s *Service) Acquire(ctx context.Context, userID, deviceID, udn string, caps zones.Capabilities, takeover bool) error {
+	return s.acquire(ctx, userID, deviceID, udn, caps, takeover, "", nil)
+}
+
+func (s *Service) acquire(ctx context.Context, userID, deviceID, udn string, caps zones.Capabilities, takeover bool, leaderID string, rejoin *deviceOutput) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m := s.output
@@ -144,16 +148,37 @@ func (s *Service) Acquire(ctx context.Context, userID, deviceID, udn string, cap
 		m.mu.Lock()
 		old := m.owners[udn]
 		m.mu.Unlock()
+		var leader *deviceOutput
+		if leaderID != "" {
+			leader = m.leader(userID, leaderID)
+			if leader == nil || leader.udn == udn || (rejoin != nil && leader != rejoin) {
+				return zones.ErrGroupUnsupported
+			}
+		}
 		if old == nil {
+			if leader != nil {
+				if rejoin != nil {
+					members := m.zones.GroupMembers(userID, leader.sessionID)
+					if !slices.ContainsFunc(members, func(member zones.GroupMember) bool {
+						return member.DeviceID == deviceID && member.UDN == udn
+					}) {
+						return zones.ErrNotFound
+					}
+				}
+				return m.claimMember(leader, deviceID, device)
+			}
 			return s.claimOutput(ctx, actor, deviceID, device, base, caps)
 		}
 		if old.ctx.Err() == nil && old.device.slimPlayer == device.slimPlayer {
-			if old.actor.ID == userID && old.deviceID == deviceID {
+			if old.actor.ID == userID && old.deviceID == deviceID && old.leader == leader {
 				return nil
 			}
-			if !takeover {
+			if !takeover && !(leader != nil && rejoin == nil && old.leader == nil && old.actor.ID == userID) {
 				return &zones.DeviceBusyError{Occupant: zones.DeviceOccupant{UserID: old.actor.ID, DisplayName: old.actor.Username}}
 			}
+		}
+		if rejoin != nil {
+			return &zones.DeviceBusyError{Occupant: zones.DeviceOccupant{UserID: old.actor.ID, DisplayName: old.actor.Username}}
 		}
 		m.handovers[udn] = zones.DeviceOccupant{UserID: actor.ID, DisplayName: actor.Username}
 		old.cancel()
@@ -219,7 +244,15 @@ func (s *Service) claimOutput(ctx context.Context, actor identity.User, deviceID
 		go p.run(sub)
 	} else if device.Kind == "slimproto" {
 		output := slimproto.Output{Zones: m.zones, UserID: userID, DeviceID: deviceID, ZoneID: o.zoneID, SessionID: o.sessionID, BaseURL: base, Player: device.slimPlayer, Logger: m.logger, Offline: func() { s.slim.Offline(udn, device.slimPlayer) }}
-		go func() { position := output.Run(run, sub); o.cancel(); o.release(position) }()
+		output.Member = func(ctx context.Context, member zones.GroupMember, rejoin bool) (slimproto.MemberLease, error) {
+			return s.slimMember(ctx, o, member, rejoin)
+		}
+		go func() {
+			position := output.Run(run, sub)
+			o.cancel()
+			m.finishMembers(o)
+			o.release(position)
+		}()
 	} else if device.Kind == "cast" {
 		output := cast.Output{Zones: m.zones, UserID: userID, DeviceID: deviceID, ZoneID: o.zoneID, SessionID: o.sessionID, BaseURL: base, Address: device.Address, Logger: m.logger, Online: func() bool { d, ok := s.cast.Lookup(udn); return ok && d.Online }, Offline: func() { s.cast.Offline(udn) }}
 		go func() { position := output.Run(run, sub); o.cancel(); o.release(position) }()
@@ -293,6 +326,9 @@ func (s *Service) SessionRevoked(userID string) {
 }
 
 type deviceOutput struct {
+	leader *deviceOutput
+	// 受 manager.mu 保护；协调器归还播放器后，成员的物理占用才能交接。
+	borrowed                               chan struct{}
 	manager                                *outputManager
 	registry                               *Registry
 	actor                                  identity.User

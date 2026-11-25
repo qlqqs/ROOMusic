@@ -11,11 +11,12 @@ import { MediaSessionBinding, type MediaSessionCommands } from "../output/media-
 import { OutputEndpoint, type AudioLike } from "../output/output";
 import type { ClaimBody, RegisterBody, ReportBody, SettingsPatch, ZoneCommand } from "./api";
 import { isUsableTarget, readControlTarget, writeControlTarget, controlTargetStorageKey, type ControlTarget } from "./control-target";
-import type { ClaimResult, CommandResult, DeviceResult, RegisterResult, ReportResult, StreamEvent } from "./decoders";
+import type { ClaimResult, CommandResult, DeviceResult, GroupVolumeResult, RegisterResult, ReportResult, StreamEvent } from "./decoders";
 import { deviceStorageKey, readDeviceId, registerBodyOf, withRegistrationLock, writeDeviceId, type LockManagerLike } from "./device";
 import { EventStream, type EventStreamDeps } from "./event-stream";
 import { importLegacyQueue } from "./legacy-import";
 import type { CommandRejection, Device, PlaybackFailureReason, PlaybackSettings, PlayerEvent, PlayerFault, PlayerStatus, Snapshot, Zone, ZoneQueue } from "./model";
+import { ThrottledWrites } from "./throttled-writes";
 import { ZoneStore } from "./zone-store";
 
 export type AddResult = "added" | "queue_full";
@@ -75,6 +76,10 @@ export type ZoneApi = {
   activateDevice: (deviceId: string, takeover: boolean) => Promise<DeviceResult>;
   putDeviceSampleRate: (deviceId: string, rate: number) => Promise<DeviceResult>;
   deleteDevice: (deviceId: string) => Promise<void>;
+  addGroupMember: (zoneId: string, deviceId: string, takeover: boolean) => Promise<RegisterResult>;
+  removeGroupMember: (zoneId: string, deviceId: string) => Promise<RegisterResult>;
+  putGroupVolume: (zoneId: string, volume: number) => Promise<GroupVolumeResult>;
+  putSyncDelay: (deviceId: string, ms: number) => Promise<DeviceResult>;
   claimOutput: (deviceId: string, body: ClaimBody) => Promise<ClaimResult>;
   postOutputReport: (sessionId: string, body: ReportBody) => Promise<ReportResult>;
   releaseOutput: (sessionId: string, body: { stream_seq: number | null; stream_seconds: number }) => void;
@@ -102,8 +107,6 @@ export type PlayerControllerDeps = {
 
 const BOOT_RETRY_MS = [1_000, 2_000, 5_000, 10_000] as const;
 const PROGRESS_INTERVAL_MS = 250;
-const VOLUME_THROTTLE_MS = 125;
-const VOLUME_OPTIMISTIC_MS = 1_000;
 const TARGET_RECHECK_MS = 60_000;
 
 const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clipIndicator: false }, sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" }, downmix: { enabled: true }, peq: defaultPeq, convolution: { enabled: false, irId: null, beforePeq: false } };
@@ -153,9 +156,9 @@ export class PlayerController {
   private progressTimer: ReturnType<typeof setInterval> | null = null;
   /** 拖动的目标位置：revision 是拖动时的状态版本，streamSeq 是那时本机输出端正在放的流（本机不出声时为 null）。 */
   private seekOverride: { zoneId: string; revision: number; seconds: number; streamSeq: number | null } | null = null;
-  private pendingVolume: { deviceId: string; volume: number; muted: boolean; until: number } | null = null;
-  private volumeTimer: ReturnType<typeof setTimeout> | null = null;
-  private volumeDirty = false;
+  /** 设备音量（按设备 ID）与组音量（按主设备的播放区 ID）的节流写入。 */
+  private readonly deviceVolumes: ThrottledWrites<{ volume: number; muted: boolean }>;
+  private readonly groupVolumes: ThrottledWrites<number>;
   private alignedZone: Zone | null = null;
   private appliedVolume: { volume: number; muted: boolean } | null = null;
   private readonly listeners = new Set<() => void>();
@@ -181,6 +184,19 @@ export class PlayerController {
     });
     this.events = new EventStream({ open: deps.api.openEventStream, onEvent: this.onStreamEvent, visibility: deps.visibility });
     this.mediaSession = new MediaSessionBinding(deps.mediaSession, deps.artworkUrl, deps.now);
+    const settled = () => this.rebuild();
+    this.deviceVolumes = new ThrottledWrites({ now: deps.now, settled, send: (deviceId, value) => {
+      deps.api.putDeviceVolume(deviceId, value.volume, value.muted).then((result) => {
+        this.store.noteServerTime(result.serverTime);
+        this.store.applyDevice(result.device);
+      }, () => undefined);
+    } });
+    this.groupVolumes = new ThrottledWrites({ now: deps.now, settled, send: (zoneId, volume) => {
+      deps.api.putGroupVolume(zoneId, volume).then((result) => {
+        this.store.noteServerTime(result.serverTime);
+        this.applyKnownDevices(result.devices);
+      }, () => undefined);
+    } });
     this.snapshot = this.buildSnapshot();
   }
 
@@ -554,49 +570,80 @@ export class PlayerController {
     void this.send({ command: "set_settings", settings });
   }
 
+  /** 正在控制的播放区有组时调整组音量，否则调整这台设备。 */
   setVolume(volume: number): void {
-    if (!Number.isFinite(volume)) return;
-    this.changeVolume(Math.min(1, Math.max(0, volume)), this.snapshot.muted);
+    if (!Number.isFinite(volume) || this.lifecycle === "ended") return;
+    const level = Math.min(1, Math.max(0, volume));
+    const zone = this.snapshot.zone;
+    if (zone !== null && zone.group !== null) {
+      this.setGroupVolume(zone.zoneId, level);
+      return;
+    }
+    const device = this.snapshot.device;
+    if (device !== null) this.changeVolume(device, level, this.snapshot.muted);
   }
 
+  /** 静音或取消静音：有组时作用于组内每台能调音量的设备。 */
   setMuted(muted: boolean): void {
-    this.changeVolume(this.snapshot.volume, muted);
+    if (this.lifecycle === "ended") return;
+    const zone = this.snapshot.zone;
+    const devices = zone !== null && zone.group !== null ? this.groupDevices(zone) : this.snapshot.device === null ? [] : [this.snapshot.device];
+    for (const device of devices) this.changeVolume(device, this.effectiveVolume(device).volume, muted);
+  }
+
+  /** 单独调组内某一台的音量（组面板），保留它的静音状态。 */
+  setDeviceVolume(deviceId: string, volume: number): void {
+    const device = this.store.device(deviceId);
+    if (device === undefined || !Number.isFinite(volume)) return;
+    this.changeVolume(device, Math.min(1, Math.max(0, volume)), this.effectiveVolume(device).muted);
+  }
+
+  /** 组音量：服务端按比例缩放组内能调音量的设备，最响的一台到 volume。节流与本地显示同设备音量。 */
+  setGroupVolume(zoneId: string, volume: number): void {
+    const zone = this.store.zone(zoneId);
+    if (this.lifecycle === "ended" || zone === undefined || zone.group === null || !Number.isFinite(volume)) return;
+    if (!this.groupDevices(zone).some((device) => device.volumeControllable)) return;
+    this.groupVolumes.set(zoneId, Math.min(1, Math.max(0, volume)));
+    this.rebuild();
+  }
+
+  /** 这台设备此刻应显示的音量与静音（拖动后 1 秒内以本地值为准）。 */
+  volumeOf(device: Device): { volume: number; muted: boolean } {
+    return this.effectiveVolume(device);
   }
 
   /** 音量属于设备：本机先立即作用于元素，再按 125 ms 节流发给服务端；1 秒内以本地值显示。 */
-  private changeVolume(volume: number, muted: boolean): void {
-    const device = this.snapshot.device;
-    if (this.lifecycle === "ended" || device === null || !device.volumeControllable) return;
-    this.pendingVolume = { deviceId: device.deviceId, volume, muted, until: this.deps.now() + VOLUME_OPTIMISTIC_MS };
+  private changeVolume(device: Device, volume: number, muted: boolean): void {
+    if (this.lifecycle === "ended" || !device.volumeControllable) return;
+    this.deviceVolumes.set(device.deviceId, { volume, muted });
     this.syncOutput();
     this.rebuild();
-    if (this.volumeTimer !== null) {
-      this.volumeDirty = true;
-      return;
-    }
-    this.flushVolume();
-  }
-
-  private flushVolume(): void {
-    const pending = this.pendingVolume;
-    if (pending === null) return;
-    this.volumeDirty = false;
-    this.deps.api.putDeviceVolume(pending.deviceId, pending.volume, pending.muted).then((result) => {
-      this.store.noteServerTime(result.serverTime);
-      this.store.applyDevice(result.device);
-    }, () => undefined);
-    this.volumeTimer = setTimeout(() => {
-      this.volumeTimer = null;
-      if (this.volumeDirty) this.flushVolume();
-      // 乐观显示到期后回到服务端的值。
-      setTimeout(() => this.rebuild(), VOLUME_OPTIMISTIC_MS);
-    }, VOLUME_THROTTLE_MS);
   }
 
   private effectiveVolume(device: Device): { volume: number; muted: boolean } {
-    const pending = this.pendingVolume;
-    if (pending !== null && pending.deviceId === device.deviceId && pending.until > this.deps.now()) return { volume: pending.volume, muted: pending.muted };
-    return { volume: device.volume, muted: device.muted };
+    return this.deviceVolumes.get(device.deviceId) ?? { volume: device.volume, muted: device.muted };
+  }
+
+  /** 组内的设备：主设备在前，其后是成员里此刻看得到的设备。 */
+  private groupDevices(zone: Zone): Device[] {
+    const ids = [zone.deviceId, ...(zone.group?.members.map((member) => member.deviceId) ?? [])];
+    return ids.flatMap((id) => {
+      const device = this.store.device(id);
+      return device === undefined ? [] : [device];
+    });
+  }
+
+  /** 组的音量显示：组内能调音量的设备里最响的一台；全部静音时显示静音。组音量刚拖动时以本地值为准。 */
+  private groupVolume(zone: Zone): { volume: number; muted: boolean; controllable: boolean } {
+    const adjustable = this.groupDevices(zone).filter((device) => device.volumeControllable).map((device) => this.effectiveVolume(device));
+    if (adjustable.length === 0) return { volume: 1, muted: false, controllable: false };
+    const volume = this.groupVolumes.get(zone.zoneId) ?? Math.max(...adjustable.map((item) => item.volume));
+    return { volume, muted: adjustable.every((item) => item.muted), controllable: true };
+  }
+
+  /** 结果里的设备只更新列表里已有的（看不到的成员设备不加进列表）。 */
+  private applyKnownDevices(devices: readonly Device[]): void {
+    for (const device of devices) if (this.store.device(device.deviceId) !== undefined) this.store.applyDevice(device);
   }
 
   // ---- 设备与控制目标 ----
@@ -648,6 +695,40 @@ export class PlayerController {
     if (this.isEnded()) return;
     this.store.noteServerTime(result.serverTime);
     this.store.applyDevice(result.device);
+  }
+
+  /**
+   * 把一台 SlimProto 设备加入 zoneId 所在的组（主设备须正在用）。别人正在用时失败（409 device_busy），界面确认后以 takeover 再来一次；
+   * 组满（group_full）、设备已在别的组里（device_grouped）等失败由调用方就近提示。
+   */
+  async addGroupMember(zoneId: string, deviceId: string, takeover: boolean): Promise<void> {
+    if (this.lifecycle === "ended") return;
+    const result = await this.deps.api.addGroupMember(zoneId, deviceId, takeover);
+    if (this.isEnded()) return;
+    this.applyGroupChange(result);
+  }
+
+  /** 把设备移出组：它回到自己的播放区（暂停）。 */
+  async removeGroupMember(zoneId: string, deviceId: string): Promise<void> {
+    if (this.lifecycle === "ended") return;
+    const result = await this.deps.api.removeGroupMember(zoneId, deviceId);
+    if (this.isEnded()) return;
+    this.applyGroupChange(result);
+  }
+
+  /** SlimProto 设备的同步微调（毫秒，−500…500），补偿功放或音箱自身的延迟。 */
+  async setSyncDelay(deviceId: string, ms: number): Promise<void> {
+    if (this.lifecycle === "ended") return;
+    const result = await this.deps.api.putSyncDelay(deviceId, ms);
+    if (this.isEnded()) return;
+    this.store.noteServerTime(result.serverTime);
+    this.applyKnownDevices([result.device]);
+  }
+
+  private applyGroupChange(result: RegisterResult): void {
+    this.store.noteServerTime(result.serverTime);
+    this.applyKnownDevices([result.device]);
+    this.store.applyZone(result.zone);
   }
 
   /** 删除离线设备，连同它的播放区与队列。 */
@@ -727,9 +808,11 @@ export class PlayerController {
       try {
         result = await this.deps.api.sendZoneCommand(zoneId, command);
       } catch (error) {
-        if (noteRejection && !this.isEnded() && isHttpFailure(failureOf(error), 409, "zone_offline")) {
+        const failure = failureOf(error);
+        const reason = isHttpFailure(failure, 409, "zone_offline") ? "zone_offline" : isHttpFailure(failure, 409, "device_grouped") ? "device_grouped" : null;
+        if (noteRejection && !this.isEnded() && reason !== null) {
           this.rejectionSeq += 1;
-          this.rejection = { seq: this.rejectionSeq, reason: "zone_offline" };
+          this.rejection = { seq: this.rejectionSeq, reason };
           this.rebuild();
         }
         throw error;
@@ -798,7 +881,8 @@ export class PlayerController {
     const currentEntryId = zone?.current?.entryId ?? null;
     const mode = zone?.mode ?? "sequential";
     const queue = previous !== undefined && previous.queue.entries === entries && previous.queue.currentEntryId === currentEntryId && previous.queue.mode === mode ? previous.queue : { entries, currentEntryId, mode };
-    const volume = device === null ? { volume: 1, muted: false } : this.effectiveVolume(device);
+    const group = zone === null || zone.group === null ? null : this.groupVolume(zone);
+    const volume = group ?? (device === null ? { volume: 1, muted: false } : this.effectiveVolume(device));
     return {
       status: zone === null || zone.current === null ? "idle" : zone.status,
       queue,
@@ -811,7 +895,7 @@ export class PlayerController {
       muted: volume.muted,
       restoring: !this.ready,
       settings: zone?.settings ?? defaultSettings,
-      volumeControllable: device?.volumeControllable ?? true,
+      volumeControllable: group?.controllable ?? device?.volumeControllable ?? true,
       zone,
       device,
       isLocal: zone !== null && zone.deviceId === this.deviceId,

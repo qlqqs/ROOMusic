@@ -45,6 +45,7 @@
       "fault": {
         "kind": "autoplay_blocked"
       },
+      "group": null,
       "has_next": true,
       "intent": "pause",
       "mode": "sequential",

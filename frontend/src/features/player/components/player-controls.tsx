@@ -67,6 +67,7 @@ export function PlayModeButton() {
 /**
  * 音量：只有一个喇叭图标（静音或音量为 0 时是静音图标），点开锚定在它上方的小弹层（图标在视口上半部时改在下方），
  * 里面是竖向音量滑块与静音开关。音量属于正在控制的设备；那台设备不能调音量（iPhone / iPad 的网页）时图标禁用，悬停提示原因。
+ * 正在控制的播放区有组时调的是组音量（按比例调整组内各台）。
  */
 export function VolumeButton() {
   const { snapshot } = usePlayer();
@@ -98,7 +99,7 @@ export function InlineVolume() {
   return <span className={styles.inlineVolume} title={fixed ? (deviceVolume ? "在设备上调音量" : "这台设备不能调音量") : undefined}>
     {deviceVolume ? <span className={styles.deviceVolume}>设备音量</span> : null}
     <Button variant="icon" label={snapshot.muted ? "取消静音" : "静音"} aria-pressed={snapshot.muted} icon={<Icon size={16} />} disabled={fixed} onClick={() => engine.setMuted(!snapshot.muted)} />
-    <input type="range" className={styles.inlineSlider} aria-label="播放器音量" aria-valuetext={snapshot.muted ? `已静音，${percent}` : percent} min={0} max={1} step={0.01} value={snapshot.volume} disabled={fixed} data-muted={snapshot.muted ? "" : undefined} onChange={(event) => engine.setVolume(Number(event.target.value))} />
+    <input type="range" className={styles.inlineSlider} aria-label={snapshot.zone?.group == null ? "播放器音量" : "组音量"} aria-valuetext={snapshot.muted ? `已静音，${percent}` : percent} min={0} max={1} step={0.01} value={snapshot.volume} disabled={fixed} data-muted={snapshot.muted ? "" : undefined} onChange={(event) => engine.setVolume(Number(event.target.value))} />
   </span>;
 }
 
@@ -112,7 +113,7 @@ function VolumeDialog({ anchor, onClose }: { anchor: DOMRect | null; onClose: ()
   return <ModalDialog open={anchor !== null} titleId={titleId} onRequestClose={onClose} closeOnBackdrop initialFocus={sliderRef} className={styles.volumeDialog}>
     <div className={styles.volumeCard} style={position} data-below={below ? "" : undefined}>
       <h2 id={titleId} className={styles.volumeValue}><VisuallyHidden>音量 </VisuallyHidden>{snapshot.muted ? "静音" : percent}</h2>
-      <input ref={sliderRef} type="range" className={styles.volumeSlider} aria-label="播放器音量" aria-valuetext={percent} min={0} max={1} step={0.01} value={snapshot.volume} onChange={(event) => engine.setVolume(Number(event.target.value))} />
+      <input ref={sliderRef} type="range" className={styles.volumeSlider} aria-label={snapshot.zone?.group == null ? "播放器音量" : "组音量"} aria-valuetext={percent} min={0} max={1} step={0.01} value={snapshot.volume} onChange={(event) => engine.setVolume(Number(event.target.value))} />
       <Button variant="icon" label={snapshot.muted ? "取消静音" : "静音"} aria-pressed={snapshot.muted} icon={snapshot.muted ? <VolumeX size={16} /> : <Volume2 size={16} />} onClick={() => engine.setMuted(!snapshot.muted)} />
     </div>
   </ModalDialog>;

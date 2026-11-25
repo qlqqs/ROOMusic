@@ -44,6 +44,10 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	h.route(mux, "PUT /api/v1/me/playback/devices/{device_id}/volume", true, h.setVolume)
 	h.route(mux, "POST /api/v1/me/playback/devices/{device_id}/activate", true, h.activate)
 	h.route(mux, "PUT /api/v1/me/playback/devices/{device_id}/sample-rate", true, h.sampleRate)
+	h.route(mux, "POST /api/v1/me/playback/zones/{zone_id}/group/members", true, h.addGroupMember)
+	h.route(mux, "DELETE /api/v1/me/playback/zones/{zone_id}/group/members/{device_id}", true, h.removeGroupMember)
+	h.route(mux, "PUT /api/v1/me/playback/zones/{zone_id}/group/volume", true, h.setGroupVolume)
+	h.route(mux, "PUT /api/v1/me/playback/devices/{device_id}/sync-delay", true, h.setSyncDelay)
 	h.route(mux, "POST /api/v1/me/playback/zones/{zone_id}/commands", true, h.command)
 }
 
@@ -206,6 +210,12 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusConflict, "device_unsupported", zones.ErrPrecisionUnavailable.Error()
 	case errors.Is(err, zones.ErrDeviceUnsupported):
 		status, code, message = http.StatusConflict, "device_unsupported", "设备需要不支持的认证方式"
+	case errors.Is(err, zones.ErrDeviceGrouped):
+		status, code, message = http.StatusConflict, "device_grouped", "设备已编组，请先移出播放组"
+	case errors.Is(err, zones.ErrGroupUnsupported):
+		status, code, message = http.StatusConflict, "group_unsupported", "当前设备或输出不支持编组"
+	case errors.Is(err, zones.ErrGroupFull):
+		status, code, message = http.StatusConflict, "group_full", "播放组最多容纳八台设备"
 	case errors.Is(err, zones.ErrZoneOffline):
 		status, code, message = http.StatusConflict, "zone_offline", "播放设备已离线"
 	case errors.Is(err, zones.ErrDeviceOnline):

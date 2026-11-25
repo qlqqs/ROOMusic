@@ -72,6 +72,7 @@ func (h *Handlers) serveUPnPResource(w http.ResponseWriter, r *http.Request, art
 	if r.Method == http.MethodHead {
 		return
 	}
+	defer stream.FinishDelivery()
 	r, finish := h.responseLifetime(w, r, stream.Done)
 	defer finish()
 	if http.NewResponseController(w).Flush() == nil && copyStream(r.Context(), w, stream.Body) {
