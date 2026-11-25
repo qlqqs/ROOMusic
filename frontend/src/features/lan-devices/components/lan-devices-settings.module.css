@@ -12,6 +12,12 @@
   gap: var(--space-2);
 }
 
+/* 协议开关旁的警示：只在协议打开但暂时不可用时出现，原因写在该行说明里。 */
+.warning {
+  flex: none;
+  color: var(--color-warning);
+}
+
 /* 没有菜单时占同样的宽度，各行右端对齐。 */
 .menuSpacer {
   display: inline-block;

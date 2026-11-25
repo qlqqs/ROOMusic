@@ -1,6 +1,6 @@
 import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
-import { decodeAirPlayFormat, decodeCastFormat, decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings, type AirPlayFormatDTO, type CastFormatDTO, type LanDeviceDTO, type LanDeviceSettingsDTO } from "./decoders";
+import { decodeAirPlayFormat, decodeCastFormat, decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings, decodeSlimProtoFormat, type AirPlayFormatDTO, type CastFormatDTO, type LanDeviceDTO, type LanDeviceSettingsChange, type LanDeviceSettingsDTO, type SlimProtoFormatDTO } from "./decoders";
 
 const BASE = "/api/v1/admin/upnp" as const;
 const udnPath = (udn: string) => `/api/v1/admin/upnp/devices/${encodeURIComponent(udn)}` as const;
@@ -10,7 +10,7 @@ export function fetchLanDeviceSettings(signal?: AbortSignal): Promise<ApiRespons
 }
 
 /** 改开关（至少一项）；返回改后的设置。 */
-export function updateLanDeviceSettings(change: Partial<LanDeviceSettingsDTO>): Promise<ApiResponse<LanDeviceSettingsDTO>> {
+export function updateLanDeviceSettings(change: LanDeviceSettingsChange): Promise<ApiResponse<LanDeviceSettingsDTO>> {
   return apiRequest({ method: "PUT", path: `${BASE}/settings`, body: change }, decodeLanDeviceSettings);
 }
 
@@ -41,6 +41,11 @@ export function putLanDeviceGrants(udn: string, userIds: readonly string[]): Pro
 /** 设定一台 AirPlay 设备的音质；不合格时 400 invalid_input。 */
 export function putAirPlayFormat(udn: string, format: AirPlayFormatDTO): Promise<ApiResponse<AirPlayFormatDTO>> {
   return apiRequest({ method: "PUT", path: `${udnPath(udn)}/format`, body: format }, decodeAirPlayFormat);
+}
+
+/** 设定一台 SlimProto 播放器的音质：采样率上限（null 跟随播放器）与音量方式；超过播放器声明或不合格时 400 invalid_input。 */
+export function putSlimProtoFormat(udn: string, format: SlimProtoFormatDTO): Promise<ApiResponse<SlimProtoFormatDTO>> {
+  return apiRequest({ method: "PUT", path: `${udnPath(udn)}/format`, body: format }, decodeSlimProtoFormat);
 }
 
 /** Apple TV 等需要屏幕 PIN 的设备：开始配对后设备屏幕显示 PIN。 */

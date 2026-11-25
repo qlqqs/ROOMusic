@@ -3,7 +3,7 @@ import type { Locator } from "@playwright/test";
 import { personalTrack } from "../src/test/personal-data";
 import { expectNoHorizontalOverflow } from "./support/checks";
 import { expect, test } from "./support/fixtures";
-import { LAN_DEVICE_API, manualRenderer, rendererIp } from "./support/lan-devices";
+import { LAN_DEVICE_API, manualRenderer, rendererIp, slimProtoPlayer } from "./support/lan-devices";
 import { heading } from "./support/locators";
 
 const screenshots = resolve(import.meta.dirname, "../../temp/lan-device-shots");
@@ -65,6 +65,58 @@ for (const width of [390, 1440]) {
       .toEqual([{ user_ids: [member?.id] }]);
     await expectNoHorizontalOverflow(page, `局域网设备设置 ${width}px`);
     await page.screenshot({ path: `${screenshots}/settings-${width}.png`, fullPage: true, animations: "disabled" });
+  });
+
+  test(`${width}px：SlimProto 开关、端口占用、播放器行和音质`, async ({ page, backend }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.lanDevices.setSlimProtoUnavailable("port_in_use");
+    const player = mock.lanDevices.addSlimProtoPlayer();
+    const declared = player.capabilities.slimproto?.declared_max_sample_rate;
+    expect(declared, "样本播放器声明 192 kHz").toBe(192000);
+    await page.goto(settingsPath);
+    await expect(heading(page, "局域网设备")).toBeVisible();
+    await page.getByRole("switch", { name: "使用局域网里的播放设备" }).click();
+
+    const slimSwitch = page.getByRole("switch", { name: "SlimProto", exact: true });
+    await expect(slimSwitch).toBeChecked();
+    await expect(slimSwitch).toHaveAccessibleDescription(/端口 3483 被本机其他程序占用/);
+    await expect(page.getByText(/端口 3483 被本机其他程序占用（例如 Lyrion Music Server）/)).toBeVisible();
+    await expect(page.locator("span").filter({ has: slimSwitch }).locator("svg.lucide-triangle-alert")).toBeVisible();
+
+    const devices = page.getByRole("region", { name: "设备" });
+    const row = devices.locator("div").filter({ has: page.getByText(player.name, { exact: true }) }).filter({ has: page.getByRole("button", { name: `${player.name} 的更多操作` }) }).last();
+    await expect(row.getByText("SlimProto", { exact: true })).toBeVisible();
+    await expect(row.getByText(/SqueezeLite 2\.0\.0 · FLAC，最高 192 kHz \/ 24 位/)).toBeVisible();
+    await expect(row.getByText(/固定音量/)).toHaveCount(0);
+    await page.evaluate(async () => { await document.fonts.ready; });
+    await expectNoHorizontalOverflow(page, `SlimProto 设置 ${width}px`);
+    await page.screenshot({ path: `${screenshots}/slimproto-settings-${width}.png`, fullPage: true, animations: "disabled" });
+
+    await row.getByRole("button", { name: `${player.name} 的更多操作` }).click();
+    await page.getByRole("menuitem", { name: `${player.name} 的音质…` }).click();
+    const quality = page.getByRole("dialog", { name: `“${player.name}”的音质` });
+    const rates = quality.getByRole("group", { name: "采样率上限（FLAC 无损）" });
+    await expect(rates.getByRole("radio", { name: "跟随播放器（192 kHz）" })).toBeChecked();
+    await expect(rates.getByRole("radio")).toHaveCount(7);
+    for (const name of ["44.1 kHz", "48 kHz", "88.2 kHz", "96 kHz", "176.4 kHz", "192 kHz"]) await expect(rates.getByRole("radio", { name, exact: true })).toBeVisible();
+    for (const name of ["352.8 kHz", "384 kHz", "705.6 kHz", "768 kHz"]) await expect(rates.getByRole("radio", { name, exact: true }), "不列出高于播放器声明值的采样率").toHaveCount(0);
+    const volume = quality.getByRole("group", { name: "音量" });
+    await expect(volume.getByRole("radio", { name: "在 ROOMusic 里调" })).toBeChecked();
+    await rates.getByRole("radio", { name: "96 kHz", exact: true }).check();
+    await volume.getByRole("radio", { name: "固定，在功放或解码器上调" }).check();
+    await expectPanelFits(quality);
+    await page.screenshot({ path: `${screenshots}/slimproto-quality-${width}.png`, animations: "disabled" });
+    await quality.getByRole("button", { name: "保存" }).click();
+    await expect(quality).toBeHidden();
+    expect(mock.callsTo("PUT", `${LAN_DEVICE_API}/devices/${encodeURIComponent(player.udn)}/format`).map(({ body }) => body))
+      .toEqual([{ codec: "flac", max_sample_rate: 96000, volume: "fixed" }]);
+    await expect(row.getByText(/FLAC，最高 96 kHz \/ 24 位 · 固定音量，在功放或解码器上调/)).toBeVisible();
+
+    await slimSwitch.click();
+    await expect(slimSwitch).not.toBeChecked();
+    await expect(slimSwitch).toHaveAccessibleDescription(/装了 Squeezelite 的播放器/);
+    expect(mock.callsTo("PUT", `${LAN_DEVICE_API}/settings`).map(({ body }) => body)).toEqual([{ enabled: true }, { slimproto_enabled: false }]);
   });
 
   test(`${width}px：播放设备列表、接管和采样率上限`, async ({ page, backend }) => {

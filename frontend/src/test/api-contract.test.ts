@@ -114,7 +114,7 @@ import {
 import { decodeAlbumResults, decodeTrackResults, decodeSearchSuggestions } from "../features/search/api/decoders";
 import { decode as d, decodeErrorEnvelope } from "../shared/api";
 import { decodeInstalledPlugin, decodeInstalledPlugins, decodePluginPreview } from "../features/curation/api/plugins";
-import { decodeAirPlayFormat, decodeCastFormat, decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings } from "../features/lan-devices/api/decoders";
+import { decodeAirPlayFormat, decodeCastFormat, decodeLanDevice, decodeLanDeviceGrants, decodeLanDevices, decodeLanDeviceSettings, decodeSlimProtoFormat } from "../features/lan-devices/api/decoders";
 import { decodeAbout, decodeInsightsStatus } from "../features/insights/api/decoders";
 import { decodeTrackSummaries } from "../features/catalog/api/track-summary";
 import { listApiSampleNames, loadApiSample, loadRawApiSample } from "./api-samples";
@@ -681,6 +681,9 @@ const successContracts: Record<string, Contract> = {
   "upnp/airplay-manual-added": { status: 200, decode: decodeLanDevice },
   "upnp/airplay-format": { status: 200, decode: decodeAirPlayFormat },
   "upnp/airplay-high-resolution-format": { status: 200, decode: decodeAirPlayFormat },
+  "upnp/slimproto-list": { status: 200, decode: decodeLanDevices },
+  "upnp/slimproto-format": { status: 200, decode: decodeSlimProtoFormat },
+  "upnp/slimproto-port-in-use": { status: 200, decode: decodeLanDeviceSettings },
   "insights/status": { status: 200, decode: decodeInsightsStatus },
   "insights/disabled": { status: 200, decode: decodeInsightsStatus },
   "insights/about": { status: 200, decode: decodeAbout },

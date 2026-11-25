@@ -230,6 +230,14 @@ describe("播放区公开 DTO 的真实样本", () => {
     expect(decodeSnapshot({ ...upnpSnapshot.body, devices }).devices[0]?.lan?.unavailableReason).toBe("精确对时不可用");
   });
 
+  it("SlimProto 播放器映射为局域网设备，保留声明的采样率与固定音量", () => {
+    const [renderer] = upnpSnapshot.body.devices;
+    const devices = [{ ...renderer, device_id: id(96), kind: "slimproto", max_sample_rate: 192000, capabilities: { ...renderer?.capabilities, volume: "fixed" } }];
+    const [slim] = decodeSnapshot({ ...upnpSnapshot.body, devices }).devices;
+    expect(slim?.lan).toStrictEqual({ maxSampleRate: 192000, formatDeclared: true, occupiedBy: null, unavailableReason: null });
+    expect(slim?.volumeControllable).toBe(false);
+  });
+
   it.each([
     [{ max_sample_rate: 48.5 }, "max_sample_rate"],
     [{ format_declared: "false" }, "format_declared"],

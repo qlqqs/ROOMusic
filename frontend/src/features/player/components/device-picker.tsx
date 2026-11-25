@@ -126,7 +126,7 @@ function DeviceList({ titleId, onClose }: { titleId: string; onClose: () => void
     <ul role="list" className={styles.list}>
       {snapshot.devices.map((row) => {
         const { device, zone } = row;
-        const text = <><span className={styles.name}>{device.lan === null ? null : <Speaker size={14} aria-hidden="true" className={styles.kindIcon} />}<span className={styles.nameText}>{device.name}</span>{row.isLocal ? <StatusTag>本机</StatusTag> : null}{device.lan === null ? null : <StatusTag>{device.kind === "cast" ? "Google Cast" : device.kind === "airplay" ? "AirPlay" : "局域网"}</StatusTag>}</span><span className={styles.state}>{stateText(row)}</span></>;
+        const text = <><span className={styles.name}>{device.lan === null ? null : <Speaker size={14} aria-hidden="true" className={styles.kindIcon} />}<span className={styles.nameText}>{device.name}</span>{row.isLocal ? <StatusTag>本机</StatusTag> : null}{device.lan === null ? null : <StatusTag>{device.kind === "cast" ? "Google Cast" : device.kind === "airplay" ? "AirPlay" : device.kind === "slimproto" ? "SlimProto" : "局域网"}</StatusTag>}</span><span className={styles.state}>{stateText(row)}</span></>;
         // 转到这台设备：把正在控制的播放区转过来；离线的设备可以转到本机接着放。
         const transferHere = device.online && !row.isTarget && source !== null && source.current !== null ? source.zoneId : null;
         const transferToLocal = !device.online && zone !== null && zone.current !== null && localZoneId !== undefined ? zone.zoneId : null;

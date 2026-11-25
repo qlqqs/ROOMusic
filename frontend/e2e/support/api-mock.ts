@@ -88,6 +88,8 @@ export type RecordedCall = { method: string; path: string; search: string; body:
 export type ApiMock = CatalogData & {
   /** 单播放区协议替身；界面用例显式登记非目录曲目。 */
   zones: ReturnType<typeof zonesMock>;
+  /** 局域网设备管理员接口的替身：设置与设备行；用例可放入 SlimProto 播放器、设定端口占用。 */
+  lanDevices: ReturnType<typeof lanDevicesMock>;
   /** 管理员对发行与专辑的受治理操作（字段修正、归组、默认版本、撤销、操作记录）的状态与行为，与上面的专辑数据共用：修改会反映到列表与详情。 */
   governance: GovernanceData;
   /** 自动整理的管理员接口（M7 E1）：批次计数与范围撤销用上面的操作记录。默认从未打开、曲库里没有可整理的发行。 */
@@ -166,6 +168,7 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
   const lanDevices = lanDevicesMock();
   const plugins = pluginsMock();
   const mock: ApiMock = {
+    lanDevices,
     zones: zonesMock((id) => mock.personal.tracks.get(id) ?? personalTracksOf(mock).find((track) => track.track_id === id)),
     search: searchDataOf(),
     artists: null,

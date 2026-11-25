@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { decodeLanDevice, type LanDeviceDTO } from "../features/lan-devices/api/decoders";
+import { decodeLanDevice, decodeLanDevices, type LanDeviceDTO } from "../features/lan-devices/api/decoders";
 import { decode as d } from "../shared/api";
 import { sampleBody } from "../test/api-samples";
 import { installFakeApi, installFakeSession } from "../test/fake-api";
@@ -15,14 +15,15 @@ const added = decodeLanDevice(sampleBody("upnp/manual-added"));
 const devicePath = `${devicesPath}/${encodeURIComponent(added.udn)}`;
 const useLan = () => screen.findByRole<HTMLInputElement>("switch", { name: "使用局域网里的播放设备" });
 const shared = () => screen.getByRole<HTMLInputElement>("switch", { name: "所有成员共用" });
-const settingsPatch = d.defineDecoder(d.object({ enabled: d.optional(d.boolean()), shared: d.optional(d.boolean()), upnp_enabled: d.optional(d.boolean()), cast_enabled: d.optional(d.boolean()), airplay_enabled: d.optional(d.boolean()) }));
+const settingsPatch = d.defineDecoder(d.object({ enabled: d.optional(d.boolean()), shared: d.optional(d.boolean()), upnp_enabled: d.optional(d.boolean()), cast_enabled: d.optional(d.boolean()), airplay_enabled: d.optional(d.boolean()), slimproto_enabled: d.optional(d.boolean()) }));
 const addressBody = d.defineDecoder(d.object({ address: d.string() }));
+const description = (element: HTMLElement) => document.getElementById(element.getAttribute("aria-describedby") ?? "")?.textContent;
 
-function setup({ enabled = false, items = [], current = "curator" }: { enabled?: boolean; items?: LanDeviceDTO[]; current?: string } = {}) {
+function setup({ enabled = false, items = [], current = "curator", slimprotoUnavailable = null }: { enabled?: boolean; items?: LanDeviceDTO[]; current?: string; slimprotoUnavailable?: string | null } = {}) {
   const api = installFakeApi();
   const session = installFakeSession(api, { current });
   installMembersApi(api, session);
-  let settings = { enabled, shared: true, upnp_enabled: true, cast_enabled: true, airplay_enabled: true };
+  let settings = { enabled, shared: true, upnp_enabled: true, cast_enabled: true, airplay_enabled: true, slimproto_enabled: true, slimproto_unavailable: slimprotoUnavailable };
   const devices = [...items];
   api.on("GET", settingsPath, () => jsonResponse(200, settings));
   api.on("PUT", settingsPath, ({ body }) => {
@@ -261,5 +262,92 @@ describe("设置 › 局域网设备", () => {
     await user.type(pair.getByRole("textbox", { name: "屏幕上的 PIN" }), "1234");
     await user.click(pair.getByRole("button", { name: "配对" }));
     await waitFor(() => expect(api.requestsTo("POST", `${path}/pair/finish`).map(({ body }) => body)).toEqual([{ pin: "1234" }]));
+  });
+
+  it("SlimProto 开关：端口 3483 被占用时换成占用说明，关掉后恢复常规说明并写入 slimproto_enabled", async () => {
+    const user = userEvent.setup();
+    const { api } = setup({ enabled: true, slimprotoUnavailable: "port_in_use" });
+    renderSettings();
+    const slim = await screen.findByRole<HTMLInputElement>("switch", { name: "SlimProto" });
+    expect(slim.checked).toBe(true);
+    expect(description(slim)).toMatch(/端口 3483 被本机其他程序占用/);
+    await user.click(slim);
+    await waitFor(() => expect(slim.checked).toBe(false));
+    expect(description(slim)).toMatch(/Squeezelite/);
+    expect(api.requestsTo("PUT", settingsPath).map(({ body }) => body)).toEqual([{ slimproto_enabled: false }]);
+  });
+
+  it("SlimProto 开关：端口可用时显示常规说明", async () => {
+    setup({ enabled: true });
+    renderSettings();
+    const slim = await screen.findByRole<HTMLInputElement>("switch", { name: "SlimProto" });
+    expect(description(slim)).toMatch(/Squeezelite/);
+    expect(description(slim)).not.toMatch(/3483/);
+  });
+
+  it("SlimProto 播放器行显示型号、固件与最高采样率；不支持 FLAC 的播放器标出“不支持”", async () => {
+    const [slim] = decodeLanDevices(sampleBody("upnp/slimproto-list")).items;
+    if (slim === undefined || slim.capabilities.slimproto == null) throw new Error("缺少 SlimProto 样本");
+    const unsupported = { ...slim, udn: "slim:02:00:00:00:00:02", name: "车库", capabilities: { ...slim.capabilities, slimproto: { ...slim.capabilities.slimproto, unsupported: true } } };
+    setup({ enabled: true, items: [slim, unsupported] });
+    renderSettings();
+    const region = within(await screen.findByRole("region", { name: "设备" }));
+    expect(await region.findByText("书房")).toBeTruthy();
+    expect(region.getAllByText("SlimProto")).toHaveLength(2);
+    expect(region.getByText("squeezelite · 在线 · SqueezeLite 2.0.0 · FLAC，最高 192 kHz / 24 位 · 192.168.44.2")).toBeTruthy();
+    expect(region.getByText(/播放器不支持 FLAC，暂时不能使用/)).toBeTruthy();
+    expect(region.getAllByText("不支持")).toHaveLength(1);
+  });
+
+  it("SlimProto 音质：只列出不超过播放器声明的采样率，默认跟随播放器，保存写入采样率上限与音量方式", async () => {
+    const user = userEvent.setup();
+    const [slim] = decodeLanDevices(sampleBody("upnp/slimproto-list")).items;
+    if (slim === undefined) throw new Error("缺少 SlimProto 样本");
+    const { api } = setup({ enabled: true, items: [slim] });
+    const formatPath = `${devicesPath}/${encodeURIComponent(slim.udn)}/format`;
+    api.on("PUT", formatPath, ({ body }) => jsonResponse(200, body));
+    renderSettings();
+    const openDialog = async () => {
+      await user.click(await screen.findByRole("button", { name: `${slim.name} 的更多操作` }));
+      await user.click(screen.getByRole("menuitem", { name: `${slim.name} 的音质…` }));
+      return within(screen.getByRole("dialog", { name: `“${slim.name}”的音质` }));
+    };
+    const dialogClosed = () => waitFor(() => expect(screen.queryByRole("dialog", { name: `“${slim.name}”的音质` })).toBeNull());
+
+    let dialog = await openDialog();
+    const rateGroup = within(dialog.getByRole("group", { name: "采样率上限（FLAC 无损）" }));
+    expect(rateGroup.getAllByRole("radio").map((radio) => radio.parentElement?.textContent)).toEqual([
+      "跟随播放器（192 kHz）",
+      "44.1 kHz",
+      "48 kHz",
+      "88.2 kHz",
+      "96 kHz",
+      "176.4 kHz",
+      "192 kHz",
+    ]);
+    expect(rateGroup.getByRole<HTMLInputElement>("radio", { name: "跟随播放器（192 kHz）" }).checked).toBe(true);
+    expect(dialog.getByRole<HTMLInputElement>("radio", { name: "在 ROOMusic 里调" }).checked).toBe(true);
+    await user.click(dialog.getByRole("button", { name: "保存" }));
+    await dialogClosed();
+
+    dialog = await openDialog();
+    await user.click(dialog.getByRole("radio", { name: "96 kHz" }));
+    await user.click(dialog.getByRole("radio", { name: "固定，在功放或解码器上调" }));
+    await user.click(dialog.getByRole("button", { name: "保存" }));
+    await dialogClosed();
+    expect(api.requestsTo("PUT", formatPath).map(({ body }) => body)).toEqual([
+      { codec: "flac", max_sample_rate: null, volume: "number" },
+      { codec: "flac", max_sample_rate: 96000, volume: "fixed" },
+    ]);
+  });
+
+  it("手动添加不提供 SlimProto：播放器自己连上来", async () => {
+    const user = userEvent.setup();
+    setup({ enabled: true });
+    renderSettings();
+    await user.click(await screen.findByRole("button", { name: "手动添加" }));
+    const kinds = within(within(screen.getByRole("dialog", { name: "手动添加设备" })).getByRole("group", { name: "设备类型" }));
+    expect(kinds.getAllByRole("radio").map((radio) => radio.parentElement?.textContent)).toEqual(["UPnP/DLNA", "Google Cast", "AirPlay"]);
+    expect(kinds.queryByRole("radio", { name: "SlimProto" })).toBeNull();
   });
 });

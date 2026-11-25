@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useViewerScope } from "../../auth";
-import type { AirPlayFormatDTO, CastFormatDTO, LanDeviceDTO, LanDeviceSettingsDTO } from "../api/decoders";
-import { addLanDevice, fetchLanDevices, fetchLanDeviceSettings, finishAirPlayPairing, putAirPlayFormat, putCastFormat, startAirPlayPairing, putLanDeviceGrants, removeLanDevice, updateLanDeviceSettings } from "../api/endpoints";
+import type { AirPlayFormatDTO, CastFormatDTO, LanDeviceDTO, LanDeviceSettingsChange, SlimProtoFormatDTO } from "../api/decoders";
+import { addLanDevice, fetchLanDevices, fetchLanDeviceSettings, finishAirPlayPairing, putAirPlayFormat, putCastFormat, putSlimProtoFormat, startAirPlayPairing, putLanDeviceGrants, removeLanDevice, updateLanDeviceSettings } from "../api/endpoints";
 import { lanDeviceKeys } from "../query-keys";
 
 /** 发现到的设备每 30 秒刷新一次（后端每 30 秒搜索一次）；开关关着时不轮询。 */
@@ -18,7 +18,7 @@ export function useUpdateLanDeviceSettings() {
   const scope = useViewerScope();
   return useMutation({
     scope: { id: "lan-device-settings" },
-    mutationFn: (change: Partial<LanDeviceSettingsDTO>) => updateLanDeviceSettings(change),
+    mutationFn: (change: LanDeviceSettingsChange) => updateLanDeviceSettings(change),
     onSuccess: async (response) => {
       if (!scope.isCurrent()) return;
       const key = lanDeviceKeys.settings(scope.generation);
@@ -71,6 +71,12 @@ export function usePutCastFormat() {
 export function usePutAirPlayFormat() {
   const refresh = useRefreshDevices();
   return useMutation({ mutationFn: ({ udn, format }: { udn: string; format: AirPlayFormatDTO }) => putAirPlayFormat(udn, format), onSuccess: refresh });
+}
+
+/** 改一台 SlimProto 播放器的音质；采样率下一条流起生效，音量方式立即生效。 */
+export function usePutSlimProtoFormat() {
+  const refresh = useRefreshDevices();
+  return useMutation({ mutationFn: ({ udn, format }: { udn: string; format: SlimProtoFormatDTO }) => putSlimProtoFormat(udn, format), onSuccess: refresh });
 }
 
 export function useStartAirPlayPairing() {
