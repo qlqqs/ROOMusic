@@ -8,8 +8,7 @@
 <h1 align="center">ROOMusic</h1>
 
 <p align="center">
-  个人和家庭用的自托管音乐库。<br>
-  按专辑与版本整理曲库，音效在服务器上处理，推到家里的音箱，几个房间同步播放。
+  自托管私人音乐库，支持多房间同步播放、服务器端音效、DLNA / AirPlay / Cast 投放、Subsonic 客户端和 AI Agent。
 </p>
 
 <p align="center">
