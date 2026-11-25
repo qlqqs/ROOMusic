@@ -7,3 +7,4 @@
 {"file": ".trellis/spec/backend/error-handling.md", "reason": "错误处理约定"}
 {"file": ".trellis/spec/frontend/personal-guidelines.md", "reason": "心形与个人状态的前端做法"}
 {"file": ".trellis/spec/frontend/playback-and-personal-state.md", "reason": "个人状态的查询与同步"}
+{"file": ".trellis/spec/backend/subsonic-contracts.md", "reason": "foundation 已落地的 Subsonic 包结构、协议、鉴权与测试约定"}

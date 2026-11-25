@@ -12,3 +12,4 @@
 {"file": ".trellis/spec/backend/artist-contracts.md", "reason": "艺人"}
 {"file": ".trellis/spec/backend/listening-contracts.md", "reason": "播放次数与最近播放"}
 {"file": ".trellis/tasks/11-25-subsonic-browse/prd.md", "reason": "本子任务需求"}
+{"file": ".trellis/spec/backend/subsonic-contracts.md", "reason": "foundation 已落地的 Subsonic 包结构、协议、鉴权与测试约定"}
