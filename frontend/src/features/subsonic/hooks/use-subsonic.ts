@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useViewerScope } from "../../auth";
-import { confirmSubsonicPassword, fetchSubsonicConnection, fetchSubsonicSettings, setSubsonicEnabled } from "../api/endpoints";
+import { confirmSubsonicPassword, fetchSubsonicConnection, fetchSubsonicSettings, setJukeboxZone, setSubsonicEnabled } from "../api/endpoints";
 import { subsonicKeys } from "../query-keys";
 
 /** 本人的连接状态；账号页据此决定显不显示“第三方客户端”一组。 */
@@ -17,6 +17,22 @@ export function useConfirmSubsonicPassword() {
     mutationFn: (password: string) => confirmSubsonicPassword(password),
     onSuccess: async () => {
       if (scope.isCurrent()) await queryClient.invalidateQueries({ queryKey: subsonicKeys.connection(scope.generation) });
+    },
+  });
+}
+
+/** 点唱机控制的播放区：即改即存，接口返回改后的连接状态，直接写回缓存。连续切换按顺序发送。 */
+export function useSetJukeboxZone() {
+  const queryClient = useQueryClient();
+  const scope = useViewerScope();
+  return useMutation({
+    scope: { id: "subsonic-jukebox-zone" },
+    mutationFn: (zoneId: string | null) => setJukeboxZone(zoneId),
+    onSuccess: async (response) => {
+      if (!scope.isCurrent()) return;
+      const key = subsonicKeys.connection(scope.generation);
+      await queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData(key, response);
     },
   });
 }
