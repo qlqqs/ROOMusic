@@ -297,7 +297,7 @@ func writeMatch(ctx context.Context, db operations.Queryer, writer *curation.Wri
 	}
 	for _, link := range request.Links {
 		if link.ObjectType == "release" {
-			return group, writer.DiscoverReleaseMerges(ctx, link.ExternalID, StoredRuleVersion)
+			return group, writer.DiscoverReleaseMerges(ctx, link.ExternalID, resourceRuleVersion)
 		}
 	}
 	return group, nil

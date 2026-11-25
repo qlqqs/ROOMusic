@@ -75,7 +75,7 @@ func writeTrackFields(ctx context.Context, writer *curation.Writer, requests []c
 	return nil
 }
 
-// 调用方已用 needsWork 核对规则版本和输入摘要。
+// 已有对应的维护按结果标记独立执行。
 func matchBackfills(s curation.WorkState, e catalog.CurationEvidence) (tracks, artists, merges bool) {
 	if s.Status != "matched" {
 		return false, false, false
@@ -147,7 +147,8 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		local, err = catalog.LoadCurationArtistCredits(ctx, w.db, e.ID)
 		if errors.Is(err, catalog.ErrArtistCatalogPreparing) {
 			artists = false
-			if !tracks && !merges {
+			// 旧行先登记基线，艺人回填仍由缺失的 artist_links 标记在后续轮次触发。
+			if !tracks && !merges && s.IdentityDigest != "" {
 				return nil
 			}
 		} else if err != nil {
@@ -156,7 +157,7 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 	}
 	markers := map[string]string{}
 	if merges {
-		if err := w.writer.DiscoverReleaseMerges(ctx, e.ExternalID, StoredRuleVersion); err != nil {
+		if err := w.writer.DiscoverReleaseMerges(ctx, e.ExternalID, resourceRuleVersion); err != nil {
 			return err
 		}
 		markers["release_merge"] = "done"
@@ -179,7 +180,7 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 	case err != nil:
 		return err
 	default:
-		u := unit{w: w, subject: s.Subject, id: e.ID, generation: s.Generation, fixedGeneration: true, releaseID: e.ID, inputDigest: s.InputDigest, releaseState: s}
+		u := unit{w: w, ruleVersion: s.RuleVersion, subject: s.Subject, id: e.ID, generation: s.Generation, fixedGeneration: true, releaseID: e.ID, inputDigest: s.InputDigest, releaseState: s}
 		source := curation.Source{Kind: "source", Provider: "musicbrainz", Basis: "按已有 MusicBrainz 对应补全"}
 		if artists {
 			links := planArtistLinks(local, *e, match)
@@ -229,15 +230,22 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 	if !ok || ReleaseDigest(entry) != s.InputDigest {
 		return errReleaseChanged
 	}
-	err = tx.QueryRowContext(ctx, `UPDATE curation_work_states SET result=result || $5::jsonb,updated_at=now()
+	d := releaseInputs(entry)
+	if err := refreshMatchItem(ctx, tx, entry, s, d, MatchRuleVersion); err != nil {
+		return err
+	}
+	err = tx.QueryRowContext(ctx, `UPDATE curation_work_states SET result=result || $5::jsonb,updated_at=now(),
+ local_rule_version=$7,match_rule_version=$8,identity_digest=$9,gap_digest=$10
  WHERE subject='release' AND target_id=$1 AND status='matched' AND generation=$2 AND rule_version=$3 AND input_digest=$4 AND updated_at=$6
- RETURNING result,updated_at`, e.ID, s.Generation, s.RuleVersion, s.InputDigest, jsonValue(markers), s.UpdatedAt).Scan(&s.Result, &s.UpdatedAt)
+ RETURNING result,updated_at`, e.ID, s.Generation, s.RuleVersion, s.InputDigest, jsonValue(markers), s.UpdatedAt, LocalRuleVersion, MatchRuleVersion, d.identity, d.gap).Scan(&s.Result, &s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errReleaseChanged
 	}
 	if err != nil {
 		return err
 	}
+	d.record(&s)
+	s.MatchRuleVersion = MatchRuleVersion
 	if err = tx.Commit(); err != nil {
 		return err
 	}

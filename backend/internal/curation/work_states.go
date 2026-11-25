@@ -10,13 +10,15 @@ import (
 )
 
 type WorkState struct {
-	Subject, TargetID                string
-	RuleVersion                      int16
-	InputDigest, Status              string
-	Attempts, Generation, RetryCount int
-	NextAttemptAt                    *time.Time
-	Result                           json.RawMessage
-	UpdatedAt                        time.Time
+	Subject, TargetID                                       string
+	RuleVersion                                             int16
+	LocalRuleVersion, MatchRuleVersion, RequeryMatchVersion int16
+	IdentityDigest, GapDigest                               string
+	InputDigest, Status                                     string
+	Attempts, Generation, RetryCount                        int
+	NextAttemptAt                                           *time.Time
+	Result                                                  json.RawMessage
+	UpdatedAt                                               time.Time
 }
 
 // ProgramChanges 是调度用的变化标记。发行轮的标记排除程序自己的写入，
@@ -52,7 +54,8 @@ type Execer interface {
 }
 
 func LoadWorkStates(ctx context.Context, q operations.Queryer, subject string, targetIDs []string) (map[string]WorkState, error) {
-	rows, err := q.QueryContext(ctx, `SELECT subject,target_id::text,rule_version,input_digest,status,attempts,generation,retry_count,next_attempt_at,result,updated_at
+	rows, err := q.QueryContext(ctx, `SELECT subject,target_id::text,rule_version,input_digest,status,attempts,generation,retry_count,next_attempt_at,result,updated_at,
+ COALESCE(local_rule_version,0),COALESCE(match_rule_version,0),COALESCE(requery_match_version,0),COALESCE(identity_digest,''),COALESCE(gap_digest,'')
  FROM curation_work_states WHERE subject=$1 AND target_id=ANY($2::uuid[])`, subject, targetIDs)
 	if err != nil {
 		return nil, err
@@ -61,7 +64,7 @@ func LoadWorkStates(ctx context.Context, q operations.Queryer, subject string, t
 	states := make(map[string]WorkState)
 	for rows.Next() {
 		var s WorkState
-		if err := rows.Scan(&s.Subject, &s.TargetID, &s.RuleVersion, &s.InputDigest, &s.Status, &s.Attempts, &s.Generation, &s.RetryCount, &s.NextAttemptAt, &s.Result, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.Subject, &s.TargetID, &s.RuleVersion, &s.InputDigest, &s.Status, &s.Attempts, &s.Generation, &s.RetryCount, &s.NextAttemptAt, &s.Result, &s.UpdatedAt, &s.LocalRuleVersion, &s.MatchRuleVersion, &s.RequeryMatchVersion, &s.IdentityDigest, &s.GapDigest); err != nil {
 			return nil, err
 		}
 		states[s.TargetID] = s
@@ -70,11 +73,13 @@ func LoadWorkStates(ctx context.Context, q operations.Queryer, subject string, t
 }
 
 func SaveWorkState(ctx context.Context, q Execer, s WorkState) error {
-	_, err := q.ExecContext(ctx, `INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status,attempts,generation,retry_count,next_attempt_at,result)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10::jsonb,'{}'))
+	_, err := q.ExecContext(ctx, `INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status,attempts,generation,retry_count,next_attempt_at,result,local_rule_version,match_rule_version,requery_match_version,identity_digest,gap_digest)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10::jsonb,'{}'),NULLIF($11::smallint,0),NULLIF($12::smallint,0),NULLIF($13::smallint,0),NULLIF($14,''),NULLIF($15,''))
  ON CONFLICT(subject,target_id) DO UPDATE SET rule_version=excluded.rule_version,input_digest=excluded.input_digest,status=excluded.status,
- attempts=excluded.attempts,generation=excluded.generation,retry_count=excluded.retry_count,next_attempt_at=excluded.next_attempt_at,result=excluded.result,updated_at=now()`,
-		s.Subject, s.TargetID, s.RuleVersion, s.InputDigest, s.Status, s.Attempts, s.Generation, s.RetryCount, s.NextAttemptAt, s.Result)
+ attempts=excluded.attempts,generation=excluded.generation,retry_count=excluded.retry_count,next_attempt_at=excluded.next_attempt_at,result=excluded.result,updated_at=now(),
+ local_rule_version=excluded.local_rule_version,match_rule_version=excluded.match_rule_version,requery_match_version=excluded.requery_match_version,
+ identity_digest=excluded.identity_digest,gap_digest=excluded.gap_digest`,
+		s.Subject, s.TargetID, s.RuleVersion, s.InputDigest, s.Status, s.Attempts, s.Generation, s.RetryCount, s.NextAttemptAt, s.Result, s.LocalRuleVersion, s.MatchRuleVersion, s.RequeryMatchVersion, s.IdentityDigest, s.GapDigest)
 	return err
 }
 
@@ -84,7 +89,8 @@ type PendingItem struct {
 	Attempts, ReviewRetries                          int
 	ShelvedReason                                    *string
 	ID, TargetType, TargetID, ArtistID, Kind, Status string
-	RuleVersion                                      int16
+	RuleVersion, MatchRuleVersion                    int16
+	IdentityDigest                                   string
 	InputDigest                                      string
 	Evidence, Candidates, Conflicts                  json.RawMessage
 	Resolution                                       *string
@@ -93,15 +99,16 @@ type PendingItem struct {
 }
 
 func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
-	target, insert := item.TargetID, `INSERT INTO curation_pending_items AS p(target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts)
- VALUES('release',$1,$2,'waiting_model',$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'))
+	target, insert := item.TargetID, `INSERT INTO curation_pending_items AS p(target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,match_rule_version,identity_digest)
+ VALUES('release',$1,$2,'waiting_model',$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''))
  ON CONFLICT(target_type,target_id,kind) WHERE status <> 'resolved'`
 	if item.TargetType == "artist" {
-		target, insert = item.ArtistID, `INSERT INTO curation_pending_items AS p(target_type,artist_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts)
- VALUES('artist',$1,$2,'waiting_model',$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'))
+		target, insert = item.ArtistID, `INSERT INTO curation_pending_items AS p(target_type,artist_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,match_rule_version,identity_digest)
+ VALUES('artist',$1,$2,'waiting_model',$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''))
  ON CONFLICT(artist_id,kind) WHERE status <> 'resolved' AND target_type='artist'`
 	}
 	_, err := q.ExecContext(ctx, insert+` DO UPDATE SET rule_version=excluded.rule_version,input_digest=excluded.input_digest,
+ match_rule_version=excluded.match_rule_version,identity_digest=excluded.identity_digest,
  evidence=excluded.evidence,candidates=excluded.candidates,conflicts=excluded.conflicts,updated_at=now(),
  status=CASE WHEN p.status='shelved' THEN 'waiting_model' ELSE p.status END,
  attempts=CASE WHEN p.status='shelved' THEN 0 ELSE p.attempts END,
@@ -111,9 +118,9 @@ func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
  review_retries=CASE WHEN p.status='in_progress' THEN p.review_retries ELSE 0 END,
  next_attempt_at=CASE WHEN p.status IN ('waiting_model','in_progress') THEN p.next_attempt_at END
  WHERE p.status IN ('waiting_model','in_progress')
- OR (p.status='shelved' AND (p.input_digest<>excluded.input_digest
-     OR p.candidates IS DISTINCT FROM excluded.candidates
-     OR p.conflicts IS DISTINCT FROM excluded.conflicts))`, target, item.Kind, item.RuleVersion, item.InputDigest, item.Evidence, item.Candidates, item.Conflicts)
+ OR (p.status='shelved' AND (p.candidates IS DISTINCT FROM excluded.candidates OR
+     CASE WHEN p.identity_digest IS NOT NULL AND excluded.identity_digest IS NOT NULL THEN p.identity_digest<>excluded.identity_digest
+          ELSE p.input_digest<>excluded.input_digest OR p.conflicts IS DISTINCT FROM excluded.conflicts END))`, target, item.Kind, item.RuleVersion, item.InputDigest, item.Evidence, item.Candidates, item.Conflicts, item.MatchRuleVersion, item.IdentityDigest)
 	return err
 }
 

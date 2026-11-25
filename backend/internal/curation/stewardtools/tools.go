@@ -115,6 +115,11 @@ func (a adapter) read(ctx context.Context, c tool.Caller, raw json.RawMessage) (
 		}
 		items = selected
 	}
+	if a.matcher != nil {
+		if err := a.matcher.AnnotatePendingEvidence(ctx, items); err != nil {
+			return nil, toolError(err)
+		}
+	}
 	rows := make([]map[string]any, 0, len(items))
 	for _, p := range items {
 		if p.Kind == "artist_identity" {

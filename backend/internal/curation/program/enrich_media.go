@@ -38,7 +38,8 @@ func (w *Worker) artworkFrom(ctx context.Context, u *unit, e catalog.CurationEvi
 	}
 	for _, target := range targets {
 		if provider != "coverartarchive" {
-			target.Title, target.Artist = e.Title, e.AlbumArtist
+			target.Title = e.Authenticity["title"].SearchValue(e.Title)
+			target.Artist = e.SelectedArtistAuth().SearchValue(albumArtist(e))
 		}
 		images, err := finder.Covers(ctx, target)
 		if mediaMiss(err) {
@@ -110,32 +111,11 @@ func (w *Worker) artworkFrom(ctx context.Context, u *unit, e catalog.CurationEvi
 }
 
 func lyricsGap(t catalog.CurationTrack) bool {
-	return !t.LocalLyrics && !t.ExternalLyrics && looseKey(t.EffectiveTitle) != "" && !lyricsArtistPlaceholder(t) && looseKey(t.EffectiveArtist) != "" && t.DurationSeconds > 0
+	return !t.LocalLyrics && !t.ExternalLyrics && looseKey(t.EffectiveTitleAuth.SearchValue(t.EffectiveTitle)) != "" && !lyricsArtistPlaceholder(t) && looseKey(t.EffectiveArtist) != "" && t.DurationSeconds > 0
 }
 
 func lyricsArtistPlaceholder(t catalog.CurationTrack) bool {
-	return t.ArtistPlaceholder && t.EffectiveArtist == t.Artist
-}
-
-// 有效艺人和扫描占位恰好同名时，批量确认是否已有自动行。
-func automaticTrackArtists(ctx context.Context, q catalog.Queryer, ids []string) (map[string]bool, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	rows, err := q.QueryContext(ctx, `SELECT track_id FROM track_auto_values WHERE field='artist' AND track_id=ANY($1::uuid[])`, ids)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := map[string]bool{}
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		result[id] = true
-	}
-	return result, rows.Err()
+	return t.EffectiveArtistAuth == metadata.Placeholder
 }
 
 var artistSeparator = regexp.MustCompile(`\b(?:feat|ft)\.|[&/、,;×]`)

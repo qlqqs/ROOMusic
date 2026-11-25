@@ -123,8 +123,8 @@ func (c *comparison) compareRelease(e catalog.CurationEvidence, method string, r
 type trackPosition struct{ disc, position int }
 
 func (c *comparison) compareTracks(e catalog.CurationEvidence, method string, release sources.Release) {
-	local := sortedTracks(e)
-	discs := discPositions(e)
+	local := e.SortedTracks()
+	discs := e.DiscPositions()
 	media := slices.Clone(release.Media)
 	slices.SortFunc(media, func(a, b sources.Medium) int { return cmp.Compare(a.Position, b.Position) })
 	if (len(discs) > 1 || method == "acoustid") && len(discs) != len(media) {

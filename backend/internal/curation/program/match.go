@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
@@ -102,56 +103,7 @@ func tags(tracks []catalog.CurationTrack, kind string) []string {
 	return slices.Sorted(maps.Keys(keys))
 }
 
-func sortedTracks(e catalog.CurationEvidence) []catalog.CurationTrack {
-	rows := slices.Clone(e.Tracks)
-	slices.SortFunc(rows, func(a, b catalog.CurationTrack) int {
-		return cmp.Or(cmp.Compare(a.Disc, b.Disc), cmp.Compare(a.Position, b.Position), cmp.Compare(a.ID, b.ID))
-	})
-	return rows
-}
-
-func discPositions(e catalog.CurationEvidence) []int {
-	discs := slices.Clone(e.Media)
-	for _, t := range e.Tracks {
-		discs = append(discs, t.Disc)
-	}
-	slices.Sort(discs)
-	return slices.Compact(discs)
-}
-
-// DiscTOCs 只有所有介质都能从同一镜像的连续 CUE 索引重建时才返回目录。
-func DiscTOCs(e catalog.CurationEvidence) []sources.DiscTOC {
-	byDisc := map[int][]catalog.CurationTrack{}
-	for _, t := range sortedTracks(e) {
-		byDisc[t.Disc] = append(byDisc[t.Disc], t)
-	}
-	var out []sources.DiscTOC
-	for _, d := range discPositions(e) {
-		rows := byDisc[d]
-		if len(rows) == 0 || len(rows) > 99 {
-			return nil
-		}
-		first, last := rows[0], rows[len(rows)-1]
-		if first.ParentFile == "" || first.CueSheetPath == "" || last.CueEndFrames == nil {
-			return nil
-		}
-		toc := sources.DiscTOC{}
-		prev := -1
-		for i, t := range rows {
-			if t.SourceKind != "cue_virtual" || t.SourceRootID != first.SourceRootID || t.CueSheetPath != first.CueSheetPath || t.ParentFile != first.ParentFile || t.Position != i+1 || t.CueIndexFrames == nil || *t.CueIndexFrames <= prev {
-				return nil
-			}
-			prev = *t.CueIndexFrames
-			toc.Offsets = append(toc.Offsets, 150+prev)
-		}
-		if *last.CueEndFrames <= prev || int64(*last.CueEndFrames) > math.MaxUint32-150 {
-			return nil
-		}
-		toc.Leadout = 150 + *last.CueEndFrames
-		out = append(out, toc)
-	}
-	return out
-}
+func DiscTOCs(e catalog.CurationEvidence) []sources.DiscTOC { return e.DiscTOCs() }
 
 func linkConflicts(e catalog.CurationEvidence, objectType, id, existing, candidate string) []string {
 	var codes []string
@@ -195,25 +147,54 @@ func releaseCandidates(method string, releases []sources.Release) []Candidate {
 
 // PendingEvidence 保留能供后续核对使用的本地元数据与位置，不保存文件路径。
 func PendingEvidence(e catalog.CurationEvidence) map[string]any {
+	return pendingMatchEvidence(e, "")
+}
+
+func pendingMatchEvidence(e catalog.CurationEvidence, method string) map[string]any {
 	type track struct {
-		ID               string              `json:"id"`
-		Title            string              `json:"title"`
-		Artist           string              `json:"artist"`
-		Disc             int                 `json:"disc"`
-		Position         int                 `json:"position"`
-		PositionInferred bool                `json:"position_inferred"`
-		Duration         int                 `json:"duration_seconds"`
-		Identifiers      map[string][]string `json:"identifiers"`
-		ISRCs            []string            `json:"isrcs"`
+		Authenticity     map[string]metadata.Authenticity `json:"authenticity"`
+		ID               string                           `json:"id"`
+		Title            string                           `json:"title"`
+		Artist           string                           `json:"artist"`
+		Disc             int                              `json:"disc"`
+		Position         int                              `json:"position"`
+		PositionInferred bool                             `json:"position_inferred"`
+		Duration         int                              `json:"duration_seconds"`
+		Identifiers      map[string][]string              `json:"identifiers"`
+		ISRCs            []string                         `json:"isrcs"`
 	}
 	discCounts := map[int]int{}
 	for _, d := range e.Media {
 		discCounts[d] = 0
 	}
 	rows := make([]track, 0, len(e.Tracks))
-	for _, t := range sortedTracks(e) {
+	for _, t := range e.SortedTracks() {
 		discCounts[t.Disc]++
-		rows = append(rows, track{t.ID, t.Title, t.Artist, t.Disc, t.Position, t.PositionInferred, t.DurationSeconds, t.Identifiers, trackISRCs(t)})
+		rows = append(rows, track{t.Authenticity, t.ID, t.Title, t.Artist, t.Disc, t.Position, t.PositionInferred, t.DurationSeconds, t.Identifiers, trackISRCs(t)})
 	}
-	return map[string]any{"title": e.Title, "artist": albumArtist(e), "barcodes": e.Barcodes, "catalog_number": e.CatalogNumber, "label": e.Label, "disc_count": len(discCounts), "track_counts": discCounts, "tracks": rows}
+	auth := maps.Clone(e.Authenticity)
+	if auth == nil {
+		auth = map[string]metadata.Authenticity{}
+	}
+	auth["artist"] = e.SelectedArtistAuth()
+	usesInferred := false
+	switch method {
+	case "search":
+		title, artist := auth["title"], auth["artist"]
+		if e.CandidateKind == "loose_unknown" && len(e.Tracks) == 1 {
+			title, artist = e.Tracks[0].Authenticity["title"], e.Tracks[0].Authenticity["artist"]
+		}
+		usesInferred = title == metadata.Inferred || artist == metadata.Inferred
+	case "catalog_number":
+		usesInferred = auth["catalog_number"] == metadata.Inferred || auth["label"] == metadata.Inferred
+	case "barcode":
+		usesInferred = slices.Contains(e.BarcodeAuthenticity, metadata.Inferred)
+	}
+	return map[string]any{
+		"title": e.Title, "artist": albumArtist(e), "album_artist": e.AlbumArtist, "year": e.Year,
+		"barcodes": e.Barcodes, "catalog_number": e.CatalogNumber, "label": e.Label,
+		"genre": e.Genres, "edition": e.Edition, "media_type": e.MediaType,
+		"disc_count": len(discCounts), "track_counts": discCounts, "tracks": rows,
+		"authenticity": auth, "barcode_authenticity": e.BarcodeAuthenticity, "uses_inferred": usesInferred,
+	}
 }

@@ -14,6 +14,7 @@ import (
 type unit struct {
 	w                      *Worker
 	subject, id, provider  string
+	ruleVersion            int16
 	generation             int
 	releaseID, inputDigest string
 	releaseState           curation.WorkState
@@ -30,7 +31,7 @@ func (u *unit) source() string {
 }
 
 func (u *unit) key(step string) string {
-	name := fmt.Sprintf("roomusic/curation/%s/%d/%d/%s", u.subject, StoredRuleVersion, u.generation, step)
+	name := fmt.Sprintf("roomusic/curation/%s/%d/%d/%s", u.subject, u.ruleVersion, u.generation, step)
 	return curation.DerivedKey(u.id, name)
 }
 

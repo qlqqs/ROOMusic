@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/operations"
@@ -61,8 +62,12 @@ func planArtistLinks(local catalog.CurationArtistCredits, e catalog.CurationEvid
 	recordings := map[string][]sources.Credit{}
 	if r := m.Release; r != nil {
 		tags := albumArtistTags(e.Tracks)
-		add(local.ReleaseArtists, r.Artists, tags)
-		add(local.AlbumArtists, r.Artists, tags)
+		if e.Authenticity["artist"] != metadata.Placeholder {
+			add(local.ReleaseArtists, r.Artists, tags)
+		}
+		if e.Authenticity["album_artist"] != metadata.Placeholder {
+			add(local.AlbumArtists, r.Artists, tags)
+		}
 		for _, medium := range r.Media {
 			for _, t := range medium.Tracks {
 				if _, duplicate := recordings[t.RecordingID]; duplicate {
@@ -80,7 +85,7 @@ func planArtistLinks(local catalog.CurationArtistCredits, e catalog.CurationEvid
 		pairs[p.TrackID] = p.RecordingID
 	}
 	for _, t := range e.Tracks {
-		if id := pairs[t.ID]; id != "" {
+		if id := pairs[t.ID]; id != "" && !t.ArtistPlaceholder {
 			add(local.Tracks[t.ID], recordings[id], t.Identifiers["mb_artist"])
 		}
 	}

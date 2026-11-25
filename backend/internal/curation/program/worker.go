@@ -9,14 +9,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
 const (
-	RuleVersion             = 1
-	StoredRuleVersion int16 = RuleVersion*100 + textnorm.Version
+	LocalRuleVersion    int16 = 2
+	MatchRuleVersion    int16 = 101
+	PatrolPromptVersion int16 = 1
+
+	// 资料主题与并入继续使用原来的版本和幂等键。
+	resourceRuleVersion int16 = 101
+	StoredRuleVersion         = resourceRuleVersion
 )
 
 type Options struct {
@@ -247,7 +251,7 @@ func (w *Worker) runPasses(ctx context.Context) error {
 	if err := w.closeBatch(ctx); err != nil {
 		return err
 	}
-	if err := w.writer.AdvanceReleaseMergeQueues(ctx, StoredRuleVersion); err != nil {
+	if err := w.writer.AdvanceReleaseMergeQueues(ctx, resourceRuleVersion); err != nil {
 		return err
 	}
 	idle, err := w.changes(ctx)
