@@ -507,3 +507,26 @@ A1–A13 证据对照写入父任务 acceptance.md；路线图、决定索引、
 ### Status
 
 [OK] **Completed**
+
+
+## Session 73: Subsonic 浏览、搜索与封面
+<!-- trellis-session: v=2 fp=cc8c85067ff161af -->
+
+**Date**: 2026-11-25
+**Task**: Subsonic 浏览、搜索与封面
+**Branch**: `main`
+
+### Summary
+
+OpenSubsonic 浏览、列表、搜索、随机、流派、资料与封面接口；歌曲/专辑/艺人输出 userRating，highest 接本人评分；search3 先归并命中再选默认版本，一万组下 p95 94ms；封面五档缩放与磁盘缓存。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `557f84f8` | feat(subsonic): 浏览、搜索、封面与本人评分输出 |
+| `f6277212` | docs(spec): Subsonic 浏览、搜索、封面与评分输出合同 |
+
+### Status
+
+[OK] **Completed**
