@@ -186,4 +186,6 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
 
 艺人列表/详情/名字/专辑/角色曲目/队列、原署名 refs 与整理期状态见[艺人合同](./artist-contracts.md)。`ArtistRef={artist_id,name,display_name}`；ReleaseSummary 增加 `artist_refs/album_artist_refs`，TrackSummary/ReleaseTrack/ReleaseCredit 增加 `artist_refs`，数组必传、每项最多100；未就绪为 `[]`，旧文本与播放能力不变。
 
-I1/I2/I4/I6已补：管理员merged-sources、albums participation=any/q、成员POST tracks/summaries、album_artist筛选并集；外形与错误见[艺人合同](./artist-contracts.md#8-实施裁决-i1--i4管理员恢复来源与成员批量摘要)。
+艺人专辑列表支持 `participation=any`、`participation=appears_on` 和 `q`，省略 `participation` 时按专辑艺人筛选。见[艺人专辑读取合同](./artist-contracts.md#rest)。
+
+I1/I2/I4/I6 还包括管理员 merged-sources、成员 POST tracks/summaries 和艺人列表的 album_artist 筛选并集。见[艺人合同](./artist-contracts.md#8-实施裁决-i1--i4管理员恢复来源与成员批量摘要)。

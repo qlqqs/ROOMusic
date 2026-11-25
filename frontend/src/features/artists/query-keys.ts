@@ -15,6 +15,8 @@ export const artistsKeys = {
   albums: (generation: number, epoch: number, artistId: string, page: number, pageSize: number) => viewerQueryKey(generation, "artists", "albums", artistId, { e: epoch, page, pageSize }),
   participationAlbums: (generation: number, epoch: number, artistId: string, q: string | null, page: number, pageSize: number) =>
     viewerQueryKey(generation, "artists", "albums-any", artistId, { e: epoch, q, page, pageSize }),
+  appearsOnAlbums: (generation: number, epoch: number, artistId: string, page: number, pageSize: number) =>
+    viewerQueryKey(generation, "artists", "albums-appears-on", artistId, { e: epoch, page, pageSize }),
   tracks: (generation: number, epoch: number, artistId: string, role: ArtistTrackRole, page: number, pageSize: number) =>
     viewerQueryKey(generation, "artists", "tracks", artistId, { e: epoch, role, page, pageSize }),
   /** 管理员看到的网络搜索状态（不随目录 epoch 变化：它跟着自动整理走）。 */

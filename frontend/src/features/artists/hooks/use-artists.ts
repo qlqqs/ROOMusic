@@ -3,7 +3,7 @@ import { failureOf, isHttpFailure } from "../../../shared/api";
 import { useViewerScope } from "../../auth";
 import { useCatalogState } from "../../catalog";
 import type { ArtistQueueDTO, ArtistTrackRole } from "../api/decoders";
-import { fetchArtist, fetchArtistAlbums, fetchArtistNames, fetchArtistParticipationAlbums, fetchArtistQueue, fetchArtistTracks, fetchArtists, type ArtistListParams } from "../api/endpoints";
+import { fetchArtist, fetchArtistAlbums, fetchArtistAppearsOnAlbums, fetchArtistNames, fetchArtistParticipationAlbums, fetchArtistQueue, fetchArtistTracks, fetchArtists, type ArtistListParams } from "../api/endpoints";
 import { artistsKeys } from "../query-keys";
 
 /** 列表每页的艺人数。 */
@@ -68,6 +68,19 @@ export function useArtistAlbums(artistId: string, page: number) {
   return useQuery({
     queryKey: artistsKeys.albums(generation, epoch ?? -1, artistId, page, ARTIST_ALBUMS_PAGE_SIZE),
     queryFn: ({ signal }) => fetchArtistAlbums(artistId, { page, pageSize: ARTIST_ALBUMS_PAGE_SIZE, signal }),
+    select: (response) => response.data,
+    enabled: epoch !== undefined,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** 艺人页“参与的专辑”：以其他身份参与、不是专辑艺人的专辑，与专辑栏同样每页 24 张。 */
+export function useArtistAppearsOnAlbums(artistId: string, page: number) {
+  const { generation } = useViewerScope();
+  const epoch = useArtistsEpoch();
+  return useQuery({
+    queryKey: artistsKeys.appearsOnAlbums(generation, epoch ?? -1, artistId, page, ARTIST_ALBUMS_PAGE_SIZE),
+    queryFn: ({ signal }) => fetchArtistAppearsOnAlbums(artistId, { page, pageSize: ARTIST_ALBUMS_PAGE_SIZE, signal }),
     select: (response) => response.data,
     enabled: epoch !== undefined,
     placeholderData: keepPreviousData,

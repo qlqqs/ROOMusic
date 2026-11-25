@@ -460,7 +460,7 @@ schema 子集（输入、输出都按此编译，出现其他关键字注册失�
 | `get_track` | 成员 | `id`* | `LoadTrackSummaries` 的摘要 + `detail`（所在版本里的 `ReleaseTrack`，缺失曲目为 `null`） | 没有歌词 |
 | `list_artists` | 成员 | `q`、`role`、`initial`：`A`–`Z`/`kana`/`#`、`sort`：`name`（默认）/`album_count`、分页 | `ListArtists` | — |
 | `get_artist` | 成员 | `id`* | `LoadArtist`（名字固定为服务层首批 20 条） | — |
-| `list_artist_albums` | 成员 | `id`*、`q`、`participation`：`any`、分页 | `ListArtistAlbums` | — |
+| `list_artist_albums` | 成员 | `id`*、`q`、`participation`：`any`、分页 | `ListArtistAlbums` | `participation=appears_on` 见[艺人 REST 接口](./artist-contracts.md#rest) |
 | `list_artist_tracks` | 成员 | `id`*、`role`*、分页 | `ListArtistTracks` | — |
 | `get_release_evidence` | 管理员 | `id`* | `LoadReleaseEvidence`（先确认版本存在） | 来源路径是音乐目录以下的相对路径；没有标签原始 JSON 与歌词 |
 | `list_release_issues` | 管理员 | `status`：`open`（默认）/`reviewed`、`category`：`fields/grouping/missing_tracks`、分页 | `governance.Store.ListIssues` → `{items, summary, pagination}` | — |

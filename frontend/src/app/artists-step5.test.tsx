@@ -211,6 +211,36 @@ describe("艺人浏览与详情（⑤）", () => {
     expect(screen.queryByText("别名1", { exact: true })).toBeNull();
   });
 
+  it("参与的专辑一栏只列不是专辑艺人的专辑，写专辑艺人；没有时整栏不出现", async () => {
+    const { data, api } = setup();
+    const album = data.albums.get(id)?.[0];
+    if (!album) throw new Error("缺少专辑样本");
+    const other = structuredClone(album);
+    other.group.id = artistTestId(310);
+    other.group.representative = { ...other.group.representative, title: "城市夜行合集", album_artist: "群星" };
+    data.participationAlbums.set(id, [{ ...structuredClone(album), roles: ["album_artist", "track_artist"] }, { ...other, roles: ["composer"] }]);
+    const { history } = renderApp({ path: `/artists/${id}` });
+    const region = await screen.findByRole("region", { name: "参与的专辑" });
+    const card = await within(region).findByRole("link", { name: /城市夜行合集/ });
+    expect(card.textContent).toContain("群星");
+    expect(within(region).queryByRole("link", { name: /海边夜曲/ })).toBeNull();
+    expect(within(region).getByText("1 张")).toBeTruthy();
+    expect(api.requestsTo("GET", `/api/v1/artists/${id}/albums`).some((request) => request.path.includes("participation=appears_on"))).toBe(true);
+    expect(history.location.search).toBe("");
+  });
+
+  it("没有以其他身份参与的专辑时不出现参与的专辑", async () => {
+    const { data, api } = setup();
+    const album = data.albums.get(id)?.[0];
+    if (!album) throw new Error("缺少专辑样本");
+    data.participationAlbums.set(id, [{ ...structuredClone(album), roles: ["album_artist"] }]);
+    renderApp({ path: `/artists/${id}` });
+    await screen.findByRole("region", { name: "专辑" });
+    await waitFor(() => expect(api.requestsTo("GET", `/api/v1/artists/${id}/albums`).some((request) => request.path.includes("participation=appears_on"))).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole("region", { name: "参与的专辑" })).toBeNull();
+  });
+
   it("曲目换角色重置自己的分页，不清掉名字与专辑页码；缺失曲目保留且不可播放", async () => {
     const { data, api } = setup();
     const detail = getDetail(data);

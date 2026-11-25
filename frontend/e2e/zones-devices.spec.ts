@@ -154,22 +154,21 @@ test("设置标题旁显示控制目标设备名，各项改动向该播放区�
   }
 });
 
-test("远端 volume fixed 时播放栏和全屏的音量按钮禁用并说明原因", async ({ page, backend }) => {
+test("远端 volume fixed 时播放栏的音量条和全屏的音量按钮禁用并说明原因", async ({ page, backend }) => {
   const mock = await backend.start({ signedInAs: "listener" });
   await setup(page, mock, true);
   await openPicker(page);
   await picker(page).getByRole("button", { name: /客厅音箱/ }).click();
-  const volume = bar(page).getByRole("button", { name: "音量", exact: true });
+  const volume = bar(page).getByRole("slider", { name: "播放器音量" });
   await expect(volume).toBeDisabled();
-  await expect(volume).toHaveAttribute("aria-haspopup", "dialog");
+  await expect(bar(page).getByRole("button", { name: "静音", exact: true })).toBeDisabled();
   await expect(volume.locator("..")).toHaveAttribute("title", "这台设备不能调音量");
-  await expect(page.getByRole("slider", { name: "播放器音量" })).toHaveCount(0);
   await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
   const fullscreen = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
   const fullVolume = fullscreen.getByRole("button", { name: "音量", exact: true });
   await expect(fullVolume).toBeDisabled();
   await expect(fullVolume.locator("..")).toHaveAttribute("title", "这台设备不能调音量");
-  await expect(page.getByRole("slider", { name: "播放器音量" })).toHaveCount(0);
+  await expect(fullscreen.getByRole("slider", { name: "播放器音量" })).toHaveCount(0);
 });
 
 for (const width of widths) {

@@ -839,6 +839,9 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 			obs := parts[part]
 			if part == "|" {
 				for _, unknown := range obs {
+					if unknown.InferredFields["album"] {
+						unknown.Album = ""
+					}
 					addBucket(CandidateSameDirSplit, meta.scope, "|@"+NormalizedPath(unknown.RelativePath), unknown)
 				}
 				continue

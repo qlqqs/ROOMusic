@@ -17,6 +17,7 @@ import type { ReleaseDetailDTO } from "../../catalog";
 import { useAlbumPlayback } from "./album-playback-actions";
 import { FullscreenPlayer } from "./fullscreen-player";
 import { PlayerBar } from "./player-bar";
+import { VolumeButton } from "./player-controls";
 import barStyles from "./player-bar.module.css";
 import { PlayerQueue } from "./player-queue";
 import { PlayerAnnouncement } from "./player-feedback";
@@ -260,12 +261,14 @@ describe("播放栏、全屏、队列与信号路径", () => {
     expect(title.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const queue = within(bar).getByRole("button", { name: "队列（1）" });
     const device = within(bar).getByRole("button", { name: "播放设备" });
-    const volume = within(bar).getByRole("button", { name: "音量" });
+    const volume = within(bar).getByRole("slider", { name: "播放器音量" });
+    const mute = within(bar).getByRole("button", { name: "静音" });
     const mode = within(bar).getByRole("button", { name: "播放模式：顺序" });
     expect(mode.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(device.textContent).toBe("");
     expect(queue.compareDocumentPosition(device) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(device.compareDocumentPosition(volume) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(device.compareDocumentPosition(mute) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(mute.compareDocumentPosition(volume) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // 分隔线在队列之后、设备之前。
     const separator = bar.querySelector(`.${barStyles.separator}`);
     if (separator === null) throw new Error("缺少分隔线");
@@ -465,11 +468,11 @@ describe("播放栏、全屏、队列与信号路径", () => {
     start({ lockedVolume: true });
     await waitFor(() => expect(engine.getSnapshot().volumeControllable).toBe(false));
     view(<PlayerBar />);
-    const volume = screen.getByRole("button", { name: "音量" });
-    expect((volume as HTMLButtonElement).disabled).toBe(true);
-    expect(volume.getAttribute("aria-haspopup")).toBe("dialog");
-    expect(volume.closest("[title]")?.getAttribute("title")).toBe("这台设备不能调音量");
-    expect(screen.queryByRole("slider", { name: "播放器音量" })).toBeNull();
+    const mute = screen.getByRole("button", { name: "静音" });
+    const slider = screen.getByRole("slider", { name: "播放器音量" });
+    expect((mute as HTMLButtonElement).disabled).toBe(true);
+    expect((slider as HTMLInputElement).disabled).toBe(true);
+    expect(slider.closest("[title]")?.getAttribute("title")).toBe("这台设备不能调音量");
   });
 
   it("队列抽屉关闭后焦点返回队列图标", async () => {
@@ -595,12 +598,30 @@ describe("播放栏、全屏、队列与信号路径", () => {
     }
   });
 
-  it("音量按钮打开弹层后可静音、取消静音与调节音量，关闭后下一首仍可用", async () => {
+  it("播放栏的音量条直接调音量，喇叭键静音与取消静音", async () => {
     await enqueue([playerTrack("1"), playerTrack("2")]);
     view(<PlayerBar />);
+    const bar = screen.getByRole("region", { name: "播放器" });
+    const slider = within(bar).getByRole("slider", { name: "播放器音量" });
+    fireEvent.change(slider, { target: { value: "0.4" } });
+    expect(engine.getSnapshot().volume).toBe(0.4);
+    expect(slider.getAttribute("aria-valuetext")).toBe("40%");
+    await userEvent.click(within(bar).getByRole("button", { name: "静音" }));
+    expect(engine.getSnapshot().muted).toBe(true);
+    const unmute = within(bar).getByRole("button", { name: "取消静音" });
+    expect(unmute.getAttribute("aria-pressed")).toBe("true");
+    expect(slider.getAttribute("aria-valuetext")).toBe("已静音，40%");
+    await userEvent.click(unmute);
+    expect(engine.getSnapshot().muted).toBe(false);
+    expect(engine.getSnapshot().volume).toBe(0.4);
+  });
+
+  it("全屏的音量按钮打开弹层后可静音、取消静音与调节音量，关闭后焦点回到按钮", async () => {
+    await enqueue([playerTrack("1"), playerTrack("2")]);
+    view(<><VolumeButton /><PlayerBar /></>);
     const volume = screen.getByRole("button", { name: "音量" });
     expect(volume.getAttribute("aria-haspopup")).toBe("dialog");
-    expect(screen.queryByRole("slider", { name: "播放器音量" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: /^音量/ })).toBeNull();
     await userEvent.click(volume);
     const dialog = screen.getByRole("dialog", { name: /^音量/ });
     const slider = within(dialog).getByRole("slider", { name: "播放器音量" });
@@ -616,7 +637,7 @@ describe("播放栏、全屏、队列与信号路径", () => {
     fireEvent(dialog, new Event("cancel", { bubbles: true, cancelable: true }));
     await waitFor(() => expect(dialog.hasAttribute("open")).toBe(false));
     expect(document.activeElement).toBe(volume);
-    await userEvent.click(screen.getByRole("button", { name: "下一首" }));
+    await userEvent.click(within(screen.getByRole("region", { name: "播放器" })).getByRole("button", { name: "下一首" }));
     await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe("track-2"));
   });
 

@@ -74,6 +74,13 @@ export function fetchArtistParticipationAlbums(artistId: string, params: PagePar
   return apiRequest({ method: "GET", path: `/api/v1/artists/${artistId}/albums?${query}`, signal: params.signal }, decodeArtistParticipationAlbumsPage);
 }
 
+/** 以其他身份参与、但不是专辑艺人的专辑（participation=appears_on）：艺人页“参与的专辑”一栏，每项带身份。 */
+export function fetchArtistAppearsOnAlbums(artistId: string, params: PageParams): Promise<ApiResponse<ArtistParticipationAlbumsPageDTO>> {
+  const query = pageQuery(params);
+  query.set("participation", "appears_on");
+  return apiRequest({ method: "GET", path: `/api/v1/artists/${artistId}/albums?${query}`, signal: params.signal }, decodeArtistParticipationAlbumsPage);
+}
+
 export function fetchArtistTracks(artistId: string, role: ArtistTrackRole, params: PageParams): Promise<ApiResponse<ArtistTracksPageDTO>> {
   const query = pageQuery(params);
   query.set("role", role);

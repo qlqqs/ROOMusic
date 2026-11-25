@@ -6,6 +6,7 @@ import { formatCount } from "../../../shared/lib/number";
 import { pageCountOf } from "../../../shared/lib/pagination";
 import { Button, DataTable, Page, Pagination, Panel, QueryContent, Skeleton, StatusTag, VisuallyHidden, type Column } from "../../../shared/ui";
 import {
+  albumArtistOf,
   albumMeta,
   AlbumGridLayout,
   AlbumGridSkeleton,
@@ -20,7 +21,7 @@ import {
 import { artistTrackRoles, type ArtistAlbumDTO, type ArtistDetailDTO, type ArtistTrackRole } from "../api/decoders";
 import type { ArtistDetailSearch } from "../artist-search";
 import { useArtistMedia } from "../hooks/use-artist-media";
-import { isArtistCatalogPreparing, useArtist, useArtistAlbums, useArtistNames, useArtistTracks } from "../hooks/use-artists";
+import { isArtistCatalogPreparing, useArtist, useArtistAlbums, useArtistAppearsOnAlbums, useArtistNames, useArtistTracks } from "../hooks/use-artists";
 import { ArtistHeader } from "./artist-header";
 import { ArtistPreparing } from "./artist-preparing";
 import styles from "./artist-detail-view.module.css";
@@ -68,8 +69,8 @@ function ArtistNotFound() {
 }
 
 /**
- * 艺人页：页头（圆章、主名、角色、概况与操作区）、其他名字、作为专辑艺人的专辑，以及按角色分栏的参与曲目（曲目艺人、作曲、指挥、演奏、制作人）。
- * 专辑、曲目与名字各自翻页，页码与选中的角色都在地址里。已经合并进别的艺人时跳到现在的艺人页；艺人数据还在整理时只说一句。
+ * 艺人页：页头（圆章、主名、角色、概况与操作区）、其他名字、作为专辑艺人的专辑、以其他身份参与的专辑，以及按角色分栏的参与曲目（曲目艺人、作曲、指挥、演奏、制作人）。
+ * 专辑、参与的专辑、曲目与名字各自翻页，页码与选中的角色都在地址里。已经合并进别的艺人时跳到现在的艺人页；艺人数据还在整理时只说一句。
  */
 export function ArtistDetailView({ artistId, search, onRedirect, renderHeaderActions, renderTrackActions, renderTrackRowsScope, onMediaChanged }: ArtistDetailViewProps) {
   const detail = useArtist(artistId);
@@ -116,6 +117,7 @@ export function ArtistDetailView({ artistId, search, onRedirect, renderHeaderAct
     >
       <NamesSection detail={data} search={search} />
       <AlbumsSection artistId={artist.id} search={search} />
+      <AppearsOnSection artistId={artist.id} search={search} />
       <TracksSection detail={data} search={search} renderTrackActions={renderTrackActions} renderTrackRowsScope={renderTrackRowsScope} />
     </Page>
   );
@@ -182,15 +184,18 @@ function NamesSection({ detail, search }: { detail: ArtistDetailDTO; search: Art
   );
 }
 
-/** 一张专辑：与专辑库同一种卡片（整张卡片是链接，卡片上的艺人名是文字）；打开时选中这位艺人署名的那个版本。 */
-function ArtistAlbumCard({ item }: { item: ArtistAlbumDTO }) {
+/**
+ * 一张专辑：与专辑库同一种卡片（整张卡片是链接，卡片上的艺人名是文字）；打开时选中这位艺人署名的那个版本。
+ * meta 是标题下的一行：专辑栏写年份与曲目数，参与的专辑写专辑艺人（这张专辑是谁的）。
+ */
+function ArtistAlbumCard({ item, meta }: { item: ArtistAlbumDTO; meta: string }) {
   const release = item.group.representative;
   const credited = item.credited_release_id === release.id ? undefined : item.credited_release_id;
   return (
     <li className={styles.album}>
       <Link to="/albums/$groupId" params={{ groupId: item.group.id }} search={{ release: credited }} className={styles.card}>
         <Cover artwork={release.artwork} title={release.title} variant="card" />
-        <span className={styles.cardTitle}>{release.title}</span> <span className={styles.cardMeta}>{albumMeta(release)}</span>
+        <span className={styles.cardTitle}>{release.title}</span> <span className={styles.cardMeta}>{meta}</span>
         {item.group.release_count > 1 ? (
           <span className={styles.cardTags}>
             <StatusTag>{item.group.release_count} 个版本</StatusTag>
@@ -201,35 +206,37 @@ function ArtistAlbumCard({ item }: { item: ArtistAlbumDTO }) {
   );
 }
 
-/** 作为专辑艺人的专辑：没有时不出现。 */
-function AlbumsSection({ artistId, search }: { artistId: string; search: ArtistDetailSearch }) {
-  const albums = useArtistAlbums(artistId, search.albums_page ?? 1);
+type ShelfPageKey = "albums_page" | "appears_page";
+type ShelfQuery = ReturnType<typeof useArtistAlbums> | ReturnType<typeof useArtistAppearsOnAlbums>;
+
+/** 一栏专辑卡片：标题旁是张数，翻页写进地址（pageKey）；第一页就没有时整栏不出现。 */
+function AlbumShelf({ artistId, title, pageKey, query, metaOf }: { artistId: string; title: string; pageKey: ShelfPageKey; query: ShelfQuery; metaOf: (item: ArtistAlbumDTO) => string }) {
   const { headingRef, showTop } = useSectionTop();
-  const data = albums.data;
+  const data = query.data;
   if (data !== undefined && data.pagination.total === 0 && data.pagination.page === 1) return null;
   return (
-    <Panel title="专辑" headingRef={headingRef} action={data === undefined ? undefined : <span>{formatCount(data.pagination.total)} 张</span>}>
-      <QueryContent query={albums} loading={<AlbumGridSkeleton count={6} />}>
+    <Panel title={title} headingRef={headingRef} action={data === undefined ? undefined : <span>{formatCount(data.pagination.total)} 张</span>}>
+      <QueryContent query={query} loading={<AlbumGridSkeleton count={6} />}>
         {(page) =>
           page.items.length === 0 ? (
             <p>
               这一页没有专辑。{" "}
-              <Link to="/artists/$artistId" params={{ artistId }} search={(previous) => ({ ...previous, albums_page: undefined })}>
+              <Link to="/artists/$artistId" params={{ artistId }} search={(previous) => ({ ...previous, [pageKey]: undefined })}>
                 回到第一页
               </Link>
             </p>
           ) : (
-            <div className={styles.results} aria-busy={albums.isPlaceholderData}>
+            <div className={styles.results} aria-busy={query.isPlaceholderData}>
               <AlbumGridLayout>
-                {page.items.map((item) => (
-                  <ArtistAlbumCard key={item.group.id} item={item} />
+                {page.items.map((item: ArtistAlbumDTO) => (
+                  <ArtistAlbumCard key={item.group.id} item={item} meta={metaOf(item)} />
                 ))}
               </AlbumGridLayout>
               <Pagination
-                label="专辑分页"
+                label={`${title}分页`}
                 page={page.pagination.page}
                 pageCount={pageCountOf(page.pagination.total, page.pagination.page_size)}
-                renderLink={(target, props) => <Link to="/artists/$artistId" params={{ artistId }} search={(previous) => ({ ...previous, albums_page: target > 1 ? target : undefined })} onClick={showTop} {...props} />}
+                renderLink={(target, props) => <Link to="/artists/$artistId" params={{ artistId }} search={(previous) => ({ ...previous, [pageKey]: target > 1 ? target : undefined })} onClick={showTop} {...props} />}
               />
             </div>
           )
@@ -237,6 +244,18 @@ function AlbumsSection({ artistId, search }: { artistId: string; search: ArtistD
       </QueryContent>
     </Panel>
   );
+}
+
+/** 作为专辑艺人的专辑：没有时不出现。 */
+function AlbumsSection({ artistId, search }: { artistId: string; search: ArtistDetailSearch }) {
+  const albums = useArtistAlbums(artistId, search.albums_page ?? 1);
+  return <AlbumShelf artistId={artistId} title="专辑" pageKey="albums_page" query={albums} metaOf={(item) => albumMeta(item.group.representative)} />;
+}
+
+/** 以其他身份参与（曲目艺人、作曲、演奏……）、但不是专辑艺人的专辑：没有时不出现。与专辑栏合起来就是页头的专辑数。 */
+function AppearsOnSection({ artistId, search }: { artistId: string; search: ArtistDetailSearch }) {
+  const albums = useArtistAppearsOnAlbums(artistId, search.appears_page ?? 1);
+  return <AlbumShelf artistId={artistId} title="参与的专辑" pageKey="appears_page" query={albums} metaOf={(item) => albumArtistOf(item.group.representative)} />;
 }
 
 /** 有曲目的角色（按固定顺序）；地址里的角色不在其中时选第一个。 */

@@ -196,6 +196,80 @@ func TestPostgreSQLArtistReadParticipationAndAliases(t *testing.T) {
 	}
 }
 
+func TestPostgreSQLArtistAlbumsAppearsOn(t *testing.T) {
+	f := newPlacementFixture(t)
+	ctx := context.Background()
+	const artist = "客席艺人"
+
+	withVisibleAlbumCredit := f.release("A Shared")
+	visibleAlbumEdition := f.release("Visible Album Artist Edition")
+	trackInExcludedGroup := f.track(withVisibleAlbumCredit, "客席曲目", "present", 120)
+	f.track(visibleAlbumEdition, "专辑艺人曲目", "present", 120)
+	f.exec(`UPDATE releases SET group_id=$1::uuid,album_artist=$2 WHERE id=$3::uuid`, withVisibleAlbumCredit.groupID, artist, visibleAlbumEdition.releaseID)
+	f.exec(`UPDATE release_groups SET default_release_id=$1::uuid WHERE id=$2::uuid`, withVisibleAlbumCredit.releaseID, withVisibleAlbumCredit.groupID)
+
+	trackOnly := f.release("B Solo")
+	trackWithOnlyTrackCredit := f.track(trackOnly, "客席曲目", "present", 120)
+	withMissingAlbumCredit := f.release("C Shared")
+	missingAlbumEdition := f.release("Hidden Album Artist Edition")
+	trackInPartlyMissingGroup := f.track(withMissingAlbumCredit, "客席曲目", "present", 120)
+	f.track(missingAlbumEdition, "缺失曲目", "missing", 120)
+	f.exec(`UPDATE releases SET group_id=$1::uuid,album_artist=$2 WHERE id=$3::uuid`, withMissingAlbumCredit.groupID, artist, missingAlbumEdition.releaseID)
+	f.exec(`INSERT INTO track_credits(track_id,role,name,position) VALUES
+		($1::uuid,'composer',$4,1),($2::uuid,'composer',$4,1),($2::uuid,'performer',$4,1),($3::uuid,'performer',$4,1)`,
+		trackInExcludedGroup, trackWithOnlyTrackCredit, trackInPartlyMissingGroup, artist)
+	publishArtistReadFixture(t, f)
+	id := findArtistReadFixture(t, f, artist)
+
+	defaultAlbums, err := f.store.ListArtistAlbums(ctx, id, 1, 10)
+	if err != nil || defaultAlbums.Pagination.Total != 1 || len(defaultAlbums.Items) != 1 ||
+		defaultAlbums.Items[0].Group.ID != withVisibleAlbumCredit.groupID || defaultAlbums.Items[0].CreditedReleaseID != visibleAlbumEdition.releaseID {
+		t.Fatalf("专辑艺人列表应只包含由可见版本提供署名的组，实际 %+v，错误 %v", defaultAlbums, err)
+	}
+	anyAlbums, err := f.store.ListArtistAlbums(ctx, id, 1, 10, ArtistAlbumOptions{Participation: "any"})
+	if err != nil || anyAlbums.Pagination.Total != 3 || len(anyAlbums.Items) != 3 || anyAlbums.Items[0].Group.ID != withVisibleAlbumCredit.groupID {
+		t.Fatalf("全部参与列表应包含三个组，实际 %+v，错误 %v", anyAlbums, err)
+	}
+
+	for _, tc := range []struct {
+		name, query string
+		page        int
+		total       int64
+		release     placementRelease
+		roles       []string
+		anyIndex    int
+	}{
+		{name: "只有曲目署名的组", page: 1, total: 2, release: trackOnly, roles: []string{"composer", "performer"}, anyIndex: 1},
+		{name: "专辑艺人署名仅来自缺失版本的组", page: 2, total: 2, release: withMissingAlbumCredit, roles: []string{"performer"}, anyIndex: 2},
+		{name: "超出差集页数", page: 3, total: 2},
+		{name: "搜索匹配保留和排除的组", query: "shared", page: 1, total: 1, release: withMissingAlbumCredit, roles: []string{"performer"}, anyIndex: 2},
+		{name: "搜索仅匹配缺失版本", query: "Hidden Album", page: 1, total: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := f.store.ListArtistAlbums(ctx, id, tc.page, 1, ArtistAlbumOptions{Participation: "appears_on", Query: tc.query})
+			if want := (ArtistPagination{Page: tc.page, PageSize: 1, Total: tc.total}); err != nil || got.Pagination != want {
+				t.Fatalf("分页 = %+v，期望 %+v，错误 %v", got.Pagination, want, err)
+			}
+			if tc.release.groupID == "" {
+				if len(got.Items) != 0 {
+					t.Errorf("期望空页，实际 %+v", got.Items)
+				}
+				return
+			}
+			if len(got.Items) != 1 {
+				t.Fatalf("期望一组专辑，实际 %+v", got.Items)
+			}
+			item, anyItem := got.Items[0], anyAlbums.Items[tc.anyIndex]
+			if item.Group.ID != tc.release.groupID || item.CreditedReleaseID != tc.release.releaseID || !reflect.DeepEqual(item.Roles, tc.roles) {
+				t.Fatalf("期望专辑组 %s、署名版本 %s 和角色 %v，实际 %+v", tc.release.groupID, tc.release.releaseID, tc.roles, item)
+			}
+			if item.Group.ID != anyItem.Group.ID || item.CreditedReleaseID != anyItem.CreditedReleaseID || !reflect.DeepEqual(item.Roles, anyItem.Roles) {
+				t.Errorf("参与组的署名与 any 不一致，实际 %+v，any 为 %+v", item, anyItem)
+			}
+		})
+	}
+}
+
 func TestPostgreSQLArtistReadCanonicalPersonalAndSafety(t *testing.T) {
 	f := newPlacementFixture(t)
 	ctx := context.Background()

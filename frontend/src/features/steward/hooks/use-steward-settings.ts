@@ -44,13 +44,15 @@ export function effectiveModelOf(settings: SettingsDTO): string {
 /**
  * 入口与名字：设置读到了才显示入口（成员开关关闭时是 403，读取失败或还没读到时也不显示），
  * 名字没起时是“管家”。侧栏、标签栏、面板标题与输入框提示都取这里，改名后随设置查询一起变化。
+ * configured 是已接上模型（密钥要重填、模型不支持工具也算接上，进去能看到原因）；手机标签栏只在接上或有未读时占一格。
  * unread 是运行结束后还没打开看过的会话数（C10），大于 0 时入口有提示点；随设置查询在运行结束、打开会话、窗口重新聚焦时重读。
  */
-export function useStewardEntry(): { available: boolean; name: string; unread: number } {
+export function useStewardEntry(): { available: boolean; configured: boolean; name: string; unread: number } {
   const query = useStewardSettings();
   const settings = query.data;
   return {
     available: settings !== undefined && !isStewardDisabled(query.error),
+    configured: settings !== undefined && readinessOf(settings) !== "not_configured",
     name: settings === undefined || settings.display_name === "" ? DEFAULT_STEWARD_NAME : settings.display_name,
     unread: settings?.unread_conversation_count ?? 0,
   };

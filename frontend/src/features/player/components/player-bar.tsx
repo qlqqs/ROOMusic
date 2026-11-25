@@ -8,7 +8,7 @@ import { useFullscreenPlayer } from "../hooks/use-fullscreen-player";
 import { DeviceButton } from "./device-picker";
 import { usePlayerProgressSelector, usePlayerSelector } from "../player-provider";
 import { PlayerArtwork } from "./player-artwork";
-import { PlayModeButton, TransportControls, VolumeButton } from "./player-controls";
+import { InlineVolume, PlayModeButton, TransportControls } from "./player-controls";
 import { PlayerFaultInline } from "./player-feedback";
 import { statusLabels } from "./player-labels";
 import { QueueButton } from "./queue-drawer";
@@ -54,7 +54,7 @@ function ProgressLine() {
 /**
  * 底部播放栏。宽屏三段：左边曲目（封面、标题、艺人 — 专辑、心形），中间信号路径、上一首、播放、下一首、播放模式与两端写时间的进度
  * （播放模式紧挨传输键，与左侧的信号圆点对称，循环与随机在常见位置），
- * 右边固定顺序：（加载与缓冲时的状态）队列、分隔线、设备、音量。窄屏是浮起的迷你栏：封面、标题、（控制别的设备时的）设备、播放、下一首、队列，
+ * 右边固定顺序：（加载与缓冲时的状态）队列、分隔线、设备、音量（静音键加常驻音量条）。窄屏是浮起的迷你栏：封面、标题、（控制别的设备时的）设备、播放、下一首、队列，
  * 底边一条进度线。
  */
 export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: PlayerBarProps = {}) {
@@ -79,7 +79,7 @@ export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: Pla
       <span className={styles.queue}><QueueButton renderQueueActions={renderQueueActions} /></span>
       <span className={`${styles.separator} ${styles.desktop}`} aria-hidden="true" />
       <DeviceButton className={styles.device} />
-      <span className={styles.desktop}><VolumeButton /></span>
+      <span className={styles.desktop}><InlineVolume /></span>
     </div>
     {track === undefined ? null : <ProgressLine />}
   </section>;

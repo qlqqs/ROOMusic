@@ -141,7 +141,7 @@ func (h *Handlers) artistNames(w http.ResponseWriter, r *http.Request) {
 func parseArtistAlbumOptions(w http.ResponseWriter, r *http.Request) (catalog.ArtistAlbumOptions, bool) {
 	var option catalog.ArtistAlbumOptions
 	var err error
-	option.Participation, err = artistReadEnum(r, "participation", "", "any")
+	option.Participation, err = artistReadEnum(r, "participation", "", "any", "appears_on")
 	if err != nil {
 		httpserver.WriteError(w, r, 400, "invalid_artist_participation", "专辑参与范围无效")
 		return option, false

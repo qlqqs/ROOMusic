@@ -21,6 +21,12 @@ func TestCacheVersionKnownExtensions(t *testing.T) {
 	}
 }
 
+func TestM4ACacheVersion(t *testing.T) {
+	if got := CacheVersion(".m4a"); got != "c4.f2" {
+		t.Errorf("CacheVersion(.m4a) = %q，期望 c4.f2", got)
+	}
+}
+
 func TestCacheVersionUnknownExtensions(t *testing.T) {
 	for _, extension := range []string{"", ".unknown", ".aac", ".cue", "flac"} {
 		t.Run(extension, func(t *testing.T) {

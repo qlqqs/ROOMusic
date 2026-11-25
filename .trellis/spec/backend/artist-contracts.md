@@ -62,7 +62,8 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 
 - `GET /artists/{id}`：artist/revision/name_source/names/names_pagination/role_counts/redirect_artist_id；首批20名字；旧重定向ID仍200，保留安全摘要，子路由解析canonical；空身份available=false而不是404。
 - `/names`：`{id,key_id,name,is_display_name,origin}` 分页，按key拆分不可只拆繁体写法。
-- `/albums`：默认只有有效album_artist关系，按group去重，保留credited_release_id，代表仍按全组规则。`participation=any`改为所有角色的present参与组，追加非空九项词表`roles`（默认省略）；`q`在两种模式下都按任一可见成员的有效专辑标题作ILIKE字面包含，转义%/_/~，不改变代表/credited版本及排序。分页仍默认50、最大100。空/未知/重复participation为400 `invalid_artist_participation`，非法/重复q为400 `invalid_query`。
+- `GET /api/v1/artists/{id}/albums` 调用 `ListArtistAlbums`。省略 `participation` 时返回任一可见版本有该艺人有效 `album_artist` 署名的组，响应省略 `roles`。`participation=any` 返回所有角色的 present 参与组，附非空的九项词表 `roles`。`participation=appears_on` 从 `any` 集合排除默认模式的组，沿用 `any` 的 `roles` 和 `credited_release_id`。
+- 三种模式均按组去重，代表版本按全组规则确定。`q` 按组内任一可见版本的有效专辑标题作 ILIKE 字面包含，转义 %/_/~，代表版本、署名版本与排序沿用同一规则。分页默认 50、最大 100。空、未知或重复 `participation` 返回 400 `invalid_artist_participation`，非法或重复 `q` 返回 400 `invalid_query`。
 - `/tracks`：track_artist/lyricist/composer/arranger/conductor/performer/producer必填角色，含missing；发行标题、发行ID、碟/轨序、轨ID稳定排序。
 - `/queue`：order=album/random，random要求UUID seed；所有角色轨并集去重，present优先筛选，随机 `md5(seed||':'||track_id)` 全体排序后LIMIT10000，不能先限再随机。完整摘要同快照每1000一批，精确total/missing_total/returned、limit/truncated，格式支持由前端判断。
 
@@ -169,6 +170,8 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 `POST /tracks/summaries`是成员可读的POST查询，强制同源；`{track_ids:[UUID...]}`逐项校验、规范小写后按首次出现去重，1–1000个。空/null/无效UUID/超限为400 `invalid_input`，无Origin/跨源403、有效同源未登录401。响应`{items:[TrackSummary]}`按首次输入顺序，未知省略、missing仍返回`present=false`。复用`LoadTrackSummaries`安全字段及artist_refs；艺人preparing时refs为[]而不是整请求503。坏目录投影或真实依赖失败安全503，不暴露SQL/路径。详情见catalog-summary-contracts。
 
 必需断言：真实merge→chain→restore→remerge历史选择及空键；普通成员不能读取恢复来源；any专辑组跨角色去重、q仅专辑名且字面转义、默认响应不新增roles；album_artist角色筛选并集与release_artist精确；1000/1001、重复UUID/顺序/unknown/missing、same-origin、整理期refs；真实handler样本的独立`artists/adjudication`所有权，不能被旧recorder删除。
+
+`appears_on` 的验证涵盖仅有曲目署名的组、组内另一可见版本有 `album_artist` 署名的组，以及只有缺失版本有 `album_artist` 署名的组。前后两种返回，中间一种排除。以整组为单位先做差集再计数和分页，并对照 `any` 核对保留组的 `roles`、`credited_release_id`、`q` 与排序。HTTP 验证合法值和非法值的响应。
 
 反例：前端按操作记录文本猜可恢复者、把q命中曲目当专辑名、先LIMIT再去重、逐发行读队列摘要。正确：后端明确恢复来源、同快照按组筛选/计数/分页、单批安全摘要与首次输入顺序。
 
