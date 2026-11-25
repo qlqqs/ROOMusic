@@ -27,7 +27,12 @@ type personalFixture struct {
 func newPersonalFixture(t *testing.T, count int) *personalFixture {
 	t.Helper()
 	app := newIntegrationTestApplication(t)
-	f := &personalFixture{t: t, app: app, user: app.createUser(t, "user")}
+	return newPersonalFixtureForUser(t, app, app.createUser(t, "user"), count)
+}
+
+func newPersonalFixtureForUser(t *testing.T, app *integrationTestApplication, user integrationTestUser, count int) *personalFixture {
+	t.Helper()
+	f := &personalFixture{t: t, app: app, user: user}
 	library := createPlaybackLibrary(t, app)
 	for i := 0; i < count; i++ {
 		id := library.addTrack(t, app, playbackTrackSpec{relative: fmt.Sprintf("personal-%d.flac", i), content: flacBytes(4096), bitDepth: 24, sampleRate: 96000, channels: 2})

@@ -1415,6 +1415,7 @@ func TestAPISampleRecorderOwnership(t *testing.T) {
 		{"scans/active.json", true, false},
 		{"errors/not-found-api.json", true, false},
 		{"favorites/list.json", false, false},
+		{"ratings/track-put.json", false, false},
 		{"playlists/list.json", false, false},
 		{"errors/personal-not-found.json", false, false},
 		{"scan-feedback/report-ready.json", false, true},
@@ -1596,5 +1597,6 @@ func (normalizer *sampleNormalizer) replace(value any) any {
 
 // isPersonalAPISample 将独立样本套件隔离，更新旧样本不能删除新能力的证据。
 func isPersonalAPISample(name string) bool {
-	return strings.HasPrefix(name, "favorites/") || strings.HasPrefix(name, "playlists/") || strings.HasPrefix(name, "errors/personal-")
+	return strings.HasPrefix(name, "favorites/") || strings.HasPrefix(name, "ratings/") ||
+		strings.HasPrefix(name, "playlists/") || strings.HasPrefix(name, "errors/personal-")
 }

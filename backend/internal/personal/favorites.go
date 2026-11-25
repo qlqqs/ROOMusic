@@ -48,13 +48,11 @@ func (s *Service) SetFavorite(ctx context.Context, userID, kind, targetID string
 		return FavoriteResult{}, fmt.Errorf("begin favorite change: %w", err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO personal_favorite_state(user_id) VALUES($1::uuid) ON CONFLICT(user_id) DO NOTHING`, userID); err != nil {
-		return FavoriteResult{}, fmt.Errorf("initialize favorite state: %w", err)
+	revision, err := lockFavoriteState(ctx, tx, userID)
+	if err != nil {
+		return FavoriteResult{}, err
 	}
-	result := FavoriteResult{TargetKind: kind, TargetID: targetID, Favorited: favorited}
-	if err := tx.QueryRowContext(ctx, `SELECT revision FROM personal_favorite_state WHERE user_id=$1::uuid FOR UPDATE`, userID).Scan(&result.Revision); err != nil {
-		return FavoriteResult{}, fmt.Errorf("lock favorite state: %w", err)
-	}
+	result := FavoriteResult{TargetKind: kind, TargetID: targetID, Favorited: favorited, Revision: revision}
 	var created time.Time
 	err = tx.QueryRowContext(ctx, `SELECT created_at FROM `+relation.table+` WHERE user_id=$1::uuid AND `+relation.column+`=$2::uuid`, userID, targetID).Scan(&created)
 	exists := err == nil
@@ -87,36 +85,64 @@ func (s *Service) SetFavorite(ctx context.Context, userID, kind, targetID string
 	return result, nil
 }
 
+func lockFavoriteState(ctx context.Context, tx *sql.Tx, userID string) (int64, error) {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO personal_favorite_state(user_id) VALUES($1::uuid) ON CONFLICT(user_id) DO NOTHING`, userID); err != nil {
+		return 0, fmt.Errorf("initialize favorite state: %w", err)
+	}
+	var revision int64
+	err := tx.QueryRowContext(ctx, `SELECT revision FROM personal_favorite_state WHERE user_id=$1::uuid FOR UPDATE`, userID).Scan(&revision)
+	return revision, err
+}
+
 func insertFavorite(ctx context.Context, tx *sql.Tx, source Catalog, userID, kind, targetID string) (time.Time, error) {
 	var created time.Time
 	if kind == "track" {
-		facts, err := source.LoadTrackFacts(ctx, []string{targetID})
-		if err != nil {
+		if err := requireTrack(ctx, source, targetID); err != nil {
 			return created, err
 		}
-		if _, exists := facts[targetID]; !exists {
-			return created, ErrNotFound
-		}
-		err = tx.QueryRowContext(ctx, `INSERT INTO favorite_tracks(user_id,track_id,created_at) VALUES($1::uuid,$2::uuid,clock_timestamp()) RETURNING created_at`, userID, targetID).Scan(&created)
+		err := tx.QueryRowContext(ctx, `INSERT INTO favorite_tracks(user_id,track_id,created_at) VALUES($1::uuid,$2::uuid,clock_timestamp()) RETURNING created_at`, userID, targetID).Scan(&created)
 		return created, err
 	}
-	groups, err := source.LoadReleaseGroupSummaries(ctx, []string{targetID})
+	snapshot, err := loadAlbumSnapshot(ctx, source, targetID)
 	if err != nil {
 		return created, err
 	}
-	group, exists := groups[targetID]
-	if !exists {
-		return created, ErrNotFound
-	}
-	title, artist := "", ""
-	if group.Available {
-		if group.Representative == nil {
-			return created, fmt.Errorf("available favorite album has no representative")
-		}
-		title, artist = group.Representative.Title, group.Representative.Artist
-	}
-	err = tx.QueryRowContext(ctx, `INSERT INTO favorite_albums(user_id,group_id,created_at,saved_title,saved_artist) VALUES($1::uuid,$2::uuid,clock_timestamp(),$3,$4) RETURNING created_at`, userID, targetID, title, artist).Scan(&created)
+	err = tx.QueryRowContext(ctx, `INSERT INTO favorite_albums(user_id,group_id,created_at,saved_title,saved_artist) VALUES($1::uuid,$2::uuid,clock_timestamp(),$3,$4) RETURNING created_at`, userID, targetID, snapshot.Title, snapshot.Artist).Scan(&created)
 	return created, err
+}
+
+func requireTrack(ctx context.Context, source Catalog, id string) error {
+	facts, err := source.LoadTrackFacts(ctx, []string{id})
+	if err != nil {
+		return err
+	}
+	if _, exists := facts[id]; !exists {
+		return ErrNotFound
+	}
+	return nil
+}
+
+type albumSnapshot struct {
+	Title, Artist string
+	Available     bool
+}
+
+func loadAlbumSnapshot(ctx context.Context, source Catalog, id string) (albumSnapshot, error) {
+	groups, err := source.LoadReleaseGroupSummaries(ctx, []string{id})
+	if err != nil {
+		return albumSnapshot{}, err
+	}
+	group, exists := groups[id]
+	if !exists {
+		return albumSnapshot{}, ErrNotFound
+	}
+	if !group.Available {
+		return albumSnapshot{}, nil
+	}
+	if group.Representative == nil {
+		return albumSnapshot{}, fmt.Errorf("available album has no representative")
+	}
+	return albumSnapshot{group.Representative.Title, group.Representative.Artist, true}, nil
 }
 
 func favoriteRevision(ctx context.Context, tx *sql.Tx, userID string, expected *int64) (int64, error) {

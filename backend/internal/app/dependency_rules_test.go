@@ -55,7 +55,7 @@ var packageRules = map[string]packageRule{
 	"upstreammock":                      {imports: []string{"insights/schema"}, http: true},
 	"subsonic/protocol":                 {http: true},
 	"subsonic/auth":                     {imports: []string{"identity", "platform/secret", "subsonic/protocol"}},
-	"subsonic/httpapi":                  {imports: []string{"identity", "platform/httpserver", "subsonic/auth", "subsonic/protocol"}, http: true},
+	"subsonic/httpapi":                  {imports: []string{"personal", "identity", "platform/httpserver", "subsonic/auth", "subsonic/protocol"}, http: true},
 	"platform/secret":                   {},
 	"sources":                           {imports: []string{"platform/egress", "platform/buildinfo"}, http: true},
 	"sources/coverartarchive":           {imports: []string{"sources", "sources/musicbrainz", "platform/uuid"}},
