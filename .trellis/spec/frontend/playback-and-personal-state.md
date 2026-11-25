@@ -101,3 +101,16 @@
   换词时旧请求经 AbortSignal 取消，慢响应只落在它自己的键下。
 - 定位曲目：建议里点曲目进入 `/albums/$groupId?release=<曲目当前所在的发行>&track=<曲目>`（`track` 同样只留 UUID、转小写；规范 `release` 时保留它，切换版本的链接不带它）。
   每来到一条历史记录（打开、刷新、后退、前进，按历史记录的 key 区分）只定位一次：滚到这一行、焦点放上去、短暂高亮；重新渲染与轮询刷新不再滚动或抢焦点，曲目不在选中的版本里就什么也不做。
+
+## SlimProto 编组（2026-11-25）
+
+接口与语义见[播放区协议：托管的局域网输出与编组 §11](../backend/playback-zone-lan-contracts.md#11-编组slimproto-多台同步)。
+
+- 解码：`Zone.group`（成员与状态）、`Device.group`（leader/member）、`Device.syncDelayMs`；缺省为 `null`，未知状态按 `waiting`，空成员列表等于没有编组（`features/player/zones/decoders.ts`）。
+- 控制器：`addGroupMember`、`removeGroupMember`、`setGroupVolume`、`setSyncDelay`、`setDeviceVolume`、`volumeOf`。音量写入按设备与按组各自节流（`zones/throttled-writes.ts`：立即发，之后至多每 125 ms，本地值保持 1 秒）。响应只更新列表里已有的设备。
+- 音量控件：控制目标有组时调组音量，显示可调设备中最响的一台，全部固定音量时禁用；组静音逐台静音（没有组静音端点），全部静音才显示为静音。读屏名为“组音量”。
+- 设备列表：控制目标或已是主设备的在线 SlimProto 行有“编组”图标按钮（有组时强调并在读屏名里写台数）；成员行写“在「主设备名」的组里”，不可选、不可转入，只能移出组。
+- 编组面板（`components/group-panel.tsx`）：主设备（皇冠）与成员（状态图标加读屏文字）；每行音量滑块（固定音量禁用）、同步微调毫秒输入（失焦或回车保存、Esc 撤销、−500..500 外内联报错）；“可以加入”只列在线、未入组、非主设备的 SlimProto 设备，`device_busy` 走现有接管确认；底部一行精度说明。
+- `device_grouped` 拒绝按被拒命令显示“这台设备在组里，先移出组。”
+- 测试：`decoders.test.ts`、`controller.test.ts`、`device-picker.test.tsx`、`group-panel.test.tsx`；浏览器 `e2e/slimproto-groups.spec.ts`（390 与 1440 宽度截图）。
+
