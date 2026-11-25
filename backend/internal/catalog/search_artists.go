@@ -8,6 +8,10 @@ import (
 )
 
 func (s *Store) searchArtists(ctx context.Context, query string, page, size int, count bool) ([]SearchArtistItem, SearchPagination, error) {
+	return s.searchArtistsOffset(ctx, query, page, size, (page-1)*size, count)
+}
+
+func (s *Store) searchArtistsOffset(ctx context.Context, query string, page, size, offset int, count bool) ([]SearchArtistItem, SearchPagination, error) {
 	items := []SearchArtistItem{}
 	pagination := SearchPagination{Page: page, PageSize: size, TotalRelation: "eq"}
 	if err := textnorm.LoadEmbedded(); err != nil {
@@ -36,14 +40,18 @@ func (s *Store) searchArtists(ctx context.Context, query string, page, size int,
 		}
 		pagination.Total, pagination.TotalRelation = boundedSearchTotal(total)
 	}
-	rows, err := s.database.QueryContext(ctx, `WITH matches AS (
- SELECT DISTINCT ON(n.artist_id) n.artist_id,n.original_value,n.name_id,`+rankSQL+` AS rank
- FROM artist_search_names n JOIN artists a ON a.id=n.artist_id LEFT JOIN artist_overrides o ON o.artist_id=a.id
- WHERE o.redirect_artist_id IS NULL AND `+predicate+` AND `+artistVisiblePredicate+`
+	// 先用名字索引选出候选，再检查艺人是否可见，避免稀疏查询为全库艺人逐个查名字。
+	rows, err := s.database.QueryContext(ctx, `WITH matching_names AS MATERIALIZED (
+ SELECT n.artist_id,n.original_value,n.name_id,n.id,`+rankSQL+` AS rank
+ FROM artist_search_names n WHERE `+predicate+`
+ ), matches AS (
+ SELECT DISTINCT ON(n.artist_id) n.artist_id,n.original_value,n.name_id,n.rank
+ FROM matching_names n JOIN artists a ON a.id=n.artist_id LEFT JOIN artist_overrides o ON o.artist_id=a.id
+ WHERE o.redirect_artist_id IS NULL AND `+artistVisiblePredicate+`
  ORDER BY n.artist_id,rank,(n.name_id IS NULL) DESC,n.original_value COLLATE "C",n.id
  ) SELECT m.artist_id::text,m.original_value,m.rank,m.original_value=p.effective_display_name
  FROM matches m JOIN artist_profiles p ON p.artist_id=m.artist_id
- ORDER BY m.rank,p.sort_key COLLATE "C",m.artist_id LIMIT $7 OFFSET $8`, append(args, size+1, (page-1)*size)...)
+ ORDER BY m.rank,p.sort_key COLLATE "C",m.artist_id LIMIT $7 OFFSET $8`, append(args, size+1, offset)...)
 	if err != nil {
 		return nil, pagination, err
 	}

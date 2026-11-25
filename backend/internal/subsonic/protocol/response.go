@@ -70,6 +70,16 @@ type Response struct {
 	Extensions    []Extension   `xml:"openSubsonicExtensions,omitempty" json:"openSubsonicExtensions,omitempty"`
 	MusicFolders  *MusicFolders `xml:"musicFolders,omitempty" json:"musicFolders,omitempty"`
 	User          *User         `xml:"user,omitempty" json:"user,omitempty"`
+	Artists       *Artists      `xml:"artists,omitempty" json:"artists,omitempty"`
+	Artist        *Artist       `xml:"artist,omitempty" json:"artist,omitempty"`
+	Album         *Album        `xml:"album,omitempty" json:"album,omitempty"`
+	Song          *Song         `xml:"song,omitempty" json:"song,omitempty"`
+	AlbumList2    *AlbumList    `xml:"albumList2,omitempty" json:"albumList2,omitempty"`
+	SearchResult3 *SearchResult `xml:"searchResult3,omitempty" json:"searchResult3,omitempty"`
+	RandomSongs   *RandomSongs  `xml:"randomSongs,omitempty" json:"randomSongs,omitempty"`
+	Genres        *Genres       `xml:"genres,omitempty" json:"genres,omitempty"`
+	ArtistInfo2   *ArtistInfo   `xml:"artistInfo2,omitempty" json:"artistInfo2,omitempty"`
+	AlbumInfo     *AlbumInfo    `xml:"albumInfo,omitempty" json:"albumInfo,omitempty"`
 }
 
 func Failure(code int, message string) Response {

@@ -431,7 +431,10 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	} else {
 		close(catalogDone)
 	}
-	subsonicapi.Register(mux, subsonic, personalService, guard, buildinfo.Current().Version)
+	subsonicapi.Register(mux, subsonic, guard, buildinfo.Current().Version, subsonicapi.Browse{
+		Catalog: catalog.NewStore(database), Personal: personalService, Listening: listeningService,
+		ReadArtwork: readArtwork, DataDirectory: settings.DataDirectory,
+	})
 	identityapi.New(database, guard, assembly.loginThrottle, logger).WithPasswordObserver(subsonic).WithSessionRevoked(func(userID string) {
 		subsonic.Forget(userID)
 		lanDevices.SessionRevoked(userID)

@@ -28,7 +28,7 @@ func (h *Handlers) setRating(r *http.Request) protocol.Response {
 		return protocol.Failure(protocol.General, "Rating must be between 0 and 5")
 	}
 	user := r.Context().Value(userKey{}).(identity.User)
-	_, err = h.ratings.SetRatingByID(r.Context(), user.ID, id, rating)
+	_, err = h.browse.Personal.SetRatingByID(r.Context(), user.ID, id, rating)
 	switch {
 	case err == nil:
 		return protocol.Response{}

@@ -238,8 +238,7 @@ func (s *Store) loadTrackAnalysis(ctx context.Context, trackID string, version i
 	}
 	if integrated.Valid && peak.Valid {
 		// 计算增益使用存储精度；仅面向 API 展示的 LUFS/峰值按一位小数舍入。
-		gain := math.Min(-14-integrated.Float64, -0.5-peak.Float64)
-		data.TrackGainDB = roundedDB(gain)
+		data.TrackGainDB = trackGainDB(integrated.Float64, peak.Float64)
 	}
 	response.Analysis = data
 	album, err := s.albumAnalysis(ctx, releaseID, version)
@@ -271,6 +270,10 @@ func nullInt32Pointer(value sql.NullInt32) *int32 {
 		return nil
 	}
 	return &value.Int32
+}
+
+func trackGainDB(lufs, peak float64) *float64 {
+	return roundedDB(math.Min(-14-lufs, -0.5-peak))
 }
 
 func roundedDB(value float64) *float64 {
