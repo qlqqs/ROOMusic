@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星级评分设计稿</title>
+<style>
+  body { margin: 0; background: #fff; color: #171717; font-family: system-ui, sans-serif; }
+  .wrap { padding: 16px; display: grid; gap: 14px; max-width: 1000px; margin: 0 auto; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 13px; color: #666; }
+  .bar .grp { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid #e5e5e5; border-radius: 8px; }
+  .bar button { font: inherit; font-size: 12.5px; border: 0; background: none; padding: 4px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+  .bar button:hover { background: #f4f4f5; }
+  .bar button[aria-pressed="true"] { background: #171717; color: #fff; }
+  .cap { font-size: 12.5px; color: #666; margin: 0 2px; line-height: 1.6; }
+  .cap kbd { font: 11px ui-monospace, monospace; border: 1px solid #ddd; border-radius: 3px; padding: 0 4px; }
+
+  /* —— ROOMusic 色板（取自 styles/tokens.css），只作用在 .rm 里 —— */
+  .rm {
+    --bg: #f3f2f2; --surface: #eae9e9; --text: #201f1d; --t2: #605d5d; --accent: #b68235; --a4: #e1ad66; --a7: #7d5411;
+    --n1: #f8f4f4; --n3: #d7d3d3; --n4: #bab6b6; --n5: #9b9797; --hover: rgba(32,31,29,.06); --warn: #b3261e;
+    --sh-lg: 0 12px 32px rgba(45,43,43,.22); --divider: rgba(32,31,29,.1);
+    font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14px; border: 1px solid #e5e5e5; border-radius: 10px;
+    margin: 0 auto; width: 100%; position: relative; overflow: hidden;
+  }
+  .rm[data-w="320"] { width: 320px; }
+  .rm * { box-sizing: border-box; }
+  .rm button { font: inherit; color: inherit; }
+  .rm :focus-visible { outline: 2px solid var(--a7); outline-offset: 2px; }
+  .ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; display: block; }
+  .sec { padding: 22px 28px; border-bottom: 1px solid var(--divider); }
+  .rm[data-w="320"] .sec { padding: 18px 16px; }
+  .lbl { font-size: 11.5px; color: var(--n5); letter-spacing: .04em; margin: 0 0 12px; }
+  .ib { width: 32px; height: 32px; display: inline-grid; place-items: center; border: 0; background: none; border-radius: 4px; color: var(--t2); cursor: pointer; position: relative; }
+  .ib:hover { background: var(--hover); color: var(--text); }
+  .ib[aria-pressed="true"] { color: var(--accent); }
+  .ib[aria-pressed="true"] .ico { fill: currentColor; }
+
+  /* —— 星级（滑块）—— */
+  .stars { display: inline-flex; align-items: center; gap: 0; border-radius: 4px; height: 32px; padding: 0 2px; cursor: pointer; touch-action: none; }
+  .stars:hover { background: var(--hover); }
+  .stars .s { width: 22px; height: 32px; display: grid; place-items: center; color: var(--n4); transition: color .12s ease, transform .12s ease; }
+  .stars .s .ico { width: 15px; height: 15px; stroke-width: 1.7; }
+  .stars .s[data-on] { color: var(--accent); }
+  .stars .s[data-on] .ico { fill: currentColor; }
+  .stars[data-preview] .s[data-on] { color: var(--a4); }
+  .stars[data-preview] .s[data-on] .ico { fill: currentColor; }
+  .stars[data-busy] { cursor: progress; opacity: .6; }
+  .stars[aria-disabled="true"] { cursor: default; opacity: .45; }
+  .stars[aria-disabled="true"]:hover { background: none; }
+  .stars .s.pop { transform: scale(1.18); }
+  @media (prefers-reduced-motion: reduce) { .stars .s { transition: none; } .stars .s.pop { transform: none; } }
+  .stars.lg .s { width: 34px; height: 40px; }
+  .stars.lg .s .ico { width: 22px; height: 22px; }
+  .stars.lg { height: 40px; }
+  .msg { font-size: 12.5px; color: var(--warn); min-height: 1em; }
+
+  /* —— 头部 —— */
+  .hero { display: grid; grid-template-columns: 168px minmax(0,1fr); gap: 24px; align-items: end; }
+  .rm[data-w="320"] .hero { grid-template-columns: 1fr; gap: 14px; }
+  .cover { width: 168px; height: 168px; border-radius: 4px; background: linear-gradient(135deg, #c9b18f, #6f5a44); }
+  .rm[data-w="320"] .cover { width: 136px; height: 136px; }
+  .hero h1 { margin: 2px 0 6px; font-size: 24px; font-weight: 600; }
+  .meta { color: var(--t2); font-size: 13px; }
+  .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 14px; }
+  .play { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px 0 12px; border: 0; border-radius: 4px; background: var(--accent); color: #fff !important; font-size: 13px; cursor: pointer; }
+  .play .ico { fill: currentColor; width: 14px; height: 14px; }
+  .sep { width: 1px; height: 18px; background: var(--n3); margin: 0 4px; }
+  /* 窄屏：星级换到操作行下面单独一行，不挤掉别的按钮 */
+  .rm[data-w="320"] .acts .sep { display: none; }
+  .rm[data-w="320"] .acts .rating { flex-basis: 100%; margin-left: -4px; order: 99; }
+  .rating { display: inline-flex; align-items: center; gap: 8px; }
+
+  /* —— 曲目行与菜单 —— */
+  .rows { display: grid; }
+  .row { display: grid; grid-template-columns: 28px minmax(0,1fr) auto auto auto; gap: 10px; align-items: center; height: 44px; padding: 0 8px; border-radius: 4px; }
+  .row:hover { background: var(--hover); }
+  .row .no { color: var(--n5); font-variant-numeric: tabular-nums; text-align: right; }
+  .row .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .d { color: var(--t2); font-variant-numeric: tabular-nums; font-size: 13px; }
+  .row .r { display: inline-flex; align-items: center; }
+  .rm[data-w="320"] .row .heart { display: none; }
+  .rm[data-w="320"] .row .d { display: none; }
+  .mini { display: inline-flex; gap: 1px; color: var(--accent); margin-right: 4px; }
+  .mini .ico { width: 10px; height: 10px; fill: currentColor; stroke-width: 1.5; }
+  .menu, .pop { position: absolute; z-index: 5; background: var(--n1); border-radius: 6px; box-shadow: var(--sh-lg); }
+  .menu { min-width: 200px; padding: 4px; }
+  .menu button { display: flex; width: 100%; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border: 0; background: none; border-radius: 4px; cursor: pointer; font-size: 13.5px; text-align: left; }
+  .menu button:hover, .menu button:focus-visible { background: var(--hover); outline: none; }
+  .menu .hint { margin-left: auto; color: var(--n5); font-size: 12px; }
+  .menu hr { border: 0; border-top: 1px solid var(--divider); margin: 4px 6px; }
+  .pop { padding: 12px 12px 10px; display: grid; gap: 6px; justify-items: center; }
+  .pop .ttl { font-size: 12.5px; color: var(--t2); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pop .foot { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+  .pop .val { font-size: 12px; color: var(--n5); padding-left: 4px; }
+  .pop .ib { width: 28px; height: 28px; }
+
+  /* —— 播放条 —— */
+  .player { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; gap: 16px; height: 72px; padding: 0 16px; background: var(--n1); border-top: 1px solid var(--divider); position: relative; }
+  .rm[data-w="320"] .player { grid-template-columns: minmax(0,1fr) auto; padding: 0 10px; gap: 8px; }
+  .now { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .now .art { width: 44px; height: 44px; border-radius: 3px; background: linear-gradient(135deg, #c9b18f, #6f5a44); flex: none; }
+  .now .tx { min-width: 0; }
+  .now .tx b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .now .tx span { font-size: 12px; color: var(--t2); }
+  .tc { display: flex; align-items: center; gap: 2px; }
+  .ctl { display: flex; align-items: center; gap: 4px; justify-content: center; }
+  .ctl .pp { width: 36px; height: 36px; border-radius: 50%; background: var(--text); color: var(--n1); border: 0; display: grid; place-items: center; }
+  .ctl .pp .ico { fill: currentColor; width: 14px; height: 14px; }
+  .rm[data-w="320"] .ctl .skip { display: none; }
+  .rm[data-w="320"] .vol { display: none; }
+  .vol { justify-self: end; color: var(--n5); font-size: 12px; }
+  .badge { position: absolute; right: 2px; bottom: 3px; font-size: 9.5px; font-weight: 600; line-height: 1; color: var(--a7); font-variant-numeric: tabular-nums; }
+  .ib.rated .ico { fill: var(--accent); stroke: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <span>宽度</span>
+    <span class="grp" id="wid"><button aria-pressed="true" data-v="full">桌面</button><button data-v="320">320px</button></span>
+    <span>写入结果</span>
+    <span class="grp" id="res"><button aria-pressed="true" data-v="ok">成功</button><button data-v="fail">失败（恢复原值）</button></span>
+    <span>状态</span>
+    <span class="grp" id="st"><button aria-pressed="true" data-v="ready">已读到</button><button data-v="loading">读取中</button></span>
+  </div>
+  <p class="cap">
+    星级是一个滑块：<b>一个 Tab 停留点</b>，读屏名“评分《标题》”，值读作“3 星”或“未评分”。
+    鼠标：悬停预览（浅色），点击即写入；点当前星级就清除。
+    键盘：<kbd>←</kbd><kbd>→</kbd> 只移动预览，<kbd>Enter</kbd> 写入，<kbd>Delete</kbd>/<kbd>Backspace</kbd> 清除，<kbd>1</kbd>–<kbd>5</kbd> 直接写入，<kbd>Esc</kbd> 或离开焦点放弃预览。
+    方向键不逐级写入：从 1 星调到 5 星只发一次请求。
+  </p>
+
+  <div class="rm" id="rm">
+    <section class="sec">
+      <p class="lbl">专辑 / 艺人详情头部：心形右侧，细线分隔</p>
+      <div class="hero">
+        <div class="cover"></div>
+        <div>
+          <div class="meta">专辑</div>
+          <h1>Northern Lights Sessions</h1>
+          <div class="meta">合成乐队 · 2019 · 12 首</div>
+          <div class="acts">
+            <button class="play"><svg class="ico" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>播放</button>
+            <button class="ib" aria-label="随机播放" title="随机播放"><svg class="ico" viewBox="0 0 24 24"><path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h1.97a4 4 0 0 0 3.3-1.7l5.45-7.6a4 4 0 0 1 3.3-1.7H22"/><path d="M2 6h1.97a4 4 0 0 1 3.3 1.7l.34.48"/><path d="M22 18h-6.04a4 4 0 0 1-3.3-1.7l-.33-.48"/></svg></button>
+            <button class="ib" aria-pressed="true" aria-label="收藏《Northern Lights Sessions》" title="取消收藏"><svg class="ico" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></button>
+            <span class="sep"></span>
+            <span class="rating"><span class="stars" data-title="《Northern Lights Sessions》" data-value="4"></span><span class="msg" role="status"></span></span>
+            <button class="ib" aria-label="添加到歌单" title="添加到歌单"><svg class="ico" viewBox="0 0 24 24"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></svg></button>
+            <button class="ib" aria-label="更多操作" title="更多操作"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec">
+      <p class="lbl">曲目行：评过分的行在时长前显示小星（只读，读屏名里带“4 星”）；“更多操作”第一组加“评分…”，弹出星级</p>
+      <div class="rows" id="rows"></div>
+    </section>
+
+    <section class="sec" style="border-bottom:0; padding-bottom: 120px;">
+      <p class="lbl">播放条：心形右侧一颗星，评过分时实心并带数字；点开同一个浮层。全屏播放器空间够，直接放五颗星（同头部）</p>
+    </section>
+    <div class="player">
+      <div class="now">
+        <div class="art"></div>
+        <div class="tx"><b id="nowTitle">Aurora Drift</b><span>合成乐队</span></div>
+        <div class="tc">
+          <button class="ib" aria-pressed="false" aria-label="收藏《Aurora Drift》" title="收藏"><svg class="ico" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></button>
+          <button class="ib" id="barStar" aria-haspopup="dialog" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24"><use href="#star"/></svg><span class="badge"></span></button>
+        </div>
+      </div>
+      <div class="ctl">
+        <button class="ib skip" aria-label="上一首"><svg class="ico" viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/></svg></button>
+        <button class="pp" aria-label="暂停"><svg class="ico" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></button>
+        <button class="ib skip" aria-label="下一首"><svg class="ico" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></svg></button>
+      </div>
+      <div class="vol">音量</div>
+    </div>
+    <div id="layer"></div>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute"><defs><symbol id="star" viewBox="0 0 24 24"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></symbol></defs></svg>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const rm = $("#rm");
+const opts = { w: "full", res: "ok", st: "ready" };
+function seg(id, key, after) {
+  const g = $("#" + id);
+  g.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    g.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    opts[key] = b.dataset.v; after?.();
+  });
+}
+seg("wid", "w", () => { rm.dataset.w = opts.w; closeLayer(); });
+seg("res", "res");
+seg("st", "st", () => document.querySelectorAll(".stars").forEach((el) => el._render()));
+
+// 每个评分目标一份值；同一目标在所有位置同步（真实实现里来自所在页的状态范围）。
+const store = new Map([["album", 4], ["t1", 0], ["t2", 5], ["t3", 0], ["t4", 3], ["now", 0]]);
+const listeners = new Set();
+const valueText = (v) => (v === 0 ? "未评分" : `${v} 星`);
+function commit(key, next, el) {
+  const before = store.get(key);
+  store.set(key, next); listeners.forEach((f) => f());
+  el.dataset.busy = "";
+  el.closest(".rating, .pop, .row")?.querySelector(".msg")?.replaceChildren();
+  setTimeout(() => {
+    delete el.dataset.busy;
+    if (opts.res === "fail") {
+      store.set(key, before); listeners.forEach((f) => f());
+      const msg = el.parentElement.querySelector(".msg");
+      if (msg) msg.textContent = "评分没有保存，请稍后再试。";
+    }
+  }, 600);
+}
+
+function mountStars(el, key, title, size) {
+  if (size) el.classList.add(size);
+  el.setAttribute("role", "slider");
+  el.setAttribute("tabindex", "0");
+  el.setAttribute("aria-label", `评分${title}`);
+  el.setAttribute("aria-valuemin", "0");
+  el.setAttribute("aria-valuemax", "5");
+  el.innerHTML = [1, 2, 3, 4, 5].map((n) => `<span class="s" data-n="${n}" title="${n} 星"><svg class="ico" viewBox="0 0 24 24"><use href="#star"/></svg></span>`).join("");
+  let preview = null;
+  el._render = () => {
+    const loading = opts.st === "loading";
+    el.setAttribute("aria-disabled", String(loading));
+    const v = loading ? 0 : store.get(key);
+    const shown = preview ?? v;
+    el.toggleAttribute("data-preview", preview !== null && preview !== v);
+    el.setAttribute("aria-valuenow", String(shown));
+    el.setAttribute("aria-valuetext", loading ? "正在读取评分" : valueText(shown) + (preview !== null && preview !== v ? "，按 Enter 保存" : ""));
+    el.title = loading ? "正在读取评分" : v === 0 ? "评分" : `${v} 星 · 再点一次清除`;
+    el.querySelectorAll(".s").forEach((s) => s.toggleAttribute("data-on", Number(s.dataset.n) <= shown));
+    el.dispatchEvent(new CustomEvent("rendered"));
+  };
+  const blocked = () => opts.st === "loading" || el.dataset.busy !== undefined;
+  const set = (n) => {
+    if (blocked()) return;
+    const cur = store.get(key);
+    const next = n === cur ? 0 : n;
+    preview = null;
+    commit(key, next, el);
+    const star = el.querySelector(`.s[data-n="${n}"]`);
+    if (next !== 0 && star) { star.classList.add("pop"); setTimeout(() => star.classList.remove("pop"), 160); }
+    el.dispatchEvent(new CustomEvent("committed"));
+  };
+  el.addEventListener("pointermove", (e) => { const s = e.target.closest(".s"); if (!s || blocked()) return; preview = Number(s.dataset.n); el._render(); });
+  el.addEventListener("pointerleave", () => { preview = null; el._render(); });
+  el.addEventListener("click", (e) => { const s = e.target.closest(".s"); if (s) set(Number(s.dataset.n)); });
+  el.addEventListener("blur", () => { preview = null; el._render(); });
+  el.addEventListener("keydown", (e) => {
+    if (blocked()) return;
+    const cur = preview ?? store.get(key);
+    if (e.key === "ArrowRight" || e.key === "ArrowUp") { preview = Math.min(5, cur + 1); }
+    else if (e.key === "ArrowLeft" || e.key === "ArrowDown") { preview = Math.max(0, cur - 1); }
+    else if (e.key === "Home") { preview = 0; }
+    else if (e.key === "End") { preview = 5; }
+    else if (e.key === "Enter") { if (preview !== null && preview !== store.get(key)) commitTo(preview); else return; }
+    else if (e.key === "Delete" || e.key === "Backspace") { preview = null; if (store.get(key) !== 0) { commit(key, 0, el); el.dispatchEvent(new CustomEvent("committed")); } }
+    else if (/^[1-5]$/.test(e.key)) { preview = null; commitTo(Number(e.key)); }
+    else if (e.key === "Escape" && preview !== null) { preview = null; e.stopPropagation(); }
+    else return;
+    e.preventDefault(); el._render();
+  });
+  function commitTo(n) { preview = null; commit(key, n, el); el.dispatchEvent(new CustomEvent("committed")); }
+  listeners.add(el._render);
+  el._render();
+}
+
+// 头部
+mountStars($(".hero .stars"), "album", "《Northern Lights Sessions》");
+
+// 曲目行
+const tracks = [["t1", "Aurora Drift", "4:12"], ["t2", "Glass Harbor", "3:48"], ["t3", "Low Tide, Late Train", "5:03"], ["t4", "Paper Lanterns", "2:57"]];
+const rows = $("#rows");
+tracks.forEach(([key, title, d], i) => {
+  const row = document.createElement("div");
+  row.className = "row";
+  row.innerHTML = `<span class="no">${i + 1}</span><span class="t">${title}</span><span class="mini"></span><span class="d">${d}</span>
+    <span class="r"><button class="ib heart" aria-pressed="false" aria-label="收藏《${title}》" title="收藏"><svg class="ico" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></button><button class="ib more" aria-haspopup="menu" aria-label="更多操作" title="更多操作"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></span>`;
+  const mini = row.querySelector(".mini");
+  const paint = () => {
+    const v = store.get(key);
+    mini.innerHTML = v === 0 ? "" : `<span class="sr" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">${v} 星</span>` + Array.from({ length: v }, () => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#star"/></svg>`).join("");
+  };
+  listeners.add(paint); paint();
+  row.querySelector(".more").addEventListener("click", (e) => openMenu(e.currentTarget, key, title));
+  rows.append(row);
+});
+
+const layer = $("#layer");
+let opener = null;
+function closeLayer(restore) { layer.replaceChildren(); $("#barStar").setAttribute("aria-expanded", "false"); if (restore && opener) opener.focus(); opener = null; }
+function place(node, anchor, above) {
+  const r = anchor.getBoundingClientRect(), base = rm.getBoundingClientRect();
+  layer.append(node);
+  const w = node.offsetWidth, h = node.offsetHeight;
+  let left = r.right - base.left - w; left = Math.max(8, Math.min(left, base.width - w - 8));
+  node.style.left = left + "px";
+  node.style.top = (above ? r.top - base.top - h - 6 : r.bottom - base.top + 4) + "px";
+}
+function openMenu(btn, key, title) {
+  closeLayer(); opener = btn;
+  const v = store.get(key);
+  const m = document.createElement("div");
+  m.className = "menu"; m.setAttribute("role", "menu");
+  m.innerHTML = `<button role="menuitem" data-act="rate"><svg class="ico" viewBox="0 0 24 24"><use href="#star"/></svg>评分…<span class="hint">${v === 0 ? "" : v + " 星"}</span></button>
+    <button role="menuitem"><svg class="ico" viewBox="0 0 24 24"><path d="M16 5H3"/><path d="M16 12H3"/><path d="M9 19H3"/><path d="m16 16-3 3 3 3"/><path d="M21 5v12a2 2 0 0 1-2 2h-6"/></svg>下一首播放</button>
+    <button role="menuitem"><svg class="ico" viewBox="0 0 24 24"><path d="M16 5H3"/><path d="M16 12H3"/><path d="M9 19H3"/><path d="m16 16 3 3-3 3"/></svg>加入队列</button>
+    <button role="menuitem"><svg class="ico" viewBox="0 0 24 24"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></svg>添加到歌单…</button>
+    <hr><button role="menuitem"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg>前往专辑</button>`;
+  place(m, btn, false);
+  m.querySelector("button").focus();
+  m.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.act === "rate") { closeLayer(); openPop(btn, key, title, false); } else closeLayer(true);
+  });
+}
+function openPop(anchor, key, title, above) {
+  closeLayer(); opener = anchor;
+  const p = document.createElement("div");
+  p.className = "pop"; p.setAttribute("role", "dialog"); p.setAttribute("aria-label", `评分《${title}》`);
+  p.innerHTML = `<span class="ttl">《${title}》</span><span class="stars"></span>
+    <span class="foot"><span class="val"></span><button class="ib" data-act="clear" aria-label="清除评分" title="清除评分"><svg class="ico" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></span><span class="msg" role="status"></span>`;
+  const stars = p.querySelector(".stars");
+  mountStars(stars, key, `《${title}》`, "lg");
+  const val = p.querySelector(".val"), clear = p.querySelector("[data-act=clear]");
+  const paint = () => { const v = store.get(key); const pv = Number(stars.getAttribute("aria-valuenow")); val.textContent = pv !== v ? `${valueText(pv)} · Enter 保存` : valueText(v); clear.disabled = v === 0; clear.style.visibility = v === 0 ? "hidden" : "visible"; };
+  listeners.add(paint); stars.addEventListener("rendered", paint); paint();
+  clear.addEventListener("click", () => { commit(key, 0, stars); stars.focus(); });
+  // 写入后停留 0.6 秒再关：让人看到结果；失败时不关，提示留在浮层里
+  stars.addEventListener("committed", () => setTimeout(() => { if (opts.res === "ok" && p.isConnected) closeLayer(true); }, 650));
+  place(p, anchor, above);
+  stars.focus();
+  if (anchor.id === "barStar") anchor.setAttribute("aria-expanded", "true");
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && layer.firstChild) closeLayer(true); });
+document.addEventListener("pointerdown", (e) => { if (layer.firstChild && !layer.contains(e.target) && !e.target.closest(".more, #barStar")) closeLayer(); });
+
+// 播放条的星
+const barStar = $("#barStar");
+const paintBar = () => {
+  const v = opts.st === "loading" ? 0 : store.get("now");
+  barStar.classList.toggle("rated", v > 0);
+  barStar.querySelector(".badge").textContent = v === 0 ? "" : String(v);
+  barStar.setAttribute("aria-label", `评分《Aurora Drift》：${opts.st === "loading" ? "正在读取" : valueText(v)}`);
+  barStar.title = v === 0 ? "评分" : `${v} 星`;
+  barStar.disabled = opts.st === "loading";
+};
+listeners.add(paintBar); paintBar();
+$("#st").addEventListener("click", paintBar);
+barStar.addEventListener("click", () => (layer.firstChild && opener === barStar ? closeLayer(true) : openPop(barStar, "now", "Aurora Drift", true)));
+</script>
+</body>
+</html>
