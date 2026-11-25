@@ -46,7 +46,7 @@ func (c *Client) searchReleases(ctx context.Context, q string, limit int) ([]sou
 	return releases(items), nil
 }
 
-func (c *Client) ReleasesByBarcode(ctx context.Context, barcode string) ([]sources.Release, error) {
+func barcodeTerm(barcode string) string {
 	digits := strings.Map(func(r rune) rune {
 		if r >= '0' && r <= '9' {
 			return r
@@ -54,7 +54,7 @@ func (c *Client) ReleasesByBarcode(ctx context.Context, barcode string) ([]sourc
 		return -1
 	}, barcode)
 	if digits == "" {
-		return nil, sources.ErrInvalidQuery
+		return ""
 	}
 	if len(digits) == 13 && digits[0] == '0' {
 		digits = digits[1:]
@@ -63,7 +63,11 @@ func (c *Client) ReleasesByBarcode(ctx context.Context, barcode string) ([]sourc
 	if len(digits) == 12 {
 		q += " OR barcode:0" + digits
 	}
-	return c.searchReleases(ctx, q, 25)
+	return q
+}
+
+func (c *Client) ReleasesByBarcode(ctx context.Context, barcode string) ([]sources.Release, error) {
+	return c.searchReleases(ctx, barcodeTerm(barcode), 25)
 }
 
 func (c *Client) ReleasesByCatalog(ctx context.Context, catalogNumber, label string) ([]sources.Release, error) {
@@ -92,13 +96,17 @@ func (c *Client) RecordingByID(ctx context.Context, id string) (sources.Recordin
 	return recording(e), nil
 }
 
-func (c *Client) RecordingsByISRC(ctx context.Context, isrc string) ([]sources.Recording, error) {
-	id := strings.ToUpper(strings.Map(func(r rune) rune {
+func normalizedISRC(isrc string) string {
+	return strings.ToUpper(strings.Map(func(r rune) rune {
 		if r == '-' || unicode.IsSpace(r) {
 			return -1
 		}
 		return r
 	}, isrc))
+}
+
+func (c *Client) RecordingsByISRC(ctx context.Context, isrc string) ([]sources.Recording, error) {
+	id := normalizedISRC(isrc)
 	if !isrcPattern.MatchString(id) {
 		return nil, sources.ErrInvalidQuery
 	}
@@ -130,25 +138,41 @@ func (c *Client) SearchRecordings(ctx context.Context, q sources.RecordingQuery)
 }
 
 func (c *Client) ArtistByID(ctx context.Context, id string) (sources.Artist, error) {
-	e, err := c.Lookup(ctx, "artist", id, []string{"aliases"})
+	e, err := c.artistEntity(ctx, id)
 	if err != nil {
 		return sources.Artist{}, err
 	}
 	return artist(e), nil
 }
 
-func (c *Client) SearchArtists(ctx context.Context, name string) ([]sources.Artist, error) {
-	terms := field(nil, "artist", name)
-	if len(terms) == 0 {
-		return nil, sources.ErrInvalidQuery
+func (c *Client) artistEntity(ctx context.Context, id string) (Entity, error) {
+	return c.Lookup(ctx, "artist", id, []string{"aliases", "url-rels"})
+}
+
+func artistExpression(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", sources.ErrInvalidQuery
 	}
-	items, err := c.Search(ctx, "artist", terms[0], 10)
+	return `"` + luceneEscapes.Replace(name) + `"`, nil
+}
+
+func (c *Client) SearchArtists(ctx context.Context, name string) ([]sources.Artist, error) {
+	query, err := artistExpression(name)
 	if err != nil {
 		return nil, err
 	}
+	items, err := c.Search(ctx, "artist", query, 10)
+	if err != nil {
+		return nil, err
+	}
+	return artists(items), nil
+}
+
+func artists(items []Entity) []sources.Artist {
 	out := make([]sources.Artist, 0, len(items))
 	for _, e := range items {
 		out = append(out, artist(e))
 	}
-	return out, nil
+	return out
 }

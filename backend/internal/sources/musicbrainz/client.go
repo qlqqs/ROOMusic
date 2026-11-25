@@ -77,7 +77,13 @@ func (c *Client) Search(ctx context.Context, entity, query string, limit int) ([
 }
 
 func (c *Client) entities(ctx context.Context, path string, params url.Values, key string, limit int) ([]Entity, error) {
+	items, _, err := c.entityPage(ctx, path, params, key, limit)
+	return items, err
+}
+
+func (c *Client) entityPage(ctx context.Context, path string, params url.Values, key string, limit int) ([]Entity, PageInfo, error) {
 	var results []Entity
+	info := PageInfo{Limit: limit, Query: params.Get("query")}
 	err := c.get(ctx, path, params, func(body []byte) (bool, bool) {
 		var fields map[string]json.RawMessage
 		if json.Unmarshal(body, &fields) != nil {
@@ -87,13 +93,29 @@ func (c *Client) entities(ctx context.Context, path string, params url.Values, k
 		if json.Unmarshal(fields[key], &items) != nil || !validEntities(items) {
 			return false, false
 		}
+		if raw := fields["count"]; raw != nil && json.Unmarshal(raw, &info.Count) != nil {
+			return false, false
+		}
+		if raw := fields["offset"]; raw != nil && json.Unmarshal(raw, &info.Offset) != nil {
+			return false, false
+		}
+		info.Returned = len(items)
 		if limit > 0 && len(items) > limit {
 			items = items[:limit]
 		}
 		results = items
+		if info.Count != nil && info.Offset != nil && *info.Offset == 0 && *info.Count == len(items) && len(items) == info.Returned {
+			ids := make(map[string]bool, len(items))
+			for _, row := range items {
+				if uuid.Valid(row.ID) {
+					ids[strings.ToLower(row.ID)] = true
+				}
+			}
+			info.Complete = len(ids) == len(items)
+		}
 		return len(items) == 0, true
 	})
-	return results, err
+	return results, info, err
 }
 
 func validEntities(items []Entity) bool {

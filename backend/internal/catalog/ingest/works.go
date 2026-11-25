@@ -22,7 +22,7 @@ func AssignWorks(candidate OrganizedCandidate) map[string]WorkAssignment {
 	tracks := candidate.orderedTracks()
 	works := make([]WorkAssignment, len(tracks))
 	inferredGroups := make([]int, len(tracks))
-	classicalGenre := hasClassicalGenre(candidate.Genres)
+	classicalGenre := metadata.HasClassicalGenre(candidate.Genres)
 	for i := 0; i < len(tracks); {
 		observation := tracks[i].Observation
 		if observation.Work != "" {
@@ -79,20 +79,6 @@ func AssignWorks(candidate OrganizedCandidate) map[string]WorkAssignment {
 		start = end
 	}
 	return result
-}
-
-func hasClassicalGenre(genres []string) bool {
-	for _, genre := range genres {
-		key := metadata.GenreKey(genre)
-		switch key {
-		case "classical", "classic", "classique", "klassik", "clásica", "clasica", "classica", "クラシック", "클래식":
-			return true
-		}
-		if strings.Contains(key, "古典") {
-			return true
-		}
-	}
-	return false
 }
 
 func movementFromTaggedTitle(title, work string) string {

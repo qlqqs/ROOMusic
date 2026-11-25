@@ -74,7 +74,7 @@ func TestMockMusicBrainzRoutes(t *testing.T) {
 		{"artist", "artist/" + artistID + "?inc=aliases", []string{artistID, "Paper Islet"}},
 		{"recording", "recording/" + recordingID + "?inc=isrcs+releases", []string{recordingID, "QMZ9X2400001", releaseID}},
 		{"isrc", "isrc/QMZ9X2400001?inc=releases", []string{`"recordings":[{`, recordingID, releaseID}},
-		{"disc", "discid/BCwmjDmGIsfPoenrs_aBAAmu1xU-", []string{`"id":"BCwmjDmGIsfPoenrs_aBAAmu1xU-"`, releaseID, doubleReleaseID}},
+		{"碟片附录音", "discid/BCwmjDmGIsfPoenrs_aBAAmu1xU-?inc=recordings+artist-credits+labels+release-groups", []string{`"id":"BCwmjDmGIsfPoenrs_aBAAmu1xU-"`, releaseID, doubleReleaseID, recordingID, `"track-count"`}},
 		{"barcode", "release?query=" + url.QueryEscape("barcode:900000000001 OR barcode:0900000000001"), []string{`"count":1`, releaseID}},
 		{"catalog", "release?query=" + url.QueryEscape(`catno:"FOLD-001" AND label:"折线合成唱片"`), []string{`"count":1`, releaseID}},
 		{"release_search", "release?query=" + url.QueryEscape(`release:"潮线以北" AND artist:"纸屿" AND tracks:3`), []string{`"count":1`, doubleReleaseID}},
@@ -91,6 +91,41 @@ func TestMockMusicBrainzRoutes(t *testing.T) {
 				if !strings.Contains(resp.Body.String(), want) {
 					t.Errorf("响应缺少 %q: %s", want, resp.Body)
 				}
+			}
+		})
+	}
+}
+
+func Test受控音乐脑支持整理合并查询与分页(t *testing.T) {
+	h := newMock(t, upstreammock.Options{})
+	for _, tc := range []struct {
+		name, path, query, limit, offset string
+		count, returned                  int
+		wantID                           string
+	}{
+		{"条码目录号文字并集的第二页", "release", `(barcode:900000000001 OR barcode:0900000000001) OR (catno:"FOLD-001" AND label:"折线合成唱片") OR (release:"潮線以北" AND arid:` + artistID + ` AND tracks:3)`, "1", "1", 2, 1, doubleReleaseID},
+		{"发行文本不展开艺人别名", "release", `release:"潮线以北" AND artist:"Paper Islet"`, "100", "0", 0, 0, ""},
+		{"无字段艺人短语匹配别名", "artist", `"Paper Islet"`, "100", "0", 1, 1, artistID},
+		{"录音ISRC并集", "recording", `isrc:QMZ9X2400001 OR isrc:QMZ9X2400003`, "100", "0", 2, 2, recordingID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			params := url.Values{"query": {tc.query}, "limit": {tc.limit}, "offset": {tc.offset}}
+			resp := callMock(h, http.MethodGet, "/musicbrainz/ws/2/"+tc.path+"?"+params.Encode(), "")
+			requireStatus(t, resp, 200)
+			payload := decodeBody[map[string]json.RawMessage](t, resp)
+			var rows []struct {
+				ID      string
+				Aliases []struct{ Name string }
+			}
+			if err := json.Unmarshal(payload[tc.path+"s"], &rows); err != nil {
+				t.Fatal(err)
+			}
+			if string(payload["offset"]) != tc.offset || string(payload["count"]) != fmt.Sprint(tc.count) || len(rows) != tc.returned ||
+				tc.returned > 0 && rows[0].ID != tc.wantID {
+				t.Fatalf("搜索页 %s", resp.Body)
+			}
+			if tc.path == "artist" && (len(rows[0].Aliases) != 1 || rows[0].Aliases[0].Name != "Paper Islet") {
+				t.Errorf("艺人搜索应回传匹配该身份的别名：%s", resp.Body)
 			}
 		})
 	}

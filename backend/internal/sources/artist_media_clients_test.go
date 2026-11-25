@@ -53,7 +53,7 @@ func wantWikimediaHeaders(t *testing.T, r *http.Request, lang string) {
 
 func TestArtistMediaMusicBrainzURLRelations(t *testing.T) {
 	opts, _ := mediaServer(t, func(w http.ResponseWriter, r *http.Request) {
-		wantMediaRequest(t, r, "/ws/2/artist/"+mediaMBID, url.Values{"fmt": {"json"}, "inc": {"url-rels"}})
+		wantMediaRequest(t, r, "/ws/2/artist/"+mediaMBID, url.Values{"fmt": {"json"}, "inc": {"aliases url-rels"}})
 		fmt.Fprintf(w, `{"id":%q,"name":"合成艺人","relations":[
 			{"type":"wikidata","url":{"resource":"https://www.wikidata.org/wiki/Q123"}},
 			{"type":"wikipedia","url":{"resource":"https://zh.wikipedia.org/wiki/合成藝人"}},

@@ -47,7 +47,7 @@ func (w *Writer) Suppressions(ctx context.Context, releaseID string, page, pageS
 		if !uuid.Valid(releaseID) {
 			return nil, 0, operations.Invalid("invalid_id", "发行标识无效")
 		}
-		filter = ` WHERE (target_type='release' AND target_id=$1::uuid)
+		filter = ` WHERE (target_type IN ('release','release_group_match') AND target_id=$1::uuid)
  OR (target_type='release_group' AND target_id=(SELECT group_id FROM releases WHERE id=$1::uuid))
  OR (target_type='track' AND target_id IN (SELECT t.id FROM tracks t JOIN media m ON m.id=t.medium_id WHERE m.release_id=$1::uuid))`
 		args = append(args, releaseID)

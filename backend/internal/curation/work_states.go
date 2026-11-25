@@ -44,7 +44,7 @@ func LoadProgramChanges(ctx context.Context, q operations.Queryer, now time.Time
  (SELECT count(*) FROM curation_suppressions),
  count(*),count(*) FILTER (WHERE subject IN ('release','artwork')),
  max(next_attempt_at),max(next_attempt_at) FILTER (WHERE subject IN ('release','artwork'))
- FROM curation_work_states WHERE status='try_later' AND next_attempt_at <= $1`, now).
+ FROM curation_work_states WHERE status IN ('try_later','unlisted') AND next_attempt_at <= $1`, now).
 		Scan(&c.Scan, &c.Settings, &c.ArtistSettings, &c.Sources, &c.Suppression, &c.Operation, &c.OtherOperation, &c.Suppressions, &c.Due, &c.ReleaseDue, &c.LatestDue, &c.LatestReleaseDue)
 	return c, err
 }
@@ -84,43 +84,43 @@ func SaveWorkState(ctx context.Context, q Execer, s WorkState) error {
 }
 
 type PendingItem struct {
-	ConversationID                                   string
-	ClaimedAt, NextAttemptAt                         *time.Time
-	Attempts, ReviewRetries                          int
-	ShelvedReason                                    *string
-	ID, TargetType, TargetID, ArtistID, Kind, Status string
-	RuleVersion, MatchRuleVersion                    int16
-	IdentityDigest                                   string
-	InputDigest                                      string
-	Evidence, Candidates, Conflicts                  json.RawMessage
-	Resolution                                       *string
-	CreatedAt, UpdatedAt                             time.Time
-	ResolvedAt                                       *time.Time
+	ConversationID                                          string
+	ClaimedAt, NextAttemptAt                                *time.Time
+	Attempts, ReviewRetries                                 int
+	ShelvedReason                                           *string
+	ID, TargetType, TargetID, ArtistID, Kind, Status, Route string
+	RuleVersion, MatchRuleVersion                           int16
+	IdentityDigest                                          string
+	InputDigest                                             string
+	Evidence, Candidates, Conflicts                         json.RawMessage
+	Resolution                                              *string
+	CreatedAt, UpdatedAt                                    time.Time
+	ResolvedAt                                              *time.Time
 }
 
 func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
-	target, insert := item.TargetID, `INSERT INTO curation_pending_items AS p(target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,match_rule_version,identity_digest)
- VALUES('release',$1,$2,'waiting_model',$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''))
+	target, insert := item.TargetID, `INSERT INTO curation_pending_items AS p(target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,match_rule_version,identity_digest,route)
+ VALUES('release',$1,$2,CASE WHEN $10 IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''),NULLIF($10,''))
  ON CONFLICT(target_type,target_id,kind) WHERE status <> 'resolved'`
 	if item.TargetType == "artist" {
-		target, insert = item.ArtistID, `INSERT INTO curation_pending_items AS p(target_type,artist_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,match_rule_version,identity_digest)
- VALUES('artist',$1,$2,'waiting_model',$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''))
+		target, insert = item.ArtistID, `INSERT INTO curation_pending_items AS p(target_type,artist_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,match_rule_version,identity_digest,route)
+ VALUES('artist',$1,$2,CASE WHEN $10 IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''),NULLIF($10,''))
  ON CONFLICT(artist_id,kind) WHERE status <> 'resolved' AND target_type='artist'`
 	}
 	_, err := q.ExecContext(ctx, insert+` DO UPDATE SET rule_version=excluded.rule_version,input_digest=excluded.input_digest,
  match_rule_version=excluded.match_rule_version,identity_digest=excluded.identity_digest,
  evidence=excluded.evidence,candidates=excluded.candidates,conflicts=excluded.conflicts,updated_at=now(),
- status=CASE WHEN p.status='shelved' THEN 'waiting_model' ELSE p.status END,
+ route=excluded.route,status=CASE WHEN p.status='in_progress' THEN p.status ELSE excluded.status END,
  attempts=CASE WHEN p.status='shelved' THEN 0 ELSE p.attempts END,
  shelved_reason=CASE WHEN p.status='in_progress' THEN p.shelved_reason END,
  conversation_id=CASE WHEN p.status='in_progress' THEN p.conversation_id END,
  claimed_at=CASE WHEN p.status='in_progress' THEN p.claimed_at END,
  review_retries=CASE WHEN p.status='in_progress' THEN p.review_retries ELSE 0 END,
  next_attempt_at=CASE WHEN p.status IN ('waiting_model','in_progress') THEN p.next_attempt_at END
- WHERE p.status IN ('waiting_model','in_progress')
+ WHERE p.status IN ('waiting_model','waiting_route','in_progress')
  OR (p.status='shelved' AND (p.candidates IS DISTINCT FROM excluded.candidates OR
      CASE WHEN p.identity_digest IS NOT NULL AND excluded.identity_digest IS NOT NULL THEN p.identity_digest<>excluded.identity_digest
-          ELSE p.input_digest<>excluded.input_digest OR p.conflicts IS DISTINCT FROM excluded.conflicts END))`, target, item.Kind, item.RuleVersion, item.InputDigest, item.Evidence, item.Candidates, item.Conflicts, item.MatchRuleVersion, item.IdentityDigest)
+          ELSE p.input_digest<>excluded.input_digest OR p.conflicts IS DISTINCT FROM excluded.conflicts END))`, target, item.Kind, item.RuleVersion, item.InputDigest, item.Evidence, item.Candidates, item.Conflicts, item.MatchRuleVersion, item.IdentityDigest, item.Route)
 	return err
 }
 
@@ -134,6 +134,6 @@ func ResolvePendingItems(ctx context.Context, q Execer, targetID, kind, resoluti
 		return err
 	}
 	_, err := q.ExecContext(ctx, `UPDATE curation_pending_items SET status='resolved', resolution=$3,updated_at=now(),resolved_at=now()
- WHERE target_type='release' AND target_id=$1 AND kind=$2 AND status IN ('waiting_model','shelved','waiting_human')`, targetID, kind, resolution)
+ WHERE target_type='release' AND target_id=$1 AND kind=$2 AND status IN ('waiting_model','waiting_route','shelved','waiting_human')`, targetID, kind, resolution)
 	return err
 }

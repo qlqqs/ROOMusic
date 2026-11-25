@@ -16,19 +16,23 @@ type metricScore struct {
 }
 
 type metricDetail struct {
-	ID       string        `json:"id"`
-	Shape    string        `json:"shape"`
-	Complete bool          `json:"complete"`
-	Match    metricMatch   `json:"match"`
-	Reasons  []metricIssue `json:"reasons"`
+	ID       string         `json:"id"`
+	Shape    string         `json:"shape"`
+	Complete bool           `json:"complete"`
+	Match    metricMatch    `json:"match"`
+	Requests map[string]int `json:"requests"`
+	Reasons  []metricIssue  `json:"reasons"`
 }
 
 type metricMatch struct {
-	Status        string   `json:"status"`
-	Method        string   `json:"method"`
-	Conflicts     []string `json:"conflicts,omitempty"`
-	PendingStatus string   `json:"pending_status,omitempty"`
-	Resolution    string   `json:"resolution,omitempty"`
+	Status         string   `json:"status"`
+	Method         string   `json:"method"`
+	Level          string   `json:"level,omitempty"`
+	Rule           string   `json:"rule,omitempty"`
+	CandidateCount int      `json:"candidate_count,omitempty"`
+	Conflicts      []string `json:"conflicts,omitempty"`
+	PendingStatus  string   `json:"pending_status,omitempty"`
+	Resolution     string   `json:"resolution,omitempty"`
 }
 
 // Target、Peer 使用样本名或曲目与艺人名；CountedFor 标明共享错误归入哪份样本的汇总。
@@ -75,7 +79,7 @@ func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries [
 		}
 	}
 	for i, e := range entries {
-		scores[i].metricDetail = metricDetail{ID: e.sample.ID, Shape: e.sample.Shape, Complete: true, Reasons: []metricIssue{}}
+		scores[i].metricDetail = metricDetail{ID: e.sample.ID, Shape: e.sample.Shape, Complete: true, Requests: e.requests, Reasons: []metricIssue{}}
 		releaseIndex[e.release] = i
 		sampleIndex[e.sample.ID] = i
 		own(e.release, i)
@@ -102,14 +106,15 @@ func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries [
 
 	groupIDs := map[string]string{}
 	metricReadRows(t, app, `SELECT r.id,r.group_id,coalesce(w.status,'未处理'),coalesce(w.result->>'method',''),coalesce(w.result->'conflicts','[]'),
+ coalesce(w.result->>'level',''),coalesce(w.result->>'rule',''),coalesce(p.candidate_count,0),
 		coalesce(p.status,''),coalesce(p.resolution,p.shelved_reason,'')
 		FROM releases r LEFT JOIN curation_work_states w ON w.target_id=r.id AND w.subject='release'
-		LEFT JOIN LATERAL (SELECT status,resolution,shelved_reason FROM curation_pending_items
+		LEFT JOIN LATERAL (SELECT status,resolution,shelved_reason,jsonb_array_length(candidates) AS candidate_count FROM curation_pending_items
 			WHERE target_id=r.id AND kind IN ('release_match','recording_match') ORDER BY created_at DESC LIMIT 1) p ON true`, func(rows *sql.Rows) {
 		var id, group string
 		var m metricMatch
 		var conflicts []byte
-		requireCurationOK(t, rows.Scan(&id, &group, &m.Status, &m.Method, &conflicts, &m.PendingStatus, &m.Resolution))
+		requireCurationOK(t, rows.Scan(&id, &group, &m.Status, &m.Method, &conflicts, &m.Level, &m.Rule, &m.CandidateCount, &m.PendingStatus, &m.Resolution))
 		requireCurationOK(t, json.Unmarshal(conflicts, &m.Conflicts))
 		groupIDs[id] = group
 		if i, ok := releaseIndex[id]; ok {
@@ -230,11 +235,11 @@ func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries [
 		if kind == "recording_match" {
 			target.kind = "track"
 		}
-		if kind != "artist_identity" && !entered[target] {
+		if kind != "artist_identity" && status != "waiting_route" && !entered[target] {
 			scores[owner].Entered++
 			entered[target] = true
 		}
-		open := status == "waiting_model" || status == "in_progress" || status == "waiting_human"
+		open := status == "waiting_model" || status == "in_progress" || status == "waiting_human" || status == "waiting_route"
 		if open {
 			scores[owner].OpenPending++
 		}

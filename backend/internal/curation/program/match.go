@@ -11,6 +11,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
+	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
@@ -19,28 +20,39 @@ type TrackPair struct {
 }
 
 type MatchResult struct {
-	Mode, Method, Status, Fingerprint string
-	Conflicts                         []string
-	Candidates                        []Candidate
-	Release                           *sources.Release
-	Recording                         *sources.Recording
-	Pairs                             []TrackPair
+	Level, Rule, GroupID, Route, RepresentativeID string
+	Credits                                       []sources.Credit
+	TrackTitles                                   map[string]string
+	Snapshot                                      MatchSnapshot
+	Offline                                       bool
+	ArtistEvidence                                map[string]sources.Artist
+	Mode, Method, Status, Fingerprint             string
+	Conflicts                                     []string
+	Candidates                                    []Candidate
+	Release                                       *sources.Release
+	Recording                                     *sources.Recording
+	Pairs                                         []TrackPair
 }
 
 type Candidate struct {
-	Score          float64  `json:"score,omitempty"`
-	Source         string   `json:"source"`
-	ExternalID     string   `json:"external_id"`
-	Method         string   `json:"method"`
-	Title          string   `json:"title"`
-	Artist         string   `json:"artist"`
-	Date           string   `json:"date"`
-	Country        string   `json:"country"`
-	Status         string   `json:"status"`
-	TrackCount     int      `json:"track_count"`
-	Barcode        string   `json:"barcode"`
-	CatalogNumbers []string `json:"catalog_numbers"`
-	ReleaseGroupID string   `json:"release_group_id"`
+	Release        *sources.Release        `json:"release,omitempty"`
+	Recording      *sources.Recording      `json:"recording,omitempty"`
+	Counts         *curation.ReleaseCounts `json:"counts,omitempty"`
+	Conflicts      []string                `json:"conflicts,omitempty"`
+	TextEvidence   *TagTextEvidence        `json:"tag_text,omitempty"`
+	Score          float64                 `json:"score,omitempty"`
+	Source         string                  `json:"source"`
+	ExternalID     string                  `json:"external_id"`
+	Method         string                  `json:"method"`
+	Title          string                  `json:"title"`
+	Artist         string                  `json:"artist"`
+	Date           string                  `json:"date"`
+	Country        string                  `json:"country"`
+	Status         string                  `json:"status"`
+	TrackCount     int                     `json:"track_count"`
+	Barcode        string                  `json:"barcode"`
+	CatalogNumbers []string                `json:"catalog_numbers"`
+	ReleaseGroupID string                  `json:"release_group_id"`
 }
 
 func newMatch(mode, method string) MatchResult {
@@ -49,6 +61,9 @@ func newMatch(mode, method string) MatchResult {
 
 func uncertain(result MatchResult, codes ...string) MatchResult {
 	result.Status = "uncertain"
+	if len(result.Candidates) > 0 {
+		result.Route = "select"
+	}
 	result.Conflicts = append(result.Conflicts, codes...)
 	return result
 }
@@ -125,7 +140,7 @@ func compareLength(local int, ms *int64) (comparable, matches bool) {
 }
 
 func releaseCandidates(method string, releases []sources.Release) []Candidate {
-	rows := slices.Clone(releases[:min(10, len(releases))])
+	rows := slices.Clone(releases[:min(100, len(releases))])
 	slices.SortFunc(rows, func(a, b sources.Release) int { return cmp.Compare(a.ID, b.ID) })
 	out := make([]Candidate, 0, len(rows))
 	for _, r := range rows {
@@ -140,7 +155,7 @@ func releaseCandidates(method string, releases []sources.Release) []Candidate {
 			}
 		}
 		slices.Sort(numbers)
-		out = append(out, Candidate{Source: "musicbrainz", ExternalID: r.ID, Method: method, Title: r.Title, Artist: credits(r.Artists), Date: r.Date, Country: r.Country, Status: r.Status, TrackCount: count, Barcode: r.Barcode, CatalogNumbers: numbers, ReleaseGroupID: r.Group.ID})
+		out = append(out, Candidate{Release: &r, Source: "musicbrainz", ExternalID: r.ID, Method: method, Title: r.Title, Artist: credits(r.Artists), Date: r.Date, Country: r.Country, Status: r.Status, TrackCount: count, Barcode: r.Barcode, CatalogNumbers: numbers, ReleaseGroupID: r.Group.ID})
 	}
 	return out
 }
@@ -197,4 +212,24 @@ func pendingMatchEvidence(e catalog.CurationEvidence, method string) map[string]
 		"disc_count": len(discCounts), "track_counts": discCounts, "tracks": rows,
 		"authenticity": auth, "barcode_authenticity": e.BarcodeAuthenticity, "uses_inferred": usesInferred,
 	}
+}
+
+// 选项只含可以采纳的对应，抑制记录仍保存在匹配快照中。
+func (m MatchResult) modelCandidates() []Candidate {
+	out := make([]Candidate, 0, len(m.Candidates))
+	for _, c := range m.Candidates {
+		if !blockedCodes(c.Conflicts) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+func (m MatchResult) savedSnapshot() MatchSnapshot {
+	snapshot := m.Snapshot
+	for _, c := range m.Candidates {
+		if blockedCodes(c.Conflicts) {
+			snapshot.Blocked = append(snapshot.Blocked, c)
+		}
+	}
+	return snapshot
 }

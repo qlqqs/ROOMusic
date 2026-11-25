@@ -243,6 +243,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	}
 	acoustic := acoustid.New(assembly.acoustid)
 	music := musicbrainz.New(assembly.music)
+	matchMusic := curationMusicBrainz{music}
 	covers := coverartarchive.New(assembly.covers)
 	lyrics := lrclib.New(assembly.lyrics)
 	artistOptions := func(id string) sources.Options {
@@ -277,7 +278,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		assembly.program.Fingerprints = programFingerprints{playback.NewFingerprints(database, settings.AllowedLibraryRoots, assembly.fingerprinter, logger)}
 	}
 	sourceGate = curation.NewSources(database,
-		curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: music, Recordings: music, Artists: music, ArtistLinks: music},
+		curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: matchMusic, Recordings: matchMusic, Artists: matchMusic, ArtistLinks: music},
 		curation.SourceRegistration{Declaration: coverartarchive.Declaration(), Covers: covers},
 		curation.SourceRegistration{Declaration: lrclib.Declaration(), Lyrics: lyrics},
 		curation.SourceRegistration{

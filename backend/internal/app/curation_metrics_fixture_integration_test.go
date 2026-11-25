@@ -30,6 +30,7 @@ type metricSample struct {
 
 type metricExpect struct {
 	Release, Group  string
+	GroupMatch      string `json:"group_match"`
 	Recordings      []string
 	Fields          map[string]string
 	TrackFields     []map[string]string `json:"track_fields"`

@@ -17,7 +17,7 @@ import (
 )
 
 func artworkGap(e catalog.CurationEvidence) bool {
-	return e.CandidateKind != "loose_unknown" && e.ExternalID != "" && !e.LocalArtwork && (!e.ExternalArtwork || !e.ArtworkFile)
+	return e.CandidateKind != "loose_unknown" && (e.ExternalID != "" || e.ReleaseGroupMatchID != "") && !e.LocalArtwork && (!e.ExternalArtwork || !e.ArtworkFile)
 }
 
 func mediaMiss(err error) bool {
@@ -32,7 +32,10 @@ func (w *Worker) artworkFrom(ctx context.Context, u *unit, e catalog.CurationEvi
 	if !ok {
 		return "", operations.Conflict("source_disabled", "封面源不可用")
 	}
-	targets := []sources.CoverTarget{{Kind: "release", ID: e.ExternalID}}
+	var targets []sources.CoverTarget
+	if e.ExternalID != "" {
+		targets = append(targets, sources.CoverTarget{Kind: "release", ID: e.ExternalID})
+	}
 	if e.ExternalGroupID != "" {
 		targets = append(targets, sources.CoverTarget{Kind: "release_group", ID: e.ExternalGroupID})
 	}

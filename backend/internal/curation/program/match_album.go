@@ -7,11 +7,21 @@ import (
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
+type TagTextEvidence struct {
+	TitleMatch  bool `json:"title_match"`
+	ArtistMatch bool `json:"artist_match"`
+	Comparable  int  `json:"comparable"`
+	Matches     int  `json:"matches"`
+}
+
 type comparison struct {
+	tagText                                                      TagTextEvidence
+	pairedTitles                                                 map[string]string
 	pairs                                                        []TrackPair
 	conflicts                                                    []string
 	countEqual, durationsOK, titleMatch, artistMatch, labelMatch bool
@@ -29,6 +39,8 @@ func (c comparison) passes(method string) bool {
 		return false
 	}
 	switch method {
+	case "search":
+		return c.countEqual && c.durationsOK
 	case "tag_id":
 		return c.countEqual || c.durationsOK
 	case "barcode":
@@ -64,7 +76,7 @@ func (c *comparison) compareRelease(e catalog.CurationEvidence, method string, r
 	compareTitle := !e.TitlePlaceholder && localTitle != "" && title != ""
 	compareArtist := !e.ArtistPlaceholder && localArtist != "" && artist != ""
 	c.titleMatch = compareTitle && localTitle == title
-	c.artistMatch = compareArtist && localArtist == artist
+	c.artistMatch = compareArtist && localArtist == artist || creditID(r.Artists, e.ArtistMBID) || (e.Compilation && creditID(r.Artists, variousArtistsID))
 	if (method == "barcode" || method == "catalog_number" || method == "isrc" || method == "acoustid") && compareTitle && compareArtist && !c.titleMatch && !c.artistMatch {
 		c.conflict("title_artist_mismatch")
 	}
@@ -115,7 +127,7 @@ func (c *comparison) compareRelease(e catalog.CurationEvidence, method string, r
 	if strings.EqualFold(r.Status, "Pseudo-Release") {
 		c.conflict("pseudo_release")
 	}
-	for _, code := range linkConflicts(e, "release", e.ID, e.ExternalID, r.ID) {
+	for _, code := range releaseBlocks(e, r.ID, r.Group.ID) {
 		c.conflict(code)
 	}
 }
@@ -127,7 +139,7 @@ func (c *comparison) compareTracks(e catalog.CurationEvidence, method string, re
 	discs := e.DiscPositions()
 	media := slices.Clone(release.Media)
 	slices.SortFunc(media, func(a, b sources.Medium) int { return cmp.Compare(a.Position, b.Position) })
-	if (len(discs) > 1 || method == "acoustid") && len(discs) != len(media) {
+	if (len(discs) > 1 || method == "acoustid" || method == "search") && len(discs) != len(media) {
 		c.conflict("media_count_mismatch")
 	}
 	localCounts := map[int]int{}
@@ -149,7 +161,7 @@ func (c *comparison) compareTracks(e catalog.CurationEvidence, method string, re
 		if m.TrackCount > 0 && m.TrackCount != len(tracks) {
 			shape = false
 		}
-		if len(discs) > 1 && (i >= len(discs) || localCounts[discs[i]] != len(tracks)) {
+		if (len(discs) > 1 || method == "search") && (i >= len(discs) || localCounts[discs[i]] != len(tracks)) {
 			shape = false
 		}
 		for _, t := range tracks {
@@ -183,6 +195,25 @@ func (c *comparison) compareTracks(e catalog.CurationEvidence, method string, re
 			other = remote[i]
 		}
 		c.pairs = append(c.pairs, TrackPair{t.ID, other.RecordingID})
+		title := other.Title
+		if title == "" {
+			title = other.RecordingTitle
+		}
+		if t.Authenticity["title"] == metadata.Real && looseKey(t.Title) != "" && looseKey(title) != "" {
+			c.tagText.Comparable++
+			if sameText(t.Title, title) {
+				c.tagText.Matches++
+			}
+		}
+		if (t.TitlePlaceholder || t.TitleInferred) && title != "" {
+			if c.pairedTitles == nil {
+				c.pairedTitles = map[string]string{}
+			}
+			c.pairedTitles[t.ID] = title
+		}
+		for _, code := range linkConflicts(e, "track", t.ID, t.ExternalID, other.RecordingID) {
+			c.conflict(code)
+		}
 		if ok, match := compareLength(t.DurationSeconds, other.LengthMS); ok {
 			comparable++
 			if match {
@@ -237,7 +268,7 @@ func compareISRCs(local, remote []string) (agree, mismatch bool) {
 	return agree, mismatch
 }
 
-// DecideAlbum 对本步骤的完整发行逐一核对；search 只保留候选。
+// DecideAlbum 核对已读出的完整发行集合。
 func DecideAlbum(e catalog.CurationEvidence, method string, releases []sources.Release) MatchResult {
 	return decideAlbum(e, method, releases, nil)
 }
@@ -245,24 +276,35 @@ func DecideAlbum(e catalog.CurationEvidence, method string, releases []sources.R
 func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.Release, recordingIDs map[string]map[string]bool) MatchResult {
 	result := newMatch("album", method)
 	result.Candidates = releaseCandidates(method, releases)
+	result.Snapshot = MatchSnapshot{Version: 1, Method: method, RecordingIDs: recordingIDs}
 	if method == "tag_id" && len(tags(e.Tracks, "mb_release")) > 1 {
 		return uncertain(result, "mixed_release_tags")
 	}
 	if len(releases) == 0 {
 		return result
 	}
-	if method == "search" {
-		return uncertain(result, "search_only")
+	if len(releases) > 100 {
+		markBlocked(e, result.Mode, result.Candidates)
+		return uncertain(result, "list_truncated")
 	}
+	result.Snapshot.CandidateSetComplete = true
 	if len(releases) > 3 {
+		if markBlocked(e, result.Mode, result.Candidates) == len(result.Candidates) {
+			result.Status, result.Conflicts = "no_usable_candidates", candidateConflicts(result.Candidates)
+			return result
+		}
 		return uncertain(result, "too_many")
 	}
-	frequencies := map[string]int{}
-	passed := 0
-	var winner *sources.Release
-	var pairs []TrackPair
-	for i := range releases {
-		r := &releases[i]
+	type verified struct {
+		release    *sources.Release
+		comparison comparison
+	}
+	var passed []verified
+	freq := map[string]int{}
+	blocked := 0
+	for i := range result.Candidates {
+		candidate := &result.Candidates[i]
+		r := candidate.Release
 		var c comparison
 		c.compareRelease(e, method, *r)
 		c.compareTracks(e, method, *r)
@@ -277,31 +319,165 @@ func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.R
 				}
 			}
 		}
-		if c.passes(method) {
-			passed++
-			winner, pairs = r, c.pairs
-		}
-		for _, code := range c.conflicts {
-			frequencies[code]++
-		}
-	}
-	switch passed {
-	case 1:
-		result.Status, result.Release, result.Pairs = "matched", winner, pairs
-	case 0:
-		// 多个候选均不通过时，保留最常见的相反证据（并列均保留）。
-		top := 0
-		for _, n := range frequencies {
-			top = max(top, n)
-		}
-		for _, code := range slices.Sorted(maps.Keys(frequencies)) {
-			if frequencies[code] == top {
-				result.Conflicts = append(result.Conflicts, code)
+		if method == "tag_id" {
+			c.tagText.TitleMatch, c.tagText.ArtistMatch = c.titleMatch, c.artistMatch
+			candidate.TextEvidence = &c.tagText
+			if e.Authenticity["title"] == metadata.Real && e.SelectedArtistAuth() == metadata.Real && looseKey(r.Title) != "" && looseKey(credits(r.Artists)) != "" && !c.titleMatch && !c.artistMatch && c.tagText.Matches == 0 {
+				if c.tagText.Comparable > 0 {
+					c.conflict("tag_text_mismatch")
+				} else {
+					c.conflict("title_artist_mismatch")
+				}
 			}
 		}
-		result.Status = "uncertain"
+		if method == "search" {
+			if len(e.Tracks) <= 4 {
+				if !c.titleMatch {
+					c.conflict("title_mismatch")
+				}
+				if !c.artistMatch {
+					c.conflict("artist_mismatch")
+				}
+			}
+			if !c.durationsOK && len(c.conflicts) == 0 {
+				c.conflict("duration_missing")
+			}
+		}
+		if (method == "catalog_number" && (e.Authenticity["label"] == metadata.Inferred || e.Authenticity["catalog_number"] == metadata.Inferred) || method == "barcode" && inferredBarcode(e, r.Barcode)) && !c.durationsOK {
+			c.conflict("duration_missing")
+		}
+		if c.passes(method) {
+			passed = append(passed, verified{r, c})
+		}
+		candidate.Conflicts = c.conflicts
+		if blockedCodes(c.conflicts) {
+			blocked++
+		}
+		for _, code := range c.conflicts {
+			freq[code]++
+		}
+	}
+	switch len(passed) {
+	case 0:
+		result = uncertain(result, commonConflicts(freq)...)
+		if blocked == len(releases) {
+			result.Status = "no_usable_candidates"
+			result.Route = ""
+		}
+	case 1:
+		result.Status, result.Level, result.Rule = "matched", "release", "identifier"
+		if method == "search" {
+			result.Rule = "structure"
+		}
+		result.Release, result.Pairs = passed[0].release, passed[0].comparison.pairs
 	default:
-		return uncertain(result, "ambiguous")
+		rows := make([]sources.Release, 0, len(passed))
+		representative := passed[0]
+		for _, v := range passed {
+			if !v.comparison.countEqual || !v.comparison.durationsOK || len(e.Tracks) <= 4 && (!v.comparison.titleMatch || !v.comparison.artistMatch) {
+				return uncertain(result, "ambiguous")
+			}
+			rows = append(rows, *v.release)
+			if earlierEdition(*v.release, *representative.release) {
+				representative = v
+			}
+		}
+		if group := sharedGroup(rows); group != "" {
+			result = groupMatch(result, rows, "structure")
+			result.TrackTitles = representative.comparison.pairedTitles
+			result.RepresentativeID = representative.release.ID
+		} else {
+			return uncertain(result, "ambiguous")
+		}
 	}
 	return result
+}
+
+func inferredBarcode(e catalog.CurationEvidence, barcode string) bool {
+	inferred := false
+	for i, raw := range e.Barcodes {
+		if barcodeKey(raw) != barcodeKey(barcode) {
+			continue
+		}
+		if i >= len(e.BarcodeAuthenticity) || e.BarcodeAuthenticity[i] == metadata.Real {
+			return false
+		}
+		inferred = inferred || e.BarcodeAuthenticity[i] == metadata.Inferred
+	}
+	return inferred
+}
+
+func commonConflicts(frequencies map[string]int) []string {
+	top := 0
+	for _, n := range frequencies {
+		top = max(top, n)
+	}
+	var codes []string
+	for _, code := range slices.Sorted(maps.Keys(frequencies)) {
+		if frequencies[code] == top {
+			codes = append(codes, code)
+		}
+	}
+	return codes
+}
+
+func blockingCode(code string) bool { return code == "existing_link" || code == "suppressed" }
+
+func blockedCodes(codes []string) bool { return slices.ContainsFunc(codes, blockingCode) }
+
+func releaseBlocks(e catalog.CurationEvidence, id, group string) []string {
+	codes := linkConflicts(e, "release", e.ID, e.ExternalID, id)
+	if group != "" {
+		for _, c := range linkConflicts(e, "release_group_match", e.ID, e.ReleaseGroupMatchID, group) {
+			if !slices.Contains(codes, c) {
+				codes = append(codes, c)
+			}
+		}
+		if e.ExternalGroupID != "" && group != e.ExternalGroupID && !slices.Contains(codes, "existing_link") {
+			codes = append(codes, "existing_link")
+		}
+	}
+	return codes
+}
+
+func sharedGroup(rows []sources.Release) string {
+	if len(rows) == 0 {
+		return ""
+	}
+	id := rows[0].Group.ID
+	for _, r := range rows[1:] {
+		if r.Group.ID != id {
+			return ""
+		}
+	}
+	return id
+}
+
+func sameCredits(a, b []sources.Credit) bool {
+	return len(a) > 0 && slices.EqualFunc(a, b, func(x, y sources.Credit) bool { return x.ArtistID != "" && x.ArtistID == y.ArtistID })
+}
+
+func groupMatch(result MatchResult, rows []sources.Release, rule string) MatchResult {
+	result.Status, result.Level, result.Rule, result.GroupID = "matched", "release_group", rule, rows[0].Group.ID
+	result.Credits = rows[0].Artists
+	for _, r := range rows {
+		if !sameCredits(result.Credits, r.Artists) {
+			result.Credits = nil
+			break
+		}
+	}
+	return result
+}
+
+func earlierEdition(a, b sources.Release) bool {
+	if a.Date == b.Date {
+		return a.ID < b.ID
+	}
+	return a.Date != "" && (b.Date == "" || a.Date < b.Date)
+}
+
+const variousArtistsID = "89ad4ac3-39f7-470e-963a-56509c546377"
+
+func creditID(cs []sources.Credit, id string) bool {
+	return id != "" && len(cs) == 1 && cs[0].ArtistID == id
 }

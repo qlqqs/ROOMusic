@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
@@ -62,7 +63,7 @@ func TestB3FingerprintAlbumRules(t *testing.T) {
 		name, status, conflict, method string
 		readIDs                        []string
 	}{
-		{"抽样不足", "uncertain", "search_only", "search", nil},
+		{"抽样不足", "uncertain", "list_truncated", "search", nil},
 		{"暂时失败", "", "", "", nil},
 		{"上游稍后再试", "", "", "", nil},
 		{"只有一首命中", "uncertain", "acoustid_sparse", "acoustid", nil},
@@ -72,7 +73,7 @@ func TestB3FingerprintAlbumRules(t *testing.T) {
 		{"配对录音不符", "uncertain", "acoustid_mismatch", "acoustid", []string{"remote"}},
 		{"标题艺人不符", "uncertain", "title_artist_mismatch", "acoustid", []string{"remote"}},
 		{"时长不符", "uncertain", "duration_mismatch", "acoustid", []string{"remote"}},
-		{"两个版本都通过", "uncertain", "ambiguous", "acoustid", []string{"remote", "second"}},
+		{"两个版本都通过", "matched", "", "acoustid", []string{"remote", "second"}},
 		{"全部通过", "matched", "", "acoustid", []string{"remote"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -153,7 +154,11 @@ func TestB3FingerprintAlbumRules(t *testing.T) {
 			if tc.method == "search" && (len(lookups) != 0 || f.searches != 1) {
 				t.Fatalf("抽样不足时查指纹=%v 搜索=%d", lookups, f.searches)
 			}
-			if tc.status == "matched" && (got.Release == nil || got.Release.ID != r.ID || !slices.Equal(got.Pairs, []TrackPair{{"local1", "rec1"}, {"local2", "rec2"}, {"local3", "rec3"}, {"local4", "rec4"}})) {
+			if tc.name == "两个版本都通过" {
+				if got.Level != "release_group" || got.GroupID != r.Group.ID || got.Release != nil || len(got.Pairs) != 0 {
+					t.Fatalf("仅能确定同一发行组：%+v", got)
+				}
+			} else if tc.status == "matched" && (got.Release == nil || got.Release.ID != r.ID || !slices.Equal(got.Pairs, []TrackPair{{"local1", "rec1"}, {"local2", "rec2"}, {"local3", "rec3"}, {"local4", "rec4"}})) {
 				t.Fatalf("发行及录音对应=%+v", got)
 			}
 		})
@@ -267,7 +272,7 @@ func TestB3FingerprintReachAndFallback(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wantMatch(t, got, "uncertain", "search_only")
+			wantMatch(t, got, "uncertain", "list_truncated")
 			if got.Fingerprint != "unavailable" || got.Method != "search" || calls != 2 || f.searches != 1 {
 				t.Fatalf("结果=%+v 指纹查询=%d 搜索=%d", got, calls, f.searches)
 			}
@@ -288,11 +293,12 @@ func TestB3MatchWithoutFingerprint(t *testing.T) {
 				want.Fingerprint = "not_reached"
 			case "文字搜索":
 				f.search = []sources.Release{r}
-				want = DecideAlbum(e, "search", f.search)
+				want = uncertain(albumPageResult(curation.ReleasePage{Items: f.search}, false), "list_truncated")
 				want.Fingerprint = "unavailable"
 			case "搜索无结果":
-				want = DecideAlbum(e, "search", nil)
-				want.Fingerprint = "unavailable"
+				want = albumPageResult(curation.ReleasePage{}, false)
+				want.Snapshot.Pages = append(want.Snapshot.Pages, SearchPage{Kind: "release", Relaxed: true})
+				want.Route, want.Fingerprint = "lookup", "unavailable"
 			case "信息不足":
 				e.TitlePlaceholder, e.ArtistPlaceholder = true, true
 				want = MatchResult{Mode: "album", Status: "no_match", Fingerprint: "unavailable", Conflicts: []string{"insufficient_evidence"}, Candidates: []Candidate{}}

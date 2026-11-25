@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 )
 
 type includes []string
@@ -20,7 +22,7 @@ func (d dataset) credit(id string) []object {
 	return []object{{"name": a.Name, "artist": object{"id": id, "name": a.Name}, "joinphrase": ""}}
 }
 func (d dataset) releaseEntity(v release, inc includes) object {
-	row := object{"id": v.ID, "title": v.Title, "barcode": v.Barcode, "date": v.Date, "country": v.Country, "status": "Official"}
+	row := object{"id": v.ID, "title": v.Title, "barcode": v.Barcode, "date": v.Date, "country": v.Country, "status": "Official", "track-count": v.trackCount()}
 	if inc.has("artist-credits") {
 		row["artist-credit"] = d.credit(v.Artist)
 	}
@@ -131,53 +133,73 @@ func (d dataset) groupEntity(g group, inc includes) object {
 	return row
 }
 
-// 查找器只组合带引号的字段、时长区间、曲数和条码的 AND/OR 表达式。
-var fieldTerm = regexp.MustCompile(`^([a-z-]+):("(?:\\.|[^"\\])*"|\[[^\]]+\]|[^ ]+)`)
+// 受控服务接受查找器生成的字段、区间、括号与 AND/OR。
+var fieldTerm = regexp.MustCompile(`^([a-z-]+):("(?:\\.|[^"\\])*"|\[[^\]]+\]|[^ )]+)`)
 var escapedChar = regexp.MustCompile(`\\(.)`)
 
+func queryText(term string) string {
+	if len(term) >= 2 && term[0] == '"' && term[len(term)-1] == '"' {
+		term = term[1 : len(term)-1]
+	}
+	return escapedChar.ReplaceAllString(term, "$1")
+}
+
 func matchesQuery(query string, fields map[string]string) bool {
-	if !fieldTerm.MatchString(query) {
+	if !strings.HasPrefix(query, "(") && !fieldTerm.MatchString(query) {
+		needle := textnorm.Text(queryText(query))
 		for _, value := range fields {
-			if strings.Contains(strings.ToLower(value), strings.ToLower(query)) {
+			if strings.Contains(textnorm.Text(value), needle) {
 				return true
 			}
 		}
 		return false
 	}
-	matched := true
+	matched, rest, valid := matchExpression(query, fields)
+	return valid && rest == "" && matched
+}
+
+func matchExpression(query string, fields map[string]string) (bool, string, bool) {
+	matched, conjunction := false, true
 	for {
-		m := fieldTerm.FindStringSubmatch(query)
-		if m == nil {
-			return false
-		}
-		key, term := m[1], m[2]
-		if len(term) >= 2 && term[0] == '"' && term[len(term)-1] == '"' {
-			term = term[1 : len(term)-1]
-		}
-		term = escapedChar.ReplaceAllString(term, "$1")
-		val, exists := fields[key]
-		same := strings.EqualFold(val, term)
-		if key == "dur" {
-			var low, high int
-			length, err := strconv.Atoi(val)
-			n, _ := fmt.Sscanf(term, "[%d TO %d]", &low, &high)
-			same = err == nil && n == 2 && low <= length && length <= high
-		}
-		matched = matched && exists && same
-		rest := query[len(m[0]):]
-		switch {
-		case rest == "":
-			return matched
-		case strings.HasPrefix(rest, " AND "):
-			query = rest[5:]
-		case strings.HasPrefix(rest, " OR "):
-			if matched {
-				return true
+		var same bool
+		if strings.HasPrefix(query, "(") {
+			var valid bool
+			same, query, valid = matchExpression(query[1:], fields)
+			if !valid || !strings.HasPrefix(query, ")") {
+				return false, "", false
 			}
-			matched = true
-			query = rest[4:]
+			query = query[1:]
+		} else {
+			m := fieldTerm.FindStringSubmatch(query)
+			if m == nil {
+				return false, "", false
+			}
+			key, term := m[1], queryText(m[2])
+			value, exists := fields[key]
+			same = strings.EqualFold(value, term)
+			switch key {
+			case "artist", "release", "recording", "release-group", "alias":
+				same = textnorm.Text(value) == textnorm.Text(term)
+			case "dur":
+				var low, high int
+				length, err := strconv.Atoi(value)
+				n, _ := fmt.Sscanf(term, "[%d TO %d]", &low, &high)
+				same = err == nil && n == 2 && low <= length && length <= high
+			}
+			same = exists && same
+			query = query[len(m[0]):]
+		}
+		conjunction = conjunction && same
+		switch {
+		case strings.HasPrefix(query, " AND "):
+			query = query[5:]
+		case strings.HasPrefix(query, " OR "):
+			matched, conjunction = matched || conjunction, true
+			query = query[4:]
+		case query == "" || strings.HasPrefix(query, ")"):
+			return matched || conjunction, query, true
 		default:
-			return false
+			return false, "", false
 		}
 	}
 }
@@ -201,14 +223,17 @@ func (s *Server) musicbrainz(r *http.Request, empty bool) response {
 	}
 	if id == "" {
 		inc = searchIncludes
-		if kind == "recording" {
+		switch kind {
+		case "recording":
 			inc = append(slices.Clone(inc), "releases")
+		case "artist":
+			inc = append(slices.Clone(inc), "aliases")
 		}
 	}
 	switch kind {
 	case "release":
 		for _, v := range d.Releases {
-			if match(v.ID, map[string]string{"release": v.Title, "artist": d.artist(v.Artist).Name, "tracks": strconv.Itoa(v.trackCount()), "catno": v.Catalog, "label": v.Label, "barcode": v.Barcode}) {
+			if match(v.ID, map[string]string{"release": v.Title, "artist": d.artist(v.Artist).Name, "arid": v.Artist, "tracks": strconv.Itoa(v.trackCount()), "catno": v.Catalog, "label": v.Label, "barcode": v.Barcode}) {
 				rows = append(rows, d.releaseEntity(v, inc))
 			}
 		}
@@ -218,7 +243,7 @@ func (s *Server) musicbrainz(r *http.Request, empty bool) response {
 				if empty || !strings.EqualFold(id, v.ISRC) {
 					continue
 				}
-			} else if !match(v.ID, map[string]string{"recording": v.Title, "artist": d.artist(v.Artist).Name, "isrc": v.ISRC, "dur": strconv.Itoa(v.Length)}) {
+			} else if !match(v.ID, map[string]string{"recording": v.Title, "artist": d.artist(v.Artist).Name, "arid": v.Artist, "isrc": v.ISRC, "dur": strconv.Itoa(v.Length)}) {
 				continue
 			}
 			rows = append(rows, d.recordingEntity(v, inc))
@@ -231,7 +256,16 @@ func (s *Server) musicbrainz(r *http.Request, empty bool) response {
 		}
 	case "artist":
 		for _, v := range d.Artists {
-			if match(v.ID, map[string]string{"artist": v.Name}) {
+			found := match(v.ID, map[string]string{"artist": v.Name})
+			if !empty && id == "" {
+				for _, alias := range v.Aliases {
+					if name, ok := alias["name"].(string); ok && matchesQuery(query, map[string]string{"alias": name}) {
+						found = true
+						break
+					}
+				}
+			}
+			if found {
 				rows = append(rows, d.artistEntity(v, inc))
 			}
 		}
@@ -264,8 +298,11 @@ func (s *Server) musicbrainz(r *http.Request, empty bool) response {
 		return ok(rows[0])
 	}
 	count := len(rows)
-	if limit > 0 && limit < count {
+	offset, _ := strconv.Atoi(params.Get("offset"))
+	offset = max(0, offset)
+	rows = rows[min(offset, count):]
+	if limit > 0 && limit < len(rows) {
 		rows = rows[:limit]
 	}
-	return ok(object{kind + "s": rows, "count": count, "offset": 0})
+	return ok(object{kind + "s": rows, "count": count, "offset": offset})
 }

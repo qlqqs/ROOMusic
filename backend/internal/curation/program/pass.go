@@ -11,7 +11,6 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
-	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
@@ -21,6 +20,7 @@ type pageStates struct {
 	pluginChange               sql.NullTime
 	releases, artworks, lyrics map[string]curation.WorkState
 	fingerprintAvailable       bool
+	offlineReleases            map[string]bool
 }
 
 func (w *Worker) walk(ctx context.Context, lyrics bool, priority func() error, fingerprintAvailable bool) error {
@@ -64,7 +64,7 @@ func (w *Worker) page(ctx context.Context, after *catalog.CurationCursor, lyrics
 	if err != nil {
 		return nil, err
 	}
-	states := pageStates{fingerprintAvailable: fingerprintAvailable}
+	states := pageStates{fingerprintAvailable: fingerprintAvailable, offlineReleases: make(map[string]bool)}
 	cap := sources.CoverArt
 	if lyrics {
 		cap = sources.LyricsLookup
@@ -115,7 +115,7 @@ func (w *Worker) page(ctx context.Context, after *catalog.CurationCursor, lyrics
 			if err := w.process(ctx, &e, "release", id, states); err != nil {
 				return nil, err
 			}
-			if artworkGap(e) {
+			if !states.offlineReleases[id] && artworkGap(e) {
 				if err := w.process(ctx, &e, "artwork", id, states); err != nil {
 					return nil, err
 				}
@@ -152,7 +152,7 @@ func needsWork(subject string, state curation.WorkState, digest string, now time
 	if previous != digest || subject != "release" && state.RuleVersion != resourceRuleVersion {
 		return true
 	}
-	if state.Status == "try_later" {
+	if state.Status == "try_later" || subject == "release" && state.Status == "unlisted" {
 		return state.NextAttemptAt != nil && !now.Before(*state.NextAttemptAt)
 	}
 	if subject == "release" && state.RequeryMatchVersion == MatchRuleVersion {
@@ -217,8 +217,10 @@ func subjectEvidence(subject string, e catalog.CurationEvidence, state curation.
 }
 
 type outcome struct {
-	status, group, trackFields, artistLinks string
-	match                                   MatchResult
+	status, group, trackFields, artistLinks, matchReason string
+	match                                                MatchResult
+	proposals                                            []curation.ArtistCreditProposal
+	review                                               releaseReviewState
 }
 
 func (w *Worker) evaluate(ctx context.Context, u *unit, e catalog.CurationEvidence, fingerprintRequired bool) (out outcome, err error) {
@@ -233,28 +235,11 @@ func (w *Worker) evaluate(ctx context.Context, u *unit, e catalog.CurationEviden
 			}
 		}
 	case "release":
-		if err = w.sources.Check(ctx, "musicbrainz"); err != nil {
-			return out, err
-		}
-		r, hasReleases := w.sources.ReleaseFinder("musicbrainz")
-		f, hasRecordings := w.sources.RecordingFinder("musicbrainz")
-		if !hasRecordings || !hasReleases {
-			return out, operations.Conflict("source_disabled", "发行或录音查询能力未启用")
-		}
-		var step *FingerprintStep
-		step, err = w.fingerprintStep(ctx)
+		m, err := w.searchRelease(ctx, u, e, fingerprintRequired)
 		if err != nil {
 			return out, err
 		}
-		if fingerprintRequired && step == nil {
-			return out, operations.Conflict("source_disabled", "声学指纹查询当前不可用")
-		}
-		out.match, err = MatchWithFingerprint(ctx, e, r, f, step)
-		if err == nil && out.match.Status == "matched" {
-			out.group, out.artistLinks, err = w.applyMatch(ctx, u, e, out.match)
-			out.trackFields = "done"
-		}
-		out.status = out.match.Status
+		return w.concludeMatch(ctx, u, e, m)
 	}
 	return out, err
 }
@@ -274,6 +259,8 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	workDigest := digest
 	version := resourceRuleVersion
 	var inputs releaseDigests
+	var offline *MatchResult
+	var review releaseReviewState
 	if subject == "release" {
 		inputs = releaseDigests{digest, IdentityDigest(input), GapDigest(input)}
 		// 旧基线与现有对应的维护一起提交，外部暂时失败时保留原状态。
@@ -283,7 +270,16 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 				return w.backfillMatch(ctx, e, state, states, tracks, artists, merges)
 			}
 		}
-		deferred, err := w.prepareRelease(ctx, input, inputs, &state)
+		var deferred bool
+		var err error
+		review, err = previousReview(state)
+		if err != nil {
+			return err
+		}
+		if state.Status == "no_usable_candidates" && review.BlockDigest == blockedLinkDigest(input) && state.MatchRuleVersion == MatchRuleVersion {
+			return nil
+		}
+		deferred, offline, err = w.prepareRelease(ctx, input, inputs, &state)
 		if err != nil {
 			return err
 		}
@@ -300,7 +296,7 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	}
 	now := w.opts.Now()
 	// 新启用的插件或更新的密钥可以补齐上一轮留下的空缺。
-	ordinary := needsWork(subject, state, workDigest, now, false) || subject != "release" && states.pluginChange.Time.After(state.UpdatedAt)
+	ordinary := offline != nil || state.Status == "no_usable_candidates" && review.BlockDigest != blockedLinkDigest(input) || needsWork(subject, state, workDigest, now, false) || subject != "release" && states.pluginChange.Time.After(state.UpdatedAt)
 	if subject == "release" && !ordinary {
 		tracks, artists, merges := matchBackfills(state, input)
 		if tracks || artists || merges {
@@ -317,7 +313,21 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 		return err
 	}
 	u := unit{w: w, subject: subject, id: id, ruleVersion: version, generation: state.Generation + 1, releaseID: e.ID, inputDigest: digest, releaseState: states.releases[e.ID]}
-	out, err := w.evaluate(ctx, &u, input, !ordinary)
+	u.offline = offline != nil
+	u.programOnly = subject == "release" && state.IdentityDigest == inputs.identity && review.UnlistedSince != nil && (state.Status == "unlisted" || state.Status == "try_later")
+	if subject == "release" {
+		u.identityDigest = inputs.identity
+	}
+	var out outcome
+	var err error
+	if offline != nil {
+		if states.offlineReleases != nil {
+			states.offlineReleases[id] = true
+		}
+		out, err = w.concludeMatch(ctx, &u, input, *offline)
+	} else {
+		out, err = w.evaluate(ctx, &u, input, !ordinary)
+	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -341,6 +351,9 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 		return err
 	}
 	if retry || out.status == "try_later" {
+		if !u.programOnly && review.UnlistedSince != nil {
+			state.Result = nil
+		}
 		delay := min(24*time.Hour, 10*time.Minute<<min(state.RetryCount, 8))
 		var local *fingerprintRetry
 		if errors.As(err, &local) {
@@ -362,6 +375,21 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	}
 	state.Status, state.Attempts, state.Generation = out.status, state.Attempts+1, u.generation
 	state.RetryCount, state.NextAttemptAt, state.Result = 0, nil, nil
+	if u.programOnly {
+		out.review.UnlistedSince = review.UnlistedSince
+		out.review.RecheckedAt = &now
+		if out.status == "unlisted" {
+			out.review.Reason = "program_recheck_inconclusive"
+		}
+	} else if out.status == "unlisted" {
+		next := now.Add(90 * 24 * time.Hour)
+		state.NextAttemptAt = &next
+		out.review.UnlistedSince = &now
+		out.review.Reason = out.matchReason
+	}
+	if out.status == "no_usable_candidates" {
+		out.review.BlockDigest = blockedLinkDigest(input)
+	}
 	return w.saveConclusion(ctx, e, state, out, states)
 }
 
@@ -407,6 +435,9 @@ func (w *Worker) saveConclusion(ctx context.Context, e *catalog.CurationEvidence
 	if state.Subject == "release" {
 		releaseDigests{postDigest, postIdentity, GapDigest(fresh)}.record(&state)
 		state.Result = releaseResult(out)
+		if err := curation.SaveArtistCreditProposals(ctx, tx, e.ID, postIdentity, out.proposals); err != nil {
+			return err
+		}
 		if err := savePending(ctx, tx, fresh, state, out.match); err != nil {
 			return err
 		}
@@ -453,6 +484,7 @@ func afterMedia(before, after catalog.CurationEvidence, subject, id string) cata
 // 只允许本次匹配计划的新增对应、自动字段以及归入目标组改变摘要。
 // 输入若有其他变化，重新判定，避免把旧候选登记在新的输入上。
 func afterMatch(before, after catalog.CurationEvidence, out outcome) catalog.CurationEvidence {
+	before = afterGroupMatch(before, after, out)
 	if r := out.match.Release; r != nil {
 		if before.ExternalID == "" && after.ExternalID == r.ID {
 			before.ExternalID, before.ExternalGroupID = r.ID, r.Group.ID
@@ -489,23 +521,38 @@ func afterMatch(before, after catalog.CurationEvidence, out outcome) catalog.Cur
 }
 
 func releaseResult(out outcome) []byte {
+	type blockedCandidate struct {
+		ID        string   `json:"external_id"`
+		Conflicts []string `json:"conflicts"`
+	}
 	m := out.match
 	r := struct {
-		Mode            string   `json:"mode"`
-		Method          string   `json:"method"`
-		Fingerprint     string   `json:"fingerprint"`
-		ExternalID      string   `json:"external_id,omitempty"`
-		ExternalGroupID string   `json:"external_group_id,omitempty"`
-		Conflicts       []string `json:"conflicts"`
-		Group           string   `json:"group,omitempty"`
-		ReleaseMerge    string   `json:"release_merge,omitempty"`
-		ArtistLinks     string   `json:"artist_links,omitempty"`
-		TrackFields     string   `json:"track_fields,omitempty"`
-	}{Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks}
+		releaseReviewState
+		Blocked         []blockedCandidate `json:"blocked,omitempty"`
+		Level           string             `json:"level,omitempty"`
+		Rule            string             `json:"rule,omitempty"`
+		Route           string             `json:"route,omitempty"`
+		Credits         []sources.Credit   `json:"credits,omitempty"`
+		Mode            string             `json:"mode"`
+		Method          string             `json:"method"`
+		Fingerprint     string             `json:"fingerprint"`
+		ExternalID      string             `json:"external_id,omitempty"`
+		ExternalGroupID string             `json:"external_group_id,omitempty"`
+		Conflicts       []string           `json:"conflicts"`
+		Group           string             `json:"group,omitempty"`
+		ReleaseMerge    string             `json:"release_merge,omitempty"`
+		ArtistLinks     string             `json:"artist_links,omitempty"`
+		TrackFields     string             `json:"track_fields,omitempty"`
+	}{releaseReviewState: out.review, Level: m.Level, Rule: m.Rule, Route: m.Route, Credits: m.Credits, ExternalGroupID: m.GroupID, Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks}
 	if m.Release != nil {
 		r.ExternalID, r.ExternalGroupID = m.Release.ID, m.Release.Group.ID
 		if out.status == "matched" {
 			r.ReleaseMerge = "done"
+		}
+	}
+	if out.status == "no_usable_candidates" {
+		for _, c := range m.Candidates {
+			r.Blocked = append(r.Blocked, blockedCandidate{c.ExternalID, c.Conflicts})
 		}
 	}
 	if m.Recording != nil {
@@ -522,9 +569,15 @@ func savePending(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidence, st
 	if m.Status == "matched" {
 		return curation.ResolvePendingItems(ctx, tx, e.ID, kind, "program_matched")
 	}
-	if slices.Contains(m.Conflicts, "insufficient_evidence") {
-		return nil
+	if m.Status == "no_usable_candidates" || m.Status == "unlisted" {
+		return curation.ResolvePendingItems(ctx, tx, e.ID, kind, m.Status)
 	}
-	return curation.UpsertPendingItem(ctx, tx, curation.PendingItem{TargetID: e.ID, Kind: kind, RuleVersion: state.RuleVersion,
-		InputDigest: state.InputDigest, MatchRuleVersion: state.MatchRuleVersion, IdentityDigest: state.IdentityDigest, Evidence: jsonValue(pendingMatchEvidence(e, m.Method)), Candidates: jsonValue(m.Candidates), Conflicts: jsonValue(m.Conflicts)})
+	if slices.Contains(m.Conflicts, "insufficient_evidence") {
+		return curation.ResolvePendingItems(ctx, tx, e.ID, kind, "insufficient_evidence")
+	}
+	evidence := pendingMatchEvidence(e, m.Method)
+	evidence["match_snapshot"] = m.savedSnapshot()
+	evidence["classification"] = e.Classification().Class
+	return curation.UpsertPendingItem(ctx, tx, curation.PendingItem{TargetID: e.ID, Kind: kind, Route: m.Route, RuleVersion: state.RuleVersion,
+		InputDigest: state.InputDigest, MatchRuleVersion: state.MatchRuleVersion, IdentityDigest: state.IdentityDigest, Evidence: jsonValue(evidence), Candidates: jsonValue(m.modelCandidates()), Conflicts: jsonValue(m.Conflicts)})
 }

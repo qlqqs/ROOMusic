@@ -30,7 +30,7 @@ func metricStoredLinks(t *testing.T, app *integrationTestApplication) map[metric
 		coalesce((SELECT x->'external_id' FROM jsonb_array_elements(o.after_state->'links') x
 			WHERE x->>'object_id'=l.object_id::text AND x->>'object_type'=l.object_type AND coalesce(x->>'source',l.source)=l.source LIMIT 1),'null'::jsonb)
 		FROM external_links l LEFT JOIN operations o ON o.id=l.operation_id
-		WHERE l.object_type IN ('release','release_group','track','artist') ORDER BY l.source,l.external_id`, func(rows *sql.Rows) {
+		WHERE l.object_type IN ('release','release_group','release_group_match','track','artist') ORDER BY l.source,l.external_id`, func(rows *sql.Rows) {
 		var key metricLinkSubject
 		var link metricStoredLink
 		requireCurationOK(t, rows.Scan(&link.row, &key.kind, &key.id, &link.sourceID, &link.value, &link.source, &link.before, &link.after))
@@ -128,6 +128,7 @@ func metricScoreValues(t *testing.T, app *integrationTestApplication, entries []
 		sample, want := e.sample.ID, e.sample.Expect
 		checkLinks(i, metricLinkSubject{"release", e.release}, sample, want.Release)
 		checkLinks(i, metricLinkSubject{"release_group", groupIDs[e.release]}, sample, want.Group)
+		checkLinks(i, metricLinkSubject{"release_group_match", e.release}, sample, want.GroupMatch)
 		checkFields(i, e.release, sample, want.Fields, false)
 		for j, id := range e.tracks {
 			var recording string

@@ -94,7 +94,7 @@ func TestPostgreSQLCurationProgramLibrary(t *testing.T) {
 			if tc.status != "matched" {
 				f.assertCount(t, 0, `SELECT count(*) FROM operations WHERE target_id=$1`, tc.id)
 				if tc.name == "chinese_search" {
-					f.assertCount(t, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND status='waiting_model' AND conflicts ? 'search_only' AND candidates->0->>'external_id'=$2`, tc.id, tc.remote)
+					f.assertCount(t, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND status='waiting_model' AND conflicts ? 'list_truncated' AND candidates->0->>'external_id'=$2`, tc.id, tc.remote)
 				} else {
 					f.assertCount(t, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, tc.id)
 				}
@@ -175,6 +175,10 @@ func TestPostgreSQLCurationProgramGroup(t *testing.T) {
 			if got != wantGroup || got == joined {
 				t.Fatalf("重新归入 %s，期望 %s", got, wantGroup)
 			}
+			// 用新的识别依据重跑计划，验证不归组的理由。
+			mustExec(t, f.application, `UPDATE tracks SET title='重扫后的曲目标题' WHERE id=$1`, tr)
+			programFinishedScan(t, f)
+			f.clock.advance(t, time.Minute)
 			reason := programString(t, f.application, `SELECT result->>'group' FROM curation_work_states WHERE subject='release' AND target_id=$1`, b)
 			if reason != why {
 				t.Fatalf("归组原因 %q，期望 %q", reason, why)

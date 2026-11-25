@@ -81,9 +81,10 @@ func checkGroupEvidence(ctx context.Context, tx *sql.Tx, releaseID, groupID stri
  SELECT 1 FROM external_links l
  JOIN operations o ON o.id=l.operation_id AND o.operation_type='external_link' AND o.target_type='release' AND o.target_id=l.object_id
  CROSS JOIN LATERAL jsonb_to_recordset(o.after_state->'links') AS item(object_type text,object_id uuid,external_id text,external_group_id text)
- JOIN external_links g ON g.source='musicbrainz' AND g.object_type='release_group' AND g.object_id=$2 AND g.external_id=item.external_group_id
- WHERE l.source='musicbrainz' AND l.object_type='release' AND l.object_id=$1
- AND item.object_type=l.object_type AND item.object_id=l.object_id AND item.external_id=l.external_id AND item.external_group_id<>''
+ JOIN external_links g ON g.source='musicbrainz' AND g.object_type='release_group' AND g.object_id=$2 AND g.external_id=CASE l.object_type WHEN 'release' THEN item.external_group_id ELSE item.external_id END
+ WHERE l.source='musicbrainz' AND l.object_type IN ('release','release_group_match') AND l.object_id=$1
+ AND item.object_type=l.object_type AND item.object_id=l.object_id AND item.external_id=l.external_id
+ AND NOT EXISTS(SELECT FROM operations undo WHERE undo.reverts_operation_id=o.id)
  FOR SHARE OF l,g)`, releaseID, groupID).Scan(&strong)
 	if err == nil && !strong {
 		return operations.Conflict("no_strong_evidence", "发行与目标专辑缺少一致的外部对应")

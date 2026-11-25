@@ -10,6 +10,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/migrations"
@@ -17,6 +19,13 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	87: `INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence)
+ VALUES('e8700000-0000-4000-8000-000000000003','musicbrainz','release_group_match','e8700000-0000-4000-8000-000000000002','synthetic-group','search','certain');
+ INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status,next_attempt_at) VALUES
+ ('release','e8700000-0000-4000-8000-000000000002',102,repeat('a',64),'unlisted',now()+interval '90 days'),
+ ('release','e8700000-0000-4000-8000-000000000004',102,repeat('b',64),'no_usable_candidates',NULL);
+ INSERT INTO curation_pending_items(id,target_type,target_id,kind,status,route,rule_version,input_digest,evidence)
+ VALUES('e8700000-0000-4000-8000-000000000005','release','e8700000-0000-4000-8000-000000000002','release_match','waiting_route','lookup',102,repeat('a',64),'{}');`,
 	85: `INSERT INTO playback_devices(id,user_id,kind,name) VALUES
  ('f8500000-0000-4000-8000-000000000001','f6900000-0000-4000-8000-000000000001','subsonic','合成客户端');
  INSERT INTO playback_zones(id,user_id,device_id) VALUES
@@ -251,6 +260,28 @@ func migrationPrefix(available []migration, last int64) fstest.MapFS {
 	}
 	return source
 }
+
+// PostgreSQL 必须原子拒绝仍含新取值的回退。逐项移除夹具后继续标准往返。
+func checkCurationRulesRollback(t *testing.T, db *sql.DB, previous fstest.MapFS) {
+	t.Helper()
+	for _, tc := range []struct{ constraint, cleanup string }{
+		{"curation_pending_items_status_check", `DELETE FROM curation_pending_items WHERE id='e8700000-0000-4000-8000-000000000005'`},
+		{"curation_work_states_status_check", `DELETE FROM curation_work_states WHERE subject='release' AND target_id IN ('e8700000-0000-4000-8000-000000000002','e8700000-0000-4000-8000-000000000004')`},
+		{"external_links_object_type_check", `DELETE FROM external_links WHERE id='e8700000-0000-4000-8000-000000000003'`},
+	} {
+		before := rollbackSnapshot(t, db)
+		err := applyMigrationsFromFS(t.Context(), db, previous)
+		var state *pgconn.PgError
+		if !errors.As(err, &state) || state.SQLState() != "23514" || state.ConstraintName != tc.constraint {
+			t.Fatalf("新版数据存在时，回退应由 %s 拒绝，得到 %v，数据库错误 %v", tc.constraint, err, state)
+		}
+		if diff := postgrestest.Diff(before, rollbackSnapshot(t, db)); len(diff) != 0 {
+			t.Fatalf("回退被拒绝后仍有变更：%v", diff)
+		}
+		rollbackExec(t, db, tc.cleanup)
+	}
+}
+
 func rollbackNeedsFixture(before, after postgrestest.SchemaSnapshot) bool {
 	for key, value := range before.Structure {
 		next, ok := after.Structure[key]
@@ -518,6 +549,11 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  ('f7900000-0000-4000-8000-000000000003','f6900000-0000-4000-8000-000000000001','f7900000-0000-4000-8000-000000000001',12),
  ('f7900000-0000-4000-8000-000000000004','f6900000-0000-4000-8000-000000000001','f7900000-0000-4000-8000-000000000002',24);`)
 			}
+			if m.Version == 87 {
+				rollbackExec(t, db, `INSERT INTO release_groups(id) VALUES('e8700000-0000-4000-8000-000000000001');
+ INSERT INTO releases(id,group_id,title,artist) VALUES('e8700000-0000-4000-8000-000000000002',
+ 'e8700000-0000-4000-8000-000000000001','整理规则迁移测试发行','测试艺人');`)
+			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
@@ -572,6 +608,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			if fixture != "" {
 				rollbackExec(t, db, fixture)
+			}
+			if m.Version == 87 {
+				checkCurationRulesRollback(t, db, migrationPrefix(available, m.Version-1))
 			}
 			if m.Version == 65 {
 				var title, artist string

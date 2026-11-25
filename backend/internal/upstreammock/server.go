@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 	"github.com/qlqq/roomusic/backend/internal/insights/schema"
 )
 
@@ -44,6 +45,9 @@ type requestRecord struct {
 }
 
 func New(opts Options) (*Server, error) {
+	if err := textnorm.LoadEmbedded(); err != nil {
+		return nil, err
+	}
 	data, err := loadData(opts.DataDir)
 	if err != nil {
 		return nil, err

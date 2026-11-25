@@ -11,11 +11,11 @@ import (
 )
 
 const pendingColumns = `id,target_type,coalesce(target_id::text,''),coalesce(artist_id::text,''),kind,status,rule_version,input_digest,evidence,candidates,conflicts,
- resolution,created_at,updated_at,resolved_at,coalesce(conversation_id::text,''),claimed_at,next_attempt_at,attempts,review_retries,shelved_reason,COALESCE(match_rule_version,0),COALESCE(identity_digest,'')`
+ resolution,created_at,updated_at,resolved_at,coalesce(conversation_id::text,''),claimed_at,next_attempt_at,attempts,review_retries,shelved_reason,COALESCE(match_rule_version,0),COALESCE(identity_digest,''),COALESCE(route,'')`
 
 func scanPending(row interface{ Scan(...any) error }) (PendingItem, error) {
 	var p PendingItem
-	err := row.Scan(&p.ID, &p.TargetType, &p.TargetID, &p.ArtistID, &p.Kind, &p.Status, &p.RuleVersion, &p.InputDigest, &p.Evidence, &p.Candidates, &p.Conflicts, &p.Resolution, &p.CreatedAt, &p.UpdatedAt, &p.ResolvedAt, &p.ConversationID, &p.ClaimedAt, &p.NextAttemptAt, &p.Attempts, &p.ReviewRetries, &p.ShelvedReason, &p.MatchRuleVersion, &p.IdentityDigest)
+	err := row.Scan(&p.ID, &p.TargetType, &p.TargetID, &p.ArtistID, &p.Kind, &p.Status, &p.RuleVersion, &p.InputDigest, &p.Evidence, &p.Candidates, &p.Conflicts, &p.Resolution, &p.CreatedAt, &p.UpdatedAt, &p.ResolvedAt, &p.ConversationID, &p.ClaimedAt, &p.NextAttemptAt, &p.Attempts, &p.ReviewRetries, &p.ShelvedReason, &p.MatchRuleVersion, &p.IdentityDigest, &p.Route)
 	return p, err
 }
 func pendingRows(rows *sql.Rows, err error) ([]PendingItem, error) {
@@ -82,7 +82,7 @@ func (w *Writer) ClaimedItems(ctx context.Context, conversation string) ([]Pendi
 
 func (w *Writer) ReleaseClaimed(ctx context.Context, conversation string, countAttempt bool, nextAttemptAt *time.Time) error {
 	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET
- attempts=attempts+$2::boolean::int,status=CASE WHEN $2 AND attempts>=2 THEN 'shelved' ELSE 'waiting_model' END,
+ attempts=attempts+$2::boolean::int,status=CASE WHEN $2 AND attempts>=2 THEN 'shelved' WHEN route IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,
  shelved_reason=CASE WHEN $2 AND attempts>=2 THEN 'unhandled' END,
  conversation_id=NULL,claimed_at=NULL,review_retries=0,next_attempt_at=$3,updated_at=now()
  WHERE status='in_progress' AND conversation_id=$1`, conversation, countAttempt, nextAttemptAt)
@@ -95,7 +95,7 @@ func (w *Writer) RetryClaimedReview(ctx context.Context, conversation string, ne
 }
 
 func (w *Writer) RecoverInProgress(ctx context.Context) error {
-	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET status='waiting_model',conversation_id=NULL,claimed_at=NULL,review_retries=0,next_attempt_at=NULL,updated_at=now() WHERE status='in_progress'`)
+	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET status=CASE WHEN route IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,conversation_id=NULL,claimed_at=NULL,review_retries=0,next_attempt_at=NULL,updated_at=now() WHERE status='in_progress'`)
 	return err
 }
 

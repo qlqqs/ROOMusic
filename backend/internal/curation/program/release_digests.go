@@ -3,73 +3,27 @@ package program
 import (
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
+	"github.com/qlqq/roomusic/backend/internal/curation"
 )
 
-type identityField struct {
-	Value, Source       string
-	Inferred, Corrected bool
-}
+// IdentityDigest 与待定项结清时使用同一份识别依据。
+func IdentityDigest(e catalog.CurationEvidence) string { return curation.ReleaseIdentityDigest(e) }
 
-type cueInput struct {
-	RootID, Sheet, Parent string
-	Index, End            *int
-}
-
-type identityTrack struct {
-	ID, ExternalID           string
-	Disc, Position, Duration int
-	PositionObservation      catalog.CurationObservation
-	Title, Artist            identityField
-	Identifiers              map[string][]string
-	CueISRC                  string
-	Cue                      *cueInput
-}
-
-// IdentityDigest 只记录查询与核对所用的本地原始事实。
-func IdentityDigest(e catalog.CurationEvidence) string {
-	type releaseInput struct {
-		Kind, ExternalID                                        string
-		Title, Artist, Barcode, CatalogNumber, Label, MediaType identityField
-		Media                                                   []int
-		Tracks                                                  []identityTrack
-		Markers                                                 []catalog.CurationSuppression
-	}
-	field := func(name, value string) identityField {
-		return identityField{Value: value, Source: e.FieldSources[name], Corrected: e.Corrected[name]}
-	}
-	single := e.CandidateKind == "loose_unknown" && len(e.Tracks) == 1
-	input := releaseInput{Kind: e.CandidateKind, ExternalID: e.ExternalID, Media: e.Media}
-	if !single {
-		input.Title = field("title", e.Title)
-		input.Artist = field("artist", e.Artist)
-		if e.AlbumArtist != "" {
-			input.Artist = field("album_artist", e.AlbumArtist)
-		}
-	}
-	// 信息不足的判断也检查条码、目录号和碟片证据。
-	input.Barcode = field("barcode", e.Barcode)
-	number := e.RawCatalogNumber
-	if number == "" {
-		number = e.CatalogNumber
-	}
-	input.CatalogNumber = field("catalog_number", number)
-	input.Label = field("label", e.Label)
-	input.MediaType = field("media_type", e.MediaType)
+// 无可用候选只在占用关系或撤销标记变化时重新检查。
+func blockedLinkDigest(e catalog.CurationEvidence) string {
+	input := struct {
+		Release, ExternalGroup, GroupMatch, Group string
+		Tracks                                    map[string]string
+		Markers                                   []catalog.CurationSuppression
+	}{Release: e.ExternalID, ExternalGroup: e.ExternalGroupID, GroupMatch: e.ReleaseGroupMatchID, Group: e.GroupExternalID, Tracks: map[string]string{}}
 	for _, t := range e.Tracks {
-		row := identityTrack{ID: t.ID, ExternalID: t.ExternalID, Disc: t.Disc, Position: t.Position,
-			PositionObservation: t.PositionObservation, Duration: t.DurationSeconds, Identifiers: t.Identifiers, CueISRC: t.CueISRC}
-		if t.SourceKind == "cue_virtual" {
-			row.Cue = &cueInput{t.SourceRootID, t.CueSheetPath, t.ParentFile, t.CueIndexFrames, t.CueEndFrames}
+		if t.ExternalID != "" {
+			input.Tracks[t.ID] = t.ExternalID
 		}
-		if single {
-			row.Title = identityField{t.Title, t.TitleObservation.Source, t.TitleObservation.Inferred, t.TitleCorrected}
-			row.Artist = identityField{t.Artist, t.ArtistObservation.Source, t.ArtistObservation.Inferred, t.ArtistCorrected}
-		}
-		input.Tracks = append(input.Tracks, row)
 	}
-	for _, marker := range e.Suppressions {
-		if marker.Subject == "external_link" && (marker.TargetType == "release" || marker.TargetType == "track") {
-			input.Markers = append(input.Markers, marker)
+	for _, m := range e.Suppressions {
+		if m.Subject == "external_link" {
+			input.Markers = append(input.Markers, m)
 		}
 	}
 	return digest(input)

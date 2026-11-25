@@ -74,7 +74,7 @@ func TestPostgreSQLCurationArtistLinks(t *testing.T) {
 		requireProgramArtistLink(t, f, single, artistIDByName(t, f, "单曲歌手"), recording.Artists[0].ArtistID)
 		f.assertCount(t, 3, `SELECT count(*) FROM external_links WHERE object_type='artist'`)
 	})
-	t.Run("署名顺序和名字不符", func(t *testing.T) {
+	t.Run("同位异名成为署名候选修改", func(t *testing.T) {
 		f := newArtistProgram(t)
 		track, r := f.tagged(t)
 		mustExec(t, f.application, `UPDATE tracks SET artist='甲 / 乙' WHERE id=$1`, track)
@@ -86,6 +86,32 @@ func TestPostgreSQLCurationArtistLinks(t *testing.T) {
 		f.run(t)
 		f.assertRelease(t, f.a, "matched", "tag_id")
 		f.assertCount(t, 0, `SELECT count(*) FROM external_links WHERE object_type='artist'`)
+		state := f.stateFor(t, "release", f.a)
+		proposals, err := f.writer.OpenArtistCreditProposals(t.Context(), f.a, state.IdentityDigest)
+		requireCurationOK(t, err)
+		if len(proposals) != 1 {
+			t.Fatalf("发行异名应保存一条候选修改，得到 %+v", proposals)
+		}
+		p := proposals[0]
+		if p.Local.Name != "Artist A" || p.Local.Position != 1 || p.External.CreditName != "外部艺人" ||
+			p.External.ArtistID != r.Artists[0].ArtistID || p.Basis.Level != "release" || p.Basis.ExternalID != r.ID ||
+			p.Basis.OperationID != f.linkOwner(t, f.a) {
+			t.Errorf("候选修改未保存同位署名和来源操作：%+v", p)
+		}
+	})
+	t.Run("署名人数不同不写候选修改", func(t *testing.T) {
+		f := newArtistProgram(t)
+		track, r := f.tagged(t)
+		mustExec(t, f.application, `UPDATE tracks SET artist='甲 / 乙' WHERE id=$1`, track)
+		r.Media[0].Tracks[0].Artists = []sources.Credit{{Name: "其他艺人", ArtistID: uuid.New()}}
+		r.Artists[0].ArtistID = uuid.New()
+		f.source.releases[r.ID] = r
+		publishSearch(t, f.application)
+		f.assertCount(t, 2, `SELECT count(*) FROM artist_credits WHERE track_id=$1 AND role='track_artist' AND layer='scan'`, track)
+		f.run(t)
+		f.assertRelease(t, f.a, "matched", "tag_id")
+		f.assertCount(t, 0, `SELECT count(*) FROM curation_artist_credit_proposals WHERE release_id=$1`, f.a)
+		requireProgramArtistLink(t, f, f.a, artistIDByName(t, f, "Artist A"), r.Artists[0].ArtistID)
 	})
 	t.Run("排除自动层且人工修正优先", func(t *testing.T) {
 		f := newArtistProgram(t)

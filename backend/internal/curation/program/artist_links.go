@@ -2,35 +2,53 @@ package program
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
-	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
-// alignCredits 以整组为单位核对按位置排列的署名。只有等长的标签组可为异名提供佐证。
-func alignCredits(local []catalog.CurationArtistCredit, external []sources.Credit, tags []string) []curation.LinkIntent {
+// 对位要求整组人数相等；同组中一项异名只影响它本身。
+type creditPosition struct {
+	local    catalog.CurationArtistCredit
+	external sources.Credit
+	tagged   bool
+}
+
+func creditPositions(local []catalog.CurationArtistCredit, external []sources.Credit, tags []string) []creditPosition {
 	if len(local) == 0 || len(local) != len(external) {
 		return nil
 	}
 	seenLocal, seenExternal := map[string]bool{}, map[string]bool{}
-	links := make([]curation.LinkIntent, 0, len(local))
+	pairs := make([]creditPosition, 0, len(local))
 	for i, c := range local {
 		x := external[i]
 		if c.Position != i+1 || c.ArtistID == "" || x.ArtistID == "" || seenLocal[c.ArtistID] || seenExternal[x.ArtistID] || curation.MusicBrainzSpecialArtist(x.ArtistID) {
 			return nil
 		}
-		name := textnorm.Text(c.Name)
-		if (name == "" || name != textnorm.Text(x.Name)) && (len(tags) != len(external) || tags[i] != x.ArtistID) {
-			return nil
-		}
 		seenLocal[c.ArtistID], seenExternal[x.ArtistID] = true, true
-		links = append(links, curation.LinkIntent{ObjectType: "artist", ObjectID: c.ArtistID, ExternalID: x.ArtistID})
+		pairs = append(pairs, creditPosition{c, x, len(tags) == len(local) && tags[i] == x.ArtistID})
+	}
+	return pairs
+}
+
+func (p creditPosition) link() curation.LinkIntent {
+	return curation.LinkIntent{ObjectType: "artist", ObjectID: p.local.ArtistID, ExternalID: p.external.ArtistID}
+}
+
+func (p creditPosition) direct() bool { return p.tagged || sameText(p.local.Name, p.external.Name) }
+
+func alignCredits(local []catalog.CurationArtistCredit, external []sources.Credit, tags []string) []curation.LinkIntent {
+	var links []curation.LinkIntent
+	for _, p := range creditPositions(local, external, tags) {
+		if p.direct() {
+			links = append(links, p.link())
+		}
 	}
 	return links
 }
@@ -48,29 +66,22 @@ func albumArtistTags(tracks []catalog.CurationTrack) []string {
 	return tags
 }
 
-func planArtistLinks(local catalog.CurationArtistCredits, e catalog.CurationEvidence, m MatchResult) []curation.LinkIntent {
-	byArtist := map[string]string{}
-	add := func(group []catalog.CurationArtistCredit, ext []sources.Credit, tags []string) {
-		for _, l := range alignCredits(group, ext, tags) {
-			if prev, ok := byArtist[l.ObjectID]; ok && prev != l.ExternalID {
-				byArtist[l.ObjectID] = ""
-			} else {
-				byArtist[l.ObjectID] = l.ExternalID
-			}
-		}
-	}
+type creditGroup struct {
+	role, trackID string
+	local         []catalog.CurationArtistCredit
+	external      []sources.Credit
+	tags          []string
+}
+
+func artistCreditGroups(local catalog.CurationArtistCredits, e catalog.CurationEvidence, m MatchResult) []creditGroup {
+	var groups []creditGroup
 	recordings := map[string][]sources.Credit{}
+	album := m.Credits
 	if r := m.Release; r != nil {
-		tags := albumArtistTags(e.Tracks)
-		if e.Authenticity["artist"] != metadata.Placeholder {
-			add(local.ReleaseArtists, r.Artists, tags)
-		}
-		if e.Authenticity["album_artist"] != metadata.Placeholder {
-			add(local.AlbumArtists, r.Artists, tags)
-		}
+		album = r.Artists
 		for _, medium := range r.Media {
 			for _, t := range medium.Tracks {
-				if _, duplicate := recordings[t.RecordingID]; duplicate {
+				if _, dup := recordings[t.RecordingID]; dup {
 					recordings[t.RecordingID] = nil
 				} else {
 					recordings[t.RecordingID] = t.Artists
@@ -80,22 +91,145 @@ func planArtistLinks(local catalog.CurationArtistCredits, e catalog.CurationEvid
 	} else if r := m.Recording; r != nil {
 		recordings[r.ID] = r.Artists
 	}
+	if m.Level == "artist" && len(e.Tracks) == 1 {
+		t := e.Tracks[0]
+		if !t.ArtistPlaceholder {
+			groups = append(groups, creditGroup{"track_artist", t.ID, local.Tracks[t.ID], m.Credits, t.Identifiers["mb_artist"]})
+		}
+		return groups
+	}
+	tags := albumArtistTags(e.Tracks)
+	if len(album) > 0 {
+		if e.Authenticity["artist"] != metadata.Placeholder {
+			groups = append(groups, creditGroup{"release_artist", "", local.ReleaseArtists, album, tags})
+		}
+		if e.Authenticity["album_artist"] != metadata.Placeholder {
+			groups = append(groups, creditGroup{"album_artist", "", local.AlbumArtists, album, tags})
+		}
+	}
 	pairs := map[string]string{}
 	for _, p := range m.Pairs {
 		pairs[p.TrackID] = p.RecordingID
 	}
 	for _, t := range e.Tracks {
 		if id := pairs[t.ID]; id != "" && !t.ArtistPlaceholder {
-			add(local.Tracks[t.ID], recordings[id], t.Identifiers["mb_artist"])
+			groups = append(groups, creditGroup{"track_artist", t.ID, local.Tracks[t.ID], recordings[id], t.Identifiers["mb_artist"]})
 		}
 	}
-	var links []curation.LinkIntent
+	return groups
+}
+
+func consistentArtistLinks(links []curation.LinkIntent) []curation.LinkIntent {
+	byArtist := map[string]string{}
+	for _, l := range links {
+		if old, ok := byArtist[l.ObjectID]; ok && old != l.ExternalID {
+			byArtist[l.ObjectID] = ""
+		} else {
+			byArtist[l.ObjectID] = l.ExternalID
+		}
+	}
+	var result []curation.LinkIntent
 	for _, id := range slices.Sorted(maps.Keys(byArtist)) {
 		if x := byArtist[id]; x != "" {
-			links = append(links, curation.LinkIntent{ObjectType: "artist", ObjectID: id, ExternalID: x})
+			result = append(result, curation.LinkIntent{ObjectType: "artist", ObjectID: id, ExternalID: x})
 		}
 	}
+	return result
+}
+
+func planArtistLinks(local catalog.CurationArtistCredits, e catalog.CurationEvidence, m MatchResult) []curation.LinkIntent {
+	return consistentArtistLinks(directArtistLinks(artistCreditGroups(local, e, m)))
+}
+
+func directArtistLinks(groups []creditGroup) []curation.LinkIntent {
+	var links []curation.LinkIntent
+	for _, g := range groups {
+		links = append(links, alignCredits(g.local, g.external, g.tags)...)
+	}
 	return links
+}
+
+func creditRoles(local catalog.CurationArtistCredits, g creditGroup, p creditPosition, a sources.Artist) (roles []catalog.CurationCreditRole, swapped bool) {
+	roles = []catalog.CurationCreditRole{}
+	var localComposer, localPlayer, remoteComposer, remotePlayer bool
+	for _, r := range local.Roles {
+		if g.trackID != "" && g.trackID != r.TrackID {
+			continue
+		}
+		mine := p.local.ArtistID == r.ArtistID
+		theirs := sameText(r.Name, p.external.Name) || artistNamed(a, r.Name)
+		if !mine && !theirs {
+			continue
+		}
+		roles = append(roles, r)
+		if r.Role == "composer" {
+			localComposer = localComposer || mine
+			remoteComposer = remoteComposer || theirs
+		} else {
+			localPlayer = localPlayer || mine
+			remotePlayer = remotePlayer || theirs
+		}
+	}
+	return roles, (localComposer && !localPlayer && remotePlayer && !remoteComposer) || (localPlayer && !localComposer && remoteComposer && !remotePlayer)
+}
+
+func (w *Worker) identifyArtists(ctx context.Context, local catalog.CurationArtistCredits, e catalog.CurationEvidence, m MatchResult, offline bool) ([]curation.LinkIntent, []curation.ArtistCreditProposal, error) {
+	artists := m.ArtistEvidence
+	if artists == nil {
+		artists = map[string]sources.Artist{}
+	}
+	groups := artistCreditGroups(local, e, m)
+	links := directArtistLinks(groups)
+	var proposals []curation.ArtistCreditProposal
+	for _, g := range groups {
+		for _, p := range creditPositions(g.local, g.external, g.tags) {
+			if p.direct() {
+				continue
+			}
+			a, ok := artists[p.external.ArtistID]
+			if !ok && !offline {
+				finder, available := w.sources.ArtistFinder("musicbrainz")
+				if available {
+					var err error
+					a, err = finder.ArtistByID(ctx, p.external.ArtistID)
+					if err != nil && !errors.Is(err, sources.ErrNotFound) {
+						return nil, nil, err
+					}
+					artists[p.external.ArtistID] = a
+				}
+			}
+			if artistNamed(a, p.local.Name) {
+				links = append(links, p.link())
+				continue
+			}
+			roles, swapped := creditRoles(local, g, p, a)
+			if (e.Classical || e.Compilation) && swapped {
+				continue
+			}
+			level, id := m.Level, m.GroupID
+			if m.Release != nil {
+				level, id = "release", m.Release.ID
+			}
+			if m.Recording != nil {
+				level, id = "recording", m.Recording.ID
+			}
+			if id == "" {
+				continue
+			}
+			aliases := make([]string, 0, len(a.Aliases))
+			for _, alias := range a.Aliases {
+				if alias.Name != "" {
+					aliases = append(aliases, alias.Name)
+				}
+			}
+			proposals = append(proposals, curation.ArtistCreditProposal{
+				Local:    curation.ProposalLocalCredit{ArtistID: p.local.ArtistID, Position: p.local.Position, Name: p.local.Name, Role: g.role, TrackID: g.trackID},
+				External: curation.ProposalExternalCredit{Provider: "musicbrainz", ArtistID: p.external.ArtistID, CreditName: p.external.Name, PrimaryName: a.Name, Aliases: aliases},
+				Basis:    curation.ProposalCreditBasis{Level: level, Rule: m.Rule, ExternalID: id, Roles: roles},
+			})
+		}
+	}
+	return consistentArtistLinks(links), proposals, nil
 }
 
 func writeArtistLinks(ctx context.Context, db operations.Queryer, writer *curation.Writer, request curation.LinkRequest, links []curation.LinkIntent, write matchStep) error {

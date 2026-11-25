@@ -82,7 +82,11 @@ func TestAlbumContraryEvidence(t *testing.T) {
 			case "existing_link":
 				e.ExternalID = "old"
 			}
-			wantMatch(t, DecideAlbum(e, method, []sources.Release{r}), "uncertain", code)
+			status := "uncertain"
+			if code == "suppressed" || code == "existing_link" {
+				status = "no_usable_candidates"
+			}
+			wantMatch(t, DecideAlbum(e, method, []sources.Release{r}), status, code)
 		})
 	}
 }
@@ -93,9 +97,8 @@ func TestAlbumCorroboration(t *testing.T) {
 			e, r := pairedAlbum(2)
 			e.Tracks[0].CueISRC = "US-ABC-23-00001"
 			got := DecideAlbum(e, method, []sources.Release{r})
-			if method == "search" {
-				wantMatch(t, got, "uncertain", "search_only")
-				return
+			if method == "search" && (got.Level != "release" || got.Rule != "structure") {
+				t.Fatalf("文字搜索结构吻合应定到版本：%+v", got)
 			}
 			wantMatch(t, got, "matched")
 			if got.Release.ID != r.ID || !slices.Equal(got.Pairs, []TrackPair{{"local1", "rec1"}, {"local2", "rec2"}}) {
@@ -157,7 +160,11 @@ func TestAlbumCorroboration(t *testing.T) {
 			r.ID = fmt.Sprint(i)
 			rows = append(rows, r)
 		}
-		wantMatch(t, DecideAlbum(e, "barcode", rows[:3]), "uncertain", "ambiguous")
+		got := DecideAlbum(e, "barcode", rows[:3])
+		wantMatch(t, got, "matched")
+		if got.Level != "release_group" || got.GroupID != r.Group.ID || got.Release != nil || len(got.Pairs) != 0 {
+			t.Fatalf("同组的三个版本只应定到发行组：%+v", got)
+		}
 		wantMatch(t, DecideAlbum(e, "barcode", rows), "uncertain", "too_many")
 		e.Tracks[0].Identifiers["mb_release"] = []string{"1", "2"}
 		wantMatch(t, DecideAlbum(e, "tag_id", nil), "uncertain", "mixed_release_tags")
@@ -177,7 +184,7 @@ func TestSingleRules(t *testing.T) {
 			t.Fatal(got)
 		}
 	}
-	wantMatch(t, decide("search"), "uncertain", "search_only")
+	wantMatch(t, decide("search"), "uncertain", "artist_mismatch")
 	r.Title = "其他"
 	wantMatch(t, decide("isrc"), "uncertain")
 	tr.CueISRC = "USABC2300002"
@@ -219,7 +226,7 @@ func TestLookupBounds(t *testing.T) {
 				t.Fatal(err)
 			}
 			wantMatch(t, got, "uncertain", tc.code)
-			if len(got.Candidates) == 0 || len(got.Candidates) > 10 {
+			if len(got.Candidates) == 0 || len(got.Candidates) != len(tc.list.items) {
 				t.Fatal(got.Candidates)
 			}
 		})

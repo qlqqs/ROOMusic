@@ -133,7 +133,7 @@ func TestPostgreSQLCurationAuthenticityFromScan(t *testing.T) {
 	inferred.External.Artists = []metricArtist{{ID: inferredArtist, Name: "同名候选艺人"}}
 	inferred.External.Releases = []metricRelease{{
 		ID: releaseID, Group: groupID, Title: "合成目录专辑", Artist: inferredArtist,
-		Tracks: []metricRecording{{TrackID: uuid.New(), ID: recordingID, Title: "候选曲", Artist: inferredArtist, Length: 110000}},
+		Tracks: []metricRecording{{TrackID: uuid.New(), ID: recordingID, Title: "候选曲", Artist: inferredArtist, Length: 114000}},
 	}}
 	app, mock, _ := newCurationMockApplication(t, writeMetricCatalog(t, []metricSample{real, inferred}), clock)
 	admin := app.createUser(t, "admin")
@@ -238,7 +238,7 @@ func requireCurationAuthenticitySearchEvidence(t *testing.T, app *integrationTes
 		t.Errorf("应实际发出推断专辑搜索和散放曲歌词查询，记录 %+v", requests)
 	}
 	id := programString(t, app, `SELECT id FROM curation_pending_items
- WHERE target_id=$1 AND kind='release_match' AND status='waiting_model' AND conflicts ? 'search_only'`, release)
+ WHERE target_id=$1 AND kind='release_match' AND status='waiting_model' AND conflicts ? 'duration_mismatch'`, release)
 	want, err := f.writer.PendingItem(t.Context(), id)
 	requireCurationOK(t, err)
 	var candidates []program.Candidate

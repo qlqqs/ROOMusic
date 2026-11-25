@@ -305,3 +305,30 @@ func (s *Sources) EnabledPluginCount(ctx context.Context) (int, error) {
         WHERE enabled AND source LIKE 'plugin:%'`).Scan(&n)
 	return n, err
 }
+
+// MatchFallbackReadiness 与联网来源共用开启者的模型和搜索配置，不检查模型预算。
+func (s *Sources) MatchFallbackReadiness(ctx context.Context) (model, web bool, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, false, err
+	}
+	defer tx.Rollback()
+	settings, err := loadSettings(ctx, tx)
+	if err != nil {
+		return false, false, err
+	}
+	model = settings.Model != ""
+	if r, ok := s.lookup("web_search"); ok {
+		item, err := s.sourceState(ctx, tx, r, settings)
+		if err != nil {
+			return false, false, err
+		}
+		for _, req := range item.Requirements {
+			if req.Kind == "model" {
+				model = req.Ready
+			}
+		}
+		web = item.Active && model
+	}
+	return model, web, tx.Commit()
+}
