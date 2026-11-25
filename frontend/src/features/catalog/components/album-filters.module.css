@@ -7,6 +7,11 @@
   min-width: 0;
 }
 
+.chips {
+  display: flex;
+  gap: 6px;
+}
+
 /* 筛选框下面出现说明时，排序与输入框仍顶部对齐。 */
 .end {
   display: flex;
