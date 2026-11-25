@@ -124,6 +124,7 @@ func (r *zonesSampleRenderer) Open(ctx context.Context, spec zones.RenderSpec) (
 
 type zonesSampleFixture struct {
 	*integrationTestApplication
+	mux      *http.ServeMux
 	service  *zones.Service
 	renderer *zonesSampleRenderer
 	clock    *zonesSampleClock
@@ -150,7 +151,7 @@ func newZonesSampleFixture(t *testing.T) *zonesSampleFixture {
 	mux := http.NewServeMux()
 	zonesapi.New(identity.NewGuard(db, false, "http://roomusic.test"), service).Register(mux)
 	application := &integrationTestApplication{database: db, origin: "http://roomusic.test", allowedRoot: t.TempDir(), handler: httpserver.Middleware(slog.New(slog.NewTextHandler(io.Discard, nil)), mux)}
-	f := &zonesSampleFixture{integrationTestApplication: application, service: service, renderer: renderer, clock: clock, user: application.createUser(t, "user")}
+	f := &zonesSampleFixture{integrationTestApplication: application, mux: mux, service: service, renderer: renderer, clock: clock, user: application.createUser(t, "user")}
 	root, group, release, medium := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	f.exec(t, `INSERT INTO library_roots(id,path,status,revision) VALUES($1,'/synthetic/zones-samples','active',1)`, root)
 	f.exec(t, `INSERT INTO release_groups(id) VALUES($1)`, group)

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 73
+- **Total Sessions**: 74
 - **Last Active**: 2026-11-25
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~532 | Active |
+| `journal-2.md` | ~555 | Active |
 | `journal-1.md` | ~1972 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 74 | 2026-11-25 | Subsonic 点唱机 | `d6d8cc4d`, `745e5c5e` | `main` |
 | 73 | 2026-11-25 | Subsonic 浏览、搜索与封面 | `557f84f8`, `f6277212` | `main` |
 | 72 | 2026-11-25 | 我的评分页与管家评分工具 | `cf611311`, `84c3baa6` | `main` |
 | 71 | 2026-11-25 | Subsonic 与网页端评分 | `ea71440a`, `b5c443c0`, `21e18fac`, `9c77e1b1` | `main` |

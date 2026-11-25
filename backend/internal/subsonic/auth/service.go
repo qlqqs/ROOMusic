@@ -73,16 +73,23 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 }
 
 type Status struct {
-	Enabled  bool   `json:"enabled"`
-	Ready    bool   `json:"ready"`
-	Username string `json:"username"`
+	Enabled       bool    `json:"enabled"`
+	Ready         bool    `json:"ready"`
+	Username      string  `json:"username"`
+	JukeboxZoneID *string `json:"jukebox_zone_id"`
 }
 
 func (s *Service) Status(ctx context.Context, user identity.User) (Status, error) {
+	return s.status(ctx, s.db, user)
+}
+
+func (s *Service) status(ctx context.Context, db interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, user identity.User) (Status, error) {
 	state := Status{Username: user.Username}
 	var sealed []byte
-	err := s.db.QueryRowContext(ctx, `SELECT subsonic_enabled, sealed FROM subsonic_settings
-        LEFT JOIN subsonic_credentials ON user_id=$1 WHERE id=1`, user.ID).Scan(&state.Enabled, &sealed)
+	err := db.QueryRowContext(ctx, `SELECT subsonic_enabled, sealed, `+jukeboxZoneSelection+` FROM subsonic_settings
+        LEFT JOIN subsonic_credentials ON user_id=$1 WHERE id=1`, user.ID).Scan(&state.Enabled, &sealed, &state.JukeboxZoneID)
 	if err == nil && state.Enabled && sealed != nil {
 		_, openErr := s.secrets.Open(user.ID, passwordPurpose, sealed)
 		state.Ready = openErr == nil

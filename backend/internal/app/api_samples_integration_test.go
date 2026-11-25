@@ -1421,6 +1421,10 @@ func TestAPISampleRecorderOwnership(t *testing.T) {
 		{"playlists/list.json", false, false},
 		{"errors/personal-not-found.json", false, false},
 		{"scan-feedback/report-ready.json", false, true},
+		{"subsonic/me-ready.json", false, false},
+		{"subsonic/me-needs-confirmation.json", false, false},
+		{"subsonic/me-put.json", false, false},
+		{"subsonic/errors/jukebox-zone-not-found.json", false, false},
 	} {
 		t.Run(sample.name, func(t *testing.T) {
 			zones := &apiSampleRecorder{scope: "playback-zones"}
@@ -1430,6 +1434,10 @@ func TestAPISampleRecorderOwnership(t *testing.T) {
 			system := &apiSampleRecorder{scope: "system"}
 			if got := system.ownsSample(sample.name); got != isSystemAPISample(sample.name) {
 				t.Errorf("系统样本所有权 = %v", got)
+			}
+			subsonic := &apiSampleRecorder{scope: "subsonic"}
+			if got := subsonic.ownsSample(sample.name); got != strings.HasPrefix(sample.name, "subsonic/") {
+				t.Errorf("Subsonic 样本所有权 = %v", got)
 			}
 			ordinary := &apiSampleRecorder{}
 			feedback := &apiSampleRecorder{scope: "scan-feedback"}

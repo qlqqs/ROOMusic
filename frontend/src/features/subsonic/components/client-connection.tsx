@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button, FailureNotice, SettingRow, SettingsGroup, StatusTag } from "../../../shared/ui";
 import { useSubsonicConnection } from "../hooks/use-subsonic";
 import { ConfirmPasswordDialog } from "./confirm-password-dialog";
+import { JukeboxZoneRow, type JukeboxZoneOption } from "./jukebox-zone";
 import styles from "./subsonic.module.css";
 
 /** 客户端里填的服务器地址：当前页面的来源，客户端自己在后面拼 /rest/…。 */
@@ -13,8 +14,9 @@ export function serverAddress(origin: string): string {
 /**
  * 设置 › 账号里的“第三方客户端”一组：服务器地址、用户名（各带复制）与登录密码的状态。
  * 实例关闭 Subsonic 接口时整组不显示；加载中不占位，读取失败给一句话。
+ * zones 是点唱机可以控制的本人播放区，由页面从播放设备里算出（subsonic 不导入 player）；还没读到时为 null。
  */
-export function ClientConnectionSettings() {
+export function ClientConnectionSettings({ zones }: { zones: readonly JukeboxZoneOption[] | null }) {
   const connection = useSubsonicConnection();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -48,6 +50,7 @@ export function ClientConnectionSettings() {
           </Button>
         )}
       </SettingRow>
+      <JukeboxZoneRow saved={data.jukebox_zone_id} zones={zones} />
       <ConfirmPasswordDialog
         open={dialogOpen}
         username={data.username}

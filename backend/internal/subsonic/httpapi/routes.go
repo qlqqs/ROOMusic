@@ -53,10 +53,12 @@ func Register(mux *http.ServeMux, service *auth.Service, guard *identity.Guard, 
 		"search3":        h.search3,
 		"getRandomSongs": h.getRandomSongs,
 		"getGenres":      h.getGenres,
+		"jukeboxControl": h.jukeboxControl,
 	}
 	h.binaryEndpoints = map[string]func(http.ResponseWriter, *http.Request) error{"getCoverArt": h.getCoverArt}
 	mux.HandleFunc("/rest/", h.rest)
 	mux.HandleFunc("GET /api/v1/me/subsonic", h.me)
+	mux.HandleFunc("PUT /api/v1/me/subsonic", h.setJukeboxZone)
 	mux.HandleFunc("POST /api/v1/me/subsonic/confirm-password", h.confirm)
 	mux.HandleFunc("GET /api/v1/admin/subsonic", h.admin)
 	mux.HandleFunc("PUT /api/v1/admin/subsonic", h.setEnabled)

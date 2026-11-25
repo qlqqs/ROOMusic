@@ -2,6 +2,7 @@ package zones
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -82,6 +83,9 @@ func (s *Service) Command(ctx context.Context, userID, zoneID string, command Co
 }
 
 func (s *Service) commandLocked(ctx context.Context, userID string, z *zoneRuntime, c Command) (CommandResult, error) {
+	if c.ExpectedRevision != nil && z.persisted.Revision != *c.ExpectedRevision {
+		return CommandResult{}, ErrRevisionConflict
+	}
 	if startsOutput(c.Command) && z.leaderZoneID != "" {
 		return CommandResult{}, ErrDeviceGrouped
 	}
@@ -134,7 +138,7 @@ func (s *Service) commandLocked(ctx context.Context, userID string, z *zoneRunti
 	}
 	z.persisted = plan.persisted
 	z.positionWrittenAt = now
-	if c.Command == "stop" || c.Command == "clear_queue" || (c.Command == "remove_entry" && z.visit != nil && z.visit.entryID == c.EntryID) {
+	if c.Command == "stop" || c.Command == "clear_queue" || c.Command == "replace_queue" || (c.Command == "remove_entry" && z.visit != nil && z.visit.entryID == c.EntryID) {
 		z.visit = nil
 	}
 	if c.Command == "seek" {
@@ -239,7 +243,7 @@ func (s *Service) plan(ctx context.Context, userID string, z *zoneRuntime, c Com
 		return nil
 	}
 	switch c.Command {
-	case "play_tracks", "play_next", "enqueue":
+	case "play_tracks", "replace_queue", "play_next", "enqueue":
 		extra := make([]queue.Entry, len(c.TrackIDs))
 		for i, id := range c.TrackIDs {
 			extra[i].TrackID = id
@@ -255,12 +259,17 @@ func (s *Service) plan(ctx context.Context, userID string, z *zoneRuntime, c Com
 			}
 			tracks[id] = track
 		}
-		if c.Command != "play_tracks" && len(q.Entries)+len(c.TrackIDs) > queue.MaxQueueEntries {
+		if (c.Command == "play_next" || c.Command == "enqueue") && len(q.Entries)+len(c.TrackIDs) > queue.MaxQueueEntries {
 			return p, ErrQueueFull
 		}
-		if c.Command == "play_tracks" {
-			if err := start(true); err != nil {
-				return p, err
+		if c.Command == "play_tracks" || c.Command == "replace_queue" {
+			if c.Command == "play_tracks" {
+				if err := start(true); err != nil {
+					return p, err
+				}
+			} else {
+				p.close = true
+				p.pause = true
 			}
 			p.persisted.Queue = queue.ReplaceQueue(q, c.TrackIDs, c.StartIndex, env)
 			position(0)
@@ -303,15 +312,18 @@ func (s *Service) plan(ctx context.Context, userID string, z *zoneRuntime, c Com
 			p.noop = true
 			break
 		}
-		if c.EntryID == q.CurrentEntryID && !failed(z, c.EntryID) {
+		if c.EntryID == q.CurrentEntryID && c.StartPositionSeconds == nil && !failed(z, c.EntryID) {
 			c.Command = "play"
 			return s.plan(ctx, userID, z, c, tracks)
 		}
-		if err := start(true); err != nil {
+		if err := start(c.EntryID != q.CurrentEntryID || failed(z, c.EntryID)); err != nil {
 			return p, err
 		}
 		p.persisted.Queue = queue.JumpTo(q, c.EntryID)
 		position(0)
+		if c.StartPositionSeconds != nil {
+			position(clampPosition(c.EntryID, *c.StartPositionSeconds, q.Entries, tracks))
+		}
 		p.clearCurrentFailure = true
 	case "remove_entry":
 		if entryIndex(q.Entries, c.EntryID) < 0 {
@@ -354,6 +366,20 @@ func (s *Service) plan(ctx context.Context, userID string, z *zoneRuntime, c Com
 			_, err := store.MoveEntry(ctx, userID, z.persisted.ZoneID, c.EntryID, c.ToIndex)
 			return err
 		}
+	case "shuffle_queue":
+		entries := slices.Clone(q.Entries)
+		for i := len(entries) - 1; i > 0; i-- {
+			j := int(env.Random() * float64(i+1))
+			entries[i], entries[j] = entries[j], entries[i]
+		}
+		if slices.Equal(entries, q.Entries) {
+			p.noop = true
+			break
+		}
+		p.persisted.Queue.Entries = entries
+		p.notify = true
+		p.change = replaceChange(entries, tracks)
+		p.writeEntries = func(store *Store) error { return store.ReplaceEntries(ctx, userID, z.persisted.ZoneID, entries) }
 	case "clear_queue":
 		p.persisted.Queue = queue.ClearQueue(q)
 		position(0)

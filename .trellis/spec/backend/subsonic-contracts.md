@@ -1,6 +1,6 @@
 # Subsonic 兼容接口合同
 
-`backend/internal/subsonic` 让 Symfonium、Feishin 等 Subsonic/OpenSubsonic 客户端用 ROOMusic 的账号连接。本文记录骨架（2026-11-25，迁移 0081）的协议外壳、鉴权、登录密码副本、实例开关与网页端设置接口，以及浏览、搜索与封面（§4.1–4.3）。播放、收藏等接口由后续子任务追加到本文。产品裁决见任务 `.trellis/tasks/11-25-opensubsonic-api/`。
+`backend/internal/subsonic` 让 Symfonium、Feishin 等 Subsonic/OpenSubsonic 客户端用 ROOMusic 的账号连接。本文记录骨架（2026-11-25，迁移 0081）的协议外壳、鉴权、登录密码副本、实例开关与网页端设置接口，以及浏览、搜索与封面（§4.1–4.3）、点唱机（§4.4，迁移 0084）。播放、收藏等接口由后续子任务追加到本文。产品裁决见任务 `.trellis/tasks/11-25-opensubsonic-api/`。
 
 ## 1. 范围与触发
 
@@ -59,10 +59,14 @@ type PersonalState struct {
 subsonic_settings(id smallint PRIMARY KEY CHECK (id = 1), subsonic_enabled boolean NOT NULL DEFAULT true) -- 单行
 subsonic_credentials(user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, sealed bytea NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())
 TRIGGER invalidate_subsonic_password AFTER UPDATE OF password_hash ON users -- 哈希变化即删该用户副本
+-- 0084
+subsonic_jukebox_settings(user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, jukebox_zone_id uuid REFERENCES playback_zones(id) ON DELETE SET NULL)
+ALTER TABLE playback_zones ADD COLUMN last_played_at timestamptz
 ```
 
 - 新装与升级的实例都默认开启。
 - `sealed` 用实例密钥加密，用途 `"subsonic-password"`，附加数据绑定 userID。解密失败（密钥换了、数据被篡改）视同没有副本。
+- 点唱机的选择与密码副本分开存放：改密、开关实例都不影响它；删除播放区时外键把选择清空。
 - 触发器覆盖只连数据库的命令行 `reset-password`：副本被删，用户之后要重新登录网页或在账号页确认一次密码。
 
 ### 副本写入时机
@@ -136,6 +140,25 @@ ID 直接用 ROOMusic 的 UUID：歌曲是曲目 ID，专辑是专辑组 ID，�
 - 缓存在 `<数据目录>/cache/subsonic-art/<资源ID>-<档位>.jpg|png`，先写临时文件再改名；同一键并发只缩放一次（singleflight）。资源 ID 由内容寻址，内容变了键就变，缓存不需要失效。
 - 响应头：`ETag` 是 `<资源ID>-<档位>`，命中 `If-None-Match` 返回 304；`Cache-Control: private, max-age=31536000, immutable`。
 
+### 4.4 点唱机 `jukeboxControl`
+
+目标播放区：`subsonic_jukebox_settings` 里选过、且仍属本人的播放区；否则取本人可见播放区里 `last_played_at` 最近的（编组成员自己的播放区不参加）；都没有时返回错误 0“没有可控制的播放区”。所有写操作经 `zones.Service`，与网页端 HTTP 处理器同一组命令，网页端经事件流实时看到。
+
+| `action` | 播放区操作 |
+| --- | --- |
+| `get` / `status` | 读状态；`get` 另带 `jukeboxPlaylist.entry[]`（歌曲，经 `ratedEntities`；重复曲目各占一位，扫描后缺失的曲目用队列里已有的摘要，下标与网页队列一致） |
+| `set` | `replace_queue`（空 `id` 列表时 `clear_queue`），暂停在第一首 |
+| `add` | `enqueue` |
+| `clear` / `remove index` | `clear_queue` / 下标换算成 `entry_id` 后 `remove_entry` |
+| `skip index offset` | `play_entry` 加 `StartPositionSeconds`；省略 `offset` 时从 0 |
+| `start` / `stop` | `play` / `pause` |
+| `shuffle` | `shuffle_queue` |
+| `setGain gain` | 0–1；编组时 `SetGroupVolume`（保留组内比例），否则 `SetVolume`（保留静音状态） |
+
+- 状态字段：`currentIndex`（没有当前项为 -1）、`playing`（播放意图，加载与缓冲中也是 true）、`gain`、`position`（只在实际 `playing` 时按服务端时钟外推，没有当前项为 0）。
+- 下标换算：先读队列，按队列版本核对顺序。写入带 `ExpectedRevision`，冲突时重读、重新换算，再写一次；仍冲突返回 0，不留部分写入。
+- 局域网设备的认领沿用 `devices/upnp` 的规则：本人要有有效的网页会话（浏览器可以关着）。
+
 ## 5. 鉴权
 
 1. 实例关闭 → 40（先于参数检查，不泄露原因）。
@@ -152,9 +175,10 @@ ID 直接用 ROOMusic 的 UUID：歌曲是曲目 ID，专辑是专辑组 ID，�
 
 | 方法与路径 | 输入 | 成功 | 失败 |
 | --- | --- | --- | --- |
-| GET `/api/v1/me/subsonic` | 无 | `{enabled, ready, username}`，`ready` 表示副本存在且能解密；关闭时 `ready=false` | 503 |
+| GET `/api/v1/me/subsonic` | 无 | `{enabled, ready, username, jukebox_zone_id}`，`ready` 表示副本存在且能解密，关闭时 `ready=false`；`jukebox_zone_id` 没选过或已失效时为 null | 503 |
 | POST `/api/v1/me/subsonic/confirm-password` | `{password}` | 204 | 403 `current_password_incorrect`；429 `too_many_attempts` 带 Retry-After；409 `subsonic_disabled`；400 `invalid_input`；加密失败 503 `database_unavailable` |
 | GET `/api/v1/admin/subsonic` | 无 | `{enabled}` | 503 |
+| PUT `/api/v1/me/subsonic` | `{jukebox_zone_id: UUID \| null}` | 与 GET 相同的对象 | 400 `invalid_input`（严格解码）；404 `not_found`（不存在或不是本人的播放区）；409 `subsonic_disabled` |
 | PUT `/api/v1/admin/subsonic` | `{enabled}` | `{enabled}`；关闭时同事务删除全部副本 | 400 `invalid_input`、503 |
 
 确认密码用 403 而不是 401：前端请求层把 401 当作会话结束。它与成员自助改密的当前密码核对共用限流与计数。样本在 `app/testdata/api-samples/subsonic/`，前端契约测试 `frontend/src/test/api-contract.test.ts` 逐份登记。
@@ -208,6 +232,10 @@ ID 直接用 ROOMusic 的 UUID：歌曲是曲目 ID，专辑是专辑组 ID，�
 | `TestPostgreSQLSubsonicSealFailurePreservesIdentity` | 密钥损坏时登录与改密成功、Warn 不含密码与密文，确认密码 503 |
 | `TestPostgreSQLSubsonicWebSettings` | 网页端四个接口的守卫与第 6 节状态码，样本录制 |
 | `TestPostgreSQLSubsonicMigrationRoundTrip` | 0081 up → down → up |
+| `TestPostgreSQLSubsonicJukeboxPlaybackAndQueue`、`…GroupGain` | 点唱机各 action 与网页快照、队列、事件流一致；设备与编组音量 |
+| `TestPostgreSQLSubsonicJukeboxRecentPlayback`、`…WebSettings` | 自动选择、没有播放区时错误 0、本人隔离；网页端 GET/PUT 状态码矩阵 |
+| `TestPostgreSQLSubsonicJukeboxRetriesWithLatestIndex`、`…RejectsPersistentRevisionConflicts` | 冲突后按新下标重试；持续冲突返回 0 且没有部分写入 |
+| `TestPostgreSQLSubsonicJukeboxMigrationRoundTrip` | 0084 往返 |
 | `TestSubsonicBrowseEntityMapping`、`TestSubsonicBrowseWireEncoding` | 实体映射、可选字段省略、XML/JSON 编码 |
 | `TestSubsonicBrowseProtocol` | 合成曲库（多碟、CUE、多艺人、有无封面与流派）上 §4.1 各接口的 XML 与 JSON |
 | `TestSubsonicBrowseAlbumLists`、`TestSubsonicBrowsePersonalAlbumLists` | 各 `type` 的顺序、分页、500 截断、参数错误；收藏、最近、最常播放的用户隔离与不可用过滤 |

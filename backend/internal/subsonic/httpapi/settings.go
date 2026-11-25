@@ -3,11 +3,14 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/subsonic/auth"
 )
 
@@ -27,6 +30,46 @@ func (h *Handlers) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpserver.WriteJSON(w, 200, state)
+}
+
+func (h *Handlers) setJukeboxZone(w http.ResponseWriter, r *http.Request) {
+	if !h.guard.RequireSameOrigin(w, r) {
+		return
+	}
+	user, err := h.guard.Authenticate(r)
+	if err != nil {
+		h.guard.WriteUnauthenticated(w, r)
+		return
+	}
+	zoneID, valid := jukeboxZoneInput(w, r)
+	if !valid {
+		httpserver.WriteError(w, r, 400, "invalid_input", "请提供有效的播放区标识或 null")
+		return
+	}
+	state, err := h.service.SetJukeboxZone(r.Context(), user, zoneID)
+	switch {
+	case errors.Is(err, auth.ErrDisabled):
+		httpserver.WriteError(w, r, 409, "subsonic_disabled", "Subsonic 接口已关闭")
+	case errors.Is(err, auth.ErrJukeboxZoneNotFound):
+		httpserver.WriteError(w, r, 404, "not_found", "播放区不存在")
+	case err != nil:
+		unavailable(w, r)
+	default:
+		httpserver.WriteJSON(w, 200, state)
+	}
+}
+
+func jukeboxZoneInput(w http.ResponseWriter, r *http.Request) (*string, bool) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
+	if err != nil || !utf8.Valid(body) || httpserver.UniqueJSONObject(body) != nil {
+		return nil, false
+	}
+	var fields map[string]json.RawMessage
+	var id *string
+	if json.Unmarshal(body, &fields) != nil || len(fields) != 1 || json.Unmarshal(fields["jukebox_zone_id"], &id) != nil {
+		return nil, false
+	}
+	return id, id == nil || uuid.Valid(*id)
 }
 
 func (h *Handlers) confirm(w http.ResponseWriter, r *http.Request) {

@@ -81,6 +81,8 @@ QueueChange = {queue_revision, kind, …}: replace {entries}（超过 500 条改
 | `play_next` / `enqueue` | `track_ids: UUID[1..]` | 插到当前项后 / 追加到队尾，不打断；超过 10,000 条 `409 queue_full` |
 | `play_entry` / `remove_entry` | `entry_id` | 播放这一项 / 移除（移除正在放的当前项时接着放后继） |
 | `move_entry` | `entry_id`、`to_index: integer`（队列下标，从 0 起） | 移到目标位置；越界 `400 invalid_input`；同位置无操作、不推送 |
+| `replace_queue` | `track_ids: UUID[1..10000]`、`start_index` | 替换队列，当前项取 `start_index`，关流并暂停在 0 秒；不起播（点唱机 `set`） |
+| `shuffle_queue` | — | 把队列打乱一次：条目 ID、当前项、位置与播放模式不变；打乱后顺序没变时无操作 |
 | `clear_queue`、`set_mode {mode}` | — | 清空并暂停；切换模式 |
 | `play`、`pause`、`stop` | — | 播放（没有当前项取第一项）；暂停；暂停并回到 0 |
 | `next`、`previous` | — | 手动下一首（跳过失败项）；上一首（结果是当前项时从头放） |
@@ -89,6 +91,10 @@ QueueChange = {queue_revision, kind, …}: replace {entries}（超过 500 条改
 | `retry` | — | 只在 `fault: transient` 时起播并续流 |
 | `transfer` | `target_zone_id` | 队列、当前项、位置、模式与历史搬到目标并直接播放，源清空；给自己 `400 invalid_input` |
 | `import` | `entries: [{entry_id: string(1..64), track_id}]`（≤ 10,000，ID 不重复）、`current_entry_id: string?`、`mode`、`position_seconds`、`history: string[≤500]` | 只在播放区为空且从没导入过时生效（`imported: true`，公告 `queue_restored`），否则 `imported: false` |
+
+服务层（不经 JSON）的 `Command` 另有两个字段，供 Subsonic 点唱机使用：`ExpectedRevision *int64`（与播放区当前 `revision` 不同时返回 `ErrRevisionConflict`，不做任何改动）、`StartPositionSeconds *float64`（`play_entry` 从这一秒开流，钳到 `[0, 时长]`；即使目标就是当前项也重新开流）。`SetVolume` 与 `SetGroupVolume` 同样接受期望版本号。
+
+输出端报告进入 `playing`、或播放中进入下一首时，写 `playback_zones.last_played_at`（迁移 0084），点唱机据此选“最近播放过的播放区”。升级前的播放没有这项记录。
 
 暂停 5 秒后服务端关闭渲染会话（`stream` 置空），之后 `play` 从保存的位置开新流。
 

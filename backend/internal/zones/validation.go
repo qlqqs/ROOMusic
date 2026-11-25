@@ -18,8 +18,8 @@ func validMode(mode queue.Mode) bool {
 func validateSettings(p SettingsPatch) error { return ValidateSettingsPatch(p) }
 func validateCommand(c Command) error {
 	switch c.Command {
-	case "play_tracks", "play_next", "enqueue":
-		if len(c.TrackIDs) == 0 || (c.Command == "play_tracks" && len(c.TrackIDs) > queue.MaxQueueEntries) {
+	case "play_tracks", "replace_queue", "play_next", "enqueue":
+		if len(c.TrackIDs) == 0 || ((c.Command == "play_tracks" || c.Command == "replace_queue") && len(c.TrackIDs) > queue.MaxQueueEntries) {
 			return ErrInvalidInput
 		}
 		for _, id := range c.TrackIDs {
@@ -29,6 +29,9 @@ func validateCommand(c Command) error {
 		}
 	case "play_entry", "remove_entry":
 		if !validID(c.EntryID) {
+			return ErrInvalidInput
+		}
+		if c.StartPositionSeconds != nil && !validSeconds(*c.StartPositionSeconds) {
 			return ErrInvalidInput
 		}
 	case "move_entry":
@@ -68,7 +71,7 @@ func validateCommand(c Command) error {
 				return ErrInvalidInput
 			}
 		}
-	case "clear_queue", "play", "pause", "stop", "next", "previous", "retry":
+	case "clear_queue", "shuffle_queue", "play", "pause", "stop", "next", "previous", "retry":
 	default:
 		return ErrInvalidInput
 	}

@@ -228,7 +228,7 @@ func (s *Service) SetSyncDelay(ctx context.Context, userID, deviceID string, ms 
 	})
 }
 
-func (s *Service) SetGroupVolume(ctx context.Context, userID, zoneID string, volume float64) (GroupVolumeResult, error) {
+func (s *Service) SetGroupVolume(ctx context.Context, userID, zoneID string, volume float64, expectedRevision ...int64) (GroupVolumeResult, error) {
 	var result GroupVolumeResult
 	if !validID(zoneID) || !finite(volume) || volume < 0 || volume > 1 {
 		return result, ErrInvalidInput
@@ -255,6 +255,9 @@ func (s *Service) SetGroupVolume(ctx context.Context, userID, zoneID string, vol
 	leader.mu.Unlock()
 	unlock := lockGroupZones(group)
 	defer unlock()
+	if len(expectedRevision) != 0 && leader.persisted.Revision != expectedRevision[0] {
+		return result, ErrRevisionConflict
+	}
 	if !leader.visible() {
 		return result, ErrZoneOffline
 	}

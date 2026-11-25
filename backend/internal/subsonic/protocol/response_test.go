@@ -56,6 +56,39 @@ func TestSubsonicProtocolResponseEncoding(t *testing.T) {
 				"podcastRole":false,"streamRole":true,"jukeboxRole":true,"shareRole":false,"videoConversionRole":false,"folder":[1]}`,
 		},
 		{
+			name: "jukebox-status", status: "ok", httpStatus: http.StatusOK,
+			response:    protocol.Response{JukeboxStatus: &protocol.JukeboxStatus{CurrentIndex: 2, Playing: true, Gain: 0.5, Position: 30}},
+			xmlPayload:  `<jukeboxStatus currentIndex="2" playing="true" gain="0.5" position="30"></jukeboxStatus>`,
+			jsonPayload: `,"jukeboxStatus":{"currentIndex":2,"playing":true,"gain":0.5,"position":30}`,
+		},
+		{
+			name: "jukebox-playlist", status: "ok", httpStatus: http.StatusOK,
+			response: protocol.Response{JukeboxPlaylist: &protocol.JukeboxPlaylist{
+				JukeboxStatus: protocol.JukeboxStatus{CurrentIndex: 0, Gain: 0.5},
+				Entries: []protocol.Song{
+					{ID: "first", Title: "潮汐 & 风", Duration: 120},
+					{ID: "second", Title: "第二首", Duration: 180},
+				},
+			}},
+			xmlPayload: `<jukeboxPlaylist currentIndex="0" playing="false" gain="0.5" position="0">
+				<entry id="first" parent="" isDir="false" title="潮汐 &amp; 风" album="" artist="" duration="120" discNumber="0" albumId="" isVideo="false" type="" mediaType="" displayArtist="" displayAlbumArtist=""></entry>
+				<entry id="second" parent="" isDir="false" title="第二首" album="" artist="" duration="180" discNumber="0" albumId="" isVideo="false" type="" mediaType="" displayArtist="" displayAlbumArtist=""></entry>
+			</jukeboxPlaylist>`,
+			jsonPayload: `,"jukeboxPlaylist":{"currentIndex":0,"playing":false,"gain":0.5,"position":0,"entry":[
+				{"id":"first","parent":"","isDir":false,"title":"潮汐 & 风","album":"","artist":"","duration":120,"discNumber":0,"albumId":"","isVideo":false,"type":"","mediaType":"","displayArtist":"","displayAlbumArtist":""},
+				{"id":"second","parent":"","isDir":false,"title":"第二首","album":"","artist":"","duration":180,"discNumber":0,"albumId":"","isVideo":false,"type":"","mediaType":"","displayArtist":"","displayAlbumArtist":""}
+			]}`,
+		},
+		{
+			name: "jukebox-empty-playlist", status: "ok", httpStatus: http.StatusOK,
+			response: protocol.Response{JukeboxPlaylist: &protocol.JukeboxPlaylist{
+				JukeboxStatus: protocol.JukeboxStatus{CurrentIndex: -1, Gain: 1},
+				Entries:       []protocol.Song{},
+			}},
+			xmlPayload:  `<jukeboxPlaylist currentIndex="-1" playing="false" gain="1" position="0"></jukeboxPlaylist>`,
+			jsonPayload: `,"jukeboxPlaylist":{"currentIndex":-1,"playing":false,"gain":1,"position":0,"entry":[]}`,
+		},
+		{
 			name: "error", status: "failed", httpStatus: http.StatusOK,
 			response:    protocol.Failure(protocol.MissingParameter, "Missing <username> & value"),
 			xmlPayload:  `<error code="10" message="Missing &lt;username&gt; &amp; value"></error>`,
