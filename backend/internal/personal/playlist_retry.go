@@ -86,8 +86,13 @@ func (s *Service) Execute(ctx context.Context, userID, key string, c Command) (R
 		return Result{}, err
 	}
 	// JSONB 的规范化结果作为首次响应，保证后续重放具有相同字节。
+	receiptKind := c.Kind
+	if receiptKind == "replace_items" {
+		// 沿用条目写入的收据类型，指纹仍包含完整的替换命令。
+		receiptKind = "add_items"
+	}
 	err = tx.QueryRowContext(ctx, `INSERT INTO personal_playlist_requests(user_id,idempotency_key,command,playlist_id,request_hash,response_status,response_body)
- VALUES($1::uuid,$2::uuid,$3,$4::uuid,$5,$6,$7::jsonb) RETURNING response_body`, userID, key, c.Kind, playlistID, hash[:], result.Status, []byte(result.Body)).Scan(&result.Body)
+ VALUES($1::uuid,$2::uuid,$3,$4::uuid,$5,$6,$7::jsonb) RETURNING response_body`, userID, key, receiptKind, playlistID, hash[:], result.Status, []byte(result.Body)).Scan(&result.Body)
 	if err != nil {
 		return Result{}, fmt.Errorf("save personal receipt: %w", err)
 	}
@@ -99,7 +104,7 @@ func (s *Service) Execute(ctx context.Context, userID, key string, c Command) (R
 
 func normalizeCommand(c Command) (Command, error) {
 	switch c.Kind {
-	case "create", "rename", "delete", "add_items", "remove_item", "restore_item", "move_item":
+	case "create", "rename", "delete", "add_items", "remove_item", "restore_item", "move_item", "replace_items":
 	default:
 		return c, ErrInvalidInput
 	}
@@ -112,12 +117,19 @@ func normalizeCommand(c Command) (Command, error) {
 	if c.Kind != "create" && c.Kind != "restore_item" && (c.ExpectedRevision < 1 || c.ExpectedRevision > MaxRevision) {
 		return c, ErrInvalidInput
 	}
-	if c.Kind == "create" || c.Kind == "rename" {
+	if c.Kind == "create" || c.Kind == "rename" || (c.Kind == "replace_items" && c.Name != "") {
 		var err error
 		c.Name, err = NormalizeName(c.Name)
 		if err != nil {
 			return c, err
 		}
+	}
+	if c.Kind == "replace_items" {
+		ids, err := normalizeIDs(c.TrackIDs, len(c.TrackIDs))
+		if err != nil {
+			return c, err
+		}
+		c.TrackIDs = ids
 	}
 	if c.Kind == "create" || c.Kind == "add_items" {
 		if len(c.TrackIDs) > TrackLimit || (c.Kind == "add_items" && len(c.TrackIDs) == 0) {
@@ -186,6 +198,8 @@ func (s *Service) runCommand(ctx context.Context, tx *sql.Tx, user, key string, 
 		}{p.ID, true}
 	case "add_items":
 		body, err = s.addItems(ctx, tx, user, p, c.TrackIDs)
+	case "replace_items":
+		body, err = s.replacePlaylistItems(ctx, tx, user, p, c)
 	case "remove_item":
 		body, err = removeItem(ctx, tx, user, p, c.ItemID)
 	case "restore_item":

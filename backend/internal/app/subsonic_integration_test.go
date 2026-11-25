@@ -218,7 +218,7 @@ func TestPostgreSQLSubsonicAuthenticationAndPayloads(t *testing.T) {
 
 	for _, test := range []struct{ endpoint, field, json string }{
 		{"getLicense", "license", `{"valid":true}`},
-		{"getOpenSubsonicExtensions", "openSubsonicExtensions", `[{"name":"formPost","versions":[1]}]`},
+		{"getOpenSubsonicExtensions", "openSubsonicExtensions", `[{"name":"formPost","versions":[1]},{"name":"songLyrics","versions":[1]}]`},
 		{"getMusicFolders", "musicFolders", `{"musicFolder":[{"id":1,"name":"ROOMusic"}]}`},
 		{"getUser", "user", `{"username":"subsonic-listener","scrobblingEnabled":false,"adminRole":false,"settingsRole":false,"downloadRole":true,"uploadRole":false,"playlistRole":false,"coverArtRole":false,"commentRole":false,"podcastRole":false,"streamRole":true,"jukeboxRole":true,"shareRole":false,"videoConversionRole":false,"folder":[1]}`},
 	} {
