@@ -13,7 +13,7 @@
 | `MenuAction.hint`、`untitledGroup` | `hint` 是右侧说明，也是菜单项名称的一部分，与标签之间保留空格；`untitledGroup` 保留组间分隔线但不显示组标题 |
 | `FilterField`、`FilterChip`、`SortMenu` | 列表筛选共用控件：250ms 后提交，首次 push、后续 replace；清空与失焦结束输入过程，前进后退由地址同步草稿。校验失败就近提示且不写地址。胶囊用 `aria-pressed`，排序菜单显示当前项；均不发请求、不判断角色 |
 | `SettingsGroup` | `section` + `h2` 标题 + 卡片；可给标题旁的操作、状态（`status`）、标题 ref 与卡片下方的脚注。卡片宽度用 ResizeObserver 量出，经 context 告诉里面的 `Segmented` 是否窄（< 640px，与 CSS 里的 639px 成对修改）；没有 ResizeObserver（jsdom）时按宽处理 |
-| `SettingRow` | 左名称（可带一行说明）、右控件右对齐；名称是指向 `controlId` 的 `<label>`，子内容可以是 `(ids) => ReactNode` 拿到 `controlId`/`labelId`/`descriptionId`。控件是按钮或只读值时用 `plainLabel`（`<label>` 指向按钮会改掉按钮的名称）。`nested` 是从属项：缩进、字号小一级；所属开关关闭时**由调用方不渲染**这一行，不做禁用态。容器查询：卡片窄时控件放不下才换到下一行 |
+| `SettingRow` | 左名称（可带一行说明）、右控件右对齐；名称是指向 `controlId` 的 `<label>`，子内容可以是 `(ids) => ReactNode` 拿到 `controlId`/`labelId`/`descriptionId`。控件是按钮或只读值时用 `plainLabel`（`<label>` 指向按钮会改掉按钮的名称）。`nested` 是从属项：缩进、字号小一级；所属开关关闭时**由调用方不渲染**这一行，不做禁用态。容器查询：卡片窄时控件放不下才换到下一行。控件列按内容定宽，里面的“输入框 + 按钮”不能用百分比宽度（`min(100%, …)`、输入框 `width: 100%`），否则列宽退成输入框的默认宽度、按钮被挤到下一行；给定宽（设置里是 360px，`max-width: 100%`）并 `nowrap`，输入框 `flex: 1 1 0` 占剩余宽度（2026-11-25） |
 | `Segmented` | 宽卡片里是 `role="radiogroup"` 的相连分段，窄卡片里是同名同值的原生 `<select>`（`aria-labelledby` 指向行名称）。用量宽切换而不是 CSS 同时渲染两份，避免读屏与测试看到重复控件 |
 | `Switch` | 开关（`role="switch"`），名称来自 `SettingRow` 的 label |
 | `TextField labelHidden` | label 视觉隐藏但仍是输入框的名称；用于单行工具条，可见提示改为 placeholder |
