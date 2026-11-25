@@ -740,7 +740,8 @@
         }
       ]
     },
-    "expect": {"release": "", "group": "91c61b37-c8f6-55a1-8b5a-5dd7002f321b", "recordings": [], "fields": {}, "track_fields": [], "artists": {"Rill Quartet": "2b50ed66-5cd1-5004-85e2-22d30fad3f61"}, "group_with": [], "merge_artist_with": []}
+    "expect": {"release": "", "group": "91c61b37-c8f6-55a1-8b5a-5dd7002f321b", "group_match": "91c61b37-c8f6-55a1-8b5a-5dd7002f321b",
+      "recordings": [], "fields": {}, "track_fields": [], "artists": {"Rill Quartet": "2b50ed66-5cd1-5004-85e2-22d30fad3f61"}, "group_with": [], "merge_artist_with": []}
   },
   {
     "id": "stream-04",
@@ -805,7 +806,8 @@
         }
       ]
     },
-    "expect": {"release": "", "group": "b5394a43-aee1-5d6d-99e3-7e1148f7fa8d", "recordings": [], "fields": {}, "track_fields": [], "artists": {"Night Cedar": "15c328a1-740b-54ae-a55b-ab5f99f0352e"}, "group_with": [], "merge_artist_with": []}
+    "expect": {"release": "", "group": "b5394a43-aee1-5d6d-99e3-7e1148f7fa8d", "group_match": "b5394a43-aee1-5d6d-99e3-7e1148f7fa8d",
+      "recordings": [], "fields": {}, "track_fields": [], "artists": {"Night Cedar": "15c328a1-740b-54ae-a55b-ab5f99f0352e"}, "group_with": [], "merge_artist_with": []}
   },
   {
     "id": "stream-05",
@@ -961,7 +963,8 @@
         }
       ]
     },
-    "expect": {"release": "", "group": "49bd93c1-29e9-5025-8010-357ce4334d87", "recordings": [], "fields": {}, "track_fields": [], "artists": {"Salt Letter": "7799f412-886e-5a79-9387-e48766037495"}, "group_with": [], "merge_artist_with": []}
+    "expect": {"release": "", "group": "49bd93c1-29e9-5025-8010-357ce4334d87", "group_match": "49bd93c1-29e9-5025-8010-357ce4334d87",
+      "recordings": [], "fields": {}, "track_fields": [], "artists": {"Salt Letter": "7799f412-886e-5a79-9387-e48766037495"}, "group_with": [], "merge_artist_with": []}
   },
   {
     "id": "stream-08",
@@ -1008,7 +1011,8 @@
         }
       ]
     },
-    "expect": {"release": "", "group": "0c1e5ef2-9966-56ff-a249-f0ce26d297b5", "recordings": [], "fields": {}, "track_fields": [], "artists": {"Rill Quartet": "2b50ed66-5cd1-5004-85e2-22d30fad3f61"}, "group_with": [], "merge_artist_with": []}
+    "expect": {"release": "", "group": "0c1e5ef2-9966-56ff-a249-f0ce26d297b5", "group_match": "0c1e5ef2-9966-56ff-a249-f0ce26d297b5",
+      "recordings": [], "fields": {}, "track_fields": [], "artists": {"Rill Quartet": "2b50ed66-5cd1-5004-85e2-22d30fad3f61"}, "group_with": [], "merge_artist_with": []}
   },
   {
     "id": "stream-09",
@@ -1164,7 +1168,8 @@
         }
       ]
     },
-    "expect": {"release": "", "group": "3a921c56-8d1c-5964-a79d-13a6fec8edc8", "recordings": [], "fields": {}, "track_fields": [], "artists": {"Iris Lock": "cff56f2d-273f-52bf-83c9-e0724fff79a1"}, "group_with": [], "merge_artist_with": []}
+    "expect": {"release": "", "group": "3a921c56-8d1c-5964-a79d-13a6fec8edc8", "group_match": "3a921c56-8d1c-5964-a79d-13a6fec8edc8",
+      "recordings": [], "fields": {}, "track_fields": [], "artists": {"Iris Lock": "cff56f2d-273f-52bf-83c9-e0724fff79a1"}, "group_with": [], "merge_artist_with": []}
   },
   {
     "id": "stream-12",
@@ -1211,7 +1216,8 @@
         }
       ]
     },
-    "expect": {"release": "", "group": "8b46203c-30c9-59d5-8411-f6fb51cb87ca", "recordings": [], "fields": {}, "track_fields": [], "artists": {"Salt Letter": "7799f412-886e-5a79-9387-e48766037495"}, "group_with": [], "merge_artist_with": []}
+    "expect": {"release": "", "group": "8b46203c-30c9-59d5-8411-f6fb51cb87ca", "group_match": "8b46203c-30c9-59d5-8411-f6fb51cb87ca",
+      "recordings": [], "fields": {}, "track_fields": [], "artists": {"Salt Letter": "7799f412-886e-5a79-9387-e48766037495"}, "group_with": [], "merge_artist_with": []}
   },
   {
     "id": "stream-13",
@@ -1367,7 +1373,8 @@
         }
       ]
     },
-    "expect": {"release": "", "group": "f20600ec-082f-55da-acba-3d02aca562bc", "recordings": [], "fields": {}, "track_fields": [], "artists": {"Fern Parcel": "4ff3f55c-7c06-5602-b9b4-9e6e811ef66d"}, "group_with": [], "merge_artist_with": []}
+    "expect": {"release": "", "group": "f20600ec-082f-55da-acba-3d02aca562bc", "group_match": "f20600ec-082f-55da-acba-3d02aca562bc",
+      "recordings": [], "fields": {}, "track_fields": [], "artists": {"Fern Parcel": "4ff3f55c-7c06-5602-b9b4-9e6e811ef66d"}, "group_with": [], "merge_artist_with": []}
   },
   {
     "id": "loose-01",

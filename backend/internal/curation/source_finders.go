@@ -28,7 +28,24 @@ func (s *Sources) ReleaseFinder(sourceID string) (sources.ReleaseFinder, bool) {
 	if !ok || r.Releases == nil || !slices.Contains(r.Declaration.Capabilities, sources.ReleaseLookup) {
 		return nil, false
 	}
-	return guardedRelease{guardedFinders{registration: r, gate: s}}, true
+	base := guardedRelease{guardedFinders{registration: r, gate: s}}
+	if pages, ok := r.Releases.(ReleasePageFinder); ok {
+		return guardedReleasePages{guardedRelease: base, pages: pages}, true
+	}
+	return base, true
+}
+
+type guardedReleasePages struct {
+	guardedRelease
+	pages ReleasePageFinder
+}
+
+func (g guardedReleasePages) SearchReleasePage(ctx context.Context, query ReleaseSearch) (ReleasePage, error) {
+	ctx, err := g.background(ctx)
+	if err != nil {
+		return ReleasePage{}, err
+	}
+	return g.pages.SearchReleasePage(ctx, query)
 }
 
 func (g guardedRelease) ReleaseByID(ctx context.Context, id string) (sources.Release, error) {
@@ -78,7 +95,24 @@ func (s *Sources) RecordingFinder(sourceID string) (sources.RecordingFinder, boo
 	if !ok || r.Recordings == nil || !slices.Contains(r.Declaration.Capabilities, sources.RecordingLookup) {
 		return nil, false
 	}
-	return guardedRecording{guardedFinders{registration: r, gate: s}}, true
+	base := guardedRecording{guardedFinders{registration: r, gate: s}}
+	if pages, ok := r.Recordings.(RecordingPageFinder); ok {
+		return guardedRecordingPages{guardedRecording: base, pages: pages}, true
+	}
+	return base, true
+}
+
+type guardedRecordingPages struct {
+	guardedRecording
+	pages RecordingPageFinder
+}
+
+func (g guardedRecordingPages) SearchRecordingPage(ctx context.Context, query RecordingSearch) (RecordingPage, error) {
+	ctx, err := g.background(ctx)
+	if err != nil {
+		return RecordingPage{}, err
+	}
+	return g.pages.SearchRecordingPage(ctx, query)
 }
 
 func (g guardedRecording) RecordingByID(ctx context.Context, id string) (sources.Recording, error) {
@@ -112,7 +146,24 @@ func (s *Sources) ArtistFinder(sourceID string) (sources.ArtistFinder, bool) {
 	if !ok || r.Artists == nil || !slices.Contains(r.Declaration.Capabilities, sources.ArtistLookup) {
 		return nil, false
 	}
-	return guardedArtist{guardedFinders{registration: r, gate: s}}, true
+	base := guardedArtist{guardedFinders{registration: r, gate: s}}
+	if pages, ok := r.Artists.(ArtistPageFinder); ok {
+		return guardedArtistPages{guardedArtist: base, pages: pages}, true
+	}
+	return base, true
+}
+
+type guardedArtistPages struct {
+	guardedArtist
+	pages ArtistPageFinder
+}
+
+func (g guardedArtistPages) SearchArtistPage(ctx context.Context, query string) (ArtistPage, error) {
+	ctx, err := g.background(ctx)
+	if err != nil {
+		return ArtistPage{}, err
+	}
+	return g.pages.SearchArtistPage(ctx, query)
 }
 
 func (g guardedArtist) ArtistByID(ctx context.Context, id string) (sources.Artist, error) {

@@ -45,7 +45,7 @@ func (c *Client) ReleasesByDisc(ctx context.Context, toc sources.DiscTOC) (sourc
 	for _, offset := range toc.Offsets {
 		parts = append(parts, strconv.Itoa(offset))
 	}
-	params := url.Values{"toc": {strings.Join(parts, " ")}, "cdstubs": {"no"}, "inc": {"artist-credits labels release-groups"}}
+	params := url.Values{"toc": {strings.Join(parts, " ")}, "cdstubs": {"no"}, "inc": {"recordings artist-credits labels release-groups"}}
 	var result sources.DiscMatch
 	err = c.get(ctx, "discid/"+id, params, func(body []byte) (bool, bool) {
 		var disc struct {
@@ -56,15 +56,41 @@ func (c *Client) ReleasesByDisc(ctx context.Context, toc sources.DiscTOC) (sourc
 		if json.Unmarshal(body, &disc) != nil || (disc.ID == "" && disc.Count == nil) || !validEntities(disc.Releases) {
 			return false, false
 		}
-		result.Exact = disc.ID != ""
+		if disc.ID != "" && disc.ID != id {
+			return false, false
+		}
+		result.Exact = disc.ID == id
 		if !result.Exact && len(disc.Releases) > 25 {
 			disc.Releases = disc.Releases[:25]
 		}
-		result.Releases = releases(disc.Releases)
+		result.Releases = make([]sources.Release, 0, len(disc.Releases))
+		for _, e := range disc.Releases {
+			if result.Exact && !completeDiscRelease(e) {
+				return false, false
+			}
+			result.Releases = append(result.Releases, release(e, result.Exact))
+		}
 		return len(result.Releases) == 0, true
 	})
 	if errors.Is(err, sources.ErrNotFound) {
 		return sources.DiscMatch{Releases: []sources.Release{}}, nil
 	}
 	return result, err
+}
+
+func completeDiscRelease(e Entity) bool {
+	if len(e.Media) == 0 {
+		return false
+	}
+	for _, medium := range e.Media {
+		if medium.Position <= 0 || medium.Tracks == nil || medium.DeclaredTrackCount == nil || len(medium.Tracks) != medium.TrackCount {
+			return false
+		}
+		for _, track := range medium.Tracks {
+			if track.Position <= 0 || track.ID == "" || track.Recording == nil || track.Recording.ID == "" {
+				return false
+			}
+		}
+	}
+	return true
 }

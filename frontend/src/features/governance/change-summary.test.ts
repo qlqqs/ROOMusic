@@ -319,6 +319,24 @@ describe("外部对应（M7 C）", () => {
     expect(changeLines(bare)).toEqual(["对上 MusicBrainz：外部发行", "依据model_judgement"]);
   });
 
+  it("只认定到外部专辑一层：写明是专辑，同时对上的艺人照常列出", () => {
+    const groupOnly: Pick<OperationItemDTO, "changes"> = {
+      changes: {
+        kind: "external_link",
+        source: "musicbrainz",
+        method: "search",
+        confidence: "certain",
+        external: { title: "Sample Album", artist: "Sample Artist", date: "2015-03-02", country: "" },
+        links: [
+          { object_type: "release_group_match", object_id: id(1), external_id: "22222222-2222-4222-8222-222222222222" },
+          { object_type: "artist", object_id: id(5), external_id: "55555555-5555-4555-8555-555555555555" },
+        ],
+      },
+    };
+    expect(changeLines(groupOnly)).toEqual(["对上 MusicBrainz 的专辑：《Sample Album》— Sample Artist（2015）", "依据标题、艺人与曲目结构，同时对上1 位艺人"]);
+    expect(revertLines(groupOnly)).toEqual(["解除与 MusicBrainz 的专辑：《Sample Album》— Sample Artist（2015） 的对应", "同时去掉1 位艺人的对应"]);
+  });
+
   it("撤销前的说明与撤销记录都写成解除", () => {
     const expected = ["解除与 MusicBrainz：《Sample Album》— Sample Artist（2015 · JP） 的对应", "同时去掉专辑、2 首曲目的对应"];
     expect(revertLines(link)).toEqual(expected);

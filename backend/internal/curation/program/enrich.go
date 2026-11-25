@@ -21,7 +21,7 @@ import (
 )
 
 var methodNames = map[string]string{
-	"tag_id": "标签标识", "barcode": "条码", "catalog_number": "唱片编号", "isrc": "ISRC", "disc_id": "光盘目录", "acoustid": "声学指纹",
+	"tag_id": "标签标识", "barcode": "条码", "catalog_number": "唱片编号", "isrc": "ISRC", "disc_id": "光盘目录", "acoustid": "声学指纹", "search": "文字与曲目结构",
 }
 
 func hasMarker(markers []catalog.CurationSuppression, objectType, objectID, subject, raw string) bool {
@@ -166,6 +166,8 @@ func linkNeeded(e catalog.CurationEvidence, links []curation.LinkIntent) bool {
 		switch link.ObjectType {
 		case "release":
 			occupied = e.ExternalID != ""
+		case "release_group_match":
+			occupied = e.ReleaseGroupMatchID != ""
 		case "track":
 			occupied = linkedTracks[link.ObjectID] != ""
 		case "release_group":
@@ -179,31 +181,81 @@ func linkNeeded(e catalog.CurationEvidence, links []curation.LinkIntent) bool {
 	return false
 }
 
-func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvidence, m MatchResult) (group, artistStatus string, err error) {
+var errArtistCreditUnconfirmed = errors.New("共同艺人署名未能对位")
+
+func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvidence, m MatchResult) (group, artistStatus string, proposals []curation.ArtistCreditProposal, err error) {
 	p, err := planMatch(ctx, w.db, e, m)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
 	p.tracks = planTrackFields(e, m)
+	p.links.RequireAll = m.Level == "artist"
 	local, err := catalog.LoadCurationArtistCredits(ctx, w.db, e.ID)
 	switch {
 	case err == nil:
-		p.artists = planArtistLinks(local, e, m)
+		p.artists, proposals, err = w.identifyArtists(ctx, local, e, m, u.offline)
+		if err != nil {
+			return "", "", nil, err
+		}
+		if u.programOnly {
+			proposals = nil
+		}
+		if m.Level == "artist" && (len(p.artists) == 0 || len(p.artists) != len(m.Credits)) {
+			return "", "", nil, errArtistCreditUnconfirmed
+		}
 		artistStatus = "done"
 	case !errors.Is(err, catalog.ErrArtistCatalogPreparing):
-		return "", "", err
+		return "", "", nil, err
+	case m.Level == "artist":
+		return "", "", nil, errArtistCreditUnconfirmed
+	}
+	if m.RepresentativeID != "" {
+		p.trackTitleSource = m.RepresentativeID
 	}
 	group, err = writeMatch(ctx, w.db, w.writer, p, u.write, nil)
-	return group, artistStatus, err
+	if m.Level == "artist" && (failureCode(err) == "occupied" || failureCode(err) == "suppressed") {
+		return "", "", nil, errArtistCreditUnconfirmed
+	}
+	return group, artistStatus, proposals, err
+}
+
+// 只承认计划认定的艺人和发行组对应，以及由该次写入产生的归组。
+func afterGroupMatch(before, after catalog.CurationEvidence, out outcome) catalog.CurationEvidence {
+	m := out.match
+	artists := m.Credits
+	if m.Release != nil {
+		artists = m.Release.Artists
+	}
+	if m.Recording != nil {
+		artists = m.Recording.Artists
+	}
+	if len(artists) == 1 && after.ArtistMBID == artists[0].ArtistID && out.artistLinks == "done" {
+		before.ArtistMBID = after.ArtistMBID
+	}
+	if m.Level != "release_group" || m.GroupID == "" {
+		return before
+	}
+	if after.ReleaseGroupMatchID == m.GroupID {
+		before.ReleaseGroupMatchID = after.ReleaseGroupMatchID
+		before.ExternalGroupID = after.ExternalGroupID
+	}
+	if out.group == "joined" && after.GroupChangeSource == "curation" && after.GroupExternalID == m.GroupID {
+		before.GroupID, before.GroupChangeSource = after.GroupID, after.GroupChangeSource
+	}
+	if (out.group == "joined" || out.group == "linked") && after.GroupExternalID == m.GroupID {
+		before.GroupExternalID = after.GroupExternalID
+	}
+	return before
 }
 
 type matchWritePlan struct {
-	artists  []curation.LinkIntent
-	tracks   []curation.TrackRequest
-	evidence catalog.CurationEvidence
-	group    groupPlan
-	links    curation.LinkRequest
-	fields   map[string]catalog.CorrectionIntent
+	trackTitleSource string
+	artists          []curation.LinkIntent
+	tracks           []curation.TrackRequest
+	evidence         catalog.CurationEvidence
+	group            groupPlan
+	links            curation.LinkRequest
+	fields           map[string]catalog.CorrectionIntent
 }
 
 func planMatch(ctx context.Context, db operations.Queryer, e catalog.CurationEvidence, m MatchResult) (matchWritePlan, error) {
@@ -212,12 +264,18 @@ func planMatch(ctx context.Context, db operations.Queryer, e catalog.CurationEvi
 	var fields map[string]catalog.CorrectionIntent
 	request.ReleaseID, request.Method, request.Confidence = e.ID, m.Method, "certain"
 	var basis string
-	if r := m.Release; r != nil {
+	groupID := m.GroupID
+	if m.Release != nil {
+		groupID = m.Release.Group.ID
+	}
+	if groupID != "" {
 		var err error
-		plan, err = planGroup(ctx, db, e, r.Group.ID)
+		plan, err = planGroup(ctx, db, e, groupID)
 		if err != nil {
 			return matchWritePlan{}, err
 		}
+	}
+	if r := m.Release; r != nil {
 		request.External = curation.ExternalSummary{Title: summaryText(r.Title), Artist: summaryText(credits(r.Artists)), Date: summaryText(r.Date), Country: summaryText(r.Country)}
 		request.External.DiscCount = len(r.Media)
 		for _, disc := range r.Media {
@@ -225,14 +283,21 @@ func planMatch(ctx context.Context, db operations.Queryer, e catalog.CurationEvi
 		}
 		basis = fmt.Sprintf("MusicBrainz 发行 %s，依据%s", r.ID, methodNames[m.Method])
 		request.Links = append(request.Links, curation.LinkIntent{ObjectType: "release", ObjectID: e.ID, ExternalID: r.ID, ExternalGroupID: r.Group.ID})
-		if plan.link {
-			request.Links = append(request.Links, curation.LinkIntent{ObjectType: "release_group", ObjectID: e.GroupID, ExternalID: r.Group.ID})
-		}
 		fields = missingFields(e, *r)
+	} else if m.Level == "release_group" {
+		request.External = curation.ExternalSummary{Title: summaryText(e.Title), Artist: summaryText(credits(m.Credits)), DiscCount: len(e.DiscPositions()), TrackCount: len(e.Tracks)}
+		request.Links = append(request.Links, curation.LinkIntent{ObjectType: "release_group_match", ObjectID: e.ID, ExternalID: m.GroupID})
+		basis = fmt.Sprintf("MusicBrainz 发行组 %s，依据%s", m.GroupID, methodNames[m.Method])
+	} else if m.Level == "artist" {
+		request.External = curation.ExternalSummary{Artist: summaryText(credits(m.Credits))}
+		basis = "MusicBrainz 录音候选的共同署名"
 	} else {
 		r := m.Recording
 		request.External = curation.ExternalSummary{Title: summaryText(r.Title), Artist: summaryText(credits(r.Artists))}
 		basis = fmt.Sprintf("MusicBrainz 录音 %s，依据%s", r.ID, methodNames[m.Method])
+	}
+	if plan.link {
+		request.Links = append(request.Links, curation.LinkIntent{ObjectType: "release_group", ObjectID: e.GroupID, ExternalID: groupID})
 	}
 	request.Source = curation.Source{Kind: "source", Provider: "musicbrainz", Basis: basis}
 	for _, pair := range m.Pairs {
@@ -288,7 +353,11 @@ func writeMatch(ctx context.Context, db operations.Queryer, writer *curation.Wri
 			return "", err
 		}
 	}
-	if err := writeTrackFields(ctx, writer, p.tracks, request.Source, write); err != nil {
+	trackSource := request.Source
+	if p.trackTitleSource != "" {
+		trackSource.Basis += "，曲名取自发行 " + p.trackTitleSource
+	}
+	if err := writeTrackFields(ctx, writer, p.tracks, trackSource, write); err != nil {
 		return "", err
 	}
 	group, err := writeMatchGroup(ctx, writer, e, plan, request, write, record)

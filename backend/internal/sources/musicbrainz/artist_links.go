@@ -9,7 +9,7 @@ import (
 )
 
 func (c *Client) ArtistLinks(ctx context.Context, links sources.ArtistLinks) (sources.ArtistLinks, error) {
-	entity, err := c.Lookup(ctx, "artist", links.MBID, []string{"url-rels"})
+	entity, err := c.artistEntity(ctx, links.MBID)
 	if err != nil {
 		return links, err
 	}

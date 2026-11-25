@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
+	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 )
 
 // CurationCursor 是发行在按加入时间倒序排列的可见曲库中的位置。
@@ -52,6 +54,7 @@ type CurationObservation struct {
 }
 
 type CurationTrack struct {
+	WorkTitle                                                        string                           `json:"-"`
 	Authenticity                                                     map[string]metadata.Authenticity `json:"-"`
 	EffectiveTitleAuth, EffectiveArtistAuth                          metadata.Authenticity            `json:"-"`
 	OtherIdentifier                                                  bool                             `json:"-"`
@@ -76,6 +79,8 @@ type CurationTrack struct {
 }
 
 type CurationEvidence struct {
+	Classical, Compilation                            bool                             `json:"-"`
+	ReleaseGroupMatchID, ArtistMBID                   string                           `json:"-"`
 	Authenticity                                      map[string]metadata.Authenticity `json:"-"`
 	EffectiveTitleAuth, EffectiveArtistAuth           metadata.Authenticity            `json:"-"`
 	EffectiveYear                                     int                              `json:"-"`
@@ -125,6 +130,13 @@ func LoadCurationEvidence(ctx context.Context, q Queryer, releaseIDs []string, a
 	if err := loadCurationTracks(ctx, q, releaseIDs, result, true); err != nil {
 		return nil, err
 	}
+	if err := loadMatchArtistIDs(ctx, q, releaseIDs, result); err != nil {
+		return nil, err
+	}
+	for id, e := range result {
+		e.Compilation = e.isCompilation()
+		result[id] = e
+	}
 	if err := loadCurationSuppressions(ctx, q, releaseIDs, result); err != nil {
 		return nil, err
 	}
@@ -141,7 +153,12 @@ const curationReleaseLinkJoin = `
          AS item(object_type text,object_id uuid,external_id text,external_group_id text)
      WHERE item.object_type='release' AND item.object_id=releases.id AND item.external_id=rl.external_id
      LIMIT 1
- ) rg ON true`
+ ) rg ON true
+ LEFT JOIN external_links gm ON gm.source='musicbrainz' AND gm.object_type='release_group_match' AND gm.object_id=releases.id
+ AND EXISTS (SELECT 1 FROM operations o WHERE o.id=gm.operation_id AND o.operation_type='external_link'
+ AND o.target_type='release' AND o.target_id=releases.id AND o.after_state->'links' @>
+ jsonb_build_array(jsonb_build_object('object_type',gm.object_type,'object_id',gm.object_id,'external_id',gm.external_id))
+ AND NOT EXISTS (SELECT FROM operations undo WHERE undo.reverts_operation_id=o.id))`
 
 const curationHeaderSQL = `SELECT releases.id::text,releases.group_id::text,COALESCE(releases.candidate_kind,''),
  releases.artist,COALESCE(releases.media_type,''),
@@ -153,7 +170,7 @@ const curationHeaderSQL = `SELECT releases.id::text,releases.group_id::text,COAL
  COALESCE((SELECT jsonb_object_agg(field_key,selected_source) FROM release_field_decisions
      WHERE release_id=releases.id),'{}'::jsonb),
  COALESCE((SELECT jsonb_agg(position ORDER BY position,id) FROM media WHERE release_id=releases.id),'[]'::jsonb),
- lo.release_id IS NOT NULL,ea.storage_key,COALESCE(rl.external_id,''),COALESCE(rg.external_group_id,''),
+ lo.release_id IS NOT NULL,ea.storage_key,COALESCE(rl.external_id,''),COALESCE(rg.external_group_id,gm.external_id,''),COALESCE(gm.external_id,''),
  COALESCE(gl.external_id,''),
  COALESCE((SELECT COALESCE(NULLIF(o.origin->>'source',''),'rest') FROM operations o
     WHERE o.operation_type='release_group_change' AND o.target_type='release' AND o.target_id=releases.id
@@ -185,7 +202,7 @@ func curationHeaders(ctx context.Context, q Queryer, ids []string, artworkExists
 		var values, corrected, automatic, decisions, media []byte
 		var artworkKey sql.NullString
 		if err := rows.Scan(&e.ID, &e.GroupID, &e.CandidateKind, &e.Artist, &e.MediaType, &values, &corrected,
-			&automatic, &decisions, &media, &e.LocalArtwork, &artworkKey, &e.ExternalID, &e.ExternalGroupID,
+			&automatic, &decisions, &media, &e.LocalArtwork, &artworkKey, &e.ExternalID, &e.ExternalGroupID, &e.ReleaseGroupMatchID,
 			&e.GroupExternalID, &e.GroupChangeSource); err != nil {
 			return nil, err
 		}
@@ -207,6 +224,7 @@ func curationHeaders(ctx context.Context, q Queryer, ids []string, artworkExists
 			}
 		}
 		e.Title, e.AlbumArtist, e.Year, e.Genres = fields.Title, fields.AlbumArtist, fields.Year, fields.Genre
+		e.Classical = metadata.HasClassicalGenre(e.Genres)
 		e.Barcode, e.CatalogNumber, e.Label, e.Edition = fields.Barcode, fields.CatalogNumber, fields.Label, fields.Edition
 		e.FieldSources, e.RawCatalogNumber = sources, fields.CatalogNumber
 		e.Automatic = make(map[string]bool, len(autoValues))
@@ -301,7 +319,7 @@ const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_
     FROM track_observations WHERE track_id=t.id AND field_name IS NOT NULL
     AND ($2 OR field_name IN ('title','artist','track_number','disc_number'))),'{}'::jsonb),
  ct.track_id IS NOT NULL,ca.track_id IS NOT NULL,atitle.track_id IS NOT NULL,aa.track_id IS NOT NULL,
- m.position,t.disc_number,t.position,
+ m.position,t.disc_number,t.position,COALESCE(t.work_title,''),
  EXISTS(SELECT FROM track_identifiers WHERE track_id=t.id AND kind IN ('mb_work','acoustid') AND value<>''),
  COALESCE(round((CASE WHEN dd.duration_seconds>0 AND dd.duration_seconds<'Infinity'::float8
      THEN dd.duration_seconds END)::numeric),0)::bigint,
@@ -333,7 +351,7 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 		var lyrics sql.NullString
 		var identifiers, observations []byte
 		if err := rows.Scan(&releaseID, &t.ID, &t.Title, &t.Artist, &t.EffectiveTitle, &t.EffectiveArtist,
-			&observations, &t.TitleCorrected, &t.ArtistCorrected, &t.TitleAutomatic, &t.ArtistAutomatic, &t.Disc, &t.DiscNumber, &t.Position,
+			&observations, &t.TitleCorrected, &t.ArtistCorrected, &t.TitleAutomatic, &t.ArtistAutomatic, &t.Disc, &t.DiscNumber, &t.Position, &t.WorkTitle,
 			&t.OtherIdentifier, &t.DurationSeconds, &t.SourceKind, &t.SourceRootID, &t.CueSheetPath, &t.ParentFile, &t.CueISRC,
 			&t.CueIndexFrames, &t.CueEndFrames, &lyrics, &t.ExternalLyrics, &t.ExternalID, &identifiers); err != nil {
 			return err
@@ -385,6 +403,7 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 			_, t.LocalLyrics = ParseLyrics(lyrics.String)
 		}
 		if e, visible := result[releaseID]; visible {
+			e.Classical = e.Classical || t.WorkTitle != ""
 			e.Tracks = append(e.Tracks, t)
 			result[releaseID] = e
 		}
@@ -395,7 +414,8 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 func loadCurationSuppressions(ctx context.Context, q Queryer, ids []string, result map[string]CurationEvidence) error {
 	rows, err := q.QueryContext(ctx, `WITH targets AS (
 	    SELECT id AS release_id,'release' AS kind,id AS target FROM releases WHERE id=ANY($1::uuid[])
-	    UNION ALL SELECT id,'release_group',group_id FROM releases WHERE id=ANY($1::uuid[])
+	    UNION ALL SELECT id,'release_group_match',id FROM releases WHERE id=ANY($1::uuid[])
+ UNION ALL SELECT id,'release_group',group_id FROM releases WHERE id=ANY($1::uuid[])
 	    UNION ALL SELECT m.release_id,'track',t.id FROM media m JOIN tracks t ON t.medium_id=m.id WHERE m.release_id=ANY($1::uuid[])
 	) SELECT t.release_id::text,s.target_type,s.target_id::text,s.subject,s.value_hash
 	FROM targets t JOIN curation_suppressions s ON s.target_type=t.kind AND s.target_id=t.target
@@ -443,7 +463,75 @@ func VisibleCurationGroups(ctx context.Context, q Queryer, groupIDs []string) ([
 func CurationGroupMembersAgree(ctx context.Context, q Queryer, groupID, exceptRelease, externalGroupID string) (bool, error) {
 	var agree bool
 	err := q.QueryRowContext(ctx, `SELECT NOT EXISTS(SELECT 1 FROM releases `+curationReleaseLinkJoin+`
-	 WHERE releases.group_id=$1::uuid AND releases.id<>$2::uuid AND rl.object_id IS NOT NULL
-	   AND rg.external_group_id IS DISTINCT FROM $3::text AND `+releasesql.ReleaseVisiblePredicate+`)`, groupID, exceptRelease, externalGroupID).Scan(&agree)
+	 WHERE releases.group_id=$1::uuid AND releases.id<>$2::uuid AND ((rl.object_id IS NOT NULL AND rg.external_group_id IS DISTINCT FROM $3::text) OR (gm.object_id IS NOT NULL AND gm.external_id<>$3::text)) AND `+releasesql.ReleaseVisiblePredicate+`)`, groupID, exceptRelease, externalGroupID).Scan(&agree)
 	return agree, err
+}
+
+func (e CurationEvidence) isCompilation() bool {
+	hasAlbumArtist := e.AlbumArtist != "" && e.Authenticity["album_artist"] != metadata.Placeholder
+	if metadata.IsCompilationPlaceholder(e.AlbumArtist) || (!hasAlbumArtist && (e.FieldSources["artist"] == "compilation" || metadata.IsCompilationPlaceholder(e.Artist))) {
+		return true
+	}
+	if hasAlbumArtist || len(e.Tracks) < 2 {
+		return false
+	}
+	seen := make(map[string]bool, len(e.Tracks))
+	for _, t := range e.Tracks {
+		name := textnorm.Text(t.Artist)
+		if t.ArtistPlaceholder || name == "" || seen[name] {
+			return false
+		}
+		seen[name] = true
+	}
+	return true
+}
+
+// 只使用当前原署名中的唯一艺人，家族内互相矛盾的编号不能用作检索条件。
+func loadMatchArtistIDs(ctx context.Context, q Queryer, ids []string, result map[string]CurationEvidence) error {
+	if err := NewStore(q).requireArtistsReady(ctx); err != nil {
+		if errors.Is(err, ErrArtistCatalogPreparing) {
+			return nil
+		}
+		return err
+	}
+	rows, err := q.QueryContext(ctx, `WITH `+ArtistMediaFamilyCTE+`, credits AS (
+ SELECT c.release_id,c.role,c.artist_id FROM artist_effective_credits c
+ JOIN artist_credits f ON f.id=c.credit_id AND f.layer<>'auto'
+ WHERE c.release_id=ANY($1::uuid[]) AND c.role IN ('release_artist','album_artist')
+ UNION ALL SELECT m.release_id,c.role,c.artist_id FROM artist_effective_credits c
+ JOIN artist_credits f ON f.id=c.credit_id AND f.layer<>'auto'
+ JOIN tracks t ON t.id=c.track_id AND t.source_status='present' JOIN media m ON m.id=t.medium_id
+ JOIN releases r ON r.id=m.release_id AND r.candidate_kind='loose_unknown'
+ WHERE m.release_id=ANY($1::uuid[]) AND c.role='track_artist'
+ ), single_credit AS (SELECT release_id,role,min(artist_id::text)::uuid AS artist_id
+ FROM credits GROUP BY release_id,role HAVING count(*)=1)
+ SELECT c.release_id::text,c.role,min(l.external_id) FROM single_credit c
+ JOIN artist_media_family m ON m.canonical_id=c.artist_id
+ JOIN external_links l ON l.object_type='artist' AND l.source='musicbrainz' AND l.object_id=m.artist_id AND l.operation_id IS NOT NULL
+ GROUP BY c.release_id,c.role HAVING count(DISTINCT l.external_id)=1`, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, role, mbid string
+		if err := rows.Scan(&id, &role, &mbid); err != nil {
+			return err
+		}
+		e, ok := result[id]
+		if !ok {
+			continue
+		}
+		selected := "release_artist"
+		if e.CandidateKind == "loose_unknown" {
+			selected = "track_artist"
+		} else if e.AlbumArtist != "" {
+			selected = "album_artist"
+		}
+		if role == selected {
+			e.ArtistMBID = mbid
+			result[id] = e
+		}
+	}
+	return rows.Err()
 }

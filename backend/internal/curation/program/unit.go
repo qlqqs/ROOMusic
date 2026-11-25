@@ -2,9 +2,7 @@ package program
 
 import (
 	"context"
-
 	"fmt"
-
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
@@ -19,6 +17,8 @@ type unit struct {
 	releaseID, inputDigest string
 	releaseState           curation.WorkState
 	checked                bool
+	offline, programOnly   bool
+	identityDigest         string
 	fixedGeneration        bool
 }
 
@@ -73,7 +73,7 @@ func (u *unit) write(ctx context.Context, step string, write func(batch, key str
 			return err
 		}
 		e, ok := entries[u.releaseID]
-		if !ok || subjectDigest(u.subject, subjectEvidence(u.subject, e, u.releaseState), u.id) != u.inputDigest {
+		if !ok || u.identityDigest != "" && IdentityDigest(e) != u.identityDigest || subjectDigest(u.subject, subjectEvidence(u.subject, e, u.releaseState), u.id) != u.inputDigest {
 			return errReleaseChanged
 		}
 		u.checked = true

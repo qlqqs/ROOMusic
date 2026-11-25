@@ -1,7 +1,6 @@
 package program
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -19,11 +18,22 @@ type pendingSearchFinder struct {
 	b3MatchFinder
 	recordingSearch   []sources.Recording
 	recordingSearches int
+	completePage      bool
 }
 
 func (f *pendingSearchFinder) SearchRecordings(context.Context, sources.RecordingQuery) ([]sources.Recording, error) {
 	f.recordingSearches++
 	return f.recordingSearch, nil
+}
+
+func (f *pendingSearchFinder) SearchReleasePage(ctx context.Context, q curation.ReleaseSearch) (curation.ReleasePage, error) {
+	rows, err := f.SearchReleases(ctx, sources.ReleaseQuery{Title: q.Title, Artist: q.Artist, TrackCount: q.TrackCount})
+	info := curation.PageInfo{}
+	if f.completePage {
+		count, offset := len(rows), 0
+		info = curation.PageInfo{Count: &count, Offset: &offset, Limit: 100, Returned: count, Complete: true}
+	}
+	return curation.ReleasePage{Items: rows, PageInfo: info}, err
 }
 
 type shelvedPendingFixture struct {
@@ -106,16 +116,18 @@ func RunShelvedPendingCases(t *testing.T, decline func(context.Context, *sql.DB,
 	t.Run("new_candidates", func(t *testing.T) {
 		f := newShelvedPendingFixture(t, "release_match")
 		ctx := t.Context()
+		oldCandidate := sources.Release{ID: uuid.New(), Title: "旧合成候选"}
+		f.finder.search = []sources.Release{oldCandidate}
 		requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
 		first := f.claim(t, f.releaseID, f.kind)
-		requirePendingCandidates(t, first)
+		requirePendingCandidates(t, first, oldCandidate.ID)
 		requirePendingRefreshOK(t, f.writer.ReleaseClaimed(ctx, first.ConversationID, true, nil))
 		claimed := f.claim(t, f.releaseID, f.kind)
-		const reason = "没有发行候选"
+		const reason = "旧候选证据不足"
 		requirePendingRefreshOK(t, f.writer.ShelvePendingItem(ctx, claimed.ID, claimed.ConversationID, reason))
 		shelved := f.load(t, first.ID)
 		if shelved.Status != "shelved" || shelved.Attempts != 1 || shelved.ShelvedReason == nil || *shelved.ShelvedReason != reason {
-			t.Fatalf("没有候选后应保留一次未处理次数及搁置原因，得到 %+v", shelved)
+			t.Fatalf("搁置后应保留一次未处理次数及搁置原因，得到 %+v", shelved)
 		}
 
 		candidate := sources.Release{ID: uuid.New(), Title: "新合成候选"}
@@ -177,6 +189,7 @@ func RunShelvedPendingCases(t *testing.T, decline func(context.Context, *sql.DB,
 		f := newShelvedPendingFixture(t, "release_match")
 		ctx := t.Context()
 		f.finder.search = []sources.Release{f.remote}
+		f.finder.completePage = true
 		candidateID := f.remote.ID
 		requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
 		item := f.claim(t, f.releaseID, f.kind)
@@ -203,17 +216,18 @@ func RunShelvedPendingCases(t *testing.T, decline func(context.Context, *sql.DB,
 
 		// 人工不采纳写入的不再提出标记会触发程序重判。
 		requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
-		next := f.claim(t, f.releaseID, f.kind)
-		requirePendingCandidates(t, next, candidateID)
-		if next.ID == item.ID || !bytes.Equal(next.Candidates, item.Candidates) {
-			t.Fatalf("程序重判应生成候选相同的新待定项，原项 %s，重判后 %+v", item.ID, next)
+		states, err := curation.LoadWorkStates(ctx, f.db, "release", []string{f.releaseID})
+		requirePendingRefreshOK(t, err)
+		if state := states[f.releaseID]; state.Status != "no_usable_candidates" {
+			t.Fatalf("唯一候选已被拒绝，工作状态为 %+v", state)
+		}
+		items, err := f.writer.ClaimPendingItems(ctx, item.ConversationID, f.worker.opts.Now(), 10)
+		requirePendingRefreshOK(t, err)
+		if len(items) != 0 {
+			t.Fatalf("不应再次领取已被拒绝的候选：%+v", items)
 		}
 		if got := f.load(t, item.ID); !reflect.DeepEqual(got, resolved) {
 			t.Fatalf("原待定项应保留人工决定，重判后 %+v", got)
-		}
-		_, err = f.matcher.Plan(ctx, next, candidateID)
-		if failureCode(err) != "suppressed" {
-			t.Fatalf("模型重试已不采纳的候选应返回 suppressed，得到 %v", err)
 		}
 	})
 }

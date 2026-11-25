@@ -195,7 +195,7 @@ func (f *programFixture) linkOwner(t *testing.T, id string) string {
 func (f *programFixture) assertRelease(t *testing.T, id, status, method string) curation.WorkState {
 	t.Helper()
 	s := f.stateFor(t, "release", id)
-	if s.Status != status || s.RuleVersion != program.StoredRuleVersion {
+	if s.Status != status || s.MatchRuleVersion != program.MatchRuleVersion {
 		t.Fatalf("发行 %s 期望 %s，状态 %+v", id, status, s)
 	}
 	if got := programString(t, f.application, `SELECT result->>'method' FROM curation_work_states WHERE subject='release' AND target_id=$1`, id); got != method {

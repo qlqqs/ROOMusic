@@ -39,7 +39,9 @@ func planTrackFields(e catalog.CurationEvidence, m MatchResult) []curation.Track
 	for _, t := range e.Tracks {
 		id := pairs[t.ID]
 		value, ok := recordings[id]
-		if id == "" || !ok || ambiguous[id] {
+		if title := m.TrackTitles[t.ID]; m.Level == "release_group" && title != "" {
+			value = names{title: metadata.NormalizeValue(title)}
+		} else if id == "" || !ok || ambiguous[id] {
 			continue
 		}
 		fields := map[string]catalog.CorrectionIntent{}
@@ -80,15 +82,18 @@ func matchBackfills(s curation.WorkState, e catalog.CurationEvidence) (tracks, a
 	if s.Status != "matched" {
 		return false, false, false
 	}
+	var result map[string]json.RawMessage
+	if json.Unmarshal(s.Result, &result) != nil {
+		return false, false, false
+	}
+	if e.ReleaseGroupMatchID != "" && string(result["level"]) == `"release_group"` {
+		return false, result["artist_links"] == nil, false
+	}
 	if e.CandidateKind == "loose_unknown" {
 		if len(e.Tracks) != 1 || e.Tracks[0].ExternalID == "" {
 			return false, false, false
 		}
 	} else if e.ExternalID == "" {
-		return false, false, false
-	}
-	var result map[string]json.RawMessage
-	if json.Unmarshal(s.Result, &result) != nil {
 		return false, false, false
 	}
 	if result["track_fields"] == nil {
@@ -163,9 +168,23 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		markers["release_merge"] = "done"
 	}
 	var match MatchResult
+	var proposals []curation.ArtistCreditProposal
 	var err error
-	if tracks || artists {
+	var saved struct {
+		releaseReviewState
+		Level   string
+		Rule    string
+		GroupID string `json:"external_group_id"`
+		Credits []sources.Credit
+	}
+	if err = json.Unmarshal(s.Result, &saved); err != nil {
+		return err
+	}
+	if saved.Level == "release_group" && saved.GroupID == e.ReleaseGroupMatchID {
+		match = MatchResult{Level: saved.Level, Rule: saved.Rule, GroupID: saved.GroupID, Credits: saved.Credits}
+	} else if tracks || artists {
 		match, err = w.linkedTracks(ctx, *e)
+		match.Rule = saved.Rule
 	}
 	switch {
 	case errors.Is(err, sources.ErrNotFound):
@@ -183,7 +202,17 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		u := unit{w: w, ruleVersion: s.RuleVersion, subject: s.Subject, id: e.ID, generation: s.Generation, fixedGeneration: true, releaseID: e.ID, inputDigest: s.InputDigest, releaseState: s}
 		source := curation.Source{Kind: "source", Provider: "musicbrainz", Basis: "按已有 MusicBrainz 对应补全"}
 		if artists {
-			links := planArtistLinks(local, *e, match)
+			var links []curation.LinkIntent
+			links, proposals, err = w.identifyArtists(ctx, local, *e, match, false)
+			if err != nil {
+				if failureCode(err) == "source_disabled" || curation.IsSourceUnavailable(err) {
+					return nil
+				}
+				return err
+			}
+			if saved.RecheckedAt != nil {
+				proposals = nil
+			}
 			request := curation.LinkRequest{ReleaseID: e.ID, ExternalSource: "musicbrainz", Source: source}
 			if err := writeArtistLinks(ctx, w.db, w.writer, request, links, u.write); err != nil {
 				if failureCode(err) == "source_disabled" {
@@ -231,6 +260,9 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		return errReleaseChanged
 	}
 	d := releaseInputs(entry)
+	if err := curation.SaveArtistCreditProposals(ctx, tx, e.ID, d.identity, proposals); err != nil {
+		return err
+	}
 	if err := refreshMatchItem(ctx, tx, entry, s, d, MatchRuleVersion); err != nil {
 		return err
 	}

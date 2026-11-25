@@ -330,7 +330,8 @@ const externalLinkChangesDecoder = d.object({
   links: d.array(
     d.object({
       // 艺人对应（M7 G）：程序层在匹配上的发行里把本地艺人对上外部艺人。
-      object_type: d.oneOf(["release", "release_group", "track", "artist"] as const),
+      // 发行组级对应（整理链 C）：只认定到外部专辑这一层，object_id 是这张本地发行。
+      object_type: d.oneOf(["release", "release_group", "release_group_match", "track", "artist"] as const),
       object_id: d.uuid(),
       external_id: d.string({ min: 1, max: 128 }),
       external_group_id: d.optional(d.string({ min: 1, max: 128 })),

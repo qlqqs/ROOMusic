@@ -15,7 +15,7 @@ import (
 
 const (
 	LocalRuleVersion    int16 = 2
-	MatchRuleVersion    int16 = 101
+	MatchRuleVersion    int16 = 102
 	PatrolPromptVersion int16 = 1
 
 	// 资料主题与并入继续使用原来的版本和幂等键。
@@ -24,6 +24,7 @@ const (
 )
 
 type Options struct {
+	CanonicalNames                               func(ctx context.Context, releaseID, trackID string) (SearchNames, error)
 	Fingerprints                                 Fingerprints
 	Now                                          func() time.Time
 	After                                        func(time.Duration) <-chan time.Time

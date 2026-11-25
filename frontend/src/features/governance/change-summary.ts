@@ -138,7 +138,7 @@ function autoText(auto: CorrectionIntentDTO | null): string {
 }
 
 // 匹配依据的中文名：程序层的六种依据；以后新增的（如模型判断）按标识原样显示。
-const linkMethodLabels: Record<string, string> = { tag_id: "标签里的编号", barcode: "条码", catalog_number: "厂牌编号", isrc: "ISRC", disc_id: "光盘目录", acoustid: "声学指纹", model: "模型判断" };
+const linkMethodLabels: Record<string, string> = { tag_id: "标签里的编号", barcode: "条码", catalog_number: "厂牌编号", isrc: "ISRC", disc_id: "光盘目录", acoustid: "声学指纹", search: "标题、艺人与曲目结构", model: "模型判断" };
 
 /** 外部发行的一行说明：《标题》— 艺人（年份 · 地区），空的部分不写。 */
 function externalReleaseText(external: { title: string; artist: string; date: string; country: string }): string {
@@ -226,8 +226,10 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
     const tracks = changes.links.filter((link) => link.object_type === "track").length;
     const artists = changes.links.filter((link) => link.object_type === "artist").length;
     const album = changes.links.some((link) => link.object_type === "release_group");
+    // 只认定到外部专辑（发行组）这一层时，没有具体版本的对应。
+    const groupOnly = changes.links.some((link) => link.object_type === "release_group_match") && !changes.links.some((link) => link.object_type === "release");
     const extra = [album ? "专辑" : null, tracks === 0 ? null : `${tracks} 首曲目`, artists === 0 ? null : `${artists} 位艺人`].filter((part) => part !== null).join("、");
-    const what = `${source}：${externalReleaseText(changes.external)}`;
+    const what = `${source}${groupOnly ? " 的专辑" : ""}：${externalReleaseText(changes.external)}`;
     if (reverse) return [`解除与 ${what} 的对应`, ...(extra === "" ? [] : [`同时去掉${extra}的对应`])];
     return [`对上 ${what}`, `依据${linkMethodLabels[changes.method] ?? changes.method}${extra === "" ? "" : `，同时对上${extra}`}`];
   }

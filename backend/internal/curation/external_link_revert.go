@@ -79,6 +79,9 @@ func (externalLinkKind) Revert(ctx context.Context, tx *sql.Tx, operationID stri
 			return operations.Outcome{}, err
 		}
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE curation_artist_credit_proposals SET status='stale' WHERE operation_id=$1 AND status='open'`, original.ID); err != nil {
+		return operations.Outcome{}, err
+	}
 	out, err := externalOutcome(ctx, release, original.After, map[string]any{})
 	if skipped > 0 {
 		out.After = map[string]int{"skipped_artist_links": skipped}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
@@ -139,7 +140,7 @@ func (fp *FingerprintStep) match(ctx context.Context, mode string, e catalog.Cur
 
 func fingerprintReleases(e catalog.CurationEvidence, hits []fingerprintHit, sampled int) (releaseList, map[string]float64) {
 	discs := len(e.DiscPositions())
-	list := releaseList{hit: true, recordingIDs: make(map[string]map[string]bool)}
+	list := releaseList{hit: true, counts: map[string]curation.ReleaseCounts{}, recordingIDs: make(map[string]map[string]bool)}
 	var pages [][]sources.Release
 	trackScores := make([]map[string]float64, 0, len(hits))
 	for _, hit := range hits {
@@ -155,7 +156,7 @@ func fingerprintReleases(e catalog.CurationEvidence, hits []fingerprintHit, samp
 				}
 				row := sources.Release{ID: r.ID, Title: r.Title, Artists: r.Artists, Date: r.Date, Country: r.Country}
 				if r.TrackCount > 0 {
-					row.Media = []sources.Medium{{TrackCount: r.TrackCount}}
+					list.counts[r.ID] = curation.ReleaseCounts{Total: &r.TrackCount}
 				}
 				page = append(page, row)
 				scores[r.ID] = max(scores[r.ID], score)
@@ -209,7 +210,17 @@ func fingerprintSingle(ctx context.Context, e catalog.CurationEvidence, f source
 	if len(byLength) > 3 {
 		result := newMatch("single", "acoustid")
 		result.Candidates = recordingCandidates("acoustid", byLength)
-		return scoreCandidates(uncertain(result, "too_many"), hit.scores), nil
+		blocked := markBlocked(e, result.Mode, result.Candidates)
+		result.Snapshot = MatchSnapshot{Version: 1, Method: "acoustid", CandidateSetComplete: len(byLength) <= 100}
+		switch {
+		case len(byLength) > 100:
+			result = uncertain(result, "list_truncated")
+		case blocked == len(byLength):
+			result.Status, result.Conflicts = "no_usable_candidates", candidateConflicts(result.Candidates)
+		default:
+			result = uncertain(result, "too_many")
+		}
+		return scoreCandidates(result, hit.scores), nil
 	}
 	var official []sources.Recording
 	scores := map[string]float64{}
@@ -228,6 +239,7 @@ func fingerprintSingle(ctx context.Context, e catalog.CurationEvidence, f source
 	if len(official) == 0 {
 		result := newMatch("single", "acoustid")
 		result.Candidates = recordingCandidates("acoustid", byLength)
+		markBlocked(e, result.Mode, result.Candidates)
 		return scoreCandidates(uncertain(result), hit.scores), nil
 	}
 	return scoreCandidates(DecideSingle(e, "acoustid", official), scores), nil

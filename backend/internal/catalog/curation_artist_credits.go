@@ -10,7 +10,15 @@ type CurationArtistCredit struct {
 	Name, ArtistID string
 }
 
+type CurationCreditRole struct {
+	TrackID  string `json:"track_id"`
+	ArtistID string `json:"artist_id"`
+	Name     string `json:"name"`
+	Role     string `json:"role"`
+}
+
 type CurationArtistCredits struct {
+	Roles                        []CurationCreditRole
 	ReleaseArtists, AlbumArtists []CurationArtistCredit
 	Tracks                       map[string][]CurationArtistCredit
 }
@@ -31,8 +39,8 @@ func LoadCurationArtistCredits(ctx context.Context, q Queryer, releaseID string)
  SELECT 1 FROM release_corrections WHERE release_id=$1 AND field='album_artist') THEN 'correction' ELSE 'scan' END
  UNION ALL
  SELECT c.track_id,c.role,c.name_id,c.position FROM media m JOIN tracks t ON t.medium_id=m.id
- JOIN artist_credits c ON c.track_id=t.id WHERE m.release_id=$1 AND t.source_status='present' AND c.role='track_artist'
- AND c.layer=CASE WHEN EXISTS(SELECT 1 FROM track_corrections WHERE track_id=t.id AND field='artist')
+ JOIN artist_credits c ON c.track_id=t.id WHERE m.release_id=$1 AND t.source_status='present' AND c.role IN ('track_artist','composer','performer','conductor')
+ AND c.layer=CASE WHEN c.role<>'track_artist' THEN 'scan' WHEN EXISTS(SELECT 1 FROM track_corrections WHERE track_id=t.id AND field='artist')
  THEN 'correction' ELSE 'scan' END)
  SELECT COALESCE(c.track_id::text,''),c.role,c.position,n.spelling,COALESCE(o.redirect_artist_id,route.artist_id)::text
  FROM scoped c JOIN artist_names n ON n.id=c.name_id JOIN artist_name_keys k ON k.id=n.key_id
@@ -60,6 +68,8 @@ func LoadCurationArtistCredits(ctx context.Context, q Queryer, releaseID string)
 			out.AlbumArtists = append(out.AlbumArtists, c)
 		case "track_artist":
 			out.Tracks[track] = append(out.Tracks[track], c)
+		case "composer", "performer", "conductor":
+			out.Roles = append(out.Roles, CurationCreditRole{track, c.ArtistID, c.Name, role})
 		}
 	}
 	return out, rows.Err()

@@ -86,7 +86,7 @@ func TestLookupProjections(t *testing.T) {
 		}
 	})
 	t.Run("artist", func(t *testing.T) {
-		c := queryClient(t, "artist/"+fixtureMBID, url.Values{"inc": {"aliases"}}, 200, artistJSON)
+		c := queryClient(t, "artist/"+fixtureMBID, url.Values{"inc": {"aliases url-rels"}}, 200, artistJSON)
 		got, err := c.ArtistByID(ctx, id)
 		want := sources.Artist{ID: "art", Name: "标准名", SortName: "排序", Type: "Person", Country: "JP", Disambiguation: "区别", Aliases: []sources.Alias{{Name: "别名", Locale: "zh", Primary: true}}}
 		if err != nil || !reflect.DeepEqual(got, want) {
@@ -133,7 +133,7 @@ func TestSearchQueries(t *testing.T) {
 		}
 	})
 	t.Run("artist", func(t *testing.T) {
-		c := queryClient(t, "artist", url.Values{"query": {`artist:"\\\+\-\&\&\|\|\!\(\)\{\}\[\]\^\"\~\*\?\:\/"`}, "limit": {"10"}}, 200, `{"artists":[`+artistJSON+`]}`)
+		c := queryClient(t, "artist", url.Values{"query": {`"\\\+\-\&\&\|\|\!\(\)\{\}\[\]\^\"\~\*\?\:\/"`}, "limit": {"10"}}, 200, `{"artists":[`+artistJSON+`]}`)
 		got, err := c.SearchArtists(ctx, `\+-&&||!(){}[]^"~*?:/`)
 		if err != nil || len(got) != 1 || got[0].ID != "art" {
 			t.Fatalf("艺人=%+v %v", got, err)
@@ -189,16 +189,57 @@ func TestDiscTOC(t *testing.T) {
 		status, count int
 		exact         bool
 	}{
-		{"exact", `{"id":"` + id + `","sectors":267125,"offset-count":12,"releases":[{"id":"rel"}]}`, 200, 1, true},
+		{"exact", `{"id":"` + id + `","sectors":267125,"offset-count":12,"releases":[` + releaseJSON + `]}`, 200, 1, true},
 		{"fuzzy", `{"release-count":1,"release-offset":0,"releases":[{"id":"rel"}]}`, 200, 1, false},
 		{"missing", `{"error":"not found"}`, 404, 0, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			c := queryClient(t, "discid/"+id, url.Values{"inc": {"artist-credits labels release-groups"}, "cdstubs": {"no"}, "toc": {"1 12 267125 150 22717 41837 58273 72053 91327 104601 115341 132131 143885 159823 174551"}}, tc.status, tc.body)
+			c := queryClient(t, "discid/"+id, url.Values{"inc": {"recordings artist-credits labels release-groups"}, "cdstubs": {"no"}, "toc": {"1 12 267125 150 22717 41837 58273 72053 91327 104601 115341 132131 143885 159823 174551"}}, tc.status, tc.body)
 			got, err := c.ReleasesByDisc(t.Context(), toc)
-			if err != nil || got.Exact != tc.exact || len(got.Releases) != tc.count || (tc.count == 1 && (got.Releases[0].ID != "rel" || got.Releases[0].Complete)) {
+			if err != nil || got.Exact != tc.exact || len(got.Releases) != tc.count || (tc.count == 1 && (got.Releases[0].ID != "rel" || got.Releases[0].Complete != tc.exact)) {
 				t.Fatalf("光盘结果=%+v %v", got, err)
 			}
 		})
+	}
+}
+
+func Test整理搜索保留完整性和原始曲数(t *testing.T) {
+	for _, tc := range []struct {
+		name, meta, items string
+		complete          bool
+		returned          int
+	}{
+		{"完整第一页", `"count":1,"offset":0`, `{"id":"` + fixtureMBID + `","track-count":5,"media":[{"track-count":3},{"track-count":2}]}`, true, 1},
+		{"总数大于返回条数", `"count":101,"offset":0`, `{"id":"` + fixtureMBID + `"}`, false, 1},
+		{"缺失总数", `"offset":0`, `{"id":"` + fixtureMBID + `"}`, false, 1},
+		{"并非第一页", `"count":1,"offset":1`, `{"id":"` + fixtureMBID + `"}`, false, 1},
+		{"重复编号不能凑齐总数", `"count":2,"offset":0`, `{"id":"` + fixtureMBID + `"},{"id":"` + fixtureMBID + `"}`, false, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expr := `(barcode:123456789012 OR barcode:0123456789012) OR (catno:"CAT\-7" AND label:"合成厂牌") OR (release:"合成专辑" AND arid:` + fixtureMBID + ` AND tracks:5)`
+			c := queryClient(t, "release", url.Values{"query": {expr}, "limit": {"100"}}, 200, `{`+tc.meta+`,"releases":[`+tc.items+`]}`)
+			page, err := c.SearchReleasePage(t.Context(), ReleaseSearch{Title: "合成专辑", ArtistID: fixtureMBID, TrackCount: 5, Barcodes: []string{"123456789012"}, CatalogNumber: "CAT-7", Label: "合成厂牌"})
+			if err != nil || page.Complete != tc.complete || page.Returned != tc.returned || page.Limit != 100 {
+				t.Fatalf("整理发行搜索页 %+v，错误 %v", page, err)
+			}
+			if tc.complete {
+				counts := page.Counts[fixtureMBID]
+				if page.Count == nil || *page.Count != 1 || page.Offset == nil || *page.Offset != 0 ||
+					counts.Total == nil || *counts.Total != 5 || len(counts.Media) != 2 || *counts.Media[0] != 3 || *counts.Media[1] != 2 ||
+					page.Items[0].Media[0].Position != 1 || page.Items[0].Media[1].Position != 2 {
+					t.Fatalf("发行分页与曲数投影 %+v", page)
+				}
+			}
+		})
+	}
+}
+
+func Test整理ISRC合并搜索(t *testing.T) {
+	c := queryClient(t, "recording", url.Values{"query": {"isrc:USABC2300001 OR isrc:USABC2300002"}, "limit": {"100"}}, 200,
+		`{"count":1,"offset":0,"recordings":[`+strings.Replace(recordingJSON, `"id":"rec"`, `"id":"`+fixtureMBID+`"`, 1)+`]}`)
+	page, err := c.SearchRecordingPage(t.Context(), RecordingSearch{ISRCs: []string{" us-abc-23-00002 ", "USABC2300001", "USABC2300002"}})
+	if err != nil || !page.Complete || page.Returned != 1 || page.ReleaseCounts[fixtureMBID] != 1 ||
+		len(page.Items) != 1 || !slices.Equal(page.Items[0].ISRCs, []string{"USABC2300001"}) {
+		t.Fatalf("合并 ISRC 的录音页 %+v，错误 %v", page, err)
 	}
 }
