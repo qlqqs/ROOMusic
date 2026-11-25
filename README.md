@@ -25,12 +25,37 @@
   <a href="https://github.com/qlqqs/ROOMusic/releases">更新说明</a>
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/albums.png" alt="ROOMusic 的专辑页：专辑封面墙，底部是正在播放的播放条" width="900">
+</p>
+
 ## 有什么不同
 
 - **按专辑和版本理解音乐**：曲库按 `专辑 → 版本 → 碟 → 曲目` 组织，而不是列出文件夹。同一张专辑的原版、重制版、豪华版归在一起，可以并排对比曲目，管理员选定默认版本。
 - **音效在服务器上处理**：参数均衡、卷积、采样率转换都在服务器上完成。浏览器、局域网音箱和手机客户端走同一条信号路径，每一步都能在网页上看到。
 - **家里的音箱直接用**：自动发现 UPnP/DLNA、Google Cast 和 AirPlay 2 设备。Squeezelite 播放器以原采样率无损播放，几台编成一组，在不同房间同步出声。
 - **整理随时可以撤销**：手动修正、自动补全、管家做的修改都有记录，每一项都能撤销，重新扫描也不会覆盖。音乐目录只读挂载，从不改动音乐文件。
+
+## 截图
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/album-versions.png" alt="专辑页：同一张专辑的两个版本，可以切换和对比"><br><sub>一张专辑的多个版本，可以切换、并排对比</sub></td>
+    <td width="50%"><img src="docs/screenshots/player-lyrics.png" alt="全屏播放器，右侧逐行同步歌词"><br><sub>全屏播放器与逐行同步歌词</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/signal-path.png" alt="信号路径：来源、电平化、参数均衡、抖动、编码、输出"><br><sub>信号路径：服务器上的每一步处理都看得到</sub></td>
+    <td width="50%"><img src="docs/screenshots/peq.png" alt="参数均衡编辑器：均衡曲线和六段滤波器"><br><sub>参数均衡，可以粘贴导入耳机均衡曲线</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/screenshots/mobile-home.png" alt="手机上的概览页" width="240">
+  <img src="docs/screenshots/mobile-player.png" alt="手机上的全屏播放器" width="240">
+  <img src="docs/screenshots/mobile-lyrics.png" alt="手机上的歌词页" width="240">
+</p>
+
+截图中的专辑、艺人、封面和歌词都是为演示合成的虚构内容。
 
 ## 功能
 
