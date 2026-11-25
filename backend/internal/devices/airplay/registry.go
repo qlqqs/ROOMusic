@@ -2,6 +2,7 @@ package airplay
 
 import (
 	"context"
+	"log/slog"
 	"net/netip"
 	"sync"
 	"time"
@@ -69,13 +70,20 @@ func (r *record) entry(now time.Time) Entry {
 }
 
 type Registry struct {
+	logger    *slog.Logger
 	lifecycle sync.Mutex
 	stop      func()
 	mu        sync.RWMutex
 	records   map[string]*record
 }
 
-func NewRegistry() *Registry { return &Registry{records: make(map[string]*record)} }
+func NewRegistry() *Registry {
+	return NewRegistryWithLogger(slog.Default())
+}
+
+func NewRegistryWithLogger(logger *slog.Logger) *Registry {
+	return &Registry{logger: logger, records: make(map[string]*record)}
+}
 
 func (r *Registry) List() []Entry {
 	r.mu.RLock()
@@ -205,7 +213,7 @@ func (r *Registry) Start(parent context.Context, manual []Device) error {
 		r.mu.Unlock()
 	}
 	for _, service := range []string{airplayService, raopService} {
-		stopBrowse, err := mdns.Start(ctx, service, r.receive)
+		stopBrowse, err := mdns.Start(ctx, service, r.logger, r.receive)
 		if err != nil {
 			stop()
 			return err

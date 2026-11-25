@@ -126,6 +126,85 @@ func TestPTPFollowerOffsetCorrectionsAndReorderedFollowUp(t *testing.T) {
 	}
 }
 
+func TestPTPFollowerKeepsLockDuringAsymmetricDelay(t *testing.T) {
+	var f follower
+	start, before := lockTestFollower(t, &f)
+	at := start.Add(6 * 250 * time.Millisecond)
+	after := followerExchange(t, &f, 7, at, time.Millisecond, time.Millisecond, 21*time.Millisecond)
+	delta := time.Duration(after.OffsetNS - before.OffsetNS).Abs()
+	if !after.Available || delta >= time.Millisecond {
+		t.Fatalf("反向多出 20 ms 后，可用 = %t，偏移变化 = %s，状态 = %+v", after.Available, delta, after)
+	}
+}
+
+func TestPTPFollowerRequiresFourSameDirectionSamplesToReset(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		jump time.Duration
+	}{
+		{"positive", 8 * time.Millisecond},
+		{"negative", -8 * time.Millisecond},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const base = time.Millisecond
+			var f follower
+			start, before := lockTestFollower(t, &f)
+			// 反向偏离应打断计数，随后必须重新累计四个同向样本。
+			for i, offset := range []time.Duration{
+				base + tc.jump, base + tc.jump, base - tc.jump,
+				base + tc.jump, base + tc.jump, base + tc.jump, base + tc.jump,
+				base + tc.jump, base + tc.jump,
+			} {
+				at := start.Add(time.Duration(i+6) * 250 * time.Millisecond)
+				got := followerExchange(t, &f, uint16(i+7), at, offset, base, base)
+				wantAvailable := i < 6 || i == 8
+				wantOffset := before.OffsetNS
+				if i >= 6 {
+					wantOffset = int64(base + tc.jump)
+				}
+				if got.Available != wantAvailable || got.OffsetNS != wantOffset {
+					t.Fatalf("跳变阶段第 %d 次交换 = %+v，期望可用 = %t、偏移 = %s",
+						i+1, got, wantAvailable, time.Duration(wantOffset))
+				}
+			}
+		})
+	}
+}
+
+func lockTestFollower(t *testing.T, f *follower) (time.Time, Status) {
+	t.Helper()
+	f.reset(portID{17, 1})
+	start := time.Unix(1_700_000_000, 0)
+	var status Status
+	for i := range 6 {
+		status = followerExchange(t, f, uint16(i+1), start.Add(time.Duration(i)*250*time.Millisecond),
+			time.Millisecond, time.Millisecond, time.Millisecond)
+	}
+	if !status.Available || status.OffsetNS != int64(time.Millisecond) {
+		t.Fatalf("六次对称交换后时钟 = %+v", status)
+	}
+	return start, status
+}
+
+func followerExchange(t *testing.T, f *follower, seq uint16, at time.Time, offset, forward, backward time.Duration) Status {
+	t.Helper()
+	local := portID{9, 2}
+	sync := message(f.source, msgSync, 44, seq, twoStep, -3)
+	f.sync(decodedArrival(t, sync, at))
+	follow := message(f.source, msgFollowUp, 44, seq, 0, -3)
+	stamp(follow[34:], at.UnixNano()+int64(offset-forward))
+	f.sync(decodedArrival(t, follow, at.Add(time.Millisecond)))
+
+	f.delaySeq = seq
+	f.delaySent = at.Add(5 * time.Millisecond)
+	response := message(f.source, msgDelayResp, 54, seq, unicast, -2)
+	stamp(response[34:], f.delaySent.UnixNano()+int64(offset+backward))
+	local.put(response[44:])
+	received := f.delaySent.Add(backward + time.Millisecond)
+	f.measure(decodedArrival(t, response, received), local)
+	return f.status(local.clock, received)
+}
+
 func TestPTPSelectsGrandmasterAndSwitchesOnExpiry(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	l := link{index: 1, ip: netip.MustParseAddr("192.168.44.1"), id: portID{9, 1}}

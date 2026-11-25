@@ -2,16 +2,18 @@ package upnp
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/netip"
 	"sync"
 	"time"
 )
 
+var searchInterval = 30 * time.Second
+
 const (
-	searchInterval = 30 * time.Second
-	manualLease    = 2 * searchInterval
-	maxDiscovered  = 1024
+	manualLease   = time.Minute
+	maxDiscovered = 1024
 )
 
 type refresh struct {
@@ -41,12 +43,13 @@ func (r *Registry) Start(parent context.Context, manual []ManualDevice) error {
 	if active {
 		return nil
 	}
-	links, err := openLinks()
-	if err != nil {
-		return err
-	}
 	ctx, cancel := context.WithCancel(parent)
 	run := &discovery{ctx: ctx, cancel: cancel, done: make(chan struct{}), jobs: make(chan *refresh, 64), pending: make(map[string]*refresh)}
+	network := &ssdpNetwork{logger: r.logger.With("module", "upnp"), links: make(map[int]*ssdpLink), receive: func(a announcement) { r.observe(run, a) }}
+	if err := network.rescan(ctx); err != nil {
+		cancel()
+		return err
+	}
 	r.mu.Lock()
 	r.run = run
 	for _, m := range manual {
@@ -54,7 +57,7 @@ func (r *Registry) Start(parent context.Context, manual []ManualDevice) error {
 		r.records[m.UDN] = rec
 	}
 	r.mu.Unlock()
-	go r.discover(run, links)
+	go r.discover(run, network)
 	return nil
 }
 
@@ -70,13 +73,85 @@ func (r *Registry) Stop() {
 	}
 }
 
-func (r *Registry) discover(run *discovery, links []ssdpLink) {
+type ssdpNetwork struct {
+	logger  *slog.Logger
+	links   map[int]*ssdpLink
+	receive func(announcement)
+	waiting bool
+}
+
+func (n *ssdpNetwork) rescan(ctx context.Context) error {
+	wanted, err := listLinks()
+	if err != nil {
+		return err
+	}
+	if len(wanted) == 0 && !n.waiting {
+		n.logger.Info("等待局域网网卡以开始 SSDP 发现", "event", "ssdp.interfaces.waiting")
+	}
+	n.waiting = len(wanted) == 0
+	for index, l := range n.links {
+		if l.addr != wanted[index] || l.stopped.Load() {
+			l.close()
+			delete(n.links, index)
+		}
+	}
+	group := net.UDPAddrFromAddrPort(netip.MustParseAddrPort(ssdpGroup))
+	var lastErr error
+	for index, addr := range wanted {
+		if n.links[index] != nil {
+			continue
+		}
+		l, err := openLink(net.Interface{Index: index}, addr, group)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		n.links[index] = l
+		l.listen(ctx, index, n.logger, n.receive)
+	}
+	if len(n.links) == 0 {
+		return lastErr
+	}
+	return nil
+}
+
+func (n *ssdpNetwork) search() {
+	group := netip.MustParseAddrPort(ssdpGroup)
+	packet := searchPacket(ssdpGroup)
+	for _, link := range n.links {
+		for range 3 {
+			_, _ = link.search.WriteToUDPAddrPort(packet, group)
+		}
+		// 同机渲染器也可位于不回送组播的网卡上。
+		local := netip.AddrPortFrom(link.addr, group.Port())
+		_, _ = link.search.WriteToUDPAddrPort(searchPacket(local.String()), local)
+	}
+}
+
+func (n *ssdpNetwork) run(ctx context.Context) {
+	defer func() {
+		for _, link := range n.links {
+			link.close()
+		}
+	}()
+	ticker := time.NewTicker(searchInterval)
+	defer ticker.Stop()
+	for ctx.Err() == nil {
+		n.search()
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := n.rescan(ctx); err != nil {
+				n.logger.Warn("SSDP 网卡刷新失败", "event", "ssdp.interfaces.failed", "error", err)
+			}
+		}
+	}
+}
+
+func (r *Registry) discover(run *discovery, network *ssdpNetwork) {
 	var wg sync.WaitGroup
 	defer func() {
-		for _, link := range links {
-			link.search.Close()
-			link.notify.Close()
-		}
 		wg.Wait()
 		// 取得写锁，与已通过开启检查的手动探测同步；取消后不会再加入。
 		r.mu.Lock()
@@ -86,30 +161,15 @@ func (r *Registry) discover(run *discovery, links []ssdpLink) {
 		r.mu.Unlock()
 		close(run.done)
 	}()
-	receive := func(a announcement) { r.observe(run, a) }
-	for _, link := range links {
-		// 组播通知在共享端口上接收，使用描述连接的本机地址。单播搜索响应有明确的本机网卡。
-		local := link.search.LocalAddr().(*net.UDPAddr).AddrPort().Addr().Unmap()
-		wg.Go(func() { readAnnouncements(link.notify, netip.Addr{}, true, receive) })
-		wg.Go(func() { readAnnouncements(link.search, local, false, receive) })
+	if network != nil {
+		wg.Go(func() { network.run(run.ctx) })
 	}
 	for range 4 {
 		wg.Go(func() { r.refreshDevices(run) })
 	}
-	group := netip.MustParseAddrPort(ssdpGroup)
-	packet := searchPacket(ssdpGroup)
 	ticker := time.NewTicker(searchInterval)
 	defer ticker.Stop()
 	for run.ctx.Err() == nil {
-		for _, link := range links {
-			for range 3 {
-				_, _ = link.search.WriteToUDPAddrPort(packet, group)
-			}
-			// 同机渲染器也可位于不回送组播的网卡上。
-			addr := link.search.LocalAddr().(*net.UDPAddr).AddrPort().Addr().Unmap()
-			local := netip.AddrPortFrom(addr, group.Port())
-			_, _ = link.search.WriteToUDPAddrPort(searchPacket(local.String()), local)
-		}
 		r.refreshManual(run)
 		select {
 		case <-run.ctx.Done():

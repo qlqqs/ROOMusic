@@ -11,11 +11,18 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
-var group = net.UDPAddr{IP: net.IPv4(224, 0, 0, 251), Port: 5353}
+var mdnsPort = 5353
+var listLinks = lanLinks
+var openBrowseSocket = openSocket
+
+func multicastGroup() *net.UDPAddr {
+	return &net.UDPAddr{IP: net.IPv4(224, 0, 0, 251), Port: mdnsPort}
+}
 
 type link struct {
-	iface net.Interface
-	local netip.Addr
+	iface  net.Interface
+	local  netip.Addr
+	prefix netip.Prefix
 }
 
 type socket struct {
@@ -52,8 +59,7 @@ func lanLinks(local netip.Addr) ([]link, *net.Interface, error) {
 		for _, addr := range addrs {
 			prefix, err := netip.ParsePrefix(addr.String())
 			if err == nil && lan.IsLANAddress(prefix.Addr()) && (!local.IsValid() || prefix.Addr() == local) {
-				links = append(links, link{iface, prefix.Addr()})
-				break
+				links = append(links, link{iface: iface, local: prefix.Addr(), prefix: prefix})
 			}
 		}
 	}
@@ -64,15 +70,33 @@ func lanLinks(local netip.Addr) ([]link, *net.Interface, error) {
 }
 
 func openSocket(l link, loop *net.Interface) (*socket, error) {
-	conn, err := net.ListenMulticastUDP("udp4", &l.iface, &group)
+	group := multicastGroup()
+	conn, err := net.ListenMulticastUDP("udp4", &l.iface, group)
 	if err != nil {
 		return nil, err
 	}
 	s := &socket{PacketConn: ipv4.NewPacketConn(conn), link: l, links: map[int]link{l.iface.Index: l}}
-	if loop != nil && s.JoinGroup(loop, &group) == nil {
+	if loop != nil && s.JoinGroup(loop, group) == nil {
 		s.loopIndex = loop.Index
 	}
-	if err = s.SetControlMessage(ipv4.FlagInterface|ipv4.FlagDst, true); err == nil {
+	return configureSocket(s)
+}
+
+func openQuerySocket(l link, loop *net.Interface) (*socket, error) {
+	conn, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(netip.AddrPortFrom(l.local, 0)))
+	if err != nil {
+		return nil, err
+	}
+	s := &socket{PacketConn: ipv4.NewPacketConn(conn), link: l, links: map[int]link{l.iface.Index: l}}
+	if loop != nil {
+		s.loopIndex = loop.Index
+	}
+	return configureSocket(s)
+}
+
+func configureSocket(s *socket) (*socket, error) {
+	err := s.SetControlMessage(ipv4.FlagInterface|ipv4.FlagDst, true)
+	if err == nil {
 		err = s.SetMulticastTTL(255)
 	}
 	if err == nil {
@@ -87,7 +111,7 @@ func openSocket(l link, loop *net.Interface) (*socket, error) {
 
 func (s *socket) send(data []byte, l link, dest *net.UDPAddr) error {
 	var control *ipv4.ControlMessage
-	if l.iface.Index != 0 {
+	if l.local.IsValid() {
 		control = &ipv4.ControlMessage{IfIndex: l.iface.Index, Src: net.IP(l.local.AsSlice())}
 	}
 	_, err := s.WriteTo(data, control, dest)
@@ -97,10 +121,11 @@ func (s *socket) send(data []byte, l link, dest *net.UDPAddr) error {
 // 宿主机可能过滤物理接口上的组播回送。同机服务在回环接口加入同一个组，
 // 报文仍以实际局域网地址为源，使 A 记录与来源校验对远近设备一致。
 func (s *socket) multicast(data []byte, l link) error {
-	err := s.send(data, l, &group)
+	group := multicastGroup()
+	err := s.send(data, l, group)
 	if s.loopIndex != 0 {
 		l.iface.Index = s.loopIndex
-		s.send(data, l, &group)
+		s.send(data, l, group)
 	}
 	return err
 }

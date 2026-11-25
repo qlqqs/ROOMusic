@@ -92,10 +92,15 @@ func Run(ctx context.Context, addr string, logger *slog.Logger) error {
 				logger.Info("PTP 时钟端口已就绪", "event", "ptp.ready", "interfaces", len(w.links), "clock_id", id)
 				lastReason = ""
 				e := engine{wire: w, local: id, peers: make(map[netip.Addr]*peerClock)}
-				err = e.serve(ctx, state)
+				err = e.serve(ctx, state, logger)
 			}
 			if ctx.Err() != nil {
 				return
+			}
+			if errors.Is(err, errLinksChanged) {
+				state.publish(Status{ClockID: id, Reason: "network_unavailable"}, nil)
+				logger.Info("网卡变化，重开 PTP 时钟端口", "event", "ptp.interfaces.changed", "module", "ptp")
+				continue
 			}
 			reason := "network_unavailable"
 			if errors.Is(err, syscall.EADDRINUSE) {

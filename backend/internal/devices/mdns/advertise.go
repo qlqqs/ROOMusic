@@ -58,7 +58,7 @@ func Advertise(ctx context.Context, e Entry) error {
 	if err != nil {
 		return err
 	}
-	links, loop, err := lanLinks(e.IP)
+	links, loop, err := listLinks(e.IP)
 	if err != nil {
 		return err
 	}
@@ -102,9 +102,10 @@ func Advertise(ctx context.Context, e Entry) error {
 			if !asksAbout(q, response.Answers) {
 				continue
 			}
-			dest := &group
+			group := multicastGroup()
+			dest := group
 			payload := data
-			if p.peer.Port() != 5353 {
+			if int(p.peer.Port()) != mdnsPort {
 				// 传统单播查询使用请求的编号并回显问题。
 				reply := response
 				reply.ID, reply.Questions = query.ID, query.Questions
@@ -117,7 +118,9 @@ func Advertise(ctx context.Context, e Entry) error {
 				dest = net.UDPAddrFromAddrPort(p.peer)
 			}
 			replyLink := l
-			if p.loop && dest == &group {
+			if dest.IP.Equal(l.local.AsSlice()) {
+				replyLink.iface.Index = 0
+			} else if p.loop && dest == group {
 				replyLink.iface.Index = s.loopIndex
 			}
 			s.send(payload, replyLink, dest)

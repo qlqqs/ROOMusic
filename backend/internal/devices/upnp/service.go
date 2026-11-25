@@ -56,13 +56,13 @@ type Service struct {
 }
 
 func NewService(ctx context.Context, db *sql.DB, registry *Registry, credentials *airplay.CredentialStore, ptpAddress string) *Service {
-	receivers := cast.NewRegistry()
+	receivers := cast.NewRegistryWithLogger(registry.logger)
 	return &Service{
 		lifecycle: ctx, db: db, registry: registry, cast: receivers, airplayCredentials: credentials, clock: ptp.Client{Address: ptpAddress}, pendingPIN: make(map[string]*pinChallenge),
 		protocols: map[string]*protocol{
 			"upnp":    {registry: registry},
 			"cast":    {registry: castRegistry{receivers}},
-			"airplay": {registry: airplayRegistry{airplay.NewRegistry()}},
+			"airplay": {registry: airplayRegistry{airplay.NewRegistryWithLogger(registry.logger)}},
 		},
 	}
 }
