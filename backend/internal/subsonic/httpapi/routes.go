@@ -5,28 +5,31 @@ import (
 	"errors"
 	"net/http"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/qlqq/roomusic/backend/internal/identity"
-	"github.com/qlqq/roomusic/backend/internal/personal"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/subsonic/auth"
 	"github.com/qlqq/roomusic/backend/internal/subsonic/protocol"
 )
 
 type Handlers struct {
-	ratings   *personal.Service
-	service   *auth.Service
-	guard     *identity.Guard
-	version   string
-	endpoints map[string]func(*http.Request) protocol.Response
+	browse          Browse
+	artworkFlights  singleflight.Group
+	binaryEndpoints map[string]func(http.ResponseWriter, *http.Request) error
+	service         *auth.Service
+	guard           *identity.Guard
+	version         string
+	endpoints       map[string]func(*http.Request) protocol.Response
 }
 
 type userKey struct{}
 
-func Register(mux *http.ServeMux, service *auth.Service, ratings *personal.Service, guard *identity.Guard, version string) {
+func Register(mux *http.ServeMux, service *auth.Service, guard *identity.Guard, version string, browse Browse) {
 	if version == "" {
 		version = "dev"
 	}
-	h := &Handlers{service: service, ratings: ratings, guard: guard, version: version}
+	h := &Handlers{browse: browse, service: service, guard: guard, version: version}
 	h.endpoints = map[string]func(*http.Request) protocol.Response{
 		"ping": func(*http.Request) protocol.Response { return protocol.Response{} },
 		"getLicense": func(*http.Request) protocol.Response {
@@ -38,9 +41,20 @@ func Register(mux *http.ServeMux, service *auth.Service, ratings *personal.Servi
 		"getMusicFolders": func(*http.Request) protocol.Response {
 			return protocol.Response{MusicFolders: &protocol.MusicFolders{Folders: []protocol.MusicFolder{{ID: 1, Name: "ROOMusic"}}}}
 		},
-		"getUser":   getUser,
-		"setRating": h.setRating,
+		"getUser":        getUser,
+		"setRating":      h.setRating,
+		"getArtists":     h.getArtists,
+		"getArtist":      h.getArtist,
+		"getAlbum":       h.getAlbum,
+		"getSong":        h.getSong,
+		"getAlbumList2":  h.getAlbumList2,
+		"getArtistInfo2": h.getArtistInfo2,
+		"getAlbumInfo2":  h.getAlbumInfo2,
+		"search3":        h.search3,
+		"getRandomSongs": h.getRandomSongs,
+		"getGenres":      h.getGenres,
 	}
+	h.binaryEndpoints = map[string]func(http.ResponseWriter, *http.Request) error{"getCoverArt": h.getCoverArt}
 	mux.HandleFunc("/rest/", h.rest)
 	mux.HandleFunc("GET /api/v1/me/subsonic", h.me)
 	mux.HandleFunc("POST /api/v1/me/subsonic/confirm-password", h.confirm)
@@ -54,12 +68,14 @@ func (h *Handlers) rest(w http.ResponseWriter, r *http.Request) {
 		protocol.Write(w, params.Values.Get("f"), h.version, status, response)
 	}
 	handle := h.endpoints[params.Endpoint]
-	if handle == nil {
+	binary := h.binaryEndpoints[params.Endpoint]
+	unknown := handle == nil && binary == nil
+	if unknown {
 		httpserver.SetSubsonicEndpoint(r, "unknown")
 	} else {
 		httpserver.SetSubsonicEndpoint(r, params.Endpoint)
 	}
-	if parseErr != nil || handle == nil {
+	if parseErr != nil || unknown {
 		if err := h.service.RequireEnabled(r.Context()); err != nil {
 			write(200, authFailure(err))
 		} else if parseErr != nil {
@@ -75,7 +91,14 @@ func (h *Handlers) rest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpserver.SetActor(r, user.ID)
-	write(200, handle(r.WithContext(context.WithValue(r.Context(), userKey{}, user))))
+	r = r.WithContext(context.WithValue(r.Context(), userKey{}, user))
+	if binary != nil {
+		if err := binary(w, r); err != nil {
+			write(200, browseFailure(err))
+		}
+		return
+	}
+	write(200, handle(r))
 }
 
 func authFailure(err error) protocol.Response {

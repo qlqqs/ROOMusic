@@ -38,6 +38,7 @@ const (
 
 // Database 是播放历史需要的最小数据库能力；*sql.DB 满足它。
 type Database interface {
+	catalog.ReadTransactionBeginner
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 	QueryRowContext(context.Context, string, ...any) *sql.Row
