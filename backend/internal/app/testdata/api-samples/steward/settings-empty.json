@@ -1,5 +1,6 @@
 {
   "body": {
+    "default_mode": "assistant",
     "display_name": "",
     "endpoint": "",
     "key_last_four": "",

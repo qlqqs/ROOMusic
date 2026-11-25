@@ -38,6 +38,10 @@ const probeResultDecoder = d.object({
   failures: d.optional(d.array(probeFailureDecoder, { max: 20 })),
 });
 
+/** 会话的模式：assistant 修改曲库前给用户确认（C6），steward 交给独立的审查调用、通过的自动执行（C7），operator 直接执行（C6）。 */
+export const stewardModes = ["assistant", "steward", "operator"] as const;
+export type StewardMode = (typeof stewardModes)[number];
+
 const settingsDecoder = d.object({
   endpoint: d.string(),
   key_last_four: d.string({ max: 4 }),
@@ -48,6 +52,8 @@ const settingsDecoder = d.object({
   /** 审查模型（C7）；空字符串表示与对话用同一个模型。 */
   review_model: d.optional(d.string()),
   display_name: d.string({ max: MAX_DISPLAY_NAME }),
+  /** 新会话的默认模式；输入框下的模式菜单可以为这一次改。 */
+  default_mode: d.oneOf(stewardModes),
   probe_result: d.nullable(probeResultDecoder),
   probed_at: d.nullable(d.timestamp()),
   overrides: d.object({
@@ -99,9 +105,6 @@ export type SearchTestDTO = d.Infer<typeof searchTestDecoder>;
 
 // ---- 会话与消息（合同 4.4）----
 
-/** 会话的模式：assistant 修改曲库前给用户确认（C6），steward 交给独立的审查调用、通过的自动执行（C7），operator 直接执行（C6）。 */
-export const stewardModes = ["assistant", "steward", "operator"] as const;
-export type StewardMode = (typeof stewardModes)[number];
 
 /** 会话的运行状态（C10）：正在运行优先，其次是有未过期的方案项等用户确认，其余是空闲。 */
 export const runStatuses = ["idle", "running", "awaiting_confirmation"] as const;

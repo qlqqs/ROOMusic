@@ -45,6 +45,8 @@ type settingsInput struct {
 	ReviewModel *string `json:"review_model"`
 	// DisplayName 是去掉首尾空白后的管家名字，空值表示默认。
 	DisplayName *string `json:"display_name"`
+	// DefaultMode 是新会话的默认模式，省略或 null 时保留原值。
+	DefaultMode *string `json:"default_mode"`
 	// Overrides 保存用户显式填写的覆盖项。
 	Overrides *manualOverrides `json:"overrides"`
 }
@@ -71,6 +73,8 @@ type settingsResponse struct {
 	ReviewModel string `json:"review_model"`
 	// DisplayName 是去掉首尾空白后的管家名字，空值表示默认。
 	DisplayName string `json:"display_name"`
+	// DefaultMode 是新会话的默认模式。
+	DefaultMode string `json:"default_mode"`
 	// ProbeResult 是最近一次探测报告。
 	ProbeResult json.RawMessage `json:"probe_result"`
 	// ProbedAt 是最近一次探测时间。
@@ -83,7 +87,7 @@ type settingsResponse struct {
 
 func (h *Handlers) settingsView(userID string, settings runtime.UserSettings) settingsResponse {
 	result := settingsResponse{Endpoint: settings.Endpoint, Protocol: settings.Protocol, Model: settings.Model, ReviewModel: settings.ReviewModel,
-		DisplayName: settings.DisplayName, Overrides: settings.Overrides, SearchSource: settings.SearchSource, SearXNGURL: settings.SearXNGURL}
+		DisplayName: settings.DisplayName, DefaultMode: settings.DefaultMode, Overrides: settings.Overrides, SearchSource: settings.SearchSource, SearXNGURL: settings.SearXNGURL}
 	if result.SearchSource == "" {
 		result.SearchSource = "none"
 	}
@@ -165,6 +169,9 @@ func (h *Handlers) putSettings(w http.ResponseWriter, r *http.Request, user iden
 }
 
 func validSettingsInput(input *settingsInput) bool {
+	if input.DefaultMode != nil && !validConversationMode(*input.DefaultMode) {
+		return false
+	}
 	if input.SearchSource != nil && *input.SearchSource != "none" && *input.SearchSource != "searxng" && *input.SearchSource != "tavily" && *input.SearchSource != "native" {
 		return false
 	}
@@ -251,7 +258,7 @@ func (h *Handlers) encryptKey(userID, purpose, key string) (*runtime.EncryptedKe
 
 func settingsUpdate(settings runtime.UserSettings) runtime.UserSettingsInput {
 	return runtime.UserSettingsInput{Endpoint: settings.Endpoint, Protocol: settings.Protocol, Model: settings.Model, ReviewModel: settings.ReviewModel,
-		DisplayName: settings.DisplayName, SearchSource: settings.SearchSource, SearXNGURL: settings.SearXNGURL}
+		DisplayName: settings.DisplayName, DefaultMode: settings.DefaultMode, SearchSource: settings.SearchSource, SearXNGURL: settings.SearXNGURL}
 }
 
 func effectiveSettings(settings runtime.UserSettings) (runtime.UserSettings, provider.ToolSupport, error) {
@@ -398,6 +405,9 @@ func (h *Handlers) mergeSettings(userID string, current runtime.UserSettings, in
 	}
 	if input.DisplayName != nil {
 		update.DisplayName = *input.DisplayName
+	}
+	if input.DefaultMode != nil {
+		update.DefaultMode = *input.DefaultMode
 	}
 	if input.Overrides != nil {
 		update.Overrides, _ = json.Marshal(input.Overrides)

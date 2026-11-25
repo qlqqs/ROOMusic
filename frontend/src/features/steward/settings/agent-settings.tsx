@@ -3,6 +3,7 @@ import { EmptyState, FailureNotice, Skeleton } from "../../../shared/ui";
 import { useViewerScope } from "../../auth";
 import { AccessTokens } from "../components/access-tokens";
 import { DEFAULT_STEWARD_NAME, isStewardDisabled, useStewardSettings } from "../hooks/use-steward-settings";
+import { AgentDefaultMode } from "./agent-default-mode";
 import { AgentMemories } from "./agent-memories";
 import { AgentModel } from "./agent-model";
 import { AgentName } from "./agent-name";
@@ -11,7 +12,7 @@ import { MembersSection } from "./members-section";
 import styles from "./settings.module.css";
 
 /**
- * 设置 › Agent 的内容：名字、模型（含审查模型，C7）、联网搜索（C8）、记忆（C10）、访问令牌，管理员另有“成员”一段（成员开关与内网地址放行）。所有登录用户都有这一栏。
+ * 设置 › Agent 的内容：名字、新会话的默认模式、模型（含审查模型，C7）、联网搜索（C8）、记忆（C10）、访问令牌，管理员另有“成员”一段（成员开关与内网地址放行）。所有登录用户都有这一栏。
  * 成员开关关闭时成员看到说明，名字、模型与联网搜索不显示；记忆（C10）与访问令牌两组保留：记忆可以查看与删除、不能添加与修改，
  * 令牌仍能查看与吊销、不能新建（C3）。
  */
@@ -30,6 +31,7 @@ export function AgentSettings() {
       ) : (
         <>
           <AgentName settings={settings.data} />
+          <AgentDefaultMode settings={settings.data} />
           <AgentModel settings={settings.data} />
           <AgentSearch settings={settings.data} />
         </>

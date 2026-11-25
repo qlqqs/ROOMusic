@@ -24,7 +24,7 @@ type ProbeResult struct {
 	ProbedAt time.Time
 }
 
-// UserSettings 是当前用户的模型设置；传输层应单独投影响应，不返回密文。
+// UserSettings 是当前用户的管家设置；传输层应单独投影响应，不返回密文。
 type UserSettings struct {
 	SearchSource string
 	SearXNGURL   string
@@ -42,6 +42,8 @@ type UserSettings struct {
 	Model       string
 	// DisplayName 为空时使用默认显示名字。
 	DisplayName string
+	// DefaultMode 是新会话的默认模式。
+	DefaultMode string
 	// Probe 是最近一次探测；尚未探测时为 nil。
 	Probe *ProbeResult
 	// Overrides 保存用户手动覆盖项。
@@ -77,6 +79,8 @@ type UserSettingsInput struct {
 	Model       string
 	// DisplayName 为空时恢复默认显示名字。
 	DisplayName string
+	// DefaultMode 为空时保留已保存的默认模式。
+	DefaultMode string
 	// Probe 为 nil 时保留上次探测结果与时间。
 	Probe *ProbeResult
 	// Overrides 为 nil 时保留已有覆盖项，传入 {} 可清空覆盖项。
@@ -84,9 +88,9 @@ type UserSettingsInput struct {
 }
 
 const settingsColumns = `user_id::text,endpoint,key_ciphertext,key_last_four,protocol,model,
- display_name,probe_result,probed_at,overrides,updated_at,review_model,search_source,searxng_url,search_key_ciphertext,search_key_last_four`
+ display_name,probe_result,probed_at,overrides,updated_at,review_model,search_source,searxng_url,search_key_ciphertext,search_key_last_four,default_mode`
 
-// GetUserSettings 读取当前用户的设置，尚未保存时返回零值设置与 nil 错误。
+// GetUserSettings 读取当前用户的设置，尚未保存时返回默认设置。
 func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSettings, error) {
 	return ReadUserSettings(ctx, s.db, userID)
 }
@@ -98,7 +102,7 @@ func ReadUserSettings(ctx context.Context, q interface {
 	settings, err := scanSettings(q.QueryRowContext(ctx, `SELECT `+settingsColumns+`
  FROM steward_user_settings WHERE user_id=$1::uuid`, userID))
 	if errors.Is(err, sql.ErrNoRows) {
-		return UserSettings{SearchSource: "none"}, nil
+		return UserSettings{SearchSource: "none", DefaultMode: "assistant"}, nil
 	}
 	return settings, storeError("读取管家设置", err)
 }
@@ -128,6 +132,9 @@ func (s *Store) UpdateUserSettings(ctx context.Context, userID string, update fu
 	if err != nil {
 		return UserSettings{}, err
 	}
+	if input.DefaultMode == "" {
+		input.DefaultMode = current.DefaultMode
+	}
 	saved, err := saveUserSettings(ctx, tx, userID, input)
 	if err != nil {
 		return UserSettings{}, err
@@ -155,20 +162,21 @@ func saveUserSettings(ctx context.Context, tx *sql.Tx, userID string, input User
 		probe, probedAt = input.Probe.Result, &input.Probe.ProbedAt
 	}
 	settings, err := scanSettings(tx.QueryRowContext(ctx, `INSERT INTO steward_user_settings
- (user_id,endpoint,key_ciphertext,key_last_four,protocol,model,display_name,probe_result,probed_at,overrides,review_model,search_source,searxng_url,search_key_ciphertext,search_key_last_four)
- VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,COALESCE($10::jsonb,'{}'::jsonb),$13,$14,$15,$16,$17)
+ (user_id,endpoint,key_ciphertext,key_last_four,protocol,model,display_name,probe_result,probed_at,overrides,review_model,search_source,searxng_url,search_key_ciphertext,search_key_last_four,default_mode)
+ VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,COALESCE($10::jsonb,'{}'::jsonb),$13,$14,$15,$16,$17,$19)
  ON CONFLICT (user_id) DO UPDATE SET endpoint=EXCLUDED.endpoint,
  key_ciphertext=CASE WHEN $11 THEN EXCLUDED.key_ciphertext ELSE steward_user_settings.key_ciphertext END,
  key_last_four=CASE WHEN $11 THEN EXCLUDED.key_last_four ELSE steward_user_settings.key_last_four END,
  search_source=EXCLUDED.search_source,searxng_url=EXCLUDED.searxng_url,
  search_key_ciphertext=CASE WHEN $18 THEN EXCLUDED.search_key_ciphertext ELSE steward_user_settings.search_key_ciphertext END,
  search_key_last_four=CASE WHEN $18 THEN EXCLUDED.search_key_last_four ELSE steward_user_settings.search_key_last_four END,
- review_model=EXCLUDED.review_model,protocol=EXCLUDED.protocol,model=EXCLUDED.model,display_name=EXCLUDED.display_name,
+ review_model=EXCLUDED.review_model,protocol=EXCLUDED.protocol,model=EXCLUDED.model,display_name=EXCLUDED.display_name,default_mode=EXCLUDED.default_mode,
  probe_result=CASE WHEN $12 THEN EXCLUDED.probe_result ELSE steward_user_settings.probe_result END,
  probed_at=CASE WHEN $12 THEN EXCLUDED.probed_at ELSE steward_user_settings.probed_at END,
  overrides=COALESCE($10::jsonb,steward_user_settings.overrides),updated_at=clock_timestamp()
  RETURNING `+settingsColumns, userID, input.Endpoint, ciphertext, lastFour, input.Protocol,
-		input.Model, input.DisplayName, probe, probedAt, input.Overrides, input.Key != nil || input.ClearKey, input.Probe != nil || input.ClearProbe, input.ReviewModel, input.SearchSource, input.SearXNGURL, searchCiphertext, searchLastFour, input.SearchKey != nil || input.ClearSearchKey))
+		input.Model, input.DisplayName, probe, probedAt, input.Overrides, input.Key != nil || input.ClearKey, input.Probe != nil || input.ClearProbe,
+		input.ReviewModel, input.SearchSource, input.SearXNGURL, searchCiphertext, searchLastFour, input.SearchKey != nil || input.ClearSearchKey, input.DefaultMode))
 	return settings, storeError("保存管家设置", err)
 }
 
@@ -179,7 +187,8 @@ func scanSettings(row scanner) (UserSettings, error) {
 	var probedAt *time.Time
 	err := row.Scan(&settings.UserID, &settings.Endpoint, &key.Ciphertext, &key.LastFour,
 		&settings.Protocol, &settings.Model, &settings.DisplayName, (*[]byte)(&probe), &probedAt,
-		(*[]byte)(&settings.Overrides), &settings.UpdatedAt, &settings.ReviewModel, &settings.SearchSource, &settings.SearXNGURL, &searchKey.Ciphertext, &searchKey.LastFour)
+		(*[]byte)(&settings.Overrides), &settings.UpdatedAt, &settings.ReviewModel, &settings.SearchSource,
+		&settings.SearXNGURL, &searchKey.Ciphertext, &searchKey.LastFour, &settings.DefaultMode)
 	if err != nil {
 		return UserSettings{}, err
 	}

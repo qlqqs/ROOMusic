@@ -58,6 +58,7 @@ export type SettingsPatch = {
   /** 审查模型（C7）；空字符串表示与对话用同一个模型。 */
   review_model?: string;
   display_name?: string;
+  default_mode?: StewardMode;
   overrides?: { protocol?: Protocol; model?: string; tool_support?: ToolSupport; native_search?: NativeSearchSupport };
   /** 联网搜索（C8）：来源是 native 而生效的自带搜索不是 supported 时 400 invalid_input；成员的 SearXNG 地址按模型端点的出站规则检查。 */
   search_source?: SearchSource;

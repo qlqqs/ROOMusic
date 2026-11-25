@@ -1,5 +1,6 @@
 {
   "body": {
+    "default_mode": "assistant",
     "display_name": "合成管家",
     "endpoint": "http://127.0.0.1:12345",
     "key_last_four": "",

@@ -118,7 +118,7 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
   const placedPlans = placePlans(view.turns, plans);
   const reviews = useReviewSnapshot();
   const planOpen = plans.some((entry) => entry.phase === "pending" || entry.phase === "submitting");
-  const mode: StewardMode = conversationId === null ? (dock.newMode ?? "assistant") : (detail.data?.mode ?? "assistant");
+  const mode: StewardMode = conversationId === null ? (dock.newMode ?? settings.default_mode) : (detail.data?.mode ?? "assistant");
   // 自动整理的会话（M7 D）：模式固定为 steward，后台的方案只读（需要人决定的项已成为例外）。
   const curation = conversationId !== null && detail.data?.kind === "curation";
   const modeLocked = running || elsewhere || planOpen || creating || patch.isPending || curation;
@@ -149,7 +149,7 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
     }
     let id: string;
     try {
-      id = (await create.mutateAsync(dock.newMode ?? "assistant")).id;
+      id = (await create.mutateAsync(dock.newMode ?? settings.default_mode)).id;
     } catch (error) {
       if (stale()) return;
       restore(draftKey);
