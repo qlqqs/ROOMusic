@@ -1,5 +1,0 @@
-{"file": ".trellis/tasks/11-25-slimproto-squeezelite/prd.md", "reason": "验收 A1–A8"}
-{"file": ".trellis/tasks/11-25-slimproto-squeezelite/design.md", "reason": "边界与协议要点"}
-{"file": ".trellis/tasks/11-25-slimproto-squeezelite/research/slimproto-protocol.md", "reason": "字节级核对"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试与门禁"}
-{"file": ".trellis/spec/backend/database-verification.md", "reason": "迁移往返"}
