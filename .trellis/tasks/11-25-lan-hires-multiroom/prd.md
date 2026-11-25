@@ -26,6 +26,7 @@
 | L4 | 高精度多房间加 Snapcast 子任务；SlimProto 编组照常做（毫秒级，给 piCorePlayer 这类用户）；SlimProto 的服务器端漂移补偿等实测发现跳过时有咔哒声再加 | qlqq 2026-11-25 选择。SlimProto 同步是毫秒级（时间戳以毫秒为单位，靠跳过修正），Snapcast 客户端按采样点校正，官方称偏差通常低于 0.2 ms，是唯一现成、精度能超过 RAAT 的路 |
 | L5 | 没有网络功能、插在 NAS 上的 USB 解码器，用 Squeezelite 边车容器接入，只写文档与示例，不写新后端代码 | 主代理取，回答 qlqq“设备不支持怎么办” |
 | L6 | Snapcast 子任务暂缓：先用真实设备试 SlimProto 编组，漂移下的跳帧修正听得出来时，再做 Snapcast 或给 SlimProto 加服务器端漂移补偿 | qlqq 2026-11-25 选择。SlimProto 编组实测时钟一致时 p95 0.35 ms，+100 ppm 时 p95 9.2 ms、峰值 10.3 ms（每几分钟一次 strm a），Snapcast 的精度优势只剩漂移场景 |
+| L7 | 无实机条件，L6 的实机门槛改为软件替代验证（子任务 `11-25-slimproto-sync-verify`）：跳帧修正在持续音、和声上有明显咔哒（切点高频能量高出基线 74–91 dB），噪声类素材可掩盖；旧版 Squeezelite 兼容性矩阵顺带修复了 1479 前版本 352.8 kHz 起不了播的问题 | qlqq 2026-11-25 选择软件替代验证。是否做 Snapcast 或服务器端漂移补偿，待 qlqq 按 WAV 试听与测量决定 |
 | L3 | 按“规划完直接实现、本地合并、不推送”进行；审查先行 | 沿用 M7/M8 的做法。审查会通读现有设备层，SlimProto 的设计要复用它的托管输出与取流约定 |
 
 ## 子任务
@@ -60,6 +61,7 @@
 | `11-25-lan-protocol-audit` | 已合入并归档 |
 | `11-25-slimproto-squeezelite` | 已合入并归档 |
 | `11-25-slimproto-sync-groups` | 已合入并归档 |
-| `11-25-snapcast-multiroom` | 暂缓（L6），规划与协议调研保留 |
+| `11-25-slimproto-sync-verify` | 已合入并归档（L7） |
+| `11-25-snapcast-multiroom` | 暂缓（L6），待 L7 结论后决定，规划与协议调研保留 |
 
-待 qlqq：真实设备试用 SlimProto 单台与编组；审阅各子任务 PRD 里主代理替他定的决定（审查 F1–F10、S1–S11、G1–G11）。
+待 qlqq：试听 `temp/slimproto-skip/` 的 WAV，决定是否做 Snapcast 或服务器端漂移补偿；审阅各子任务 PRD 里主代理替他定的决定（审查 F1–F10、S1–S11、G1–G11）。
