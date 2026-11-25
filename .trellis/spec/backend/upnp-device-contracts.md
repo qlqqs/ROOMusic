@@ -122,3 +122,64 @@ contentFeatures.dlna.org: DLNA.ORG_OP=00;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=0170000000
 - 音质：`PUT …/devices/{udn}/format {"codec":"alac","max_sample_rate","max_bit_depth"}`，44100/16（默认）或 48000/24（仅 AirPlay 2）；其他 `400 invalid_input`。
 - 对时：独立的 `ptp` 服务（`cmd/roomusic-ptp`，见部署合同）在 UDP 319/320 上运行 PTP，应用经 `ROOMUSIC_PTP_ADDR` 读取。必须 PTP 的型号（设备差异表，如 HomePod、Sonos Era）在时钟不可用时 `unsupported`，激活返回 `409 device_unsupported`；播放中失去时钟时自动重建为兼容会话。
 - 测试：`scripts/test-airplay.sh` 在独立 Docker 网络里用 shairport-sync（AirPlay 2 带 nqptp，与 classic）做真实接收端，覆盖原生 PTP、端口占用回退、播放中失去时钟与 AirPlay 1。
+
+## 网卡变化、对时样本与锁（2026-11-25 审查修复）
+
+来源：任务 `11-25-lan-protocol-audit`（审查记录 `research/audit.md`，修复项 F1–F9）。
+
+### 网卡与接收
+
+- mDNS（`devices/mdns`）、SSDP（`upnp/discovery.go`、`ssdp.go`）与 PTP（`ptp/network.go`）每 30 秒重新枚举局域网网卡，按接口索引与本机地址做差集：新网卡开套接字，消失或换地址的网卡关旧套接字再开新的。枚举入口是包级函数变量 `listLinks`，测试据此注入网卡集合。
+- 启动时没有局域网网卡不算失败：`Start` 返回成功，不发包，写一次 Info（`mdns.interfaces.waiting`），网卡出现后的下一轮开始工作。
+- 接收循环遇到非超时错误时写 Warn（`mdns.receive.failed` 等），下一轮重开该网卡的套接字，不再永久停收。
+- 发现日志使用装配时注入的应用 logger（`mdns.Start(ctx, service, logger, receive)`、`upnp.NewRegistryWithLogger`、`cast.NewRegistryWithLogger`、`airplay.NewRegistryWithLogger`），这样日志进入 stdout 与诊断日志环。不要在包里另建 `slog.New(…os.Stderr…)`。
+
+### mDNS 定向查询
+
+`LookupMatch` 用 RFC 6762 §6.7 的传统单播查询：从临时端口发出，带随机非零事务号，只接受同一套接字上事务号相同的应答；按目标所在网段的最长前缀选网卡。本机目标另发一份组播，让共享 5353 的同机服务也能应答。不再有全进程串行的查询槽位。
+
+### PTP 跟随端的样本选择
+
+`ptp/follower.go` 在最近 8 次 Delay 交换里取往返最短的样本作偏移。往返比窗口最小值大 2 ms 以上的样本丢弃，不重置。偏移连续 4 次同向偏离超过 5 ms 才认定主钟跳变，从当前交换重新累计。一次单向排队延迟不会让时钟显示失锁。
+
+### 托管输出的锁
+
+`upnp.Service.mu` 内不等待旧输出的网络收尾：
+
+| 路径 | 做法 |
+| --- | --- |
+| `Acquire` 接管，或旧输出正在收尾 | 锁内取消旧输出并登记 `handovers[udn]`，解锁等 `done`，再加锁从头核对协议周期、会话、可见性与占用。交接期间别人认领同一设备得 `device_busy`，占用者显示为交接目标 |
+| 设置变更、移除、改授权、会话撤销、`ReleaseIdle` | `cancelOutputs` 锁内取消，`waitOutputsLocked` 解锁等待后重新加锁 |
+| 协议启停 | 另有 `protocolMu` 串行 `Restore`、`UpdateSettings`、`Close`；停止时先把 `protocol.ctx` 置空，等待期间该协议的 `Acquire` 返回 `not_found` |
+
+错误做法与正确做法：
+
+```go
+// 错误：持有全局锁等待设备收尾，所有成员的快照与命令被卡住
+s.mu.Lock(); old.cancel(); <-old.done; s.mu.Unlock()
+// 正确：锁内取消并登记，锁外等待，回来重新核对
+m.handovers[udn] = occupant; old.cancel(); s.mu.Unlock(); <-old.done; s.mu.Lock(); delete(m.handovers, udn)
+```
+
+托管输出的订阅被 hub 关闭（不是本输出主动取消）时，UPnP、Cast、AirPlay 输出写 Warn（`devices.output.resubscribing`），按同一会话重新 `SubscribeOutput`。判定用 `msg, ok := <-sub.Events` 的 `!ok` 或 `sub.Done`，不要在读到事件后再嵌套判断 `Done`：hub 先关事件通道再关 `done`，嵌套判断会读到零值消息。
+
+### AirPlay 心跳与 RTSP 超时
+
+- 心跳单次期限 2 秒，连续 3 次失败才结束会话，成功即清零。
+- RTSP 客户端在“请求已完整写出、且没有从连接收到任何回应字节”的超时后保留连接，把该 CSeq 记为过期（最多 4 个，超过就关闭连接）；之后先丢弃过期 CSeq 的完整回应，再读本次回应。字节计数在加密分帧层之下。部分写入、读到一半的超时、帧错误仍然关闭连接。
+- 播放中 PTP 降级到 NTP 时写 Warn：发送端 `airplay.sender.fallback`，输出层 `airplay.output.fallback`。
+
+### 必需测试（已有）
+
+| 测试 | 断言 |
+| --- | --- |
+| `ptp/clock_test.go` 的单向 +20 ms 用例与连续偏离用例 | 仍可用、偏移变化小于 1 ms；连续 4 次同向偏离才重置 |
+| `mdns`、`upnp` 的 `discovery_network_test.go`、`query_udp_test.go` | 零网卡时不发包、网卡出现后开始工作、换地址替换套接字、读失败后重开；定向查询源端口不是 5353、错误事务号被丢弃 |
+| `app` 的 `TestPostgreSQLUPnPTakeoverDoesNotBlockOtherMember`、`TestPostgreSQLUPnPReactivatesSameMemberDuringRevocation` | 慢设备收尾时第三个账号的快照 1 秒内返回；收尾期间同一成员重新激活最终成功 |
+| `upnp` 的 `TestPostgreSQLUPnPResubscribesAfterHubOverflow` | 订阅溢出被关闭后重新订阅并继续收事件 |
+| `airplay` 的 `TestAirPlayHeartbeatConsecutiveFailures`、`TestAirPlayHeartbeatRecoversAfterTimeout`，`rtsp` 的 `TestAirPlayRTSPIgnoresLateResponse`、`TestAirPlayRTSPPartialResponseTimeoutClosesConnection` | 两次失败会话仍在、第三次结束；超时后下一次心跳在同一连接上成功；迟到回应被丢弃；读到一半超时仍关闭 |
+| `upnp` 的 `TestAirPlayOutputWarnsOnLivePTPFallback` | 降级时两条 Warn 都写出 |
+
+### 未做
+
+Cast 与 AirPlay 输出在设备换地址后不重连，仍是断开并暂停播放区，由用户重新选择（设计 F10）。

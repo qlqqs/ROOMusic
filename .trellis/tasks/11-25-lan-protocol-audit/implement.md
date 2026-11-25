@@ -46,3 +46,10 @@ sg docker -c 'scripts/test-airplay.sh --ptp'
 
 - 每组一个提交，可单独 `git revert`。
 - F2 改动了锁的持有方式，是风险最高的一项；若集成测试或 AirPlay 回归出现死锁或竞态，先回退 F2，其余照常合入。
+
+## 完成记录（2026-11-25）
+
+- A 组 `76a68d03`、B 组 `6898f9d2`，合并后在任务分支上实际运行：`go vet`（devices、ptp、app、zones）、`go test ./internal/devices/... ./internal/ptp/...`、`ROOMUSIC_TEST_RUN='UPnP' ./scripts/test-integration.sh`（10 个 UPnP 顶层用例通过）、`scripts/test-airplay.sh` 与 `--ptp`（均退出码 0）。
+- 测试代理各自在 `-race` 下跑过受影响包；能在修复前代码上编译的新测试都在修复前失败。依赖新替换点的 F4、F6 用例只做行为对照。
+- 返工：F2 收尾中的旧输出改为锁外等待后重试；F3 改用 `ok` 判定订阅关闭；发现日志改为注入应用 logger；F7 由测试代理发现 RTSP 超时即关连接，补改 `rtsp/client.go`。
+- 未做：F10（设备换地址后重连）。

@@ -21,7 +21,8 @@
   "children": [
     "11-25-lan-protocol-audit",
     "11-25-slimproto-squeezelite",
-    "11-25-slimproto-sync-groups"
+    "11-25-slimproto-sync-groups",
+    "11-25-snapcast-multiroom"
   ],
   "parent": null,
   "relatedFiles": [],
