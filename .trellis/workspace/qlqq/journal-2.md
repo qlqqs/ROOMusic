@@ -434,3 +434,28 @@ A1–A13 证据对照写入父任务 acceptance.md；路线图、决定索引、
 ### Status
 
 [OK] **Completed**
+
+
+## Session 70: OpenSubsonic 规划增补与 foundation 实现
+<!-- trellis-session: v=2 fp=3d568e9325032301 -->
+
+**Date**: 2026-11-25
+**Task**: OpenSubsonic 规划增补与 foundation 实现
+**Branch**: `main`
+
+### Summary
+
+评分子任务加入并拆出“我的评分页与管家评分工具”子任务；平均评分、半星不做的理由入档。foundation：Codex astra 实现后端（/rest 外壳、三种鉴权、迁移 0081 密码副本与实例开关、PasswordObserver），返工一处（加密失败不影响网页登录与改密）；Codex sol 写 12 个测试与 9 份样本；主代理写账号页第三方客户端一组与设置 › 第三方客户端开关、前端测试；新增 subsonic-contracts.md，secret 包移到 platform/secret 单独提交，合入 main。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `830580e6` | chore(task): 规划 OpenSubsonic 兼容接口与个人评分 |
+| `04337fa3` | refactor(secret): 实例密钥包移到 platform/secret |
+| `7615dbce` | feat(subsonic): OpenSubsonic 鉴权与协议骨架 |
+| `a4d766a7` | merge: 合入 OpenSubsonic 鉴权与协议骨架 |
+
+### Status
+
+[OK] **Completed**
