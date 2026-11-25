@@ -1,5 +1,0 @@
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "质量检查"}
-{"file": ".trellis/spec/backend/database-verification.md", "reason": "数据库验证方法"}
-{"file": ".trellis/tasks/11-25-opensubsonic-api/design.md", "reason": "协议约定核对"}
-{"file": ".trellis/tasks/11-25-subsonic-browse/prd.md", "reason": "验收标准"}
-{"file": ".trellis/spec/backend/subsonic-contracts.md", "reason": "foundation 已落地的 Subsonic 包结构、协议、鉴权与测试约定"}
