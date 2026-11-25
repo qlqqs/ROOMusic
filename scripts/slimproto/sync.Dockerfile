@@ -1,0 +1,3 @@
+ARG SQUEEZELITE_IMAGE
+FROM ${SQUEEZELITE_IMAGE}
+RUN apk add --no-cache iproute2-tc

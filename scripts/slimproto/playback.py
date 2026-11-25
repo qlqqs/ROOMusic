@@ -90,7 +90,7 @@ def setup(base):
     return admin
 
 
-def library(admin):
+def library(admin, expected_titles=TRACKS):
     admin.api("POST", "/api/v1/library-roots", {"path": "/music"})
     scan = admin.api("POST", "/api/v1/scans", {})
 
@@ -105,7 +105,7 @@ def library(admin):
     tracks = {track["title"]: track["id"] for release in releases
               for medium in admin.api("GET", "/api/v1/releases/" + release["id"])["media"]
               for track in medium["tracks"]}
-    assert tracks.keys() == TRACKS.keys(), tracks
+    assert tracks.keys() == set(expected_titles), tracks
     return tracks
 
 
