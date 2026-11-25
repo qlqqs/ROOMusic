@@ -1,0 +1,77 @@
+/* 顶栏：与侧栏的品牌同高；底边一条分隔线，与播放栏的上边线呼应。 */
+.bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: 0 var(--space-4) 0 var(--layout-page-inset-x);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.search {
+  flex: 0 1 360px;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* 管家按钮：圆形命中区；卡片打开或在整页对话里时用强调色轻底。 */
+.iconButton {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.iconButton:hover {
+  background: var(--color-hover);
+  color: var(--text-primary);
+}
+
+.iconButton[aria-expanded="true"],
+.iconButton[aria-current="page"] {
+  background: var(--color-selected);
+  color: var(--text-accent);
+}
+
+.iconButton:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* 未读提示点：按钮右上角。 */
+.dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--color-bg);
+  border-radius: 50%;
+  background: var(--color-accent-700);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iconButton {
+    transition: none;
+  }
+}

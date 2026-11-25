@@ -5,14 +5,12 @@ import { heading } from "./locators";
 /** 窄屏（<768px）没有侧栏：个人入口、设置与退出登录在底部标签栏的“我的”页里。 */
 export const isNarrow = (page: Page) => (page.viewportSize()?.width ?? 1280) < 768;
 
-/** 宽屏侧栏底部的“账号”菜单按钮（“…”，里面是账号与退出登录）。 */
-export const userTrigger = (page: Page) => page.getByRole("region", { name: "当前用户" }).getByRole("button", { name: "账号", exact: true });
-/** 宽屏侧栏底部的齿轮：一步进入设置。 */
-export const settingsLink = (page: Page) => page.getByRole("region", { name: "当前用户" }).getByRole("link", { name: "设置", exact: true });
+/** 宽屏顶栏的头像按钮，读屏名是用户名与角色。 */
+export const userTrigger = (page: Page) => page.getByRole("button", { name: /，(?:管理员|成员)$/ });
 /** 窄屏底部标签栏（侧栏此时不显示，看得见的“主导航”只有它）。 */
 export const tabBar = (page: Page) => page.getByRole("navigation", { name: "主导航", exact: true });
 
-/** 宽屏：用键盘打开侧栏底部的“账号”菜单。 */
+/** 宽屏：用键盘从头像打开“账号”菜单。 */
 export async function openUserMenu(page: Page): Promise<void> {
   await expect(page.getByRole("main")).toBeVisible();
   await keyActivate(page, userTrigger(page));
@@ -27,20 +25,22 @@ export async function openMePage(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/me$/);
 }
 
-/** 进入设置（账号栏）：宽屏按侧栏的齿轮，窄屏经“我的”页的“设置”。 */
+/** 进入设置（账号栏）：宽屏从头像菜单进入，窄屏经“我的”页的“设置”。 */
 export async function openSettings(page: Page): Promise<void> {
   if (isNarrow(page)) {
     await openMePage(page);
     await keyActivate(page, page.getByRole("main").getByRole("link", { name: "设置", exact: true }));
   } else {
-    await expect(page.getByRole("main")).toBeVisible();
-    await keyActivate(page, settingsLink(page));
+    await openUserMenu(page);
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("menuitem", { name: "设置", exact: true })).toBeFocused();
+    await page.keyboard.press("Enter");
   }
   await expect(heading(page, "账号")).toBeVisible();
   await expect(page).toHaveURL(/\/settings\/account$/);
 }
 
-/** 退出登录：宽屏从侧栏的“账号”菜单，窄屏从“我的”页。 */
+/** 退出登录：宽屏从头像菜单，窄屏从“我的”页。 */
 export async function logoutFromMenu(page: Page): Promise<void> {
   if (isNarrow(page)) {
     await openMePage(page);
@@ -56,7 +56,7 @@ export type SettingsScene = (typeof settingsScenes)[number];
 
 /** axe 与响应式检查共用状态，所有确认框都由实际交互打开。 */
 export async function openSettingsScene(page: Page, scene: SettingsScene): Promise<void> {
-  // 宽屏是侧栏底部展开的“账号”菜单，窄屏是同样入口所在的“我的”页。
+  // 宽屏打开头像菜单，窄屏进入“我的”页。
   if (scene === "用户菜单") {
     await page.goto("/");
     await expect(heading(page, "概览")).toBeVisible();

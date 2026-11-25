@@ -26,7 +26,7 @@ ADR 状态见 [ADR 索引](../../../docs/architecture/architecture-decisions.md#
 M1a 技术设计（本机归档 `.trellis/tasks/archive/2026-10/09-28-classical-m1a-shell-admin/design.md`）。各规范文件区分“已实现的合同”与尚未实现的目标
 （播放器、搜索、受治理操作与 Agent 界面）；后者不是当前前端已通过验收的声明。
 
-2026-11-16：M6 C4 增加管家的对话界面（`features/steward`：侧栏入口与右侧停靠面板、`/steward` 整页对话、窄屏标签栏第五项）与设置页的
+2026-11-16：M6 C4 增加管家的对话界面（`features/steward`：入口与停靠面板——2026-11-25 起入口在宽屏顶栏、面板改为浮起的卡片——`/steward` 整页对话、窄屏标签栏第五项）与设置页的
 Agent 栏目（`/settings/agent`，取代 `/settings/tokens`），见[管家的前端约定](./steward-guidelines.md)；C5 增加输入框上方的页面与播放上下文标签、播放与个人库工具的标签和查询失效；
 C6 增加修改方案卡片（逐项确认、结果与撤销、刷新后恢复、作废与过期）、模式按钮与菜单（Assistant、Operator，输入框里 Shift+Tab 轮换）、
 曲库与艺人治理工具的标签与查询失效，以及操作记录页的来源标签；C7 增加审查结果（按项的状态与理由、转人工的确认、审查不可用后的重新审查）、

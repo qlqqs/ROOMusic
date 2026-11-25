@@ -8,16 +8,15 @@ import { installStewardMock, seedConversation } from "./support/steward";
 // 运行流一次性返回整段 SSE；行为细节（停止、重试、出错、会话管理）由 Vitest 的页面级测试覆盖。
 
 test.describe("管家对话", () => {
-  test("桌面：侧栏打开面板，发消息，看到工具摘要与表格回答，展开到整页", async ({ page, backend }) => {
+  test("桌面：顶栏打开面板，发消息，看到工具摘要与表格回答，展开到整页", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
     await installStewardMock(page);
     await page.goto("/");
     await expect(heading(page, "概览")).toBeVisible();
 
-    await page.getByRole("navigation", { name: "主导航" }).getByRole("button", { name: "小蓝", exact: true }).click();
+    await page.getByRole("button", { name: "小蓝", exact: true }).click();
     const panel = page.getByRole("complementary", { name: "小蓝" });
     await expect(panel).toBeVisible();
-    // 面板挤占内容，当前页面不变。
     await expect(heading(page, "概览")).toBeVisible();
     const input = panel.getByRole("textbox", { name: "问问小蓝" });
     await expect(input).toBeFocused();
@@ -38,11 +37,54 @@ test.describe("管家对话", () => {
     await panel.getByRole("button", { name: "展开到整页" }).click();
     await expect(page).toHaveURL(/\/steward\/[0-9a-f-]{36}$/);
     await expect(panel).toBeHidden();
+    await expect(page.getByRole("link", { name: "小蓝", exact: true })).toHaveAttribute("aria-current", "page");
     const conversation = page.getByRole("region", { name: "对话" });
     await expect(conversation.getByRole("table").getByRole("cell", { name: "柏林" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "对话" }).getByRole("link", { name: /贝九有几版/ })).toHaveAttribute("aria-current", "page");
     await expectNoHorizontalOverflow(page, "整页对话");
   });
+
+  for (const width of [768, 1100, 1440]) {
+    test(`${width}px：管家卡片浮在主内容右侧，内容仍可点击，Esc 收起并归还焦点`, async ({ page, backend }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await backend.start({ signedInAs: "curator" });
+      await installStewardMock(page);
+      await page.goto("/");
+      const overview = heading(page, "概览");
+      await expect(overview).toBeVisible();
+
+      const search = page.getByRole("combobox", { name: "搜索", exact: true });
+      const nav = page.getByRole("navigation", { name: "主导航" });
+      await expect(nav.getByRole("button", { name: "小蓝", exact: true })).toHaveCount(0);
+      await page.keyboard.press("/");
+      await expect(search).toBeFocused();
+
+      const main = page.getByRole("main");
+      const before = await main.boundingBox();
+      const entry = page.getByRole("button", { name: "小蓝", exact: true });
+      await entry.click();
+      const panel = page.getByRole("complementary", { name: "小蓝" });
+      const input = panel.getByRole("textbox", { name: "问问小蓝" });
+      await expect(input).toBeFocused();
+      await expect(entry).toHaveAttribute("aria-expanded", "true");
+      const bounds = await panel.boundingBox();
+      if (before === null || bounds === null) throw new Error("管家卡片与主内容区必须有边界");
+      expect(await main.boundingBox()).toEqual(before);
+      expect(bounds.x).toBeGreaterThan(before.x);
+      expect(bounds.x + bounds.width).toBeLessThan(before.x + before.width);
+      expect(bounds.y).toBeGreaterThanOrEqual(before.y);
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(before.y + before.height);
+
+      await overview.click({ position: { x: 8, y: 8 } });
+      await expect(panel).toBeVisible();
+      await input.click();
+      await page.keyboard.press("Escape");
+      await expect(panel).toBeHidden();
+      await expect(entry).toHaveAttribute("aria-expanded", "false");
+      await expect(entry).toBeFocused();
+    });
+  }
 
   test("390px：从标签栏进入完成一次对话，再切换会话，没有横向滚动", async ({ page, backend }) => {
     await page.setViewportSize({ width: 390, height: 844 });

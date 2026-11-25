@@ -32,22 +32,21 @@ async function openAgent(options: Parameters<typeof setup>[0] = {}) {
 }
 
 const group = (name: string) => within(screen.getByRole("region", { name }));
-const sidebar = () => within(screen.getAllByRole("navigation", { name: "主导航" })[0] as HTMLElement);
 
 afterEach(() => setDockOpen(false));
 
 describe("设置 › Agent › 名字", () => {
-  it("改名只提交 display_name；侧栏、面板标题与输入框提示不刷新就变成新名字", async () => {
+  it("改名只提交 display_name；顶栏按钮、面板标题与输入框提示不刷新就变成新名字", async () => {
     const { api } = await openAgent({ settings: settingsOf({ display_name: "" }) });
-    expect(await sidebar().findByRole("button", { name: "管家" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "管家" })).toBeTruthy();
     const name = await screen.findByRole("textbox", { name: "名字" });
     await userEvent.type(name, "  小蓝 ");
     await userEvent.click(group("名字").getByRole("button", { name: "保存" }));
     await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body)).toEqual([{ display_name: "小蓝" }]));
-    expect(await sidebar().findByRole("button", { name: "小蓝" })).toBeTruthy();
+    const entry = await screen.findByRole("button", { name: "小蓝" });
     expect(group("名字").getByText("已保存")).toBeTruthy();
 
-    await userEvent.click(sidebar().getByRole("button", { name: "小蓝" }));
+    await userEvent.click(entry);
     const panel = within(await screen.findByRole("complementary", { name: "小蓝" }));
     expect(panel.getByRole("heading", { level: 2, name: "小蓝" })).toBeTruthy();
     expect(await panel.findByRole("textbox", { name: "问问小蓝" })).toBeTruthy();
@@ -62,7 +61,7 @@ describe("设置 › Agent › 名字", () => {
     expect((group("名字").getByRole("button", { name: "保存" }) as HTMLButtonElement).disabled).toBe(true);
     await userEvent.click(group("名字").getByRole("button", { name: "恢复为“管家”" }));
     await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body)).toEqual([{ display_name: "" }]));
-    expect(await sidebar().findByRole("button", { name: "管家" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "管家" })).toBeTruthy();
   });
 });
 
@@ -188,7 +187,7 @@ describe("设置 › Agent › 模型", () => {
     setup({ settings: emptySettings() });
     const { history } = renderApp({ path: "/" });
     await screen.findByRole("heading", { level: 1, name: "概览" });
-    await userEvent.click(await sidebar().findByRole("button", { name: "管家" }));
+    await userEvent.click(await screen.findByRole("button", { name: "管家" }));
     await userEvent.click(within(await screen.findByRole("complementary", { name: "管家" })).getByRole("link", { name: "去设置" }));
     await waitFor(() => expect(history.location.pathname).toBe("/settings/agent"));
     expect(await screen.findByRole("heading", { level: 1, name: "Agent" })).toBeTruthy();

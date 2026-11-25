@@ -568,7 +568,8 @@ describe("导航与概览", () => {
     expect(within(nav).getByRole("link", { name: "概览" }).getAttribute("aria-current")).toBeNull();
     // 配置入口移到设置分栏，仍只对管理员显示。
     expect(within(nav).queryByRole("link", { name: "音乐目录" })).toBeNull();
-    await userEvent.click(within(screen.getByRole("region", { name: "当前用户" })).getByRole("link", { name: "设置" }));
+    await userEvent.click(screen.getByRole("button", { name: role === "admin" ? "curator，管理员" : "listener，成员" }));
+    await userEvent.click(within(screen.getByRole("menu", { name: "账号" })).getByRole("menuitem", { name: "设置" }));
     const settings = await screen.findByRole("navigation", { name: "设置" });
     expect(within(settings).queryByRole("link", { name: "音乐目录" }) !== null).toBe(role === "admin");
   });

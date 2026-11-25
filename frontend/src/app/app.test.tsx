@@ -100,15 +100,13 @@ describe("启动与路由守卫", () => {
 });
 
 describe("登录与初始化", () => {
-  it("登录成功进入概览，外壳显示当前用户与角色", async () => {
+  it("登录成功进入概览，头像按钮的读屏名包含当前用户与角色", async () => {
     setup();
     renderApp();
     await heading("登录");
     await signIn("curator", "curator-password");
     expect(await heading("概览")).toBeTruthy();
-    const identity = screen.getByRole("region", { name: "当前用户" });
-    expect(within(identity).getByText("curator")).toBeTruthy();
-    expect(within(identity).getByText("管理员")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "curator，管理员" })).toBeTruthy();
     const nav = screen.getByRole("navigation", { name: "主导航" });
     expect(within(nav).getByRole("link", { name: "概览" }).getAttribute("aria-current")).toBe("page");
   });
@@ -176,7 +174,7 @@ describe("退出与会话失效", () => {
     const { api } = setup({ current: "curator" });
     const { history, runtime } = renderApp({ path: "/nowhere" });
     await heading("页面不存在");
-    await userEvent.click(within(screen.getByRole("region", { name: "当前用户" })).getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: "curator，管理员" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "退出登录" }));
     expect(await heading("登录")).toBeTruthy();
     expect(screen.getByText("已退出登录。")).toBeTruthy();
@@ -193,7 +191,7 @@ describe("退出与会话失效", () => {
     api.on("POST", "/api/v1/auth/logout", () => {
       throw new TypeError("Failed to fetch");
     });
-    await userEvent.click(within(screen.getByRole("region", { name: "当前用户" })).getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: "curator，管理员" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "退出登录" }));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("退出失败");
@@ -245,7 +243,7 @@ describe("切换用户时的数据隔离", () => {
 
     await signIn("curator", "curator-password");
     await heading("概览");
-    await userEvent.click(within(screen.getByRole("region", { name: "当前用户" })).getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: "curator，管理员" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "退出登录" }));
     await heading("登录");
     await signIn("listener", "listener-password");
@@ -258,7 +256,7 @@ describe("切换用户时的数据隔离", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(within(library).queryByRole("link", { name: /99/ })).toBeNull();
     expect(currentCount.isConnected).toBe(true);
-    expect(within(screen.getByRole("region", { name: "当前用户" })).getByText("listener")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "listener，成员" })).toBeTruthy();
   });
 
   it("成员不请求任何管理接口，也看不到管理员区块", async () => {
@@ -273,8 +271,7 @@ describe("切换用户时的数据隔离", () => {
     expect(within(status).queryByText("成员")).toBeNull();
     expect(requestsTo(api, "/api/v1/library-roots")).toBe(0);
     expect(requestsTo(api, "/api/v1/users")).toBe(0);
-    const identity = screen.getByRole("region", { name: "当前用户" });
-    expect(within(identity).getByText("成员")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "listener，成员" })).toBeTruthy();
   });
 });
 
@@ -295,11 +292,11 @@ describe("跨标签页与重新可见", () => {
     const [ours, theirs] = channelPair();
     renderApp({ channel: ours });
     await heading("概览");
-    expect(within(screen.getByRole("region", { name: "当前用户" })).getByText("curator")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "curator，管理员" })).toBeTruthy();
     session.current = "listener";
     act(() => theirs.notifyChanged());
-    await waitFor(() => expect(within(screen.getByRole("region", { name: "当前用户" })).getByText("listener")).toBeTruthy());
-    expect(screen.queryByText("curator")).toBeNull();
+    expect(await screen.findByRole("button", { name: "listener，成员" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "curator，管理员" })).toBeNull();
     await waitFor(() => expect(within(screen.getByRole("region", { name: "资料库状态" })).queryByText("成员")).toBeNull());
   });
 

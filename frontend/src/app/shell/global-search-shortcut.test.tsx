@@ -35,7 +35,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("外壳全局搜索快捷键", () => {
-  it("宽屏聚焦可见侧栏搜索框，阻止斜杠输入但不打开搜索对话框", async () => {
+  it("宽屏聚焦可见顶栏搜索框，阻止斜杠输入但不打开搜索对话框", async () => {
     const main = await setup();
     const input = screen.getByRole("combobox", { name: "搜索" });
     visible(input);
