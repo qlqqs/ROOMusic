@@ -6,6 +6,7 @@ var fixedLogMessages = map[string]struct{}{
 	"MCP 工具调用结束":                              {},
 	"MCP 认证失败来源已暂停":                           {},
 	"MCP 认证数据暂时不可用":                           {},
+	"client error reported":                   {},
 	"frontend assets missing":                 {},
 	"governed operation failed":               {},
 	"http request completed":                  {},

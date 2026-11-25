@@ -1,4 +1,5 @@
 import { sampleBody } from "./api-samples";
+import { clientErrorResponder } from "./diagnostics-data";
 import { installCurationApi } from "./fake-curation";
 import { installPersonalApi } from "./fake-personal";
 import { jsonResponse, sampleResponse, stubFetch, type RecordedRequest } from "./http";
@@ -76,6 +77,18 @@ export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> =
   api.on("GET", "/api/v1/auth/me", () => {
     const current = viewer();
     return current === null ? sampleResponse("errors/unauthorized") : jsonResponse(200, current);
+  });
+  api.on("GET", "/api/v1/admin/diagnostics", () => {
+    const current = viewer();
+    if (current === null) return sampleResponse("errors/unauthorized");
+    if (current.role !== "admin") return sampleResponse("errors/forbidden");
+    return sampleResponse("diagnostics/admin", { "Cache-Control": "no-store" });
+  });
+  const respondToClientError = clientErrorResponder();
+  api.on("POST", "/api/v1/diagnostics/client-errors", ({ body, init }) => {
+    const oversized = typeof init.body === "string" && Buffer.byteLength(init.body) > 4096;
+    const result = respondToClientError(viewer()?.id ?? null, body, oversized);
+    return result.status === 204 ? new Response(null, { status: 204 }) : jsonResponse(result.status, result.body);
   });
   // 默认采用已发布的搜索状态；需要回填或错误状态的用例显式覆盖，不默认登记搜索响应。
   api.on("GET", "/api/v1/catalog/status", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("search/catalog-status-ready"));

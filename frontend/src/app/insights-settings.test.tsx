@@ -1,8 +1,9 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { decode as d } from "../shared/api";
 import { sampleBody } from "../test/api-samples";
+import { deferred } from "../test/deferred";
 import { installFakeApi, installFakeSession } from "../test/fake-api";
 import { jsonResponse } from "../test/http";
 import { renderApp } from "../test/render-app";
@@ -10,6 +11,11 @@ import { renderApp } from "../test/render-app";
 const statusPath = "/api/v1/admin/insights";
 const ackPath = "/api/v1/admin/insights/notice-acknowledgement";
 const aboutPath = "/api/v1/system/about";
+const versionPath = "/api/v1/system/version";
+const diagnosticsPath = "/api/v1/admin/diagnostics";
+const repo = "https://github.com/qlqqs/ROOMusic";
+const version = "0.8.1";
+const commit = "b6654580039af4cd484397f8d5d42de14eca3641";
 const enabledBody = d.defineDecoder(d.object({ enabled: d.boolean() }));
 type Status = Record<string, unknown> & { enabled: boolean; forced_off: boolean; notice_acknowledged: boolean };
 
@@ -28,6 +34,13 @@ function setup({ current = "curator", status = {} }: { current?: "curator" | "li
     return new Response(null, { status: 204 });
   });
   api.on("GET", aboutPath, () => jsonResponse(200, sampleBody("insights/about")));
+  return api;
+}
+
+function renderAbout(current: "curator" | "listener" = "curator") {
+  const api = setup({ current });
+  api.on("GET", versionPath, () => jsonResponse(200, { version, commit }));
+  renderApp({ path: "/settings/about" });
   return api;
 }
 
@@ -92,13 +105,123 @@ describe("匿名统计", () => {
     expect(toggle.checked).toBe(false);
     expect(screen.getByText(/ROOMUSIC_INSIGHTS_DISABLED/)).toBeTruthy();
   });
+});
 
-  it("关于：所有人都能看到许可与源代码地址", async () => {
-    setup({ current: "listener" });
-    renderApp({ path: "/settings/about" });
-    const link = await screen.findByRole("link", { name: "github.com/qlqqs/ROOMusic" });
-    expect(link.getAttribute("href")).toBe("https://github.com/qlqqs/ROOMusic");
-    expect(screen.getByText(/AGPL-3.0/)).toBeTruthy();
-    expect(screen.queryByText("版本")).toBeNull();
+describe("设置 › 关于", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("成员看到项目与反馈链接，版本和诊断信息仅供管理员查看", async () => {
+    const api = renderAbout("listener");
+    const about = within(await screen.findByRole("region", { name: "ROOMusic" }));
+    const links = [
+      ["源代码", repo],
+      ["更新说明", `${repo}/releases`],
+      ["许可 AGPL-3.0", "https://www.gnu.org/licenses/agpl-3.0.html"],
+      ["第三方许可", `${repo}/blob/main/THIRD-PARTY-NOTICES.md`],
+      ["反馈问题", `${repo}/issues/new?template=bug_report.yml`],
+    ] as const;
+    for (const [name, href] of links) {
+      expect(about.getByRole("link", { name }).getAttribute("href")).toBe(href);
+    }
+    expect(about.queryByText("版本")).toBeNull();
+    expect(about.queryByRole("button", { name: /诊断信息/ })).toBeNull();
+    expect(api.requestsTo("GET", versionPath)).toHaveLength(0);
+    expect(api.requestsTo("GET", diagnosticsPath)).toHaveLength(0);
+  });
+
+  it("管理员看到版本、commit 和带版本的反馈链接", async () => {
+    renderAbout();
+    const about = within(await screen.findByRole("region", { name: "ROOMusic" }));
+    expect(await about.findByText(version)).toBeTruthy();
+    expect(about.getByRole("link", { name: "b665458" }).getAttribute("href")).toBe(`${repo}/commit/${commit}`);
+    expect(about.getByRole("link", { name: `${version} 的更新说明` }).getAttribute("href")).toBe(`${repo}/releases/tag/v${version}`);
+    expect(about.getByRole("link", { name: "反馈问题" }).getAttribute("href")).toBe(`${repo}/issues/new?template=bug_report.yml&version=0.8.1+%28b665458%29`);
+  });
+
+  it("管理员点击后复制带 JSON 围栏的诊断报告并更新按钮读屏名", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("ClipboardItem", undefined);
+    const writeText = vi.spyOn(navigator.clipboard, "writeText");
+    const api = renderAbout();
+    await user.click(await screen.findByRole("button", { name: "复制诊断信息" }));
+    expect(await screen.findByRole("button", { name: "已复制诊断信息" })).toBeTruthy();
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(`\`\`\`json\n${JSON.stringify(sampleBody("diagnostics/admin"), null, 2)}\n\`\`\`\n`);
+    expect(api.requestsTo("GET", diagnosticsPath)).toHaveLength(1);
+  });
+
+  it("诊断接口返回 503 时显示错误提示", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("ClipboardItem", undefined);
+    const writeText = vi.spyOn(navigator.clipboard, "writeText");
+    const api = renderAbout();
+    api.on("GET", diagnosticsPath, () => jsonResponse(503, {
+      error: { code: "diagnostics_unavailable", message: "暂时无法读取诊断信息" },
+      request_id: "sample-request",
+    }));
+    await user.click(await screen.findByRole("button", { name: "复制诊断信息" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("没有拿到诊断信息");
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
+  it("ClipboardItem 写入先被拒绝、诊断接口随后返回 503 时显示错误且没有未处理拒绝", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("ClipboardItem", class {
+      constructor(readonly items: Record<string, Promise<Blob>>) {}
+    });
+    const write = vi.spyOn(navigator.clipboard, "write").mockRejectedValue(new DOMException("剪贴板权限被拒绝", "NotAllowedError"));
+    const response = deferred<Response>();
+    const api = renderAbout();
+    api.on("GET", diagnosticsPath, () => response.promise);
+
+    await user.click(await screen.findByRole("button", { name: "复制诊断信息" }));
+    await waitFor(() => expect(write).toHaveBeenCalledExactlyOnceWith([expect.any(ClipboardItem)]));
+    expect(screen.getByRole("button", { name: "正在复制诊断信息" })).toBeTruthy();
+
+    // 剪贴板替身没有消费 Blob Promise，泄漏的拒绝会由 Vitest 报错。
+    response.resolve(jsonResponse(503, {
+      error: { code: "diagnostics_unavailable", message: "暂时无法读取诊断信息" },
+      request_id: "sample-request",
+    }));
+    expect((await screen.findByRole("alert")).textContent).toContain("没有拿到诊断信息");
+    expect(screen.getByRole("button", { name: "复制诊断信息" })).toBeTruthy();
+  });
+
+  it.each([
+    { scenario: "非安全上下文", secureContext: false, buttonName: "下载诊断信息", writeAttempts: 0 },
+    { scenario: "剪贴板写入被拒绝后", secureContext: true, buttonName: "复制诊断信息", writeAttempts: 1 },
+  ])("$scenario 下载 JSON 文件并更新按钮读屏名", async ({ secureContext, buttonName, writeAttempts }) => {
+    const user = userEvent.setup();
+    vi.stubGlobal("isSecureContext", secureContext);
+    vi.stubGlobal("ClipboardItem", undefined);
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new DOMException("剪贴板权限被拒绝", "NotAllowedError"));
+    const createObjectURL = vi.fn<(blob: Blob) => string>().mockReturnValue("blob:diagnostics");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", class extends URL {
+      static createObjectURL = createObjectURL;
+      static revokeObjectURL = revokeObjectURL;
+    });
+    const downloads: { href: string; filename: string }[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push({ href: this.href, filename: this.download });
+    });
+    renderAbout();
+    await user.click(await screen.findByRole("button", { name: buttonName }));
+    expect(await screen.findByRole("button", { name: "已下载诊断信息" })).toBeTruthy();
+    expect(downloads).toEqual([{ href: "blob:diagnostics", filename: "roomusic-diagnostics-2026-01-01T00-00-02Z.json" }]);
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    const blob = createObjectURL.mock.calls[0]?.[0];
+    if (blob === undefined) throw new Error("缺少诊断报告文件");
+    expect(blob.type).toBe("application/json");
+    const text = await new Promise<string | ArrayBuffer | null>((resolve) => {
+      const reader = new FileReader();
+      reader.addEventListener("loadend", () => resolve(reader.result));
+      reader.readAsText(blob);
+    });
+    expect(text).toBe(JSON.stringify(sampleBody("diagnostics/admin"), null, 2));
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:diagnostics");
+    expect(writeText).toHaveBeenCalledTimes(writeAttempts);
   });
 });

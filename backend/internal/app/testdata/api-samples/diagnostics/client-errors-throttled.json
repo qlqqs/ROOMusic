@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "client_errors_throttled",
+      "message": "页面报错上报过于频繁，请稍后再试"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 429
+}

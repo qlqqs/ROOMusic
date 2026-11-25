@@ -4,6 +4,7 @@ import type { DiagnosticsPageDTO, RootDTO, RootOperationDTO, ScanDTO, ScanReport
 import type { RecentReleaseDTO } from "../../src/features/listening/api/decoders";
 import type { MemberDTO } from "../../src/features/members/api/decoders";
 import { loadApiSample, sampleBody } from "../../src/test/api-samples";
+import { clientErrorResponder } from "../../src/test/diagnostics-data";
 import {
   albumGroups,
   catalogDataOf,
@@ -67,7 +68,7 @@ import { demoPlugin, PLUGINS_API, pluginsMock } from "./plugins";
 // 注意：e2e 运行在 Node 里，不能导入会连带导入 *.module.css 的应用代码，所以只做类型导入，种子数据取自样本。
 
 type Role = "admin" | "user";
-type Handled = { status: number; body: unknown } | "abort";
+type Handled = { status: number; body: unknown; headers?: Record<string, string> } | "abort";
 type Account = { id: string; password: string; role: Role };
 
 export type MockOptions = {
@@ -305,8 +306,17 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     mock.operations.unshift({ id: uuidOf("b", counter++), created_at: now(), ...item });
   };
 
+  const respondToClientError = clientErrorResponder();
   const handle = (method: string, path: string, headers: Record<string, string>, body: unknown, search: URLSearchParams, requestOrigin: string, invalidJSON: boolean, requestURL: URL): Handled => {
     const key = `${method} ${path}`;
+    if (key === "GET /api/v1/admin/diagnostics") {
+      return guarded(method, path, true, () => ({ status: 200, body: sampleBody("diagnostics/admin"), headers: { "Cache-Control": "no-store" } }));
+    }
+    if (key === "POST /api/v1/diagnostics/client-errors") {
+      if (headers["origin"] === undefined) return sample("errors/personal-origin-required");
+      if (headers["origin"] !== requestOrigin) return sample("errors/origin-forbidden");
+      return respondToClientError(viewer()?.id ?? null, body, invalidJSON);
+    }
     if (mock.artists !== null && /^\/api\/v1\/(artists(?:\/|$)|artist-candidates$)/.test(path)) {
       const artists = mock.artists;
       const requireAdmin = method !== "GET" || path.endsWith("/merged-sources") || path === "/api/v1/artist-candidates";
@@ -681,6 +691,7 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
       // Playwright 对无请求体也返回 null，必须与显式 JSON null 区分，心形 PUT/DELETE 合法地不带 body。
       const raw = request.postData();
       body = raw === null ? undefined : url.pathname === `${PLUGINS_API}/preview` ? raw : request.postDataJSON();
+      if (url.pathname === "/api/v1/diagnostics/client-errors" && raw !== null) invalidJSON = Buffer.byteLength(raw) > 4096;
     } catch {
       invalidJSON = true;
       body = undefined;
@@ -732,7 +743,12 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
       return;
     }
     if (handled.status === 204) await route.fulfill({ status: 204 });
-    else await route.fulfill({ status: handled.status, contentType: "application/json", body: JSON.stringify(handled.body) });
+    else await route.fulfill({
+      status: handled.status,
+      ...(handled.headers === undefined ? {} : { headers: handled.headers }),
+      contentType: "application/json",
+      body: JSON.stringify(handled.body),
+    });
   });
 
   return mock;

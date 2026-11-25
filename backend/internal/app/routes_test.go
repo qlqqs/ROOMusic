@@ -101,3 +101,17 @@ func TestRoutesResolveToRegisteredPatterns(t *testing.T) {
 		}
 	}
 }
+
+func TestDiagnosticRoutesResolveToRegisteredPatterns(t *testing.T) {
+	application := New(t.Context(), config.Server{}, nil, testFrontend(), nil)
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/admin/diagnostics"},
+		{http.MethodPost, "/api/v1/diagnostics/client-errors"},
+	} {
+		request := httptest.NewRequest(route.method, route.path, nil)
+		want := route.method + " " + route.path
+		if _, pattern := application.mux.Handler(request); pattern != want {
+			t.Errorf("%s resolved to %q", want, pattern)
+		}
+	}
+}

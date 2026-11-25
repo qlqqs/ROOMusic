@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { sampleBody } from "../../../test/api-samples";
 import { withValue, without } from "../../../test/mutate";
 import { systemDataOf } from "../../../test/system-data";
-import { decodeBackupDeletions, decodeBackupOverview, decodeRetentionSave } from "./decoders";
+import { decodeBackupDeletions, decodeBackupOverview, decodeDiagnosticsReport, decodeRetentionSave } from "./decoders";
 
 function overview() {
   const data = systemDataOf();
@@ -53,4 +54,23 @@ describe("保存规则判别联合解码", () => {
     { confirmation_required: false, deleted: -1, failed: 0, overview: overview() },
     { confirmation_required: false, deleted: 0, failed: "1", overview: overview() },
   ])("拒绝缺字段、错误判别或非法数量：%j", (value) => expect(() => decodeRetentionSave(value)).toThrow());
+});
+
+describe("诊断报告解码", () => {
+  const report = sampleBody("diagnostics/admin");
+
+  it("保留生成时间，将整个响应排版为 JSON 文本", () => {
+    expect(decodeDiagnosticsReport(report)).toEqual({
+      generatedAt: "2026-01-01T00:00:02Z",
+      text: JSON.stringify(report, null, 2),
+    });
+  });
+
+  it.each(["generated_at", "status", "disks", "logs"])("拒绝缺失 %s", (field) => {
+    expect(() => decodeDiagnosticsReport(without(report, [field]))).toThrow(field);
+  });
+
+  it.each([["generated_at", "昨天"], ["status", []], ["disks", {}], ["logs", null]])("拒绝格式不符的 %s", (field, value) => {
+    expect(() => decodeDiagnosticsReport(withValue(report, [field], value))).toThrow(field);
+  });
 });

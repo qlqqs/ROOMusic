@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api";
 import { FailureNotice } from "./failure-notice";
@@ -13,16 +14,47 @@ describe("Notice", () => {
     expect(screen.getByRole("status").textContent).toContain("已保存");
   });
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
 
-  it("请求 ID 不显示在界面上，只记到控制台", () => {
+  it("有错误编号时提供复制按钮，复制成功的读屏名保留两秒", async () => {
+    userEvent.setup();
+    vi.stubGlobal("isSecureContext", true);
+    vi.useFakeTimers();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
-    const { container, rerender } = render(<Notice requestId="web-0123456789abcdef">说明</Notice>);
-    expect(container.textContent).not.toContain("web-0123456789abcdef");
-    expect(screen.queryByText(/请求 ID/)).toBeNull();
-    expect(info).toHaveBeenCalledWith("请求 ID：web-0123456789abcdef");
-    rerender(<Notice>说明</Notice>);
-    expect(info).toHaveBeenCalledTimes(1);
+    const requestId = "web-0123456789abcdef";
+    render(<Notice requestId={requestId}>说明</Notice>);
+    expect(screen.queryByText(requestId)).toBeNull();
+    expect(info).toHaveBeenCalledExactlyOnceWith(`请求 ID：${requestId}`);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "复制错误编号" }));
+    });
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(requestId);
+    expect(screen.getByRole("button", { name: "已复制错误编号" })).toBeTruthy();
+    act(() => vi.advanceTimersByTime(1999));
+    expect(screen.getByRole("button", { name: "已复制错误编号" })).toBeTruthy();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByRole("button", { name: "复制错误编号" })).toBeTruthy();
+  });
+
+  it("没有剪贴板时点击按钮显示并选中错误编号", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("isSecureContext", true);
+    const clipboardHost: { readonly clipboard: Clipboard | undefined } = navigator;
+    vi.spyOn(clipboardHost, "clipboard", "get").mockReturnValue(undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    render(<Notice requestId="web-abc">说明</Notice>);
+    await user.click(screen.getByRole("button", { name: "复制错误编号" }));
+    expect(screen.getByText("web-abc")).toBeTruthy();
+    expect(window.getSelection()?.toString()).toBe("web-abc");
+  });
+
+  it("没有错误编号时不提供复制按钮", () => {
+    render(<Notice>说明</Notice>);
+    expect(screen.queryByRole("button", { name: "复制错误编号" })).toBeNull();
   });
 
   it("显示标题与下一步操作", () => {
@@ -37,12 +69,13 @@ describe("Notice", () => {
 });
 
 describe("FailureNotice", () => {
-  it("把 http 失败转成中文文案，feature 文案优先，不显示请求 ID", () => {
+  it("把 http 失败转成中文文案，feature 文案优先，并提供错误编号复制按钮", () => {
     const error = new ApiError({ kind: "http", status: 409, code: "last_admin", message: "x", requestId: "web-abc" });
     render(<FailureNotice error={error} messages={{ last_admin: "不能停用最后一个管理员。" }} />);
     const alert = screen.getByRole("alert");
     expect(alert.textContent).toContain("不能停用最后一个管理员。");
     expect(alert.textContent).not.toContain("web-abc");
+    expect(screen.getByRole("button", { name: "复制错误编号" })).toBeTruthy();
   });
 
   it("写请求的网络失败说明结果未知", () => {

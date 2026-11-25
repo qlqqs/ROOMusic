@@ -19,7 +19,7 @@ import {
   decodeSettings,
   decodeTokenList,
 } from "../features/steward/api/decoders";
-import { decodeBackupOverview, decodeBackupCommand, decodeBackupDeletions, decodeRetentionSave, decodeBuildInfo } from "../features/system/api/decoders";
+import { decodeBackupOverview, decodeBackupCommand, decodeBackupDeletions, decodeDiagnosticsReport, decodeRetentionSave, decodeBuildInfo } from "../features/system/api/decoders";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -693,6 +693,7 @@ const successContracts: Record<string, Contract> = {
   "insights/status": { status: 200, decode: decodeInsightsStatus },
   "insights/disabled": { status: 200, decode: decodeInsightsStatus },
   "insights/about": { status: 200, decode: decodeAbout },
+  "diagnostics/admin": { status: 200, decode: decodeDiagnosticsReport, preservesWireShape: false },
   "upnp/playback-snapshot": { status: 200, decode: decodeSnapshot, preservesWireShape: false },
   "upnp/playback-occupied": { status: 200, decode: decodeDeviceResult, preservesWireShape: false },
   "plugins/preview": { status: 200, decode: decodePluginPreview },
@@ -713,6 +714,8 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "upnp/cast-invalid-format": { status: 400, code: "invalid_input" },
   "upnp/airplay-pair-expired": { status: 409, code: "pairing_expired" },
   "insights/forced-off": { status: 409, code: "insights_forced_off" },
+  "diagnostics/invalid-client-error": { status: 400, code: "invalid_client_error" },
+  "diagnostics/client-errors-throttled": { status: 429, code: "client_errors_throttled" },
   "steward/continue-nothing": { status: 409, code: "nothing_to_continue" },
   "steward/conversation-not-found": { status: 404, code: "not_found" },
   "steward/invalid-context": { status: 400, code: "invalid_request" },

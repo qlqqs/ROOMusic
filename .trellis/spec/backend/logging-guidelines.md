@@ -167,7 +167,7 @@ Subagent 响应当作执行已提交的证据。批准引用、执行状态和�
 ## 管家诊断日志环与配置事件（C9）
 
 `cmd/roomusic/main.go` 用 `diagnostics.NewHandler` 包装原 JSON Handler，并通过
-`app.WithDiagnostics` 将同一个进程内环交给管理员诊断工具。容量固定 1000，重启清空；
+`app.WithDiagnostics` 将同一个进程内环交给管理员诊断工具和诊断导出接口。容量固定 1000，重启清空；
 原 Handler 先输出，环使用 TryLock，竞争时丢弃本次环记录，不等待、不建立队列。
 旁路脱敏或入环出错不得改变原 Handler 的输出、返回值和业务行为。
 
@@ -175,7 +175,7 @@ Subagent 响应当作执行已提交的证据。批准引用、执行状态和�
 
 白名单按产品 slog 调用点整理（实现为 `diagnostics/logs.go:safeLogKey`）：
 
-- 字符串键：`event`、`module`、`level`、`msg`、`kind`、`status`、`reason`、`tool`、`mode`、`source_kind`、`outcome`、`error_code`、`error_kind`、`route_template`、`method`、`mime_type`、`category`、`stage`、`trigger`、`direction`、`capability`、`phase`、`yield_status`、`operation`。
+- 字符串键：`event`、`module`、`level`、`msg`、`kind`、`status`、`reason`、`tool`、`mode`、`source_kind`、`outcome`、`error_code`、`error_kind`、`route_template`、`client_route`、`method`、`mime_type`、`category`、`stage`、`trigger`、`direction`、`capability`、`phase`、`yield_status`、`operation`。
 - 标识键：`request_id` 以及所有以 `_id` 结尾的键；标识必须是后端记录 ID，不是凭据明文。
 - 仅数值键：`count`、`total`、`bytes`、`duration_ms`、`response_bytes`、`status_code`、`exit_code`、`keep_days`、`keep_count`、`conversations`、`analyzed`、`completed`、`written`、`batch_size`、`skipped_current`、`batch_ms`、`yield_ms`、`elapsed_ms`、`eta_ms`、`live_updated`、`target_generation`、`from_version`、`to_version`、`version`、`textnorm_version`、`search_projection_version`、`artist_projection_version`、`track_budget`、`name_budget`、`estimated_tracks`、`estimated_input_names`、`files_parsed`、`parse_cache_hits`、`parse_cache_writes`、`candidates_written`、`candidates_skipped`、`artwork_deferred_loads`、`matched`、`rebound`、`ambiguous_keys`、`content_replaced`、`deferred_scopes`、`fingerprints_borrowed`、`fingerprints_computed`、`fingerprints_reused`、`fingerprint_failures`、`scope_failures`、`step`、`steps`、`input_tokens`、`output_tokens`、`usage_known_steps`、`search_count`、`failed_count`、`result_count`、`approved`、`rejected`、`needs_human_confirmation`。`status` 同时接受数值状态码。
 - 数值键只接收 int/uint/float/duration，以及现有模型用量的 `*int`/`*int64`；不接受字符串或任意容器，duration 转毫秒。
@@ -192,6 +192,15 @@ Authorization Basic/Token/Bearer、Cookie、裸 sk-/sk-ant- 密钥和无协议 u
 `route_template` 只保留已登记 API/健康路由形状或 `<unmatched>`，MIME 值中的斜杠不作为绝对路径。
 不执行未知 Any/LogValuer/Stringer；每条最多 64 个属性、匿名组深度 8、字段名 128 字节、字符串 4096 字节，
 过长字符串替为 `[omitted]`；脱敏后字段超过 16 KiB 则丢弃整条。脱敏与大小校验全部在取得环锁之前完成，锁内只写入。
+
+页面报错接口成功接收一条上报时记一条 WARN，固定消息为 `client error reported`。
+属性包括 `event=client.error.reported`、`module=frontend`、`kind`、`error_kind`（错误类名）、
+`actor_id`、`request_id`、`client_route` 和 `message`。自由正文 `message` 只写入 stdout 的 JSON 日志。
+环中 `msg` 是固定消息。通过凭据检查后，`client_route` 可原样保留根路径 `/` 或符合模板结构的完整路径，可带末尾斜杠。
+每段可以是单独的 `$`、以 `$` 开头的参数名（首字符为英文字母，其后可含英文字母或数字），或以单个连字符分隔的小写英文单词。
+例如 `/albums/$groupId`、`/settings/about` 原样入环，含数字编号或查询串的值记为 `[redacted]`。
+超额或无效上报只走通用 HTTP 完成日志，不产生页面报错事件。
+接口权限、限流和导出内容见[问题反馈诊断合同](./diagnostics-contracts.md)。
 
 成功的管家配置写入（含分区设置和套用 PEQ）记一条 INFO：
 
