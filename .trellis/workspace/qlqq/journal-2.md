@@ -459,3 +459,28 @@ A1–A13 证据对照写入父任务 acceptance.md；路线图、决定索引、
 ### Status
 
 [OK] **Completed**
+
+
+## Session 71: Subsonic 与网页端评分
+<!-- trellis-session: v=2 fp=67ac4b1bc689b6f7 -->
+
+**Date**: 2026-11-25
+**Task**: Subsonic 与网页端评分
+**Branch**: `main`
+
+### Summary
+
+评分三表（0082）、/me/ratings 接口、Subsonic setRating；评分随扫描转移、专辑合并撤销与艺人解析搬迁（用户并集一次加锁、不增收藏 revision）；网页端星级滑块（头部、曲目菜单浮层、播放器栏）与 AC7 用例；userRating 与 highest 由 browse 合入前接线。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ea71440a` | feat(personal): 个人评分与 Subsonic setRating |
+| `b5c443c0` | feat(personal): 评分跟随扫描转移、专辑合并与艺人解析 |
+| `21e18fac` | feat(personal): 网页端星级评分 |
+| `9c77e1b1` | merge: 合入 Subsonic 与网页端评分 |
+
+### Status
+
+[OK] **Completed**
