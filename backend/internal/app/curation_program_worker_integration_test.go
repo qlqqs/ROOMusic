@@ -180,6 +180,8 @@ func TestPostgreSQLCurationProgramRescanAndChanges(t *testing.T) {
 	f.enable(t)
 	track, _ := f.tagged(t)
 	f.run(t)
+	before := f.assertRelease(t, f.a, "matched", "tag_id")
+	owner := f.linkOwner(t, f.a)
 	orig := maps.Clone(f.source.calls)
 	// 模拟扫描完成的持久化边界，先重报相同标签。
 	programFinishedScan(t, f)
@@ -187,15 +189,17 @@ func TestPostgreSQLCurationProgramRescanAndChanges(t *testing.T) {
 	if !maps.Equal(orig, f.source.calls) {
 		t.Fatalf("相同输入重查 %v -> %v", orig, f.source.calls)
 	}
-	mustExec(t, f.application, `UPDATE curation_work_states SET rule_version=$2 WHERE target_id=$1 AND subject='release'`, f.a, program.StoredRuleVersion-100)
+	mustExec(t, f.application, `UPDATE curation_work_states SET match_rule_version=$2 WHERE target_id=$1 AND subject='release'`, f.a, program.MatchRuleVersion-1)
 	f.clock.advance(t, 6*time.Hour)
-	if f.source.calls["ReleaseByID"] != orig["ReleaseByID"]+1 {
-		t.Fatal("旧版本未被重查", f.source.calls)
+	after := f.assertRelease(t, f.a, "matched", "tag_id")
+	if after.MatchRuleVersion != program.MatchRuleVersion || after.Generation != before.Generation ||
+		after.Attempts != before.Attempts || f.linkOwner(t, f.a) != owner || !maps.Equal(orig, f.source.calls) {
+		t.Fatalf("外部规则升级应沿用已匹配对应，升级前 %+v，升级后 %+v，调用 %v -> %v", before, after, orig, f.source.calls)
 	}
 	f.correct(t, f.a, 1, map[string]any{"title": setChange("人工标题")})
 	f.clock.advance(t, time.Minute)
 	s := f.assertRelease(t, f.a, "matched", "tag_id")
-	if s.Attempts != 3 || f.source.calls["ReleaseByID"] != orig["ReleaseByID"]+2 {
+	if s.Attempts != before.Attempts+1 || f.source.calls["ReleaseByID"] != orig["ReleaseByID"]+1 {
 		t.Fatal(s, f.source.calls)
 	}
 	programTag(t, f.application, track, "mb_recording", uuid.New())

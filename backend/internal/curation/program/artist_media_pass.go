@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
@@ -21,6 +22,7 @@ type artistEvidence struct {
 	NoLink                             bool
 	hasCredits                         bool
 	pendingStatus                      string
+	albumAuth, trackAuth               []metadata.Authenticity
 }
 
 func (e artistEvidence) resolution() string {
@@ -65,10 +67,16 @@ ORDER BY a.id LIMIT $2`
 func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, args ...any) ([]artistEvidence, error) {
 	rows, err := db.QueryContext(ctx, `WITH `+catalog.ArtistMediaFamilyCTE+`, page(canonical_id) AS MATERIALIZED (`+pageSQL+`),
 	family AS MATERIALIZED (SELECT f.* FROM artist_media_family f JOIN page USING(canonical_id)),
-	`+curation.ArtistMediaLinksCTE+`, primary_credits AS MATERIALIZED (
-		SELECT f.canonical_id,c.track_id,c.release_id FROM family f JOIN artist_effective_credits c USING(artist_id)
+	`+curation.ArtistMediaLinksCTE+`, credit_sources AS MATERIALIZED (
+		SELECT f.canonical_id,c.track_id,c.release_id,spelling.spelling AS name, `+catalog.UsableCurationCredit+` AS usable
+		FROM family f JOIN artist_effective_credits c USING(artist_id) `+catalog.CurationCreditJoins+`
 		WHERE c.role IN `+primaryArtistRolesSQL+`
-		AND NOT EXISTS (SELECT FROM media_links l WHERE l.canonical_id=f.canonical_id)
+	), placeholder_names AS (
+		SELECT canonical_id,name FROM credit_sources GROUP BY canonical_id,name HAVING NOT bool_or(usable)
+		EXCEPT SELECT artist_id,display_name FROM artist_overrides WHERE display_name IS NOT NULL
+	), primary_credits AS MATERIALIZED (
+		SELECT c.* FROM credit_sources c WHERE c.usable
+		AND NOT EXISTS (SELECT FROM media_links l WHERE l.canonical_id=c.canonical_id)
 	), credited_tracks AS MATERIALIZED (
 		SELECT c.canonical_id,t.id,m.release_id FROM primary_credits c JOIN tracks t ON t.id=c.track_id
 		JOIN media m ON m.id=t.medium_id WHERE t.source_status='present'
@@ -85,13 +93,25 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 		to_jsonb(ARRAY(SELECT DISTINCT name FROM (
 			SELECT COALESCE(profile.effective_display_name,a.initial_name) AS name
 			UNION ALL SELECT n.original_value FROM family f JOIN artist_search_names n USING(artist_id) WHERE f.canonical_id=p.canonical_id
-		) names ORDER BY name)),
+		) names WHERE NOT EXISTS(SELECT FROM placeholder_names pn WHERE pn.canonical_id=p.canonical_id AND pn.name=names.name) ORDER BY name)),
 		(SELECT COALESCE(jsonb_agg(to_jsonb(sample) ORDER BY name,year),'[]') FROM (
-			SELECT DISTINCT r.title AS name,r.year FROM credited_tracks c JOIN release_effective r ON r.id=c.release_id
-			WHERE c.canonical_id=p.canonical_id ORDER BY name,year LIMIT 8
+			SELECT DISTINCT ON (r.title,r.year) r.title AS name,r.year,COALESCE(d.selected_source,'') AS source,
+				rc.release_id IS NOT NULL AS corrected, a.release_id IS NOT NULL AS automatic
+			FROM credited_tracks c JOIN release_effective r ON r.id=c.release_id
+			LEFT JOIN release_field_decisions d ON d.release_id=r.id AND d.field_key='title'
+			LEFT JOIN release_corrections rc ON rc.release_id=r.id AND rc.field='title'
+			LEFT JOIN release_auto_values a ON a.release_id=r.id AND a.field='title'
+			WHERE c.canonical_id=p.canonical_id ORDER BY r.title,r.year,r.id LIMIT 8
 		) sample),
-		to_jsonb(ARRAY(SELECT DISTINCT t.title FROM credited_tracks c JOIN track_effective t ON t.id=c.id
-			WHERE c.canonical_id=p.canonical_id ORDER BY t.title LIMIT 12)),
+		(SELECT COALESCE(jsonb_agg(to_jsonb(sample) ORDER BY name),'[]') FROM (
+			SELECT DISTINCT ON(t.title) t.title AS name, COALESCE(o.source_kind,'') AS source,COALESCE(o.inferred,false) AS inferred,
+				tc.track_id IS NOT NULL AS corrected, a.track_id IS NOT NULL AS automatic
+			FROM credited_tracks c JOIN track_effective t ON t.id=c.id
+			LEFT JOIN track_observations o ON o.track_id=t.id AND o.field_name='title'
+			LEFT JOIN track_corrections tc ON tc.track_id=t.id AND tc.field='title'
+			LEFT JOIN track_auto_values a ON a.track_id=t.id AND a.field='title'
+			WHERE c.canonical_id=p.canonical_id ORDER BY t.title,t.id LIMIT 12
+		) sample),
 		EXISTS(SELECT FROM credited_tracks c WHERE c.canonical_id=p.canonical_id),
 		COALESCE((SELECT status FROM curation_pending_items pi WHERE pi.artist_id=p.canonical_id
 			AND pi.target_type='artist' AND pi.kind='artist_identity' AND pi.status<>'resolved'),'')
@@ -120,10 +140,63 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 		if err := json.Unmarshal(names, &e.Names); err != nil {
 			return nil, err
 		}
+		if !slices.Contains(e.Names, e.Name) {
+			e.Name = ""
+			if len(e.Names) > 0 {
+				e.Name = e.Names[0]
+			}
+		}
+		if err := e.projectSamples(); err != nil {
+			return nil, err
+		}
 		e.NoLink = len(e.MBIDs) == 0 && len(e.WikidataIDs) == 0
 		page = append(page, e)
 	}
 	return page, rows.Err()
+}
+
+// 保持资料工作状态使用的样本格式，真实性单独随模型证据发送。
+func (e *artistEvidence) projectSamples() error {
+	type sample struct {
+		Name, Source                   string
+		Year                           *int
+		Inferred, Corrected, Automatic bool
+	}
+	type album struct {
+		Name string `json:"name"`
+		Year *int   `json:"year"`
+	}
+	albums := []album{}
+	tracks := []string{}
+	for _, collection := range []struct {
+		field string
+		data  json.RawMessage
+	}{{"release_title", e.Albums}, {"title", e.Tracks}} {
+		var samples []sample
+		if err := json.Unmarshal(collection.data, &samples); err != nil {
+			return err
+		}
+		for _, s := range samples {
+			source := s.Source
+			if s.Automatic && !s.Corrected {
+				source = "automatic"
+			}
+			auth := metadata.FieldAuthenticity(collection.field, s.Name, source, s.Inferred, s.Corrected)
+			if collection.field == "release_title" {
+				albums = append(albums, album{s.Name, s.Year})
+				e.albumAuth = append(e.albumAuth, auth)
+			} else {
+				tracks = append(tracks, s.Name)
+				e.trackAuth = append(e.trackAuth, auth)
+			}
+		}
+	}
+	e.Albums, e.Tracks = jsonValue(albums), jsonValue(tracks)
+	return nil
+}
+
+func (e artistEvidence) sampleAuthenticity() map[string][]metadata.Authenticity {
+	return map[string][]metadata.Authenticity{"albums": e.albumAuth, "tracks": e.trackAuth}
 }
 
 type artistProviders struct {
@@ -277,7 +350,7 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 			return err
 		}
 	}
-	u := unit{w: w, subject: subject, id: e.ID, generation: state.Generation + 1}
+	u := unit{w: w, ruleVersion: resourceRuleVersion, subject: subject, id: e.ID, generation: state.Generation + 1}
 	retry, err := w.enrichArtist(ctx, &u, &e, providers)
 	if err != nil {
 		return err
@@ -285,7 +358,7 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 	if err := w.ready(ctx); err != nil {
 		return err
 	}
-	state.Subject, state.TargetID, state.RuleVersion = subject, e.ID, StoredRuleVersion
+	state.Subject, state.TargetID, state.RuleVersion = subject, e.ID, resourceRuleVersion
 	state.InputDigest = digest([]any{e, providers.digest})
 	state.Generation = u.generation
 	if retry {
@@ -336,8 +409,8 @@ func (w *Worker) finishArtistState(ctx context.Context, observed artistEvidence,
 		}
 	} else if state != nil && p.active["web_search"] {
 		input := digest([]any{e, p.digest})
-		evidence := map[string]any{"names": e.Names, "albums": e.Albums, "tracks": e.Tracks, "gaps": map[string]bool{"image": e.ImageRank == 0, "bio": e.BioRank == 0}}
-		item := curation.PendingItem{TargetType: "artist", ArtistID: e.ID, Kind: "artist_identity", RuleVersion: StoredRuleVersion, InputDigest: input, Evidence: jsonValue(evidence)}
+		evidence := map[string]any{"authenticity": e.sampleAuthenticity(), "names": e.Names, "albums": e.Albums, "tracks": e.Tracks, "gaps": map[string]bool{"image": e.ImageRank == 0, "bio": e.BioRank == 0}}
+		item := curation.PendingItem{TargetType: "artist", ArtistID: e.ID, Kind: "artist_identity", RuleVersion: resourceRuleVersion, InputDigest: input, Evidence: jsonValue(evidence)}
 		if err := curation.UpsertPendingItem(ctx, tx, item); err != nil {
 			return err
 		}

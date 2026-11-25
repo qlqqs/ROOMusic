@@ -56,7 +56,8 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 		return nil
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT r.id::text,r.artist,COALESCE(r.album_artist,''),COALESCE(c.text_value,''),COALESCE(a.text_value,''),
- EXISTS(SELECT 1 FROM release_field_decisions d WHERE d.release_id=r.id AND d.field_key='artist' AND d.selected_source='default_fallback') OR (r.artist='未知艺术家' AND NOT EXISTS(SELECT 1 FROM release_field_decisions d WHERE d.release_id=r.id AND d.field_key='artist'))
+ COALESCE((SELECT selected_source FROM release_field_decisions WHERE release_id=r.id AND field_key='artist'),''),
+ COALESCE((SELECT selected_source FROM release_field_decisions WHERE release_id=r.id AND field_key='album_artist'),'')
  FROM releases r LEFT JOIN release_corrections c ON c.release_id=r.id AND c.field='album_artist'
  LEFT JOIN release_auto_values a ON a.release_id=r.id AND a.field='album_artist' WHERE r.id=ANY($1::uuid[]) ORDER BY r.id`, ids)
 	if err != nil {
@@ -64,12 +65,12 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 	}
 	type release struct {
 		id, artist, album, correction, auto string
-		inferred                            bool
+		artistSource, albumSource           string
 	}
 	var releases []release
 	for rows.Next() {
 		var r release
-		if err = rows.Scan(&r.id, &r.artist, &r.album, &r.correction, &r.auto, &r.inferred); err != nil {
+		if err = rows.Scan(&r.id, &r.artist, &r.album, &r.correction, &r.auto, &r.artistSource, &r.albumSource); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -81,13 +82,13 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 		return nil, err
 	}
 	for _, r := range releases {
-		if !r.inferred && !metadata.IsCompilationPlaceholder(r.artist) {
+		if metadata.FieldAuthenticity("artist", r.artist, r.artistSource, false, false) != metadata.Placeholder && !metadata.IsCompilationPlaceholder(r.artist) {
 			if err = add(r.id, "", "release_artist", r.artist, "scan"); err != nil {
 				return nil, err
 			}
 		}
 		// 明确AlbumArtist恰好叫“未知艺术家”仍是真实名字。
-		if !metadata.IsCompilationPlaceholder(r.album) {
+		if metadata.FieldAuthenticity("album_artist", r.album, r.albumSource, false, false) != metadata.Placeholder && !metadata.IsCompilationPlaceholder(r.album) {
 			if err = add(r.id, "", "album_artist", r.album, "scan"); err != nil {
 				return nil, err
 			}
@@ -103,7 +104,7 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 			}
 		}
 	}
-	rows, err = tx.QueryContext(ctx, `SELECT t.id::text,t.artist,COALESCE(tc.text_value,''),COALESCE(ta.text_value,''),o.value,(o.inferred AND o.source_kind <> 'filename_fallback'),
+	rows, err = tx.QueryContext(ctx, `SELECT t.id::text,t.artist,COALESCE(tc.text_value,''),COALESCE(ta.text_value,''),o.value,COALESCE(o.source_kind,''), COALESCE(o.inferred,false),
  COALESCE((SELECT jsonb_agg(e.raw_value ORDER BY e.occurrence_index,e.tag_key) FROM artist_tag_evidence e WHERE e.track_id=t.id AND e.role='track_artist'),'[]'::jsonb),
  COALESCE((SELECT jsonb_agg(jsonb_build_object('role',c.role,'name',c.name) ORDER BY c.role,c.position,c.id) FROM track_credits c WHERE c.track_id=t.id),'[]'::jsonb)
  FROM tracks t JOIN media m ON m.id=t.medium_id LEFT JOIN track_observations o ON o.track_id=t.id AND o.field_name='artist'
@@ -116,13 +117,14 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 	type track struct {
 		id, artist, correction, automatic string
 		raw                               sql.NullString
-		inferred                          sql.NullBool
+		source                            string
+		inferred                          bool
 		evidence, credits                 []byte
 	}
 	var tracks []track
 	for rows.Next() {
 		var t track
-		if err = rows.Scan(&t.id, &t.artist, &t.correction, &t.automatic, &t.raw, &t.inferred, &t.evidence, &t.credits); err != nil {
+		if err = rows.Scan(&t.id, &t.artist, &t.correction, &t.automatic, &t.raw, &t.source, &t.inferred, &t.evidence, &t.credits); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -150,10 +152,10 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 		raw := t.artist
 		if len(rawNames) > 0 {
 			raw = strings.Join(rawNames, " / ")
-		} else if t.raw.Valid && !t.inferred.Bool {
+		} else if t.raw.Valid {
 			raw = t.raw.String
 		}
-		if !t.inferred.Bool && (t.raw.Valid || len(rawNames) > 0 || raw != "未知艺术家") {
+		if len(rawNames) > 0 || metadata.FieldAuthenticity("artist", raw, t.source, t.inferred, false) != metadata.Placeholder {
 			if err = add("", t.id, "track_artist", raw, "scan"); err != nil {
 				return nil, err
 			}

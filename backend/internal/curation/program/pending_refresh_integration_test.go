@@ -202,8 +202,9 @@ func TestPostgreSQLCurationModelPlanAfterClaimRefresh(t *testing.T) {
 	after, err := curation.LoadWorkStates(ctx, f.db, "release", []string{release})
 	requirePendingRefreshOK(t, err)
 	if state := after[release]; state.Status != "uncertain" || state.InputDigest == claimed.InputDigest ||
-		state.Generation != before[release].Generation+1 {
-		t.Fatalf("写入歌词后应使用新摘要重判，重判前 %+v，重判后 %+v", before[release], state)
+		state.GapDigest == before[release].GapDigest || state.IdentityDigest != before[release].IdentityDigest ||
+		state.Generation != before[release].Generation || state.Attempts != before[release].Attempts || finder.searches != 1 {
+		t.Errorf("写入歌词应只刷新本地证据，刷新前 %+v，刷新后 %+v，搜索 %d 次", before[release], state, finder.searches)
 	}
 
 	items, err := f.writer.ClaimedItems(ctx, claimed.ConversationID)
@@ -211,11 +212,79 @@ func TestPostgreSQLCurationModelPlanAfterClaimRefresh(t *testing.T) {
 	if len(items) != 1 || items[0].ID != claimed.ID {
 		t.Fatalf("原会话应仍领取待定项 %s，得到 %+v", claimed.ID, items)
 	}
+	if items[0].InputDigest != after[release].InputDigest || items[0].IdentityDigest != claimed.IdentityDigest {
+		t.Errorf("原待定项应更新完整摘要并保留识别摘要，得到 %+v", items[0])
+	}
 	plan, err := NewModelMatcher(f.db, f.writer, gate).Plan(ctx, items[0], remote.ID)
 	if err != nil {
 		t.Fatalf("原领取会话的匹配预览失败（%s） %v", failureCode(err), err)
 	}
 	if plan.Target != remote.Title || len(plan.Changes) == 0 {
 		t.Fatalf("未生成发行 %q 的匹配预览，得到 %+v", remote.Title, plan)
+	}
+}
+
+func TestPostgreSQLCurationExternalRuleUpgradePending(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		withCandidates bool
+	}{
+		{"有保存候选时离线重判", true},
+		{"零候选只登记和消费一次补查", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newShelvedPendingFixture(t, "release_match")
+			ctx := t.Context()
+			if tc.withCandidates {
+				f.finder.search = []sources.Release{f.remote}
+			}
+			requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
+			pending := f.pending(t)
+			if tc.withCandidates {
+				requirePendingCandidates(t, pending, f.remote.ID)
+			} else {
+				requirePendingCandidates(t, pending)
+			}
+			read := func() curation.WorkState {
+				t.Helper()
+				states, err := curation.LoadWorkStates(ctx, f.db, "release", []string{f.releaseID})
+				requirePendingRefreshOK(t, err)
+				return states[f.releaseID]
+			}
+			before := read()
+			old := MatchRuleVersion - 1
+			f.exec(t, "UPDATE curation_work_states SET match_rule_version=$2 WHERE subject='release' AND target_id=$1", f.releaseID, old)
+			f.exec(t, "UPDATE curation_pending_items SET match_rule_version=$2 WHERE id=$1", pending.ID, old)
+			requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
+			upgrade := read()
+			if f.finder.searches != 1 || len(f.finder.releaseReads) != 0 || upgrade.MatchRuleVersion != MatchRuleVersion ||
+				upgrade.Generation != before.Generation || upgrade.Attempts != before.Attempts || upgrade.Status != before.Status {
+				t.Fatalf("外部规则升级轮应离线复核并保留原结论，之前 %+v，之后 %+v，搜索 %d 次，读取 %v",
+					before, upgrade, f.finder.searches, f.finder.releaseReads)
+			}
+			got := f.pending(t)
+			if got.ID != pending.ID || got.MatchRuleVersion != MatchRuleVersion || got.IdentityDigest != pending.IdentityDigest ||
+				got.Status != pending.Status || !bytes.Equal(got.Candidates, pending.Candidates) {
+				t.Errorf("升级应更新原待定项版本并保留证据，之前 %+v，之后 %+v", pending, got)
+			}
+			expectedRequery, expectedSearches := int16(0), 1
+			if !tc.withCandidates {
+				expectedRequery, expectedSearches = MatchRuleVersion, 2
+			}
+			if upgrade.RequeryMatchVersion != expectedRequery {
+				t.Errorf("登记补查版本 %d，期望 %d", upgrade.RequeryMatchVersion, expectedRequery)
+			}
+			requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
+			after := read()
+			requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
+			if f.finder.searches != expectedSearches || len(f.finder.releaseReads) != 0 {
+				t.Errorf("后续轮累计搜索 %d 次，期望 %d 次，读取 %v", f.finder.searches, expectedSearches, f.finder.releaseReads)
+			}
+			if after.RequeryMatchVersion != 0 || after.Generation != before.Generation+expectedSearches-1 ||
+				after.Attempts != before.Attempts+expectedSearches-1 || !reflect.DeepEqual(read(), after) {
+				t.Errorf("补查后的状态应稳定，补查版本 %d，代次 %d -> %d，尝试 %d -> %d",
+					after.RequeryMatchVersion, before.Generation, after.Generation, before.Attempts, after.Attempts)
+			}
+		})
 	}
 }

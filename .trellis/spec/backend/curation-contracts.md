@@ -24,8 +24,7 @@ M7 子任务 A（2026-11）给后台自动整理准备好写入、记录与撤�
 
 | 条款 | 将改为 | 子任务 |
 | --- | --- | --- |
-| 15.1、15.6 后台循环逐页走全库、规则版本 `StoredRuleVersion` 一个数、证据摘要是整份证据的指纹 | 本地规则、外部匹配规则、巡检提示词分别计版本；摘要只含识别用到的字段；发行带真实性标记与本地分类 | A |
-| 15.2 搜索从不判定；艺人对应要求名字规范化后相同（19.1）；`insufficient_evidence` 只认 `default_fallback` | 文字搜索结果按曲目结构判定，发行组唯一时认定到发行组一级；艺人认外部登记的别名；占位判断覆盖扫描的全部兜底来源；零候选的处理与未收录状态 | A、C |
+| 15.2 搜索从不判定；艺人对应要求名字规范化后相同（19.1） | 文字搜索结果按曲目结构判定，发行组唯一时认定到发行组一级；艺人认外部登记的别名；零候选的处理与未收录状态 | C |
 | 15.6 单个后台循环、封面清单与 MusicBrainz 共用限速器、首次整理期间新入库的要等一轮结束 | 各来源各自一条队列，按状态与优先级取项；封面清单不占 MusicBrainz 额度；拷贝中的专辑等稳定后整理 | B |
 | 第 4 节与 18.1 自动层一个字段后写的替换先写的 | 自动层内部按写入依据固定先后；自动值记录依据的扫描值，扫描值变化后作废 | F |
 | 17.2–17.4 待定项每批 5 项交管家运行、审查转人工与没通过的成为例外等管理员处理 | 三档识别兜底；通过完整结构核对的外部编号免审；例外改为“未采用的建议”，不计待办；无佐证的发现先联网求证 | E |
@@ -927,3 +926,63 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 * 离线试用可为 mock 的 `-script` 选择 `backend/internal/upstreammock/testdata/artist-{identity,media,candidates}.json`。用主署名“纸屿”试验身份与同名候选，用“海岸来信”试验图片与简介。示例插件用“折纸灯乐团”试验按名补简介。
 
 工具边界验证应覆盖第六条引用、501 字标题、经管家出站放行名单登记的内网地址，以及纯文本标题写入。集成验证应覆盖单项资料写入后原待定项的结论、剩余缺口的新摘要、人工资料优先和程序收尾时的例外状态。
+
+## 22. 规则版本、识别摘要与发行分类（整理链 A，2026-11-25）
+
+依据 ADR 0006 第 16.2 节。设计细节见归档任务 `11-25-curation-chain-a-authenticity` 的 `design.md`。
+
+### 22.1 三种规则版本
+
+| 常量（`curation/program/worker.go`） | 当前值 | 升级时 |
+| --- | --- | --- |
+| `LocalRuleVersion` | 2 | 只重算真实性、分类与缺口，不发外部请求 |
+| `MatchRuleVersion` | 101 | 已对上的保持；有候选的待定项用已保存的候选离线重判，登记新版本，不发搜索；零候选或旧候选不足以判断的，登记 `requery_match_version`，由普通遍历补查一次 |
+| `PatrolPromptVersion` | 1 | 不让任何工作状态到期；只作用于新巡检与手动重新巡检 |
+
+迁移 0086 给 `curation_work_states` 加 `local_rule_version`、`match_rule_version`、`identity_digest`、`gap_digest`、`requery_match_version`，
+给 `curation_pending_items` 加 `match_rule_version`、`identity_digest`。旧列 `rule_version`、`input_digest` 保留并继续写。
+
+### 22.2 两份摘要
+
+- **识别摘要**只哈希原始输入：标题与采用的署名及其原始来源名、条码与目录号与厂牌、碟结构、在库曲目的碟位曲序与整秒时长与 inferred 位、
+  标签标识与 ISRC、可重建的 CUE 目录、已有对应与 `external_link` 抑制标记。不含真实性等解释结果，因此本地规则升级不改变识别摘要。
+  识别摘要变化才重新识别。
+- **缺口摘要**记各可写字段的真实性、人工与自动占用、抑制标记，以及封面、歌词的有无。只有缺口摘要变化时，重算本地计划与发生变化的媒体主题，不重新识别。
+- 整份发行指纹（`curation.ReleaseDigest`）保持不变，继续作为写入校验：待定项 `input_digest`、模型预览与采纳、确认恢复、并入证据都用它。
+
+旧格式行（新列为空）首次遇到新程序：用整份指纹核对旧 `input_digest`，相同则直接写入新列作为基线、不发请求；不同按普通变化处理。
+基于 result 标记的维护（曲目字段回填、艺人对应回填、并入发现）在同一轮照常进行。解释改变了缺口的旧行（例如 `display_fallback` 曲目艺人成为可补），
+按已有对应读取一次发行详情用于补全，不搜索。
+
+### 22.3 真实性
+
+`catalog/metadata/curation_authenticity.go` 的纯函数按字段来源与人工层给出 `real`、`inferred`、`placeholder`：
+
+| 来源 | 类别 |
+| --- | --- |
+| `tag`、各格式的标签来源、`cue_sheet`、`cue_track`、`cue_virtual`、`rip_log`、非空人工设值 | 真实 |
+| `filename_fallback`、`folder_fallback`、`folder`、`album_title`、`folder_structure`、`path_order_fallback` | 推断 |
+| `display_fallback`、`default_fallback`、合辑展示署名（`compilation`）、空来源且值为“未知专辑”“未知艺术家” | 占位 |
+
+人工设空表示缺值且禁止补写。`TitlePlaceholder`、`ArtistPlaceholder`、`TitleInferred` 由它导出。占位值不进入外部搜索与歌词查询；
+搜索证据记录是否用到推断值（`uses_inferred`）。交给模型的待定项证据在发行与每条曲目旁附 `authenticity`，按字段名给类别。
+
+### 22.4 发行分类
+
+按顺序取首个命中，只看可见发行与在库曲目：
+
+1. `tagged_id`：至少一首曲目有标签 `mb_release`（散放单曲为 `mb_recording`）。
+2. `insufficient`：标题与艺人都是占位，且没有条码、目录号、ISRC、任何外部编号，也不能重建 CUE 目录。
+3. `has_gaps`：标题或艺人不是真实值、任一曲目标题不是真实值、年份为空、没有本地封面，至少一项成立。
+4. `local_complete`：其余。
+
+缺口排序键为（标题与艺人中非真实的个数，非真实曲名数，缺本地封面，缺年份），逐项降序。
+
+`GET /api/v1/admin/curation/classifications`（管理员）返回同一快照的计数，四类之和等于 `total`，空库全为零：
+
+```json
+{"versions": {"local_rule": 2, "external_match_rule": 101, "patrol_prompt": 1},
+ "releases": {"total": 0, "tagged_id": 0, "has_gaps": 0, "local_complete": 0, "insufficient": 0}}
+```
+
+按 `PageCurationReleases` 分页实时计算，不读文件、不调外部能力。

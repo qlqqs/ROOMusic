@@ -16,19 +16,19 @@ import (
 )
 
 type Handlers struct {
-	model       curation.ModelStatus
-	exceptions  curation.ExceptionResolver
-	program     curation.ProgramStatus
-	ruleVersion int16
-	sources     *curation.Sources
-	writer      *curation.Writer
-	reverter    *curation.Reverter
-	guard       *identity.Guard
-	logger      *slog.Logger
+	model      curation.ModelStatus
+	exceptions curation.ExceptionResolver
+	program    curation.ProgramStatus
+	versions   curation.RuleVersions
+	sources    *curation.Sources
+	writer     *curation.Writer
+	reverter   *curation.Reverter
+	guard      *identity.Guard
+	logger     *slog.Logger
 }
 
-func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, program curation.ProgramStatus, model curation.ModelStatus, exceptions curation.ExceptionResolver, ruleVersion int16, guard *identity.Guard, logger *slog.Logger) *Handlers {
-	return &Handlers{model: model, exceptions: exceptions, sources: sources, writer: writer, reverter: reverter, program: program, ruleVersion: ruleVersion, guard: guard, logger: logger}
+func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, program curation.ProgramStatus, model curation.ModelStatus, exceptions curation.ExceptionResolver, versions curation.RuleVersions, guard *identity.Guard, logger *slog.Logger) *Handlers {
+	return &Handlers{model: model, exceptions: exceptions, sources: sources, writer: writer, reverter: reverter, program: program, versions: versions, guard: guard, logger: logger}
 }
 
 func (h *Handlers) Register(mux *http.ServeMux) {
@@ -38,6 +38,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT "+base+"/sources/{id}", h.admin(h.setSource))
 	mux.HandleFunc("PUT "+base+"/sources/{id}/keys/{name}", h.admin(h.setSourceKey))
 	mux.HandleFunc("DELETE "+base+"/sources/{id}/keys/{name}", h.admin(h.clearSourceKey))
+	mux.HandleFunc("GET "+base+"/classifications", h.admin(h.classifications))
 	mux.HandleFunc("GET "+base+"/progress", h.admin(h.progress))
 	mux.HandleFunc("GET "+base+"/exceptions", h.admin(h.listExceptions))
 	mux.HandleFunc("POST "+base+"/exceptions/{id}/accept", h.admin(h.acceptException))
@@ -96,8 +97,13 @@ func decode(w http.ResponseWriter, r *http.Request, body any) bool {
 	return true
 }
 
+func (h *Handlers) classifications(w http.ResponseWriter, r *http.Request, _ identity.User) {
+	result, err := h.writer.Classifications(r.Context(), h.versions)
+	h.respond(w, r, result, err)
+}
+
 func (h *Handlers) progress(w http.ResponseWriter, r *http.Request, _ identity.User) {
-	p, err := h.writer.Progress(r.Context(), h.ruleVersion, h.program)
+	p, err := h.writer.Progress(r.Context(), h.versions.ExternalMatchRule, h.program)
 	if err != nil {
 		h.respond(w, r, nil, err)
 		return

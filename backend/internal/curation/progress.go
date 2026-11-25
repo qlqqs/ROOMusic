@@ -46,7 +46,7 @@ func (w *Writer) Progress(ctx context.Context, ruleVersion int16, status Program
  count(*) FILTER (WHERE s.status='matched'),count(*) FILTER (WHERE s.status='uncertain'),
  count(*) FILTER (WHERE s.status='no_match'),count(*) FILTER (WHERE s.status='try_later'),
  (SELECT count(*) FROM curation_pending_items p WHERE `+PendingTargetVisibleSQL+` AND p.status='waiting_model')
- FROM visible v LEFT JOIN curation_work_states s ON s.subject='release' AND s.rule_version=$1 AND s.target_id=v.id`, ruleVersion).
+ FROM visible v LEFT JOIN curation_work_states s ON s.subject='release' AND (COALESCE(s.match_rule_version,s.rule_version)=$1 OR s.status='matched' AND s.match_rule_version IS NOT NULL) AND s.target_id=v.id`, ruleVersion).
 		Scan(&r.Total, &r.Processed, &r.Matched, &r.Uncertain, &r.NoMatch, &r.TryLater, &p.Pending.WaitingModel)
 	if err != nil {
 		return Progress{}, err
@@ -59,4 +59,20 @@ func (w *Writer) Progress(ctx context.Context, ruleVersion int16, status Program
 		}
 	}
 	return p, nil
+}
+
+type RuleVersions struct {
+	LocalRule         int16 `json:"local_rule"`
+	ExternalMatchRule int16 `json:"external_match_rule"`
+	PatrolPrompt      int16 `json:"patrol_prompt"`
+}
+
+type Classifications struct {
+	Versions RuleVersions                `json:"versions"`
+	Releases catalog.CurationClassCounts `json:"releases"`
+}
+
+func (w *Writer) Classifications(ctx context.Context, versions RuleVersions) (Classifications, error) {
+	counts, err := catalog.CountCurationClasses(ctx, w.db)
+	return Classifications{Versions: versions, Releases: counts}, err
 }

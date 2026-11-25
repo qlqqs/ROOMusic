@@ -80,20 +80,12 @@ func (w *Worker) page(ctx context.Context, after *catalog.CurationCursor, lyrics
 	if err != nil {
 		return nil, err
 	}
-	var sameArtistOverrides map[string]bool
 	if lyrics {
-		var tracks, ambiguous []string
+		var tracks []string
 		for _, e := range entries {
 			for _, t := range e.Tracks {
 				tracks = append(tracks, t.ID)
-				if lyricsArtistPlaceholder(t) && !t.LocalLyrics && !t.ExternalLyrics && t.DurationSeconds > 0 {
-					ambiguous = append(ambiguous, t.ID)
-				}
 			}
-		}
-		sameArtistOverrides, err = automaticTrackArtists(ctx, w.db, ambiguous)
-		if err != nil {
-			return nil, err
 		}
 		states.lyrics, err = curation.LoadWorkStates(ctx, w.db, "lyrics", tracks)
 	} else {
@@ -111,9 +103,6 @@ func (w *Worker) page(ctx context.Context, after *catalog.CurationCursor, lyrics
 			for _, t := range e.Tracks {
 				if err := priority(); err != nil {
 					return nil, err
-				}
-				if sameArtistOverrides[t.ID] {
-					t.ArtistPlaceholder = false
 				}
 				if !lyricsGap(t) {
 					continue
@@ -156,7 +145,17 @@ func needsWork(subject string, state curation.WorkState, digest string, now time
 	if digest == "" {
 		return false
 	}
-	if state.RuleVersion != StoredRuleVersion || state.InputDigest != digest || state.Status == "try_later" && state.NextAttemptAt != nil && !now.Before(*state.NextAttemptAt) {
+	previous := state.InputDigest
+	if subject == "release" && state.IdentityDigest != "" {
+		previous = state.IdentityDigest
+	}
+	if previous != digest || subject != "release" && state.RuleVersion != resourceRuleVersion {
+		return true
+	}
+	if state.Status == "try_later" {
+		return state.NextAttemptAt != nil && !now.Before(*state.NextAttemptAt)
+	}
+	if subject == "release" && state.RequeryMatchVersion == MatchRuleVersion {
 		return true
 	}
 	if !fingerprintAvailable || subject != "release" || (state.Status != "no_match" && state.Status != "uncertain") {
@@ -205,7 +204,7 @@ func subjectSource(subject string) string {
 
 // 旧的发行对应缺少操作后态。只有已核对为同一外部发行时，封面才可退到匹配结果中的专辑。
 func subjectEvidence(subject string, e catalog.CurationEvidence, state curation.WorkState) catalog.CurationEvidence {
-	if subject == "artwork" && e.ExternalGroupID == "" && e.ExternalID != "" && state.Status == "matched" && state.RuleVersion == StoredRuleVersion {
+	if subject == "artwork" && e.ExternalGroupID == "" && e.ExternalID != "" && state.Status == "matched" {
 		var matched struct {
 			ID    string `json:"external_id"`
 			Group string `json:"external_group_id"`
@@ -272,16 +271,43 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	}
 	input := subjectEvidence(subject, *e, states.releases[e.ID])
 	digest := subjectDigest(subject, input, id)
+	workDigest := digest
+	version := resourceRuleVersion
+	var inputs releaseDigests
+	if subject == "release" {
+		inputs = releaseDigests{digest, IdentityDigest(input), GapDigest(input)}
+		// 旧基线与现有对应的维护一起提交，外部暂时失败时保留原状态。
+		if state.InputDigest == digest && (state.IdentityDigest == "" || state.IdentityDigest == inputs.identity && state.LocalRuleVersion != LocalRuleVersion) {
+			tracks, artists, merges := matchBackfills(state, input)
+			if tracks || artists || merges {
+				return w.backfillMatch(ctx, e, state, states, tracks, artists, merges)
+			}
+		}
+		deferred, err := w.prepareRelease(ctx, input, inputs, &state)
+		if err != nil {
+			return err
+		}
+		if state.TargetID != "" {
+			states.releases[id] = state
+		}
+		if deferred {
+			return nil
+		}
+		if state.IdentityDigest != "" {
+			workDigest = inputs.identity
+		}
+		version = MatchRuleVersion
+	}
 	now := w.opts.Now()
 	// 新启用的插件或更新的密钥可以补齐上一轮留下的空缺。
-	ordinary := needsWork(subject, state, digest, now, false) || subject != "release" && states.pluginChange.Time.After(state.UpdatedAt)
+	ordinary := needsWork(subject, state, workDigest, now, false) || subject != "release" && states.pluginChange.Time.After(state.UpdatedAt)
 	if subject == "release" && !ordinary {
 		tracks, artists, merges := matchBackfills(state, input)
 		if tracks || artists || merges {
 			return w.backfillMatch(ctx, e, state, states, tracks, artists, merges)
 		}
 	}
-	if !ordinary && !needsWork(subject, state, digest, now, states.fingerprintAvailable) {
+	if !ordinary && !needsWork(subject, state, workDigest, now, states.fingerprintAvailable) {
 		return nil
 	}
 	if err := w.ready(ctx); err != nil {
@@ -290,12 +316,16 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	if err := w.rotateBatch(ctx); err != nil {
 		return err
 	}
-	u := unit{w: w, subject: subject, id: id, generation: state.Generation + 1, releaseID: e.ID, inputDigest: digest, releaseState: states.releases[e.ID]}
+	u := unit{w: w, subject: subject, id: id, ruleVersion: version, generation: state.Generation + 1, releaseID: e.ID, inputDigest: digest, releaseState: states.releases[e.ID]}
 	out, err := w.evaluate(ctx, &u, input, !ordinary)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	state.Subject, state.TargetID, state.RuleVersion, state.InputDigest = subject, id, StoredRuleVersion, digest
+	state.Subject, state.TargetID, state.RuleVersion, state.InputDigest = subject, id, version, digest
+	if subject == "release" {
+		inputs.record(&state)
+		state.MatchRuleVersion, state.RequeryMatchVersion = version, 0
+	}
 	if failureCode(err) == "source_disabled" {
 		return nil
 	}
@@ -353,7 +383,11 @@ func (w *Worker) saveConclusion(ctx context.Context, e *catalog.CurationEvidence
 	if postDigest == "" {
 		return errReleaseChanged
 	}
-	if postDigest != state.InputDigest {
+	var postIdentity string
+	if state.Subject == "release" {
+		postIdentity = IdentityDigest(fresh)
+	}
+	if postDigest != state.InputDigest || state.Subject == "release" && postIdentity != state.IdentityDigest {
 		var expected catalog.CurationEvidence
 		switch {
 		case state.Subject == "release" && out.status == "matched":
@@ -363,23 +397,25 @@ func (w *Worker) saveConclusion(ctx context.Context, e *catalog.CurationEvidence
 		default:
 			return errReleaseChanged
 		}
-		if subjectDigest(state.Subject, subjectEvidence(state.Subject, expected, states.releases[e.ID]), state.TargetID) != postDigest {
+		if subjectDigest(state.Subject, subjectEvidence(state.Subject, expected, states.releases[e.ID]), state.TargetID) != postDigest ||
+			state.Subject == "release" && IdentityDigest(expected) != postIdentity {
 			return errReleaseChanged
 		}
 	}
 	state.InputDigest = postDigest
 	var related *curation.WorkState
 	if state.Subject == "release" {
+		releaseDigests{postDigest, postIdentity, GapDigest(fresh)}.record(&state)
 		state.Result = releaseResult(out)
 		if err := savePending(ctx, tx, fresh, state, out.match); err != nil {
 			return err
 		}
-	} else if s, ok := states.releases[e.ID]; ok && s.RuleVersion == StoredRuleVersion &&
+	} else if s, ok := states.releases[e.ID]; ok && s.IdentityDigest != "" && s.IdentityDigest == IdentityDigest(fresh) &&
 		s.InputDigest == ReleaseDigest(*e) && s.InputDigest != ReleaseDigest(fresh) &&
 		ReleaseDigest(afterMedia(*e, fresh, state.Subject, state.TargetID)) == ReleaseDigest(fresh) {
-		// 封面与歌词存在位也是发行摘要的一部分，自己的这次写入不能触发整张重查。
-		s.InputDigest = ReleaseDigest(fresh)
-		if err := curation.SaveWorkState(ctx, tx, s); err != nil {
+		// 同步媒体写后的缺口和完整指纹，保留识别结论。
+		inputs := releaseInputs(fresh)
+		if err := updateReleaseProjection(ctx, tx, fresh, &s, inputs, s.MatchRuleVersion); err != nil {
 			return err
 		}
 		related = &s
@@ -490,5 +526,5 @@ func savePending(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidence, st
 		return nil
 	}
 	return curation.UpsertPendingItem(ctx, tx, curation.PendingItem{TargetID: e.ID, Kind: kind, RuleVersion: state.RuleVersion,
-		InputDigest: state.InputDigest, Evidence: jsonValue(PendingEvidence(e)), Candidates: jsonValue(m.Candidates), Conflicts: jsonValue(m.Conflicts)})
+		InputDigest: state.InputDigest, MatchRuleVersion: state.MatchRuleVersion, IdentityDigest: state.IdentityDigest, Evidence: jsonValue(pendingMatchEvidence(e, m.Method)), Candidates: jsonValue(m.Candidates), Conflicts: jsonValue(m.Conflicts)})
 }

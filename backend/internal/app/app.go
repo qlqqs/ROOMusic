@@ -396,7 +396,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		close(modelDone)
 	}
 	resolver := model.NewExceptionResolver(database, curationWriter, matcher)
-	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), sourceGate, programStatus, scheduler, resolver, program.StoredRuleVersion, guard, logger).Register(mux)
+	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), sourceGate, programStatus, scheduler, resolver, curation.RuleVersions{LocalRule: program.LocalRuleVersion, ExternalMatchRule: program.MatchRuleVersion, PatrolPrompt: program.PatrolPromptVersion}, guard, logger).Register(mux)
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		AnalysisProgress: progress,
 	}).Register(mux)

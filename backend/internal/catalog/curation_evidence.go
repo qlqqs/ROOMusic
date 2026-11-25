@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
 // CurationCursor 是发行在按加入时间倒序排列的可见曲库中的位置。
@@ -43,14 +45,25 @@ type CurationSuppression struct {
 	TargetType, TargetID, Subject, ValueHash string
 }
 
+// CurationObservation 保留选值的字段来源和扫描推断位。
+type CurationObservation struct {
+	Source   string
+	Inferred bool
+}
+
 type CurationTrack struct {
-	EffectiveTitle, EffectiveArtist     string `json:"-"`
-	TitleInferred                       bool   `json:"-"`
-	ID, Title, Artist                   string
-	TitlePlaceholder, ArtistPlaceholder bool
-	Disc, DiscNumber, Position          int
-	PositionInferred                    bool
-	DurationSeconds                     int
+	Authenticity                                                     map[string]metadata.Authenticity `json:"-"`
+	EffectiveTitleAuth, EffectiveArtistAuth                          metadata.Authenticity            `json:"-"`
+	OtherIdentifier                                                  bool                             `json:"-"`
+	TitleObservation, ArtistObservation, PositionObservation         CurationObservation              `json:"-"`
+	TitleCorrected, ArtistCorrected, TitleAutomatic, ArtistAutomatic bool                             `json:"-"`
+	EffectiveTitle, EffectiveArtist                                  string                           `json:"-"`
+	TitleInferred                                                    bool                             `json:"-"`
+	ID, Title, Artist                                                string
+	TitlePlaceholder, ArtistPlaceholder                              bool
+	Disc, DiscNumber, Position                                       int
+	PositionInferred                                                 bool
+	DurationSeconds                                                  int
 
 	SourceKind, SourceRootID     string
 	CueSheetPath, ParentFile     string
@@ -63,6 +76,12 @@ type CurationTrack struct {
 }
 
 type CurationEvidence struct {
+	Authenticity                                      map[string]metadata.Authenticity `json:"-"`
+	EffectiveTitleAuth, EffectiveArtistAuth           metadata.Authenticity            `json:"-"`
+	EffectiveYear                                     int                              `json:"-"`
+	BarcodeAuthenticity                               []metadata.Authenticity          `json:"-"`
+	FieldSources                                      map[string]string                `json:"-"`
+	RawCatalogNumber                                  string                           `json:"-"`
 	ID, GroupID, CandidateKind                        string
 	Title, Artist, AlbumArtist                        string
 	TitlePlaceholder, ArtistPlaceholder               bool
@@ -103,7 +122,7 @@ func LoadCurationEvidence(ctx context.Context, q Queryer, releaseIDs []string, a
 	if err != nil {
 		return nil, err
 	}
-	if err := loadCurationTracks(ctx, q, releaseIDs, result); err != nil {
+	if err := loadCurationTracks(ctx, q, releaseIDs, result, true); err != nil {
 		return nil, err
 	}
 	if err := loadCurationSuppressions(ctx, q, releaseIDs, result); err != nil {
@@ -130,9 +149,9 @@ const curationHeaderSQL = `SELECT releases.id::text,releases.group_id::text,COAL
     'genre',releases.genres,'label',releases.label,'catalog_number',releases.catalog_number,
     'barcode',releases.barcode,'edition',releases.edition) || COALESCE(c.values,'{}'::jsonb),
  COALESCE(c.present,'{}'::jsonb),
- COALESCE((SELECT jsonb_object_agg(field,true) FROM release_auto_values WHERE release_id=releases.id),'{}'::jsonb),
+ COALESCE(a.values,'{}'::jsonb),
  COALESCE((SELECT jsonb_object_agg(field_key,selected_source) FROM release_field_decisions
-     WHERE release_id=releases.id AND field_key IN ('title','artist','album_artist','catalog_number')),'{}'::jsonb),
+     WHERE release_id=releases.id),'{}'::jsonb),
  COALESCE((SELECT jsonb_agg(position ORDER BY position,id) FROM media WHERE release_id=releases.id),'[]'::jsonb),
  lo.release_id IS NOT NULL,ea.storage_key,COALESCE(rl.external_id,''),COALESCE(rg.external_group_id,''),
  COALESCE(gl.external_id,''),
@@ -145,6 +164,10 @@ const curationHeaderSQL = `SELECT releases.id::text,releases.group_id::text,COAL
     SELECT jsonb_object_agg(field,COALESCE(to_jsonb(text_value),to_jsonb(year_value),to_jsonb(list_value))) AS values,
            jsonb_object_agg(field,true) AS present FROM release_corrections WHERE release_id=releases.id
  ) c ON true
+ LEFT JOIN LATERAL (
+    SELECT jsonb_object_agg(field,COALESCE(to_jsonb(text_value),to_jsonb(year_value),to_jsonb(list_value))) AS values
+    FROM release_auto_values WHERE release_id=releases.id
+ ) a ON true
  LEFT JOIN release_artworks lo ON lo.release_id=releases.id
  LEFT JOIN release_external_artworks ea ON ea.release_id=releases.id
  LEFT JOIN external_links gl ON gl.source='musicbrainz' AND gl.object_type='release_group' AND gl.object_id=releases.group_id` +
@@ -174,25 +197,65 @@ func curationHeaders(ctx context.Context, q Queryer, ids []string, artworkExists
 			Year                           int
 		}
 		var sources map[string]string
+		var autoValues map[string]json.RawMessage
 		for _, column := range []struct {
 			raw    []byte
 			target any
-		}{{values, &fields}, {corrected, &e.Corrected}, {automatic, &e.Automatic}, {decisions, &sources}, {media, &e.Media}} {
+		}{{values, &fields}, {corrected, &e.Corrected}, {automatic, &autoValues}, {decisions, &sources}, {media, &e.Media}} {
 			if err := json.Unmarshal(column.raw, column.target); err != nil {
 				return nil, err
 			}
 		}
 		e.Title, e.AlbumArtist, e.Year, e.Genres = fields.Title, fields.AlbumArtist, fields.Year, fields.Genre
 		e.Barcode, e.CatalogNumber, e.Label, e.Edition = fields.Barcode, fields.CatalogNumber, fields.Label, fields.Edition
-		e.TitlePlaceholder = !e.Corrected["title"] && curationPlaceholder(sources, "title", e.Title, "未知专辑")
+		e.FieldSources, e.RawCatalogNumber = sources, fields.CatalogNumber
+		e.Automatic = make(map[string]bool, len(autoValues))
+		for name := range autoValues {
+			e.Automatic[name] = true
+		}
+		e.Authenticity = make(map[string]metadata.Authenticity)
+		for name, value := range map[string]string{"title": e.Title, "artist": e.Artist, "album_artist": e.AlbumArtist,
+			"label": e.Label, "barcode": e.Barcode, "catalog_number": e.CatalogNumber, "media_type": e.MediaType,
+			"year": positiveNumber(e.Year), "edition": e.Edition, "genre": strings.Join(e.Genres, " ")} {
+			field := name
+			if name == "title" {
+				field = "release_title"
+			}
+			e.Authenticity[name] = metadata.FieldAuthenticity(field, value, sources[name], false, e.Corrected[name])
+		}
 		if e.Corrected["album_artist"] && e.AlbumArtist != "" {
 			e.Artist = e.AlbumArtist
-		} else if e.AlbumArtist != "" {
-			e.ArtistPlaceholder = curationPlaceholder(sources, "album_artist", e.AlbumArtist, "未知艺术家")
-		} else {
-			e.ArtistPlaceholder = curationPlaceholder(sources, "artist", e.Artist, "未知艺术家")
+			e.Authenticity["artist"] = e.Authenticity["album_artist"]
+		}
+		e.TitlePlaceholder = e.Authenticity["title"] == metadata.Placeholder
+		e.ArtistPlaceholder = e.SelectedArtistAuth() == metadata.Placeholder
+		e.EffectiveTitleAuth, e.EffectiveArtistAuth, e.EffectiveYear = e.Authenticity["title"], e.SelectedArtistAuth(), e.Year
+		for name, dest := range map[string]*metadata.Authenticity{"title": &e.EffectiveTitleAuth, "album_artist": &e.EffectiveArtistAuth} {
+			if raw, ok := autoValues[name]; ok && !e.Corrected[name] {
+				var value string
+				if err := json.Unmarshal(raw, &value); err != nil {
+					return nil, err
+				}
+				*dest = metadata.FieldAuthenticity(name, value, "automatic", false, false)
+			}
+		}
+		if raw, ok := autoValues["year"]; ok && !e.Corrected["year"] {
+			e.EffectiveYear = 0
+			if err := json.Unmarshal(raw, &e.EffectiveYear); err != nil {
+				return nil, err
+			}
 		}
 		e.setCurationBarcodes(fields.Barcode, sources["catalog_number"] == "cue_sheet" && !e.Corrected["catalog_number"])
+		for _, barcode := range e.Barcodes {
+			auth := e.Authenticity["catalog_number"]
+			if barcode == strings.TrimSpace(fields.Barcode) {
+				direct := e.Authenticity["barcode"]
+				if !e.CatalogNumberIsMCN || barcode != strings.TrimSpace(e.RawCatalogNumber) || direct == metadata.Real || auth == metadata.Placeholder {
+					auth = direct
+				}
+			}
+			e.BarcodeAuthenticity = append(e.BarcodeAuthenticity, auth)
+		}
 		e.ExternalArtwork = artworkKey.Valid
 		if artworkKey.Valid && len(artworkExists) != 0 && artworkExists[0] != nil {
 			e.ArtworkFile = artworkExists[0](artworkKey.String)
@@ -202,9 +265,18 @@ func curationHeaders(ctx context.Context, q Queryer, ids []string, artworkExists
 	return result, rows.Err()
 }
 
-func curationPlaceholder(sources map[string]string, field, value, fallback string) bool {
-	source, present := sources[field]
-	return source == "default_fallback" || (!present && value == fallback)
+func positiveNumber(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strconv.Itoa(n)
+}
+
+func (e CurationEvidence) SelectedArtistAuth() metadata.Authenticity {
+	if e.AlbumArtist != "" {
+		return e.Authenticity["album_artist"]
+	}
+	return e.Authenticity["artist"]
 }
 
 func (e *CurationEvidence) setCurationBarcodes(barcode string, fromCue bool) {
@@ -225,14 +297,16 @@ func (e *CurationEvidence) setCurationBarcodes(barcode string, fromCue bool) {
 
 const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_value,t.title),COALESCE(ca.text_value,t.artist),
  COALESCE(ct.text_value,atitle.text_value,t.title),COALESCE(ca.text_value,aa.text_value,t.artist),
- COALESCE(tt.source_kind IN ('filename_fallback','default_fallback'),false),m.position,t.disc_number,t.position,
- COALESCE(p.inferred,false),ca.track_id IS NULL AND (COALESCE(ao.source_kind='default_fallback',false)
-     OR (ao.id IS NULL AND t.artist='未知艺术家')),
- ct.track_id IS NULL AND COALESCE(tt.source_kind='default_fallback',false),
+ COALESCE((SELECT jsonb_object_agg(field_name,jsonb_build_object('source',source_kind,'inferred',inferred,'value',value))
+    FROM track_observations WHERE track_id=t.id AND field_name IS NOT NULL
+    AND ($2 OR field_name IN ('title','artist','track_number','disc_number'))),'{}'::jsonb),
+ ct.track_id IS NOT NULL,ca.track_id IS NOT NULL,atitle.track_id IS NOT NULL,aa.track_id IS NOT NULL,
+ m.position,t.disc_number,t.position,
+ EXISTS(SELECT FROM track_identifiers WHERE track_id=t.id AND kind IN ('mb_work','acoustid') AND value<>''),
  COALESCE(round((CASE WHEN dd.duration_seconds>0 AND dd.duration_seconds<'Infinity'::float8
      THEN dd.duration_seconds END)::numeric),0)::bigint,
  t.source_kind,t.source_root_id::text,COALESCE(t.cue_sheet_path,''),COALESCE(t.cue_parent_relative_path,''),COALESCE(t.cue_isrc,''),
- t.cue_index_frames,t.cue_end_frames,t.lyrics,el.track_id IS NOT NULL,COALESCE(tl.external_id,''),
+ t.cue_index_frames,t.cue_end_frames,CASE WHEN $2 THEN t.lyrics END,el.track_id IS NOT NULL,COALESCE(tl.external_id,''),
  COALESCE((SELECT jsonb_object_agg(tags.kind,tags.ids) FROM (
      SELECT kind,jsonb_agg(value ORDER BY ordinal,value) AS ids FROM track_identifiers
      WHERE track_id=t.id AND kind IN ('mb_release','mb_release_group','mb_recording','mb_track','mb_artist','mb_album_artist','mb_disc','isrc')
@@ -243,15 +317,12 @@ const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_
  LEFT JOIN track_auto_values atitle ON atitle.track_id=t.id AND atitle.field='title'
  LEFT JOIN track_auto_values aa ON aa.track_id=t.id AND aa.field='artist'
  LEFT JOIN track_display_durations dd ON dd.track_id=t.id
- LEFT JOIN track_observations p ON p.track_id=t.id AND p.field_name='track_number'
- LEFT JOIN track_observations ao ON ao.track_id=t.id AND ao.field_name='artist'
- LEFT JOIN track_observations tt ON tt.track_id=t.id AND tt.field_name='title'
  LEFT JOIN track_external_lyrics el ON el.track_id=t.id
  LEFT JOIN external_links tl ON tl.source='musicbrainz' AND tl.object_type='track' AND tl.object_id=t.id
  WHERE m.release_id=ANY($1::uuid[]) ORDER BY m.release_id,m.position,t.position,t.id`
 
-func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map[string]CurationEvidence) error {
-	rows, err := q.QueryContext(ctx, curationTrackSQL, ids)
+func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map[string]CurationEvidence, withDetails bool) error {
+	rows, err := q.QueryContext(ctx, curationTrackSQL, ids, withDetails)
 	if err != nil {
 		return err
 	}
@@ -260,14 +331,55 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 		var t CurationTrack
 		var releaseID string
 		var lyrics sql.NullString
-		var identifiers []byte
-		if err := rows.Scan(&releaseID, &t.ID, &t.Title, &t.Artist, &t.EffectiveTitle, &t.EffectiveArtist, &t.TitleInferred, &t.Disc, &t.DiscNumber, &t.Position, &t.PositionInferred,
-			&t.ArtistPlaceholder, &t.TitlePlaceholder, &t.DurationSeconds, &t.SourceKind, &t.SourceRootID, &t.CueSheetPath, &t.ParentFile, &t.CueISRC,
+		var identifiers, observations []byte
+		if err := rows.Scan(&releaseID, &t.ID, &t.Title, &t.Artist, &t.EffectiveTitle, &t.EffectiveArtist,
+			&observations, &t.TitleCorrected, &t.ArtistCorrected, &t.TitleAutomatic, &t.ArtistAutomatic, &t.Disc, &t.DiscNumber, &t.Position,
+			&t.OtherIdentifier, &t.DurationSeconds, &t.SourceKind, &t.SourceRootID, &t.CueSheetPath, &t.ParentFile, &t.CueISRC,
 			&t.CueIndexFrames, &t.CueEndFrames, &lyrics, &t.ExternalLyrics, &t.ExternalID, &identifiers); err != nil {
 			return err
 		}
+		var observed map[string]struct {
+			CurationObservation
+			Value string
+		}
+		if err := json.Unmarshal(observations, &observed); err != nil {
+			return err
+		}
+		t.TitleObservation = observed["title"].CurationObservation
+		t.ArtistObservation = observed["artist"].CurationObservation
+		t.PositionObservation = observed["track_number"].CurationObservation
+		auth := func(name, value string, corrected bool) metadata.Authenticity {
+			o := observed[name]
+			return metadata.FieldAuthenticity(name, value, o.Source, o.Inferred, corrected)
+		}
+		t.Authenticity = make(map[string]metadata.Authenticity, len(observed)+3)
+		for name, o := range observed {
+			t.Authenticity[name] = auth(name, o.Value, false)
+		}
+		t.Authenticity["title"] = auth("title", t.Title, t.TitleCorrected)
+		t.Authenticity["artist"] = auth("artist", t.Artist, t.ArtistCorrected)
+		t.Authenticity["position"] = auth("track_number", positiveNumber(t.Position), false)
+		t.Authenticity["disc"] = auth("disc_number", positiveNumber(t.DiscNumber), false)
+		t.Authenticity["duration_seconds"] = metadata.FieldAuthenticity("duration", positiveNumber(t.DurationSeconds), "", false, false)
+		t.TitlePlaceholder = t.Authenticity["title"] == metadata.Placeholder
+		t.ArtistPlaceholder = t.Authenticity["artist"] == metadata.Placeholder
+		t.TitleInferred = t.Authenticity["title"] == metadata.Inferred
+		t.PositionInferred = t.Authenticity["position"] != metadata.Real
+		t.EffectiveTitleAuth, t.EffectiveArtistAuth = t.Authenticity["title"], t.Authenticity["artist"]
+		if t.TitleAutomatic && !t.TitleCorrected {
+			t.EffectiveTitleAuth = metadata.Inferred
+		}
+		if t.ArtistAutomatic && !t.ArtistCorrected {
+			t.EffectiveArtistAuth = metadata.Inferred
+		}
 		if err := json.Unmarshal(identifiers, &t.Identifiers); err != nil {
 			return err
+		}
+		for kind := range t.Identifiers {
+			t.Authenticity[kind] = metadata.Real
+		}
+		if t.CueISRC != "" {
+			t.Authenticity["cue_isrc"] = metadata.Real
 		}
 		if lyrics.Valid {
 			_, t.LocalLyrics = ParseLyrics(lyrics.String)

@@ -90,7 +90,7 @@ type fingerprintHit struct {
 }
 
 func (fp *FingerprintStep) match(ctx context.Context, mode string, e catalog.CurationEvidence, f sources.ReleaseFinder, rf sources.RecordingFinder) (MatchResult, string, error) {
-	tracks := sampleFour(sortedTracks(e))
+	tracks := sampleFour(e.SortedTracks())
 	prints, err := fp.sample(ctx, tracks)
 	if err != nil {
 		return MatchResult{}, "used", err
@@ -138,7 +138,7 @@ func (fp *FingerprintStep) match(ctx context.Context, mode string, e catalog.Cur
 }
 
 func fingerprintReleases(e catalog.CurationEvidence, hits []fingerprintHit, sampled int) (releaseList, map[string]float64) {
-	discs := len(discPositions(e))
+	discs := len(e.DiscPositions())
 	list := releaseList{hit: true, recordingIDs: make(map[string]map[string]bool)}
 	var pages [][]sources.Release
 	trackScores := make([]map[string]float64, 0, len(hits))

@@ -8,6 +8,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -44,9 +45,10 @@ type MergeReleaseEvidence struct {
 const mergeLayoutTrackLimit = 300
 
 type mergeLayoutTrack struct {
-	Position   int    `json:"position"`
-	Title      string `json:"title"`
-	ExternalID string `json:"external_id"`
+	TitleAuthenticity metadata.Authenticity `json:"title_authenticity"`
+	Position          int                   `json:"position"`
+	Title             string                `json:"title"`
+	ExternalID        string                `json:"external_id"`
 }
 
 type mergeLayoutMedium struct {
@@ -221,7 +223,7 @@ func buildMergeLayout(plan governance.ReleaseMergePreview, entries map[string]ca
 		for id, entry := range entries {
 			for _, t := range entry.Tracks {
 				key := discKey{id, t.Disc}
-				tracks[key] = append(tracks[key], mergeLayoutTrack{t.Position, t.EffectiveTitle, t.ExternalID})
+				tracks[key] = append(tracks[key], mergeLayoutTrack{t.EffectiveTitleAuth, t.Position, t.EffectiveTitle, t.ExternalID})
 			}
 		}
 	}

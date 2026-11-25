@@ -89,7 +89,7 @@ func releasePages(pages [][]sources.Release) releaseList {
 
 func sampleISRCs(e catalog.CurationEvidence) [][]string {
 	var rows [][]string
-	for _, t := range sortedTracks(e) {
+	for _, t := range e.SortedTracks() {
 		if ids := trackISRCs(t); len(ids) > 0 {
 			rows = append(rows, ids)
 		}
@@ -230,15 +230,15 @@ func albumIdentifiers(ctx context.Context, e catalog.CurationEvidence, f sources
 			return DecideAlbum(e, "tag_id", []sources.Release{r}), nil
 		}
 	}
-	list, err := barcodeCandidates(ctx, f, e.Barcodes)
+	list, err := barcodeCandidates(ctx, f, e.SearchBarcodes())
 	if err != nil {
 		return MatchResult{}, err
 	}
 	if list.hit {
 		return fullCandidates(ctx, f, e, "barcode", list)
 	}
-	if e.CatalogNumber != "" {
-		items, err := found(f.ReleasesByCatalog(ctx, e.CatalogNumber, e.Label))
+	if number := e.Authenticity["catalog_number"].SearchValue(e.CatalogNumber); number != "" {
+		items, err := found(f.ReleasesByCatalog(ctx, number, e.Authenticity["label"].SearchValue(e.Label)))
 		if err != nil {
 			return MatchResult{}, err
 		}

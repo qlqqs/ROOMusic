@@ -17,10 +17,12 @@ import (
 
 type pendingSearchFinder struct {
 	b3MatchFinder
-	recordingSearch []sources.Recording
+	recordingSearch   []sources.Recording
+	recordingSearches int
 }
 
 func (f *pendingSearchFinder) SearchRecordings(context.Context, sources.RecordingQuery) ([]sources.Recording, error) {
+	f.recordingSearches++
 	return f.recordingSearch, nil
 }
 
@@ -76,13 +78,13 @@ func (f shelvedPendingFixture) pending(t *testing.T) curation.PendingItem {
 
 func (f shelvedPendingFixture) rejudge(t *testing.T) {
 	t.Helper()
-	// 将工作状态标为旧规则版本，让程序重新查询同一份目录证据。
-	f.exec(t, "UPDATE curation_work_states SET rule_version=$2 WHERE subject='release' AND target_id=$1", f.releaseID, StoredRuleVersion-1)
+	// 消费已登记的补查机会，用真实外部结果检查搁置项是否应重开。
+	f.exec(t, "UPDATE curation_work_states SET requery_match_version=$2 WHERE subject='release' AND target_id=$1", f.releaseID, MatchRuleVersion)
 	requirePendingRefreshOK(t, f.worker.walk(t.Context(), false, nil, false))
 	states, err := curation.LoadWorkStates(t.Context(), f.db, "release", []string{f.releaseID})
 	requirePendingRefreshOK(t, err)
-	if state := states[f.releaseID]; state.RuleVersion != StoredRuleVersion {
-		t.Fatalf("程序未重新判定发行，工作状态为 %+v", state)
+	if state := states[f.releaseID]; state.RequeryMatchVersion != 0 {
+		t.Fatalf("程序未消费补查机会，工作状态为 %+v", state)
 	}
 }
 
@@ -120,7 +122,8 @@ func RunShelvedPendingCases(t *testing.T, decline func(context.Context, *sql.DB,
 		f.finder.search = []sources.Release{candidate}
 		f.rejudge(t)
 		got := f.pending(t)
-		if got.ID != shelved.ID || got.InputDigest != shelved.InputDigest || got.Status != "waiting_model" || got.Attempts != 0 || got.ShelvedReason != nil {
+		if f.finder.searches != 2 || got.ID != shelved.ID || got.IdentityDigest != shelved.IdentityDigest ||
+			got.InputDigest != shelved.InputDigest || got.Status != "waiting_model" || got.Attempts != 0 || got.ShelvedReason != nil {
 			t.Fatalf("同摘要下出现新候选应重开原项 %s，清零次数并清空原因，得到状态 %s、摘要 %s、次数 %d、原因 %v",
 				shelved.ID, got.Status, got.InputDigest, got.Attempts, got.ShelvedReason)
 		}
@@ -146,10 +149,27 @@ func RunShelvedPendingCases(t *testing.T, decline func(context.Context, *sql.DB,
 			slices.Reverse(f.finder.search)
 			slices.Reverse(f.finder.recordingSearch)
 			f.rejudge(t)
+			if searches := f.finder.searches + f.finder.recordingSearches; searches != 2 {
+				t.Fatalf("应实际重新搜索以核对换序，搜索 %d 次", searches)
+			}
 			if got := f.pending(t); !reflect.DeepEqual(got, shelved) {
 				t.Fatalf("外部结果只换序时应保留搁置项，重判前状态 %s、候选 %s、冲突 %s，重判后状态 %s、候选 %s、冲突 %s",
 					shelved.Status, shelved.Candidates, shelved.Conflicts, got.Status, got.Candidates, got.Conflicts)
 			}
+
+			// 识别输入真正改变后，即使候选集合相同也应重新开放。
+			if kind == "release_match" {
+				f.exec(t, "UPDATE releases SET title='新专辑标题' WHERE id=$1", f.releaseID)
+			} else {
+				f.exec(t, "UPDATE tracks SET title='新录音标题' WHERE source_status='present' AND medium_id IN (SELECT id FROM media WHERE release_id=$1)", f.releaseID)
+			}
+			requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
+			updated := f.pending(t)
+			if updated.ID != claimed.ID || updated.Status != "waiting_model" || updated.IdentityDigest == claimed.IdentityDigest ||
+				updated.Attempts != 0 || updated.ShelvedReason != nil {
+				t.Fatalf("识别输入变化应重开原待定项，原项 %+v，更新后 %+v", shelved, updated)
+			}
+			requirePendingCandidates(t, updated, firstID, secondID)
 		})
 	}
 

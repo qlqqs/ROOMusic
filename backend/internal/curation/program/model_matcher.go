@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -57,6 +58,102 @@ func (m *ModelMatcher) evidence(ctx context.Context, q operations.Queryer, id st
 		return e, staleItem()
 	}
 	return e, nil
+}
+
+// AnnotatePendingEvidence 读取尚无真实性标记的旧项；只给完整指纹吻合的发行附上当前来源。
+func (m *ModelMatcher) AnnotatePendingEvidence(ctx context.Context, items []curation.PendingItem) error {
+	var ids, artistIDs []string
+	var artistIndices, indices []int
+	for i, item := range items {
+		if item.Kind != "release_match" && item.Kind != "recording_match" && item.Kind != "artist_identity" {
+			continue
+		}
+		var stored struct{ Authenticity json.RawMessage }
+		if err := json.Unmarshal(item.Evidence, &stored); err != nil {
+			return err
+		}
+		if stored.Authenticity == nil {
+			if item.Kind == "artist_identity" {
+				artistIDs = append(artistIDs, item.ArtistID)
+				artistIndices = append(artistIndices, i)
+				continue
+			}
+			ids = append(ids, item.TargetID)
+			indices = append(indices, i)
+		}
+	}
+	if len(ids)+len(artistIDs) == 0 {
+		return nil
+	}
+	tx, err := m.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if len(artistIDs) > 0 {
+		page, err := artistMediaPage(ctx, tx, `SELECT unnest($1::uuid[])`, artistIDs)
+		if err != nil {
+			return err
+		}
+		byID := map[string]artistEvidence{}
+		for _, e := range page {
+			byID[e.ID] = e
+		}
+		for _, i := range artistIndices {
+			item := &items[i]
+			e, ok := byID[item.ArtistID]
+			if !ok {
+				continue
+			}
+			var stored map[string]json.RawMessage
+			if err := json.Unmarshal(item.Evidence, &stored); err != nil {
+				return err
+			}
+			if !sameArtistSamples(stored, e) {
+				continue
+			}
+			stored["authenticity"] = jsonValue(e.sampleAuthenticity())
+			item.Evidence = jsonValue(stored)
+		}
+	}
+	if len(ids) == 0 {
+		return tx.Commit()
+	}
+	entries, err := catalog.LoadCurationEvidence(ctx, tx, ids, m.writer.ArtworkExists)
+	if err != nil {
+		return err
+	}
+	states, err := curation.LoadWorkStates(ctx, tx, "release", ids)
+	if err != nil {
+		return err
+	}
+	for _, i := range indices {
+		item := &items[i]
+		e, ok := entries[item.TargetID]
+		if !ok || ReleaseDigest(e) != item.InputDigest {
+			continue
+		}
+		var matched struct{ Method string }
+		state := states[item.TargetID]
+		if state.InputDigest == item.InputDigest && len(state.Result) > 0 {
+			if err := json.Unmarshal(state.Result, &matched); err != nil {
+				return err
+			}
+		}
+		item.Evidence = jsonValue(pendingMatchEvidence(e, matched.Method))
+	}
+	return tx.Commit()
+}
+
+func sameArtistSamples(stored map[string]json.RawMessage, current artistEvidence) bool {
+	// JSONB 的空白与键顺序不代表样本变化。
+	for name, now := range map[string]json.RawMessage{"albums": current.Albums, "tracks": current.Tracks, "names": jsonValue(current.Names)} {
+		var before, after any
+		if json.Unmarshal(stored[name], &before) != nil || json.Unmarshal(now, &after) != nil || !reflect.DeepEqual(before, after) {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *ModelMatcher) Plan(ctx context.Context, item curation.PendingItem, externalID string) (MatchPlan, error) {
@@ -177,7 +274,7 @@ func (m *ModelMatcher) readMatch(ctx context.Context, kind string, e catalog.Cur
 		if release.ID != id {
 			return r, matchConflict("external_id_mismatch")
 		}
-		if len(discPositions(e)) != len(release.Media) {
+		if len(e.DiscPositions()) != len(release.Media) {
 			return r, matchConflict("media_count_mismatch")
 		}
 		var c comparison
@@ -277,7 +374,9 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 		state.Generation++
 		state.Attempts++
 	}
-	state.Subject, state.TargetID, state.RuleVersion = "release", fresh.ID, StoredRuleVersion
+	state.Subject, state.TargetID, state.RuleVersion = "release", fresh.ID, MatchRuleVersion
+	releaseInputs(fresh).record(&state)
+	state.MatchRuleVersion, state.RequeryMatchVersion = MatchRuleVersion, 0
 	state.Status, state.InputDigest, state.Result = "matched", digest, releaseResult(conclusion)
 	state.RetryCount, state.NextAttemptAt = 0, nil
 	if err := curation.SaveWorkState(ctx, tx, state); err != nil {
