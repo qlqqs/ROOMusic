@@ -83,6 +83,9 @@ func (s *Service) Command(ctx context.Context, userID, zoneID string, command Co
 }
 
 func (s *Service) commandLocked(ctx context.Context, userID string, z *zoneRuntime, c Command) (CommandResult, error) {
+	if z.device.Kind == "subsonic" && c.Command != "set_settings" {
+		return CommandResult{}, ErrClientPlayback
+	}
 	if c.ExpectedRevision != nil && z.persisted.Revision != *c.ExpectedRevision {
 		return CommandResult{}, ErrRevisionConflict
 	}

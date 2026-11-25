@@ -12,6 +12,8 @@ G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间�
 - `Tool.Reserve(ctx, n) (*Reservation, error)` 原子预留多个名额；`Reservation.Start(ctx, StartOptions)`、`Tool.Start(ctx, StartOptions)` 返回 `*Process`。
 - `Process` 实现 Read/Write/Wait/Close，另有 CloseInput、Stdout。Source 经 fd 3 借用，所有者仍须关闭原句柄。自然结束先 CloseInput、读到 EOF、Wait，最后必须 Close。
 - `render.New(Options{FFmpeg, Sources, Clock, NewTicker, Logger}) *Renderer`；实现 zones 两个端口；`Renderer.Close()` 等待资源回收。
+- `Tool.TryReserve(n) (*Reservation, error)`：不等待，名额不够立即返回错误；Subsonic 单曲渲染用它，“服务器忙”时不排队。
+- `Renderer.RenderTrack(ctx, zones.TrackRender{UserID, TrackID, Settings, Codec, BitRate, StartSeconds}) (io.ReadCloser, zones.StreamFormat, error)`：实现 `zones.SingleTrackRenderer`，见 §14。`render.HasProcessing(zones.ZoneSettings) bool` 判断设置里有没有任何处理（直发原文件的前提）。
 - `TrackSource.Prepare(ctx, userID, trackID) (Track, error)`；Track 包含源格式、IsFloat、文件、时长、发行、首尾静音、曲目/专辑增益。`CueStartFrame/CueEndFrame` 以源 PCM 帧计，用于 CUE 截取，不是数据库的 CUE 75 Hz 索引。
 - `playback.WithRenderDecoders(RenderDecoders)`、`Service.RenderFormats() []Format`、`Service.OpenForRender(ctx, trackID) (*RenderSource, error)`；RenderDecoders 只含 HasDecoder。
 - `app.OpenRenderer(ctx, settings, logger) (*ffmpeg.Tool, error)`；`app.WithRenderer(tool)` 注入工具，由 app 组合 playback 和 catalog 公开合同。
@@ -149,3 +151,12 @@ G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间�
 - 设置及验证见[合同 §9](./zones-data-contracts.md#9-降混设置文档0046)。
 
 错误：ffmpeg 与链重复混合。正确：仅矩阵或 Tail 缩减，交付格式等于链输出。
+
+## 14. 单曲渲染（Subsonic `stream`，2026-11-25）
+
+- **共用路径**：会话与单曲共用 `prepareSource`、`validateTrack`、`Negotiate`、`concreteFormat`、`prepareTrackPipeline`（装载卷积、构链、预留名额、启动编码与解码）和 `pcmOutput.block`（处理、量化、编码）。会话仍由自己的循环负责输入提交边界、就绪通知、计时、事件和播放头控速，行为与时序不变。
+- **单曲**：没有 Cursor、接续、交叉渐变和播放头，不派发事件；直接读同一个解码器，处理带 EOF 的最后一块和处理链尾帧，等编码器结束。背压只来自 HTTP 写出，不按播放进度控速。
+- **名额**：装载卷积前先 `TryReserve`；PCM 源的解码与编码一起预留，DSD 只占编码名额。拿不到时返回错误，由 Subsonic 层报 0“服务器忙”。
+- **起点**：`StartSeconds` 换成源帧号加到 CUE 起点上，交给解码器起点。
+- **格式**：FLAC 保留源采样率与位深；Opus 固定 48 kHz，默认 192 kbps；MP3、AAC 取 44.1 或 48 kHz，默认 256 kbps；给了 `BitRate` 用它。启动时没有 libmp3lame 时 MP3 请求改用 Opus，返回的 `StreamFormat.MimeType` 如实标明。
+- **回收**：`Close` 或请求上下文取消都会解除管道阻塞并结束解码与编码进程。

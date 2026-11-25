@@ -91,11 +91,27 @@ func (s *Service) Record(ctx context.Context, userID, idempotencyKey, trackID st
 	if !meetsThreshold(duration, playedSeconds) {
 		return Recorded{}, ErrPlayTooShort
 	}
+	return s.insert(ctx, userID, idempotencyKey, trackID, playedSeconds, nil)
+}
+
+// RecordTrackAt 按曲目完整时长记录客户端申报的播放时间。
+func (s *Service) RecordTrackAt(ctx context.Context, userID, idempotencyKey, trackID string, at time.Time) (Recorded, error) {
+	duration, err := s.catalog.LoadTrackDuration(ctx, trackID)
+	if err != nil {
+		return Recorded{}, err
+	}
+	if !ValidPlayedSeconds(duration) {
+		return Recorded{}, ErrInvalidPlay
+	}
+	return s.insert(ctx, userID, idempotencyKey, trackID, duration, &at)
+}
+
+func (s *Service) insert(ctx context.Context, userID, idempotencyKey, trackID string, playedSeconds float64, at *time.Time) (Recorded, error) {
 	var recorded Recorded
-	err = s.database.QueryRowContext(ctx, `INSERT INTO play_history (user_id, track_id, idempotency_key, played_seconds)
-		VALUES ($1::uuid, $2::uuid, $3::uuid, $4)
+	err := s.database.QueryRowContext(ctx, `INSERT INTO play_history (user_id, track_id, idempotency_key, played_seconds, played_at)
+		VALUES ($1::uuid, $2::uuid, $3::uuid, $4, COALESCE($5::timestamptz, now()))
 		ON CONFLICT (user_id, idempotency_key) DO NOTHING
-		RETURNING id::text, track_id::text, played_at`, userID, trackID, idempotencyKey, playedSeconds).Scan(&recorded.ID, &recorded.TrackID, &recorded.PlayedAt)
+		RETURNING id::text, track_id::text, played_at`, userID, trackID, idempotencyKey, playedSeconds, at).Scan(&recorded.ID, &recorded.TrackID, &recorded.PlayedAt)
 	switch {
 	case err == nil:
 		recorded.PlayedAt = recorded.PlayedAt.UTC()

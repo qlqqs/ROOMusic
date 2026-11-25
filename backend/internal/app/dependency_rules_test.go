@@ -56,7 +56,7 @@ var packageRules = map[string]packageRule{
 	"subsonic/protocol":                 {http: true},
 	"subsonic":                          {imports: []string{"catalog", "subsonic/protocol"}},
 	"subsonic/auth":                     {imports: []string{"identity", "platform/secret", "subsonic/protocol"}},
-	"subsonic/httpapi":                  {imports: []string{"catalog", "identity", "listening", "personal", "platform/uuid", "platform/httpserver", "subsonic", "subsonic/auth", "subsonic/protocol", "zones"}, http: true},
+	"subsonic/httpapi":                  {imports: []string{"catalog", "identity", "listening", "personal", "playback", "playback/render", "zones", "platform/uuid", "platform/httpserver", "subsonic", "subsonic/auth", "subsonic/protocol"}, http: true},
 	"platform/secret":                   {},
 	"sources":                           {imports: []string{"platform/egress", "platform/buildinfo"}, http: true},
 	"sources/coverartarchive":           {imports: []string{"sources", "sources/musicbrainz", "platform/uuid"}},

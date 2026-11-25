@@ -373,6 +373,13 @@ func TestPostgreSQLZonesAPIResponseSamples(t *testing.T) {
 	}
 
 	c.groupSamples()
+	// 使用独立用户与播放区，快照只包含真实协议请求登记的客户端。
+	streamFixture := newJukeboxPlaybackFixture(t)
+	params := subsonicParameters(jukeboxMember, subsonicPassword, "plain")
+	params.Set("c", "合成播放器")
+	requireSubsonicOK(t, requestSubsonic(streamFixture.integrationTestApplication, "GET", "ping", params))
+	streamCalls := zonesSampleCalls{t: t, f: streamFixture}
+	samples.record("playback-zones/responses/snapshot-subsonic-device", streamCalls.call("", "GET", "", nil, 200), 200)
 	samples.finish()
 }
 

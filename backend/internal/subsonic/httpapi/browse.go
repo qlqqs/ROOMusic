@@ -15,15 +15,19 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/listening"
 	"github.com/qlqq/roomusic/backend/internal/personal"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/playback"
+	"github.com/qlqq/roomusic/backend/internal/playback/render"
 	"github.com/qlqq/roomusic/backend/internal/subsonic/protocol"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
 type Browse struct {
+	Zones         *zones.Service
+	Playback      *playback.Service
+	Renderer      zones.SingleTrackRenderer
 	Catalog       *catalog.Store
 	Personal      *personal.Service
 	Listening     *listening.Service
-	Zones         *zones.Service
 	ReadArtwork   func(ctx context.Context, id string, head bool) (string, []byte, error)
 	DataDirectory string
 }
@@ -33,10 +37,12 @@ var errNotFound = errors.New("not found")
 
 func browseFailure(err error) protocol.Response {
 	switch {
-	case errors.Is(err, errParameter):
+	case errors.Is(err, render.ErrBusy):
+		return protocol.Failure(protocol.General, "服务器忙")
+	case errors.Is(err, errParameter), errors.Is(err, zones.ErrInvalidInput):
 		return protocol.Failure(protocol.MissingParameter, "Invalid or missing parameter")
-	case errors.Is(err, errNotFound), errors.Is(err, sql.ErrNoRows), errors.Is(err, fs.ErrNotExist),
-		errors.Is(err, catalog.ErrReleaseGroupNotFound), errors.Is(err, catalog.ErrArtistNotFound), errors.Is(err, catalog.ErrTrackNotFound), errors.Is(err, personal.ErrNotFound):
+	case errors.Is(err, playback.ErrRootDisabled), errors.Is(err, playback.ErrTrackNotFound), errors.Is(err, catalog.ErrTrackNotFound), errors.Is(err, playback.ErrSourceUnavailable), errors.Is(err, playback.ErrSourceChanged), errors.Is(err, errNotFound), errors.Is(err, sql.ErrNoRows), errors.Is(err, fs.ErrNotExist),
+		errors.Is(err, catalog.ErrReleaseGroupNotFound), errors.Is(err, catalog.ErrArtistNotFound), errors.Is(err, personal.ErrNotFound):
 		return protocol.Failure(protocol.NotFound, "Requested data was not found")
 	default:
 		return protocol.Failure(protocol.General, "Service unavailable")

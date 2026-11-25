@@ -14,6 +14,7 @@ import (
 )
 
 type Handlers struct {
+	nowPlaying      nowPlayingStore
 	browse          Browse
 	artworkFlights  singleflight.Group
 	binaryEndpoints map[string]func(http.ResponseWriter, *http.Request) error
@@ -24,6 +25,7 @@ type Handlers struct {
 }
 
 type userKey struct{}
+type clientZoneKey struct{}
 
 func Register(mux *http.ServeMux, service *auth.Service, guard *identity.Guard, version string, browse Browse) {
 	if version == "" {
@@ -39,11 +41,14 @@ func Register(mux *http.ServeMux, service *auth.Service, guard *identity.Guard, 
 			return protocol.Response{Extensions: []protocol.Extension{
 				{Name: "formPost", Versions: []int{1}},
 				{Name: "songLyrics", Versions: []int{1}},
+				{Name: "transcodeOffset", Versions: []int{1}},
 			}}
 		},
 		"getMusicFolders": func(*http.Request) protocol.Response {
 			return protocol.Response{MusicFolders: &protocol.MusicFolders{Folders: []protocol.MusicFolder{{ID: 1, Name: "ROOMusic"}}}}
 		},
+		"scrobble":          h.scrobble,
+		"getNowPlaying":     h.getNowPlaying,
 		"getUser":           getUser,
 		"setRating":         h.setRating,
 		"getArtists":        h.getArtists,
@@ -68,7 +73,7 @@ func Register(mux *http.ServeMux, service *auth.Service, guard *identity.Guard, 
 		"getLyrics":         h.getLyrics,
 		"jukeboxControl":    h.jukeboxControl,
 	}
-	h.binaryEndpoints = map[string]func(http.ResponseWriter, *http.Request) error{"getCoverArt": h.getCoverArt}
+	h.binaryEndpoints = map[string]func(http.ResponseWriter, *http.Request) error{"getCoverArt": h.getCoverArt, "stream": h.stream, "download": h.download}
 	mux.HandleFunc("/rest/", h.rest)
 	mux.HandleFunc("GET /api/v1/me/subsonic", h.me)
 	mux.HandleFunc("PUT /api/v1/me/subsonic", h.setJukeboxZone)
@@ -107,6 +112,12 @@ func (h *Handlers) rest(w http.ResponseWriter, r *http.Request) {
 	}
 	httpserver.SetActor(r, user.ID)
 	r = r.WithContext(context.WithValue(r.Context(), userKey{}, user))
+	_, zone, err := h.browse.Zones.EnsureClientDevice(r.Context(), user.ID, params.Values.Get("c"))
+	if err != nil {
+		write(200, browseFailure(err))
+		return
+	}
+	r = r.WithContext(context.WithValue(r.Context(), clientZoneKey{}, zone))
 	if binary != nil {
 		if err := binary(w, r); err != nil {
 			write(200, browseFailure(err))

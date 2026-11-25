@@ -58,7 +58,17 @@ type User struct {
 	Folders             []int  `xml:"folder" json:"folder"`
 }
 
+type NowPlaying struct {
+	Entries []NowPlayingEntry `xml:"entry" json:"entry"`
+}
+type NowPlayingEntry struct {
+	Song
+	Username   string `xml:"username,attr" json:"username"`
+	MinutesAgo int    `xml:"minutesAgo,attr" json:"minutesAgo"`
+	PlayerName string `xml:"playerName,attr" json:"playerName"`
+}
 type Response struct {
+	NowPlaying    *NowPlaying   `xml:"nowPlaying,omitempty" json:"nowPlaying,omitempty"`
 	XMLName       xml.Name      `xml:"http://subsonic.org/restapi subsonic-response" json:"-"`
 	Status        string        `xml:"status,attr" json:"status"`
 	Version       string        `xml:"version,attr" json:"version"`

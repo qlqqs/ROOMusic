@@ -28,10 +28,14 @@ func (s *Service) prepareManagedCommand(ctx context.Context, userID string, u *u
 		return ErrNotFound
 	}
 	source.mu.Lock()
+	unsupported := source.device.Kind == "subsonic" && c.Command != "set_settings"
 	grouped := source.leaderZoneID != ""
 	visible := source.visible()
 	revision := source.persisted.Revision
 	source.mu.Unlock()
+	if unsupported {
+		return ErrClientPlayback
+	}
 	if grouped && startsOutput(c.Command) {
 		return ErrDeviceGrouped
 	}

@@ -41,6 +41,9 @@ func (s *Service) ClaimOutput(ctx context.Context, userID, deviceID string, inpu
 			s.publishZone(userID, result.Zone)
 		}
 	}()
+	if z.device.Kind == "subsonic" {
+		return ClaimOutputResult{}, ErrClientPlayback
+	}
 	if managedKind(z.device.Kind) != input.Managed || !z.visible() {
 		return ClaimOutputResult{}, ErrNotFound
 	}
