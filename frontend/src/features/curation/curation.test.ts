@@ -8,7 +8,7 @@ const settings = (patch: Partial<CurationSettingsDTO> = {}): CurationSettingsDTO
   active: true, enabled: true, enabled_at: "2026-01-01T00:00:00Z", enabled_by: { id: "00000000-0000-4000-8000-000000000001", username: "curator" }, inactive_reason: null, paused: false, model: "", daily_token_limit: 10_000_000, ...patch,
 });
 const progress = (state: CurationProgressDTO["state"], total = 3): CurationProgressDTO => ({
-  batch: null, last_pass_finished_at: null, model: { daily_token_limit: null, items: { in_progress: 0, shelved: 0, waiting_human: 0, waiting_model: 0 }, model: "", state: "disabled", today: { date: "2026-01-01", input_tokens: 0, output_tokens: 0 }, unavailable_reason: null }, pending: { waiting_model: 0 }, releases: { total, processed: 0, matched: 0, uncertain: 0, no_match: 0, try_later: 0 }, rule_version: 101, state,
+  batch: null, last_pass_finished_at: null, model: { daily_token_limit: null, items: { in_progress: 0, shelved: 0, waiting_human: 0, waiting_model: 0 }, model: "", state: "disabled", today: { date: "2026-01-01", input_tokens: 0, output_tokens: 0 }, unavailable_reason: null }, pending: { waiting_model: 0 }, releases: { total, processed: 0, matched: 0, uncertain: 0, no_match: 0, try_later: 0, unlisted: 0, no_usable_candidates: 0 }, rule_version: 101, state,
 });
 
 describe("进度的轮询", () => {

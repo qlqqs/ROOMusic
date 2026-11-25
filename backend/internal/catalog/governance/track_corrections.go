@@ -36,7 +36,7 @@ func (s *Store) LoadTrackCorrectionState(ctx context.Context, trackID string) (T
 func (s *Store) loadTrackCorrectionState(ctx context.Context, trackID string, present bool) (TrackCorrectionState, error) {
 	rows, err := s.database.QueryContext(ctx, `SELECT t.id::text, m.release_id::text, t.edit_revision,
 		f.field, f.scan_value, f.effective, COALESCE(obs.inferred,false),
-		c.text_value, a.text_value, a.operation_id::text, o.origin->>'provider_kind', o.origin->>'provider'
+		c.text_value, a.text_value, a.operation_id::text, o.origin->>'provider_kind', o.origin->>'provider',COALESCE(a.writer_level,0),a.scan_basis
 		FROM tracks t JOIN media m ON m.id=t.medium_id JOIN track_effective e ON e.id=t.id
 		CROSS JOIN LATERAL (VALUES (1,'title',t.title,e.title),(2,'artist',t.artist,e.artist)) f(position,field,scan_value,effective)
 		LEFT JOIN track_observations obs ON obs.track_id=t.id AND obs.field_name=f.field
@@ -52,9 +52,11 @@ func (s *Store) loadTrackCorrectionState(ctx context.Context, trackID string, pr
 	for rows.Next() {
 		var f CorrectionField
 		var corrected, automatic, operation, providerKind, provider sql.NullString
+		var level catalog.AutoWriterLevel
+		var basis []byte
 		var scan, effective string
 		if err := rows.Scan(&state.TrackID, &state.ReleaseID, &state.Revision, &f.Field, &scan, &effective, &f.Uncertain,
-			&corrected, &automatic, &operation, &providerKind, &provider); err != nil {
+			&corrected, &automatic, &operation, &providerKind, &provider, &level, &basis); err != nil {
 			return TrackCorrectionState{}, fmt.Errorf("%w: read track correction field: %w", catalog.ErrQuery, err)
 		}
 		f.ScanValue, f.EffectiveValue = scan, effective
@@ -63,7 +65,7 @@ func (s *Store) loadTrackCorrectionState(ctx context.Context, trackID string, pr
 		}
 		if automatic.Valid {
 			f.Auto = &catalog.AutoValue{Mode: catalog.CorrectionSet, Value: automatic.String, OperationID: operation.String,
-				ProviderKind: providerKind.String, Provider: provider.String}
+				ProviderKind: providerKind.String, Provider: provider.String, WriterLevel: level, ScanBasis: basis}
 		}
 		state.Fields = append(state.Fields, f)
 	}

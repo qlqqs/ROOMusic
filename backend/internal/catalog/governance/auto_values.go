@@ -143,12 +143,27 @@ func (r *LockedAutoRelease) Current(field string) (catalog.AutoValue, bool) {
 
 type ownedAutoIntent struct {
 	catalog.CorrectionIntent
-	OperationID string `json:"operation_id"`
+	OperationID string                  `json:"operation_id"`
+	WriterLevel catalog.AutoWriterLevel `json:"writer_level,omitempty"`
+	ScanBasis   json.RawMessage         `json:"scan_basis,omitempty"`
+}
+
+func ownedIntent(v catalog.AutoValue) *ownedAutoIntent {
+	return &ownedAutoIntent{CorrectionIntent: v.Intent(), OperationID: v.OperationID, WriterLevel: v.WriterLevel, ScanBasis: v.ScanBasis}
 }
 
 type autoFieldState struct {
-	Auto      *ownedAutoIntent `json:"auto"`
-	Effective any              `json:"effective"`
+	InvalidatingScan json.RawMessage  `json:"scan_value,omitempty"`
+	Auto             *ownedAutoIntent `json:"auto"`
+	Effective        any              `json:"effective"`
+}
+
+// 普通补全的展示沿用原合同，作废记录另展示作废依据及其变化。
+func (s autoFieldState) display() autoFieldState {
+	if s.Auto != nil && s.InvalidatingScan == nil {
+		s.Auto = &ownedAutoIntent{CorrectionIntent: s.Auto.CorrectionIntent, OperationID: s.Auto.OperationID}
+	}
+	return s
 }
 
 type autoRecordState struct {
@@ -156,15 +171,32 @@ type autoRecordState struct {
 }
 
 // Write 写入已由 NormalizeAutoFields 规范化、由调用方过滤后的字段，返回供 Run 保存的前后态。
-func (r *LockedAutoRelease) Write(ctx context.Context, operationID string, fields map[string]catalog.CorrectionIntent) (operations.Outcome, error) {
+func (r *LockedAutoRelease) Write(ctx context.Context, operationID string, fields map[string]catalog.CorrectionIntent, level catalog.AutoWriterLevel, expected map[string]json.RawMessage) (operations.Outcome, error) {
+	return writeAutoFields(ctx, r, operationID, fields, level, expected)
+}
+
+func writeAutoFields(ctx context.Context, target lockedAutoFields, operationID string, fields map[string]catalog.CorrectionIntent, level catalog.AutoWriterLevel, expected map[string]json.RawMessage) (operations.Outcome, error) {
 	if len(fields) == 0 {
 		return operations.Outcome{}, operations.Conflict("nothing_to_apply", "没有需要写入的自动值")
 	}
+	scan, err := target.scanBasis(ctx)
+	if err != nil {
+		return operations.Outcome{}, err
+	}
 	next := make(map[string]*ownedAutoIntent, len(fields))
 	for name, intent := range fields {
-		next[name] = &ownedAutoIntent{CorrectionIntent: intent, OperationID: operationID}
+		if expected != nil {
+			same, err := sameScanValue(expected[name], scan[name])
+			if err != nil {
+				return operations.Outcome{}, err
+			}
+			if !same {
+				return operations.Outcome{}, operations.Conflict("item_stale", "计划依据的扫描值已变更")
+			}
+		}
+		next[name] = &ownedAutoIntent{CorrectionIntent: intent, OperationID: operationID, WriterLevel: level, ScanBasis: scan[name]}
 	}
-	return r.replace(ctx, next)
+	return target.replace(ctx, next)
 }
 
 // replace 在改写前后读取有效值。撤销时 next 携带原写入者，空指针表示原先没有自动行。
@@ -182,16 +214,10 @@ func (r *LockedAutoRelease) replace(ctx context.Context, next map[string]*ownedA
 		}
 		previous := autoFieldState{Effective: effective[i]}
 		if old, exists := r.current[field.Name]; exists {
-			previous.Auto = &ownedAutoIntent{old.Intent(), old.OperationID}
+			previous.Auto = ownedIntent(old)
 		}
 		before.Fields[field.Name] = previous
-		var intent *catalog.CorrectionIntent
-		var owner string
-		if value != nil {
-			intent = &value.CorrectionIntent
-			owner = value.OperationID
-		}
-		if err := writeFieldIntent(ctx, r.tx, "release_auto_values", r.id, field, intent, owner); err != nil {
+		if err := r.writeIntent(ctx, field, value); err != nil {
 			return operations.Outcome{}, err
 		}
 	}
@@ -207,8 +233,26 @@ func (r *LockedAutoRelease) replace(ctx context.Context, next map[string]*ownedA
 	}
 	for i, field := range catalog.CorrectableFields {
 		if value, ok := next[field.Name]; ok {
-			after.Fields[field.Name] = autoFieldState{value, effective[i]}
+			after.Fields[field.Name] = autoFieldState{Auto: value, Effective: effective[i]}
 		}
 	}
 	return operations.Outcome{TargetType: operations.TargetRelease, TargetID: r.id, ExpectedRevision: r.revision, ResultRevision: r.revision + 1, Before: before, After: after}, nil
+}
+
+func (r *LockedAutoRelease) scanBasis(ctx context.Context) (map[string]json.RawMessage, error) {
+	return catalog.ReleaseScanBasis(ctx, r.tx, r.id)
+}
+
+func (r *LockedAutoRelease) writeIntent(ctx context.Context, field catalog.CorrectableField, value *ownedAutoIntent) error {
+	if value == nil {
+		_, err := r.tx.ExecContext(ctx, "DELETE FROM release_auto_values WHERE release_id=$1 AND field=$2", r.id, field.Name)
+		return err
+	}
+	text, year, genres := intentColumns(field, &value.CorrectionIntent)
+	_, err := r.tx.ExecContext(ctx, `INSERT INTO release_auto_values(release_id,field,mode,text_value,year_value,list_value,operation_id,writer_level,scan_basis)
+		VALUES($1,$2,$3,$4,$5,$6::text[],$7,NULLIF($8::smallint,0),$9::jsonb) ON CONFLICT(release_id,field) DO UPDATE SET
+		mode=excluded.mode,text_value=excluded.text_value,year_value=excluded.year_value,list_value=excluded.list_value,
+		operation_id=excluded.operation_id,writer_level=excluded.writer_level,scan_basis=excluded.scan_basis`,
+		r.id, field.Name, value.Mode, text, year, genres, value.OperationID, value.WriterLevel, []byte(value.ScanBasis))
+	return err
 }

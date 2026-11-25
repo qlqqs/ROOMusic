@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 )
 
 // 修正的三种修改方式：set 与 null 是存下来的意图，clear 删除意图（显示下一层的值）。
@@ -153,13 +155,35 @@ func decodeIntent(name, mode string, text, listJSON sql.NullString, year sql.Nul
 	return intent, nil
 }
 
+type AutoWriterLevel int16
+
+const (
+	LevelModelLocal AutoWriterLevel = iota + 1
+	LevelModelReference
+	LevelModelExternal
+	LevelProgramExternal
+)
+
+// EffectiveLevel 只在读取缺少级别的旧自动行时使用。
+func (v AutoValue) EffectiveLevel() AutoWriterLevel {
+	if v.WriterLevel != 0 {
+		return v.WriterLevel
+	}
+	if v.ProviderKind == "source" {
+		return LevelProgramExternal
+	}
+	return LevelModelExternal
+}
+
 // AutoValue 是自动层当前的意图与来源。明确留空时只记录模式。
 type AutoValue struct {
-	Mode         string `json:"mode"`
-	Value        any    `json:"value,omitempty"`
-	OperationID  string `json:"operation_id"`
-	ProviderKind string `json:"provider_kind"`
-	Provider     string `json:"provider"`
+	WriterLevel  AutoWriterLevel `json:"-"`
+	ScanBasis    json.RawMessage `json:"-"`
+	Mode         string          `json:"mode"`
+	Value        any             `json:"value,omitempty"`
+	OperationID  string          `json:"operation_id"`
+	ProviderKind string          `json:"provider_kind"`
+	Provider     string          `json:"provider"`
 }
 
 // Intent 返回可与规范化请求比较的意图。
@@ -169,7 +193,7 @@ func (v AutoValue) Intent() CorrectionIntent {
 
 func LoadAutoValues(ctx context.Context, database Queryer, releaseID string) (map[string]AutoValue, error) {
 	rows, err := database.QueryContext(ctx, `SELECT a.field, a.mode, a.text_value, a.year_value, to_jsonb(a.list_value)::text,
- a.operation_id::text, o.origin->>'provider_kind', o.origin->>'provider'
+ a.operation_id::text, o.origin->>'provider_kind', o.origin->>'provider', COALESCE(a.writer_level,0),a.scan_basis
  FROM release_auto_values a JOIN operations o ON o.id=a.operation_id WHERE a.release_id=$1::uuid`, releaseID)
 	if err != nil {
 		return nil, err
@@ -179,9 +203,10 @@ func LoadAutoValues(ctx context.Context, database Queryer, releaseID string) (ma
 	for rows.Next() {
 		var name string
 		var value AutoValue
+		var basis []byte
 		var text, list sql.NullString
 		var year sql.NullInt64
-		if err := rows.Scan(&name, &value.Mode, &text, &year, &list, &value.OperationID, &value.ProviderKind, &value.Provider); err != nil {
+		if err := rows.Scan(&name, &value.Mode, &text, &year, &list, &value.OperationID, &value.ProviderKind, &value.Provider, &value.WriterLevel, &basis); err != nil {
 			return nil, err
 		}
 		intent, err := decodeIntent(name, value.Mode, text, list, year)
@@ -189,6 +214,7 @@ func LoadAutoValues(ctx context.Context, database Queryer, releaseID string) (ma
 			return nil, err
 		}
 		value.Value = intent.Value
+		value.ScanBasis = basis
 		values[name] = value
 	}
 	return values, rows.Err()
@@ -218,7 +244,7 @@ func LoadTrackCorrectionIntents(ctx context.Context, database Queryer, trackID s
 
 func LoadTrackAutoValues(ctx context.Context, database Queryer, trackID string) (map[string]AutoValue, error) {
 	rows, err := database.QueryContext(ctx, `SELECT a.field, a.mode, a.text_value, a.operation_id::text,
-		o.origin->>'provider_kind', o.origin->>'provider'
+		o.origin->>'provider_kind', o.origin->>'provider', COALESCE(a.writer_level,0),a.scan_basis
 		FROM track_auto_values a JOIN operations o ON o.id=a.operation_id WHERE a.track_id=$1::uuid`, trackID)
 	if err != nil {
 		return nil, err
@@ -228,11 +254,24 @@ func LoadTrackAutoValues(ctx context.Context, database Queryer, trackID string) 
 	for rows.Next() {
 		var field, text string
 		var value AutoValue
-		if err := rows.Scan(&field, &value.Mode, &text, &value.OperationID, &value.ProviderKind, &value.Provider); err != nil {
+		var basis []byte
+		if err := rows.Scan(&field, &value.Mode, &text, &value.OperationID, &value.ProviderKind, &value.Provider, &value.WriterLevel, &basis); err != nil {
 			return nil, err
 		}
 		value.Value = text
+		value.ScanBasis = basis
 		values[field] = value
 	}
 	return values, rows.Err()
+}
+
+// ReleaseScanBasis 返回可修正字段在同一基础表行上的扫描值，包括 JSON null。
+func ReleaseScanBasis(ctx context.Context, q Queryer, id string) (map[string]json.RawMessage, error) {
+	var raw []byte
+	if err := q.QueryRowContext(ctx, "SELECT "+releasesql.ScanFieldsJSON+" FROM releases WHERE id=$1", id).Scan(&raw); err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	err := json.Unmarshal(raw, &fields)
+	return fields, err
 }

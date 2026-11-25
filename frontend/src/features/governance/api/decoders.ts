@@ -256,7 +256,15 @@ const correctionChangesDecoder = d.object({
 });
 // 自动整理写入发行字段（M7 A）：前后是自动层的意图（没有自动值为 null）与当时的有效值。有人工修正时有效值不随自动值变化。
 // auto 另带写入这个值的操作：撤销恢复的是前态的值与它原来的写入者。
-const ownedAutoDecoder = d.object({ mode: d.oneOf(["set", "null"] as const), value: d.optional(fieldValueDecoder), operation_id: d.uuid() });
+// 整理链 F 起另带写入方级别（4 程序依据外部源 … 1 模型从本地文字整理）与写入时依据的扫描值；升级前写入的没有这两项。
+const writerLevelDecoder = d.optional(d.integer({ min: 1, max: 4 }));
+const ownedAutoDecoder = d.object({
+  mode: d.oneOf(["set", "null"] as const),
+  value: d.optional(fieldValueDecoder),
+  operation_id: d.uuid(),
+  writer_level: writerLevelDecoder,
+  scan_basis: d.optional(d.nullable(fieldValueDecoder)),
+});
 const autoFieldStateDecoder = d.object({ auto: d.nullable(ownedAutoDecoder), effective: d.nullable(fieldValueDecoder) });
 const autoCorrectionChangesDecoder = d.object({
   kind: d.literal("release_auto_correction"),
@@ -273,11 +281,38 @@ const trackCorrectionChangesDecoder = d.object({
   track: trackRefDecoder,
   fields: d.array(d.object({ field: d.oneOf(TRACK_CORRECTABLE_FIELDS), before: trackFieldStateDecoder, after: trackFieldStateDecoder }), { max: TRACK_CORRECTABLE_FIELDS.length }),
 });
-const trackAutoFieldStateDecoder = d.object({ auto: d.nullable(d.object({ mode: d.literal("set"), value: trackTextDecoder, operation_id: d.uuid() })), effective: d.nullable(trackTextDecoder) });
+const trackOwnedAutoDecoder = d.object({
+  mode: d.literal("set"),
+  value: trackTextDecoder,
+  operation_id: d.uuid(),
+  writer_level: writerLevelDecoder,
+  scan_basis: d.optional(d.nullable(trackTextDecoder)),
+});
+const trackAutoFieldStateDecoder = d.object({ auto: d.nullable(trackOwnedAutoDecoder), effective: d.nullable(trackTextDecoder) });
 const trackAutoCorrectionChangesDecoder = d.object({
   kind: d.literal("track_auto_correction"),
   track: trackRefDecoder,
   fields: d.array(d.object({ field: d.oneOf(TRACK_CORRECTABLE_FIELDS), before: trackAutoFieldStateDecoder, after: trackAutoFieldStateDecoder }), { max: TRACK_CORRECTABLE_FIELDS.length }),
+});
+// 自动值作废（整理链 F）：自动值依据的扫描值变了（例如标签改了），自动值退出有效值。记录沿用自动修正的操作类型，
+// 前后两侧另带当时的扫描值；撤销作废恢复原来的自动值。
+const invalidationFieldStateDecoder = d.object({ auto: d.nullable(ownedAutoDecoder), effective: d.nullable(fieldValueDecoder), scan_value: d.nullable(fieldValueDecoder) });
+const autoInvalidationChangesDecoder = d.object({
+  kind: d.literal("release_auto_invalidation"),
+  fields: d.array(
+    d.object({ field: d.oneOf(CORRECTABLE_FIELDS), before: invalidationFieldStateDecoder, after: invalidationFieldStateDecoder }),
+    { max: CORRECTABLE_FIELDS.length },
+  ),
+});
+const trackInvalidationFieldStateDecoder = d.object({
+  auto: d.nullable(trackOwnedAutoDecoder),
+  effective: d.nullable(trackTextDecoder),
+  scan_value: d.nullable(trackTextDecoder),
+});
+const trackAutoInvalidationChangesDecoder = d.object({
+  kind: d.literal("track_auto_invalidation"),
+  track: trackRefDecoder,
+  fields: d.array(d.object({ field: d.oneOf(TRACK_CORRECTABLE_FIELDS), before: trackInvalidationFieldStateDecoder, after: trackInvalidationFieldStateDecoder }), { max: TRACK_CORRECTABLE_FIELDS.length }),
 });
 // 自动整理补的外部封面与外部歌词（M7 B2）：本地没有时才写入，一个发行一张、一首曲目一份；撤销就是去掉它。
 // 来源是外部源的标识，外部编号按不可信文本显示。封面的 resource_id 在撤销之后可能已经读不到图片。
@@ -419,7 +454,9 @@ type OperationChanges =
   | d.Infer<typeof issueReviewChangesDecoder>
   | d.Infer<typeof claimChangesDecoder>
   | d.Infer<typeof releaseMergeChangesDecoder>
-  | d.Infer<typeof releaseAutoMergeChangesDecoder>;
+  | d.Infer<typeof releaseAutoMergeChangesDecoder>
+  | d.Infer<typeof autoInvalidationChangesDecoder>
+  | d.Infer<typeof trackAutoInvalidationChangesDecoder>;
 // 按 kind 选择解码器；未知的 kind 整体拒绝（后端新增操作类型时，样本契约测试先失败，在这里补上才算确认前端已经知道）。
 const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   const kind = typeof input === "object" && input !== null && "kind" in input ? input.kind : undefined;
@@ -427,6 +464,8 @@ const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   if (kind === "release_auto_correction") return autoCorrectionChangesDecoder(input, path);
   if (kind === "track_correction") return trackCorrectionChangesDecoder(input, path);
   if (kind === "track_auto_correction") return trackAutoCorrectionChangesDecoder(input, path);
+  if (kind === "release_auto_invalidation") return autoInvalidationChangesDecoder(input, path);
+  if (kind === "track_auto_invalidation") return trackAutoInvalidationChangesDecoder(input, path);
   if (kind === "release_external_artwork") return externalArtworkChangesDecoder(input, path);
   if (kind === "track_external_lyrics") return externalLyricsChangesDecoder(input, path);
   if (kind === "artist_external_artwork") return artistExternalArtworkChangesDecoder(input, path);

@@ -50,11 +50,11 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
     case "release_auto_merge":
       return "自动合并发行";
     case "release_auto_correction":
-      return "自动补全发行信息";
+      return item.changes?.kind === "release_auto_invalidation" ? "自动值作废" : "自动补全发行信息";
     case "track_correction":
       return "修改曲目信息";
     case "track_auto_correction":
-      return "自动补全曲目信息";
+      return item.changes?.kind === "track_auto_invalidation" ? "曲目的自动值作废" : "自动补全曲目信息";
     case "release_external_artwork":
       return "自动补封面";
     case "track_external_lyrics":
@@ -83,6 +83,8 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       if (item.changes?.kind === "release_auto_correction") return "撤销自动补全";
       if (item.changes?.kind === "track_correction") return "撤销曲目修改";
       if (item.changes?.kind === "track_auto_correction") return "撤销曲目的自动补全";
+      if (item.changes?.kind === "release_auto_invalidation") return "恢复作废的自动值";
+      if (item.changes?.kind === "track_auto_invalidation") return "恢复曲目作废的自动值";
       if (item.changes?.kind === "release_external_artwork") return "撤销自动补的封面";
       if (item.changes?.kind === "track_external_lyrics") return "撤销自动补的歌词";
       if (item.changes?.kind === "artist_external_artwork") return "撤销自动补的艺人图片";
@@ -247,6 +249,17 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
       const label = `《${changes.track.title}》${trackFieldLabels[field.field]}`;
       if (sameValue(from.effective, to.effective)) return `${label}：自动值 ${from.auto?.value ?? "（无）"} → ${to.auto?.value ?? "（无）"}（人工修正优先，显示不变）`;
       return `${label}：${displayValue(from.effective)} → ${displayValue(to.effective)}${to.auto === null ? "（取消自动补全）" : ""}`;
+    });
+  }
+  // 自动值作废：依据的扫描值变了，显示回到新的扫描值；撤销是恢复自动值。
+  if (changes.kind === "release_auto_invalidation" || changes.kind === "track_auto_invalidation") {
+    const prefix = changes.kind === "track_auto_invalidation" ? `《${changes.track.title}》` : "";
+    return changes.fields.map((field) => {
+      const [from, to] = reverse ? [field.after, field.before] : [field.before, field.after];
+      const label = `${prefix}${changes.kind === "track_auto_invalidation" ? trackFieldLabels[field.field as keyof typeof trackFieldLabels] : correctionFieldLabels[field.field as keyof typeof correctionFieldLabels]}`;
+      const note = reverse ? "（恢复自动值）" : "（标签变了，自动值作废）";
+      if (sameValue(from.effective, to.effective)) return `${label}：自动值作废，显示不变（人工修正优先）`;
+      return `${label}：${displayValue(from.effective)} → ${displayValue(to.effective)}${note}`;
     });
   }
   if (changes.kind === "release_auto_correction") {

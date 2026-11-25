@@ -33,6 +33,9 @@ func (k trackAutoCorrectionKind) Revert(ctx context.Context, tx *sql.Tx, id stri
 	if err != nil {
 		return operations.Outcome{}, err
 	}
+	if isInvalidation(prior.Fields) {
+		return revertInvalidation(ctx, tx, locked, original, prior.Fields, true)
+	}
 	next := make(map[string]*ownedAutoIntent, len(prior.Fields))
 	for _, field := range catalog.TrackCorrectableFields {
 		entry, ok := prior.Fields[field.Name]
@@ -87,6 +90,7 @@ func (trackAutoCorrectionKind) Describe(ctx context.Context, q operations.Querye
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	var invalidations []string
 	descriptions := make(map[string]operations.Description, len(records))
 	for _, record := range records {
 		d := infos.describe(record)
@@ -101,14 +105,21 @@ func (trackAutoCorrectionKind) Describe(ctx context.Context, q operations.Querye
 		var changes []map[string]any
 		for _, field := range catalog.TrackCorrectableFields {
 			if state, ok := after.Fields[field.Name]; ok {
-				changes = append(changes, map[string]any{"field": field.Name, "before": before.Fields[field.Name], "after": state})
+				changes = append(changes, map[string]any{"field": field.Name, "before": before.Fields[field.Name].display(), "after": state.display()})
 				d.Revertible = d.Revertible && owners[[3]string{record.ID, after.TrackID, field.Name}]
 			}
 		}
-		d.Changes = map[string]any{"kind": TypeTrackAutoCorrection, "track": map[string]string{"id": after.TrackID, "title": after.TrackTitle}, "fields": changes}
+		kind := TypeTrackAutoCorrection
+		if isInvalidation(after.Fields) {
+			kind = TypeTrackAutoInvalidation
+			if record.Type != operations.TypeRevert && record.RevertedByID == "" {
+				invalidations = append(invalidations, record.ID)
+			}
+		}
+		d.Changes = map[string]any{"kind": kind, "track": map[string]string{"id": after.TrackID, "title": after.TrackTitle}, "fields": changes}
 		descriptions[record.ID] = d
 	}
-	return descriptions, nil
+	return describeInvalidations(ctx, q, descriptions, invalidations, true)
 }
 
 func (trackAutoCorrectionKind) PreviewRevert(ctx context.Context, q operations.Queryer, record operations.Record) ([]operations.PreviewChange, error) {

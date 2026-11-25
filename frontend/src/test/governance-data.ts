@@ -574,6 +574,8 @@ function invertChanges(changes: OperationChangesDTO): OperationChangesDTO {
   if (changes.kind === "release_auto_correction") return { kind: "release_auto_correction", fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
   if (changes.kind === "track_correction") return { kind: "track_correction", track: changes.track, fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
   if (changes.kind === "track_auto_correction") return { kind: "track_auto_correction", track: changes.track, fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
+  // 作废的撤销记录同样带被撤销那次作废的内容（整理链 F）。
+  if (changes.kind === "release_auto_invalidation" || changes.kind === "track_auto_invalidation") return changes;
   return { kind: "release_correction", fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
 }
 

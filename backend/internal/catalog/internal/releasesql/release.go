@@ -56,3 +56,8 @@ const (
 	ReleaseGroupMemberOrder = `(releases.id IS DISTINCT FROM (SELECT default_group.default_release_id FROM release_groups default_group WHERE default_group.id = releases.group_id)),
 		(NULLIF(releases.year, 0) IS NULL), NULLIF(releases.year, 0), releases.created_at, releases.id`
 )
+
+// ScanFieldsJSON 取发行基础表的八个原始扫描字段。
+const ScanFieldsJSON = `jsonb_build_object('title',releases.title,'album_artist',releases.album_artist,'year',releases.year,
+    'genre',releases.genres,'label',releases.label,'catalog_number',releases.catalog_number,
+    'barcode',releases.barcode,'edition',releases.edition)`

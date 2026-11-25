@@ -25,7 +25,6 @@ M7 子任务 A（2026-11）给后台自动整理准备好写入、记录与撤�
 | 条款 | 将改为 | 子任务 |
 | --- | --- | --- |
 | 15.6 单个后台循环、封面清单与 MusicBrainz 共用限速器、首次整理期间新入库的要等一轮结束 | 各来源各自一条队列，按状态与优先级取项；封面清单不占 MusicBrainz 额度；拷贝中的专辑等稳定后整理 | B |
-| 第 4 节与 18.1 自动层一个字段后写的替换先写的 | 自动层内部按写入依据固定先后；自动值记录依据的扫描值，扫描值变化后作废 | F |
 | 17.2–17.4 待定项每批 5 项交管家运行、审查转人工与没通过的成为例外等管理员处理 | 三档识别兜底；通过完整结构核对的外部编号免审；例外改为“未采用的建议”，不计待办；无佐证的发现先联网求证 | E |
 | 第 21 节与“网络搜索与身份待定项” | 联网兜底单独的每日上限；模型巡检给出规范身份 | D、E |
 
@@ -1050,3 +1049,31 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 旧的 `matched` 不因升级重查，也不批量撤销先前的 `tag_id` 结论。有候选的待定项用已保存的候选离线重判（零出站），写入复用在线路径；快照不足以判断的保留候选交第一档；
 零候选或只剩截断前缀的登记 `requery_match_version` 补查一次。识别摘要在 102 补入专辑的原始曲目标题及来源、合辑与古典的判别证据、本发行的组级对应与抑制；
 升级轮先按 101 算法核对旧摘要再建 102 基线。迁移 0087 增加对象类型、工作与待定状态、到期索引、路线字段与艺人提案表。
+
+## 24. 自动层的写入先后与作废（整理链 F，2026-11-25）
+
+依据 ADR 0006 第 16.5 节。修订第 4 节与第 18.1 节“后写的替换先写的”。
+
+### 24.1 级别
+
+迁移 0088 给 `release_auto_values`、`track_auto_values` 各加 `writer_level smallint` 与 `scan_basis jsonb`。
+
+| `writer_level` | 依据 | 写入方 |
+| --- | --- | --- |
+| 4 | 程序依据外部源 | 程序层的补空与曲目字段 |
+| 3 | 模型选择、后端核实的外部源 | `ModelMatcher` 的补空（含采纳匹配例外）；子任务 E 核实外部源后传此级 |
+| 2 | 库内写法或带引用的网页 | 子任务 E、D 核实依据后显式传此级 |
+| 1 | 本地文字整理 | 现有 `correct_release`、`correct_track`（没有可核实的结构化依据）；子任务 D 的本地整理 |
+
+- 级别由后端经 `curation.Source.WriterLevel` 传给 `Apply`、`ApplyTrack`，模型预览向 `CheckModelCorrection`、`CheckModelTrackCorrection` 传相同级别，模型不能自报。
+- 在 `Writer.applyFields` 的事务内逐字段判定：同级或更高级别可以替换；低级别遇到高级别返回 `skipped[field]="lower_priority"`，其余字段照常提交；全部跳过返回 409 `nothing_to_apply`。
+- 旧行：程序写的按 4，历史模型写的按 3。
+
+### 24.2 扫描依据与作废
+
+- 写入时记录对应扫描字段的原始 JSON 值（`scan_basis`）；SQL NULL 表示升级前写入、没有依据，这类旧值不作废。
+- 扫描不改自动层。整理读取证据时比较依据与当前扫描值，不同则该自动值作废：受治理操作，来源 `curation / source / scan`，
+  数据库类型沿用 `release_auto_correction`、`track_auto_correction`，`changes.kind` 为 `release_auto_invalidation`、`track_auto_invalidation`，
+  `fields[]` 的前后两侧为 `{auto, effective, scan_value}`，曲目记录另带 `track: {id, title}`。
+- 作废后有效值回到新的扫描值，缺口按当前状态重新出现。作废不写“不再提出”。撤销作废时核对字段仍空、扫描值仍匹配，恢复原值、级别与写入者，以确认时的扫描值作为新依据。
+- 级别、依据不进整份指纹与识别摘要；只作废自动值不触发外部重新识别。

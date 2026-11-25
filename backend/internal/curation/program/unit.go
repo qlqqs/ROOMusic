@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 )
 
@@ -68,7 +67,7 @@ func (u *unit) write(ctx context.Context, step string, write func(batch, key str
 	w := u.w
 	if !u.checked {
 		// 网络查询期间可能完成了扫描或人工修正，写入前使用当前证据核对本次请求。
-		entries, err := catalog.LoadCurationEvidence(ctx, w.db, []string{u.releaseID}, w.writer.ArtworkExists)
+		entries, err := w.writer.LoadCurationEvidence(ctx, []string{u.releaseID})
 		if err != nil {
 			return err
 		}
@@ -119,6 +118,9 @@ func (u *unit) writeInBatch(ctx context.Context, step string, write func(batch, 
 	if failureCode(err) == "idempotency_conflict" && !u.fixedGeneration {
 		u.generation++
 		err = write(w.batch.ID, u.key(step))
+	}
+	if failureCode(err) == "item_stale" {
+		return errReleaseChanged
 	}
 	if failureCode(err) == "nothing_to_apply" {
 		err = nil

@@ -49,7 +49,13 @@ type MatchApplied struct {
 
 func staleItem() error { return operations.Conflict("item_stale", "待定项证据已变更") }
 func (m *ModelMatcher) evidence(ctx context.Context, q operations.Queryer, id string) (catalog.CurationEvidence, error) {
-	entries, err := catalog.LoadCurationEvidence(ctx, q, []string{id}, m.writer.ArtworkExists)
+	var entries map[string]catalog.CurationEvidence
+	var err error
+	if q == m.db {
+		entries, err = m.writer.LoadCurationEvidence(ctx, []string{id})
+	} else {
+		entries, err = catalog.LoadCurationEvidence(ctx, q, []string{id}, m.writer.ArtworkExists)
+	}
 	if err != nil {
 		return catalog.CurationEvidence{}, err
 	}
@@ -300,6 +306,7 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 	if conversation == "" {
 		conversation = plan.item.ConversationID
 	}
+	opt.Source.WriterLevel = catalog.LevelModelExternal
 	p.links.Source, p.links.ConversationID, p.links.ConfirmedBy = opt.Source, conversation, opt.ConfirmedBy
 	// 目录锁内重读摘要；同键回放由操作日志先行处理。
 	p.links.CheckEvidence = func(ctx context.Context, tx *sql.Tx) error {

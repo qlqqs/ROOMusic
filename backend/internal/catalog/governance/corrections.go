@@ -504,15 +504,19 @@ func sameIntent(field catalog.CorrectableField, previous catalog.CorrectionInten
 
 // writeIntent 写下字段的新意图：next 为 nil 删除修正行，否则插入或替换（operation_id 记下设下它的操作）。
 func writeIntent(ctx context.Context, tx *sql.Tx, releaseID string, field catalog.CorrectableField, next *catalog.CorrectionIntent, operationID string) error {
-	return writeFieldIntent(ctx, tx, "release_corrections", releaseID, field, next, operationID)
-}
-
-// table 由人工修正和自动值的写入入口固定，字段名与取值均通过参数传入。
-func writeFieldIntent(ctx context.Context, tx *sql.Tx, table, releaseID string, field catalog.CorrectableField, next *catalog.CorrectionIntent, operationID string) error {
 	if next == nil {
-		_, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE release_id=$1::uuid AND field=$2`, releaseID, field.Name)
+		_, err := tx.ExecContext(ctx, "DELETE FROM release_corrections WHERE release_id=$1 AND field=$2", releaseID, field.Name)
 		return err
 	}
+	text, year, genres := intentColumns(field, next)
+	_, err := tx.ExecContext(ctx, `INSERT INTO release_corrections(release_id,field,mode,text_value,year_value,list_value,operation_id)
+		VALUES($1,$2,$3,$4,$5,$6::text[],$7) ON CONFLICT(release_id,field) DO UPDATE SET
+		mode=excluded.mode,text_value=excluded.text_value,year_value=excluded.year_value,list_value=excluded.list_value,operation_id=excluded.operation_id`,
+		releaseID, field.Name, next.Mode, text, year, genres, operationID)
+	return err
+}
+
+func intentColumns(field catalog.CorrectableField, next *catalog.CorrectionIntent) (sql.NullString, sql.NullInt64, []string) {
 	var text sql.NullString
 	var year sql.NullInt64
 	var genres []string
@@ -525,10 +529,5 @@ func writeFieldIntent(ctx context.Context, tx *sql.Tx, table, releaseID string, 
 			text = sql.NullString{String: next.Value.(string), Valid: true}
 		}
 	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO `+table+`(release_id, field, mode, text_value, year_value, list_value, operation_id)
-		VALUES($1::uuid, $2, $3, $4, $5, $6::text[], $7::uuid)
-		ON CONFLICT (release_id, field) DO UPDATE
-		SET mode = EXCLUDED.mode, text_value = EXCLUDED.text_value, year_value = EXCLUDED.year_value, list_value = EXCLUDED.list_value, operation_id = EXCLUDED.operation_id`,
-		releaseID, field.Name, next.Mode, text, year, genres, operationID)
-	return err
+	return text, year, genres
 }

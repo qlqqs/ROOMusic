@@ -46,18 +46,18 @@ func IsMissingSourceMatch(err error) bool {
 }
 
 // CheckModelCorrection 在形成待审提案前使用与写入相同的版本、人工优先及不再提出规则。
-func (w *Writer) CheckModelCorrection(ctx context.Context, id string, revision int64, changes map[string]catalog.CorrectionIntent) error {
-	return w.checkModelFields(ctx, id, "", false, revision, changes)
+func (w *Writer) CheckModelCorrection(ctx context.Context, id string, revision int64, changes map[string]catalog.CorrectionIntent, level catalog.AutoWriterLevel) error {
+	return w.checkModelFields(ctx, id, "", false, revision, changes, level)
 }
 
-func (w *Writer) CheckModelTrackCorrection(ctx context.Context, releaseID, trackID string, revision int64, changes map[string]catalog.CorrectionIntent) error {
+func (w *Writer) CheckModelTrackCorrection(ctx context.Context, releaseID, trackID string, revision int64, changes map[string]catalog.CorrectionIntent, level catalog.AutoWriterLevel) error {
 	if !uuid.Valid(trackID) {
 		return operations.Invalid("invalid_input", "曲目标识无效")
 	}
-	return w.checkModelFields(ctx, releaseID, trackID, true, revision, changes)
+	return w.checkModelFields(ctx, releaseID, trackID, true, revision, changes, level)
 }
 
-func (w *Writer) checkModelFields(ctx context.Context, releaseID, trackID string, track bool, revision int64, changes map[string]catalog.CorrectionIntent) error {
+func (w *Writer) checkModelFields(ctx context.Context, releaseID, trackID string, track bool, revision int64, changes map[string]catalog.CorrectionIntent, level catalog.AutoWriterLevel) error {
 	normalize := governance.NormalizeAutoFields
 	target, id, definitions := "release", releaseID, catalog.CorrectableFields
 	if track {
@@ -101,11 +101,14 @@ func (w *Writer) checkModelFields(ctx context.Context, releaseID, trackID string
 			return operations.Conflict("manual_override", "字段已有人工修正")
 		}
 	}
-	written, result, err := filterAutoFields(ctx, tx, target, id, definitions, locked, fields, false)
+	written, result, err := filterAutoFields(ctx, tx, target, id, definitions, locked, fields, false, level)
 	if err != nil {
 		return err
 	}
 	for _, reason := range result.Skipped {
+		if reason == "lower_priority" {
+			return operations.Conflict("nothing_to_apply", "提案含更高级别已写入的字段")
+		}
 		if reason == "suppressed" {
 			return operations.Conflict("nothing_to_apply", "提案含已标记不再提出的字段值")
 		}

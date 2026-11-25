@@ -43,6 +43,11 @@ func PageCurationReleases(ctx context.Context, q Queryer, after *CurationCursor,
 	return page, rows.Err()
 }
 
+type StaleAutoFields struct {
+	TrackID string
+	Owners  map[string]string
+}
+
 type CurationSuppression struct {
 	TargetType, TargetID, Subject, ValueHash string
 }
@@ -79,6 +84,10 @@ type CurationTrack struct {
 }
 
 type CurationEvidence struct {
+	// 补空计划采用的字段输入，人工字段会由写入事务跳过。
+	FieldInputs map[string]json.RawMessage `json:"-"`
+	// 由整理写入方在受治理事务中复核。
+	StaleAuto                                         []StaleAutoFields                `json:"-"`
 	Classical, Compilation                            bool                             `json:"-"`
 	ReleaseGroupMatchID, ArtistMBID                   string                           `json:"-"`
 	Authenticity                                      map[string]metadata.Authenticity `json:"-"`
@@ -162,11 +171,9 @@ const curationReleaseLinkJoin = `
 
 const curationHeaderSQL = `SELECT releases.id::text,releases.group_id::text,COALESCE(releases.candidate_kind,''),
  releases.artist,COALESCE(releases.media_type,''),
- jsonb_build_object('title',releases.title,'album_artist',releases.album_artist,'year',releases.year,
-    'genre',releases.genres,'label',releases.label,'catalog_number',releases.catalog_number,
-    'barcode',releases.barcode,'edition',releases.edition) || COALESCE(c.values,'{}'::jsonb),
+ ` + releasesql.ScanFieldsJSON + ` || COALESCE(c.values,'{}'::jsonb),
  COALESCE(c.present,'{}'::jsonb),
- COALESCE(a.values,'{}'::jsonb),
+ COALESCE(a.values,'{}'::jsonb),a.stale,
  COALESCE((SELECT jsonb_object_agg(field_key,selected_source) FROM release_field_decisions
      WHERE release_id=releases.id),'{}'::jsonb),
  COALESCE((SELECT jsonb_agg(position ORDER BY position,id) FROM media WHERE release_id=releases.id),'[]'::jsonb),
@@ -182,8 +189,11 @@ const curationHeaderSQL = `SELECT releases.id::text,releases.group_id::text,COAL
            jsonb_object_agg(field,true) AS present FROM release_corrections WHERE release_id=releases.id
  ) c ON true
  LEFT JOIN LATERAL (
-    SELECT jsonb_object_agg(field,COALESCE(to_jsonb(text_value),to_jsonb(year_value),to_jsonb(list_value))) AS values
-    FROM release_auto_values WHERE release_id=releases.id
+    SELECT jsonb_object_agg(field,COALESCE(to_jsonb(text_value),to_jsonb(year_value),to_jsonb(list_value))) FILTER (WHERE valid) AS values,
+           jsonb_object_agg(field,operation_id) FILTER (WHERE NOT valid) AS stale
+    FROM release_auto_values
+    CROSS JOIN LATERAL (SELECT scan_basis IS NULL OR scan_basis=(` + releasesql.ScanFieldsJSON + `)->field AS valid) validity
+    WHERE release_id=releases.id
  ) a ON true
  LEFT JOIN release_artworks lo ON lo.release_id=releases.id
  LEFT JOIN release_external_artworks ea ON ea.release_id=releases.id
@@ -199,10 +209,10 @@ func curationHeaders(ctx context.Context, q Queryer, ids []string, artworkExists
 	result := make(map[string]CurationEvidence, len(ids))
 	for rows.Next() {
 		var e CurationEvidence
-		var values, corrected, automatic, decisions, media []byte
+		var values, corrected, automatic, stale, decisions, media []byte
 		var artworkKey sql.NullString
 		if err := rows.Scan(&e.ID, &e.GroupID, &e.CandidateKind, &e.Artist, &e.MediaType, &values, &corrected,
-			&automatic, &decisions, &media, &e.LocalArtwork, &artworkKey, &e.ExternalID, &e.ExternalGroupID, &e.ReleaseGroupMatchID,
+			&automatic, &stale, &decisions, &media, &e.LocalArtwork, &artworkKey, &e.ExternalID, &e.ExternalGroupID, &e.ReleaseGroupMatchID,
 			&e.GroupExternalID, &e.GroupChangeSource); err != nil {
 			return nil, err
 		}
@@ -213,12 +223,19 @@ func curationHeaders(ctx context.Context, q Queryer, ids []string, artworkExists
 			Genre                          []string
 			Year                           int
 		}
+		if stale != nil {
+			var fields StaleAutoFields
+			if err := json.Unmarshal(stale, &fields.Owners); err != nil {
+				return nil, err
+			}
+			e.StaleAuto = append(e.StaleAuto, fields)
+		}
 		var sources map[string]string
 		var autoValues map[string]json.RawMessage
 		for _, column := range []struct {
 			raw    []byte
 			target any
-		}{{values, &fields}, {corrected, &e.Corrected}, {automatic, &autoValues}, {decisions, &sources}, {media, &e.Media}} {
+		}{{values, &fields}, {values, &e.FieldInputs}, {corrected, &e.Corrected}, {automatic, &autoValues}, {decisions, &sources}, {media, &e.Media}} {
 			if err := json.Unmarshal(column.raw, column.target); err != nil {
 				return nil, err
 			}
@@ -314,11 +331,12 @@ func (e *CurationEvidence) setCurationBarcodes(barcode string, fromCue bool) {
 }
 
 const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_value,t.title),COALESCE(ca.text_value,t.artist),
- COALESCE(ct.text_value,atitle.text_value,t.title),COALESCE(ca.text_value,aa.text_value,t.artist),
+ COALESCE(ct.text_value,CASE WHEN valid.title THEN atitle.text_value END,t.title),COALESCE(ca.text_value,CASE WHEN valid.artist THEN aa.text_value END,t.artist),
  COALESCE((SELECT jsonb_object_agg(field_name,jsonb_build_object('source',source_kind,'inferred',inferred,'value',value))
     FROM track_observations WHERE track_id=t.id AND field_name IS NOT NULL
     AND ($2 OR field_name IN ('title','artist','track_number','disc_number'))),'{}'::jsonb),
- ct.track_id IS NOT NULL,ca.track_id IS NOT NULL,atitle.track_id IS NOT NULL,aa.track_id IS NOT NULL,
+ ct.track_id IS NOT NULL,ca.track_id IS NOT NULL,atitle.track_id IS NOT NULL AND valid.title,aa.track_id IS NOT NULL AND valid.artist,
+ CASE WHEN NOT valid.title THEN atitle.operation_id::text END,CASE WHEN NOT valid.artist THEN aa.operation_id::text END,
  m.position,t.disc_number,t.position,COALESCE(t.work_title,''),
  EXISTS(SELECT FROM track_identifiers WHERE track_id=t.id AND kind IN ('mb_work','acoustid') AND value<>''),
  COALESCE(round((CASE WHEN dd.duration_seconds>0 AND dd.duration_seconds<'Infinity'::float8
@@ -334,6 +352,8 @@ const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_
  LEFT JOIN track_corrections ca ON ca.track_id=t.id AND ca.field='artist'
  LEFT JOIN track_auto_values atitle ON atitle.track_id=t.id AND atitle.field='title'
  LEFT JOIN track_auto_values aa ON aa.track_id=t.id AND aa.field='artist'
+ CROSS JOIN LATERAL (SELECT atitle.scan_basis IS NULL OR atitle.scan_basis=to_jsonb(t.title) AS title,
+     aa.scan_basis IS NULL OR aa.scan_basis=to_jsonb(t.artist) AS artist) valid
  LEFT JOIN track_display_durations dd ON dd.track_id=t.id
  LEFT JOIN track_external_lyrics el ON el.track_id=t.id
  LEFT JOIN external_links tl ON tl.source='musicbrainz' AND tl.object_type='track' AND tl.object_id=t.id
@@ -348,10 +368,10 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 	for rows.Next() {
 		var t CurationTrack
 		var releaseID string
-		var lyrics sql.NullString
+		var lyrics, staleTitle, staleArtist sql.NullString
 		var identifiers, observations []byte
 		if err := rows.Scan(&releaseID, &t.ID, &t.Title, &t.Artist, &t.EffectiveTitle, &t.EffectiveArtist,
-			&observations, &t.TitleCorrected, &t.ArtistCorrected, &t.TitleAutomatic, &t.ArtistAutomatic, &t.Disc, &t.DiscNumber, &t.Position, &t.WorkTitle,
+			&observations, &t.TitleCorrected, &t.ArtistCorrected, &t.TitleAutomatic, &t.ArtistAutomatic, &staleTitle, &staleArtist, &t.Disc, &t.DiscNumber, &t.Position, &t.WorkTitle,
 			&t.OtherIdentifier, &t.DurationSeconds, &t.SourceKind, &t.SourceRootID, &t.CueSheetPath, &t.ParentFile, &t.CueISRC,
 			&t.CueIndexFrames, &t.CueEndFrames, &lyrics, &t.ExternalLyrics, &t.ExternalID, &identifiers); err != nil {
 			return err
@@ -403,6 +423,16 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 			_, t.LocalLyrics = ParseLyrics(lyrics.String)
 		}
 		if e, visible := result[releaseID]; visible {
+			if staleTitle.Valid || staleArtist.Valid {
+				owners := map[string]string{}
+				if staleTitle.Valid {
+					owners["title"] = staleTitle.String
+				}
+				if staleArtist.Valid {
+					owners["artist"] = staleArtist.String
+				}
+				e.StaleAuto = append(e.StaleAuto, StaleAutoFields{TrackID: t.ID, Owners: owners})
+			}
 			e.Classical = e.Classical || t.WorkTitle != ""
 			e.Tracks = append(e.Tracks, t)
 			result[releaseID] = e

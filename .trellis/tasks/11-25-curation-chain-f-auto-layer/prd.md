@@ -1,6 +1,6 @@
 # 整理链 F：自动层规则
 
-状态：实施中（2026-11-25）。父任务：`.trellis/tasks/11-25-curation-chain`。需求、原则与总体设计见父任务的 `prd.md`、`design.md`，
+状态：已完成（2026-11-25）。父任务：`.trellis/tasks/11-25-curation-chain`。需求、原则与总体设计见父任务的 `prd.md`、`design.md`，
 现状与审查发现见父任务的 `research/`。设计见本目录 `design.md`（实现代理写），执行见 `implement.md`。
 
 ## 目标
@@ -25,11 +25,18 @@
 
 ## 验收
 
-- [ ] M 的度量重跑，错连、错并、错改不高于 C 合入后的数字（父任务 `research/m-baseline/after-c/`）。
+- [x] M 的度量重跑，错连、错并、错改不高于 C 合入后的数字（父任务 `research/m-baseline/after-c/`）。
 
-- [ ] 父任务 V11。
-- [ ] 写入方先后有用例覆盖；按批与按来源撤销的现有用例不回退。
+- [x] 父任务 V11。
+- [x] 写入方先后有用例覆盖；按批与按来源撤销的现有用例不回退。
 
 ## 不在范围内
 
 - 不新增可修正的字段。
+
+## 结果
+
+- 迁移 0088；四级写入与扫描依据作废，规则见自动整理合同第 24 节。前端接入两种作废记录，解码保留 `writer_level`、`scan_basis`。
+- 现状核对证实：改动前标签改了以后旧自动值仍然生效。
+- 度量与 C 合入后逐字节一致（oracle 0/0/0，first_candidate 38/0/4），JSON 在父任务 `research/m-baseline/after-f/`。
+- 顺带修正：零候选用例按 C 的 `unlisted` 改断言；前端整理进度解码补上 C 新增的 `unlisted`、`no_usable_candidates`（样本契约测试此前在 `main` 上失败）。
