@@ -530,3 +530,26 @@ OpenSubsonic 浏览、列表、搜索、随机、流派、资料与封面接口�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 74: Subsonic 点唱机
+<!-- trellis-session: v=2 fp=c28a8b84a386860e -->
+
+**Date**: 2026-11-25
+**Task**: Subsonic 点唱机
+**Branch**: `main`
+
+### Summary
+
+jukeboxControl 映射到播放区服务层命令（带期望版本号、冲突重试一次）；zones 新增 replace_queue/shuffle_queue 与起播秒数；迁移 0084 保存点唱机播放区与 last_played_at；账号页加点唱机控制下拉。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d6d8cc4d` | feat(subsonic): 点唱机控制播放区 |
+| `745e5c5e` | feat(web): 账号页选择点唱机控制的播放区 |
+
+### Status
+
+[OK] **Completed**

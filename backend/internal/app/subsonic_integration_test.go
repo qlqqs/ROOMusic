@@ -163,10 +163,13 @@ func setSubsonicEnabled(t *testing.T, a *integrationTestApplication, admin *inte
 	requireSubsonicWebJSON(t, a.request(t, http.MethodGet, subsonicAdminPath, nil, admin, nil), body)
 }
 
-func requireSubsonicMe(t *testing.T, a *integrationTestApplication, member *integrationTestUser, name string, enabled, ready bool) {
+func requireSubsonicMe(t *testing.T, a *integrationTestApplication, member *integrationTestUser, name string, enabled, ready bool) *httptest.ResponseRecorder {
 	t.Helper()
-	requireSubsonicWebJSON(t, a.request(t, http.MethodGet, subsonicMePath, nil, member, nil),
-		map[string]any{"enabled": enabled, "ready": ready, "username": name})
+	response := a.request(t, http.MethodGet, subsonicMePath, nil, member, nil)
+	requireSubsonicWebJSON(t, response, map[string]any{
+		"enabled": enabled, "ready": ready, "username": name, "jukebox_zone_id": nil,
+	})
+	return response
 }
 
 func TestPostgreSQLSubsonicAuthenticationAndPayloads(t *testing.T) {

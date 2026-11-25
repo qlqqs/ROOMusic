@@ -18,6 +18,7 @@ var (
 	ErrGroupUnsupported      = errors.New("group_unsupported")
 	ErrGroupFull             = errors.New("group_full")
 	ErrInvalidInput          = errors.New("invalid_input")
+	ErrRevisionConflict      = errors.New("revision_conflict")
 	ErrTrackNotFound         = errors.New("track_not_found")
 	ErrQueueFull             = queue.ErrQueueFull
 	ErrZoneOffline           = errors.New("zone_offline")
@@ -63,6 +64,9 @@ type Command struct {
 	Entries         []ImportEntry `json:"entries"`
 	CurrentEntryID  *string       `json:"current_entry_id"`
 	History         []string      `json:"history"`
+
+	ExpectedRevision     *int64   `json:"-"`
+	StartPositionSeconds *float64 `json:"-"`
 }
 
 type QueueEntry struct {
@@ -134,6 +138,7 @@ type ZoneEvent struct {
 	Dropped  *int   `json:"dropped,omitempty"`
 }
 type Zone struct {
+	LastPlayedAt  *time.Time   `json:"-"`
 	Group         *ZoneGroup   `json:"group"`
 	ZoneID        string       `json:"zone_id"`
 	DeviceID      string       `json:"device_id"`
