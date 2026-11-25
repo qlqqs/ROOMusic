@@ -431,10 +431,11 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	} else {
 		close(catalogDone)
 	}
+	trackRenderer, _ := renderer.(zones.SingleTrackRenderer)
 	subsonicapi.Register(mux, subsonic, guard, buildinfo.Current().Version, subsonicapi.Browse{
 		Catalog: catalog.NewStore(database), Personal: personalService, Listening: listeningService,
+		Zones: zonesService, Playback: playbackService, Renderer: trackRenderer,
 		ReadArtwork: readArtwork, DataDirectory: settings.DataDirectory,
-		Zones: zonesService,
 	})
 	identityapi.New(database, guard, assembly.loginThrottle, logger).WithPasswordObserver(subsonic).WithSessionRevoked(func(userID string) {
 		subsonic.Forget(userID)

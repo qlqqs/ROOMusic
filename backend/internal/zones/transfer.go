@@ -28,6 +28,9 @@ func (s *Service) transfer(ctx context.Context, userID string, source, target *z
 	return result, nil
 }
 func (s *Service) transferLocked(ctx context.Context, userID string, source, target *zoneRuntime) (CommandResult, *QueueChange, *QueueChange, error) {
+	if source.device.Kind == "subsonic" || target.device.Kind == "subsonic" {
+		return CommandResult{}, nil, nil, ErrClientPlayback
+	}
 	if source.leaderZoneID != "" {
 		return CommandResult{}, nil, nil, ErrDeviceGrouped
 	}

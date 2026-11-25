@@ -17,10 +17,10 @@
 
 ## 1. 设备与播放区
 
-每个成员的一台设备对应一个播放区。浏览器或原生设备由客户端登记，在线且可见的局域网渲染器由服务端投影。服务端生成设备与播放区 ID。播放区持有队列、模式、播放设置与传输状态。
+每个成员的一台设备对应一个播放区。浏览器或原生设备由客户端登记，在线且可见的局域网渲染器由服务端投影，第三方客户端（`subsonic`）由 Subsonic 鉴权路径登记（见下）。服务端生成设备与播放区 ID。播放区持有队列、模式、播放设置与传输状态。
 
 ```text
-Device = {device_id, zone_id, name, kind: "browser"|"native"|"upnp"|"cast"|"airplay"|"slimproto", online, last_seen_at, volume: 0..1, muted,
+Device = {device_id, zone_id, name, kind: "browser"|"native"|"upnp"|"cast"|"airplay"|"slimproto"|"subsonic", online, last_seen_at, volume: 0..1, muted,
           capabilities: Capabilities, output_session_id: UUID?}
 Snapshot = {server_time, protocol: 1, devices: Device[], zones: Zone[]}          // 按设备创建时间升序
 QueueEntry = {entry_id: UUID, track: TrackSummary}   // 与 POST /tracks/summaries 同一投影，按曲目当前的发行与组给出
@@ -66,6 +66,14 @@ QueueChange = {queue_revision, kind, …}: replace {entries}（超过 500 条改
 
 名称去掉首尾空白后 1–64 字符，同名时服务端追加“ 2”“ 3”。新登记的设备离线。30 天没上线且离线的设备每小时自动清理（推送 `device_removed`），
 认领得 `404 not_found` 时客户端重新登记。音量属于设备、只作用于输出端，不进渲染流。
+
+### 第三方客户端设备（`subsonic`，迁移 0085）
+
+- 登记：`zones.Service.EnsureClientDevice(ctx, userID, clientName)`，只由 Subsonic 鉴权后的请求调用，按（用户、规范后的客户端名）幂等，设备与播放区在同一事务创建；已登记的从内存里查，不写库。唯一索引 `playback_devices_subsonic_name_idx(user_id, name) WHERE kind='subsonic'`。
+- 客户端名规范：无效 UTF-8 换成 U+FFFD，去掉控制字符，去掉首尾空白，截到 64 个字符，空了用“Subsonic 客户端”。
+- 默认设置 `zones.SubsonicSettings()`：无损，响度、降混、均衡、卷积、Headroom、采样率转换都关，无缝与渐变关。
+- 只用来存放播放设置：`online` 恒为 false，`output_session_id` 为 null，`capabilities.stream_formats` 为空。`set_settings` 照常生效并推送事件；其余播放区命令、音量、转移、认领输出、编组都返回 `409 device_unsupported`（`ErrClientPlayback`）。`last_seen_at` 只在 `stream` 时更新（`TouchClientDevice`）。
+- 删除走现有 `DELETE /devices/{id}`，不受 `device_online` 限制，播放区一并删除；同名客户端再次请求时重新登记，恢复默认设置。点唱机不把这类设备当作可控制的播放区。
 
 ## 2. 命令
 

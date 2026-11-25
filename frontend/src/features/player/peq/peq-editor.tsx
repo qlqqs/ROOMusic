@@ -1,7 +1,7 @@
 import { BookmarkCheck, ClipboardPaste, Headphones, Plus, Trash2, X } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { Button, ModalDialog } from "../../../shared/ui";
-import { usePlayerEngine, usePlayerSelector } from "../player-provider";
+import { useSettingsTarget } from "../components/settings-target";
 import { bandHasGain, bandHasSlope, newBand, peqBandTypes, peqLimits, peqSlopes, PEQ_MAX_BANDS, samePeq, sourceLabel, withType, type PeqBand, type PeqBandType, type PeqChannels, type PeqDocument } from "./document";
 import { usePeqResponse } from "./hooks";
 import { OpraDialog } from "./opra-dialog";
@@ -120,8 +120,8 @@ function BandRow({ band, index, draft, onChange }: { band: PeqBand; index: numbe
 
 /** PEQ 编辑面板：改动先进本地草稿并预览曲线，一次完成的操作提交一次完整文档。 */
 function PeqEditorBody({ titleId, onClose }: { titleId: string; onClose: () => void }) {
-  const engine = usePlayerEngine();
-  const server = usePlayerSelector((snapshot) => snapshot.settings.peq);
+  const target = useSettingsTarget();
+  const server = target.settings.peq;
   const [draft, setDraft] = useState(server);
   const [seen, setSeen] = useState(server);
   if (!samePeq(server, seen)) {
@@ -132,7 +132,7 @@ function PeqEditorBody({ titleId, onClose }: { titleId: string; onClose: () => v
   const response = usePeqResponse(draft);
   const change: Change = (next, commit) => {
     setDraft(next);
-    if (commit && !samePeq(next, server)) engine.setPlaybackSettings({ peq: next });
+    if (commit && !samePeq(next, server)) target.set({ peq: next });
   };
   const apply = (peq: PeqDocument) => {
     change({ ...peq, enabled: true }, true);

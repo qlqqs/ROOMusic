@@ -402,3 +402,27 @@ it("设备与组字段：快照里的主设备播放区带组，控制成员自�
   controller.setControlTarget(leaderZone.zoneId);
   expect(controller.getSnapshot().zone?.group).toStrictEqual(groupOf([member, "waiting"]));
 });
+
+describe("第三方客户端的设备", () => {
+  it("不在可选的播放设备里，单列在 clients；改它的设置发给它的播放区，不动控制目标", async () => {
+    const server = fakeZoneServer();
+    const client: Device = { ...server.device(), deviceId: "00000000-0000-4000-8000-00000000d0c1", zoneId: "00000000-0000-4000-8000-00000000e0c1", name: "Symfonium", kind: "subsonic" };
+    const clientZone: Zone = { ...server.zone(), zoneId: client.zoneId, deviceId: client.deviceId };
+    const sent: { zoneId: string; command: string }[] = [];
+    const { controller } = testPlayerController(server, { deps: { api: {
+      ...server.api,
+      fetchSnapshot: async () => ({ serverTime: Date.now(), devices: [server.device(), client], zones: [server.zone(), clientZone] }),
+      sendZoneCommand: async (zoneId, command) => {
+        sent.push({ zoneId, command: command.command });
+        return { serverTime: Date.now(), zone: clientZone, queueChange: null, targetZone: null, imported: null };
+      },
+    } } });
+    controllers.push(controller);
+    controller.attach();
+    await waitFor(() => expect(controller.getSnapshot().clients.map((row) => row.device.name)).toEqual(["Symfonium"]));
+    expect(controller.getSnapshot().devices.map((row) => row.device.kind)).toEqual(["browser"]);
+    controller.setZoneSettings(client.zoneId, { leveling: "off" });
+    await waitFor(() => expect(sent).toEqual([{ zoneId: client.zoneId, command: "set_settings" }]));
+    expect(controller.getSnapshot().zone?.zoneId).toBe(server.zone().zoneId);
+  });
+});

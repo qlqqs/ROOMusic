@@ -21,3 +21,6 @@
 .chain li { display: inline-flex; align-items: center; gap: 6px; }
 .chain li + li::before { content: "→"; content: "→" / ""; color: var(--text-secondary); }
 .node { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border: 1px solid var(--color-neutral-300); border-radius: 13px; background: color-mix(in srgb, white 45%, var(--color-bg)); }
+
+/* 设置的设备：下拉与删除图标同一行。 */
+.target { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; }

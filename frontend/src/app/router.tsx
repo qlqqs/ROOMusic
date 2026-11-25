@@ -5,6 +5,7 @@ import { parseClaimsSearch, parseIssuesSearch, parseOperationsSearch, type Claim
 import { parseSearchPageSearch, type SearchPageSearch } from "../features/search";
 import { parseArtistDetailSearch, parseArtistsSearch, type ArtistDetailSearch, type ArtistsSearch } from "../features/artists";
 import { parsePageParam } from "../shared/lib/pagination";
+import { isUuid } from "../shared/lib/ids";
 import { AuthenticatedLayout } from "./shell/authenticated-layout";
 import { AccountPage } from "./routes/account-page";
 import { AdminGate } from "./routes/admin-gate";
@@ -392,15 +393,22 @@ const settingsIndexRoute = createRoute({
 const accountRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/account", component: AccountPage });
 
 // 播放设置（音量均衡、交叉渐变）：所有登录用户都能用，存在这台设备上。
+// device：设置第三方客户端的设备时是它的设备 ID；不是 UUID 时忽略，改正在控制的设备。
 function PlaybackSettingsRoute() {
+  const { device } = playbackSettingsRoute.useSearch();
   return (
     <LazyPage>
-      <PlaybackSettingsPage />
+      <PlaybackSettingsPage deviceId={device ?? null} />
     </LazyPage>
   );
 }
 
-const playbackSettingsRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/playback", component: PlaybackSettingsRoute });
+const playbackSettingsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/playback",
+  validateSearch: (search: Record<string, unknown>): { device?: string | undefined } => ({ device: typeof search["device"] === "string" && isUuid(search["device"]) ? search["device"].toLowerCase() : undefined }),
+  component: PlaybackSettingsRoute,
+});
 
 // Agent（管家的名字、模型、访问令牌；管理员另有成员开关与内网地址）：所有登录用户都有。
 function AgentSettingsRoute() {

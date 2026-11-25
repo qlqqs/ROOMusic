@@ -11,6 +11,7 @@ import (
 )
 
 var (
+	ErrClientPlayback        = errors.New("第三方客户端设备不能作为播放目标")
 	ErrDevicePairingRequired = errors.New("device_pairing_required")
 	ErrPrecisionUnavailable  = errors.New("精确对时不可用")
 	ErrDeviceUnsupported     = errors.New("device_unsupported")

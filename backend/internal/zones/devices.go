@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/qlqq/roomusic/backend/internal/zones/queue"
 )
@@ -37,10 +38,15 @@ func (s *Service) RegisterDevice(ctx context.Context, userID string, input Regis
 		runes := []rune(input.Name)
 		name = string(runes[:min(len(runes), 64-len([]rune(suffix)))]) + suffix
 	}
+	input.Name = name
+	return s.createClientDevice(ctx, userID, u, input, applySettings(defaultSettings(), input.Settings))
+}
+
+func (s *Service) createClientDevice(ctx context.Context, userID string, u *userRuntime, input RegisterDeviceInput, settings PlaybackSettings) (RegisterDeviceResult, error) {
 	now := s.options.Now()
 	paused := timestamp(now)
-	d := PersistedDevice{DeviceID: s.newID(), Kind: input.Kind, Name: name, Capabilities: defaultCapabilities(), Volume: input.Volume, Muted: input.Muted, CreatedAt: now, LastSeenAt: now}
-	p := PersistedZone{ZoneID: s.newID(), DeviceID: d.DeviceID, Queue: queue.EmptyQueue(), PositionSavedAt: now, Settings: applySettings(defaultSettings(), input.Settings)}
+	d := PersistedDevice{DeviceID: s.newID(), Kind: input.Kind, Name: input.Name, Capabilities: defaultCapabilities(), Volume: input.Volume, Muted: input.Muted, CreatedAt: now, LastSeenAt: now}
+	p := PersistedZone{ZoneID: s.newID(), DeviceID: d.DeviceID, Queue: queue.EmptyQueue(), PositionSavedAt: now, Settings: settings}
 	if err := s.checkIRReference(ctx, nil, userID, p.Settings.Convolution); err != nil {
 		return RegisterDeviceResult{}, err
 	}
@@ -62,13 +68,71 @@ func (s *Service) RegisterDevice(ctx context.Context, userID string, input Regis
 	s.publishZone(userID, result.Zone)
 	return result, nil
 }
+
+func subsonicDeviceName(raw string) string {
+	// Map 按码点读取，无效 UTF-8 会解码为 U+FFFD。
+	name := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, raw)
+	runes := []rune(strings.TrimSpace(name))
+	if len(runes) == 0 {
+		return "Subsonic 客户端"
+	}
+	return string(runes[:min(len(runes), 64)])
+}
+
+// EnsureClientDevice 按用户与规范后的第三方客户端名登记唯一的设置设备。
+func (s *Service) EnsureClientDevice(ctx context.Context, userID, clientName string) (Device, Zone, error) {
+	clientName = subsonicDeviceName(clientName)
+	u, err := s.user(ctx, userID)
+	if err != nil {
+		return Device{}, Zone{}, err
+	}
+	userID = strings.ToLower(userID)
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	for _, z := range u.order {
+		z.mu.Lock()
+		if z.device.Kind == "subsonic" && z.device.Name == clientName {
+			device, zone := deviceOf(z), s.zoneOf(z, nil)
+			z.mu.Unlock()
+			return device, zone, nil
+		}
+		z.mu.Unlock()
+	}
+	result, err := s.createClientDevice(ctx, userID, u, RegisterDeviceInput{Name: clientName, Kind: "subsonic", Volume: 1}, SubsonicSettings())
+	return result.Device, result.Zone, err
+}
+
+func (s *Service) TouchClientDevice(ctx context.Context, userID, deviceID string) error {
+	_, err := s.updateDevice(ctx, userID, deviceID, func(_ *zoneRuntime, d *PersistedDevice) error {
+		if d.Kind != "subsonic" {
+			return ErrInvalidInput
+		}
+		d.LastSeenAt = s.Now()
+		return nil
+	})
+	return err
+}
+
+func SubsonicSettings() PlaybackSettings {
+	settings := defaultSettings()
+	settings.Leveling = "off"
+	settings.Gapless = false
+	settings.Crossfade = false
+	settings.Downmix, _ = NewDownmixDocument(DownmixSettings{Enabled: false})
+	return settings
+}
 func (s *Service) RenameDevice(ctx context.Context, userID, deviceID, name string) (DeviceResult, error) {
 	name = strings.TrimSpace(name)
 	if !validID(deviceID) || !validName(name) {
 		return DeviceResult{}, ErrInvalidInput
 	}
 	return s.updateDevice(ctx, userID, deviceID, func(z *zoneRuntime, d *PersistedDevice) error {
-		if managedKind(d.Kind) {
+		if managedKind(d.Kind) || d.Kind == "subsonic" {
 			return ErrInvalidInput
 		}
 		d.Name = name
@@ -80,6 +144,9 @@ func (s *Service) SetVolume(ctx context.Context, userID, deviceID string, volume
 		return DeviceResult{}, ErrInvalidInput
 	}
 	return s.updateDevice(ctx, userID, deviceID, func(z *zoneRuntime, d *PersistedDevice) error {
+		if d.Kind == "subsonic" {
+			return ErrClientPlayback
+		}
 		if len(expectedRevision) != 0 && (z.persisted.Revision != expectedRevision[0] || d.Muted != muted) {
 			return ErrRevisionConflict
 		}
@@ -281,6 +348,10 @@ func (s *Service) SetOutputState(ctx context.Context, userID, deviceID string, s
 	defer z.dispatch.Unlock()
 	z.mu.Lock()
 	d, p := z.device, z.persisted
+	if d.Kind == "subsonic" {
+		z.mu.Unlock()
+		return DeviceResult{}, ErrClientPlayback
+	}
 	if state.Capabilities != nil {
 		d.Capabilities = cloneCapabilities(*state.Capabilities)
 	}

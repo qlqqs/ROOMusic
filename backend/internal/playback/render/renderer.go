@@ -84,14 +84,7 @@ func (r *Renderer) Open(ctx context.Context, spec zones.RenderSpec) (zones.Rende
 	default:
 		return nil, errors.New("render: 电平化模式无效")
 	}
-	source, prepareErr := r.options.Sources.Prepare(ctx, spec.UserID, spec.Start.TrackID)
-	if prepareErr == nil {
-		prepareErr = validateTrack(source)
-	}
-	if prepareErr != nil && source.File != nil {
-		_ = source.File.Close()
-		source.File = nil
-	}
+	source, prepareErr := r.prepareSource(ctx, spec.UserID, spec.Start.TrackID)
 	if prepareErr != nil && failureReason(prepareErr) == "transient" {
 		return nil, prepareErr
 	}
@@ -140,6 +133,18 @@ func (r *Renderer) Open(ctx context.Context, spec zones.RenderSpec) (zones.Rende
 		r.mu.Unlock()
 	}()
 	return s, nil
+}
+
+func (r *Renderer) prepareSource(ctx context.Context, userID, trackID string) (Track, error) {
+	source, prepareErr := r.options.Sources.Prepare(ctx, userID, trackID)
+	if prepareErr == nil {
+		prepareErr = validateTrack(source)
+	}
+	if prepareErr != nil && source.File != nil {
+		_ = source.File.Close()
+		source.File = nil
+	}
+	return source, prepareErr
 }
 
 func validateTrack(t Track) error {

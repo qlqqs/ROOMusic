@@ -322,11 +322,15 @@ func TestPostgreSQLSubsonicJukeboxGroupGain(t *testing.T) {
 	response := jukeboxRequest(f, jukeboxMember, "json", "setGain", url.Values{"gain": {"0.5"}})
 	requireJukeboxStatus(t, requireSubsonicOK(t, response), -1, false, 0.5, 0)
 	want := map[string]float64{leader.DeviceID: 0.5, member.DeviceID: 0.25}
-	for range len(want) {
+	for len(want) > 0 {
 		frame := events.wait(t, func(frame zonesSampleFrame) bool { return frame.Event == "device" })
 		var payload struct{ Device zones.Device }
 		if err := json.Unmarshal(frame.Data, &payload); err != nil {
 			t.Fatal(err)
+		}
+		// 点唱机请求会先登记发出请求的第三方客户端设备，它的设备事件与编组音量无关。
+		if payload.Device.Kind == "subsonic" {
+			continue
 		}
 		volume, ok := want[payload.Device.DeviceID]
 		if !ok || payload.Device.Volume != volume {

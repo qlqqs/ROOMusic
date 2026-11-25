@@ -2,10 +2,7 @@ package render
 
 import (
 	"context"
-	"encoding/binary"
-	"errors"
 	"io"
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -96,49 +93,14 @@ func (s *session) prepare() error {
 			_ = track.File.Close()
 		}
 	}()
-	plan := s.pendingPlan
-	if err := s.ctx.Err(); err != nil {
+	pipeline, err := s.owner.prepareTrackPipeline(s.ctx, s.spec, s.format, *s.pendingPlan, track, s.writer, s.hls, s.fail, false)
+	if pipeline == nil {
 		return err
 	}
-	if err := s.loadConvolution(plan); err != nil {
-		return err
-	}
-	c, err := plan.buildChain(s.spec.Settings, s.format.BitDepth)
-	if err != nil {
-		return err
-	}
-	s.chain, s.pendingPlan = c, nil
-	if err := s.ctx.Err(); err != nil {
-		return err
-	}
-	count := 0
-	if track.DSDLayout == nil {
-		count++
-	}
-	if s.format.Codec != "wav" && s.format.Delivery != "push" {
-		count++
-	}
-	var starter processStarter
-	if count > 0 {
-		reservation, err := s.owner.options.FFmpeg.Reserve(s.ctx, count)
-		if err != nil {
-			return errors.Join(ErrBusy, err)
-		}
-		defer reservation.Close()
-		starter = reservation
-	}
-	enc, err := newEncoder(s.ctx, starter, s.owner.options.FFmpeg, s.format, s.outputPCM, s.writer, s.hls, s.fail)
-	if err != nil {
-		return err
-	}
-	s.encoder = enc
-	d, err := openDecoder(s.ctx, starter, s.owner.options.FFmpeg, track, s.spec.Start, s.sourcePCM, s.spec.StartSeconds, s.spec.Settings.Leveling)
-	if err != nil {
-		s.player.firstErr = err
-	} else {
-		s.player.current = d
-		transferred = true
-	}
+	s.chain, s.encoder, s.player.current = pipeline.chain, pipeline.encoder, pipeline.decoder
+	s.player.firstErr = err
+	s.pendingPlan = nil
+	transferred = err == nil
 	return nil
 }
 
@@ -363,6 +325,7 @@ func (s *session) run() {
 	var speed speedMonitor
 	var encoded []byte
 	var clipped int
+	pcm := pcmOutput{chain: s.chain, integer: s.format.BitDepth != 0, clip: s.spec.Settings.Headroom.ClipIndicator}
 	for {
 		available, err := s.waitToRender(ticker)
 		if err != nil {
@@ -388,7 +351,7 @@ func (s *session) run() {
 		s.mu.Unlock()
 		s.markReady()
 		begin := s.owner.options.Clock()
-		buffer = s.chain.Process(buffer)
+		buffer, encoded, clipped = pcm.block(encoded, buffer)
 		if buffer.Frames == 0 {
 			cost += s.owner.options.Clock().Sub(begin)
 			if err := speed.add(s, 0, cost); err != nil {
@@ -396,7 +359,6 @@ func (s *session) run() {
 			}
 			continue
 		}
-		encoded, clipped = s.encodePCM(encoded[:0], buffer)
 		cost += s.owner.options.Clock().Sub(begin)
 		if err = s.encoder.write(encoded); err != nil {
 			if s.ctx.Err() == nil {
@@ -416,11 +378,11 @@ func (s *session) run() {
 			return
 		}
 		begin := s.owner.options.Clock()
-		buffer := s.chain.Drain()
+		var buffer *chain.Buffer
+		buffer, encoded, clipped = pcm.block(encoded, nil)
 		if buffer == nil {
 			break
 		}
-		encoded, clipped = s.encodePCM(encoded[:0], buffer)
 		cost := s.owner.options.Clock().Sub(begin)
 		s.markReady()
 		if err := s.encoder.write(encoded); err != nil {
@@ -578,29 +540,6 @@ func (s *session) pruneEncodedLocked(head int64) {
 		copy(s.encodedCheckpoints, s.encodedCheckpoints[count:])
 		s.encodedCheckpoints = s.encodedCheckpoints[:len(s.encodedCheckpoints)-count]
 	}
-}
-
-func (s *session) encodePCM(dst []byte, b *chain.Buffer) ([]byte, int) {
-	if s.format.BitDepth != 0 {
-		return s.chain.Quantize(dst, b)
-	}
-	needed := b.Frames * s.outputPCM.Channels * 4
-	if cap(dst) < needed {
-		dst = make([]byte, needed)
-	} else {
-		dst = dst[:needed]
-	}
-	clipped := 0
-	for frame := range b.Frames {
-		for channel := range s.outputPCM.Channels {
-			sample := b.Samples[channel][frame]
-			if s.spec.Settings.Headroom.ClipIndicator && math.Abs(sample) > 1 {
-				clipped++
-			}
-			binary.LittleEndian.PutUint32(dst[(frame*s.outputPCM.Channels+channel)*4:], math.Float32bits(float32(sample)))
-		}
-	}
-	return dst, clipped
 }
 
 var _ zones.RenderSession = (*session)(nil)

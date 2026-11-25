@@ -178,6 +178,20 @@ func (t *Tool) Reserve(ctx context.Context, n int) (*Reservation, error) {
 		}
 	}
 }
+
+// TryReserve 原子获取名额，资源不足时立即返回 ErrBusy。
+func (t *Tool) TryReserve(n int) (*Reservation, error) {
+	if n <= 0 {
+		return nil, fmt.Errorf("invalid ffmpeg reservation size: %d", n)
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.capacity-t.used < n {
+		return nil, ErrBusy
+	}
+	t.used += n
+	return &Reservation{tool: t, remaining: n}, nil
+}
 func (t *Tool) release(n int) {
 	if n == 0 {
 		return

@@ -233,6 +233,9 @@ func chooseSampleRate(sourceRate int, document zones.SettingsDocument, f zones.S
 	case "mp3":
 		// 320 kb/s 使用 MPEG-1 的三个采样率，32 kHz 也是可明确协商的编码目标。
 		rates = []int{48000, 44100, 32000}
+		if f.BitRate > 0 {
+			rates = rates[:2]
+		}
 		request.CompatibilityRates = rates
 	}
 	if len(rates) > 0 {

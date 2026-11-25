@@ -37,7 +37,8 @@ func (s *Service) SetJukeboxZone(ctx context.Context, user identity.User, zoneID
 		_, err = tx.ExecContext(ctx, `DELETE FROM subsonic_jukebox_settings WHERE user_id=$1`, user.ID)
 	} else {
 		var ownedID string
-		err = tx.QueryRowContext(ctx, `SELECT id FROM playback_zones WHERE id=$2 AND user_id=$1 FOR KEY SHARE`, user.ID, *zoneID).Scan(&ownedID)
+		err = tx.QueryRowContext(ctx, `SELECT z.id FROM playback_zones z JOIN playback_devices d ON d.id=z.device_id
+            WHERE z.id=$2 AND z.user_id=$1 AND d.kind <> 'subsonic' FOR KEY SHARE OF z`, user.ID, *zoneID).Scan(&ownedID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return Status{}, ErrJukeboxZoneNotFound
 		}

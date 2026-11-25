@@ -23,7 +23,8 @@ import { PlayerQueue } from "./player-queue";
 import { PlayerAnnouncement } from "./player-feedback";
 import { SignalPathButton } from "./signal-path";
 import { WaveformSeek } from "./waveform-seek";
-import { PlaybackSettingsDevice, PlaybackSettingsForm } from "./playback-settings-form";
+import { PlaybackSettingsForm } from "./playback-settings-form";
+import { PlaybackSettingsDevice } from "./settings-device-target";
 import { decodeTrackAnalysis, decodeTrackLyrics } from "../api/decoders";
 import { sampleBody } from "../../../test/api-samples";
 

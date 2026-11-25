@@ -17,7 +17,7 @@ import { IrFilesDialog } from "../convolution/ir-files-dialog";
 import { useIrFiles } from "../convolution/hooks";
 import { sourceLabel } from "../peq/document";
 import { PeqEditorDialog } from "../peq/peq-editor";
-import { usePlayerEngine, usePlayerSelector } from "../player-provider";
+import { SettingsTargetProvider, useSettingsTarget } from "./settings-target";
 import { Button, Segmented, SettingRow, SettingsGroup, Switch, VisuallyHidden } from "../../../shared/ui";
 import { gainLabel } from "./player-labels";
 import styles from "./playback-settings-form.module.css";
@@ -80,13 +80,13 @@ function peqSummary(name: string | null, bands: number): string {
 
 /** 参数均衡：开关在行尾；打开后下面多一行“均衡曲线”，“编辑…”打开编辑面板。 */
 function PeqRows({ disabled }: { disabled: boolean }) {
-  const engine = usePlayerEngine();
-  const peq = usePlayerSelector((snapshot) => snapshot.settings.peq);
+  const target = useSettingsTarget();
+  const peq = target.settings.peq;
   const [editing, setEditing] = useState(false);
   return (
     <>
       <SettingRow label="参数均衡">
-        {(ids) => <Switch id={ids.controlId} checked={peq.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ peq: { ...peq, enabled } })} />}
+        {(ids) => <Switch id={ids.controlId} checked={peq.enabled} disabled={disabled} onChange={(enabled) => target.set({ peq: { ...peq, enabled } })} />}
       </SettingRow>
       {peq.enabled ? (
         <SettingRow label="均衡曲线" description={peqSummary(sourceLabel(peq.source), peq.bands.length)} nested plainLabel>
@@ -100,20 +100,20 @@ function PeqRows({ disabled }: { disabled: boolean }) {
 
 /** 卷积：开关在行尾；打开后下面多一行“IR 文件”，选 IR 与“管理 IR 文件”。 */
 function ConvolutionRows({ disabled }: { disabled: boolean }) {
-  const engine = usePlayerEngine();
-  const convolution = usePlayerSelector((snapshot) => snapshot.settings.convolution);
+  const target = useSettingsTarget();
+  const convolution = target.settings.convolution;
   const files = useIrFiles();
   const [managing, setManaging] = useState(false);
   return (
     <>
       <SettingRow label="卷积">
-        {(ids) => <Switch id={ids.controlId} checked={convolution.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ convolution: { ...convolution, enabled } })} />}
+        {(ids) => <Switch id={ids.controlId} checked={convolution.enabled} disabled={disabled} onChange={(enabled) => target.set({ convolution: { ...convolution, enabled } })} />}
       </SettingRow>
       {convolution.enabled ? (
         <SettingRow label="IR 文件" nested>
           {(ids) => <>
             <select id={ids.controlId} className={styles.select} value={convolution.irId ?? ""} disabled={disabled || files.data === undefined} onChange={(event) => {
-              if (event.target.value !== "") engine.setPlaybackSettings({ convolution: { ...convolution, irId: event.target.value } });
+              if (event.target.value !== "") target.set({ convolution: { ...convolution, irId: event.target.value } });
             }}>
               {convolution.irId === null ? <option value="">选择 IR</option> : null}
               {files.data?.map((file) => <option key={file.irId} value={file.irId}>{file.name}</option>)}
@@ -129,9 +129,9 @@ function ConvolutionRows({ disabled }: { disabled: boolean }) {
 
 /** 参数均衡与卷积都开着时的先后：两步排成一条链，“对调”交换先后。 */
 function DspOrder({ disabled }: { disabled: boolean }) {
-  const engine = usePlayerEngine();
-  const convolution = usePlayerSelector((snapshot) => snapshot.settings.convolution);
-  const peqEnabled = usePlayerSelector((snapshot) => snapshot.settings.peq.enabled);
+  const target = useSettingsTarget();
+  const convolution = target.settings.convolution;
+  const peqEnabled = target.settings.peq.enabled;
   if (!peqEnabled || !convolution.enabled || convolution.irId === null) return null;
   const order = convolution.beforePeq ? ["卷积", "参数均衡"] : ["参数均衡", "卷积"];
   return (
@@ -140,27 +140,27 @@ function DspOrder({ disabled }: { disabled: boolean }) {
         <ol role="list" className={styles.chain} aria-labelledby={ids.labelId}>
           {order.map((step) => <li key={step}><span className={styles.node}>{step}</span></li>)}
         </ol>
-        <Button disabled={disabled} onClick={() => engine.setPlaybackSettings({ convolution: { ...convolution, beforePeq: !convolution.beforePeq } })}><span>对调<VisuallyHidden>处理顺序</VisuallyHidden></span></Button>
+        <Button disabled={disabled} onClick={() => target.set({ convolution: { ...convolution, beforePeq: !convolution.beforePeq } })}><span>对调<VisuallyHidden>处理顺序</VisuallyHidden></span></Button>
       </>}
     </SettingRow>
   );
-}
-
-/** 设置页页首的一句话：这些设置改的是正在控制的那台设备；还没有设备时不渲染。 */
-export function PlaybackSettingsDevice() {
-  const name = usePlayerSelector((snapshot) => snapshot.device?.name ?? null);
-  if (name === null) return null;
-  return <>这些设置作用于正在控制的设备：<span className={styles.deviceName}>{name}</span></>;
 }
 
 /**
  * 设置 › 播放：分“播放”“输出”“音效处理”三组，作用于正在控制的播放区（服务端渲染）；还没读到播放区时禁用。
  * 开关一律在行右端；从属项（渐变时长、目标采样率、均衡曲线、IR 文件、增益）缩进在所属开关或选项下，所属项关着时整行不出现。
  */
-export function PlaybackSettingsForm() {
-  const engine = usePlayerEngine();
-  const settings = usePlayerSelector((snapshot) => snapshot.settings);
-  const disabled = usePlayerSelector((snapshot) => snapshot.zone === null);
+export function PlaybackSettingsForm({ zoneId = null }: { zoneId?: string | null }) {
+  return (
+    <SettingsTargetProvider zoneId={zoneId}>
+      <SettingsFormBody />
+    </SettingsTargetProvider>
+  );
+}
+
+function SettingsFormBody() {
+  const target = useSettingsTarget();
+  const { settings, disabled } = target;
   return (
     <div className={styles.form}>
       <SettingsGroup title="播放">
@@ -170,33 +170,38 @@ export function PlaybackSettingsForm() {
             options={streamQualities.map((quality) => ({ value: quality, label: qualityLabels[quality] }))}
             value={settings.quality}
             disabled={disabled}
-            onChange={(quality) => engine.setPlaybackSettings({ quality })}
+            onChange={(quality) => target.set({ quality })}
           />}
         </SettingRow>
-        <SettingRow label="无缝播放" description="曲目之间不留空隙">
-          {(ids) => <Switch id={ids.controlId} aria-describedby={ids.descriptionId} checked={settings.gapless} disabled={disabled} onChange={(gapless) => engine.setPlaybackSettings({ gapless })} />}
-        </SettingRow>
-        <SettingRow label="交叉渐变" description="上一首淡出时下一首淡入">
-          {(ids) => <Switch id={ids.controlId} aria-describedby={ids.descriptionId} checked={settings.crossfade} disabled={disabled} onChange={(crossfade) => engine.setPlaybackSettings({ crossfade })} />}
-        </SettingRow>
-        {settings.crossfade ? (
-          <SettingRow label="渐变时长" nested>
-            {(ids) => <Segmented<CrossfadeSeconds>
-              {...ids}
-              options={crossfadeDurations.map((seconds) => ({ value: seconds, label: `${seconds} 秒` }))}
-              value={settings.crossfadeSeconds}
-              disabled={disabled}
-              onChange={(crossfadeSeconds) => engine.setPlaybackSettings({ crossfadeSeconds })}
-            />}
-          </SettingRow>
-        ) : null}
+        {/* 无缝与渐变发生在播放端，第三方客户端自己负责。 */}
+        {target.client ? null : (
+          <>
+            <SettingRow label="无缝播放" description="曲目之间不留空隙">
+              {(ids) => <Switch id={ids.controlId} aria-describedby={ids.descriptionId} checked={settings.gapless} disabled={disabled} onChange={(gapless) => target.set({ gapless })} />}
+            </SettingRow>
+            <SettingRow label="交叉渐变" description="上一首淡出时下一首淡入">
+              {(ids) => <Switch id={ids.controlId} aria-describedby={ids.descriptionId} checked={settings.crossfade} disabled={disabled} onChange={(crossfade) => target.set({ crossfade })} />}
+            </SettingRow>
+            {settings.crossfade ? (
+              <SettingRow label="渐变时长" nested>
+                {(ids) => <Segmented<CrossfadeSeconds>
+                  {...ids}
+                  options={crossfadeDurations.map((seconds) => ({ value: seconds, label: `${seconds} 秒` }))}
+                  value={settings.crossfadeSeconds}
+                  disabled={disabled}
+                  onChange={(crossfadeSeconds) => target.set({ crossfadeSeconds })}
+                />}
+              </SettingRow>
+            ) : null}
+          </>
+        )}
         <SettingRow label="音量均衡">
           {(ids) => <Segmented<LevelingMode>
             {...ids}
             options={levelingModes.map((mode) => ({ value: mode, label: levelingLabels[mode] }))}
             value={settings.leveling}
             disabled={disabled}
-            onChange={(leveling) => engine.setPlaybackSettings({ leveling })}
+            onChange={(leveling) => target.set({ leveling })}
           />}
         </SettingRow>
       </SettingsGroup>
@@ -207,7 +212,7 @@ export function PlaybackSettingsForm() {
             options={sampleRateStrategies.map((strategy) => ({ value: strategy, label: strategyLabels[strategy] }))}
             value={settings.sampleRate.strategy}
             disabled={disabled}
-            onChange={(strategy) => engine.setPlaybackSettings({ sampleRate: { ...settings.sampleRate, strategy, customRate: strategy === "custom" ? (settings.sampleRate.customRate ?? DEFAULT_CUSTOM_RATE) : settings.sampleRate.customRate } })}
+            onChange={(strategy) => target.set({ sampleRate: { ...settings.sampleRate, strategy, customRate: strategy === "custom" ? (settings.sampleRate.customRate ?? DEFAULT_CUSTOM_RATE) : settings.sampleRate.customRate } })}
           />}
         </SettingRow>
         {settings.sampleRate.strategy === "custom" ? (
@@ -217,7 +222,7 @@ export function PlaybackSettingsForm() {
               options={customSampleRates.map((rate) => ({ value: rate, label: `${rate / 1000} kHz` }))}
               value={settings.sampleRate.customRate ?? DEFAULT_CUSTOM_RATE}
               disabled={disabled}
-              onChange={(customRate) => engine.setPlaybackSettings({ sampleRate: { ...settings.sampleRate, customRate } })}
+              onChange={(customRate) => target.set({ sampleRate: { ...settings.sampleRate, customRate } })}
             />}
           </SettingRow>
         ) : null}
@@ -227,11 +232,11 @@ export function PlaybackSettingsForm() {
             options={sampleRateFilters.map((filter) => ({ value: filter, label: filterLabels[filter] }))}
             value={settings.sampleRate.filter}
             disabled={disabled}
-            onChange={(filter) => engine.setPlaybackSettings({ sampleRate: { ...settings.sampleRate, filter } })}
+            onChange={(filter) => target.set({ sampleRate: { ...settings.sampleRate, filter } })}
           />}
         </SettingRow>
         <SettingRow label="多声道降为双声道">
-          {(ids) => <Switch id={ids.controlId} checked={settings.downmix.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ downmix: { enabled } })} />}
+          {(ids) => <Switch id={ids.controlId} checked={settings.downmix.enabled} disabled={disabled} onChange={(enabled) => target.set({ downmix: { enabled } })} />}
         </SettingRow>
       </SettingsGroup>
       <SettingsGroup title="音效处理">
@@ -239,16 +244,16 @@ export function PlaybackSettingsForm() {
         <ConvolutionRows disabled={disabled} />
         <DspOrder disabled={disabled} />
         <SettingRow label="Headroom" description="整体降低电平，给均衡与卷积留出余量">
-          {(ids) => <Switch id={ids.controlId} aria-describedby={ids.descriptionId} checked={settings.headroom.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, enabled } })} />}
+          {(ids) => <Switch id={ids.controlId} aria-describedby={ids.descriptionId} checked={settings.headroom.enabled} disabled={disabled} onChange={(enabled) => target.set({ headroom: { ...settings.headroom, enabled } })} />}
         </SettingRow>
         {settings.headroom.enabled ? (
           <SettingRow label="增益" nested>
-            {(ids) => <GainSlider id={ids.controlId} value={settings.headroom.db} disabled={disabled} onCommit={(db) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, db } })} />}
+            {(ids) => <GainSlider id={ids.controlId} value={settings.headroom.db} disabled={disabled} onCommit={(db) => target.set({ headroom: { ...settings.headroom, db } })} />}
           </SettingRow>
         ) : null}
         {/* 削波检测不依赖 Headroom（服务端只看这个开关），所以不是 Headroom 的从属项：Headroom 关着时也能开关它。 */}
         <SettingRow label="削波指示" description="出现削波时在信号路径里提示">
-          {(ids) => <Switch id={ids.controlId} aria-describedby={ids.descriptionId} checked={settings.headroom.clipIndicator} disabled={disabled} onChange={(clipIndicator) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, clipIndicator } })} />}
+          {(ids) => <Switch id={ids.controlId} aria-describedby={ids.descriptionId} checked={settings.headroom.clipIndicator} disabled={disabled} onChange={(clipIndicator) => target.set({ headroom: { ...settings.headroom, clipIndicator } })} />}
         </SettingRow>
       </SettingsGroup>
     </div>

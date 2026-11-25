@@ -1409,6 +1409,7 @@ func TestAPISampleRecorderOwnership(t *testing.T) {
 		feedback bool
 	}{
 		{"playback-zones/responses/snapshot.json", false, false},
+		{"playback-zones/responses/snapshot-subsonic-device.json", false, false},
 		{"system/backups.json", false, false},
 		{"errors/backup-busy.json", false, false},
 		{"release-groups/list.json", true, false},

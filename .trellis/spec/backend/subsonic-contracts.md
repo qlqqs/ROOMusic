@@ -1,6 +1,6 @@
 # Subsonic 兼容接口合同
 
-`backend/internal/subsonic` 让 Symfonium、Feishin 等 Subsonic/OpenSubsonic 客户端用 ROOMusic 的账号连接。本文记录骨架（2026-11-25，迁移 0081）的协议外壳、鉴权、登录密码副本、实例开关与网页端设置接口，以及浏览、搜索与封面（§4.1–4.3）、点唱机（§4.4，迁移 0084）、收藏歌单与歌词（§4.5）。播放流与听歌记录由 stream 子任务追加到本文。产品裁决见任务 `.trellis/tasks/11-25-opensubsonic-api/`。
+`backend/internal/subsonic` 让 Symfonium、Feishin 等 Subsonic/OpenSubsonic 客户端用 ROOMusic 的账号连接。本文记录骨架（2026-11-25，迁移 0081）的协议外壳、鉴权、登录密码副本、实例开关与网页端设置接口，以及浏览、搜索与封面（§4.1–4.3）、点唱机（§4.4，迁移 0084）、收藏歌单与歌词（§4.5）、播放流与听歌记录（§4.6，迁移 0085）。产品裁决见任务 `.trellis/tasks/11-25-opensubsonic-api/`。
 
 ## 1. 范围与触发
 
@@ -95,7 +95,7 @@ Subsonic 的 `p=` 登录成功**不**补写副本：只有网页入口知道该�
 | --- | --- |
 | `ping` | 空外壳 |
 | `getLicense` | `license{valid=true}` |
-| `getOpenSubsonicExtensions` | 只列已实现的扩展：`formPost` v1、`songLyrics` v1；stream 子任务实现 `transcodeOffset` 时再追加 |
+| `getOpenSubsonicExtensions` | 只列已实现的扩展：`formPost` v1、`songLyrics` v1、`transcodeOffset` v1 |
 | `getMusicFolders` | 一个虚拟文件夹 `id=1`、`name="ROOMusic"` |
 | `getUser` | 只能查本人；`streamRole`、`downloadRole`、`jukeboxRole` 为 true，`folder=[1]` |
 | `setRating` | `id` 是曲目、专辑组或艺人（`personal.SetRatingByID` 判断类型）；`rating=0` 清除，1–5 设置。缺参数或非整数 → 10，整数越界 → 0，ID 不存在 → 70，失败都不写入。与网页端评分是同一份数据，见 `personal-contracts.md` §9 |
@@ -177,6 +177,24 @@ ID 直接用 ROOMusic 的 UUID：歌曲是曲目 ID，专辑是专辑组 ID，�
 
 歌单写入一律“读当前歌单 → 在内存里算出新曲目列表 → 带 revision 的命令”，修改类请求的幂等键由用户 ID 加命令内容（含 revision）算出。`revision_conflict` 时重读、重算一次，仍冲突返回 0，不留部分写入。
 
+### 4.6 播放流与听歌记录
+
+- **客户端设备**：鉴权成功后，`/rest/` 的每个请求都按（用户、客户端名 `c`）登记或取回一台 `subsonic` 设备（`zones.EnsureClientDevice`，规则见 `playback-zone-contracts.md`），把它的播放区放进请求上下文。`stream` 用它的设置，并刷新 `last_seen_at`。
+
+`stream` 按顺序取第一个满足的情况：
+
+| 情况 | 输出 |
+| --- | --- |
+| `format=raw` | 原文件（`playback.OpenSource`）；CUE 分轨用关闭全部处理的设置渲染成 FLAC |
+| 直发：设备没有任何处理（`render.HasProcessing` 为假）、源是 FLAC/MP3/AAC(M4A)/Ogg Vorbis/Opus/WAV 且不是 CUE、没有 `timeOffset`、`format` 为空或与源相同、`maxBitRate` 为空或不低于源码率 | 原文件，`http.ServeContent`：支持 Range，强 ETag 用内容指纹 |
+| 其余 | `RenderTrack`：`format` 取 `mp3`/`opus`/`aac`/`flac`；没给时有 `maxBitRate` 或设备音质为有损用 Opus，否则 FLAC。`timeOffset` 秒数作起点。响应带实际 MIME、`Accept-Ranges: none`，先刷出响应头再分块写出 |
+
+- `download`：始终原文件；CUE 分轨同 `format=raw`。
+- 两者都发 `Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff`。`estimateContentLength` 忽略。
+- 错误：曲目缺失或目录停用 70；`format` 不认识 10；渲染名额用尽 0“服务器忙”（不排队，在写响应头之前返回）；渲染途中客户端断开时中止响应。
+- `scrobble`：`submission=true`（默认）经 `listening.RecordTrackAt` 计入听歌记录，播放时长取目录里的曲目时长，客户端给的 `time`（毫秒）作播放时间；幂等键为用户、曲目与 `time` 字符串的 SHA-256，按 UUIDv8 写入，没给 `time` 时按服务器整秒算。重复或并发提交只记一次。`submission=false` 只更新“正在播放”。
+- `getNowPlaying`：“正在播放”只存在进程内，按用户覆盖，10 分钟后过期，所有用户都能看到；歌曲经 `ratedEntities`，带请求者本人的评分与收藏。
+
 ## 5. 鉴权
 
 1. 实例关闭 → 40（先于参数检查，不泄露原因）。
@@ -252,6 +270,8 @@ ID 直接用 ROOMusic 的 UUID：歌曲是曲目 ID，专辑是专辑组 ID，�
 | `TestPostgreSQLSubsonicSealFailurePreservesIdentity` | 密钥损坏时登录与改密成功、Warn 不含密码与密文，确认密码 503 |
 | `TestPostgreSQLSubsonicWebSettings` | 网页端四个接口的守卫与第 6 节状态码，样本录制 |
 | `TestPostgreSQLSubsonicMigrationRoundTrip` | 0081 up → down → up |
+| `TestPostgreSQLSubsonicPersonal*`、`TestSubsonicPersonalWireEncoding` | §4.5：收藏双向互通与锚点、批量原子性、歌单读写与版本冲突、他人歌单 50/70、歌词三种形态与旧接口匹配 |
+| `TestPostgreSQLSubsonicStream*` | §4.6：直发与 Range、均衡后渲染的 PCM 与会话一致、码率、APE/DSF/CUE、`timeOffset`、不控速、断开后进程回收、并发名额、目录停用、客户端设备与网页端设置、scrobble 幂等与正在播放 |
 | `TestPostgreSQLSubsonicJukeboxPlaybackAndQueue`、`…GroupGain` | 点唱机各 action 与网页快照、队列、事件流一致；设备与编组音量 |
 | `TestPostgreSQLSubsonicJukeboxRecentPlayback`、`…WebSettings` | 自动选择、没有播放区时错误 0、本人隔离；网页端 GET/PUT 状态码矩阵 |
 | `TestPostgreSQLSubsonicJukeboxRetriesWithLatestIndex`、`…RejectsPersistentRevisionConflicts` | 冲突后按新下标重试；持续冲突返回 0 且没有部分写入 |

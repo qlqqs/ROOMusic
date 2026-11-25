@@ -17,6 +17,10 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	85: `INSERT INTO playback_devices(id,user_id,kind,name) VALUES
+ ('f8500000-0000-4000-8000-000000000001','f6900000-0000-4000-8000-000000000001','subsonic','合成客户端');
+ INSERT INTO playback_zones(id,user_id,device_id) VALUES
+ ('f8500000-0000-4000-8000-000000000002','f6900000-0000-4000-8000-000000000001','f8500000-0000-4000-8000-000000000001');`,
 	79: `UPDATE playback_devices SET sync_delay_ms=-500 WHERE id='f7900000-0000-4000-8000-000000000001';
  UPDATE playback_devices SET sync_delay_ms=500 WHERE id='f7900000-0000-4000-8000-000000000002';
  INSERT INTO playback_group_members(device_id,user_id,leader_zone_id,ordinal)
@@ -499,7 +503,7 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if m.Version == 71 {
 				rollbackExec(t, db, beforeSourcePluginMigration)
 			}
-			if m.Version == 69 || m.Version == 70 || m.Version == 75 || m.Version == 76 || m.Version == 77 || m.Version == 78 || m.Version == 79 {
+			if m.Version == 69 || m.Version == 70 || m.Version == 75 || m.Version == 76 || m.Version == 77 || m.Version == 78 || m.Version == 79 || m.Version == 85 {
 				rollbackExec(t, db, beforeUPnPMigration)
 			}
 			if m.Version == 75 || m.Version == 76 || m.Version == 77 || m.Version == 78 {
