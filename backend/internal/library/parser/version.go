@@ -19,7 +19,7 @@ var formatVersions = map[string]int{
 	".ogg":  1,
 	".opus": 1,
 	".wav":  1,
-	".m4a":  1,
+	".m4a":  2,
 	".dsf":  1,
 	".dff":  1,
 }

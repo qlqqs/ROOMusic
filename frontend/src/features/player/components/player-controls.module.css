@@ -46,6 +46,14 @@ input[type="range"] { accent-color: var(--text-accent); min-height: 24px; }
   .large .play, .large .play button { width: 68px; min-width: 68px; height: 68px; min-height: 68px; }
 }
 
+/* 桌面播放栏的常驻音量条；静音时滑块退成中性色，位置保留（取消静音回到原音量）。 */
+.inlineVolume { display: inline-flex; align-items: center; gap: var(--space-1); }
+.inlineSlider { width: 96px; margin: 0; }
+/* 768–1023px 播放栏三段都挤，音量条收短，把宽度留给标题。 */
+@media (max-width: 1023px) { .inlineSlider { width: 64px; } }
+.inlineSlider[data-muted] { accent-color: var(--color-neutral-400); }
+.inlineSlider:disabled { opacity: 0.45; }
+
 /* 局域网设备的固定音量提示。 */
 .deviceVolume {
   color: var(--text-secondary);

@@ -71,6 +71,46 @@ func TestParseM4AReaderParsesALACConfigAndLargesize(t *testing.T) {
 	}
 }
 
+func TestParseM4ABitDepthByCodec(t *testing.T) {
+	for _, tc := range []struct {
+		entryType, codec string
+		bitDepth         int
+	}{
+		{entryType: "mp4a", codec: "aac", bitDepth: 0},
+		{entryType: "alac", codec: "alac", bitDepth: 24},
+	} {
+		t.Run(tc.entryType, func(t *testing.T) {
+			entry := make([]byte, 28)
+			binary.BigEndian.PutUint16(entry[16:18], 2)
+			binary.BigEndian.PutUint16(entry[18:20], 16)
+			binary.BigEndian.PutUint32(entry[24:28], 44100<<16)
+			if tc.entryType == "alac" {
+				// cookie 的位深与 sample entry 的 samplesize 不同，用来验证取值优先级。
+				cookie := make([]byte, 28)
+				cookie[9] = 24
+				cookie[13] = 2
+				binary.BigEndian.PutUint32(cookie[24:28], 44100)
+				entry = append(entry, repairM4AAtom("alac", cookie)...)
+			}
+			atoms := repairM4AAtom("stsd", append([]byte{0, 0, 0, 0, 0, 0, 0, 1}, repairM4AAtom(tc.entryType, entry)...))
+			for _, atomType := range []string{"stbl", "minf", "mdia", "trak", "moov"} {
+				atoms = repairM4AAtom(atomType, atoms)
+			}
+			path := filepath.Join(t.TempDir(), "track.m4a")
+			if err := os.WriteFile(path, append(testM4AFtyp(), atoms...), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			observation, err := ParseAudioFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if observation.Codec != tc.codec || observation.BitDepth != tc.bitDepth {
+				t.Errorf("编码及位深 = %q/%d，期望 %q/%d", observation.Codec, observation.BitDepth, tc.codec, tc.bitDepth)
+			}
+		})
+	}
+}
+
 func TestParseM4AReaderRejectsTruncatedAtomWithoutPanic(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "truncated.m4a")
 	fixture := repairM4AAtom("ftyp", append([]byte("M4A "), []byte{0, 0, 0, 0}...))

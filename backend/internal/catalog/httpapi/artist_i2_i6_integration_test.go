@@ -144,6 +144,11 @@ func TestPostgreSQLArtistI2I6HTTP(t *testing.T) {
 	if got := albums(composerPath); got.Pagination.Total != 0 || got.Items == nil || len(got.Items) != 0 {
 		t.Fatalf("默认不应包含作曲: %+v", got)
 	}
+	if got := albums(composerPath + "?participation=appears_on"); got.Pagination.Total != 1 || len(got.Items) != 1 || got.Items[0].Group.ID != group ||
+		got.Items[0].CreditedReleaseID != release || !reflect.DeepEqual(got.Items[0].Roles, []string{"composer"}) {
+		t.Fatalf("参与的专辑响应错误: %+v", got)
+	}
+	checkError(composerPath+"?participation=appears-on", true, 400, "invalid_artist_participation")
 	for _, query := range []string{"", "&q=%25", "&q=_", "&q=~", "&q=%25_~", "&page_size=100"} {
 		got := albums(composerPath + "?participation=any" + query)
 		if got.Pagination.Total != 1 || len(got.Items) != 1 || got.Items[0].Group.ID != group || got.Items[0].CreditedReleaseID != release || !reflect.DeepEqual(got.Items[0].Roles, []string{"composer"}) {

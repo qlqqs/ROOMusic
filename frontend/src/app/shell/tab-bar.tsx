@@ -33,7 +33,7 @@ export function tabAt(pathname: string): Tab["id"] | null {
 }
 
 /**
- * 窄屏（<768px）底部标签栏：概览、专辑、艺人（后端有艺人能力时）、管家（读到管家设置时，显示用户起的名字，进整页对话）、我的。当前标签 aria-current="page"，图标与文字用强调色，“我的”的心形填实。
+ * 窄屏（<768px）底部标签栏：概览、专辑、艺人（后端有艺人能力时）、管家（读到管家设置、且已接上模型或有未读会话时，显示用户起的名字，进整页对话；没接上模型时不占格，从设置进入引导）、我的。当前标签 aria-current="page"，图标与文字用强调色，“我的”的心形填实。
  * 外壳按它的实际高度给迷你播放栏与主内容留位置。
  */
 export function TabBar({ ref }: { ref: RefObject<HTMLElement | null> }) {
@@ -46,7 +46,7 @@ export function TabBar({ ref }: { ref: RefObject<HTMLElement | null> }) {
     <nav ref={ref} className={styles.bar} aria-label="主导航">
       <ul className={styles.list}>
         {tabs
-          .filter((tab) => (tab.id !== "artists" || artists) && (tab.id !== "steward" || steward.available))
+          .filter((tab) => (tab.id !== "artists" || artists) && (tab.id !== "steward" || (steward.available && (steward.configured || unread))))
           .map((tab) => (
             <li key={tab.id}>
               {/* 管家：面板没有记着会话时进空白新对话，不转到列表里最近的会话（那是刷新、直接打开地址时的行为）。 */}

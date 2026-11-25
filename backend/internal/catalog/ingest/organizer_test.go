@@ -114,6 +114,63 @@ func TestOrganizeSameDirectoryConflictUsesMajorityOrStableSplit(t *testing.T) {
 	}
 }
 
+func TestOrganizeSameDirectoryWithInferredAlbum(t *testing.T) {
+	first := SourceObservation{RelativePath: "Downloads/first.flac", Directory: "Downloads", Title: "曲目甲", Artist: "艺人", Album: "专辑甲", TrackNumber: 1}
+	second := SourceObservation{RelativePath: "Downloads/second.flac", Directory: "Downloads", Title: "曲目乙", Artist: "艺人", Album: "专辑乙", TrackNumber: 1}
+	untagged := filenameObservation("Downloads/guest.flac")
+	untagged.Title, untagged.Artist = "曲目丙", "艺人"
+	delete(untagged.InferredFields, "title")
+	delete(untagged.InferredFields, "artist")
+	untagged.FieldSources["title"], untagged.FieldSources["artist"] = "tag", "tag"
+
+	t.Run("专辑标签冲突时无标签曲目独立成组", func(t *testing.T) {
+		got := OrganizeObservations([]SourceObservation{first, second, untagged})
+		if len(got) != 3 {
+			t.Fatalf("候选数 = %d，期望 3", len(got))
+		}
+		wantTitles := map[string]string{first.RelativePath: first.Album, second.RelativePath: second.Album, untagged.RelativePath: "未知专辑"}
+		for _, candidate := range got {
+			tracks := candidate.Mediums[1]
+			if candidate.Anchor.Kind != CandidateSameDirSplit || len(candidate.Mediums) != 1 || len(tracks) != 1 {
+				t.Fatalf("期望每个拆分候选恰有一轨，实际 %+v", candidate)
+			}
+			relativePath := tracks[0].Observation.RelativePath
+			if want, ok := wantTitles[relativePath]; !ok || candidate.Title != want {
+				t.Errorf("%s 的候选标题 = %q，期望 %q", relativePath, candidate.Title, want)
+			}
+			delete(wantTitles, relativePath)
+			if relativePath == untagged.RelativePath {
+				const wantGroupKey = "same_dir_split\x00Downloads\x00|@Downloads/guest.flac"
+				if candidate.ReleaseGroupKey != wantGroupKey {
+					t.Errorf("无标签曲目的归组键 = %q，期望 %q", candidate.ReleaseGroupKey, wantGroupKey)
+				}
+				if candidate.Anchor.Partition != "source:Downloads/guest.flac" {
+					t.Errorf("无标签曲目的发行锚点分区 = %q，期望 source:Downloads/guest.flac", candidate.Anchor.Partition)
+				}
+			}
+		}
+	})
+
+	t.Run("仅一种专辑标签时无标签曲目并入该专辑", func(t *testing.T) {
+		sameAlbum := second
+		sameAlbum.Album = first.Album
+		got := OrganizeObservations([]SourceObservation{first, sameAlbum, untagged})
+		if len(got) != 1 || got[0].Anchor.Kind != CandidateOrdinary || got[0].Title != first.Album {
+			t.Fatalf("期望同目录曲目归入专辑 %q，实际 %+v", first.Album, got)
+		}
+		var paths []string
+		for _, tracks := range got[0].Mediums {
+			for _, track := range tracks {
+				paths = append(paths, track.Observation.RelativePath)
+			}
+		}
+		slices.Sort(paths)
+		if want := []string{first.RelativePath, untagged.RelativePath, second.RelativePath}; !slices.Equal(paths, want) {
+			t.Errorf("专辑曲目来源 = %v，期望 %v", paths, want)
+		}
+	})
+}
+
 func TestOrganizeNonContiguousDiscDirectoriesStayLeafCandidates(t *testing.T) {
 	got := OrganizeObservations([]SourceObservation{
 		{RelativePath: "Box/Disc 1/a.flac", Directory: "Box/Disc 1", Album: "Set", DiscNumber: 1},

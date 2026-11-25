@@ -9,7 +9,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 )
 
-// ListArtistAlbums 默认仅列专辑艺人参与；可选参数不改变旧调用及默认响应。
+// ListArtistAlbums 默认仅列专辑艺人参与，可通过 Participation 扩展到所有参与或只列其他参与。
 func (s *Store) ListArtistAlbums(ctx context.Context, id string, page, size int, options ...ArtistAlbumOptions) (ArtistPage[ArtistAlbum], error) {
 	var option ArtistAlbumOptions
 	if len(options) > 1 {
@@ -18,7 +18,9 @@ func (s *Store) ListArtistAlbums(ctx context.Context, id string, page, size int,
 	if len(options) == 1 {
 		option = options[0]
 	}
-	if option.Participation != "" && option.Participation != "any" {
+	switch option.Participation {
+	case "", "any", "appears_on":
+	default:
 		return ArtistPage[ArtistAlbum]{}, fmt.Errorf("%w: invalid artist album participation", ErrQuery)
 	}
 	return artistSnapshot(ctx, s, func(snapshot *Store) (ArtistPage[ArtistAlbum], error) {
@@ -78,10 +80,12 @@ func (s *Store) ListArtistAlbums(ctx context.Context, id string, page, size int,
 }
 
 func artistAlbumsSQL(participation string) (string, string) {
+	const albumArtistCredits = `SELECT DISTINCT e.release_id FROM artist_effective_credits e WHERE e.artist_id=ANY($1::uuid[]) AND e.role='album_artist'`
 	prefix := `WITH `
-	credits := `SELECT DISTINCT e.release_id FROM artist_effective_credits e WHERE e.artist_id=ANY($1::uuid[]) AND e.role='album_artist'`
+	credits := albumArtistCredits
 	roles := `'null'::jsonb`
-	if participation == "any" {
+	groupFilter := ""
+	if participation == "any" || participation == "appears_on" {
 		// 与安全摘要同一参与口径：发行级展开全部轨，轨级只取该轨；missing 不制造可见参与。
 		prefix += artistParticipationCTE + `, album_participation AS MATERIALIZED (
  SELECT DISTINCT group_id,release_id,role FROM artist_participation WHERE present), `
@@ -89,9 +93,15 @@ func artistAlbumsSQL(participation string) (string, string) {
 		roles = `(SELECT jsonb_agg(role ORDER BY ` + artistRoleOrder + `) FROM (
  SELECT DISTINCT role FROM album_participation WHERE group_id=c.group_id) roles)`
 	}
+	if participation == "appears_on" {
+		prefix += `album_artist_groups AS (
+ SELECT DISTINCT releases.group_id FROM ` + releasesql.ReleaseSource + `
+ WHERE releases.id IN (` + albumArtistCredits + `) AND ` + releasesql.ReleaseVisiblePredicate + `), `
+		groupFilter = ` AND NOT EXISTS (SELECT 1 FROM album_artist_groups g WHERE g.group_id=releases.group_id)`
+	}
 	prefix += `credited AS MATERIALIZED (
  SELECT DISTINCT ON (releases.group_id) releases.group_id,releases.id AS credited_release_id
- FROM ` + releasesql.ReleaseSource + ` WHERE releases.id IN (` + credits + `) AND ` + releasesql.ReleaseVisiblePredicate + `
+ FROM ` + releasesql.ReleaseSource + ` WHERE releases.id IN (` + credits + `) AND ` + releasesql.ReleaseVisiblePredicate + groupFilter + `
  ORDER BY releases.group_id,` + releasesql.ReleaseGroupMemberOrder + `), representatives AS (
  SELECT DISTINCT ON (releases.group_id) releases.group_id,releases.id,releases.title
  FROM ` + releasesql.ReleaseSource + ` WHERE releases.group_id IN (SELECT group_id FROM credited) AND ` + releasesql.ReleaseVisiblePredicate + `

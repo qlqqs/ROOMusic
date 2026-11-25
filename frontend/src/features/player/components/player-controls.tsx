@@ -84,6 +84,24 @@ export function VolumeButton() {
   </span>;
 }
 
+/**
+ * 桌面播放栏的音量：喇叭图标（按一下静音或取消静音，图标随音量变化）加一条常驻的横向音量条，拖动、点击或方向键直接调。
+ * 那台设备不能由软件调音量时两者都禁用，悬停提示原因；局域网设备另写“设备音量”。
+ */
+export function InlineVolume() {
+  const { engine, snapshot } = usePlayer();
+  const fixed = !snapshot.volumeControllable;
+  const silent = snapshot.muted || snapshot.volume === 0;
+  const Icon = silent ? VolumeX : snapshot.volume < 0.5 ? Volume1 : Volume2;
+  const deviceVolume = fixed && snapshot.device?.lan != null;
+  const percent = `${Math.round(snapshot.volume * 100)}%`;
+  return <span className={styles.inlineVolume} title={fixed ? (deviceVolume ? "在设备上调音量" : "这台设备不能调音量") : undefined}>
+    {deviceVolume ? <span className={styles.deviceVolume}>设备音量</span> : null}
+    <Button variant="icon" label={snapshot.muted ? "取消静音" : "静音"} aria-pressed={snapshot.muted} icon={<Icon size={16} />} disabled={fixed} onClick={() => engine.setMuted(!snapshot.muted)} />
+    <input type="range" className={styles.inlineSlider} aria-label="播放器音量" aria-valuetext={snapshot.muted ? `已静音，${percent}` : percent} min={0} max={1} step={0.01} value={snapshot.volume} disabled={fixed} data-muted={snapshot.muted ? "" : undefined} onChange={(event) => engine.setVolume(Number(event.target.value))} />
+  </span>;
+}
+
 function VolumeDialog({ anchor, onClose }: { anchor: DOMRect | null; onClose: () => void }) {
   const { engine, snapshot } = usePlayer();
   const titleId = useId();

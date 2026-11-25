@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { artistIdOf, parseArtistDetailSearch, parseArtistsSearch } from "./artist-search";
 
 const listDefaults = { q: undefined, initial: undefined, role: undefined, sort: undefined, page: undefined };
-const detailDefaults = { albums_page: undefined, track_role: undefined, tracks_page: undefined, names_page: undefined };
+const detailDefaults = { albums_page: undefined, appears_page: undefined, track_role: undefined, tracks_page: undefined, names_page: undefined };
 const invalidPages = [undefined, null, "", "bad", "1.5", "-2", " 2 ", [], {}, 0, 1, -1, 1.5, Infinity, NaN, 1_000_001];
 
 describe("艺人列表URL校验", () => {
@@ -44,12 +44,12 @@ describe("艺人列表URL校验", () => {
 });
 
 describe("艺人详情URL分页互不串扰", () => {
-  const valid = { albums_page: 2, tracks_page: 3, names_page: 4, track_role: "composer" };
-  it("分别恢复专辑、曲目、名字页码和角色，忽略其他feature参数", () => {
-    expect(parseArtistDetailSearch({ albums_page: "02", tracks_page: 3, names_page: "04", track_role: "composer", page: 88, artists_page: 99 })).toStrictEqual(valid);
+  const valid = { albums_page: 2, appears_page: 6, tracks_page: 3, names_page: 4, track_role: "composer" };
+  it("分别恢复专辑、参与的专辑、曲目、名字页码和角色，忽略其他feature参数", () => {
+    expect(parseArtistDetailSearch({ albums_page: "02", appears_page: "6", tracks_page: 3, names_page: "04", track_role: "composer", page: 88, artists_page: 99 })).toStrictEqual(valid);
     expect(parseArtistDetailSearch({})).toStrictEqual(detailDefaults);
   });
-  it.each(["albums_page", "tracks_page", "names_page"] as const)("%s清理或翻页不改另两栏及角色", (field) => {
+  it.each(["albums_page", "appears_page", "tracks_page", "names_page"] as const)("%s清理或翻页不改其他栏及角色", (field) => {
     for (const page of invalidPages) expect(parseArtistDetailSearch({ ...valid, [field]: page })).toStrictEqual({ ...valid, [field]: undefined });
     expect(parseArtistDetailSearch({ ...valid, [field]: "05" })).toStrictEqual({ ...valid, [field]: 5 });
     expect(parseArtistDetailSearch({ ...valid, [field]: 1_000_000 })).toStrictEqual({ ...valid, [field]: 1_000_000 });
@@ -61,11 +61,11 @@ describe("艺人详情URL分页互不串扰", () => {
     expect(parseArtistDetailSearch({ ...valid, track_role: role })).toStrictEqual({ ...valid, track_role: undefined });
   });
   it("重复校验幂等，不修改传入对象，复制地址可独立恢复", () => {
-    const raw = { albums_page: "02", tracks_page: "03", names_page: "04", track_role: "composer" };
+    const raw = { albums_page: "02", appears_page: "06", tracks_page: "03", names_page: "04", track_role: "composer" };
     const parsed = parseArtistDetailSearch(raw);
     expect(parseArtistDetailSearch(parsed)).toStrictEqual(parsed);
     expect(parseArtistDetailSearch(Object.fromEntries(new URLSearchParams(raw)))).toStrictEqual(valid);
-    expect(raw).toStrictEqual({ albums_page: "02", tracks_page: "03", names_page: "04", track_role: "composer" });
+    expect(raw).toStrictEqual({ albums_page: "02", appears_page: "06", tracks_page: "03", names_page: "04", track_role: "composer" });
   });
 });
 

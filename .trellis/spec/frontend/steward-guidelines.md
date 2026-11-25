@@ -155,7 +155,8 @@ features/steward/
 
 - `useStewardEntry()`：设置查询（`GET /me/steward/settings`）读到了才显示入口；读取失败、还没读到、或是 `403 steward_disabled`
   （包括之前读到过、重读时被拒）都不显示。名字取 `display_name`，空时是“管家”。侧栏、标签栏、面板标题与输入框提示都取这里，
-  设置页保存后直接写设置缓存，不刷新就变。
+  设置页保存后直接写设置缓存，不刷新就变。`configured` 是 `readinessOf` 不为 `not_configured`（密钥要重填、模型不支持工具也算接上）；
+  窄屏标签栏只在 `available && (configured || unread > 0)` 时占一格，侧栏入口不看 `configured`（没接上时从侧栏或设置进入引导页）。
 - 侧栏“聆听”里管家排在艺人之后（`app/shell/nav-items.ts` 的 `steward` 项，`visibleNavGroups(role, {steward})`）：在别的页面上是
   开合面板的按钮（`aria-expanded`、`aria-controls="steward-dock"`，`id="steward-entry"`），在整页对话里是指向 `/steward` 的当前项链接。
   图标是 `nav-items.ts` 的 `StewardIcon`（lucide `Loader`，对应原型的八道光芒），侧栏与标签栏共用。

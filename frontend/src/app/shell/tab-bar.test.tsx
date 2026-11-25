@@ -44,11 +44,14 @@ afterEach(() => {
   window.matchMedia = originalMatchMedia;
 });
 
-function setup(options: { artists?: boolean; steward?: "on" | "disabled" } = {}) {
+function setup(options: { artists?: boolean; steward?: "on" | "disabled" | "unconfigured" | "unconfigured-unread" } = {}) {
   const api = installFakeApi();
   // 已有会话：标签栏进入时仍是空白新对话，不转到最近的会话。
   if (options.steward !== undefined) {
-    installStewardApi(api, { settings: settingsOf({ display_name: "小蓝" }), disabled: options.steward === "disabled", conversations: [conversationOf("00000000-0000-4000-8000-000000000005")] });
+    const unconfigured = options.steward === "unconfigured" || options.steward === "unconfigured-unread";
+    const settings = settingsOf({ display_name: "小蓝", ...(unconfigured ? { endpoint: "", model: "" } : {}) });
+    const conversation = { ...conversationOf("00000000-0000-4000-8000-000000000005"), unread: options.steward === "unconfigured-unread" };
+    installStewardApi(api, { settings, disabled: options.steward === "disabled", conversations: [conversation] });
   }
   installFakeSession(api, { current: "curator" });
   installOverviewApi(api);
@@ -115,6 +118,23 @@ describe("窄屏底部标签栏", () => {
     await waitFor(() => expect(within(bar()).getByRole("link", { name: "小蓝" }).getAttribute("aria-current")).toBe("page"));
     expect(await screen.findByRole("textbox", { name: "问问小蓝" })).toBeTruthy();
     expect(history.location.pathname).toBe("/steward");
+  });
+
+  it("还没接上模型时不占一格", async () => {
+    const api = setup({ steward: "unconfigured" });
+    renderApp({ path: "/" });
+    await screen.findByRole("heading", { level: 1, name: "概览" });
+    // 设置读到之后标签栏仍是四项。
+    await waitFor(() => expect(api.requestsTo("GET", "/api/v1/me/steward/settings").length).toBeGreaterThan(0));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(within(bar()).getAllByRole("link").map((link) => link.textContent)).toEqual(["概览", "专辑", "艺人", "我的"]);
+  });
+
+  it("没接上模型但有未读会话时仍有这一项", async () => {
+    setup({ steward: "unconfigured-unread" });
+    renderApp({ path: "/" });
+    await screen.findByRole("heading", { level: 1, name: "概览" });
+    await waitFor(() => expect(within(bar()).getAllByRole("link").map((link) => link.textContent)).toEqual(["概览", "专辑", "艺人", "小蓝", "我的"]));
   });
 
   it("管理员关闭了成员使用管家时没有这一项", async () => {

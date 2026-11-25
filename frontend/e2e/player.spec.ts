@@ -704,7 +704,8 @@ test("375px：浮起的迷你栏不遮挡页面最后一行，四周留白；底
   await expect(bar(page).getByRole("button", { name: "播放", exact: true })).toBeVisible();
   await expect(bar(page).getByRole("button", { name: "下一首", exact: true })).toBeVisible();
   await expect(bar(page).getByRole("button", { name: /^队列（\d+）$/ })).toBeVisible();
-  for (const name of ["播放模式：顺序", "上一首", "音量"]) await expect(bar(page).getByRole("button", { name, exact: true })).toBeHidden();
+  for (const name of ["播放模式：顺序", "上一首", "静音"]) await expect(bar(page).getByRole("button", { name, exact: true })).toBeHidden();
+  await expect(bar(page).getByRole("slider", { name: "播放器音量" })).toBeHidden();
   await expect(bar(page).getByRole("button", { name: /^信号路径：/ })).toBeHidden();
   // 滚到页面最底部：最后一首曲目整行在迷你栏上方。
   await page.evaluate(() => {

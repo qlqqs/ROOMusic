@@ -30,7 +30,7 @@
 
 - `/artists?q=&initial=&role=&sort=album_count&page=`：q 与专辑列表同一个校验；initial 是 A–Z、`kana`、`#`，只在按名字排序时保留；
   role 是九个角色之一；按名字排序是默认、不写；任何筛选改变都回到第 1 页；越界页码替换成末页。按名字排序时按首字母分组显示，按专辑数排序时不分组。
-- `/artists/{id}?albums_page=&track_role=&tracks_page=&names_page=`：专辑、曲目、名字各自翻页；曲目栏按七个曲目级角色分栏（`artistTrackRoles`，只列有曲目的角色，没有数据的角色不显示），换角色时曲目回到第 1 页。
+- `/artists/{id}?albums_page=&appears_page=&track_role=&tracks_page=&names_page=`：专辑、参与的专辑、曲目、名字各自翻页；“参与的专辑”取 `participation=appears_on`（以其他身份参与、不是专辑艺人的组），卡片下写专辑艺人，第 1 页就没有时整栏不出现；曲目栏按七个曲目级角色分栏（`artistTrackRoles`，只列有曲目的角色，没有数据的角色不显示），换角色时曲目回到第 1 页。
   路径不是 UUID 时不发请求、显示“艺人不存在”；详情给出 `redirect_artist_id` 时用替换历史的方式带到现在的艺人页。
 - `/me/favorites?tab=artists`：“我的收藏”的艺人一栏；`/search?artists_page=`：搜索结果的艺人栏页码；`/operations?artist=`：这位艺人的操作记录（与 release、group 取并集）；
   `/artist-candidates?status=&page=`（管理员）：“重复艺人”。`status` 只接受 `ignored`，不传就是待处理；切换时不带页码，回到第一页；

@@ -82,7 +82,7 @@ function readParameterError(url: URL): ArtistResponse | null {
   if (p < 1n || p > max || n < 1n || n > 100n || (p - 1n) * n > max) return artistError("invalid_pagination", 400);
   if (url.pathname.endsWith("/albums")) {
     const values = query.getAll("participation");
-    if (values.length > 1 || (values.length === 1 && values[0] !== "any")) return artistError("invalid_artist_participation", 400);
+    if (values.length > 1 || (values.length === 1 && values[0] !== "any" && values[0] !== "appears_on")) return artistError("invalid_artist_participation", 400);
     if (query.getAll("q").length > 1) return artistError("invalid_query", 400);
   }
   const q = query.get("q") ?? "";
@@ -170,7 +170,12 @@ export function respondToArtists(data: ArtistData, method: string, url: URL, bod
     if (action === "merged-sources") return ok({ items: data.mergedSources.get(id) ?? [] });
     if (action === "albums") {
       const q = query.get("q")?.trim().toLocaleLowerCase() ?? "";
-      const items = query.get("participation") === "any" ? data.participationAlbums.get(id) ?? [] : data.albums.get(id) ?? [];
+      const participation = query.get("participation");
+      const own = data.albums.get(id) ?? [];
+      // appears_on：任一身份参与的组减去专辑栏里的组。
+      const items = participation === "any" ? data.participationAlbums.get(id) ?? []
+        : participation === "appears_on" ? (data.participationAlbums.get(id) ?? []).filter((item) => !own.some((album) => album.group.id === item.group.id))
+        : own;
       // 输入快照已按后端顺序、按组去重；筛选不改变代表版本、署名版本或角色。
       return ok({ artist_id: id, ...page(items.filter((item) => [item.group.representative.title, ...(data.albumTitles.get(item.group.id) ?? [])].some((title) => title.toLocaleLowerCase().includes(q))), query) });
     }

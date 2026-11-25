@@ -142,6 +142,6 @@ test("固定音量的局域网设备显示设备音量", async ({ page, backend 
   const picker = page.getByRole("dialog", { name: "播放设备", exact: true });
   await picker.getByRole("button", { name: new RegExp(rendererName) }).click();
   await expect(bar.getByRole("button", { name: `正在控制：${rendererName}` })).toBeVisible();
-  await expect(bar.getByRole("slider", { name: "播放器音量" })).toHaveCount(0);
+  await expect(bar.getByRole("slider", { name: "播放器音量" })).toBeDisabled();
   expect(await bar.getByText("设备音量", { exact: true }).isVisible(), "固定音量时播放器应显示“设备音量”").toBe(true);
 });

@@ -345,7 +345,9 @@ func parseM4ASampleDescription(reader io.ReaderAt, atom m4aAtom, observation *Au
 		}
 		if supported && len(entry) >= 36 {
 			observation.Channels = int(binary.BigEndian.Uint16(entry[24:26]))
-			observation.BitDepth = int(binary.BigEndian.Uint16(entry[26:28]))
+			if codec == "alac" {
+				observation.BitDepth = int(binary.BigEndian.Uint16(entry[26:28]))
+			}
 			observation.SampleRate = int(binary.BigEndian.Uint32(entry[32:36]) >> 16)
 			childrenOffset := 36
 			version := binary.BigEndian.Uint16(entry[16:18])

@@ -30,9 +30,10 @@ export function parseArtistsSearch(search: Record<string, unknown>): ArtistsSear
   };
 }
 
-/** 艺人页：专辑与曲目各自的页码，曲目栏选中的角色，名字的页码。 */
+/** 艺人页：专辑、参与的专辑与曲目各自的页码，曲目栏选中的角色，名字的页码。 */
 export type ArtistDetailSearch = {
   albums_page?: number | undefined;
+  appears_page?: number | undefined;
   track_role?: ArtistTrackRole | undefined;
   tracks_page?: number | undefined;
   names_page?: number | undefined;
@@ -41,6 +42,7 @@ export type ArtistDetailSearch = {
 export function parseArtistDetailSearch(search: Record<string, unknown>): ArtistDetailSearch {
   return {
     albums_page: parsePageParam(search["albums_page"]),
+    appears_page: parsePageParam(search["appears_page"]),
     track_role: oneOf(artistTrackRoles, search["track_role"]),
     tracks_page: parsePageParam(search["tracks_page"]),
     names_page: parsePageParam(search["names_page"]),
