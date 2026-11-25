@@ -120,6 +120,7 @@ Esc、关闭图标或点外面（`ModalDialog` 的 `closeOnBackdrop`）关闭，
 渐变时长（3 / 5 / 8 / 12 秒，交叉渐变关时禁用）、音质（无损 / 省流量）、Headroom 开关、增益滑块、削波指示开关。
 - 增益滑块：−30…0 dB、步进 0.1，旁边的 `output` 显示当前值，Headroom 关时禁用。拖动只改本地显示，松手、按键抬起或失焦时才发出，同一个值只发一次；服务端的值变了就跟上服务端。
 - 设置作用于正在控制的那台设备的播放区；还没读到播放区时全部禁用。不写说明句。
+- 第三方客户端设备（`kind: "subsonic"`）：快照里单列在 `PlayerSnapshot.clients`，不进 `devices`（播放设备列表、点唱机选项都不列它）。有这类设备时，页面顶部多一行“设置的设备”下拉（`PlaybackSettingsTarget`，选择写进地址 `?device=<设备 ID>`），选中后表单经 `SettingsTargetProvider` / `useSettingsTarget()` 改它的播放区（`PlayerController.setZoneSettings`），不显示无缝播放与交叉渐变；页首写“最近使用于…”，行尾有删除。均衡编辑与 IR 管理也读写同一个目标。
 
 **波形进度条**（`WaveformSeek`）：当前曲目有分析结果时，底层 canvas 画波形、上面覆盖透明的原生 `range`（名称“播放进度”、`aria-valuetext`、键盘、点击、拖动都由原生控件提供，焦点环画在外层）。
 宽 W 像素画 `floor(W/3)` 根柱，每根取区间最大峰值，**按本曲最大峰值归一化**后再按 `^0.6` 拉伸，最低 1px；已播放与未播放两色；只订阅播放比例。
@@ -175,7 +176,7 @@ M0 只核对文档合同；以上界面与播放验收不因写完本规范而�
 ## 可执行入口与错误矩阵（播放区客户端）
 
 - 入口：`PlayerProvider(userId)`、`usePlayer()->{engine,snapshot}`、`usePlayerProgress()`、`usePlayerEngine()`（只发命令）、
-  `usePlayerSelector()`、`usePlayerProgressSelector()`、`useCurrentTrackMarker()`、`usePlaybackCapabilities()`；组件 `PlayerBar`、`FullscreenPlayer`、`PlayerAnnouncement`、`PlaybackSettingsForm`、`PlaybackSettingsDevice`、`AlbumPlaybackActions`；
+  `usePlayerSelector()`、`usePlayerProgressSelector()`、`useCurrentTrackMarker()`、`usePlaybackCapabilities()`；组件 `PlayerBar`、`FullscreenPlayer`、`PlayerAnnouncement`、`PlaybackSettingsForm`、`PlaybackSettingsDevice`、`PlaybackSettingsTarget`、`useClientDevice`、`AlbumPlaybackActions`；
   曲目由 catalog 的已解码详情经 `playerTrackOf/playerTracksOf` 转换。控制器、zone store 与输出端见[播放与个人状态](./playback-and-personal-state.md)“播放区客户端”。
 - 命令：`playTracks/playNext/enqueue/playEntry/removeEntry/moveEntry/clearQueue/setMode/play/pause/togglePlayback/stop/next/previous/seek/setVolume/setMuted/retry/setPlaybackSettings`，
   以及设备列表用的 `setControlTarget/transfer/renameDevice/deleteDevice`。三种入队动作返回 `added|queue_full`，上限 10,000；拒绝超限并提示，不静默截断或部分替换。

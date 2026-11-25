@@ -15,7 +15,7 @@ import type { ClaimResult, CommandResult, DeviceResult, GroupVolumeResult, Regis
 import { deviceStorageKey, readDeviceId, registerBodyOf, withRegistrationLock, writeDeviceId, type LockManagerLike } from "./device";
 import { EventStream, type EventStreamDeps } from "./event-stream";
 import { importLegacyQueue } from "./legacy-import";
-import type { CommandRejection, Device, PlaybackFailureReason, PlaybackSettings, PlayerEvent, PlayerFault, PlayerStatus, Snapshot, Zone, ZoneQueue } from "./model";
+import { CLIENT_DEVICE_KIND, type CommandRejection, type Device, type PlaybackFailureReason, type PlaybackSettings, type PlayerEvent, type PlayerFault, type PlayerStatus, type Snapshot, type Zone, type ZoneQueue } from "./model";
 import { ThrottledWrites } from "./throttled-writes";
 import { ZoneStore } from "./zone-store";
 
@@ -42,8 +42,10 @@ export type PlayerSnapshot = {
   device: Device | null;
   /** 正在控制的是本机播放区。 */
   isLocal: boolean;
-  /** 设备列表：本机在前，其余按登记顺序。 */
+  /** 可以选作播放目标的设备：本机在前，其余按登记顺序。第三方客户端的设备不在这里。 */
   devices: readonly PlaybackDeviceRow[];
+  /** 第三方客户端的设备与它们的播放区（只用来设置），按登记顺序。 */
+  clients: readonly ClientDeviceRow[];
   /** 最近一条被拒的命令；之后有命令成功或改了控制目标时清掉。 */
   rejection: CommandRejection | null;
 };
@@ -51,6 +53,9 @@ export type PlayerSnapshot = {
 /** 设备列表的一行：设备、它的播放区（还没读到时为 null）、是不是本机、是不是正在控制的。 */
 /** occupant：局域网设备被别的成员占用时，那位成员的显示名（没人用或自己在用时为 null）。 */
 export type PlaybackDeviceRow = { device: Device; zone: Zone | null; isLocal: boolean; isTarget: boolean; occupant: string | null };
+
+/** 第三方客户端设备的一行：设备与它的播放区（还没读到时为 null）。 */
+export type ClientDeviceRow = { device: Device; zone: Zone | null };
 
 export type PlayerProgress = {
   positionSeconds: number;
@@ -109,7 +114,7 @@ const BOOT_RETRY_MS = [1_000, 2_000, 5_000, 10_000] as const;
 const PROGRESS_INTERVAL_MS = 250;
 const TARGET_RECHECK_MS = 60_000;
 
-const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clipIndicator: false }, sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" }, downmix: { enabled: true }, peq: defaultPeq, convolution: { enabled: false, irId: null, beforePeq: false } };
+export const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clipIndicator: false }, sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" }, downmix: { enabled: true }, peq: defaultPeq, convolution: { enabled: false, irId: null, beforePeq: false } };
 const idleProgress: PlayerProgress = { positionSeconds: 0, durationSeconds: null, seekable: false };
 
 function settingsPatchOf(patch: Partial<PlaybackSettings>): SettingsPatch {
@@ -170,6 +175,7 @@ export class PlayerController {
   private rejection: CommandRejection | null = null;
   private rejectionSeq = 0;
   private rowsCache: { devices: readonly Device[]; zones: ReadonlyMap<string, Zone>; localId: string | null; targetId: string | undefined; rows: readonly PlaybackDeviceRow[] } | null = null;
+  private clientsCache: { devices: readonly Device[]; zones: ReadonlyMap<string, Zone>; rows: readonly ClientDeviceRow[] } | null = null;
 
   constructor(deps: PlayerControllerDeps) {
     this.deps = deps;
@@ -570,6 +576,13 @@ export class PlayerController {
     void this.send({ command: "set_settings", settings });
   }
 
+  /** 改另一个播放区的设置（设置页里选了第三方客户端的设备时），不改变控制目标。 */
+  setZoneSettings(zoneId: string, patch: Partial<PlaybackSettings>): void {
+    const settings = settingsPatchOf(patch);
+    if (Object.keys(settings).length === 0) return;
+    void this.sendTo(zoneId, { command: "set_settings", settings });
+  }
+
   /** 正在控制的播放区有组时调整组音量，否则调整这台设备。 */
   setVolume(volume: number): void {
     if (!Number.isFinite(volume) || this.lifecycle === "ended") return;
@@ -857,13 +870,22 @@ export class PlayerController {
     const localId = this.deviceId;
     const cache = this.rowsCache;
     if (cache !== null && cache.devices === devices && cache.zones === zones && cache.localId === localId && cache.targetId === targetId) return cache.rows;
-    const rows = devices.map((device) => {
+    const rows = devices.filter((device) => device.kind !== CLIENT_DEVICE_KIND).map((device) => {
       const occupiedBy = device.lan?.occupiedBy ?? null;
       const occupant = occupiedBy === null || occupiedBy.userId === this.deps.userId ? null : occupiedBy.displayName;
       return { device, zone: zones.get(device.zoneId) ?? null, isLocal: device.deviceId === localId, isTarget: device.zoneId === targetId, occupant };
     });
     rows.sort((a, b) => Number(b.isLocal) - Number(a.isLocal));
     this.rowsCache = { devices, zones, localId, targetId, rows };
+    return rows;
+  }
+
+  private clientRows(): readonly ClientDeviceRow[] {
+    const { devices, zones } = this.store.getState();
+    const cache = this.clientsCache;
+    if (cache !== null && cache.devices === devices && cache.zones === zones) return cache.rows;
+    const rows = devices.filter((device) => device.kind === CLIENT_DEVICE_KIND).map((device) => ({ device, zone: zones.get(device.zoneId) ?? null }));
+    this.clientsCache = { devices, zones, rows };
     return rows;
   }
 
@@ -900,6 +922,7 @@ export class PlayerController {
       device,
       isLocal: zone !== null && zone.deviceId === this.deviceId,
       devices: this.deviceRows(zoneId),
+      clients: this.clientRows(),
       rejection: this.rejection,
     };
   }

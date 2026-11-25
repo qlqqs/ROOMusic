@@ -3,7 +3,7 @@ export { PlayerProvider, usePlayer, usePlayerEngine, usePlayerProgress, usePlaye
 export { usePlaybackCapabilities } from "./hooks/use-playback-capabilities";
 export { playerKeys } from "./query-keys";
 export { useCurrentTrackMarker } from "./hooks/use-current-track-marker";
-export { isPlaybackActive, PlayerController, type AddResult, type PlaybackDeviceRow, type PlayerControllerDeps, type PlayerProgress, type PlayerSnapshot, type ZoneApi } from "./zones/controller";
+export { isPlaybackActive, PlayerController, type AddResult, type ClientDeviceRow, type PlaybackDeviceRow, type PlayerControllerDeps, type PlayerProgress, type PlayerSnapshot, type ZoneApi } from "./zones/controller";
 export type { Device, PlaybackFailureReason, PlaybackSettings, PlayerEvent, PlayerFault, PlayerStatus, Zone } from "./zones/model";
 export { playModes, upNext, MAX_QUEUE_ENTRIES, type PlayMode, type PlayerTrack, type QueueEntry, type QueueState, type SourceFacts, type TrackDisplayMetadata } from "./engine/queue";
 export { playerTrackOf, playerTracksOf, playerTrackOfSummary, type SafeTrack } from "./engine/tracks";
@@ -13,4 +13,5 @@ export { PlayerBar } from "./components/player-bar";
 export { FullscreenPlayer } from "./components/fullscreen-player";
 export { PlayerAnnouncement } from "./components/player-feedback";
 export { TrackLoudness } from "./components/track-loudness";
-export { PlaybackSettingsForm, PlaybackSettingsDevice } from "./components/playback-settings-form";
+export { PlaybackSettingsForm } from "./components/playback-settings-form";
+export { PlaybackSettingsDevice, PlaybackSettingsTarget, useClientDevice } from "./components/settings-device-target";

@@ -2,7 +2,7 @@ import { Check, Pencil, Trash2, Upload, X } from "lucide-react";
 import { useId, useRef, useState, type FormEvent } from "react";
 import { failureOf } from "../../../shared/api";
 import { Button, ConfirmDialog, FailureNotice, ModalDialog } from "../../../shared/ui";
-import { usePlayerSelector } from "../player-provider";
+import { useSettingsTarget } from "../components/settings-target";
 import { IR_ACCEPT, type IrFile } from "./api";
 import { useIrFileActions, useIrFiles } from "./hooks";
 import styles from "./convolution.module.css";
@@ -70,7 +70,7 @@ function IrRow({ file, onDelete }: { file: IrFile; onDelete: () => void }) {
 function IrFilesBody() {
   const files = useIrFiles();
   const { upload, progress, cancelUpload, remove } = useIrFileActions();
-  const inUse = usePlayerSelector((snapshot) => snapshot.settings.convolution.irId);
+  const inUse = useSettingsTarget().settings.convolution.irId;
   const [deleting, setDeleting] = useState<IrFile | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const picker = useRef<HTMLInputElement>(null);

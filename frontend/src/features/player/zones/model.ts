@@ -141,6 +141,9 @@ export type ZoneGroup = { members: readonly { deviceId: string; state: GroupMemb
 /** 设备所在的播放组：zoneId 是主设备的播放区；leader 是主设备本身，member 是被加入的设备。 */
 export type DeviceGroup = { zoneId: string; role: "leader" | "member" };
 
+/** 第三方客户端（Subsonic）登记的设备：只存放播放设置，客户端自己播放；不能选作播放目标，也没有队列。 */
+export const CLIENT_DEVICE_KIND = "subsonic";
+
 export type Device = {
   deviceId: string;
   zoneId: string;

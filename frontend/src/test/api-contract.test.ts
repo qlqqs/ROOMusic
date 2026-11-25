@@ -198,6 +198,7 @@ const successContracts: Record<string, Contract> = {
   "playback-zones/responses/snapshot-empty": { status: 200, decode: decodeSnapshot, preservesWireShape: false },
   "playback-zones/responses/snapshot-next-stream": { status: 200, decode: decodeSnapshot, preservesWireShape: false },
   "playback-zones/responses/snapshot": { status: 200, decode: decodeSnapshot, preservesWireShape: false },
+  "playback-zones/responses/snapshot-subsonic-device": { status: 200, decode: decodeSnapshot, preservesWireShape: false },
   "playback-zones/responses/status-buffering": { status: 200, decode: decodeReportResult, preservesWireShape: false },
   "playback-zones/responses/status-loading": { status: 200, decode: decodeReportResult, preservesWireShape: false },
   "playback-zones/responses/status-paused": { status: 200, decode: decodeReportResult, preservesWireShape: false },
