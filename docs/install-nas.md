@@ -40,7 +40,7 @@ ROOMusic 由两个容器组成：应用和数据库（PostgreSQL）。在 NAS �
 4. Container Manager → 项目 → 新增：项目名 `roomusic`，路径选上面的文件夹，提示已有 `docker-compose.yml` 时选择使用它，完成后启动。
 5. 打开 `http://NAS地址:8090`。
 
-注意：群晖自带的 Compose 版本较旧，不能使用 `deploy/production/compose.bridge.yaml`；默认的 host 网络可以直接用。开启 DSM 防火墙后，放行网页端口；使用局域网播放设备时，还需按下表配置入站规则。
+注意：开启 DSM 防火墙后，放行网页端口；使用局域网播放设备时，还需按下表配置入站规则。
 
 ### 局域网设备所需入站端口
 

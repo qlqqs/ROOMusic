@@ -101,7 +101,7 @@ docker compose pull && docker compose up -d --wait
 docker compose exec app /app/roomusic --version
 ```
 
-从原有 bridge 配置升级时，保留部署目录、项目名、容器名、密码文件和数据挂载，下载新版 `compose.yaml`。默认网络会改为 host，应用直接监听 `0.0.0.0:${ROOMUSIC_HTTP_PORT:-8090}`，直接访问时登录限速按 TCP 对端地址区分。先用 `ss -ltn` 核对 HTTP 端口和回环数据库端口（默认 55439）是否可用；HTTP 端口可沿用本实例之前发布的端口。同机多实例分别指定 HTTP 端口、数据库端口、项目名和固定容器名，再执行上面的升级命令。现有 `postgres/` 和账号继续使用。
+从原有 bridge 配置升级时，保留部署目录、项目名、容器名、密码文件和数据挂载，下载新版 `compose.yaml`。网络改为 host，应用直接监听 `0.0.0.0:${ROOMUSIC_HTTP_PORT:-8090}`，直接访问时登录限速按 TCP 对端地址区分。先用 `ss -ltn` 核对 HTTP 端口和回环数据库端口（默认 55439）是否可用；HTTP 端口可沿用本实例之前发布的端口。同机多实例分别指定 HTTP 端口、数据库端口、项目名和固定容器名，再执行上面的升级命令。现有 `postgres/` 和账号继续使用。
 
 从旧版包含 `init` 的 Compose 切换时，先更新部署文件，并执行一次 `docker compose up -d --wait --remove-orphans`，清除该项目遗留的初始化容器；已有目录和密码继续复用。固定名称变更会重建应用和数据库容器，安排在维护窗口执行。
 
@@ -121,22 +121,12 @@ docker compose exec app /app/roomusic --version
 `0.1.0` 不认识网页上设置的自动清理，只按 `ROOMUSIC_BACKUP_KEEP_DAYS` 清理旧备份。如果在网页上把保留天数设成了“不限”或比这个值更长，
 降级前先把 `ROOMUSIC_BACKUP_KEEP_DAYS` 调大，不然降级后第一次备份完成时会按它删掉更早的备份。再升级回来，网页上的设置照常生效。
 
-### 使用 bridge 网络
-
-需要保留 bridge 网络时，下载覆盖文件（Docker Compose v2.24.4 或更新版），在部署目录执行：
-
-```bash
-curl -fL -o compose.bridge.yaml https://raw.githubusercontent.com/qlqqs/ROOMusic/main/deploy/production/compose.bridge.yaml
-```
-
-在 `.env` 写入 `COMPOSE_FILE=compose.yaml:compose.bridge.yaml`，后续日常与升级命令仍是 `docker compose`。应用在项目网络内连接 `postgres:5432`，只发布网页端口。要使用局域网播放，在 `.env` 将 `ROOMUSIC_LAN_URL` 设为设备可达的宿主机 HTTP 地址，并由管理员在设备设置里手动添加描述地址。host 模式可直接打开设置里的“局域网设备”进行 SSDP 发现。两种模式的设备面板都支持暂停、继续与停止；跳转与上下首从 ROOMusic 控制。
-
 升级到带匿名统计的版本后，应用默认每天向 `roomusic.org` 发送一次匿名统计，新实例满 24 小时后才开始；管理员首次登录会看到说明。
 不想发送时，在 `.env` 里加 `ROOMUSIC_INSIGHTS_DISABLED=true` 再执行升级命令，或者在网页“设置 › 匿名统计”里关闭。字段说明见[匿名统计说明](../../docs/insights.md)。
 
 升级到带 AirPlay 的版本后，Compose 多一个 `ptp` 服务（容器名默认 `roomusic-ptp`，`ROOMUSIC_PTP_CONTAINER_NAME` 可改），为 AirPlay 2 设备提供精确对时。
 它与应用同一镜像，只有绑定低端口的权限，在 host 网络使用 UDP 319/320。同一台机器上已经运行 shairport-sync、nqptp 或其他 PTP 程序时端口会被占用：
-应用照常工作，兼容设备改用普通对时，HomePod、Sonos Era 等必须精确对时的设备在“局域网设备”里显示“精确对时不可用”。用 bridge 覆盖文件部署时没有 `ptp` 服务，也不支持精确对时。
+应用照常工作，兼容设备改用普通对时，HomePod、Sonos Era 等必须精确对时的设备在“局域网设备”里显示“精确对时不可用”。
 
 ### 局域网设备所需入站端口
 

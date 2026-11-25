@@ -10,7 +10,6 @@ trap 'rm -rf -- "$work"' EXIT
 
 # 在独立目录中仅使用假值；不会读取工作区或部署目录的配置，也不创建容器与网络。
 cp "$ROOT_DIR/compose.prod.yaml" "$work/compose.yaml"
-cp "$ROOT_DIR/deploy/production/compose.bridge.yaml" "$work/compose.bridge.yaml"
 printf '%s\n' 'ROOMUSIC_MUSIC_DIR=./music' > "$work/required.env"
 : > "$work/empty.env"
 cp "$work/required.env" "$work/bind.env"
@@ -110,23 +109,9 @@ printf '%s\n' 'ROOMUSIC_HTTP_PORT=19090' 'ROOMUSIC_DB_PORT=55440' 'ROOMUSIC_LAN_
 compose bind.env config --format json | jq -e '
   .services.app.environment.ROOMUSIC_HTTP_ADDR == "0.0.0.0:19090" and
   .services.app.environment.ROOMUSIC_DATABASE_URL == "postgres://roomusic@127.0.0.1:55440/roomusic?sslmode=disable" and
+  .services.app.environment.ROOMUSIC_LAN_URL == "http://192.168.1.2:19090" and
   .services.postgres.ports[0].published == "55440"
 ' > /dev/null
-compose bind.env -f compose.yaml -f compose.bridge.yaml config --format json | jq -e '
-  (.services | has("ptp") | not) and
-  .services.app.network_mode == null and
-  (.services.app.networks | has("roomusic")) and
-  (.services.postgres.networks | has("roomusic")) and
-  (.services.postgres.ports | length) == 0 and
-  (.services.app.ports | length) == 1 and
-  .services.app.ports[0].published == "19090" and
-  .services.app.ports[0].host_ip == "0.0.0.0" and
-  .services.app.ports[0].target == 8080 and
-  .services.app.environment.ROOMUSIC_LAN_URL == "http://192.168.1.2:19090" and
-  .services.app.environment.ROOMUSIC_HTTP_ADDR == "0.0.0.0:8080" and
-  .services.app.environment.ROOMUSIC_DATABASE_URL == "postgres://roomusic@postgres:5432/roomusic?sslmode=disable"
-' > /dev/null
-
 cat > "$work/compose.override.yaml" <<'YAML'
 networks:
   roomusic:

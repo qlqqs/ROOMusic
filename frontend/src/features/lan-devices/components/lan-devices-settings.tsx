@@ -139,7 +139,7 @@ function DeviceList({ settings }: { settings: LanDeviceSettingsDTO }) {
           items.length === 0 ? (
             <p className={styles.empty}>
               {settings.enabled
-                ? "还没有找到设备。确认设备和服务器在同一个局域网；服务器用 bridge 网络部署时自动查找不到，可以手动添加，并在部署配置里设置 ROOMUSIC_LAN_URL。"
+                ? "还没有找到设备。确认设备和服务器在同一个局域网，也可以手动添加。"
                 : "打开“使用局域网里的播放设备”后开始查找。"}
             </p>
           ) : (
