@@ -1,6 +1,6 @@
 # 整理链 M：度量与回归曲库
 
-状态：实施中（2026-11-25）。父任务：`.trellis/tasks/11-25-curation-chain`。需求、原则与总体设计见父任务的 `prd.md`、`design.md`，
+状态：已完成（2026-11-25）。父任务：`.trellis/tasks/11-25-curation-chain`。需求、原则与总体设计见父任务的 `prd.md`、`design.md`，
 现状与审查发现见父任务的 `research/`。设计见本目录 `design.md`，执行见 `implement.md`。
 
 ## 目标
@@ -27,10 +27,17 @@
 
 ## 验收
 
-- [ ] 基线数字已记录，包含每种曲库形态的外部请求数、进入模型的项数、模型 token、不需要人处理的完成比例、错误数。
-- [ ] 度量可以重复运行，结果稳定。
-- [ ] 两项实测的结果已记录，并回写父任务 `research/external-services.md`。
+- [x] 基线数字已记录，包含每种曲库形态的外部请求数、进入模型的项数、模型 token、不需要人处理的完成比例、错误数。
+- [x] 度量可以重复运行，结果稳定。
+- [x] 两项实测的结果已记录，并回写父任务 `research/external-services.md`。
 
 ## 不在范围内
 
 - 不改变任何整理行为。
+
+## 结果
+
+- 基线：`research/baseline-2026-11-25.md`；实测：`research/live-measurements-2026-11-25.md`；原始 JSON 在 `research/`。
+- 运行度量：`ROOMUSIC_TEST_RUN='TestPostgreSQLCurationMetrics' ROOMUSIC_CURATION_METRICS_OUT=<文件> ./scripts/test-integration.sh`，
+  `ROOMUSIC_CURATION_METRICS_MODEL=first_candidate` 切换模型模式。约 4 到 5 分钟。
+- 已知局限：声纹不覆盖；受控服务的文字查询语法有限、艺人搜索只索引主名；模型端点不主动发明候选、不提交字段修正；时长容差实测样本小且不均衡。

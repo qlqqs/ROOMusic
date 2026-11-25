@@ -4,6 +4,7 @@ package upstreammock
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -26,6 +27,8 @@ type Server struct {
 	script      script
 	mu          sync.Mutex
 	scenarios   map[string]Scenario
+	counters    map[string]map[string]int
+	lastRequest map[string]time.Time
 	records     [500]*requestRecord
 	next, count int
 }
@@ -54,6 +57,9 @@ func New(opts Options) (*Server, error) {
 	for service, name := range opts.Scenarios {
 		sc := defaultScenario()
 		sc.Name = name
+		if name == "rate_threshold" {
+			sc.MinIntervalMS = 1000
+		}
 		if err := s.setScenario(service, sc); err != nil {
 			return nil, err
 		}
@@ -105,6 +111,21 @@ func New(opts Options) (*Server, error) {
 	s.route("POST /anthropic/v1/messages", s.model)
 	s.mux.HandleFunc("GET /_mock/scenarios", s.getScenarios)
 	s.mux.HandleFunc("PUT /_mock/scenarios/{service}", s.putScenario)
+	s.mux.HandleFunc("GET /_mock/counters", func(w http.ResponseWriter, _ *http.Request) {
+		s.mu.Lock()
+		snapshot := make(map[string]map[string]int, len(s.counters))
+		for service, kinds := range s.counters {
+			snapshot[service] = maps.Clone(kinds)
+		}
+		s.mu.Unlock()
+		writeJSON(w, http.StatusOK, snapshot)
+	})
+	s.mux.HandleFunc("DELETE /_mock/counters", func(w http.ResponseWriter, _ *http.Request) {
+		s.mu.Lock()
+		clear(s.counters)
+		s.mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
 	s.mux.HandleFunc("GET /_mock/requests", s.getRequests)
 	s.mux.HandleFunc("POST /_mock/reset", func(w http.ResponseWriter, r *http.Request) { s.reset(); w.WriteHeader(http.StatusNoContent) })
 	return s, nil
@@ -126,6 +147,32 @@ func problem(status int, msg string) response {
 }
 func missing() response { return problem(404, "未找到") }
 
+// 按路由模板归类，编号、查询内容和服务密钥都不进入计数键。
+func endpointKind(service string, r *http.Request) string {
+	switch service {
+	case "musicbrainz":
+		switch r.PathValue("entity") {
+		case "isrc", "discid":
+			return r.PathValue("entity")
+		}
+		if r.PathValue("id") != "" {
+			return "lookup"
+		}
+		if r.URL.Query().Has("query") {
+			return "search"
+		}
+		return "browse"
+	case "coverartarchive":
+		if r.PathValue("image") != "" {
+			return "image"
+		}
+		return "manifest"
+	default:
+		_, route, _ := strings.Cut(r.Pattern, "/"+service+"/")
+		return route
+	}
+}
+
 func (s *Server) record(service string, r *http.Request) (Scenario, *requestRecord) {
 	q := r.URL.Query()
 	for key := range q {
@@ -142,13 +189,26 @@ func (s *Server) record(service string, r *http.Request) (Scenario, *requestReco
 	if service == "theaudiodb" && r.PathValue("key") != "" {
 		path = "/theaudiodb/api/v1/json/***/artist-mb.php"
 	}
-	rec := &requestRecord{Time: time.Now().UTC(), Service: service, Method: r.Method, Path: path, Query: q}
+	rec := &requestRecord{Service: service, Method: r.Method, Path: path, Query: q}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := time.Now()
+	rec.Time = now.UTC()
+	if s.counters[service] == nil {
+		s.counters[service] = make(map[string]int)
+	}
+	s.counters[service][endpointKind(service, r)]++
+	sc := s.scenarios[service]
+	if sc.Name == "rate_threshold" {
+		if last := s.lastRequest[service]; !last.IsZero() && now.Sub(last) < time.Duration(sc.MinIntervalMS)*time.Millisecond {
+			sc.Name = "unavailable"
+		}
+		s.lastRequest[service] = now
+	}
 	s.records[s.next] = rec
 	s.next = (s.next + 1) % len(s.records)
 	s.count = min(s.count+1, len(s.records))
-	return s.scenarios[service], rec
+	return sc, rec
 }
 
 func (s *Server) getRequests(w http.ResponseWriter, r *http.Request) {
