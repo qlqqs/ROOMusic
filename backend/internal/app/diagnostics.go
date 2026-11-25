@@ -18,9 +18,6 @@ func WithDiagnostics(logs *diagnostics.LogRing, startedAt time.Time) Option {
 func newDiagnostics(database *sql.DB, settings config.Server, scans *library.Service, assembly options) *diagnostics.Service {
 	logs := assembly.diagnosticLogs
 	roots := append([]string{settings.DataDirectory, settings.Backup.Directory}, settings.AllowedLibraryRoots...)
-	if logs == nil {
-		logs = diagnostics.NewLogRing(roots...)
-	}
 	started := assembly.startedAt
 	if started.IsZero() {
 		started = time.Now()

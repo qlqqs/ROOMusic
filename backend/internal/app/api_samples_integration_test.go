@@ -88,6 +88,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	loginResponse := call(http.MethodPost, "/api/v1/auth/login", credentials("curator", sampleAdminPassword), nil)
 	samples.record("auth/login", loginResponse, http.StatusOK)
 	admin := login(loginResponse)
+	recordDiagnosticsSamples(t, samples, call, admin)
 	samples.record("auth/me-admin", call(http.MethodGet, "/api/v1/auth/me", nil, admin), http.StatusOK)
 
 	// 空库状态：没有扫描、没有发行组、没有目录。
@@ -394,6 +395,56 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordExternalCurationSamples(t, samples)
 	recordCurationCLinkSamples(t, samples)
 	samples.finish()
+}
+
+func recordDiagnosticsSamples(t *testing.T, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	const path = "/api/v1/diagnostics/client-errors"
+	report := map[string]string{"kind": "render", "name": "TypeError", "message": "合成页面报错", "route": "/albums/$groupId"}
+	send := func() {
+		t.Helper()
+		if r := call("POST", path, report, admin); r.Code != http.StatusNoContent {
+			t.Fatalf("上报页面报错：HTTP %d %s", r.Code, r.Body)
+		}
+	}
+	send()
+	r := call("GET", "/api/v1/admin/diagnostics", nil, admin)
+	var body map[string]any
+	if err := json.Unmarshal(r.Body.Bytes(), &body); err != nil || r.Code != 200 {
+		t.Fatalf("读取诊断样本：HTTP %d %s", r.Code, r.Body)
+	}
+	// 固定易变的宿主机容量、连接池计数与运行时长，保留实际响应的字段。
+	status := body["status"].(map[string]any)
+	status["uptime_seconds"] = 2
+	pool := status["database_pool"].(map[string]any)
+	for key := range pool {
+		pool[key] = 0
+	}
+	for _, entry := range body["disks"].([]any) {
+		disk := entry.(map[string]any)
+		if disk["kind"] == "data" && disk["total_bytes"] != nil && disk["available_bytes"] != nil {
+			disk["name"], disk["total_bytes"], disk["available_bytes"] = "data", 1073741824, 536870912
+		}
+	}
+	// 启动和鉴权日志因运行环境而异，样本只选取本次请求实际产生的报错事件。
+	var reports []any
+	for _, entry := range body["logs"].([]any) {
+		fields := entry.(map[string]any)["fields"].(map[string]any)
+		if fields["event"] == "client.error.reported" {
+			reports = append(reports, entry)
+		}
+	}
+	body["logs"] = reports
+	r.Body.Reset()
+	if err := json.NewEncoder(r.Body).Encode(body); err != nil {
+		t.Fatal(err)
+	}
+	samples.record("diagnostics/admin", r, 200)
+	samples.record("diagnostics/invalid-client-error", call("POST", path, map[string]string{}, admin), 400)
+	for i := 1; i < 20; i++ {
+		send()
+	}
+	samples.record("diagnostics/client-errors-throttled", call("POST", path, report, admin), 429)
 }
 
 // recordRootRelocateSamples 用独立连接持有扫描锁产生冲突，再释放锁录制成功响应。

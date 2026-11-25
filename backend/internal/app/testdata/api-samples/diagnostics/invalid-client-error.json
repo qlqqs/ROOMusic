@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_client_error",
+      "message": "页面报错信息无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

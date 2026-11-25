@@ -92,6 +92,7 @@ Before writing or reviewing backend code:
 | [数据源插件](plugin-contracts.md) | 插件运行时、出网、安装与完整性 |
 | [认领合同](./claim-contracts.md) | M4 第三项：迁移 0020、待认领的判定与推荐、预览与令牌、认领的执行器与撤销、读取接口、测试 |
 | [备份管理合同](./backup-management-contracts.md) | 删除与批量删除备份、保留规则（天数 / 份数上限、备份目录里的规则文件、未确认不删的保存语义）、测试 |
+| [问题反馈诊断合同](./diagnostics-contracts.md) | 管理员导出系统状态、磁盘与脱敏日志，已登录用户上报页面报错及按用户限流 |
 | [匿名统计合同](./insights-contracts.md) | 心跳的调度、载荷与分档、管理员接口、公开的“关于”、统计端的校验、限速与存储 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |
 | [管家运行时合同](./steward-runtime-contracts.md) | M6 C2：迁移 0051、工具合同与 16 个只读工具、设置与探测、会话接口与 SSE 事件、循环上限、三种模型协议、出站与密钥的落地数值、错误码、日志、测试 |

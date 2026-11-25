@@ -1,0 +1,65 @@
+{
+  "body": {
+    "disks": [
+      {
+        "available_bytes": 536870912,
+        "kind": "data",
+        "name": "data",
+        "total_bytes": 1073741824
+      },
+      {
+        "available_bytes": null,
+        "error_code": "disk_unavailable",
+        "kind": "backup",
+        "name": "root",
+        "total_bytes": null
+      }
+    ],
+    "generated_at": "2026-01-01T00:00:02Z",
+    "logs": [
+      {
+        "fields": {
+          "actor_id": "00000000-0000-4000-8000-000000000001",
+          "client_route": "/albums/$groupId",
+          "error_kind": "TypeError",
+          "event": "client.error.reported",
+          "kind": "render",
+          "module": "frontend",
+          "msg": "client error reported",
+          "request_id": "sample-request"
+        },
+        "level": "WARN",
+        "time": "2026-01-01T00:00:01Z"
+      }
+    ],
+    "status": {
+      "build": {
+        "commit": "",
+        "version": "dev"
+      },
+      "catalog": {
+        "albums": 0,
+        "artists": null,
+        "composers": null,
+        "tracks": 0
+      },
+      "database_connected": true,
+      "database_pool": {
+        "Idle": 0,
+        "InUse": 0,
+        "MaxIdleClosed": 0,
+        "MaxIdleTimeClosed": 0,
+        "MaxLifetimeClosed": 0,
+        "MaxOpenConnections": 0,
+        "OpenConnections": 0,
+        "WaitCount": 0,
+        "WaitDuration": 0
+      },
+      "errors": [],
+      "migration_version": 79,
+      "started_at": "2026-01-01T00:00:00Z",
+      "uptime_seconds": 2
+    }
+  },
+  "status": 200
+}

@@ -95,3 +95,31 @@ const buildInfoDecoder = d.object({
 
 export const decodeBuildInfo = d.defineDecoder(buildInfoDecoder);
 export type BuildInfoDTO = d.Infer<typeof buildInfoDecoder>;
+
+// 诊断报告（仅管理员）：整份原样交给管理员粘贴进 issue，界面不读其中字段。
+// 这里只核对外形（生成时间与三个分区），结果是排版好的 JSON 文本；后端加字段不影响前端。
+export type DiagnosticsReport = { generatedAt: string; text: string };
+
+const diagnosticsShape = d.object({
+  generated_at: d.timestamp(),
+  status: (input: unknown, path: string) => {
+    if (typeof input !== "object" || input === null || Array.isArray(input)) throw new d.DecodeError(path, "应为对象");
+    return input;
+  },
+  disks: (input: unknown, path: string) => {
+    if (!Array.isArray(input)) throw new d.DecodeError(path, "应为数组");
+    return input;
+  },
+  logs: (input: unknown, path: string) => {
+    if (!Array.isArray(input)) throw new d.DecodeError(path, "应为数组");
+    return input;
+  },
+});
+
+export const decodeDiagnosticsReport = d.defineDecoder((input, path): DiagnosticsReport => {
+  const report = diagnosticsShape(input, path);
+  return { generatedAt: report.generated_at, text: JSON.stringify(input, null, 2) };
+});
+
+// 页面报错上报：成功是 204，没有响应体。
+export const decodeNoContent = d.defineDecoder((): null => null);

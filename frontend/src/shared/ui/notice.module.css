@@ -42,6 +42,24 @@
   flex: none;
 }
 
+/* 错误编号的复制按钮贴着文字行；没有剪贴板时编号显示在按钮左边，可选中。 */
+.requestId {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  margin-block: calc((var(--control-height) - 1.6em) / -2);
+}
+
+.requestIdText {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 @media (max-width: 767px) {
   .notice {
     flex-wrap: wrap;

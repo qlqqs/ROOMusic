@@ -106,7 +106,12 @@ type Handler struct {
 	bound  []boundAttrs
 }
 
-func NewHandler(next slog.Handler, ring *LogRing) *Handler { return &Handler{next: next, ring: ring} }
+func NewHandler(next slog.Handler, ring *LogRing) *Handler {
+	if existing, ok := next.(*Handler); ok && existing.ring == ring {
+		return existing
+	}
+	return &Handler{next: next, ring: ring}
+}
 func (h *Handler) Enabled(ctx context.Context, level slog.Level) bool {
 	return h.next.Enabled(ctx, level)
 }
@@ -183,7 +188,7 @@ func safeLogKey(key string) (text, number bool) {
 		return true, false
 	}
 	switch key {
-	case "event", "module", "level", "msg", "kind", "status", "reason", "tool", "mode", "source_kind", "outcome", "error_code", "error_kind", "route_template", "method", "mime_type", "category", "stage", "trigger", "direction", "capability", "phase", "yield_status", "operation":
+	case "event", "module", "level", "msg", "kind", "status", "reason", "tool", "mode", "source_kind", "outcome", "error_code", "error_kind", "route_template", "client_route", "method", "mime_type", "category", "stage", "trigger", "direction", "capability", "phase", "yield_status", "operation":
 		return true, key == "status"
 	case "count", "total", "bytes", "duration_ms", "response_bytes", "status_code", "exit_code", "keep_days", "keep_count",
 		"conversations", "analyzed", "completed", "written", "batch_size", "skipped_current", "batch_ms", "yield_ms", "elapsed_ms", "eta_ms", "live_updated",
@@ -218,7 +223,7 @@ func redactAttr(target map[string]any, attr slog.Attr, r *Redactor, depth int, b
 	switch attr.Value.Kind() {
 	case slog.KindString:
 		if allowText {
-			value := r.text(attr.Value.String(), attr.Key == "route_template")
+			value := r.text(attr.Value.String(), attr.Key)
 			if attr.Key == "msg" {
 				if _, fixed := fixedLogMessages[attr.Value.String()]; !fixed {
 					value = "[omitted]"

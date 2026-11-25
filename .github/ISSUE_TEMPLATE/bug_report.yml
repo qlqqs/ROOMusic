@@ -1,0 +1,42 @@
+name: 问题反馈
+description: 报告 ROOMusic 的错误或异常行为
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 设置 › 关于 里的版本号（管理员可见）；从“关于”页的反馈按钮打开时已自动填好。
+      placeholder: 0.8.1 (b665458)
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 你做了什么、看到了什么、原本期望看到什么。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开…
+        2. 点击…
+        3. 出现…
+  - type: input
+    id: request-id
+    attributes:
+      label: 错误编号
+      description: 错误提示行尾的“#”按钮可以复制它，方便在服务器日志里找到这次请求。
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 诊断信息
+      description: 管理员在 设置 › 关于 点听诊器图标复制（或下载）诊断信息后粘贴到这里。内容已去掉密钥与文件路径，但会公开显示，提交前请再看一眼。
+  - type: textarea
+    id: environment
+    attributes:
+      label: 使用环境
+      description: 浏览器与系统、部署方式（Docker Compose 等）、播放设备（如果和播放有关）。

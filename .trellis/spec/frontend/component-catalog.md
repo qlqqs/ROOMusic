@@ -9,8 +9,8 @@
 | 组件 | 约定 |
 | --- | --- |
 | `Page`、`Panel`、`StatList` | `Page` 渲染唯一的 `h1`（并设置“页面名 · ROOMusic”标题），标题很长时 `compactTitle` 降一级字号（M1b：专辑名超过 80 个字符），完整显示并换行；给 `header` 时它替换默认页头（标题、说明与操作），由它渲染唯一的 `h1`，文字与 `title` 相同（歌单与我喜欢的音乐的封面页头，2026-11-08）；`Panel` 是带标题的区段，给 `headingRef` 时标题可以被程序聚焦（`tabIndex=-1`，不进 Tab 顺序）；`StatList` 显示数值，数据值用 `tabular-nums` |
-| `QueryContent` | 数据区块的首次加载（保留结构的 `Skeleton`，不画成空库）、失败（`FailureNotice` 与重试，请求 ID 只记到控制台）、成功，以及“刷新失败但还有旧数据”（旧数据继续显示，错误在其上方）；它只依赖最小的查询形状，不依赖查询库 |
-| `Notice`、`FailureNotice` | 行内状态或错误，由图标与文字表达，不靠颜色；错误 `role="alert"`，其余 `role="status"`；可附下一步操作；请求 ID 只记到控制台，不显示在界面；**不使用全局 toast**，结果就近显示在操作区 |
+| `QueryContent` | 数据区块的首次加载（保留结构的 `Skeleton`，不画成空库）、失败（`FailureNotice` 与重试，请求 ID 由提示行尾的按钮复制）、成功，以及“刷新失败但还有旧数据”（旧数据继续显示，错误在其上方）；它只依赖最小的查询形状，不依赖查询库 |
+| `Notice`、`FailureNotice` | 行内状态或错误，由图标与文字表达，不靠颜色；错误 `role="alert"`，其余 `role="status"`；可附下一步操作；请求 ID 平时不显示：标题行尾一个“#”图标按钮（读屏名“复制错误编号”）复制它，成功后两秒对勾与“已复制错误编号”；没有剪贴板（经 http 局域网地址打开）时点按钮在旁边显示编号并选中（2026-11-25），同时写进控制台；**不使用全局 toast**，结果就近显示在操作区 |
 | `Button`、`TextField` | `Button` 有主要 / 次要 / 只有图标三种外观（`primary | secondary | icon`），只有图标时必须给 `label`，用作 `aria-label`，也是悬停提示的文字（`tooltip` 可另给提示文字，如心形状态未读到时的说明）；不用原生 `title`（2026-11-08 起）；忙碌态不设 `disabled`（焦点留在按钮上），点击被忽略并设置 `aria-busy`，文案由调用方改成“正在…”；`TextField` 的 label、说明与错误经 `aria-describedby` 关联，错误同时设置 `aria-invalid` |
 | `StatusTag` | 文字加图标，不只靠颜色 |
 | `useTooltip`（2026-11-08） | 图标按钮与图标链接的悬停提示：返回 `triggerProps`（放到触发元素上）与 `tooltip`（渲染在触发元素旁）。只响应鼠标，停留 300ms 显示，移开、按下、Esc、滚动或窗口缩放立即消失，按下后要移出再移入才会再出现；键盘焦点不弹，提示 `aria-hidden`（读屏靠 `aria-label`）。浮层 fixed 定位，渲染到 `trigger.closest("dialog") ?? document.body`，不被表格、播放器栏裁掉，默认在上方、放不下翻到下方。`Button variant="icon"`（含 `MenuButton iconOnly`）、心形、侧栏展开按钮都用它；新加的图标控件也用它，不写 `title` |
@@ -37,7 +37,7 @@
 - 管理页由 `AdminGate` 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不调用管理接口；后端仍独立鉴权。
 - 停用与撤销类操作先确认并说明影响范围，恢复与重新启用直接执行；目标是自己时对话框额外提示会被退出登录。
 - 失败文案按**错误码**选择（各 feature 的 `*-messages.ts`，`as const` 映射），不比较后端 message；未知错误码显示后端的安全
-  message（`describeFailure`），请求 ID 只记到控制台。
+  message（`describeFailure`），请求 ID 由 `Notice` 行尾的按钮复制。
 - 扫描阶段只在变化时经礼貌型 live region 播报一次，轮询得到相同阶段不重复播报。M5 ⑥ 起只有服务端给出的确定进度（`progress.percent_bp`）才显示百分比，
   前端不推算、不补动画；剩余时间（ETA）仍不做。
 - 扫描进度（M5 ⑥，`library/components/scan-progress.tsx`，扫描详情用此组件，概览状态行复用相同的进度计算函数）：只读的 `role="progressbar"`，名称“扫描进度”，`aria-valuemin=0`、

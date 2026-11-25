@@ -5,12 +5,15 @@ import {
   decodeBackupDeletions,
   decodeBackupOverview,
   decodeBuildInfo,
+  decodeDiagnosticsReport,
+  decodeNoContent,
   decodeRetentionSave,
   type BackupCommandDTO,
   type BackupDeletionsDTO,
   type BackupOverviewDTO,
   type BackupRetentionDTO,
   type BuildInfoDTO,
+  type DiagnosticsReport,
   type RetentionSaveDTO,
 } from "./decoders";
 
@@ -50,4 +53,17 @@ export function saveRetention(rule: BackupRetentionDTO, confirm: boolean): Promi
     { method: "PUT", path: "/api/v1/system/backups/retention", body: { keep_days: rule.keep_days, keep_count: rule.keep_count, confirm } },
     decodeRetentionSave,
   );
+}
+
+/** 诊断报告（仅管理员）：系统状态、磁盘与最近的脱敏日志，供反馈问题时附上。 */
+export function fetchDiagnostics(signal?: AbortSignal): Promise<ApiResponse<DiagnosticsReport>> {
+  return apiRequest({ method: "GET", path: "/api/v1/admin/diagnostics", signal }, decodeDiagnosticsReport);
+}
+
+export type ClientErrorKind = "error" | "unhandledrejection" | "render";
+export type ClientErrorReport = { kind: ClientErrorKind; name: string; message: string; route: string };
+
+/** 上报一次页面报错（任何已登录用户）。页面卸载前也要发出，所以 keepalive。 */
+export function postClientError(report: ClientErrorReport): Promise<ApiResponse<null>> {
+  return apiRequest({ method: "POST", path: "/api/v1/diagnostics/client-errors", body: report, keepalive: true }, decodeNoContent);
 }

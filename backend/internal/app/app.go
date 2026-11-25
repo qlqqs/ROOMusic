@@ -43,6 +43,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/buildinfo"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/diagnostics"
+	diagnosticsapi "github.com/qlqq/roomusic/backend/internal/platform/diagnostics/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/playback"
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
@@ -150,6 +151,11 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	for _, apply := range applied {
 		apply(&assembly)
 	}
+	if assembly.diagnosticLogs == nil {
+		roots := append([]string{settings.DataDirectory, settings.Backup.Directory}, settings.AllowedLibraryRoots...)
+		assembly.diagnosticLogs = diagnostics.NewLogRing(roots...)
+	}
+	logger = slog.New(diagnostics.NewHandler(logger.Handler(), assembly.diagnosticLogs))
 	var guard *identity.Guard
 	switch settings.OriginMode {
 	case config.OriginModeAllowList:
@@ -368,7 +374,9 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	}
 	progress := playback.NewAnalysisProgressProvider(database, analysis.Version, analysisWorker)
 	matcher := program.NewModelMatcher(database, curationWriter, sourceGate)
-	supervisor, launcher := registerSteward(lifecycle, mux, database, guard, instanceSecrets, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{tavilyEndpoint: tavilyEndpoint, mockHost: mockHost, writer: curationWriter, sources: sourceGate, matcher: matcher, music: music, covers: covers, diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
+	diagnosticService := newDiagnostics(database, settings, libraryService, assembly)
+	diagnosticsapi.Register(mux, guard, diagnosticService, logger)
+	supervisor, launcher := registerSteward(lifecycle, mux, database, guard, instanceSecrets, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{tavilyEndpoint: tavilyEndpoint, mockHost: mockHost, writer: curationWriter, sources: sourceGate, matcher: matcher, music: music, covers: covers, diagnostics: diagnosticService, backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
 	scheduler := model.NewScheduler(database, curationWriter, sourceGate, launcher, logger, assembly.model)
 	modelDone := make(chan struct{})
 	if database != nil && launcher != nil && !assembly.disableModel {
