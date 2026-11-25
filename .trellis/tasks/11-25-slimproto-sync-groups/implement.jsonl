@@ -1,0 +1,10 @@
+{"file": ".trellis/tasks/11-25-slimproto-sync-groups/prd.md", "reason": "决定 G1–G11 与验收"}
+{"file": ".trellis/tasks/11-25-slimproto-sync-groups/design.md", "reason": "模型、分发、协调器、接口"}
+{"file": ".trellis/tasks/11-25-slimproto-sync-groups/research/group-model-plan.md", "reason": "带代码证据的实施规划"}
+{"file": ".trellis/tasks/11-25-slimproto-sync-groups/research/sync-algorithm.md", "reason": "SlimProto 同步机制"}
+{"file": ".trellis/spec/backend/playback-zone-contracts.md", "reason": "播放区协议"}
+{"file": ".trellis/spec/backend/playback-zone-service-contracts.md", "reason": "服务端锁与托管输出"}
+{"file": ".trellis/spec/backend/slimproto-device-contracts.md", "reason": "单台 SlimProto 合同"}
+{"file": ".trellis/spec/backend/upnp-device-contracts.md", "reason": "占用、接管与锁"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移规则"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试与门禁"}
