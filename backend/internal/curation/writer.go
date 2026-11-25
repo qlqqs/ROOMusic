@@ -16,15 +16,17 @@ import (
 )
 
 type Source struct {
-	Kind     string
-	Provider string
-	Basis    string
+	WriterLevel catalog.AutoWriterLevel `json:"-"`
+	Kind        string
+	Provider    string
+	Basis       string
 }
 
 type Request struct {
 	ExpectedRevision            int64
 	ConfirmedBy, ConversationID string
 	OnlyEmpty                   bool
+	ExpectedScan                map[string]json.RawMessage
 	ReleaseID                   string
 	Fields                      map[string]catalog.CorrectionIntent
 	Source                      Source
@@ -50,19 +52,20 @@ type TrackRequest struct {
 	ExpectedRevision            int64
 	ConfirmedBy, ConversationID string
 	OnlyEmpty                   bool
+	ExpectedScan                map[string]json.RawMessage
 	Fields                      map[string]catalog.CorrectionIntent
 	Source                      Source
 	BatchID, Key, RequestID     string
 }
 
 func (w *Writer) ApplyTrack(ctx context.Context, r TrackRequest) (Applied, error) {
-	return w.applyFields(ctx, Request{ReleaseID: r.ReleaseID, ExpectedRevision: r.ExpectedRevision, ConfirmedBy: r.ConfirmedBy, ConversationID: r.ConversationID, OnlyEmpty: r.OnlyEmpty, Fields: r.Fields, Source: r.Source, BatchID: r.BatchID, Key: r.Key, RequestID: r.RequestID}, strings.ToLower(r.TrackID), true)
+	return w.applyFields(ctx, Request{ReleaseID: r.ReleaseID, ExpectedRevision: r.ExpectedRevision, ConfirmedBy: r.ConfirmedBy, ConversationID: r.ConversationID, OnlyEmpty: r.OnlyEmpty, ExpectedScan: r.ExpectedScan, Fields: r.Fields, Source: r.Source, BatchID: r.BatchID, Key: r.Key, RequestID: r.RequestID}, strings.ToLower(r.TrackID), true)
 }
 
 type autoFieldTarget interface {
 	Current(string) (catalog.AutoValue, bool)
 	EditRevision() int64
-	Write(context.Context, string, map[string]catalog.CorrectionIntent) (operations.Outcome, error)
+	Write(context.Context, string, map[string]catalog.CorrectionIntent, catalog.AutoWriterLevel, map[string]json.RawMessage) (operations.Outcome, error)
 }
 
 func (w *Writer) applyFields(ctx context.Context, request Request, trackID string, track bool) (Applied, error) {
@@ -74,6 +77,16 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 	if (source.Kind != "source" && source.Kind != "model") || !providerPattern.MatchString(source.Provider) ||
 		len(source.Basis) > 500 || !utf8.ValidString(source.Basis) || strings.ContainsRune(source.Basis, '\x00') {
 		return Applied{}, operations.Invalid("invalid_input", "自动整理来源或依据无效")
+	}
+	level := source.WriterLevel
+	if level == 0 {
+		level = catalog.LevelModelLocal
+		if source.Kind == "source" {
+			level = catalog.LevelProgramExternal
+		}
+	}
+	if level < catalog.LevelModelLocal || level > catalog.LevelProgramExternal || (source.Kind == "source") != (level == catalog.LevelProgramExternal) {
+		return Applied{}, operations.Invalid("invalid_input", "写入方级别与来源不符")
 	}
 	normalize := governance.NormalizeAutoFields
 	kind, target, idField, id := operations.TypeReleaseAutoCorrection, "release", "release_id", strings.ToLower(request.ReleaseID)
@@ -98,6 +111,15 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 	}
 	if request.OnlyEmpty {
 		fingerprint["only_empty"] = true
+	}
+	legacyFingerprint := operations.Fingerprint(fingerprint)
+	fingerprint["writer_level"] = level
+	if len(request.ExpectedScan) > 0 {
+		inputs := map[string]json.RawMessage{}
+		for field := range fields {
+			inputs[field] = request.ExpectedScan[field]
+		}
+		fingerprint["scan_basis"] = inputs
 	}
 	spec := operations.Spec{
 		ActorID: actor, Key: key, Type: kind, BatchID: request.BatchID, RequestID: request.RequestID,
@@ -139,14 +161,14 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 			}
 		}
 		var write map[string]catalog.CorrectionIntent
-		write, applied, err = filterAutoFields(ctx, tx, target, id, definitions, locked, fields, request.OnlyEmpty)
+		write, applied, err = filterAutoFields(ctx, tx, target, id, definitions, locked, fields, request.OnlyEmpty, level)
 		if err != nil {
 			return operations.Outcome{}, err
 		}
 		if len(write) == 0 {
-			return operations.Outcome{}, operations.Conflict("nothing_to_apply", "所有字段均已相同或已标记为不再提出")
+			return operations.Outcome{}, operations.Conflict("nothing_to_apply", "字段已占用、相同、已有更高级别的值或已标记为不再提出")
 		}
-		out, err := locked.Write(ctx, operationID, write)
+		out, err := locked.Write(ctx, operationID, write, level, request.ExpectedScan)
 		if err != nil {
 			return operations.Outcome{}, err
 		}
@@ -156,8 +178,13 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 	})
 	if err != nil {
 		var failure *operations.Failure
-		if errors.As(err, &failure) && failure.Code == "nothing_to_apply" {
-			return applied, err
+		if errors.As(err, &failure) {
+			switch failure.Code {
+			case "nothing_to_apply":
+				return applied, err
+			case "idempotency_conflict":
+				return w.legacyAutoReplay(ctx, request, spec, level, legacyFingerprint, err)
+			}
 		}
 		return Applied{}, err
 	}
@@ -174,7 +201,7 @@ func loadManualFields(ctx context.Context, tx *sql.Tx, target, id string) (map[s
 	return catalog.LoadCorrectionIntents(ctx, tx, id)
 }
 
-func filterAutoFields(ctx context.Context, tx *sql.Tx, target, id string, definitions []catalog.CorrectableField, locked autoFieldTarget, fields map[string]catalog.CorrectionIntent, onlyEmpty bool) (map[string]catalog.CorrectionIntent, Applied, error) {
+func filterAutoFields(ctx context.Context, tx *sql.Tx, target, id string, definitions []catalog.CorrectableField, locked autoFieldTarget, fields map[string]catalog.CorrectionIntent, onlyEmpty bool, level catalog.AutoWriterLevel) (map[string]catalog.CorrectionIntent, Applied, error) {
 	var corrections map[string]catalog.CorrectionIntent
 	if onlyEmpty {
 		var err error
@@ -191,10 +218,14 @@ func filterAutoFields(ctx context.Context, tx *sql.Tx, target, id string, defini
 		if !ok {
 			continue
 		}
+		current, exists := locked.Current(name)
+		if exists && level < current.EffectiveLevel() {
+			result.Skipped[name] = "lower_priority"
+			continue
+		}
 		if onlyEmpty {
 			_, manual := corrections[name]
-			_, automatic := locked.Current(name)
-			if manual || automatic {
+			if manual || exists {
 				result.Skipped[name] = "occupied"
 				continue
 			}
@@ -211,12 +242,12 @@ func filterAutoFields(ctx context.Context, tx *sql.Tx, target, id string, defini
 			result.Skipped[name] = "suppressed"
 			continue
 		}
-		if current, exists := locked.Current(name); exists {
+		if exists {
 			_, currentHash, err := governance.AutoValueKey(name, current.Intent())
 			if err != nil {
 				return nil, Applied{}, err
 			}
-			if currentHash == hash {
+			if currentHash == hash && current.EffectiveLevel() == level {
 				result.Skipped[name] = "unchanged"
 				continue
 			}
@@ -225,4 +256,30 @@ func filterAutoFields(ctx context.Context, tx *sql.Tx, target, id string, defini
 		result.Written = append(result.Written, name)
 	}
 	return write, result, nil
+}
+
+// 0088 之前的操作指纹没有级别。只重放旧写入入口原本就能产生的请求。
+func (w *Writer) legacyAutoReplay(ctx context.Context, r Request, spec operations.Spec, level catalog.AutoWriterLevel, fingerprint string, conflict error) (Applied, error) {
+	legacyLevel := catalog.LevelProgramExternal
+	if r.Source.Kind == "model" {
+		legacyLevel = catalog.LevelModelLocal
+		if r.OnlyEmpty {
+			legacyLevel = catalog.LevelModelExternal
+		}
+	}
+	if level != legacyLevel {
+		return Applied{}, conflict
+	}
+	var raw []byte
+	err := w.db.QueryRowContext(ctx, `SELECT response FROM operations WHERE actor_id=$1 AND idempotency_key=$2
+	AND fingerprint=$3 AND origin->>'provider_kind'=$4`, spec.ActorID, spec.Key, fingerprint, r.Source.Kind).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Applied{}, conflict
+	}
+	if err != nil {
+		return Applied{}, err
+	}
+	var result Applied
+	err = json.Unmarshal(raw, &result)
+	return result, err
 }

@@ -60,7 +60,7 @@ func (w *Worker) page(ctx context.Context, after *catalog.CurationCursor, lyrics
 	for i, p := range page {
 		ids[i] = p.ID
 	}
-	entries, err := catalog.LoadCurationEvidence(ctx, w.db, ids, w.writer.ArtworkExists)
+	entries, err := w.writer.LoadCurationEvidence(ctx, ids)
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@ package governance
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
@@ -81,19 +82,15 @@ func trackAutoSnapshot(state TrackCorrectionState, changes map[string]*ownedAuto
 		}
 		entry := autoFieldState{Effective: f.EffectiveValue}
 		if f.Auto != nil {
-			entry.Auto = &ownedAutoIntent{f.Auto.Intent(), f.Auto.OperationID}
+			entry.Auto = ownedIntent(*f.Auto)
 		}
 		out.Fields[f.Field] = entry
 	}
 	return out
 }
 
-func (t *LockedAutoTrack) Write(ctx context.Context, id string, fields map[string]catalog.CorrectionIntent) (operations.Outcome, error) {
-	next := make(map[string]*ownedAutoIntent, len(fields))
-	for name, intent := range fields {
-		next[name] = &ownedAutoIntent{intent, id}
-	}
-	return t.replace(ctx, next)
+func (t *LockedAutoTrack) Write(ctx context.Context, id string, fields map[string]catalog.CorrectionIntent, level catalog.AutoWriterLevel, expected map[string]json.RawMessage) (operations.Outcome, error) {
+	return writeAutoFields(ctx, t, id, fields, level, expected)
 }
 
 func (t *LockedAutoTrack) replace(ctx context.Context, next map[string]*ownedAutoIntent) (operations.Outcome, error) {
@@ -105,8 +102,8 @@ func (t *LockedAutoTrack) replace(ctx context.Context, next map[string]*ownedAut
 		if value == nil {
 			_, err = t.tx.ExecContext(ctx, `DELETE FROM track_auto_values WHERE track_id=$1 AND field=$2`, t.state.TrackID, name)
 		} else {
-			_, err = t.tx.ExecContext(ctx, `INSERT INTO track_auto_values(track_id,field,mode,text_value,operation_id) VALUES($1,$2,'set',$3,$4)
- ON CONFLICT(track_id,field) DO UPDATE SET text_value=excluded.text_value,operation_id=excluded.operation_id`, t.state.TrackID, name, value.Value, value.OperationID)
+			_, err = t.tx.ExecContext(ctx, `INSERT INTO track_auto_values(track_id,field,mode,text_value,operation_id,writer_level,scan_basis) VALUES($1,$2,'set',$3,$4,NULLIF($5::smallint,0),$6::jsonb)
+ ON CONFLICT(track_id,field) DO UPDATE SET text_value=excluded.text_value,operation_id=excluded.operation_id,writer_level=excluded.writer_level,scan_basis=excluded.scan_basis`, t.state.TrackID, name, value.Value, value.OperationID, value.WriterLevel, []byte(value.ScanBasis))
 		}
 		if err != nil {
 			return operations.Outcome{}, err
@@ -124,4 +121,16 @@ func (t *LockedAutoTrack) replace(ctx context.Context, next map[string]*ownedAut
 		return operations.Outcome{}, err
 	}
 	return operations.Outcome{TargetType: operations.TargetRelease, TargetID: t.ReleaseID(), ExpectedRevision: t.releaseRevision, ResultRevision: t.releaseRevision + 1, Before: trackAutoSnapshot(t.state, next), After: trackAutoSnapshot(after, next)}, nil
+}
+
+func (t *LockedAutoTrack) scanBasis(ctx context.Context) (map[string]json.RawMessage, error) {
+	scan := make(map[string]json.RawMessage, len(t.state.Fields))
+	for _, f := range t.state.Fields {
+		value, err := json.Marshal(f.ScanValue)
+		if err != nil {
+			return nil, err
+		}
+		scan[f.Field] = value
+	}
+	return scan, nil
 }

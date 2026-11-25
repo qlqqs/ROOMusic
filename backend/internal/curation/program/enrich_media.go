@@ -92,7 +92,7 @@ func (w *Worker) artworkFrom(ctx context.Context, u *unit, e catalog.CurationEvi
 				return "", err
 			}
 			// 同键回放只返回原操作，仍需确认当前封面行指向的文件存在。
-			entries, err := catalog.LoadCurationEvidence(ctx, w.db, []string{e.ID}, w.writer.ArtworkExists)
+			entries, err := w.writer.LoadCurationEvidence(ctx, []string{e.ID})
 			if err != nil {
 				return "", err
 			}

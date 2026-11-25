@@ -10,7 +10,7 @@ const BATCH = "00000000-0000-4000-8000-0000000000b1";
 function seedCuration(mock: ApiMock) {
   enableCuration(mock.curation);
   mock.curation.state = "running";
-  mock.curation.releases = { total: 12, processed: 5, matched: 4, uncertain: 1, no_match: 0, try_later: 0 };
+  mock.curation.releases = { total: 12, processed: 5, matched: 4, uncertain: 1, no_match: 0, try_later: 0, unlisted: 0, no_usable_candidates: 0 };
   seedBatch(mock.curation, { id: BATCH, openedAt: "2026-01-05T00:00:00Z" });
   const [first, second] = mock.groups;
   for (const group of [first, second]) {

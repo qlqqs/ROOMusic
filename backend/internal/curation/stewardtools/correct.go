@@ -71,6 +71,7 @@ func autoCorrect(writer *curation.Writer, track bool) tool.Handler {
 			return nil, toolError(err)
 		}
 		source := modelSource(run, in.Basis.Note)
+		source.WriterLevel = catalog.LevelModelLocal
 		var result curation.Applied
 		if track {
 			result, err = writer.ApplyTrack(ctx, curation.TrackRequest{TrackID: in.TrackID, ReleaseID: item.TargetID, Fields: fields, Source: source, BatchID: batch, Key: c.IdempotencyKey, RequestID: c.RequestID, ExpectedRevision: in.ExpectedRevision, ConversationID: run.ConversationID})

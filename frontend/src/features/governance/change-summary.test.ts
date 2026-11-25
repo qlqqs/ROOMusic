@@ -280,6 +280,45 @@ describe("自动补的封面与歌词（M7 B2）", () => {
   });
 });
 
+describe("自动值作废（整理链 F）", () => {
+  const op = "00000000-0000-4000-8000-000000000009";
+  const release: Pick<OperationItemDTO, "type" | "changes"> = {
+    type: "release_auto_correction",
+    changes: {
+      kind: "release_auto_invalidation",
+      fields: [{
+        field: "year",
+        before: { auto: { mode: "set", value: 2001, operation_id: op }, effective: 2001, scan_value: 1999 },
+        after: { auto: null, effective: 1999, scan_value: 1999 },
+      }],
+    },
+  };
+  const track: Pick<OperationItemDTO, "type" | "changes"> = {
+    type: "track_auto_correction",
+    changes: {
+      kind: "track_auto_invalidation",
+      track: { id: "00000000-0000-4000-8000-000000000001", title: "新曲名" },
+      fields: [{
+        field: "title",
+        before: { auto: { mode: "set", value: "自动曲名", operation_id: op }, effective: "自动曲名", scan_value: "新曲名" },
+        after: { auto: null, effective: "新曲名", scan_value: "新曲名" },
+      }],
+    },
+  };
+
+  it("类型名与撤销记录的类型名", () => {
+    expect(operationTypeLabel(release)).toBe("自动值作废");
+    expect(operationTypeLabel(track)).toBe("曲目的自动值作废");
+    expect(operationTypeLabel({ type: "revert", changes: release.changes })).toBe("恢复作废的自动值");
+  });
+
+  it("改动：显示回到新的标签值；撤销写成恢复自动值", () => {
+    expect(changeLines(release)).toEqual(["年份：2001 → 1999（标签变了，自动值作废）"]);
+    expect(changeLines(track)).toEqual(["《新曲名》曲目标题：自动曲名 → 新曲名（标签变了，自动值作废）"]);
+    expect(revertLines(track)).toEqual(["《新曲名》曲目标题：新曲名 → 自动曲名（恢复自动值）"]);
+  });
+});
+
 describe("外部对应（M7 C）", () => {
   const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
   const link: Pick<OperationItemDTO, "type" | "changes"> = {

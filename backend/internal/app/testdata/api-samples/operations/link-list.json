@@ -9,6 +9,206 @@
         "album": null,
         "artist": null,
         "changes": {
+          "fields": [
+            {
+              "after": {
+                "auto": null,
+                "effective": "重扫后的曲目标题",
+                "scan_value": "重扫后的曲目标题"
+              },
+              "before": {
+                "auto": {
+                  "mode": "set",
+                  "operation_id": "00000000-0000-4000-8000-000000000002",
+                  "scan_basis": "Album A track 1",
+                  "value": "合成自动曲目标题",
+                  "writer_level": 4
+                },
+                "effective": "合成自动曲目标题",
+                "scan_value": "重扫后的曲目标题"
+              },
+              "field": "title"
+            }
+          ],
+          "kind": "track_auto_invalidation",
+          "track": {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "title": "重扫后的曲目标题"
+          }
+        },
+        "created_at": "2026-01-01T00:00:06Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "origin": {
+          "basis": "对应字段的扫描值已变化",
+          "provider": "scan",
+          "provider_kind": "source",
+          "source": "curation"
+        },
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000006",
+          "title": "重扫后的发行标题",
+          "visible": true
+        },
+        "reverted_by": null,
+        "revertible": true,
+        "reverts": null,
+        "type": "track_auto_correction"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "changes": {
+          "fields": [
+            {
+              "after": {
+                "auto": null,
+                "effective": "重扫后的发行标题",
+                "scan_value": "重扫后的发行标题"
+              },
+              "before": {
+                "auto": {
+                  "mode": "set",
+                  "operation_id": "00000000-0000-4000-8000-000000000007",
+                  "scan_basis": "Album A",
+                  "value": "合成自动发行标题",
+                  "writer_level": 4
+                },
+                "effective": "合成自动发行标题",
+                "scan_value": "重扫后的发行标题"
+              },
+              "field": "title"
+            }
+          ],
+          "kind": "release_auto_invalidation"
+        },
+        "created_at": "2026-01-01T00:00:05Z",
+        "id": "00000000-0000-4000-8000-000000000008",
+        "origin": {
+          "basis": "对应字段的扫描值已变化",
+          "provider": "scan",
+          "provider_kind": "source",
+          "source": "curation"
+        },
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000006",
+          "title": "重扫后的发行标题",
+          "visible": true
+        },
+        "reverted_by": null,
+        "revertible": true,
+        "reverts": null,
+        "type": "release_auto_correction"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "changes": {
+          "fields": [
+            {
+              "after": {
+                "auto": {
+                  "mode": "set",
+                  "operation_id": "00000000-0000-4000-8000-000000000002",
+                  "value": "合成自动曲目标题"
+                },
+                "effective": "合成自动曲目标题"
+              },
+              "before": {
+                "auto": null,
+                "effective": "Album A track 1"
+              },
+              "field": "title"
+            }
+          ],
+          "kind": "track_auto_correction",
+          "track": {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "title": "合成自动曲目标题"
+          }
+        },
+        "created_at": "2026-01-01T00:00:04Z",
+        "id": "00000000-0000-4000-8000-000000000002",
+        "origin": {
+          "basis": "合成标签匹配",
+          "provider": "fixture-catalog",
+          "provider_kind": "source",
+          "source": "curation"
+        },
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000006",
+          "title": "重扫后的发行标题",
+          "visible": true
+        },
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": null,
+        "type": "track_auto_correction"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "changes": {
+          "fields": [
+            {
+              "after": {
+                "auto": {
+                  "mode": "set",
+                  "operation_id": "00000000-0000-4000-8000-000000000007",
+                  "value": "合成自动发行标题"
+                },
+                "effective": "合成自动发行标题"
+              },
+              "before": {
+                "auto": null,
+                "effective": "Album A"
+              },
+              "field": "title"
+            }
+          ],
+          "kind": "release_auto_correction"
+        },
+        "created_at": "2026-01-01T00:00:03Z",
+        "id": "00000000-0000-4000-8000-000000000007",
+        "origin": {
+          "basis": "合成标签匹配",
+          "provider": "fixture-catalog",
+          "provider_kind": "source",
+          "source": "curation"
+        },
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000006",
+          "title": "重扫后的发行标题",
+          "visible": true
+        },
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": null,
+        "type": "release_auto_correction"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "changes": {
           "confidence": "high",
           "external": {
             "artist": "合成外部艺人",
@@ -19,33 +219,32 @@
           "kind": "external_link",
           "links": [
             {
-              "external_group_id": "fixture-group",
-              "external_id": "fixture-release",
-              "object_id": "00000000-0000-4000-8000-000000000002",
-              "object_type": "release"
-            },
-            {
-              "external_id": "fixture-group",
-              "object_id": "00000000-0000-4000-8000-000000000003",
-              "object_type": "release_group"
+              "external_id": "fixture-group-only",
+              "object_id": "00000000-0000-4000-8000-000000000006",
+              "object_type": "release_group_match"
             }
           ],
-          "method": "barcode",
+          "method": "search",
           "source": "musicbrainz"
         },
-        "created_at": "2026-01-01T00:00:01Z",
-        "id": "00000000-0000-4000-8000-000000000004",
-        "origin": null,
+        "created_at": "2026-01-01T00:00:02Z",
+        "id": "00000000-0000-4000-8000-000000000009",
+        "origin": {
+          "basis": "合成发行组匹配",
+          "provider": "musicbrainz",
+          "provider_kind": "source",
+          "source": "curation"
+        },
         "release": {
-          "group_id": "00000000-0000-4000-8000-000000000003",
-          "id": "00000000-0000-4000-8000-000000000002",
-          "title": "Album A",
+          "group_id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000006",
+          "title": "重扫后的发行标题",
           "visible": true
         },
         "reverted_by": null,
-        "revertible": false,
-        "reverts": "00000000-0000-4000-8000-000000000005",
-        "type": "revert"
+        "revertible": true,
+        "reverts": null,
+        "type": "external_link"
       },
       {
         "actor": {
@@ -54,7 +253,6 @@
         },
         "album": null,
         "artist": null,
-        "batch_id": "00000000-0000-4000-8000-000000000006",
         "changes": {
           "confidence": "high",
           "external": {
@@ -68,12 +266,59 @@
             {
               "external_group_id": "fixture-group",
               "external_id": "fixture-release",
-              "object_id": "00000000-0000-4000-8000-000000000002",
+              "object_id": "00000000-0000-4000-8000-000000000006",
               "object_type": "release"
             },
             {
               "external_id": "fixture-group",
-              "object_id": "00000000-0000-4000-8000-000000000003",
+              "object_id": "00000000-0000-4000-8000-000000000005",
+              "object_type": "release_group"
+            }
+          ],
+          "method": "barcode",
+          "source": "musicbrainz"
+        },
+        "created_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000010",
+        "origin": null,
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000006",
+          "title": "重扫后的发行标题",
+          "visible": true
+        },
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": "00000000-0000-4000-8000-000000000011",
+        "type": "revert"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "artist": null,
+        "batch_id": "00000000-0000-4000-8000-000000000012",
+        "changes": {
+          "confidence": "high",
+          "external": {
+            "artist": "合成外部艺人",
+            "country": "JP",
+            "date": "2001",
+            "title": "合成外部发行"
+          },
+          "kind": "external_link",
+          "links": [
+            {
+              "external_group_id": "fixture-group",
+              "external_id": "fixture-release",
+              "object_id": "00000000-0000-4000-8000-000000000006",
+              "object_type": "release"
+            },
+            {
+              "external_id": "fixture-group",
+              "object_id": "00000000-0000-4000-8000-000000000005",
               "object_type": "release_group"
             }
           ],
@@ -81,7 +326,7 @@
           "source": "musicbrainz"
         },
         "created_at": "2026-01-01T00:00:00Z",
-        "id": "00000000-0000-4000-8000-000000000005",
+        "id": "00000000-0000-4000-8000-000000000011",
         "origin": {
           "basis": "合成条码匹配",
           "provider": "musicbrainz",
@@ -89,12 +334,12 @@
           "source": "curation"
         },
         "release": {
-          "group_id": "00000000-0000-4000-8000-000000000003",
-          "id": "00000000-0000-4000-8000-000000000002",
-          "title": "Album A",
+          "group_id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000006",
+          "title": "重扫后的发行标题",
           "visible": true
         },
-        "reverted_by": "00000000-0000-4000-8000-000000000004",
+        "reverted_by": "00000000-0000-4000-8000-000000000010",
         "revertible": false,
         "reverts": null,
         "type": "external_link"
@@ -103,7 +348,7 @@
     "pagination": {
       "page": 1,
       "page_size": 50,
-      "total": 2
+      "total": 7
     }
   },
   "status": 200

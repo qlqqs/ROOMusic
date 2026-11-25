@@ -128,7 +128,7 @@ describe("总开关与暂停", () => {
 describe("进度", () => {
   it("从未打开过时收成一行；打开后写出状态与计数", async () => {
     const { curation } = setup();
-    curation.releases = { total: 12, processed: 4, matched: 3, uncertain: 1, no_match: 0, try_later: 0 };
+    curation.releases = { total: 12, processed: 4, matched: 3, uncertain: 1, no_match: 0, try_later: 0, unlisted: 0, no_usable_candidates: 0 };
     renderApp({ path: "/settings/curation" });
     const progress = await group("进度");
     expect(await within(progress).findByText("未打开 · 曲库共 12 个发行")).toBeTruthy();
@@ -140,7 +140,7 @@ describe("进度", () => {
     seedBatch(curation, { id: BATCH, openedAt: "2026-01-05T00:00:00Z", closedAt: null });
     seedAutoOperation(governance, { type: "external_link", releaseId: releaseOf(albumA()), changes: linkChanges("Sample Symphonies"), provider: "musicbrainz", batchId: BATCH });
     curation.state = "running";
-    curation.releases = { total: 10, processed: 4, matched: 3, uncertain: 1, no_match: 0, try_later: 2 };
+    curation.releases = { total: 10, processed: 4, matched: 3, uncertain: 1, no_match: 0, try_later: 2, unlisted: 0, no_usable_candidates: 0 };
     curation.model.items = { ...curation.model.items, waiting_model: 1 };
     renderApp({ path: "/settings/curation" });
     const progress = await group("进度");
@@ -406,7 +406,7 @@ describe("操作记录的自动整理筛选", () => {
 describe("概览", () => {
   it("曲库里有发行而从未打开过：管理员看到提示，不再提示之后不再出现", async () => {
     const { curation } = setup();
-    curation.releases = { total: 3, processed: 0, matched: 0, uncertain: 0, no_match: 0, try_later: 0 };
+    curation.releases = { total: 3, processed: 0, matched: 0, uncertain: 0, no_match: 0, try_later: 0, unlisted: 0, no_usable_candidates: 0 };
     const user = userEvent.setup();
     renderApp({ path: "/" });
     expect(await screen.findByText("曲库扫描好了")).toBeTruthy();
@@ -418,7 +418,7 @@ describe("概览", () => {
 
   it("打开过之后不提示；成员不提示也不请求", async () => {
     const { curation } = setup();
-    curation.releases = { total: 3, processed: 0, matched: 0, uncertain: 0, no_match: 0, try_later: 0 };
+    curation.releases = { total: 3, processed: 0, matched: 0, uncertain: 0, no_match: 0, try_later: 0, unlisted: 0, no_usable_candidates: 0 };
     enableCuration(curation);
     renderApp({ path: "/" });
     expect(await screen.findByRole("heading", { level: 1, name: "概览" })).toBeTruthy();

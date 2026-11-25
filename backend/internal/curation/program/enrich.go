@@ -299,7 +299,7 @@ func planMatch(ctx context.Context, db operations.Queryer, e catalog.CurationEvi
 	if plan.link {
 		request.Links = append(request.Links, curation.LinkIntent{ObjectType: "release_group", ObjectID: e.GroupID, ExternalID: groupID})
 	}
-	request.Source = curation.Source{Kind: "source", Provider: "musicbrainz", Basis: basis}
+	request.Source = curation.Source{WriterLevel: catalog.LevelProgramExternal, Kind: "source", Provider: "musicbrainz", Basis: basis}
 	for _, pair := range m.Pairs {
 		if pair.RecordingID != "" {
 			request.Links = append(request.Links, curation.LinkIntent{ObjectType: "track", ObjectID: pair.TrackID, ExternalID: pair.RecordingID})
@@ -345,7 +345,7 @@ func writeMatch(ctx context.Context, db operations.Queryer, writer *curation.Wri
 	}
 	if len(fields) > 0 {
 		err := write(ctx, "fields", func(batch, key string) error {
-			result, err := writer.Apply(ctx, curation.Request{OnlyEmpty: true, ConfirmedBy: request.ConfirmedBy, ConversationID: request.ConversationID, ReleaseID: e.ID, Fields: fields, Source: request.Source, BatchID: batch, Key: key})
+			result, err := writer.Apply(ctx, curation.Request{OnlyEmpty: true, ExpectedScan: e.FieldInputs, ConfirmedBy: request.ConfirmedBy, ConversationID: request.ConversationID, ReleaseID: e.ID, Fields: fields, Source: request.Source, BatchID: batch, Key: key})
 			record(result.OperationID)
 			return err
 		})

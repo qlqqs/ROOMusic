@@ -84,7 +84,17 @@ const progressDecoder = d.object({
   last_pass_finished_at: d.nullable(d.timestamp()),
   model: modelProgressDecoder,
   pending: d.object({ waiting_model: count() }),
-  releases: d.object({ matched: count(), no_match: count(), processed: count(), total: count(), try_later: count(), uncertain: count() }),
+  // unlisted（外部库未收录）与 no_usable_candidates（候选都被撤销或已被占用）来自整理链 C。
+  releases: d.object({
+    matched: count(),
+    no_match: count(),
+    processed: count(),
+    total: count(),
+    try_later: count(),
+    uncertain: count(),
+    unlisted: count(),
+    no_usable_candidates: count(),
+  }),
   rule_version: d.integer({ min: 1 }),
   state: d.oneOf(PROGRAM_STATES),
 });

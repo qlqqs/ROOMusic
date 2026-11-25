@@ -909,6 +909,19 @@ func recordOperationSamples(t *testing.T, application *integrationTestApplicatio
 	samples.record("operations/list-by-release", call(http.MethodGet, "/api/v1/operations?release_id="+cueRelease+"&page_size=2", nil, admin), http.StatusOK)
 }
 
+// 用真实整理证据读取生成两种作废记录，供操作列表的样本录制。
+func writeAutoInvalidationSampleOperations(t *testing.T, f *curationFixture) {
+	t.Helper()
+	app := f.application
+	track, _ := externalTrack(t, app, f.a)
+	f.apply(t, f.a, "fixture-catalog", "", map[string]any{"title": "合成自动发行标题"})
+	applyTrackAuto(t, f, trackAutoRequest(track, f.a, "fixture-catalog", "", map[string]any{"title": "合成自动曲目标题"}))
+	mustExec(t, app, `UPDATE releases SET title='重扫后的发行标题' WHERE id=$1`, f.a)
+	mustExec(t, app, `UPDATE tracks SET title='重扫后的曲目标题' WHERE id=$1`, track)
+	_, err := f.writer.LoadCurationEvidence(t.Context(), []string{f.a})
+	requireCurationOK(t, err)
+}
+
 // recordGroupDefaultSamples 记录默认版本接口：设定默认版本的成功响应、设定后的组详情（带 revision 与 default_release_id）
 // 与版本对比，以及不在这张专辑里的版本与过期版本号两种错误；再记录按专辑筛选的操作记录（专辑目标的记录，album 有值、release 为 null）
 // 和撤销这次设定的响应（目标是专辑）。素材是前面的归组样本：撤销移出之后，单曲专辑所在的组有三个版本

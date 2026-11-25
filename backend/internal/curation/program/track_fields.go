@@ -57,7 +57,7 @@ func planTrackFields(e catalog.CurationEvidence, m MatchResult) []curation.Track
 		add("title", value.title, t.TitlePlaceholder || t.TitleInferred)
 		add("artist", value.artist, t.ArtistPlaceholder)
 		if len(fields) > 0 {
-			requests = append(requests, curation.TrackRequest{ReleaseID: e.ID, TrackID: t.ID, OnlyEmpty: true, Fields: fields})
+			requests = append(requests, curation.TrackRequest{ReleaseID: e.ID, TrackID: t.ID, OnlyEmpty: true, Fields: fields, ExpectedScan: map[string]json.RawMessage{"title": jsonValue(t.Title), "artist": jsonValue(t.Artist)}})
 		}
 	}
 	return requests
@@ -200,7 +200,7 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		return err
 	default:
 		u := unit{w: w, ruleVersion: s.RuleVersion, subject: s.Subject, id: e.ID, generation: s.Generation, fixedGeneration: true, releaseID: e.ID, inputDigest: s.InputDigest, releaseState: s}
-		source := curation.Source{Kind: "source", Provider: "musicbrainz", Basis: "按已有 MusicBrainz 对应补全"}
+		source := curation.Source{WriterLevel: catalog.LevelProgramExternal, Kind: "source", Provider: "musicbrainz", Basis: "按已有 MusicBrainz 对应补全"}
 		if artists {
 			var links []curation.LinkIntent
 			links, proposals, err = w.identifyArtists(ctx, local, *e, match, false)

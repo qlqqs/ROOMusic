@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"maps"
 	"strings"
@@ -145,10 +146,22 @@ func TestPostgreSQLCurationGapAndIdentityChanges(t *testing.T) {
 	track, _ := externalTrack(t, f.application, f.a)
 	mustExec(t, f.application, `UPDATE releases SET year=NULL WHERE id=$1`, f.a)
 	f.run(t)
-	previous := f.assertRelease(t, f.a, "no_match", "search")
+	assertUnlisted := func(t *testing.T) curation.WorkState {
+		t.Helper()
+		state := f.assertRelease(t, f.a, "unlisted", "search")
+		var result struct{ Reason string }
+		requireCurationOK(t, json.Unmarshal(state.Result, &result))
+		if result.Reason != "model_unconfigured" {
+			t.Fatalf("未收录原因 %q，期望 model_unconfigured", result.Reason)
+		}
+		return state
+	}
+	previous := assertUnlisted(t)
+	// 零候选时，每轮识别搜索原查询和去掉曲目数的查询。
+	const searchesPerIdentification = 2
 	searches := f.source.calls["SearchReleases"]
-	if searches != 1 {
-		t.Fatalf("初次搜索 %d 次，期望 1 次", searches)
+	if searches != searchesPerIdentification {
+		t.Fatalf("初次识别搜索 %d 次，期望 %d 次", searches, searchesPerIdentification)
 	}
 	for _, tc := range []struct {
 		name   string
@@ -172,7 +185,7 @@ func TestPostgreSQLCurationGapAndIdentityChanges(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.change(t)
 			f.clock.advance(t, 6*time.Hour)
-			got := f.assertRelease(t, f.a, "no_match", "search")
+			got := assertUnlisted(t)
 			if got.IdentityDigest != previous.IdentityDigest || got.GapDigest == previous.GapDigest ||
 				got.InputDigest == previous.InputDigest || got.Generation != previous.Generation ||
 				got.Attempts != previous.Attempts || f.source.calls["SearchReleases"] != searches {
@@ -193,8 +206,8 @@ func TestPostgreSQLCurationGapAndIdentityChanges(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mustExec(t, f.application, tc.query, tc.id)
 			f.clock.advance(t, 6*time.Hour)
-			searches++
-			got := f.assertRelease(t, f.a, "no_match", "search")
+			searches += searchesPerIdentification
+			got := assertUnlisted(t)
 			if got.IdentityDigest == previous.IdentityDigest || got.Generation != previous.Generation+1 ||
 				got.Attempts != previous.Attempts+1 || f.source.calls["SearchReleases"] != searches {
 				t.Errorf("识别输入变化应触发一次识别，之前 %+v，之后 %+v，调用 %v", previous, got, f.source.calls)

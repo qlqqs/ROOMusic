@@ -324,5 +324,11 @@ func recordCurationCLinkSamples(t *testing.T, samples *apiSampleRecorder) {
 	group := curationCLink("release_group", f.groupA, release.ExternalGroupID)
 	op := curationCApplyLinks(t, f, curationCLinkRequest(f.a, f.batch(t, "program"), release, group)).OperationID
 	samples.record("operations/link-reverted", f.revert(t, &f.admin, op, uuid.New()), 200)
+	groupMatch := curationCLink("release_group_match", f.a, "fixture-group-only")
+	groupRequest := curationCLinkRequest(f.a, "", groupMatch)
+	groupRequest.Method = "search"
+	groupRequest.Source.Basis = "合成发行组匹配"
+	curationCApplyLinks(t, f, groupRequest)
+	writeAutoInvalidationSampleOperations(t, f)
 	samples.record("operations/link-list", app.request(t, "GET", "/api/v1/operations?release_id="+f.a, nil, &f.admin, nil), 200)
 }

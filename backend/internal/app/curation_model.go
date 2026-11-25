@@ -223,9 +223,9 @@ func checkBackgroundFields(ctx context.Context, w *curation.Writer, caller tool.
 			continue
 		}
 		if track {
-			err = w.CheckModelTrackCorrection(ctx, item.TargetID, in.TrackID, in.ExpectedRevision, in.Changes)
+			err = w.CheckModelTrackCorrection(ctx, item.TargetID, in.TrackID, in.ExpectedRevision, in.Changes, catalog.LevelModelLocal)
 		} else {
-			err = w.CheckModelCorrection(ctx, item.TargetID, in.ExpectedRevision, in.Changes)
+			err = w.CheckModelCorrection(ctx, item.TargetID, in.ExpectedRevision, in.Changes, catalog.LevelModelLocal)
 		}
 		var f *operations.Failure
 		if errors.As(err, &f) {

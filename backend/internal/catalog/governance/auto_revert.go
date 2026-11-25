@@ -62,6 +62,9 @@ func (k autoCorrectionKind) Revert(ctx context.Context, tx *sql.Tx, operationID 
 	if err != nil {
 		return operations.Outcome{}, err
 	}
+	if isInvalidation(prior.Fields) {
+		return revertInvalidation(ctx, tx, locked, original, prior.Fields, false)
+	}
 	next := make(map[string]*ownedAutoIntent, len(prior.Fields))
 	for _, field := range catalog.CorrectableFields {
 		entry, changed := prior.Fields[field.Name]
@@ -116,6 +119,7 @@ func (autoCorrectionKind) Describe(ctx context.Context, q operations.Queryer, re
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	var invalidations []string
 	descriptions := make(map[string]operations.Description, len(records))
 	for _, record := range records {
 		var d operations.Description
@@ -136,18 +140,25 @@ func (autoCorrectionKind) Describe(ctx context.Context, q operations.Queryer, re
 				if !ok {
 					break
 				}
-				changes = append(changes, map[string]any{"field": field.Name, "before": prior, "after": next})
+				changes = append(changes, map[string]any{"field": field.Name, "before": prior.display(), "after": next.display()})
 				d.Revertible = d.Revertible && owners[[2]string{record.TargetID, field.Name}] == record.ID
 			}
 			if len(changes) == len(before.Fields) {
-				d.Changes = map[string]any{"kind": operations.TypeReleaseAutoCorrection, "fields": changes}
+				kind := operations.TypeReleaseAutoCorrection
+				if isInvalidation(after.Fields) {
+					kind = TypeReleaseAutoInvalidation
+					if record.Type != operations.TypeRevert && record.RevertedByID == "" {
+						invalidations = append(invalidations, record.ID)
+					}
+				}
+				d.Changes = map[string]any{"kind": kind, "fields": changes}
 			} else {
 				d.Revertible = false
 			}
 		}
 		descriptions[record.ID] = d
 	}
-	return descriptions, nil
+	return describeInvalidations(ctx, q, descriptions, invalidations, false)
 }
 
 func (autoCorrectionKind) PreviewRevert(ctx context.Context, q operations.Queryer, record operations.Record) ([]operations.PreviewChange, error) {
