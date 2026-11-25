@@ -1,27 +1,20 @@
-/* “关于”卡片：与设置卡片同一张纸面。上半是标志与名称，下半一行图标；两半之间一条分隔线。 */
-.card {
-  min-width: 0;
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, white 45%, var(--color-bg));
-}
-
-.identity {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-width: 0;
-  padding: var(--space-4);
+/* 页首：居中的标志、名称与版本，像系统的“关于本机”。不套卡片，下面的两组列表才是设置卡片。 */
+.hero {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  padding: var(--space-4) 0 var(--space-2);
+  text-align: center;
 }
 
 /* 标志放在一块白色方块上，像应用图标；1px 细线收边。 */
 .plate {
   box-sizing: border-box;
   display: grid;
-  flex: none;
   place-items: center;
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
+  margin-bottom: var(--space-2);
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-lg);
   background: white;
@@ -29,14 +22,8 @@
 
 .plate img {
   display: block;
-  width: 38px;
-  height: 38px;
-}
-
-.titles {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
+  width: 44px;
+  height: 44px;
 }
 
 .name {
@@ -50,6 +37,7 @@
 .build {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   align-items: baseline;
   gap: 0 var(--space-3);
   margin: 0;
@@ -69,57 +57,118 @@
   text-decoration: underline;
 }
 
-/* 版本读取中占住一行，读到后名称不跳动。 */
+/* 版本读取中占住一行，读到后下面的列表不跳动。 */
 .buildPlaceholder {
   display: block;
   height: calc(var(--fs-13) * 1.6);
 }
 
-/* 图标行：项目链接一组、反馈一组，组间一条竖线。 */
-.links {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1) 0;
-  padding: var(--space-2) var(--space-3);
-  border-top: 1px solid var(--color-divider);
-}
-
-.group + .group {
-  margin-left: var(--space-2);
-  padding-left: var(--space-2);
-  border-left: 1px solid var(--color-divider);
-}
-
-.group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
+/* 列表：每行图标、名称、右侧的值与行尾图标；行间分隔线从名称起，不贯穿图标列。 */
+.list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.iconLink {
-  display: inline-flex;
+.list > li {
+  position: relative;
+  min-width: 0;
+}
+
+.list > li + li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(var(--space-4) + 18px + var(--space-3));
+  z-index: 1;
+  border-top: 1px solid var(--color-divider);
+  pointer-events: none;
+}
+
+/* 整行可点；圆角卡片里第一行与最后一行的底色跟着卡片圆角。 */
+.row {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  min-width: var(--control-height);
-  min-height: var(--control-height);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  transition:
-    background-color 0.12s ease,
-    color 0.12s ease;
-}
-
-.iconLink:hover {
-  background: var(--color-hover);
+  gap: var(--space-3);
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: var(--space-1) var(--space-4);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-14);
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
 }
 
-.iconLink:active {
+.list > li:first-child > .row {
+  border-start-start-radius: var(--radius-lg);
+  border-start-end-radius: var(--radius-lg);
+}
+
+.list > li:last-child > .row {
+  border-end-start-radius: var(--radius-lg);
+  border-end-end-radius: var(--radius-lg);
+}
+
+.row > svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.row:active {
   background: var(--color-pressed);
+}
+
+@media (hover: hover) {
+  .row:hover {
+    background: var(--color-hover);
+  }
+}
+
+.row:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -3px;
+}
+
+.row[aria-busy="true"] {
+  cursor: progress;
+}
+
+.label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 右侧的值（地址、版本、许可名）：次要色，放不下时截断，名称优先。 */
+.value {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row > .trail {
+  color: var(--text-secondary);
+}
+
+.row > .trail[data-done] {
+  color: var(--text-accent);
 }
 
 .liveRegion {
@@ -132,7 +181,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .iconLink {
+  .row {
     transition: none;
   }
 }

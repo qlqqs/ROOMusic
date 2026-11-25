@@ -112,19 +112,23 @@ describe("设置 › 关于", () => {
 
   it("成员看到项目与反馈链接，版本和诊断信息仅供管理员查看", async () => {
     const api = renderAbout("listener");
-    const about = within(await screen.findByRole("region", { name: "ROOMusic" }));
+    const project = within(await screen.findByRole("region", { name: "项目" }));
+    const feedback = within(screen.getByRole("region", { name: "反馈" }));
     const links = [
       ["源代码", repo],
       ["更新说明", `${repo}/releases`],
       ["许可 AGPL-3.0", "https://www.gnu.org/licenses/agpl-3.0.html"],
       ["第三方许可", `${repo}/blob/main/THIRD-PARTY-NOTICES.md`],
-      ["反馈问题", `${repo}/issues/new?template=bug_report.yml`],
     ] as const;
     for (const [name, href] of links) {
-      expect(about.getByRole("link", { name }).getAttribute("href")).toBe(href);
+      expect(project.getByRole("link", { name }).getAttribute("href")).toBe(href);
     }
-    expect(about.queryByText("版本")).toBeNull();
-    expect(about.queryByRole("button", { name: /诊断信息/ })).toBeNull();
+    expect(feedback.getByRole("link", { name: "反馈问题" }).getAttribute("href")).toBe(`${repo}/issues/new?template=bug_report.yml`);
+    const main = within(screen.getByRole("main"));
+    expect(main.queryByText("版本")).toBeNull();
+    expect(main.queryByText(version)).toBeNull();
+    expect(main.queryByRole("link", { name: "b665458" })).toBeNull();
+    expect(main.queryByRole("button", { name: /诊断信息/ })).toBeNull();
     expect(api.requestsTo("GET", versionPath)).toHaveLength(0);
     expect(api.requestsTo("GET", diagnosticsPath)).toHaveLength(0);
   });
@@ -134,8 +138,10 @@ describe("设置 › 关于", () => {
     const about = within(await screen.findByRole("region", { name: "ROOMusic" }));
     expect(await about.findByText(version)).toBeTruthy();
     expect(about.getByRole("link", { name: "b665458" }).getAttribute("href")).toBe(`${repo}/commit/${commit}`);
-    expect(about.getByRole("link", { name: `${version} 的更新说明` }).getAttribute("href")).toBe(`${repo}/releases/tag/v${version}`);
-    expect(about.getByRole("link", { name: "反馈问题" }).getAttribute("href")).toBe(`${repo}/issues/new?template=bug_report.yml&version=0.8.1+%28b665458%29`);
+    const project = within(screen.getByRole("region", { name: "项目" }));
+    const feedback = within(screen.getByRole("region", { name: "反馈" }));
+    expect(project.getByRole("link", { name: `${version} 的更新说明` }).getAttribute("href")).toBe(`${repo}/releases/tag/v${version}`);
+    expect(feedback.getByRole("link", { name: "反馈问题" }).getAttribute("href")).toBe(`${repo}/issues/new?template=bug_report.yml&version=0.8.1+%28b665458%29`);
   });
 
   it("管理员点击后复制带 JSON 围栏的诊断报告并更新按钮读屏名", async () => {

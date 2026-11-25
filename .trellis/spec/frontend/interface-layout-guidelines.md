@@ -105,9 +105,11 @@
 - 音乐目录页：先是“目录”卡（不与页面标题重名；“添加目录…”打开对话框，还没有目录时它是主要按钮；每行图标、名称、只在停用时出现的“已停用”与“目录 {名} 的更多操作”菜单：
   停用目录 / 恢复目录 / 改路径… / 不扫描的文件夹…；列表是 `<ul aria-label="音乐目录列表">`；添加成功的提示带“开始扫描”），再是扫描卡（当前状态、完整重扫、主要按钮“开始扫描”，
   每天自动扫描一行；没有启用的目录时两个按钮不可用并说明先添加目录），最后是扫描记录与目录操作记录卡（时间、目录、操作、结果，不显示内部版本号）。
-- 关于（所有人，2026-11-25 重做）：一张卡片，上半是白色方块里的标志、名称“ROOMusic”（h2）与管理员可见的版本号和 commit 前 7 位（链到该 commit）；下半一行图标链接，
-  不写说明文字，名称在悬停提示与读屏名里：项目组（源代码，GitHub 地址用 GitHub 标志；更新说明；许可 AGPL-3.0 链到 gnu.org；第三方许可）与反馈组（反馈问题；管理员的“复制诊断信息”，
-  没有剪贴板时是“下载诊断信息”），组间一条竖线。链接都从 `/api/v1/system/about` 的 `source_url` 推出（`features/insights/components/project-links.ts`）：只有 github.com 地址才有更新说明、反馈、第三方许可与 commit 链接；
+- 关于（所有人，2026-11-25 重做）：页首居中、不套卡片：白色方块里的标志、名称“ROOMusic”（h2）与管理员可见的版本号和 commit 前 7 位（链到该 commit）。
+  下面两个设置分组，组内是整行可点的列表（每行图标、短名称、右侧的值、行尾斜箭头，新标签页打开；行间分隔线从名称起）：
+  “项目”——源代码（GitHub 地址用 GitHub 标志，值是去掉协议的地址）、更新说明（值是版本）、许可（值 AGPL-3.0，链到 gnu.org）、第三方许可；
+  “反馈”——反馈问题（值 GitHub Issues）、管理员的“复制诊断信息”按钮行（没有剪贴板时“下载诊断信息”，行尾复制或下载图标，完成两秒对勾），诊断失败的错误在分组卡片下方。
+  链接都从 `/api/v1/system/about` 的 `source_url` 推出（`features/insights/components/project-links.ts`）：只有 github.com 地址才有更新说明、反馈、第三方许可与 commit 链接；
   管理员的链接指向运行版本（`releases/tag/v<版本>`、`blob/v<版本>/THIRD-PARTY-NOTICES.md`），成员指向最新；反馈打开 `issues/new?template=bug_report.yml`，管理员预填 `version=<版本> (<commit7>)`
   （模板在 `.github/ISSUE_TEMPLATE/bug_report.yml`）。诊断信息取自 `GET /api/v1/admin/diagnostics`（合同见[诊断合同](../backend/diagnostics-contracts.md)），复制成 ```json 代码块；剪贴板写入在点击当刻用 `ClipboardItem` 交出 Promise（Safari 在 await 后拒绝写入），被拒时退回下载。
 - 页面报错上报（`features/system/client-errors.ts`）：已登录布局里挂一次，监听 window 的 `error`、`unhandledrejection`，并由 `main.tsx` 的 `onCaughtError`/`onUncaughtError` 交来渲染错误；

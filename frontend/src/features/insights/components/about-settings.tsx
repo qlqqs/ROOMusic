@@ -1,8 +1,8 @@
-import { Blocks, Check, Code, MessageSquareWarning, Scale, ScrollText, Stethoscope } from "lucide-react";
+import { ArrowUpRight, Blocks, Check, Code, Copy, Download, MessageSquareWarning, Scale, ScrollText, Stethoscope } from "lucide-react";
 import { useId, type ReactNode } from "react";
 import { useViewerScope } from "../../auth";
 import { useBuildInfo, useDiagnosticsExport } from "../../system";
-import { Button, FailureNotice, QueryContent, Skeleton, useTooltip, VisuallyHidden } from "../../../shared/ui";
+import { FailureNotice, QueryContent, SettingsGroup, Skeleton, useTooltip, VisuallyHidden } from "../../../shared/ui";
 import { useAbout } from "../hooks/use-insights";
 import { projectLinks, type BuildLine } from "./project-links";
 import styles from "./about-settings.module.css";
@@ -10,17 +10,15 @@ import styles from "./about-settings.module.css";
 const ICON = 18;
 
 /**
- * 设置 › 关于（所有人）：应用标志与名称、一行图标链接（源代码、更新说明、许可、第三方许可、反馈问题）。
- * 管理员另外看到版本与 commit，并可以复制诊断信息附进反馈。文字都在悬停提示与读屏名里，页面上只有名称与版本。
+ * 设置 › 关于（所有人）：居中的标志、名称（管理员另见版本与 commit），下面两组列表：
+ * 项目（源代码、更新说明、许可、第三方许可）与反馈（反馈问题，管理员另有复制诊断信息）。每行图标、短名称、右侧的值，整行可点。
  */
 export function AboutSettings({ mark }: { mark: ReactNode }) {
   const about = useAbout();
   const { viewer } = useViewerScope();
   return (
-    <QueryContent query={about} loading={<Skeleton label="正在加载" lines={2} />}>
-      {(data) =>
-        viewer.role === "admin" ? <AdminAbout mark={mark} sourceUrl={data.source_url} /> : <AboutCard mark={mark} sourceUrl={data.source_url} build={null} />
-      }
+    <QueryContent query={about} loading={<Skeleton label="正在加载" lines={3} />}>
+      {(data) => (viewer.role === "admin" ? <AdminAbout mark={mark} sourceUrl={data.source_url} /> : <About mark={mark} sourceUrl={data.source_url} build={null} />)}
     </QueryContent>
   );
 }
@@ -28,15 +26,10 @@ export function AboutSettings({ mark }: { mark: ReactNode }) {
 function AdminAbout({ mark, sourceUrl }: { mark: ReactNode; sourceUrl: string }) {
   const build = useBuildInfo();
   const diagnostics = useDiagnosticsExport();
-  return (
-    <>
-      <AboutCard mark={mark} sourceUrl={sourceUrl} build={build.data ?? null} buildPending={build.isPending} diagnostics={diagnostics} />
-      {diagnostics.error === null ? null : <FailureNotice error={diagnostics.error} title="没有拿到诊断信息" />}
-    </>
-  );
+  return <About mark={mark} sourceUrl={sourceUrl} build={build.data ?? null} buildPending={build.isPending} diagnostics={diagnostics} />;
 }
 
-type AboutCardProps = {
+type AboutProps = {
   mark: ReactNode;
   sourceUrl: string;
   /** null：看不到版本（成员），或管理员读取版本失败。 */
@@ -45,68 +38,49 @@ type AboutCardProps = {
   diagnostics?: ReturnType<typeof useDiagnosticsExport>;
 };
 
-function AboutCard({ mark, sourceUrl, build, buildPending = false, diagnostics }: AboutCardProps) {
+function About({ mark, sourceUrl, build, buildPending = false, diagnostics }: AboutProps) {
   const nameId = useId();
   const links = projectLinks(sourceUrl, build);
-  const github = links.releaseNotes !== null;
+  const version = build?.version ?? null;
   return (
-    <section className={styles.card} aria-labelledby={nameId}>
-      <div className={styles.identity}>
+    <>
+      <section className={styles.hero} aria-labelledby={nameId}>
         <span className={styles.plate} aria-hidden="true">
           {mark}
         </span>
-        <div className={styles.titles}>
-          <h2 id={nameId} className={styles.name}>
-            ROOMusic
-          </h2>
-          {build !== null ? <Build build={build} commitUrl={links.commit} /> : buildPending ? <span className={styles.buildPlaceholder} /> : null}
-        </div>
-      </div>
-      <div className={styles.links}>
-        <ul className={styles.group} aria-label="项目">
-          <li>
-            <IconLink href={links.source} label="源代码" tooltip={`源代码 ${links.sourceLabel}`}>
-              {github ? <GitHubMark /> : <Code size={ICON} aria-hidden="true" />}
-            </IconLink>
-          </li>
+        <h2 id={nameId} className={styles.name}>
+          ROOMusic
+        </h2>
+        {build !== null ? <Build build={build} commitUrl={links.commit} /> : buildPending ? <span className={styles.buildPlaceholder} /> : null}
+      </section>
+      <SettingsGroup title="项目">
+        <ul className={styles.list} data-settings-flush="">
+          <LinkRow href={links.source} label="源代码" icon={links.releaseNotes !== null ? <GitHubMark /> : <Code size={ICON} aria-hidden="true" />} value={links.sourceLabel} />
           {links.releaseNotes === null ? null : (
-            <li>
-              <IconLink href={links.releaseNotes} label={build?.version ? `${build.version} 的更新说明` : "更新说明"}>
-                <ScrollText size={ICON} aria-hidden="true" />
-              </IconLink>
-            </li>
+            <LinkRow
+              href={links.releaseNotes}
+              label="更新说明"
+              name={version === null ? "更新说明" : `${version} 的更新说明`}
+              icon={<ScrollText size={ICON} aria-hidden="true" />}
+              value={version}
+            />
           )}
-          <li>
-            <IconLink href={links.license} label="许可 AGPL-3.0">
-              <Scale size={ICON} aria-hidden="true" />
-            </IconLink>
-          </li>
-          {links.thirdParty === null ? null : (
-            <li>
-              <IconLink href={links.thirdParty} label="第三方许可">
-                <Blocks size={ICON} aria-hidden="true" />
-              </IconLink>
-            </li>
-          )}
+          <LinkRow href={links.license} label="许可" name="许可 AGPL-3.0" icon={<Scale size={ICON} aria-hidden="true" />} value="AGPL-3.0" />
+          {links.thirdParty === null ? null : <LinkRow href={links.thirdParty} label="第三方许可" icon={<Blocks size={ICON} aria-hidden="true" />} />}
         </ul>
-        {links.feedback === null && diagnostics === undefined ? null : (
-          <ul className={styles.group} aria-label="反馈">
-            {links.feedback === null ? null : (
-              <li>
-                <IconLink href={links.feedback} label="反馈问题">
-                  <MessageSquareWarning size={ICON} aria-hidden="true" />
-                </IconLink>
-              </li>
-            )}
-            {diagnostics === undefined ? null : (
-              <li>
-                <DiagnosticsButton diagnostics={diagnostics} />
-              </li>
-            )}
+      </SettingsGroup>
+      {links.feedback === null && diagnostics === undefined ? null : (
+        <SettingsGroup
+          title="反馈"
+          footer={diagnostics === undefined || diagnostics.error === null ? undefined : <FailureNotice error={diagnostics.error} title="没有拿到诊断信息" />}
+        >
+          <ul className={styles.list} data-settings-flush="">
+            {links.feedback === null ? null : <LinkRow href={links.feedback} label="反馈问题" icon={<MessageSquareWarning size={ICON} aria-hidden="true" />} value="GitHub Issues" />}
+            {diagnostics === undefined ? null : <DiagnosticsRow diagnostics={diagnostics} />}
           </ul>
-        )}
-      </div>
-    </section>
+        </SettingsGroup>
+      )}
+    </>
   );
 }
 
@@ -131,36 +105,42 @@ function Build({ build, commitUrl }: { build: BuildLine; commitUrl: string | nul
   );
 }
 
-function DiagnosticsButton({ diagnostics }: { diagnostics: ReturnType<typeof useDiagnosticsExport> }) {
-  const verbOf = (delivery: "copy" | "download") => (delivery === "copy" ? "复制" : "下载");
-  const verb = verbOf(diagnostics.delivery);
-  const label = diagnostics.done !== null ? `已${verbOf(diagnostics.done)}诊断信息` : diagnostics.pending ? `正在${verb}诊断信息` : `${verb}诊断信息`;
+/** 外部链接一行：新标签页打开，行尾斜箭头。name 是读屏名（包含可见的名称），缺省同 label。 */
+function LinkRow({ href, label, name, icon, value = null }: { href: string; label: string; name?: string; icon: ReactNode; value?: string | null }) {
   return (
-    <>
-      <Button
-        variant="icon"
-        label={label}
-        tooltip={diagnostics.done !== null ? label : `${label}，附进反馈`}
-        busy={diagnostics.pending}
-        icon={diagnostics.done !== null ? <Check size={ICON} aria-hidden="true" /> : <Stethoscope size={ICON} aria-hidden="true" />}
-        onClick={diagnostics.run}
-      />
-      <span className={styles.liveRegion} role="status">
-        {diagnostics.done !== null ? label : ""}
-      </span>
-    </>
+    <li>
+      <a className={styles.row} href={href} target="_blank" rel="noreferrer" aria-label={name ?? label}>
+        {icon}
+        <span className={styles.label}>{label}</span>
+        {value === null ? null : <span className={styles.value}>{value}</span>}
+        <ArrowUpRight className={styles.trail} size={16} aria-hidden="true" />
+      </a>
+    </li>
   );
 }
 
-function IconLink({ href, label, tooltip, children }: { href: string; label: string; tooltip?: string; children: ReactNode }) {
-  const tip = useTooltip(tooltip ?? label);
+function DiagnosticsRow({ diagnostics }: { diagnostics: ReturnType<typeof useDiagnosticsExport> }) {
+  const verbOf = (delivery: "copy" | "download") => (delivery === "copy" ? "复制" : "下载");
+  const verb = verbOf(diagnostics.delivery);
+  const label = diagnostics.done !== null ? `已${verbOf(diagnostics.done)}诊断信息` : diagnostics.pending ? `正在${verb}诊断信息` : `${verb}诊断信息`;
+  const Trail = diagnostics.done !== null ? Check : diagnostics.delivery === "copy" ? Copy : Download;
   return (
-    <>
-      <a className={styles.iconLink} href={href} target="_blank" rel="noreferrer" aria-label={label} {...tip.triggerProps}>
-        {children}
-      </a>
-      {tip.tooltip}
-    </>
+    <li>
+      <button
+        type="button"
+        className={styles.row}
+        aria-busy={diagnostics.pending || undefined}
+        aria-disabled={diagnostics.pending || undefined}
+        onClick={diagnostics.run}
+      >
+        <Stethoscope size={ICON} aria-hidden="true" />
+        <span className={styles.label}>{label}</span>
+        <Trail className={styles.trail} data-done={diagnostics.done !== null ? "" : undefined} size={16} aria-hidden="true" />
+      </button>
+      <span className={styles.liveRegion} role="status">
+        {diagnostics.done !== null ? label : ""}
+      </span>
+    </li>
   );
 }
 
