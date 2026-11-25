@@ -16,12 +16,14 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/personal"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/subsonic/protocol"
+	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
 type Browse struct {
 	Catalog       *catalog.Store
 	Personal      *personal.Service
 	Listening     *listening.Service
+	Zones         *zones.Service
 	ReadArtwork   func(ctx context.Context, id string, head bool) (string, []byte, error)
 	DataDirectory string
 }

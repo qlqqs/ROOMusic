@@ -1,6 +1,7 @@
 {
   "body": {
     "enabled": true,
+    "jukebox_zone_id": null,
     "ready": true,
     "username": "subsonic-web-listener"
   },

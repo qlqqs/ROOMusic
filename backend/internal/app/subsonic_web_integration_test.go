@@ -14,6 +14,8 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/platform/diagnostics"
 	"github.com/qlqq/roomusic/backend/internal/platform/secret"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
 func TestPostgreSQLSubsonicWebSettings(t *testing.T) {
@@ -61,7 +63,7 @@ func TestPostgreSQLSubsonicWebSettings(t *testing.T) {
 	}
 	requireSubsonicCredentialCount(t, a, 1)
 	samples.record("subsonic/admin-get", call(http.MethodGet, subsonicAdminPath, nil, &admin, a.origin), http.StatusOK)
-	samples.record("subsonic/me-needs-confirmation", call(http.MethodGet, subsonicMePath, nil, &member, a.origin), http.StatusOK)
+	samples.record("subsonic/me-needs-confirmation", requireSubsonicMe(t, a, &member, name, true, false), http.StatusOK)
 
 	for _, test := range []struct {
 		name string
@@ -92,7 +94,12 @@ func TestPostgreSQLSubsonicWebSettings(t *testing.T) {
 
 	confirmation := call(http.MethodPost, subsonicConfirmPath, validPassword, &member, a.origin)
 	samples.record("subsonic/confirm-password", confirmation, http.StatusNoContent)
-	samples.record("subsonic/me-ready", call(http.MethodGet, subsonicMePath, nil, &member, a.origin), http.StatusOK)
+	samples.record("subsonic/me-ready", requireSubsonicMe(t, a, &member, name, true, true), http.StatusOK)
+	device := registerJukeboxDevice(t, a, &member)
+	selection := map[string]any{"jukebox_zone_id": device.Zone.ZoneID}
+	samples.record("subsonic/me-put", call(http.MethodPut, subsonicMePath, selection, &member, a.origin), http.StatusOK)
+	unknown := map[string]any{"jukebox_zone_id": uuid.New()}
+	samples.record("subsonic/errors/jukebox-zone-not-found", call(http.MethodPut, subsonicMePath, unknown, &member, a.origin), http.StatusNotFound)
 	for i := range 5 {
 		response := call(http.MethodPost, subsonicConfirmPath, map[string]string{"password": subsonicWrongPass}, &member, a.origin)
 		requireAPIError(t, response, http.StatusForbidden, "current_password_incorrect")
@@ -109,6 +116,13 @@ func TestPostgreSQLSubsonicWebSettings(t *testing.T) {
 	requireAPIError(t, response, http.StatusConflict, "subsonic_disabled")
 	samples.record("subsonic/errors/subsonic-disabled", response, http.StatusConflict)
 	samples.finish()
+}
+
+func registerJukeboxDevice(t *testing.T, a *integrationTestApplication, user *integrationTestUser) zones.RegisterDeviceResult {
+	t.Helper()
+	body := map[string]any{"name": "合成点唱机设备", "kind": "browser", "volume": 0.75, "muted": false}
+	response := a.request(t, http.MethodPost, zonesSamplePrefix+"/devices", body, user, nil)
+	return zonesSampleDecode[zones.RegisterDeviceResult](t, response, http.StatusCreated)
 }
 
 func TestPostgreSQLSubsonicDiagnosticsHideCredentials(t *testing.T) {

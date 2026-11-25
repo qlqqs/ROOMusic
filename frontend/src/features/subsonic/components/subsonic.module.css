@@ -43,3 +43,36 @@
   gap: var(--space-2);
   margin-top: var(--space-2);
 }
+
+/* 点唱机控制：下拉与保存失败的提示上下排列，下拉与其他设置控件同高。 */
+.jukebox {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-2);
+  max-width: 100%;
+}
+
+.select {
+  min-height: var(--control-height);
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-13);
+}
+
+.select:hover:not(:disabled) {
+  border-color: var(--color-neutral-800);
+}
+
+.select:focus-visible {
+  border-color: var(--color-accent-700);
+  outline-offset: 0;
+}
+
+.select:disabled {
+  cursor: not-allowed;
+}

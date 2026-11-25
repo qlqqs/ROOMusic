@@ -75,7 +75,7 @@ func loadZones(ctx context.Context, tx *sql.Tx, userID string, state *UserState,
 SELECT z.id, z.device_id, z.mode, z.current_entry_id,
  z.position_seconds, z.position_saved_at, to_json(z.history), to_json(z.shuffle_bag),
  z.leveling, z.crossfade, z.crossfade_seconds, z.gapless, z.quality,
- z.revision, z.queue_revision, z.imported_at, z.headroom, z.sample_rate, z.downmix, z.peq, z.convolution
+ z.revision, z.queue_revision, z.imported_at, z.headroom, z.sample_rate, z.downmix, z.peq, z.convolution, z.last_played_at
 FROM playback_zones z
 JOIN playback_devices d ON d.id=z.device_id AND d.user_id=z.user_id
 WHERE z.user_id=$1::uuid ORDER BY d.created_at, d.id, z.id`, userID)
@@ -92,7 +92,7 @@ WHERE z.user_id=$1::uuid ORDER BY d.created_at, d.id, z.id`, userID)
 			&zone.PositionSeconds, &zone.PositionSavedAt, &history, &bag,
 			&zone.Settings.Leveling, &zone.Settings.Crossfade, &zone.Settings.CrossfadeSeconds,
 			&zone.Settings.Gapless, &zone.Settings.Quality,
-			&zone.Revision, &zone.QueueRevision, &imported, &headroom, &sampleRate, &downmix, &peq, &convolution); err != nil {
+			&zone.Revision, &zone.QueueRevision, &imported, &headroom, &sampleRate, &downmix, &peq, &convolution, &zone.LastPlayedAt); err != nil {
 			return fmt.Errorf("scan playback zone: %w", err)
 		}
 		zone.Settings.Headroom = readHeadroom(ctx, logger, zone.ZoneID, headroom)

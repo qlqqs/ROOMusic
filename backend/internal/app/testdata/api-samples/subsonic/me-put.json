@@ -1,0 +1,9 @@
+{
+  "body": {
+    "enabled": true,
+    "jukebox_zone_id": "00000000-0000-4000-8000-000000000001",
+    "ready": true,
+    "username": "subsonic-web-listener"
+  },
+  "status": 200
+}

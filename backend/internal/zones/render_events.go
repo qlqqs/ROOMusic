@@ -348,6 +348,9 @@ func (s *Service) applyRenderEvent(userID string, z *zoneRuntime, h *renderHandl
 		p.Queue = nextQueue
 		p.PositionSeconds = max(0, e.Seconds)
 		p.PositionSavedAt = s.Now()
+		if z.status == "playing" {
+			p.LastPlayedAt = &p.PositionSavedAt
+		}
 	case "track_failed":
 		if entryIndex(p.Queue.Entries, e.EntryID) < 0 || !validFailure(e.Reason) {
 			return true, nil

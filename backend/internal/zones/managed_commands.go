@@ -30,12 +30,16 @@ func (s *Service) prepareManagedCommand(ctx context.Context, userID string, u *u
 	source.mu.Lock()
 	grouped := source.leaderZoneID != ""
 	visible := source.visible()
+	revision := source.persisted.Revision
 	source.mu.Unlock()
 	if grouped && startsOutput(c.Command) {
 		return ErrDeviceGrouped
 	}
 	if !visible {
 		return ErrNotFound
+	}
+	if c.ExpectedRevision != nil && revision != *c.ExpectedRevision {
+		return ErrRevisionConflict
 	}
 	if startsOutput(c.Command) {
 		return s.acquireManaged(ctx, userID, target, c.Takeover)

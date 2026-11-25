@@ -16,7 +16,7 @@ function setup({ current = "listener", enabled = true, ready = false }: { curren
   const api = installFakeApi();
   const session = installFakeSession(api, { current });
   const state = { enabled, ready };
-  api.on("GET", connectionPath, () => jsonResponse(200, { enabled: state.enabled, ready: state.enabled && state.ready, username: current }));
+  api.on("GET", connectionPath, () => jsonResponse(200, { enabled: state.enabled, ready: state.enabled && state.ready, username: current, jukebox_zone_id: null }));
   api.on("POST", confirmPath, ({ body }) => {
     if (passwordBody(body).password !== session.accounts[current]?.password) {
       return jsonResponse(403, { error: { code: "current_password_incorrect", message: "密码不对" }, request_id: "r" });
