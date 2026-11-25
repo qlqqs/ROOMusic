@@ -3,7 +3,7 @@ package mcp
 import (
 	"testing"
 
-	"github.com/qlqq/roomusic/backend/internal/steward/secret"
+	"github.com/qlqq/roomusic/backend/internal/platform/secret"
 	"github.com/qlqq/roomusic/backend/internal/steward/web"
 )
 
