@@ -1,7 +1,7 @@
 # 整理链 E：模型兜底改造
 
-状态：规划中。父任务：`.trellis/tasks/11-25-curation-chain`。需求、原则与总体设计见父任务的 `prd.md`、`design.md`，
-现状与审查发现见父任务的 `research/`。本文件是启动前的范围说明，启动时再补全（复杂的加 `design.md`、`implement.md`）。
+状态：实施中（2026-11-25）。父任务：`.trellis/tasks/11-25-curation-chain`。需求、原则与总体设计见父任务的 `prd.md`、`design.md`，
+现状与审查发现见父任务的 `research/`。设计见本目录 `design.md`（实现代理先写、主代理审阅后实施），执行见 `implement.md`。
 
 ## 目标
 
@@ -25,8 +25,13 @@ B、C、F。
 - 没有佐证的：“网络搜索”可用时先联网求证（父任务 D17）。联网后仍没有佐证的、审查拿不准或不通过的：不写入并结束，记为未采用的建议；保留手动采纳；迁移已有的待处理例外；改掉后台提示词里“交人工确认”的说法。
 - 联网兜底：沿用“网络搜索”开关，单独的每日 token 上限，每项上限按 D16，按艺人在库专辑数排序。
 - 模型凭记忆给出的事实类字段不写入。
+- 前面子任务留给 E 的接口（自动整理合同第 22–25 节）：`waiting_route` 待定项的 `route=lookup|web`（第二档与联网）、`curation_artist_credit_proposals`（名字对不上的同位署名，交核对判断）、
+  `Writer.FinishUnlisted`（第二档与联网都没有结果时结清为未收录）、自动层 `writer_level`（核实外部源 3、库内或网页 2）、B 的 `NextModelKind`、`LookupTierReady`、`BeforeModelItem`。
+- M 的基线：模型选第一个候选时仍有 38 条错连、4 条错改（wrong-id、near、truncated），来自后端不核对时长（父任务 `research/current-chain.md` 第 13 节）；D4 的完整结构核对应让它们不再写入。
 
 ## 验收
+
+- [ ] M 的度量重跑：first_candidate 模式的错连、错并、错改为 0（父任务 V17）；oracle 模式不低于 B 合入后的完成数；`waiting_route` 的 11 项按路线处理完。结果记在本任务目录并抄到父任务 `research/m-baseline/after-e/`。
 
 - [ ] 父任务 V5、V7、V8、V15，V17 中属于模型的反例。
 - [ ] 审查不可用时不执行、每日上限、开关与停止的现有用例不回退。
