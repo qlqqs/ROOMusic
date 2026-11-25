@@ -11,7 +11,7 @@
 | `MenuAction.group` | 相邻且 `group` 相同的项为一组，组间一条 `role="separator"`；有名字的组包在 `role="group"` 里，组标题（`aria-hidden` 的小号灰字，经 `aria-labelledby` 作为组名，避免读两遍）是它的名称，不可聚焦，方向键跳过。不给 `group` 的项结构与以前相同；打开后先校正菜单位置，再用 `focus({ preventScroll: true })` 聚焦首项，避免底边触发器引发文档滚动而被滚动关闭监听误关；仅当打开后锚点坐标实际改变时响应滚动关闭，菜单内部滚动与打开前的迟到事件不关闭 |
 | `MenuAction.danger` | 危险项与普通项分段，文字与图标用警示色；同名组不重复标题，停用项仍用次要色 |
 | `MenuAction.hint`、`untitledGroup` | `hint` 是右侧说明，也是菜单项名称的一部分，与标签之间保留空格；`untitledGroup` 保留组间分隔线但不显示组标题 |
-| `FilterField`、`FilterChip`、`SortMenu` | 列表筛选共用控件：250ms 后提交，首次 push、后续 replace；清空与失焦结束输入过程，前进后退由地址同步草稿。校验失败就近提示且不写地址。胶囊用 `aria-pressed`，排序菜单显示当前项；均不发请求、不判断角色 |
+| `FilterField`、`FilterChip`、`SortMenu` | 列表筛选共用控件：250ms 后提交，首次 push、后续 replace；清空与失焦结束输入过程，前进后退由地址同步草稿。校验失败就近提示且不写地址。`collapsible` 时平时收成放大镜（读屏名与悬停提示是 label），聚焦、有字或有说明时展开到 240px，空着失焦或按 Esc 收回；不做宽度过渡（过渡中输入法上屏会把光标放回开头）。胶囊用 `aria-pressed`，排序菜单显示当前项；均不发请求、不判断角色 |
 | `SettingsGroup` | `section` + `h2` 标题 + 卡片；可给标题旁的操作、状态（`status`）、标题 ref 与卡片下方的脚注。卡片宽度用 ResizeObserver 量出，经 context 告诉里面的 `Segmented` 是否窄（< 640px，与 CSS 里的 639px 成对修改）；没有 ResizeObserver（jsdom）时按宽处理 |
 | `SettingRow` | 左名称（可带一行说明）、右控件右对齐；名称是指向 `controlId` 的 `<label>`，子内容可以是 `(ids) => ReactNode` 拿到 `controlId`/`labelId`/`descriptionId`。控件是按钮或只读值时用 `plainLabel`（`<label>` 指向按钮会改掉按钮的名称）。`nested` 是从属项：缩进、字号小一级；所属开关关闭时**由调用方不渲染**这一行，不做禁用态。容器查询：卡片窄时控件放不下才换到下一行。控件列按内容定宽，里面的“输入框 + 按钮”不能用百分比宽度（`min(100%, …)`、输入框 `width: 100%`），否则列宽退成输入框的默认宽度、按钮被挤到下一行；给定宽（设置里是 360px，`max-width: 100%`）并 `nowrap`，输入框 `flex: 1 1 0` 占剩余宽度（2026-11-25） |
 | `Segmented` | 宽卡片里是 `role="radiogroup"` 的相连分段，窄卡片里是同名同值的原生 `<select>`（`aria-labelledby` 指向行名称）。用量宽切换而不是 CSS 同时渲染两份，避免读屏与测试看到重复控件 |
@@ -140,7 +140,7 @@
 - “元数据”“待认领”只在本会话已经读过对应列表时显示数字（`useCachedTodoCounts` 只读查询缓存，不发请求）；0 不显示；数字经描述给读屏（“N 个待处理的问题”），链接名称不变。
 - 歌单行在名称前有 26px 封面（`PlaylistCover size="thumb"`，`Cover variant="thumb"`：无裱边、懒加载、`aria-hidden`）：4 组封面拼 2×2，1–3 组用第一张，没有时是歌单图标。
   行与主导航左对齐不缩进，当前歌单高亮；数据就是 `usePlaylists(1)` 的结果。导航列用 `minmax(0, 1fr)`，长名称省略号截断。
-- 专辑与艺人列表用 `FilterField` 即时筛选，去掉提交按钮；关注与角色用胶囊、排序用菜单，控件同高，窄屏按组换行；Tab 顺序不变。
+- 专辑与艺人列表用 `FilterField` 即时筛选，去掉提交按钮；关注与角色用胶囊、排序用菜单，控件同高。2026-11-25 起工具条左边是胶囊，右边是筛选（`collapsible`，全库搜索在宽屏顶栏，列表筛选不再像第二个搜索框）与排序；Tab 顺序为胶囊 → 筛选 → 排序。窄屏右边一组占满这一行剩下的宽度，筛选展开时原地收窄。
 - 曲目“更多”中的播放与加入歌单项带图标；有可用引用时追加“前往艺人”（第一位），其他专辑的曲目有“前往专辑”（携带 track 定位）；当前专辑页不重复提供自己的专辑入口。
 - 验证重点：`filter-field.test.tsx` 与列表页面测试覆盖一次输入一条历史、清空、超长与后退同步；`player-ui.test.tsx` 覆盖同组其他版本、暂停继续保持第二首；`track-credits.test.ts` 覆盖单首不上提、跨介质共同署名与不同署名保留。
 

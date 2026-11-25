@@ -246,8 +246,9 @@ test.describe("键盘", () => {
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/albums\?q=Album$/);
 
-    // 需要关注：Tab 到胶囊，空格切换，立即生效。
-    await tabTo(page, (name) => name === "需要关注");
+    // 需要关注：胶囊在筛选框前面（工具条左边胶囊、右边筛选与排序），Shift+Tab 倒回去，空格切换，立即生效。
+    await page.keyboard.press("Shift+Tab");
+    expect(await focusedName(page)).toBe("需要关注");
     await expectVisibleFocusRing(page, "需要关注");
     await page.keyboard.press("Space");
     await expect(page).toHaveURL(/\/albums\?q=Album&attention=required$/);

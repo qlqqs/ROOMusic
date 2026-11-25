@@ -38,6 +38,11 @@
   background: var(--color-bg);
 }
 
+/* 宽屏顶栏（搜索、管家、头像）：窄屏由上面的 .topbar 与底部标签栏代替。 */
+.deskbar {
+  display: none;
+}
+
 .sidebar {
   display: none;
 }

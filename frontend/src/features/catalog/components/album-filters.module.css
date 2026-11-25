@@ -1,4 +1,4 @@
-/* 列表页工具条（与艺人列表的 artist-filters 同一套）：筛选框、胶囊、排序一行，排序靠右；窄时换行，筛选框占满一行。 */
+/* 列表页工具条（与艺人列表的 artist-filters 同一套）：左边胶囊，右边筛选（平时是放大镜）与排序；窄时换行，右边一组仍靠右。 */
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -7,18 +7,26 @@
   min-width: 0;
 }
 
-.filter {
-  flex: 0 1 260px;
+/* 筛选框下面出现说明时，排序与输入框仍顶部对齐。 */
+.end {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
   min-width: 0;
-}
-
-.sort {
-  display: inline-flex;
   margin-inline-start: auto;
 }
 
+/* 排序菜单不收缩，只有筛选框让宽度。 */
+.end > :last-child {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* 手机上右边一组占满这一行剩下的宽度：筛选展开时在原地收窄，不把自己挤到下一行。 */
 @media (max-width: 767px) {
-  .filter {
-    flex-basis: 100%;
+  .end {
+    flex: 1 1 0;
+    justify-content: flex-end;
   }
 }
+
