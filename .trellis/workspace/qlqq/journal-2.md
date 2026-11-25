@@ -553,3 +553,26 @@ jukeboxControl 映射到播放区服务层命令（带期望版本号、冲突�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 75: Subsonic 收藏、歌单与歌词
+<!-- trellis-session: v=2 fp=025f753deaa0938a -->
+
+**Date**: 2026-11-25
+**Task**: Subsonic 收藏、歌单与歌词
+**Branch**: `main`
+
+### Summary
+
+star/unstar 原子批量写入、getStarred2、浏览实体带 starred；私有歌单读写映射到 personal.Execute（读后重算、冲突重试一次、新建用随机幂等键）；getLyricsBySongId 与 getLyrics。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `242b1bd1` | feat(subsonic): 收藏、私有歌单与歌词 |
+| `72090c8f` | docs(spec): Subsonic 收藏、歌单与歌词合同 |
+
+### Status
+
+[OK] **Completed**
