@@ -17,6 +17,9 @@ latest="$(git tag --list 'v*' | sort -V | tail -n 1)"
 if [[ -n "$latest" && "$(printf '%s\n%s\n' "$latest" "$version" | sort -V | tail -n 1)" != "$version" ]]; then
   fail '新版本必须大于所有已有 v* 标签'
 fi
+notes="docs/releases/$version.md"
+git cat-file -e "HEAD:$notes" 2>/dev/null || fail "缺少更新说明：先提交 $notes"
+[[ -n "$(git show "HEAD:$notes" | tr -d '[:space:]')" ]] || fail "更新说明为空：$notes"
 # 只检查 HEAD 的 Git 对象；不读取工作树中的 .env 或其他私密文件。
 # 首发包含根提交，不能遗漏第一个提交里引入的文件。
 base="$(git tag --merged HEAD --list 'v*' | sort -V | tail -n 1)"

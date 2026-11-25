@@ -32,6 +32,7 @@ class ReleaseCheckTests(unittest.TestCase):
         self.git("config", "core.hooksPath", "/dev/null")
         self.write("scripts/release-check.sh", SCRIPT.read_text())
         self.write("tracked.txt", "合成已跟踪文件\n")
+        self.write("docs/releases/v1.0.0.md", "合成更新说明\n")
         self.commit()
         self.origin = self.root / "origin.git"
         self.git("clone", "--bare", str(self.repo), str(self.origin))
@@ -82,8 +83,17 @@ class ReleaseCheckTests(unittest.TestCase):
         self.git("update-ref", "refs/tags/v1.2.0", "HEAD")
         self.check("v1.2.0", contains="版本标签已存在")
         self.check("v1.1.9", contains="新版本必须大于")
+        for version in ["v1.2.1", "v1.10.0"]:
+            self.write(f"docs/releases/{version}.md", "合成更新说明\n")
+        self.commit()
         self.check("v1.2.1", success=True)
         self.check("v1.10.0", success=True)
+
+    def test_release_notes_required_in_head(self):
+        self.check("v1.0.1", contains="缺少更新说明：先提交 docs/releases/v1.0.1.md")
+        self.write("docs/releases/v1.0.1.md", " \n\t\n")
+        self.commit()
+        self.check("v1.0.1", contains="更新说明为空：docs/releases/v1.0.1.md")
 
     def test_dirty_tracked_and_untracked_worktree(self):
         self.write("untracked.txt", "合成未跟踪文件\n")
