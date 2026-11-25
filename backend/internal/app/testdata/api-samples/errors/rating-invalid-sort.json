@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_sort",
+      "message": "评分排序方式无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

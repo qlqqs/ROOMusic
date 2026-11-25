@@ -3,11 +3,15 @@ package stewardtools
 import (
 	"context"
 	"encoding/json"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/personal"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
 func (f *c5Fixture) playlist(t *testing.T, user string) (string, []string) {
@@ -232,6 +236,149 @@ func TestPostgreSQLStewardC5PersonalNestedMissingTargets(t *testing.T) {
 					f.invoke(t, f.a, name, in, "not_found")
 				})
 			}
+		})
+	}
+}
+
+func TestPostgreSQLRatingToolContracts(t *testing.T) {
+	f := newC5Fixture(t)
+	caller := tool.Caller{User: identity.User{ID: f.a, Role: "user"}}
+	defs := f.registry.List(caller)
+	for name, scope := range map[string]tool.Scope{"list_ratings": tool.ScopeRead, "set_rating": tool.ScopePersonal} {
+		t.Run(name, func(t *testing.T) {
+			idx := slices.IndexFunc(defs, func(d tool.Definition) bool { return d.Name == name })
+			if idx < 0 {
+				t.Fatalf("成员工具列表缺少 %s", name)
+			}
+			if def := defs[idx]; def.Scope != scope || def.MinRole != tool.RoleMember || def.Revertible || !def.Untrusted {
+				t.Fatalf("工具合同错误：%+v", def)
+			}
+			caller := tool.Caller{User: identity.User{ID: f.a}}
+			_, err := f.registry.Invoke(t.Context(), caller, name, json.RawMessage(`{}`))
+			if failure, ok := err.(*tool.Error); !ok || failure.Code != tool.CodePermissionDenied {
+				t.Fatalf("未经成员鉴权的工具返回 %v", err)
+			}
+		})
+	}
+
+	for _, input := range []map[string]any{
+		{},
+		{"kind": "albums"},
+		{"kind": "album", "page_size": 51},
+		{"kind": "album", "page": 0},
+		{"kind": "album", "min_rating": 0},
+		{"kind": "album", "min_rating": 3.5},
+		{"kind": "album", "sort": "highest"},
+		{"kind": "album", "user_id": f.b},
+	} {
+		f.invoke(t, f.a, "list_ratings", input, "validation_failed")
+	}
+	for _, input := range []map[string]any{
+		{"kind": "track", "target_id": f.tracks[0]},
+		{"kind": "track", "target_id": f.tracks[0], "rating": -1},
+		{"kind": "track", "target_id": f.tracks[0], "rating": 6},
+		{"kind": "track", "target_id": f.tracks[0], "rating": 4.5},
+		{"kind": "track", "target_id": f.tracks[0], "rating": 5, "user_id": f.b},
+	} {
+		f.invoke(t, f.a, "set_rating", input, "validation_failed")
+	}
+	for _, kind := range []string{"track", "album", "artist"} {
+		for _, rating := range []int{0, 5} {
+			f.invoke(t, f.a, "set_rating", map[string]any{"kind": kind, "target_id": uuid.New(), "rating": rating}, "not_found")
+		}
+	}
+}
+
+func TestPostgreSQLRatingToolsSetListAndClear(t *testing.T) {
+	f := newC5Fixture(t)
+	const privateLyrics = "合成但不可公开的歌词"
+	if _, err := f.db.Exec(`UPDATE tracks SET lyrics=$2, lyrics_source='vorbis_lyrics' WHERE id=$1`, f.tracks[0], privateLyrics); err != nil {
+		t.Fatal(err)
+	}
+	artist := uuid.New()
+	if _, err := f.db.Exec(`INSERT INTO artists(id,initial_name) VALUES($1,'工具合成艺人')`, artist); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.db.Exec(`INSERT INTO artist_profiles(artist_id,auto_display_name,effective_display_name,sort_key,initial_group,version)
+		VALUES($1,'工具合成艺人','工具合成艺人','工具合成艺人','#',1)`, artist); err != nil {
+		t.Fatal(err)
+	}
+
+	f.invoke(t, f.b, "set_rating", map[string]any{"kind": "track", "target_id": f.tracks[1], "rating": 5}, "")
+	for _, tc := range []struct {
+		kind, target, idKey string
+	}{
+		{"track", f.tracks[0], "track_id"},
+		{"album", f.group, "group_id"},
+		{"artist", artist, "id"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			set := func(user string, rating int) {
+				t.Helper()
+				input := map[string]any{"kind": tc.kind, "target_id": tc.target, "rating": rating}
+				output := f.invoke(t, user, "set_rating", input, "")
+				var got personal.RatingResult
+				if err := json.Unmarshal(output, &got); err != nil {
+					t.Fatal(err)
+				}
+				if got.TargetKind != tc.kind || got.TargetID != tc.target {
+					t.Fatalf("改分目标错误：%s", output)
+				}
+				if rating == 0 {
+					if got.Rating != nil || got.RatedAt != nil {
+						t.Fatalf("清除评分的结果错误：%s", output)
+					}
+				} else if got.Rating == nil || *got.Rating != rating || got.RatedAt == nil {
+					t.Fatalf("设置评分的结果错误：%s", output)
+				}
+			}
+			list := func(user string, input map[string]any, size int, ratings ...int) []map[string]json.RawMessage {
+				t.Helper()
+				input["kind"] = tc.kind
+				raw := f.invoke(t, user, "list_ratings", input, "")
+				var page struct {
+					Items      []map[string]json.RawMessage `json:"items"`
+					Pagination personal.Pagination          `json:"pagination"`
+				}
+				if err := json.Unmarshal(raw, &page); err != nil {
+					t.Fatal(err)
+				}
+				if page.Items == nil || len(page.Items) != len(ratings) || page.Pagination != (personal.Pagination{Page: 1, PageSize: size, Total: int64(len(ratings))}) {
+					t.Fatalf("列表数量或分页错误：%s", raw)
+				}
+				for i, rating := range ratings {
+					if string(page.Items[i]["rating"]) != strconv.Itoa(rating) {
+						t.Fatalf("第 %d 项的评分错误：%s", i, raw)
+					}
+				}
+				for _, secret := range []string{privateLyrics, `"lyrics"`, `"path"`, `"relative_path"`, "/synthetic/c5", "album/0.flac", f.b} {
+					if strings.Contains(string(raw), secret) {
+						t.Fatalf("列表输出泄露 %q：%s", secret, raw)
+					}
+				}
+				return page.Items
+			}
+			set(f.b, 2)
+			set(f.a, 5)
+			items := list(f.a, map[string]any{"min_rating": 5, "sort": "recent", "page_size": 50}, 50, 5)
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(items[0][tc.kind], &fields); err != nil {
+				t.Fatal(err)
+			}
+			var id string
+			if err := json.Unmarshal(fields[tc.idKey], &id); err != nil || id != tc.target {
+				t.Fatalf("列表没有预期目标 %s，摘要 %s，错误 %v", tc.target, items[0][tc.kind], err)
+			}
+			if tc.kind == "track" {
+				list(f.b, map[string]any{"min_rating": 5}, 20, 5)
+			}
+			set(f.a, 0)
+			list(f.a, map[string]any{}, 20)
+			wantOther := []int{2}
+			if tc.kind == "track" {
+				wantOther = []int{5, 2}
+			}
+			list(f.b, map[string]any{"min_rating": 2, "sort": "rating"}, 20, wantOther...)
 		})
 	}
 }

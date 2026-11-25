@@ -54,6 +54,11 @@ jobs:
             echo "::error::标签指向的提交不在 main 上"
             exit 1
           fi
+          notes="docs/releases/$REF_NAME.md"
+          if [[ ! -s "$notes" ]]; then
+            echo "::error::缺少更新说明 $notes"
+            exit 1
+          fi
           echo "version=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
           echo "publish=true" >> "$GITHUB_OUTPUT"
       - name: Check Docker Hub configuration
@@ -273,10 +278,26 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # 正文取自 docs/releases/vX.Y.Z.md，镜像与完整变更链接由这里补上。
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/release-notes.md"
+          previous=$(git tag --merged "$GITHUB_SHA" --list 'v*' --sort=-v:refname | grep -vxF "$TAG" | head -n 1 || true)
+          {
+            cat "docs/releases/$TAG.md"
+            printf '\n镜像：\x60%s:%s\x60，支持 \x60linux/amd64\x60 和 \x60linux/arm64\x60。\n' "$IMAGE" "$VERSION"
+            if [[ -n "$previous" ]]; then
+              printf '\n**完整变更**：%s/%s/compare/%s...%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$previous" "$TAG"
+            fi
+          } > "$notes"
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --verify-tag --title "ROOMusic ${TAG}" --generate-notes
+            --verify-tag --title "ROOMusic ${TAG}" --notes-file "$notes"

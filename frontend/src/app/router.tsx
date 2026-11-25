@@ -11,6 +11,7 @@ import { AdminGate } from "./routes/admin-gate";
 import { AlbumDetailPage } from "./routes/album-detail-page";
 import { AlbumsPage } from "./routes/albums-page";
 import { FavoritesPage, LikedPage } from "./routes/favorites-page";
+import { RatingsPage } from "./routes/ratings-page";
 import { HistoryPage } from "./routes/history-page";
 import { LoginPage } from "./routes/login-page";
 import { MePage } from "./routes/me-page";
@@ -242,6 +243,31 @@ const favoritesRoute = createRoute({
     if (search.tab === "tracks") throw redirect({ to: "/me/liked", search: { page: search.page }, replace: true });
   },
   component: FavoritesRoute,
+});
+
+// 我的评分：tab（曲目是默认）、min（2–5，1 是默认）、sort（recent，rating 是默认）、page（2 及以上）；默认值与不合法的值都显式写成 undefined。
+type RatingsSearch = { tab?: "albums" | "artists" | undefined; min?: number | undefined; sort?: "recent" | undefined; page?: number | undefined };
+
+function parseMinRating(value: unknown): number | undefined {
+  const number = typeof value === "number" ? value : typeof value === "string" && /^[2-5]$/.test(value) ? Number(value) : NaN;
+  return Number.isInteger(number) && number >= 2 && number <= 5 ? number : undefined;
+}
+
+function RatingsRoute() {
+  const { tab, min, sort, page } = ratingsRoute.useSearch();
+  return <RatingsPage tab={tab ?? "tracks"} minRating={min ?? 1} sort={sort ?? "rating"} page={page ?? 1} />;
+}
+
+const ratingsRoute = createRoute({
+  getParentRoute: () => meRoute,
+  path: "/ratings",
+  validateSearch: (search: Record<string, unknown>): RatingsSearch => ({
+    tab: search["tab"] === "albums" ? "albums" : search["tab"] === "artists" ? "artists" : undefined,
+    min: parseMinRating(search["min"]),
+    sort: search["sort"] === "recent" ? "recent" : undefined,
+    page: parsePageParam(search["page"]),
+  }),
+  component: RatingsRoute,
 });
 
 // 歌单列表与歌单详情：page 只在 2 及以上时出现；歌单 ID 不是 UUID 时由页面显示“歌单不存在”，不发请求。
@@ -552,7 +578,7 @@ const routeTree = rootRoute.addChildren([
     searchRoute,
     artistsRoute,
     artistDetailRoute,
-    meRoute.addChildren([meIndexRoute, likedRoute, historyRoute, favoritesRoute, playlistsRoute, playlistDetailRoute]),
+    meRoute.addChildren([meIndexRoute, likedRoute, historyRoute, favoritesRoute, ratingsRoute, playlistsRoute, playlistDetailRoute]),
     issuesRoute,
     claimsRoute,
     artistCandidatesRoute,

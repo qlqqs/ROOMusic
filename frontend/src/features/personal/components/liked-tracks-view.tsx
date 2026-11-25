@@ -10,6 +10,7 @@ import { useFavoriteTracks } from "../hooks/use-favorites";
 import { useRetainedRows } from "../hooks/use-retained-rows";
 import { CollectionHero, LikedCover, SongsHeading } from "./collection-hero";
 import { FavoriteStatusScope } from "./favorite-status-scope";
+import { RatingStatusScope } from "./rating-status-scope";
 import { UpdatedHint, useCarriedRevision, useResultsTop } from "./favorite-list-parts";
 import styles from "./favorites-view.module.css";
 import { TrackTable, TrackTableRow } from "./track-table";
@@ -90,11 +91,13 @@ export function LikedTracksView({ page, renderPlayAll, renderTrackActions }: Lik
               </p>
             ) : (
               <FavoriteStatusScope trackIds={trackIds}>
-                <TrackTable label="收藏的曲目">
-                  {retained.rows.map((item, index) => (
-                    <TrackTableRow key={item.track.track_id} track={item.track} number={offset + index + 1} actions={renderTrackActions(item)} />
-                  ))}
-                </TrackTable>
+                <RatingStatusScope trackIds={trackIds}>
+                  <TrackTable label="收藏的曲目">
+                    {retained.rows.map((item, index) => (
+                      <TrackTableRow key={item.track.track_id} track={item.track} number={offset + index + 1} actions={renderTrackActions(item)} />
+                    ))}
+                  </TrackTable>
+                </RatingStatusScope>
               </FavoriteStatusScope>
             )}
             <Pagination

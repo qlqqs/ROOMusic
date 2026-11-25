@@ -110,6 +110,12 @@ import {
   decodePlaylistQueue,
   decodePlaylistRenamed,
   decodePlaylistsPage,
+  decodeRatedAlbumsPage,
+  decodeRatedArtistsPage,
+  decodeRatedTracksPage,
+  decodeRatingLookup,
+  decodeRatingQueue,
+  decodeRatingResult,
 } from "../features/personal/api/decoders";
 import { decodeAlbumResults, decodeTrackResults, decodeSearchSuggestions } from "../features/search/api/decoders";
 import { decode as d, decodeErrorEnvelope } from "../shared/api";
@@ -618,6 +624,19 @@ const successContracts: Record<string, Contract> = {
   "listening/history-queue-truncated": { status: 200, decode: decodeHistoryQueue },
   "listening/track-plays-deleted": { status: 200, decode: decodeTrackPlaysDeleted },
   "listening/track-plays-deleted-empty": { status: 200, decode: decodeTrackPlaysDeleted },
+  "ratings/track-put": { status: 200, decode: decodeRatingResult },
+  "ratings/track-delete": { status: 200, decode: decodeRatingResult },
+  "ratings/album-put": { status: 200, decode: decodeRatingResult },
+  "ratings/artist-put": { status: 200, decode: decodeRatingResult },
+  "ratings/artist-delete": { status: 200, decode: decodeRatingResult },
+  "ratings/lookup": { status: 200, decode: decodeRatingLookup },
+  "ratings/lookup-empty": { status: 200, decode: decodeRatingLookup },
+  "ratings/artist-lookup": { status: 200, decode: decodeRatingLookup },
+  "ratings/tracks": { status: 200, decode: decodeRatedTracksPage },
+  "ratings/tracks-empty": { status: 200, decode: decodeRatedTracksPage },
+  "ratings/albums": { status: 200, decode: decodeRatedAlbumsPage },
+  "ratings/artists": { status: 200, decode: decodeRatedArtistsPage },
+  "ratings/queue": { status: 200, decode: decodeRatingQueue },
   "favorites/album-delete": { status: 200, decode: decodeFavoriteToggle },
   "favorites/album-put": { status: 200, decode: decodeFavoriteToggle },
   "favorites/albums-empty": { status: 200, decode: decodeFavoriteAlbumsPage },
@@ -933,6 +952,8 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/personal-playlist-track-limit": { status: 409, code: "playlist_track_limit_reached" },
   "errors/personal-revision-conflict": { status: 409, code: "revision_conflict" },
   "errors/personal-unauthorized": { status: 401, code: "unauthorized" },
+  "errors/rating-invalid-rating": { status: 400, code: "invalid_rating" },
+  "errors/rating-invalid-sort": { status: 400, code: "invalid_sort" },
 };
 
 // 204 没有 JSON 响应体；生产 API 的空结果回调不承担解码。

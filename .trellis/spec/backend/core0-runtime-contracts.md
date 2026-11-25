@@ -69,7 +69,8 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   备份接口 `GET|POST /api/v1/system/backups`、`GET|DELETE /api/v1/system/backups/{name}`、`POST /api/v1/system/backups/deletions`、
   `PUT /api/v1/system/backups/retention` 与 `GET /api/v1/system/version`（管理员），删除与保留规则见[备份管理](./backup-management-contracts.md)。
 - 发布：推送标签 `vX.Y.Z` 触发 `.github/workflows/release.yml`（不重跑测试，要求该提交在 main 上的 CI 已通过；原生 amd64 与 arm64 构建，推送 `X.Y.Z`、`X.Y`、`latest`，
-  只发布镜像和 Release 说明）；打标签前运行只读检查 `scripts/release-check.sh vX.Y.Z`。要发布时仓库 secret `ACOUSTID_CLIENT_KEY`（ROOMusic 在 AcoustID 注册的应用密钥）必须已设置，否则构建前失败（M7 B3 补充）。
+  只发布镜像和 Release 说明）；打标签前运行只读检查 `scripts/release-check.sh vX.Y.Z`。Release 正文取自已提交的 `docs/releases/vX.Y.Z.md`，
+  检查脚本与工作流的 prepare 都要求它存在且非空；发布时追加 GHCR 镜像行和与上一个已合入 `v*` 标签的完整变更链接。要发布时仓库 secret `ACOUSTID_CLIENT_KEY`（ROOMusic 在 AcoustID 注册的应用密钥）必须已设置，否则构建前失败（M7 B3 补充）。
 
 ## 3. 合同
 

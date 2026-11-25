@@ -35,7 +35,7 @@ describe("“我的”页（/me）", () => {
     expect(account.getAttribute("href")).toBe("/settings/account");
     expect(within(account).getByText("C").getAttribute("aria-hidden")).toBe("true");
     // 我的音乐：与侧栏同源，歌单另成一节。
-    expect(linkNames(section("我的音乐"))).toEqual(["我喜欢的音乐", "我的收藏", "播放历史"]);
+    expect(linkNames(section("我的音乐"))).toEqual(["我喜欢的音乐", "我的收藏", "我的评分", "播放历史"]);
     const playlists = section("我的歌单");
     await waitFor(() => expect(playlists.getAllByRole("link").map((link) => link.textContent)).toEqual(["周末聆听2 首", "晚间聆听0 首"]));
     expect(playlists.getByRole("button", { name: "新建歌单" })).toBeTruthy();
@@ -53,7 +53,7 @@ describe("“我的”页（/me）", () => {
     expect(main().getByRole("link", { name: /^listener .+，账号设置$/ })).toBeTruthy();
     expect(main().queryByRole("region", { name: "管理" })).toBeNull();
     expect(main().queryByRole("link", { name: "元数据" })).toBeNull();
-    expect(linkNames(section("我的音乐"))).toEqual(["我喜欢的音乐", "我的收藏", "播放历史"]);
+    expect(linkNames(section("我的音乐"))).toEqual(["我喜欢的音乐", "我的收藏", "我的评分", "播放历史"]);
   });
 
   it("歌单没有列全时末尾是“全部歌单”", async () => {

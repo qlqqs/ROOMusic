@@ -6,12 +6,14 @@ import (
 	"net/http"
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
+	"github.com/qlqq/roomusic/backend/internal/personal"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/subsonic/auth"
 	"github.com/qlqq/roomusic/backend/internal/subsonic/protocol"
 )
 
 type Handlers struct {
+	ratings   *personal.Service
 	service   *auth.Service
 	guard     *identity.Guard
 	version   string
@@ -20,11 +22,11 @@ type Handlers struct {
 
 type userKey struct{}
 
-func Register(mux *http.ServeMux, service *auth.Service, guard *identity.Guard, version string) {
+func Register(mux *http.ServeMux, service *auth.Service, ratings *personal.Service, guard *identity.Guard, version string) {
 	if version == "" {
 		version = "dev"
 	}
-	h := &Handlers{service: service, guard: guard, version: version}
+	h := &Handlers{service: service, ratings: ratings, guard: guard, version: version}
 	h.endpoints = map[string]func(*http.Request) protocol.Response{
 		"ping": func(*http.Request) protocol.Response { return protocol.Response{} },
 		"getLicense": func(*http.Request) protocol.Response {
@@ -36,7 +38,8 @@ func Register(mux *http.ServeMux, service *auth.Service, guard *identity.Guard, 
 		"getMusicFolders": func(*http.Request) protocol.Response {
 			return protocol.Response{MusicFolders: &protocol.MusicFolders{Folders: []protocol.MusicFolder{{ID: 1, Name: "ROOMusic"}}}}
 		},
-		"getUser": getUser,
+		"getUser":   getUser,
+		"setRating": h.setRating,
 	}
 	mux.HandleFunc("/rest/", h.rest)
 	mux.HandleFunc("GET /api/v1/me/subsonic", h.me)

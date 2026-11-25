@@ -103,13 +103,18 @@ make dev                    # PostgreSQL + Go 后端（8080）+ Vite（5173）
 
 ### 发布
 
+先在 `main` 上提交更新说明 `docs/releases/vX.Y.Z.md`，再检查并打标签：
+
 ```bash
-scripts/release-check.sh vX.Y.Z               # 只读检查
+scripts/release-check.sh vX.Y.Z               # 只读检查，缺少或为空的更新说明会失败
 git tag -a vX.Y.Z -m "ROOMusic vX.Y.Z" && git push origin vX.Y.Z
 ```
 
+更新说明写给使用者：开头一句概括本版，再列出功能变化和修复；有数据库迁移、配置调整、降级影响或首次扫描变慢时，
+另写“升级注意”。镜像地址和完整变更链接由发布流程追加，不用手写。
+
 推送标签后，GitHub Actions 会确认该提交在 `main` 上的 CI 已经通过，然后构建 amd64 和 arm64 镜像，推送到
-`ghcr.io/qlqqs/roomusic`，并发布 Release 说明。
+`ghcr.io/qlqqs/roomusic`，并以这份更新说明发布 Release。
 
 ## 文档
 

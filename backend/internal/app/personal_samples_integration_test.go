@@ -22,6 +22,8 @@ func TestPostgreSQLPersonalAPIResponseSamples(t *testing.T) {
 	recordPersonalPlaylistSamples(t, f, recorder)
 	recordPersonalRestoreSamples(t, f, recorder)
 	recordPersonalLimitSamples(t, recorder)
+	recordPersonalRatingSamples(t, f, recorder)
+	recordPersonalRatingViewSamples(t, f, recorder)
 	finishPersonalSamples(t, recorder)
 }
 
@@ -68,6 +70,65 @@ func recordPersonalFavoriteSamples(t *testing.T, f *personalFixture, s *apiSampl
 	mustExec(t, f.app, `ALTER TABLE favorite_tracks RENAME TO favorite_tracks_unavailable`)
 	record("errors/personal-database-unavailable", "GET", favoritesURL+"/tracks", nil, 503)
 	mustExec(t, f.app, `ALTER TABLE favorite_tracks_unavailable RENAME TO favorite_tracks`)
+}
+
+func recordPersonalRatingSamples(t *testing.T, f *personalFixture, s *apiSampleRecorder) {
+	t.Helper()
+	record := func(name, method, path string, body any) {
+		s.record("ratings/"+name, f.call(method, path, body), 200)
+	}
+	trackURL, albumURL := ratingsURL+"/tracks/"+f.tracks[0], ratingsURL+"/albums/"+f.groups[0]
+	lookupURL := ratingsURL + "/lookup"
+	record("track-put", "PUT", trackURL, map[string]int{"rating": 4})
+	invalid := f.call("PUT", trackURL, map[string]int{"rating": 6})
+	const invalidSample = "errors/personal-invalid-input"
+	if got := encodeAPISample(t, invalidSample, invalid.Code, invalid.Body.Bytes()); !bytes.Equal(got, s.samples[invalidSample]) {
+		t.Fatalf("评分超出范围的响应应与个人接口通用样本一致，实际为 %s", got)
+	}
+	record("album-put", "PUT", albumURL, map[string]int{"rating": 5})
+	record("lookup", "POST", lookupURL, map[string]any{
+		"track_ids": []string{f.tracks[0], f.tracks[1], f.tracks[0]},
+		"group_ids": f.groups[:2],
+	})
+	record("lookup-empty", "POST", lookupURL, map[string]any{})
+	record("track-delete", "DELETE", trackURL, nil)
+
+	// 只准备合成艺人的目录事实，评分与解析均通过真实接口。
+	oldArtist, canonical, unrated := uuid.New(), uuid.New(), uuid.New()
+	mustExec(t, f.app, `INSERT INTO artists(id,initial_name) VALUES($1,'合并前艺人'),($2,'目标艺人'),($3,'未评分艺人')`, oldArtist, canonical, unrated)
+	mustExec(t, f.app, `INSERT INTO artist_overrides(artist_id,redirect_artist_id) VALUES($1,$2)`, oldArtist, canonical)
+	mustExec(t, f.app, `UPDATE catalog_projection_state SET status='ready',manifest_sealed=true,published_generation=target_generation,
+		published_textnorm_version=textnorm_version,published_search_projection_version=search_projection_version WHERE capability='artists'`)
+	artistURL := ratingsURL + "/artists/" + oldArtist
+	record("artist-put", "PUT", artistURL, map[string]int{"rating": 3})
+	record("artist-lookup", "POST", lookupURL, map[string]any{"artist_ids": []string{oldArtist, unrated}})
+	record("artist-delete", "DELETE", artistURL, nil)
+}
+
+func recordPersonalRatingViewSamples(t *testing.T, f *personalFixture, s *apiSampleRecorder) {
+	t.Helper()
+	s.record("ratings/tracks-empty", f.call("GET", ratingsURL+"/tracks", nil), 200)
+	set := func(path string, rating int) {
+		t.Helper()
+		requireRatingHTTP(t, f.call("PUT", ratingsURL+path, map[string]int{"rating": rating}), 200)
+	}
+	set("/tracks/"+f.tracks[0], 5)
+	set("/tracks/"+f.tracks[1], 4)
+	set("/albums/"+f.groups[1], 4)
+
+	artist := uuid.New()
+	mustExec(t, f.app, `INSERT INTO artists(id,initial_name) VALUES($1,'合成评分艺人')`, artist)
+	mustExec(t, f.app, `INSERT INTO artist_profiles(artist_id,auto_display_name,effective_display_name,sort_key,initial_group,version)
+		VALUES($1,'合成评分艺人','合成评分艺人','合成评分艺人','#',1)`, artist)
+	set("/artists/"+artist, 3)
+	mustExec(t, f.app, `UPDATE tracks SET source_status='missing' WHERE id=$1`, f.tracks[0])
+
+	s.record("ratings/tracks", f.call("GET", ratingsURL+"/tracks?min_rating=4", nil), 200)
+	s.record("ratings/albums", f.call("GET", ratingsURL+"/albums", nil), 200)
+	s.record("ratings/artists", f.call("GET", ratingsURL+"/artists", nil), 200)
+	s.record("ratings/queue", f.call("GET", ratingsURL+"/tracks/queue?min_rating=4", nil), 200)
+	s.record("errors/rating-invalid-rating", f.call("GET", ratingsURL+"/tracks?min_rating=6", nil), 400)
+	s.record("errors/rating-invalid-sort", f.call("GET", ratingsURL+"/tracks?sort=highest", nil), 400)
 }
 
 func recordPersonalPlaylistSamples(t *testing.T, f *personalFixture, s *apiSampleRecorder) {
@@ -257,6 +318,10 @@ favorites/tracks favorites/tracks-empty favorites/tracks-missing favorites/track
 favorites/albums favorites/albums-empty favorites/albums-unavailable favorites/track-put favorites/track-put-repeated
 favorites/track-delete favorites/track-delete-repeated favorites/album-put favorites/album-delete
 favorites/lookup favorites/lookup-empty favorites/queue favorites/queue-empty favorites/queue-missing
+ratings/track-put ratings/track-delete ratings/album-put ratings/artist-put ratings/artist-delete
+ratings/lookup ratings/lookup-empty ratings/artist-lookup
+ratings/tracks ratings/tracks-empty ratings/albums ratings/artists ratings/queue
+errors/rating-invalid-rating errors/rating-invalid-sort
 playlists/list playlists/list-empty playlists/list-unknown-duration playlists/create playlists/create-with-tracks
 playlists/create-replayed playlists/detail playlists/detail-over-limit playlists/rename playlists/rename-noop
 playlists/delete playlists/delete-replayed playlists/items playlists/items-next-page playlists/items-missing

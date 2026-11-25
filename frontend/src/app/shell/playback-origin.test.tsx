@@ -27,7 +27,7 @@ const playlistSample = decodePlaylistQueue(sampleBody("playlists/queue"));
 const playlistId = playlistSample.playlist.id;
 const favorites: PersonalQueueSource = { kind: "favorites" };
 const playlist: PersonalQueueSource = { kind: "playlist", playlistId };
-const pathOf = (source: PersonalQueueSource) =>
+const pathOf = (source: Exclude<PersonalQueueSource, { kind: "ratings" }>) =>
   source.kind === "favorites" ? "/api/v1/me/favorites/tracks/queue" : `/api/v1/me/playlists/${source.playlistId}/queue`;
 
 function track(index: number): TrackSummaryDTO {
@@ -36,7 +36,7 @@ function track(index: number): TrackSummaryDTO {
   return { ...base, track_id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`, title: `合成曲目 ${index}`, source: { ...base.source } };
 }
 
-function queueResponse(source: PersonalQueueSource, items: TrackSummaryDTO[]): FavoriteQueueDTO | PlaylistQueueDTO {
+function queueResponse(source: Exclude<PersonalQueueSource, { kind: "ratings" }>, items: TrackSummaryDTO[]): FavoriteQueueDTO | PlaylistQueueDTO {
   const counts = {
     items, total: items.length, missing_count: 0, eligible_count: items.length,
     returned_count: items.length, omitted_count: 0, limit: 10_000 as const, truncated: false,

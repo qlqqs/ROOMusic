@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSessionController, SessionProvider, ViewerScopeProvider } from "../../features/auth";
 import { PlayerProvider, MAX_QUEUE_ENTRIES } from "../../features/player";
-import { FavoriteStatusScope } from "../../features/personal";
+import { FavoriteStatusScope, RatingStatusScope } from "../../features/personal";
 import { deferred } from "../../test/deferred";
 import { installFakeApi, installFakeSession } from "../../test/fake-api";
 import { playerHarness } from "../../test/fake-zones";
@@ -30,7 +30,7 @@ async function setup() {
   const { engine } = player;
   dispose.push(() => { engine.endSession(); controller.dispose(); client.clear(); });
   const view = (children: ReactNode, trackIds: readonly string[] = []) => render(<QueryClientProvider client={client}><SessionProvider controller={controller}>
-    <ViewerScopeProvider viewer={state.viewer} generation={state.generation}><PlayerProvider userId={state.viewer.id} controller={engine}><FavoriteStatusScope trackIds={trackIds}>{children}</FavoriteStatusScope></PlayerProvider></ViewerScopeProvider>
+    <ViewerScopeProvider viewer={state.viewer} generation={state.generation}><PlayerProvider userId={state.viewer.id} controller={engine}><FavoriteStatusScope trackIds={trackIds}><RatingStatusScope trackIds={trackIds}>{children}</RatingStatusScope></FavoriteStatusScope></PlayerProvider></ViewerScopeProvider>
   </SessionProvider></QueryClientProvider>);
   return { api, session, controller, engine, player, view };
 }

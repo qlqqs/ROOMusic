@@ -58,28 +58,36 @@ func (h *Handlers) setFavorite(w http.ResponseWriter, r *http.Request, user, kin
 	respond(w, r, result, err)
 }
 func (h *Handlers) lookup(w http.ResponseWriter, r *http.Request, user string) {
-	if _, ok := query(w, r); !ok {
-		return
-	}
-	input, ok := decodeObject(w, r, false, "track_ids", "group_ids", "artist_ids")
+	tracks, groups, artists, ok := lookupIDs(w, r)
 	if !ok {
-		return
-	}
-	tracks, ok := input.ids("track_ids", false, 10000)
-	if !ok {
-		invalidInput(w, r)
-		return
-	}
-	groups, ok := input.ids("group_ids", false, 1000)
-	if !ok {
-		invalidInput(w, r)
-		return
-	}
-	artists, ok := input.ids("artist_ids", false, 1000)
-	if !ok {
-		invalidInput(w, r)
 		return
 	}
 	result, err := h.service.LookupFavorites(r.Context(), user, tracks, groups, artists)
 	respond(w, r, result, err)
+}
+
+func lookupIDs(w http.ResponseWriter, r *http.Request) (tracks, groups, artists []string, ok bool) {
+	if _, ok := query(w, r); !ok {
+		return nil, nil, nil, false
+	}
+	input, ok := decodeObject(w, r, false, "track_ids", "group_ids", "artist_ids")
+	if !ok {
+		return nil, nil, nil, false
+	}
+	tracks, ok = input.ids("track_ids", false, 10000)
+	if !ok {
+		invalidInput(w, r)
+		return nil, nil, nil, false
+	}
+	groups, ok = input.ids("group_ids", false, 1000)
+	if !ok {
+		invalidInput(w, r)
+		return nil, nil, nil, false
+	}
+	artists, ok = input.ids("artist_ids", false, 1000)
+	if !ok {
+		invalidInput(w, r)
+		return nil, nil, nil, false
+	}
+	return tracks, groups, artists, true
 }

@@ -53,11 +53,9 @@ func (s *Service) setArtistFavorite(ctx context.Context, userID, targetID string
 		targetID = canonical
 	}
 	result := FavoriteResult{TargetKind: "artist", TargetID: targetID, Favorited: favorited}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO personal_favorite_state(user_id) VALUES($1::uuid) ON CONFLICT(user_id) DO NOTHING`, userID); err != nil {
-		return FavoriteResult{}, fmt.Errorf("initialize artist favorite state: %w", err)
-	}
-	if err := tx.QueryRowContext(ctx, `SELECT revision FROM personal_favorite_state WHERE user_id=$1::uuid FOR UPDATE`, userID).Scan(&result.Revision); err != nil {
-		return FavoriteResult{}, fmt.Errorf("lock artist favorite state: %w", err)
+	result.Revision, err = lockFavoriteState(ctx, tx, userID)
+	if err != nil {
+		return FavoriteResult{}, err
 	}
 	var created sql.NullTime
 	if err := tx.QueryRowContext(ctx, `SELECT MAX(created_at) FROM artist_favorites WHERE user_id=$1::uuid AND resolved_artist_id=$2::uuid`, userID, targetID).Scan(&created); err != nil {

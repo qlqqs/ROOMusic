@@ -24,6 +24,17 @@ func TestRoutesResolveToRegisteredPatterns(t *testing.T) {
 		{http.MethodPost, "/api/v1/auth/logout", "POST /api/v1/auth/logout"},
 		{http.MethodGet, "/api/v1/auth/me", "GET /api/v1/auth/me"},
 		{http.MethodPost, "/api/v1/auth/password", "POST /api/v1/auth/password"},
+		{http.MethodGet, "/api/v1/me/ratings/tracks", "GET /api/v1/me/ratings/tracks"},
+		{http.MethodGet, "/api/v1/me/ratings/tracks/queue", "GET /api/v1/me/ratings/tracks/queue"},
+		{http.MethodGet, "/api/v1/me/ratings/albums", "GET /api/v1/me/ratings/albums"},
+		{http.MethodGet, "/api/v1/me/ratings/artists", "GET /api/v1/me/ratings/artists"},
+		{http.MethodPut, "/api/v1/me/ratings/tracks/" + id, "PUT /api/v1/me/ratings/tracks/{track_id}"},
+		{http.MethodDelete, "/api/v1/me/ratings/tracks/" + id, "DELETE /api/v1/me/ratings/tracks/{track_id}"},
+		{http.MethodPut, "/api/v1/me/ratings/albums/" + id, "PUT /api/v1/me/ratings/albums/{group_id}"},
+		{http.MethodDelete, "/api/v1/me/ratings/albums/" + id, "DELETE /api/v1/me/ratings/albums/{group_id}"},
+		{http.MethodPut, "/api/v1/me/ratings/artists/" + id, "PUT /api/v1/me/ratings/artists/{artist_id}"},
+		{http.MethodDelete, "/api/v1/me/ratings/artists/" + id, "DELETE /api/v1/me/ratings/artists/{artist_id}"},
+		{http.MethodPost, "/api/v1/me/ratings/lookup", "POST /api/v1/me/ratings/lookup"},
 		{http.MethodGet, "/api/v1/me/subsonic", "GET /api/v1/me/subsonic"},
 		{http.MethodPost, "/api/v1/me/subsonic/confirm-password", "POST /api/v1/me/subsonic/confirm-password"},
 		{http.MethodGet, "/api/v1/admin/subsonic", "GET /api/v1/admin/subsonic"},
@@ -100,7 +111,13 @@ func TestRoutesResolveToRegisteredPatterns(t *testing.T) {
 		{http.MethodGet, "/api", "/api"},
 	} {
 		request := httptest.NewRequest(route.method, route.path, nil)
-		if _, pattern := application.mux.Handler(request); pattern != route.pattern {
+		_, pattern := application.mux.Handler(request)
+		switch pattern {
+		case "/api/v1/me/ratings/tracks", "/api/v1/me/ratings/tracks/", "/api/v1/me/ratings/tracks/queue":
+			application.mux.ServeHTTP(httptest.NewRecorder(), request)
+			pattern = request.Pattern
+		}
+		if pattern != route.pattern {
 			t.Errorf("%s %s resolved to %q, want %q", route.method, route.path, pattern, route.pattern)
 		}
 	}
@@ -125,6 +142,8 @@ func TestSubsonicRoutesResolveToPrefix(t *testing.T) {
 	for _, route := range []struct{ method, path string }{
 		{http.MethodGet, "/rest/ping.view"},
 		{http.MethodPost, "/rest/ping"},
+		{http.MethodGet, "/rest/setRating.view"},
+		{http.MethodPost, "/rest/setRating"},
 	} {
 		request := httptest.NewRequest(route.method, route.path, nil)
 		if _, pattern := application.mux.Handler(request); pattern != "/rest/" {

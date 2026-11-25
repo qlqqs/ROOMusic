@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// MoveAlbumFavorites 在调用方事务里转移专辑收藏，已收藏目标组时只删除来源收藏。
+// MoveAlbumFavorites 在调用方事务里转移专辑收藏和评分，目标已有的关系优先。
 // 调用方须已持有 CATP，传入被腾空组到非空接收组的映射，并在失败时回滚事务。
 // 按用户 UUID 升序锁收藏版本行，每个实际受影响用户的版本只递增一次；返回来源收藏行数。
 func MoveAlbumFavorites(ctx context.Context, tx *sql.Tx, moves map[string]string) (int, error) {
@@ -18,16 +18,24 @@ func MoveAlbumFavorites(ctx context.Context, tx *sql.Tx, moves map[string]string
 		from, to = append(from, source), append(to, target)
 	}
 
-	users, err := lockFavoriteSources(ctx, tx, from)
+	users, err := lockAlbumSources(ctx, tx, from)
 	if err != nil {
 		return 0, err
 	}
-	return moveLockedAlbumFavorites(ctx, tx, from, to, users)
+	moved, err := moveLockedAlbumFavorites(ctx, tx, from, to, users)
+	if err != nil {
+		return 0, err
+	}
+	if err := moveLockedAlbumRatings(ctx, tx, from, to, users); err != nil {
+		return 0, err
+	}
+	return moved, nil
 }
 
-func lockFavoriteSources(ctx context.Context, tx *sql.Tx, from []string) ([]string, error) {
+func lockAlbumSources(ctx context.Context, tx *sql.Tx, from []string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT state.user_id::text FROM personal_favorite_state AS state
-   WHERE state.user_id IN (SELECT DISTINCT user_id FROM favorite_albums WHERE group_id=ANY($1::text[]::uuid[]))
+   WHERE state.user_id IN (SELECT user_id FROM favorite_albums WHERE group_id=ANY($1::uuid[])
+		UNION SELECT user_id FROM rating_albums WHERE group_id=ANY($1::uuid[]))
    ORDER BY state.user_id FOR UPDATE`, from)
 	if err != nil {
 		return nil, fmt.Errorf("lock moved album favorite states: %w", err)

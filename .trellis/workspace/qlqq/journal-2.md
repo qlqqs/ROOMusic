@@ -459,3 +459,51 @@ A1–A13 证据对照写入父任务 acceptance.md；路线图、决定索引、
 ### Status
 
 [OK] **Completed**
+
+
+## Session 71: Subsonic 与网页端评分
+<!-- trellis-session: v=2 fp=67ac4b1bc689b6f7 -->
+
+**Date**: 2026-11-25
+**Task**: Subsonic 与网页端评分
+**Branch**: `main`
+
+### Summary
+
+评分三表（0082）、/me/ratings 接口、Subsonic setRating；评分随扫描转移、专辑合并撤销与艺人解析搬迁（用户并集一次加锁、不增收藏 revision）；网页端星级滑块（头部、曲目菜单浮层、播放器栏）与 AC7 用例；userRating 与 highest 由 browse 合入前接线。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ea71440a` | feat(personal): 个人评分与 Subsonic setRating |
+| `b5c443c0` | feat(personal): 评分跟随扫描转移、专辑合并与艺人解析 |
+| `21e18fac` | feat(personal): 网页端星级评分 |
+| `9c77e1b1` | merge: 合入 Subsonic 与网页端评分 |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 72: 我的评分页与管家评分工具
+<!-- trellis-session: v=2 fp=b6fca2ed81efb36b -->
+
+**Date**: 2026-11-25
+**Task**: 我的评分页与管家评分工具
+**Branch**: `main`
+
+### Summary
+
+新增 /me/ratings 曲目、专辑、艺人评分列表（星级筛选、两种排序、地址状态、列表内改分）、评分播放队列、管家 list_ratings/set_rating；迁移 0083 三个分页索引。艺人列表需先按解析 ID 去重，不建排序索引，执行计划只断言按 user_id 走索引。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cf611311` | feat(personal): 我的评分列表、播放队列与管家评分工具 |
+| `84c3baa6` | feat(web): 我的评分页 |
+
+### Status
+
+[OK] **Completed**

@@ -48,3 +48,11 @@
 ## 不做
 
 - `getIndexes`、`getMusicDirectory`、`getTopSongs`、`getSimilarSongs`。
+
+## 评分接线（2026-11-25 追加）
+
+评分子任务已先合入 `main`（`personal.LookupRatings`、`HighestRatedAlbums`）。按共用约定“后合入的一方负责”，本任务合入前要：
+
+- 在 `subsonic.PersonalState` 加评分，歌曲、专辑、艺人对象输出 `userRating`（没有评分时省略）；
+- `getAlbumList2 type=highest` 改用 `HighestRatedAlbums`，按评分降序、再按评分时间新到旧，支持分页；
+- 测试覆盖评分子任务的 AC1 客户端一侧（网页端评 4 星，客户端读到 `userRating=4`）与 AC3（highest 的排序、分页、用户隔离）。
