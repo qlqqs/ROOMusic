@@ -55,7 +55,7 @@
 - 仓库里不出现从那份逆向文档搬来的内容：Roon 的服务号、端口与组播地址、内部类名、厂商例外表、协议报文定义。
 - README、路线图与对应 spec 同步新状态。
 
-## 进度（2026-11-25）
+## 进度（2026-11-25，父任务收尾归档）
 
 | 子任务 | 状态 |
 | --- | --- |
@@ -64,6 +64,6 @@
 | `11-25-slimproto-sync-groups` | 已合入并归档 |
 | `11-25-slimproto-sync-verify` | 已合入并归档（L7） |
 | `11-25-slimproto-drift-compensation` | 已合入并归档（L8） |
-| `11-25-snapcast-multiroom` | 暂缓（L6、L8），规划与协议调研保留 |
+| `11-25-snapcast-multiroom` | 暂缓（L6、L8），保留为独立的待办任务，规划与协议调研保留 |
 
 待 qlqq：试听 `temp/slimproto-skip/` 中补偿后的 WAV；审阅各子任务 PRD 里主代理替他定的决定（审查 F1–F10、S1–S11、G1–G11）。
