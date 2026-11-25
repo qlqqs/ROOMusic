@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 68
+- **Total Sessions**: 69
 - **Last Active**: 2026-11-25
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~409 | Active |
+| `journal-2.md` | ~436 | Active |
 | `journal-1.md` | ~1972 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 69 | 2026-11-25 | 局域网设备：协议审查、SlimProto 单台与编组、软件替代验证、服务器端漂移补偿 | `a664d7c2`, `81418dac`, `6cdb2516`, `d91f13f3`, `deb95e5c`, `40382704` | `main` |
 | 68 | 2026-11-25 | 走查遗留五项 | `f378a820`, `9e984f34` | `main` |
 | 67 | 2026-11-24 | 界面细节走查与优化 | `c33f0a0e`, `7587c8ee` | `main` |
 | 66 | 2026-11-16 | 管家 C11：验收对照与文档同步 | `ae7b1ba5` | `steward-c11-acceptance` |

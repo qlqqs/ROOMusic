@@ -407,3 +407,30 @@ A1–A13 证据对照写入父任务 acceptance.md；路线图、决定索引、
 ### Status
 
 [OK] **Completed**
+
+
+## Session 69: 局域网设备：协议审查、SlimProto 单台与编组、软件替代验证、服务器端漂移补偿
+<!-- trellis-session: v=2 fp=8ba855c40a49056f -->
+
+**Date**: 2026-11-25
+**Task**: 局域网设备：协议审查、SlimProto 单台与编组、软件替代验证、服务器端漂移补偿
+**Branch**: `main`
+
+### Summary
+
+无实机条件下改用软件替代验证：Squeezelite 跳帧修正在持续音上有明显咔哒（高频 +74–91 dB）；版本矩阵覆盖 piCorePlayer 9/10/11.1、moOde、Debian，修复 1479 前版本 352.8 kHz 起播卡住（output_threshold 上限）。按 qlqq 选择实现 SlimProto 编组服务器端漂移补偿：成员流解码后 Kaiser-sinc 局部拉伸插删单帧再编码、主设备比特完美、回归估计 ppm 前馈；+100 ppm 稳态 p95 0.92 ms、无硬修正，调整点高频最多 +5 dB。定因并修复测试读端欠载误判。父任务归档，Snapcast 暂缓保留，Bridge 记为后续候选。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a664d7c2` | fix(slimproto): 高采样率起播门槛不超过默认输出缓冲，兼容 1479 前的 Squeezelite |
+| `81418dac` | test: SlimProto 跳帧可听性录音与 Squeezelite 发行版版本矩阵 |
+| `6cdb2516` | docs(task): 软件替代验证结论与版本矩阵 |
+| `d91f13f3` | feat(slimproto): 编组成员服务器端漂移补偿 |
+| `deb95e5c` | test: 漂移补偿单元测试与真实播放器验收，修正读端欠载误判 |
+| `40382704` | docs: 漂移补偿合同、README 与任务记录 |
+
+### Status
+
+[OK] **Completed**
