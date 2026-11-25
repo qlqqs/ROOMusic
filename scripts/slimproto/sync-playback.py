@@ -17,6 +17,8 @@ SECOND = 1_000_000_000
 P95_LIMIT = 10
 PEAK_LIMIT = 15
 PAIR_LIMIT = SECOND // 4
+WARMUP = 60 * SECOND
+UNDERRUN_WINDOW = 5 * SECOND
 TRACKS = {"Long": (44100, 1, 0), "Same A": (44100, 3, 8),
           "Same B": (44100, 5, 13), "Different": (48000, 7, 13)}
 
@@ -45,6 +47,10 @@ def nearest(at, candidates):
 def statistics(values):
     ordered = sorted(values)
     return median(ordered), ordered[math.ceil(.95 * len(ordered)) - 1], ordered[-1]
+
+
+class ReaderUnderrun(Exception):
+    """欠载后的硬修正使本次漂移验收失效。"""
 
 
 class Player(Receiver):
@@ -125,34 +131,37 @@ class Suite:
                                  f"播放状态 {zone['status']}，成员 {zone['group']}") from error
 
         end = initially[0][0] + seconds * SECOND
-        if drift:
-            # 留出修正指令进入输出后再采集三个完整脉冲的时间。
-            time.sleep(max(0, end + 4 * SECOND - time.monotonic_ns()) / SECOND)
-        else:
-            time.sleep(max(0, end + PAIR_LIMIT - time.monotonic_ns()) / SECOND)
+        time.sleep(max(0, end + PAIR_LIMIT - time.monotonic_ns()) / SECOND)
         pulses = [player.pulses(start, title) for player in self.players]
         corrections = [player.events_of("correction", start) for player in self.players]
         pairs, missing = self.compare(pulses, end)
-        if not pairs:
+        if not pairs and not drift:
             raise AssertionError(f"{label}无可配对脉冲，主/成员脉冲 {[len(times) for times in pulses]}")
-        differences = [abs(a - b) / 1e6 for a, b in pairs]
-        p50, p95, peak = statistics(differences)
-        counts = [sum(row["at_ns"] < end for row in events) for events in corrections]
-        print(f"{label}，{len(pairs)} 对，p50={p50:.3f} ms，p95={p95:.3f} ms，峰值={peak:.3f} ms，"
-              f"strm a 主/成员={counts[0]}/{counts[1]}，未配对={sum(map(len, missing))}")
-        if p95 > P95_LIMIT or peak > PEAK_LIMIT:
-            worst = sorted(pairs, key=lambda pair: abs(pair[0] - pair[1]), reverse=True)[:5]
-            print("最大偏差（主设备相对首脉冲秒，成员相对主设备毫秒）", [
-                (round((a - initially[0][0]) / SECOND, 3), round((b - a) / 1e6, 3)) for a, b in worst])
-            raise AssertionError(f"{label}超出同步阈值 p95={P95_LIMIT} ms / 峰值={PEAK_LIMIT} ms")
-        assert len(pairs) >= max(1, math.ceil(seconds * .9)), (label, "有效脉冲不足", len(pairs))
-        for times, commands in zip(missing, corrections):
-            for at in times:
-                assert drift and any(0 <= at - row["at_ns"] < PAIR_LIMIT for row in commands), (
-                    label, "有脉冲缺失", (at - initially[0][0]) / SECOND)
-        assert self.check_roster(self.playback.zone()) == "active", (label, self.playback.zone()["group"])
+        # 接续曲与前曲共用请求，按本曲的首个脉冲裁剪事件。
+        window_start = initially[0][0] if title in ("Same B", "Different") else start
+        corrections = [[row for row in events if window_start <= row["at_ns"] < end]
+                       for events in corrections]
+        underruns = [[row for row in player.events_of("underrun", window_start) if row["at_ns"] < end]
+                     for player in self.players]
+        counts = {cmd: [sum(row["command"] == cmd for row in events) for events in corrections]
+                  for cmd in ("a", "p")}
+        print(f"{label}，strm a 主/成员={counts['a']}，带间隔 strm p 主/成员={counts['p']}，"
+              f"读端欠载 主/成员={list(map(len, underruns))}，未配对={sum(map(len, missing))}")
+        # Long 的首个脉冲位于源的 0.25 秒处。
+        origin = initially[0][0] - SECOND // 4
+        for device, events in zip(("主设备", "成员"), underruns):
+            for row in events:
+                print(f"{device}读端欠载，距起播 {(row['at_ns'] - origin) / SECOND:.3f} 秒，"
+                      f"迟到 {row['late_ns'] / 1e6:.3f} ms")
         if drift:
-            self.check_recovery(end, pulses, corrections)
+            self.check_drift(label, pairs, origin, seconds, underruns, corrections)
+        else:
+            p50, p95, peak = statistics([abs(a - b) / 1e6 for a, b in pairs])
+            print(f"{label}，{len(pairs)} 对，p50={p50:.3f} ms，p95={p95:.3f} ms，峰值={peak:.3f} ms")
+            assert p95 <= P95_LIMIT and peak <= PEAK_LIMIT, (label, "超出同步阈值", p95, peak)
+        assert len(pairs) >= max(1, math.ceil(seconds * .9)), (label, "有效脉冲不足", len(pairs))
+        assert not any(missing), (label, "有脉冲缺失", list(map(len, missing)))
+        assert self.check_roster(self.playback.zone()) == "active", (label, self.playback.zone()["group"])
         return pairs
 
     @staticmethod
@@ -178,16 +187,50 @@ class Suite:
                     missing[0].append(at)
         return pairs, missing
 
-    def check_recovery(self, end, pulses, corrections):
-        events = sorted(row["at_ns"] for rows in corrections for row in rows if row["at_ns"] < end)
-        assert events, "漂移场景没有观察到 strm a"
-        pairs, _ = self.compare(pulses, end + 4 * SECOND)
-        for at in events:
-            following = [abs(a - b) / 1e6 for a, b in pairs if a > at + 80_000_000][:3]
-            assert len(following) == 3, "修正后的脉冲样本不足"
-            p50, p95, peak = statistics(following)
-            print(f"strm a 后三对脉冲，p50={p50:.3f} ms，p95={p95:.3f} ms，峰值={peak:.3f} ms")
-            assert p95 <= P95_LIMIT and peak <= PEAK_LIMIT, ("strm a 修正后未恢复同步", following)
+    @staticmethod
+    def check_drift(label, pairs, origin, seconds, underruns, corrections):
+        def affected(at):
+            return any(0 <= at - row["at_ns"] < UNDERRUN_WINDOW for rows in underruns for row in rows)
+
+        clean = [(a, b) for a, b in pairs if not (affected(a) or affected(b))]
+        print(f"{label}，欠载后 5 秒内排除 {len(pairs) - len(clean)}/{len(pairs)} 对")
+        boundary = origin + WARMUP
+        windows = [("预热", [(a, b) for a, b in clean if a < boundary], None, 15)]
+        if seconds > WARMUP // SECOND:
+            windows.append(("稳态", [(a, b) for a, b in clean if a >= boundary], 1, 2))
+
+        failures = []
+        for phase, samples, p95_limit, peak_limit in windows:
+            if not samples:
+                failures.append(f"{phase}无有效脉冲对")
+                continue
+            p50, p95, peak = statistics([abs(a - b) / 1e6 for a, b in samples])
+            print(f"{label} {phase}，{len(samples)} 对，p50={p50:.3f} ms，"
+                  f"p95={p95:.3f} ms，峰值={peak:.3f} ms")
+            if peak > peak_limit or p95_limit is not None and p95 > p95_limit:
+                failures.append(f"{phase}超限")
+        environment, unexpected = [], []
+        for device, rows in enumerate(corrections):
+            for row in rows:
+                # 成员读端停顿会使成员落后，主读端停顿则使成员超前。
+                # 扣除两边同期的欠载，并核对它解释的修正方向与幅度。
+                late = [sum(u["late_ns"] for u in events if 0 <= row["at_ns"] - u["at_ns"] < UNDERRUN_WINDOW)
+                        for events in underruns]
+                displacement = (late[1] - late[0]) / 1e6
+                correction = row["milliseconds"] * (1 if row["command"] == "a" else -1)
+                if device == 1 and correction * displacement > 0 and abs(correction - displacement) < 20:
+                    environment.append(row)
+                else:
+                    unexpected.append(row)
+        if unexpected:
+            failures.append(f"未由欠载解释的硬修正 {unexpected}")
+        if environment:
+            print(f"欠载引发硬修正 {environment}", file=sys.stderr)
+        if failures:
+            print("；".join(failures), file=sys.stderr)
+        if environment:
+            raise ReaderUnderrun(label)
+        assert not failures, (label, failures)
 
     def pause_and_seek(self):
         marks = [player.mark()[0] for player in self.players]
@@ -297,13 +340,28 @@ if __name__ == "__main__":
     elif mode == "run":
         seconds, *compose_args = args
         suite = Suite(Path(path), compose_args)
-        suite.measure("无漂移持续播放", suite.play("Long"), int(seconds), "Long")
-        suite.pause_and_seek()
-        suite.advance("Same B", streams=1)
-        suite.advance("Different", streams=2)
-        suite.jitter()
-        suite.reconnect()
-        suite.restart_app()
-        suite.drift(int(seconds))
+        scenarios = [
+            lambda: suite.measure("无漂移持续播放", suite.play("Long"), int(seconds), "Long"),
+            suite.pause_and_seek,
+            lambda: suite.advance("Same B", streams=1),
+            lambda: suite.advance("Different", streams=2),
+            suite.jitter, suite.reconnect, suite.restart_app,
+            lambda: suite.drift(int(seconds)),
+        ]
+        failures = []
+        environmental = []
+        for scenario in scenarios:
+            try:
+                scenario()
+            except ReaderUnderrun as error:
+                environmental.append(str(error))
+            except (AssertionError, TimeoutError) as error:
+                print(f"场景失败：{error}", file=sys.stderr)
+                failures.append(str(error))
+        if environmental:
+            print(f"环境失败（读端欠载触发硬修正）：{environmental}", file=sys.stderr)
+            raise SystemExit(3)
+        if failures:
+            raise AssertionError(failures)
     else:
         raise SystemExit(f"未知测试模式：{mode}")

@@ -73,6 +73,7 @@ func (*groupTestZones) SubscribeOutput(context.Context, string, string) (*zones.
 
 type groupTestPeer struct {
 	player   *Player
+	drift    zones.DriftCompensator
 	jiffies  uint32
 	released int
 	rejoins  int
@@ -148,7 +149,7 @@ func (f *groupTestRun) stream(seq int64, members ...string) {
 		if seq == 2 {
 			path += "-next"
 		}
-		stream.Members = append(stream.Members, zones.GroupMemberStream{DeviceID: id, Path: path})
+		stream.Members = append(stream.Members, zones.GroupMemberStream{DeviceID: id, Path: path, Drift: f.peers[id].drift})
 	}
 	f.zones.mu.Lock()
 	f.zones.streams[seq] = stream
@@ -172,7 +173,7 @@ func (f *groupTestRun) setZone(intent string, seq, next int64) {
 	f.t.Helper()
 	f.zones.mu.Lock()
 	z := zones.Zone{ZoneID: "zone", Revision: f.zones.zone.Revision + 1, Intent: intent,
-		Group: &zones.ZoneGroup{}, Stream: &zones.Stream{Seq: seq},
+		Group: &zones.ZoneGroup{}, Stream: &zones.Stream{Seq: seq, Format: &zones.StreamAudioFormat{SampleRate: 48000}},
 		Settings: zones.ZoneSettings{
 			SampleRate: zones.DefaultSampleRateDocument(), Downmix: zones.DefaultDownmixDocument(),
 			PEQ: zones.DefaultPEQDocument(), Convolution: zones.DefaultConvolutionDocument(),

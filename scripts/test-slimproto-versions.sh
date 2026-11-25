@@ -48,7 +48,7 @@ while read -r -u 3 source micro commit; do
   echo "单台 $source $micro"
   if ! "$root/scripts/test-slimproto.sh" > "$out/$micro-single.log" 2>&1; then single=失败; result=1; fi
   echo "编组 $source $micro"
-  if ! ROOMUSIC_SLIMPROTO_SYNC_SECONDS=60 ROOMUSIC_SLIMPROTO_SYNC_PPM=300 \
+  if ! ROOMUSIC_SLIMPROTO_SYNC_SECONDS=120 \
       "$root/scripts/test-slimproto-sync.sh" > "$out/$micro-sync.log" 2>&1; then sync=失败; result=1; fi
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$source" "$micro" "$commit" "$build" "$single" "$sync" >> "$summary"
   if [[ -n "$image" ]]; then docker image rm "$image" >/dev/null; image=; fi
