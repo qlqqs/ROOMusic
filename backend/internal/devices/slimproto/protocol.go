@@ -111,13 +111,26 @@ func control(command byte) []byte {
 	return payload
 }
 
-func startStream(ip netip.Addr, port uint16, path string, rate int) ([]byte, error) {
+func controlMS(command byte, ms uint32) []byte {
+	p := control(command)
+	be.PutUint32(p[14:], ms)
+	return p
+}
+
+func startStream(ip netip.Addr, port uint16, path string, rate int, options ...byte) ([]byte, error) {
 	if !ip.Is4() || port == 0 || !strings.HasPrefix(path, "/") || strings.ContainsAny(path, " \r\n") {
 		return nil, errors.New("SlimProto 取流地址无效")
 	}
 	p := control('s')
 	copy(p[1:7], "1f????")
 	p[7], p[10] = 255, '0'
+	switch len(options) {
+	case 0:
+	case 2:
+		p[1], p[7] = options[0], options[1]
+	default:
+		return nil, errors.New("开流参数须同时指定自动起播和缓冲阈值")
+	}
 	if rate >= 176400 {
 		p[12] = 20
 	}

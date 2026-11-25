@@ -16,34 +16,52 @@ func (j *Jiffies) Unwrap(value uint32) uint64 {
 	return j.wraps + uint64(value)
 }
 
-// ClockEstimator 属于一条控制连接。预热期间直接使用接收时刻。
+// ClockEstimator 按单向延迟的下包络估计同一控制连接的时钟零点。
 type ClockEstimator struct {
-	jiffies           Jiffies
-	samples           [50]time.Time
-	count, next       int
-	epoch, calculated time.Time
+	jiffies     Jiffies
+	epoch       time.Time
+	offsets     [50]time.Time
+	count, next int
 }
 
 func (c *ClockEstimator) Observe(jiffies uint32, received time.Time) time.Time {
 	elapsed := time.Duration(c.jiffies.Unwrap(jiffies)) * time.Millisecond
-	c.samples[c.next] = received.Add(-elapsed)
-	c.next = (c.next + 1) % len(c.samples)
-	c.count = min(c.count+1, len(c.samples))
-	if c.count < 10 {
+	offset := received.Add(-elapsed)
+	if c.epoch.IsZero() || offset.Before(c.epoch) {
+		c.epoch = offset
+		c.count, c.next = 0, 0
 		return received
 	}
-	if c.calculated.IsZero() || received.Sub(c.calculated) >= 30*time.Second {
-		c.epoch = c.samples[0]
-		for _, sample := range c.samples[1:c.count] {
-			if sample.Before(c.epoch) {
-				c.epoch = sample
+	c.offsets[c.next] = offset
+	c.next = (c.next + 1) % len(c.offsets)
+	c.count = min(c.count+1, len(c.offsets))
+	if c.count >= 10 {
+		floor := c.offsets[0]
+		for _, sample := range c.offsets[1:c.count] {
+			if sample.Before(floor) {
+				floor = sample
 			}
 		}
-		c.calculated = received
+		drift := floor.Sub(c.epoch)
+		if drift > time.Millisecond && (drift <= 5*time.Millisecond || c.count == len(c.offsets)) {
+			c.epoch = floor
+			c.count, c.next = 0, 0
+		}
 	}
-	estimate := c.epoch.Add(elapsed)
-	if estimate.After(received) {
-		return received
+	return c.epoch.Add(elapsed)
+}
+
+// Target 将未来的服务器时刻换为协议的无符号毫秒数，零在协议中表示立即播放。
+func (c *ClockEstimator) Target(now, target time.Time) (uint32, bool) {
+	if c.epoch.IsZero() || !target.After(now) || target.Sub(now) > 10*time.Second {
+		return 0, false
 	}
-	return estimate
+	ms := uint32(target.Sub(c.epoch).Milliseconds())
+	if ms == 0 {
+		if target.Add(time.Millisecond).Sub(now) > 10*time.Second {
+			return 0, false
+		}
+		ms = 1
+	}
+	return ms, true
 }

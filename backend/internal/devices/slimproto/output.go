@@ -13,12 +13,23 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
+type OutputZones interface {
+	ManagedOutputVolume(userID, sessionID string) (float64, bool)
+	ManagedStream(userID, sessionID string, seq int64) (zones.UPnPStreamInfo, error)
+	ManagedGroupStream(userID, sessionID string, seq int64) (zones.GroupStreamInfo, error)
+	GroupMembers(userID, sessionID string) []zones.GroupMember
+	ReportGroupMember(context.Context, string, string, string, string) error
+	ReportOutput(context.Context, string, string, zones.ReportOutputInput) (zones.OutputResult, error)
+	SubscribeOutput(context.Context, string, string) (*zones.Subscription, error)
+}
+
 type Output struct {
-	Zones                                        *zones.Service
+	Zones                                        OutputZones
 	UserID, DeviceID, ZoneID, SessionID, BaseURL string
 	Player                                       *Player
 	Logger                                       *slog.Logger
 	Offline                                      func()
+	Member                                       func(context.Context, zones.GroupMember, bool) (MemberLease, error)
 }
 
 type outputStream struct {
@@ -37,6 +48,8 @@ type outputSession struct {
 	state, controlIntent   string
 	seconds, elapsedOffset float64
 	anchor                 time.Time
+	group                  *groupCoordinator
+	memberEvents           chan groupEvent
 	// 连续跳转时，以最后一个开流的 STMc 隔开旧流在途的状态。
 	awaitingConnect int
 }
@@ -49,7 +62,7 @@ func (o Output) Run(ctx context.Context, sub *zones.Subscription) zones.ReleaseO
 		if o.Offline != nil {
 			o.Offline()
 		}
-	} else if s.current != nil {
+	} else if s.current != nil || (s.group != nil && s.group.leader.current != nil) {
 		s.Player.stopOutput()
 	}
 	if ctx.Err() == nil && err != nil && !errors.Is(err, net.ErrClosed) {
@@ -71,9 +84,24 @@ func (s *outputSession) run(sub *zones.Subscription) error {
 	s.port = uint16(port)
 	events := s.Player.subscribe()
 	defer s.Player.unsubscribe(events)
+	defer func() {
+		if s.group != nil {
+			s.seconds, s.anchor = s.position(), time.Time{}
+			s.group.close()
+		}
+	}()
 	ticker := time.NewTicker(time.Second)
+	groupTicks := false
 	defer ticker.Stop()
 	for {
+		if grouped := s.group != nil; grouped != groupTicks {
+			groupTicks = grouped
+			if grouped {
+				ticker.Reset(250 * time.Millisecond)
+			} else {
+				ticker.Reset(time.Second)
+			}
+		}
 		closed := false
 		select {
 		case <-s.ctx.Done():
@@ -89,8 +117,24 @@ func (s *outputSession) run(sub *zones.Subscription) error {
 				err = s.apply()
 			}
 		case ev := <-events:
-			err = s.event(ev)
+			if s.group != nil {
+				err = s.group.event(s.group.leader, ev)
+			} else {
+				err = s.event(ev)
+			}
+		case ev := <-s.memberEvents:
+			if s.group != nil && ev.peer.stopRelay == ev.lease && s.group.peers[ev.peer.DeviceID] == ev.peer {
+				if ev.lost != "" {
+					err = s.group.drop(ev.peer, ev.lost)
+				} else {
+					err = s.group.event(ev.peer, ev.event)
+				}
+			}
 		case <-ticker.C:
+			if s.group != nil {
+				err = s.group.tick(time.Now())
+				break
+			}
 			err = s.apply()
 			if err == nil && s.state == "playing" {
 				err = s.report("status", s.state, nil, s.seq(), s.position())
@@ -136,7 +180,7 @@ func (s *outputSession) receive(msg zones.Message) bool {
 		z = update.Zone
 	case "device":
 		var update struct{ Device zones.Device }
-		return json.Unmarshal(msg.Data, &update) == nil && update.Device.DeviceID == s.DeviceID
+		return json.Unmarshal(msg.Data, &update) == nil && (update.Device.DeviceID == s.DeviceID || (s.group != nil && s.group.peers[update.Device.DeviceID] != nil))
 	default:
 		return false
 	}
@@ -157,7 +201,7 @@ func (s *outputSession) seq() *int64 {
 func (s *outputSession) position() float64 {
 	seconds := s.seconds
 	if s.state == "playing" && !s.anchor.IsZero() {
-		seconds += time.Since(s.anchor).Seconds()
+		seconds += max(0, time.Since(s.anchor).Seconds())
 	}
 	if s.current != nil {
 		duration := s.current.duration
@@ -198,6 +242,27 @@ func (s *outputSession) stop() error {
 func (s *outputSession) apply() error {
 	if s.zone.ZoneID == "" {
 		return nil
+	}
+	if s.zone.Group != nil && s.group == nil {
+		if s.memberEvents == nil {
+			s.memberEvents = make(chan groupEvent, 8*64)
+		}
+		s.group = newGroup(s)
+	}
+	if g := s.group; g != nil {
+		if s.zone.Group != nil || g.buffering {
+			return g.apply()
+		}
+		g.close()
+		s.group = nil
+		if g.reference != g.leader && s.zone.Stream != nil {
+			if err := g.restart(); err != nil {
+				return err
+			}
+			if err := s.stop(); err != nil {
+				return err
+			}
+		}
 	}
 	if volume, ok := s.Zones.ManagedOutputVolume(s.UserID, s.SessionID); ok {
 		if err := s.Player.setVolume(volume); err != nil {
@@ -283,7 +348,7 @@ func (s *outputSession) start(stream *zones.Stream, info zones.UPnPStreamInfo, p
 	if stream.Format != nil {
 		rate = stream.Format.SampleRate
 	}
-	frame, err := startStream(s.Player.local, s.port, info.Path, rate)
+	frame, err := startStream(s.Player.local, s.port, info.Path, rate, '1', 255)
 	if err != nil {
 		return err
 	}

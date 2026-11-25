@@ -19,16 +19,21 @@ type writeRequest struct {
 	written chan struct{}
 }
 type Player struct {
-	modeMu         sync.Mutex
-	local          netip.Addr
-	ctx            context.Context
-	cancel         context.CancelFunc
-	queue          chan writeRequest
-	mu             sync.Mutex
-	events         chan playerEvent
-	fixed, modeSet bool
-	volume         float64
+	lastSTAT           time.Time
+	clock              ClockEstimator
+	modeMu             sync.Mutex
+	local              netip.Addr
+	ctx                context.Context
+	cancel             context.CancelFunc
+	queue              chan writeRequest
+	mu                 sync.Mutex
+	events             chan playerEvent
+	fixed, modeSet     bool
+	grouped, gainDirty bool
+	volume             float64
 }
+
+func (p *Player) Done() <-chan struct{} { return p.ctx.Done() }
 
 func (p *Player) send(frame []byte) error {
 	return p.enqueue(writeRequest{frame: frame})
@@ -54,12 +59,18 @@ func (p *Player) command(name string, payload []byte) error {
 }
 
 // 写完停止命令后才允许交接，协议关闭时也有机会先停掉播放器的音频。
-func (p *Player) stopOutput() {
+func (p *Player) requestStop() <-chan struct{} {
 	frame, _ := encodeFrame("strm", control('q'))
 	done := make(chan struct{})
 	if p.enqueue(writeRequest{frame: frame, written: done}) != nil {
-		return
+		close(done)
 	}
+	return done
+}
+
+func (p *Player) stopOutput() { p.waitStop(p.requestStop()) }
+
+func (p *Player) waitStop(done <-chan struct{}) {
 	select {
 	case <-done:
 	case <-p.ctx.Done():
@@ -79,16 +90,32 @@ func (p *Player) refreshFixed(read func() (bool, error)) error {
 	defer p.mu.Unlock()
 	p.modeSet = true
 	p.fixed = fixed
+	if p.grouped {
+		p.gainDirty = true
+		return nil
+	}
 	return p.command("audg", volumePayload(p.volume, p.fixed))
 }
 func (p *Player) setVolume(v float64) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if v == p.volume {
+	if v == p.volume && !p.gainDirty {
 		return nil
 	}
+	p.gainDirty = false
 	p.volume = v
 	return p.command("audg", volumePayload(v, p.fixed))
+}
+
+func (p *Player) groupControl(active bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.grouped = active
+	if !active && p.gainDirty {
+		p.gainDirty = false
+		// 输出交回前应用最后一次增益变更；队列已关闭时由连接收尾。
+		p.command("audg", volumePayload(p.volume, p.fixed))
+	}
 }
 
 func (p *Player) subscribe() chan playerEvent {
@@ -104,6 +131,30 @@ func (p *Player) unsubscribe(ch chan playerEvent) {
 		p.events = nil
 	}
 }
+func (p *Player) silentSince(at time.Time) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return !p.lastSTAT.After(at)
+}
+
+func (p *Player) target(now, at time.Time) (uint32, bool, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	target, valid := p.clock.Target(now, at)
+	// Squeezelite 在写音频时直接比较 now + 10000；回绕前的最后十秒会错误地立即播放。
+	current := uint32(now.Sub(p.clock.epoch).Milliseconds())
+	wrap := target < current || target > ^uint32(0)-10000
+	return target, valid, wrap
+}
+
+func (p *Player) stat(st Status, now time.Time) {
+	p.mu.Lock()
+	p.lastSTAT = now
+	at := p.clock.Observe(st.Jiffies, now)
+	p.mu.Unlock()
+	p.notify(playerEvent{st, at})
+}
+
 func (p *Player) notify(e playerEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -187,7 +238,6 @@ func (r *Registry) handle(parent context.Context, conn *net.TCPConn) {
 		p.writeLoop(conn, initialGain)
 	}()
 	defer func() { cancel(); <-writerDone }()
-	var clock ClockEstimator
 	conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 	for ctx.Err() == nil {
 		op, body, err := readFrame(conn)
@@ -202,7 +252,7 @@ func (r *Registry) handle(parent context.Context, conn *net.TCPConn) {
 				continue
 			}
 			conn.SetReadDeadline(now.Add(15 * time.Second))
-			p.notify(playerEvent{st, clock.Observe(st.Jiffies, now)})
+			p.stat(st, now)
 		case "SETD":
 			if len(body) > 1 && body[0] == 0 {
 				if name := cleanText(body[1:]); name != "" {
@@ -244,6 +294,12 @@ func (p *Player) writeLoop(conn net.Conn, gain []byte) {
 			return
 		case req = <-p.queue:
 		case <-ticker.C:
+			p.mu.Lock()
+			grouped := p.grouped
+			p.mu.Unlock()
+			if grouped {
+				continue
+			}
 			req.frame = heartbeat
 		}
 		if writePlayer(conn, req.frame) != nil {
