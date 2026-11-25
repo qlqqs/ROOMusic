@@ -1,8 +1,8 @@
-import { ArrowRightLeft, Award, ClipboardCheck, Combine, ConciergeBell, Disc3, Heart, History, LayoutDashboard, ListMusic, MicVocal, Star, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, Award, ClipboardCheck, Combine, Disc3, Heart, History, LayoutDashboard, ListMusic, MicVocal, Sparkles, Star, type LucideIcon } from "lucide-react";
 import type { UserRole } from "../../features/auth";
 
-/** 管家入口的图标（服务铃），宽屏顶栏与窄屏标签栏共用。 */
-export const StewardIcon: LucideIcon = ConciergeBell;
+/** 管家入口的图标（星光，常见的 AI 标识，与“自动补全”同一套），宽屏顶栏与窄屏标签栏共用。 */
+export const StewardIcon: LucideIcon = Sparkles;
 
 export type NavItem = {
   to: "/" | "/albums" | "/artists" | "/me/liked" | "/me/favorites" | "/me/ratings" | "/me/history" | "/me/playlists" | "/issues" | "/claims" | "/artist-candidates";
