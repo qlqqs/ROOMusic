@@ -58,10 +58,9 @@ afterEach(() => {
 });
 
 const sidebarNav = () => within(screen.getAllByRole("navigation", { name: "主导航" })[0] as HTMLElement);
-const findSidebarNav = async () => within((await screen.findAllByRole("navigation", { name: "主导航" }))[0] as HTMLElement);
 
 async function openPanel() {
-  await userEvent.click(await (await findSidebarNav()).findByRole("button", { name: "小蓝" }));
+  await userEvent.click(await screen.findByRole("button", { name: "小蓝" }));
   return within(await screen.findByRole("complementary", { name: "小蓝" }));
 }
 
@@ -81,32 +80,39 @@ function persistedRun(question: string, answer: string) {
 }
 
 describe("管家的入口与名字", () => {
-  it("侧栏“聆听”里是起的名字；点它在当前页面打开或收起面板，面板标题与输入框提示用同一个名字", async () => {
+  it("顶栏管家按钮用设置的名字，在当前页面开合面板；面板标题与输入框提示用同一个名字", async () => {
     setup();
     renderApp({ path: "/" });
     await screen.findByRole("heading", { level: 1, name: "概览" });
-    const entry = await sidebarNav().findByRole("button", { name: "小蓝" });
+    const entry = await screen.findByRole("button", { name: "小蓝" });
+    expect(sidebarNav().queryByRole("button", { name: "小蓝" })).toBeNull();
+    expect(entry.id).toBe("steward-entry");
     expect(entry.getAttribute("aria-expanded")).toBe("false");
     const panel = await openPanel();
     expect(entry.getAttribute("aria-expanded")).toBe("true");
+    expect(entry.getAttribute("aria-controls")).toBe("steward-dock");
+    expect(screen.getByRole("complementary", { name: "小蓝" }).id).toBe("steward-dock");
     expect(panel.getByRole("heading", { level: 2, name: "小蓝" })).toBeTruthy();
     expect(await panel.findByRole("textbox", { name: "问问小蓝" })).toBeTruthy();
     // 当前页面没有变化。
     expect(screen.getByRole("heading", { level: 1, name: "概览" })).toBeTruthy();
     await userEvent.click(entry);
     expect(screen.queryByRole("complementary", { name: "小蓝" })).toBeNull();
+    expect(entry.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("有运行结束后还没看过的会话：入口有提示点（读屏读到数量）；打开会话标记已读后消失", async () => {
     const { state } = setup({ conversations: [conversationOf(id, { title: "后台跑完的", unread: true, messages: persistedRun("问", "答") })] });
     const { history } = renderApp({ path: "/" });
-    const entry = await (await findSidebarNav()).findByRole("button", { name: "小蓝" });
+    const entry = await screen.findByRole("button", { name: "小蓝" });
     await waitFor(() => expect(entry.getAttribute("aria-describedby")).not.toBeNull());
     expect(document.getElementById(entry.getAttribute("aria-describedby") ?? "")?.textContent).toBe("1 个对话有新回答");
 
     await history.push(`/steward/${id}`);
     await waitFor(() => expect(state.reads).toEqual([id]));
-    const link = await sidebarNav().findByRole("link", { name: "小蓝" });
+    const link = await screen.findByRole("link", { name: "小蓝" });
+    expect(link.getAttribute("aria-current")).toBe("page");
+    expect(sidebarNav().queryByRole("link", { name: "小蓝" })).toBeNull();
     await waitFor(() => expect(link.getAttribute("aria-describedby")).toBeNull());
   });
 
@@ -119,7 +125,7 @@ describe("管家的入口与名字", () => {
     await waitFor(() => expect(state.runs).toHaveLength(1));
     const created = state.conversations.find((item) => item.id !== id);
     if (created === undefined) throw new Error("没有创建会话");
-    const entry = sidebarNav().getByRole("button", { name: "小蓝" });
+    const entry = screen.getByRole("button", { name: "小蓝" });
     await userEvent.click(entry);
     expect(screen.queryByRole("complementary", { name: "小蓝" })).toBeNull();
 
@@ -151,7 +157,7 @@ describe("管家的入口与名字", () => {
   it("没起名字时叫“管家”", async () => {
     setup({ settings: settingsOf({ display_name: "" }) });
     renderApp({ path: "/" });
-    expect(await (await findSidebarNav()).findByRole("button", { name: "管家" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "管家" })).toBeTruthy();
   });
 
   it("成员开关关闭时成员看不到入口", async () => {
@@ -160,7 +166,7 @@ describe("管家的入口与名字", () => {
     await screen.findByRole("heading", { level: 1, name: "概览" });
     await waitFor(() => expect(api.requestsTo("GET", "/api/v1/me/steward/settings").length).toBeGreaterThan(0));
     await waitFor(() => expect(sidebarNav().getByRole("link", { name: "艺人" })).toBeTruthy());
-    expect(sidebarNav().queryByRole("button", { name: /管家|小蓝/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^(管家|小蓝)$/ })).toBeNull();
   });
 
   it("成员开关关闭时直接打开地址看到说明", async () => {
@@ -561,14 +567,14 @@ describe("审查后的修正", () => {
     expect(await screen.findByText("管理员暂时关闭了这个功能")).toBeTruthy();
   });
 
-  it("用户打开面板时焦点进输入框；收起后回到侧栏入口", async () => {
+  it("用户打开面板时焦点进输入框；收起后回到顶栏管家按钮", async () => {
     setup();
     renderApp({ path: "/" });
     const panel = await openPanel();
     const input = await panel.findByRole("textbox", { name: "问问小蓝" });
     await waitFor(() => expect(document.activeElement).toBe(input));
     await userEvent.click(panel.getByRole("button", { name: "收起" }));
-    expect(document.activeElement).toBe(sidebarNav().getByRole("button", { name: "小蓝" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "小蓝" }));
   });
 
   it("未配置时焦点移到面板本身", async () => {
@@ -578,41 +584,29 @@ describe("审查后的修正", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("complementary", { name: "小蓝" })));
   });
 
-  it("面板浮在内容上（768–1099px）时按 Esc 收起，焦点回到入口", async () => {
-    const original = window.matchMedia;
-    window.matchMedia = (query: string) => ({ ...original(query), matches: query === "(min-width: 768px) and (max-width: 1099px)" });
-    try {
-      setup();
-      renderApp({ path: "/" });
-      const panel = await openPanel();
-      const input = await panel.findByRole("textbox", { name: "问问小蓝" });
-      await waitFor(() => expect(document.activeElement).toBe(input));
-      await userEvent.keyboard("{Escape}");
-      await waitFor(() => expect(screen.queryByRole("complementary", { name: "小蓝" })).toBeNull());
-      expect(document.activeElement).toBe(sidebarNav().getByRole("button", { name: "小蓝" }));
-    } finally {
-      window.matchMedia = original;
-    }
+  it("焦点在管家卡片内时按 Esc 收起，焦点回到顶栏管家按钮", async () => {
+    setup();
+    renderApp({ path: "/" });
+    const panel = await openPanel();
+    const input = await panel.findByRole("textbox", { name: "问问小蓝" });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("complementary", { name: "小蓝" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "小蓝" }));
   });
 
   it("浮层状态下焦点在面板外时 Esc 归页面自己，不收起面板；输入法组合中的 Esc 也不收起", async () => {
-    const original = window.matchMedia;
-    window.matchMedia = (query: string) => ({ ...original(query), matches: query === "(min-width: 768px) and (max-width: 1099px)" });
-    try {
-      setup();
-      renderApp({ path: "/" });
-      const panel = await openPanel();
-      const input = await panel.findByRole("textbox", { name: "问问小蓝" });
-      await waitFor(() => expect(document.activeElement).toBe(input));
-      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, isComposing: true }));
-      expect(screen.getByRole("complementary", { name: "小蓝" })).toBeTruthy();
-      const search = screen.getAllByRole("combobox")[0] as HTMLElement;
-      search.focus();
-      await userEvent.keyboard("{Escape}");
-      expect(screen.getByRole("complementary", { name: "小蓝" })).toBeTruthy();
-    } finally {
-      window.matchMedia = original;
-    }
+    setup();
+    renderApp({ path: "/" });
+    const panel = await openPanel();
+    const input = await panel.findByRole("textbox", { name: "问问小蓝" });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, isComposing: true }));
+    expect(screen.getByRole("complementary", { name: "小蓝" })).toBeTruthy();
+    const search = screen.getByRole("combobox", { name: "搜索" });
+    search.focus();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("complementary", { name: "小蓝" })).toBeTruthy();
   });
 
   it("面板内容加载期间焦点被挪去别处时，就绪后不抢焦点", async () => {
@@ -631,7 +625,7 @@ describe("审查后的修正", () => {
       return jsonResponse(200, { ...conversationOf(id, { title: "记着的对话" }) });
     });
     runtime.queryClient.removeQueries({ queryKey: ["viewer"], predicate: (query) => query.queryKey.includes("conversation") });
-    await userEvent.click(sidebarNav().getByRole("button", { name: "小蓝" }));
+    await userEvent.click(screen.getByRole("button", { name: "小蓝" }));
     await screen.findByRole("complementary", { name: "小蓝" });
     const search = screen.getAllByRole("combobox")[0] as HTMLElement;
     search.focus();
@@ -661,14 +655,6 @@ describe("审查后的修正", () => {
     expect((await again.findByRole("textbox", { name: "问问小蓝" }) as HTMLTextAreaElement).value).toBe("");
     expect(again.queryByText("没能开始新对话")).toBeNull();
     expect(screen.queryByText("不该留下的草稿")).toBeNull();
-  });
-
-  it("宽屏挤占内容时 Esc 不收起面板", async () => {
-    setup();
-    renderApp({ path: "/" });
-    await openPanel();
-    await userEvent.keyboard("{Escape}");
-    expect(screen.getByRole("complementary", { name: "小蓝" })).toBeTruthy();
   });
 
   it("刷新后进 /steward（面板没有记着会话）：转到列表里最近的会话", async () => {

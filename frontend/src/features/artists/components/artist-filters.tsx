@@ -18,7 +18,8 @@ function validate(text: string): string | null {
 }
 
 /**
- * 艺人列表的工具条：在艺人中筛选（边输入边出结果，一次输入过程只占一条历史，见 FilterField）、一排角色胶囊（单选，“全部”与各角色）与排序菜单；
+ * 艺人列表的工具条：左边一排角色胶囊（单选，“全部”与各角色），右边筛选与排序菜单。筛选平时收成放大镜（全库搜索在顶栏），
+ * 边输入边出结果，一次输入过程只占一条历史（见 FilterField）；
  * 任何一项改变都回到第 1 页。地址里的 release_artist（只匹配发行艺人）没有单独的胶囊，显示在“专辑艺人”下。
  * 换成按专辑数排序时首字母不再适用（列表不分组），一起去掉。
  */
@@ -29,16 +30,6 @@ export function ArtistFilters({ search, rail = false }: { search: ArtistsSearch;
   const selected: ArtistRole | undefined = search.role === "release_artist" ? "album_artist" : search.role;
   return (
     <div role="search" aria-label="筛选艺人" className={styles.toolbar} data-rail={rail ? "" : undefined}>
-      <div className={styles.filter}>
-        <FilterField
-          label="筛选艺人"
-          placeholder="在艺人中筛选"
-          value={search.q}
-          normalize={parseSearchText}
-          validate={validate}
-          onCommit={(q, mode) => go({ ...search, q }, mode === "replace")}
-        />
-      </div>
       <div role="group" aria-label="角色" className={styles.chips}>
         <FilterChip pressed={selected === undefined} onClick={() => go({ ...search, role: undefined })}>
           全部
@@ -49,7 +40,16 @@ export function ArtistFilters({ search, rail = false }: { search: ArtistsSearch;
           </FilterChip>
         ))}
       </div>
-      <span className={styles.sort}>
+      <div className={styles.end}>
+        <FilterField
+          label="筛选艺人"
+          placeholder="在艺人中筛选"
+          value={search.q}
+          normalize={parseSearchText}
+          validate={validate}
+          onCommit={(q, mode) => go({ ...search, q }, mode === "replace")}
+          collapsible
+        />
         <SortMenu
           options={sortOptions}
           value={search.sort ?? "name"}
@@ -58,7 +58,7 @@ export function ArtistFilters({ search, rail = false }: { search: ArtistsSearch;
             go({ ...search, sort, initial: sort === undefined ? search.initial : undefined });
           }}
         />
-      </span>
+      </div>
     </div>
   );
 }

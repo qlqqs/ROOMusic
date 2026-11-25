@@ -1,6 +1,7 @@
 import { CircleAlert, Search, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "./button";
+import { useTooltip } from "./tooltip";
 import styles from "./filter-field.module.css";
 
 /** 写入地址的方式：一次输入过程的第一次写入新增一条历史，之后替换它。 */
@@ -19,6 +20,11 @@ type FilterFieldProps = {
   validate?: (text: string) => string | null;
   /** 写入地址：mode 是新增还是替换历史。 */
   onCommit: (value: string | undefined, mode: FilterCommitMode) => void;
+  /**
+   * 平时收成放大镜图标（列表页用：全库搜索在顶栏，这里只筛当前列表，外观上不要像第二个搜索框）。
+   * 聚焦、框里有字或有说明时展开；空着失焦、或空着按 Esc 时收回。收起时输入框仍在原处，Tab 与点击照常进入。
+   */
+  collapsible?: boolean;
 };
 
 /** 停止输入多久之后写入地址。 */
@@ -32,7 +38,7 @@ const COMMIT_DELAY_MS = 250;
  * 地址变化（后退、前进、别处改了筛选词）时输入框跟着地址走，还没写入的输入随之放弃。
  * 不合格的输入（validate 给出说明）不写入、也不静默丢弃，说明显示在框下方并与输入框关联。
  */
-export function FilterField({ label, placeholder, value, normalize, validate, onCommit }: FilterFieldProps) {
+export function FilterField({ label, placeholder, value, normalize, validate, onCommit, collapsible = false }: FilterFieldProps) {
   const id = useId();
   const errorId = `${id}-error`;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +51,9 @@ export function FilterField({ label, placeholder, value, normalize, validate, on
   const [awaiting, setAwaiting] = useState<{ value: string | undefined } | null>(null);
   // 这次输入过程是否已经新增过一条历史。
   const [inSession, setInSession] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const collapsed = collapsible && !focused && draft === "" && error === null;
+  const tip = useTooltip(collapsed ? label : undefined);
 
   if (seen !== value) {
     setSeen(value);
@@ -109,17 +118,21 @@ export function FilterField({ label, placeholder, value, normalize, validate, on
     } else if (event.key === "Escape" && draft !== "") {
       event.preventDefault();
       clear();
+    } else if (event.key === "Escape" && collapsible) {
+      event.preventDefault();
+      inputRef.current?.blur();
     }
   }
 
   function onBlur() {
+    setFocused(false);
     // 离开输入框：还在等待的输入立即写入；之后的输入是新的过程。
     if (timer.current !== undefined) commit(draft);
     setInSession(false);
   }
 
   return (
-    <div className={styles.field}>
+    <div className={styles.field} data-collapsible={collapsible ? "" : undefined} data-collapsed={collapsed ? "" : undefined}>
       <label htmlFor={id} className={styles.label}>
         {label}
       </label>
@@ -140,8 +153,11 @@ export function FilterField({ label, placeholder, value, normalize, validate, on
           aria-describedby={error === null ? undefined : errorId}
           onChange={(event) => change(event.target.value)}
           onKeyDown={onKeyDown}
+          onFocus={() => setFocused(true)}
           onBlur={onBlur}
+          {...tip.triggerProps}
         />
+        {tip.tooltip}
         {draft === "" ? null : (
           <span className={styles.clear}>
             {/* 按下 × 不让输入框失去焦点：否则失焦会先把还在等待的输入写进地址，再被清除，多出一条历史。 */}

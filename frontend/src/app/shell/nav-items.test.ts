@@ -18,7 +18,7 @@ describe("聆听、我的音乐与管理导航", () => {
       ...(role === "admin" ? [{ label: "管理", items: ["元数据", "待认领"] }] : []),
     ]);
   });
-  it.each(["user", "admin"] as const)("读到管家设置时 %s 的“聆听”里有管家入口，排在艺人之后", (role) => {
-    expect(visibleNavGroups(role, { steward: true })[0]?.items.map((item) => item.label)).toEqual(["概览", "专辑", "艺人", "管家"]);
+  it.each(["user", "admin"] as const)("%s 的侧栏导航里没有管家入口（宽屏在顶栏）", (role) => {
+    expect(visibleNavGroups(role)[0]?.items.map((item) => item.label)).toEqual(["概览", "专辑", "艺人"]);
   });
 });

@@ -1,6 +1,6 @@
 /*
- * 列表页工具条（与专辑列表的 album-filters 同一套）：筛选框、角色胶囊、排序一行，排序靠右；窄时换行，筛选框占满一行，
- * 胶囊一行横向滚动（不换成好几行）。
+ * 列表页工具条（与专辑列表的 album-filters 同一套）：左边角色胶囊，右边筛选（平时是放大镜）与排序；
+ * 窄时胶囊占满一行并横向滚动（不换成好几行），筛选与排序在下一行靠右。
  */
 .toolbar {
   display: flex;
@@ -10,10 +10,6 @@
   min-width: 0;
 }
 
-.filter {
-  flex: 0 1 260px;
-  min-width: 0;
-}
 
 .chips {
   display: flex;
@@ -22,16 +18,30 @@
   min-width: 0;
 }
 
-.sort {
-  display: inline-flex;
+/* 筛选框下面出现说明时，排序与输入框仍顶部对齐。 */
+.end {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
   margin-inline-start: auto;
 }
 
-@media (max-width: 767px) {
-  .filter {
-    flex-basis: 100%;
-  }
+/* 排序菜单不收缩，只有筛选框让宽度。 */
+.end > :last-child {
+  flex: none;
+  white-space: nowrap;
+}
 
+/* 手机上右边一组占满这一行剩下的宽度：筛选展开时在原地收窄，不把自己挤到下一行。 */
+@media (max-width: 767px) {
+  .end {
+    flex: 1 1 0;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 767px) {
   /* 胶囊一行，横向滚动到页面两边；里面的按钮都能 Tab 到，滚动区不另加 tabindex。 */
   .chips {
     flex: 1 1 100%;

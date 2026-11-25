@@ -1,11 +1,10 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useId, useState } from "react";
 import type { UserRole } from "../../features/auth";
 import { useCatalogState } from "../../features/catalog";
 import { useCachedTodoCounts } from "../../features/governance";
 import { PlaylistCover, usePlaylists } from "../../features/personal";
-import { toggleDock, useDockState, useStewardEntry } from "../../features/steward";
 import { formatCount } from "../../shared/lib/number";
 import { Button } from "../../shared/ui";
 import { NewPlaylistButton } from "./new-playlist-button";
@@ -19,28 +18,20 @@ export function useArtistsAvailable(): boolean {
   return artistsState === "preparing" || artistsState === "ready";
 }
 
-/** 停靠面板的元素 ID：侧栏入口的 aria-controls 指向它。 */
-export const STEWARD_DOCK_ID = "steward-dock";
-/** 侧栏的管家入口：面板收起后焦点回到这里。 */
-export const STEWARD_ENTRY_ID = "steward-entry";
-
 /** 主导航：导航用链接，当前页由 aria-current 表达。 */
 export function PrimaryNav({ role }: { role: UserRole }) {
   const artists = useArtistsAvailable();
-  const steward = useStewardEntry();
   const todoCounts = useCachedTodoCounts();
   const nowPlaying = useNowPlayingOrigin();
   return (
     <nav className={styles.nav} aria-label="主导航">
-      {visibleNavGroups(role, { artists, steward: steward.available }).map((group) => (
+      {visibleNavGroups(role, { artists }).map((group) => (
         <div key={group.label ?? "default"} className={styles.group}>
           {group.label === null ? null : <p className={styles.groupLabel}>{group.label}</p>}
           <ul className={styles.list}>
             {group.items.map((item) =>
               item.playlists === true ? (
                 <PlaylistsNavItem key={item.to} item={item} nowPlaying={nowPlaying} />
-              ) : item.steward === true ? (
-                <StewardNavItem key={item.to} item={item} name={steward.name} unread={steward.unread} />
               ) : (
                 <NavLinkItem
                   key={item.to}
@@ -108,50 +99,6 @@ function NavLinkItem({ item, count, marker }: { item: NavItem; count: number | n
 /** 入口提示点的说明（读屏经 aria-describedby 读到；提示点本身是装饰）。 */
 export function stewardUnreadText(count: number): string {
   return `${formatCount(count)} 个对话有新回答`;
-}
-
-/**
- * 管家入口：名字取自设置。在别的页面上点它是在当前页面打开或收起右侧面板（按钮，aria-expanded 表达开合）；
- * 在整页对话里它是当前项（链接）。有运行结束后还没打开看过的会话（C10）时名字右侧有提示点，数量经 aria-describedby 说明。
- */
-function StewardNavItem({ item, name, unread }: { item: NavItem; name: string; unread: number }) {
-  const onPage = useRouterState({ select: (state) => state.location.pathname === "/steward" || state.location.pathname.startsWith("/steward/") });
-  const dock = useDockState();
-  const descriptionId = useId();
-  const described = unread > 0 ? descriptionId : undefined;
-  const content = (
-    <>
-      <item.icon size={18} aria-hidden="true" />
-      <span className={styles.label}>{name}</span>
-      {unread > 0 ? <span className={styles.dot} aria-hidden="true" /> : null}
-    </>
-  );
-  return (
-    <li>
-      {onPage ? (
-        <Link to="/steward" className={styles.link} aria-current="page" aria-describedby={described}>
-          {content}
-        </Link>
-      ) : (
-        <button
-          type="button"
-          id={STEWARD_ENTRY_ID}
-          className={styles.link}
-          aria-expanded={dock.open}
-          aria-controls={dock.open ? STEWARD_DOCK_ID : undefined}
-          aria-describedby={described}
-          onClick={toggleDock}
-        >
-          {content}
-        </button>
-      )}
-      {unread > 0 ? (
-        <span id={descriptionId} hidden>
-          {stewardUnreadText(unread)}
-        </span>
-      ) : null}
-    </li>
-  );
 }
 
 // 展开状态是这个浏览器的偏好，默认展开。

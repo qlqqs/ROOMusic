@@ -6,6 +6,9 @@
   min-height: 0;
   padding: var(--space-3) var(--space-2);
   overflow-y: auto;
+  /* 细滚动条，指针停在上面或焦点在里面时才显出滑块（同外壳的主内容区）。 */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
 
 .sessions > button {
@@ -116,4 +119,8 @@
   padding: 0 var(--space-3);
   color: var(--text-secondary);
   font-size: var(--fs-13);
+}
+
+.sessions:is(:hover, :focus-within) {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }

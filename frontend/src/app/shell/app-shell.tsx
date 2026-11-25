@@ -20,18 +20,15 @@ const renderQueueActions = (tracks: readonly PlayerTrack[]) => <SaveQueueAsPlayl
 import { LazyPage } from "../routes/lazy-page";
 import { Brand } from "./brand";
 import { PlaybackOriginProvider } from "./playback-origin";
-import { PrimaryNav, STEWARD_DOCK_ID, STEWARD_ENTRY_ID } from "./primary-nav";
+import { PrimaryNav } from "./primary-nav";
 import { StewardHostScope } from "./steward-host";
 import { TabBar } from "./tab-bar";
 import { useCatalogEpochSync } from "./use-catalog-epoch-sync";
-import { UserMenu } from "./user-menu";
+import { STEWARD_DOCK_ID, STEWARD_ENTRY_ID, TopBar } from "./top-bar";
 
 /** 与外壳样式表的断点一致：窄于 768px 时没有侧栏，底部是标签栏。 */
 const NARROW = "(max-width: 767px)";
-/** 管家面板浮在主内容上的宽度区间（与外壳样式表一致）：这时按 Esc 收起面板。 */
-const DOCK_OVERLAY = "(min-width: 768px) and (max-width: 1099px)";
-
-/** 面板内容加载期间用户没有把焦点挪去别处（仍在侧栏入口或没有焦点）：面板就绪后才可以把焦点移进去。 */
+/** 卡片内容加载期间用户没有把焦点挪去别处（仍在顶栏的管家按钮或没有焦点）：卡片就绪后才可以把焦点移进去。 */
 function focusStillOnEntry(): boolean {
   const active = document.activeElement;
   return active === null || active === document.body || active.id === STEWARD_ENTRY_ID;
@@ -62,10 +59,10 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * 已登录界面的外壳。≥768px：左侧导航与主内容各自滚动，当前用户（齿轮进设置、“更多”里是账号与退出登录）固定在侧栏底部；
+ * 已登录界面的外壳。≥768px：左侧是品牌与导航，主内容上方是顶栏（全局搜索、管家按钮、当前用户的头像菜单），侧栏与主内容各自滚动，播放栏通栏在底部；
  * <768px：顶部栏是品牌与搜索按钮（打开搜索对话框），底部是标签栏（概览、专辑、艺人、管家、我的），迷你播放栏浮在标签栏上方，页面只有一个滚动区。
  * 导航切换页面后，焦点回到主内容区，读屏用户得到页面变化的反馈。
- * 管家的停靠面板（侧栏入口开合）：≥1100px 在主内容右侧占一列，768–1099px 浮在主内容上，<768px 与整页对话里不显示；
+ * 管家卡片（顶栏的管家按钮开合）：≥768px 浮在主内容右侧，从顶栏下方到播放栏上方，不加遮罩、不挤占内容；<768px 与整页对话里不显示；
  * 面板与整页对话的页面上下文、个人数据的刷新由 StewardHostScope 交给管家。
  */
 export function AppShell({ children }: { children: ReactNode }) {
@@ -104,16 +101,15 @@ function ShellFrame({ children }: { children: ReactNode }) {
   const dock = useDockState();
   const steward = useStewardEntry();
   const showDock = dock.open && steward.available && !narrow && pathname !== "/steward" && !pathname.startsWith("/steward/");
-  const dockOverlay = useMediaQuery(DOCK_OVERLAY);
-  // 收起面板：焦点回到侧栏入口。
+  // 收起卡片：焦点回到顶栏的管家按钮。
   const closeDock = useCallback(() => {
     setDockOpen(false);
     document.getElementById(STEWARD_ENTRY_ID)?.focus();
   }, []);
-  // 浮层状态下、焦点在面板里时按 Esc 收起。焦点在面板外时 Esc 归页面自己（提示、专辑详情等），不同时收起面板；
+  // 焦点在卡片里时按 Esc 收起。焦点在卡片外时 Esc 归页面自己（提示、专辑详情等），不同时收起卡片；
   // 输入法组合中的 Esc、菜单与对话框已经处理过的 Esc（preventDefault，或有打开的模态对话框）也不算。
   useEffect(() => {
-    if (!showDock || !dockOverlay) return;
+    if (!showDock) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.isComposing || event.defaultPrevented || document.querySelector("dialog[open]") !== null) return;
       if (!(event.target instanceof Node && document.getElementById(STEWARD_DOCK_ID)?.contains(event.target))) return;
@@ -121,7 +117,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [showDock, dockOverlay, closeDock]);
+  }, [showDock, closeDock]);
   // 在结果页时，搜索框显示地址里的查询词；别的页面（包括专辑页自己的搜索）不带过来。
   const searchQuery = useRouterState({ select: (state) => (state.location.pathname === "/search" ? state.location.search.q : undefined) });
   useCatalogEpochSync();
@@ -182,13 +178,12 @@ function ShellFrame({ children }: { children: ReactNode }) {
       </header>
       <div className={styles.sidebar}>
         <Brand />
-        <GlobalSearchBox currentQuery={searchQuery} />
         <div className={styles.sidebarNav}>
           <PrimaryNav role={viewer.role} />
         </div>
-        <div className={styles.identity}>
-          <UserMenu />
-        </div>
+      </div>
+      <div className={styles.deskbar}>
+        <TopBar searchQuery={searchQuery} />
       </div>
       <main id="main" ref={mainRef} tabIndex={-1} className={styles.main}>
         {children}

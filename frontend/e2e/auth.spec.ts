@@ -3,7 +3,7 @@ import { artistKeyActivate as keyActivate, artistTabTo as keyboardTabTo } from "
 import { expectFocusStaysInDialog } from "./support/keyboard";
 import { expect, test } from "./support/fixtures";
 import { heading } from "./support/locators";
-import { logoutFromMenu, openSettings, settingsLink, tabBar, userTrigger } from "./support/settings";
+import { logoutFromMenu, openSettings, tabBar, userTrigger } from "./support/settings";
 
 test.describe("初始化、登录与退出", () => {
   test("初始化后自动登录：创建管理员 → 登录 → 概览，密码不出现在页面上", async ({ page, backend }) => {
@@ -29,7 +29,7 @@ test.describe("初始化、登录与退出", () => {
     await page.getByLabel("密码").fill("curator-password");
     await page.getByRole("button", { name: "登录" }).click();
     await expect(heading(page, "概览")).toBeVisible();
-    await expect(page.getByRole("region", { name: "当前用户" })).toContainText("curator");
+    await expect(userTrigger(page)).toHaveAccessibleName("curator，管理员");
 
     await page.reload();
     await expect(heading(page, "概览")).toBeVisible();
@@ -131,7 +131,7 @@ test.describe("权限", () => {
     await expect(heading(page, "音乐目录")).toBeVisible();
     await expect(page.getByRole("alert").filter({ hasText: "你没有权限执行此操作。" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "主导航" })).toBeVisible();
-    await expect(page.getByRole("region", { name: "当前用户" })).toContainText("curator");
+    await expect(userTrigger(page)).toHaveAccessibleName("curator，管理员");
   });
 
   test("未知路径：已登录显示在外壳里的“页面不存在”，未登录先去登录", async ({ page, backend }) => {
@@ -182,7 +182,7 @@ test.describe("账户密码：自助修改", () => {
     await keyActivate(page, done);
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();
-    await expect(page.getByRole("region", { name: "当前用户" })).not.toContainText("密码已修改。");
+    await expect(page.getByText("密码已修改。", { exact: true })).toHaveCount(0);
     await expect(heading(page, "账号")).toBeVisible();
     await expect(page).toHaveURL(originalURL);
     expect(mock.session).toBe("listener");
@@ -198,7 +198,7 @@ test.describe("账户密码：自助修改", () => {
     await expect(page.locator("body")).not.toContainText(changedPassword);
     await page.reload();
     await expect(heading(page, "账号")).toBeVisible();
-    await expect(page.getByRole("region", { name: "当前用户" })).toContainText("listener");
+    await expect(userTrigger(page)).toHaveAccessibleName("listener，成员");
   });
 
   for (const closeWith of ["完成", "Esc"] as const) {
@@ -217,7 +217,6 @@ test.describe("账户密码：自助修改", () => {
       else await page.keyboard.press("Escape");
       await expect(passwordDialog(page)).toBeHidden();
       await expect(trigger).toBeFocused();
-      await expect(page.getByRole("region", { name: "当前用户" })).not.toContainText("密码已修改。");
       await expect(page.getByText("密码已修改。", { exact: true })).toHaveCount(0);
       await expectLogoutInViewport(page);
       await page.keyboard.press("Enter");
@@ -306,33 +305,39 @@ test.describe("账户密码：自助修改", () => {
 
 });
 
-test.describe("侧栏底部的当前用户", () => {
-  test("齿轮一步进设置；“账号”菜单向上展开、完整键盘循环和 Esc 恢复焦点；设置分栏只在设置页出现", async ({ page, backend }) => {
+test.describe("顶栏头像菜单", () => {
+  test("头像菜单向下展开、完整键盘循环与 Esc 恢复焦点；选择设置后显示设置分栏", async ({ page, backend }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await backend.start({ signedInAs: "curator" });
     await page.goto("/");
     await expect(heading(page, "概览")).toBeVisible();
-    const identity = page.getByRole("region", { name: "当前用户" });
-    await expect(identity).toContainText("curator");
-    await expect(identity).toContainText("管理员");
-    await expect(identity.locator('[aria-hidden="true"]').filter({ hasText: "C" })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: /^(音乐目录|成员|自动整理|操作记录|备份)$/ })).toHaveCount(0);
-    await expect(settingsLink(page)).not.toHaveAttribute("aria-current", "page");
     const trigger = userTrigger(page);
+    await expect(trigger).toHaveAccessibleName("curator，管理员");
+    await expect(trigger).toHaveText("C");
+    await expect(trigger.locator('[aria-hidden="true"]').filter({ hasText: "C" })).toBeVisible();
+    await expect(page.getByText("curator", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: /^(音乐目录|成员|自动整理|操作记录|备份)$/ })).toHaveCount(0);
+    const settingsNav = page.getByRole("navigation", { name: "设置", exact: true });
+    await expect(settingsNav).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "设置", exact: true })).toHaveCount(0);
     await keyActivate(page, trigger, "ArrowDown");
     const menu = page.getByRole("menu", { name: "账号", exact: true });
     const account = menu.getByRole("menuitem", { name: "账号", exact: true });
+    const settings = menu.getByRole("menuitem", { name: "设置", exact: true });
     const logout = menu.getByRole("menuitem", { name: "退出登录", exact: true });
-    await expect(menu.getByRole("menuitem")).toHaveText(["账号", "退出登录"]);
+    await expect(menu.getByRole("group", { name: "curator", exact: true }).getByRole("menuitem")).toHaveText(["账号", "设置"]);
+    await expect(menu.getByRole("menuitem")).toHaveText(["账号", "设置", "退出登录"]);
     await expect(account).toBeFocused();
     const menuBounds = await menu.boundingBox();
     const triggerBounds = await trigger.boundingBox();
-    if (menuBounds === null || triggerBounds === null) throw new Error("菜单与“账号”按钮必须有边界");
-    expect(menuBounds.y + menuBounds.height).toBeLessThanOrEqual(triggerBounds.y);
+    if (menuBounds === null || triggerBounds === null) throw new Error("菜单与头像按钮必须有边界");
+    expect(menuBounds.y).toBeGreaterThanOrEqual(triggerBounds.y + triggerBounds.height);
     await page.keyboard.press("ArrowUp");
     await expect(logout).toBeFocused();
     await page.keyboard.press("Home");
     await expect(account).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(settings).toBeFocused();
     await page.keyboard.press("End");
     await expect(logout).toBeFocused();
     await page.keyboard.press("ArrowDown");
@@ -342,8 +347,8 @@ test.describe("侧栏底部的当前用户", () => {
     await expect(trigger).toBeFocused();
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await openSettings(page);
-    await expect(settingsLink(page)).toHaveAttribute("aria-current", "page");
-    await expect(page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link")).toHaveText(["账号", "播放", "Agent", "关于", "音乐目录", "成员", "自动整理", "局域网设备", "操作记录", "备份", "匿名统计"]);
+    await expect(settingsNav.getByRole("link", { name: "账号", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(settingsNav.getByRole("link")).toHaveText(["账号", "播放", "Agent", "关于", "音乐目录", "成员", "自动整理", "局域网设备", "操作记录", "备份", "匿名统计"]);
   });
 
   test("退出失败留在当前页面，菜单关闭且提示重试后才真正退出", async ({ page, backend }) => {
@@ -353,14 +358,19 @@ test.describe("侧栏底部的当前用户", () => {
     const originalURL = page.url();
     await page.route("**/api/v1/auth/logout", (route) => route.fulfill({ status: 503, json: { error: { code: "database_unavailable", message: "服务暂时不可用" }, request_id: "logout-test" } }), { times: 1 });
     await logoutFromMenu(page);
-    const identity = page.getByRole("region", { name: "当前用户" });
-    await expect(identity.getByRole("alert")).toContainText("退出失败");
-    await expect(identity.getByRole("button", { name: "重试", exact: true })).toBeVisible();
+    const alert = page.getByRole("alert").filter({ hasText: "退出失败" });
+    await expect(alert).toBeVisible();
+    const retry = alert.getByRole("button", { name: "重试", exact: true });
+    await expect(retry).toBeVisible();
     await expect(page.getByRole("menu", { name: "账号", exact: true })).toBeHidden();
     await expect(userTrigger(page)).toBeFocused();
+    const alertBounds = await alert.boundingBox();
+    const triggerBounds = await userTrigger(page).boundingBox();
+    if (alertBounds === null || triggerBounds === null) throw new Error("退出失败提示与头像按钮必须有边界");
+    expect(alertBounds.y).toBeGreaterThanOrEqual(triggerBounds.y + triggerBounds.height);
     await expect(page).toHaveURL(originalURL);
     expect(mock.session).toBe("curator");
-    await identity.getByRole("button", { name: "重试", exact: true }).click();
+    await retry.click();
     await expect(heading(page, "登录")).toBeVisible();
     expect(mock.session).toBeNull();
   });

@@ -1,77 +1,45 @@
-.panel {
-  display: grid;
-  gap: var(--space-3);
-  min-width: 0;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-divider);
-}
-
-/* 头像、用户名与角色、齿轮与“更多”。用户名单行显示，放不下时省略号截断。 */
-.row {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-  padding-left: var(--space-2);
-}
-
-.row[aria-busy="true"] {
-  cursor: progress;
-}
-
-.who {
-  display: grid;
-  flex: 1 1 auto;
-  min-width: 0;
-  margin-left: 8px;
-  line-height: 1.3;
-}
-
-.name {
-  overflow: hidden;
-  font-size: var(--fs-14);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.role {
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: var(--fs-12);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 齿轮是去设置页的链接，外观同只有图标的按钮；在设置页时用强调色与轻底。 */
-.iconLink {
+/* 头像按钮：32px 圆形命中区，悬停与菜单打开时一圈浅底。 */
+.trigger {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
   width: var(--control-height);
   height: var(--control-height);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  transition:
-    background-color 0.12s ease,
-    color 0.12s ease;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
 }
 
-.iconLink:hover {
+.trigger:hover,
+.trigger[aria-expanded="true"] {
   background: var(--color-hover);
-  color: var(--text-primary);
 }
 
-.iconLink:active {
-  background: var(--color-pressed);
-}
-
-.iconLink:focus-visible {
+.trigger:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
-.iconLink[aria-current="page"] {
-  background: var(--color-selected);
-  color: var(--text-accent);
+.trigger[aria-busy="true"] {
+  cursor: progress;
+}
+
+/* 退出失败的提示：浮在头像下方，右缘对齐，不改变顶栏高度。 */
+.error {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: var(--space-4);
+  z-index: 20;
+  width: min(360px, calc(100vw - 2 * var(--space-4)));
+  box-shadow: var(--shadow-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trigger {
+    transition: none;
+  }
 }

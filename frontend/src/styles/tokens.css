@@ -105,11 +105,13 @@
   --layout-page-inset-x: 32px;
   --layout-page-inset-y: 24px;
   --layout-topbar-height: 52px;
+  /* 宽屏（≥768px）主内容上方的顶栏：全局搜索、管家按钮与头像。 */
+  --layout-deskbar-height: 56px;
   /* 元数据页的列表栏（两栏时）；详情最宽 860px，容器窄于约 900px 时改为顺序导航。 */
   --layout-issue-list-width: 380px;
   /* 设置页的左侧分栏（视口 ≥1024px 时）。 */
   --layout-settings-nav-width: 176px;
-  /* 管家：右侧停靠面板（视口 ≥1100px 时挤占内容，768–1099px 浮在内容上）与整页的会话列表。 */
+  /* 管家：浮起的卡片（≥768px，浮在主内容右侧）与整页的会话列表。 */
   --layout-steward-width: 390px;
   --layout-session-width: 248px;
 

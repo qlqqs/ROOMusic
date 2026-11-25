@@ -87,6 +87,37 @@
   }
 }
 
+/*
+ * 可收起（列表页）：收起时宽同图标按钮、透明底，悬停是按钮的悬停底色，放大镜居中；展开时宽 240px（放不下时随容器收窄）。
+ * 不做宽度过渡：输入框宽度变化的过程中写入的文字（输入法上屏、粘贴）在 Chromium 里光标会回到开头，字序颠倒。
+ */
+.field[data-collapsible] {
+  width: 240px;
+  max-width: 100%;
+}
+
+.field[data-collapsed] {
+  width: var(--control-height);
+}
+
+.field[data-collapsed] .icon {
+  inset-inline-start: calc((var(--control-height) - 16px) / 2);
+}
+
+.field[data-collapsed] .input {
+  padding-inline: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.field[data-collapsed] .input:hover {
+  background: var(--color-hover);
+}
+
+.field[data-collapsed] .input::placeholder {
+  color: transparent;
+}
+
 .error {
   display: flex;
   align-items: flex-start;

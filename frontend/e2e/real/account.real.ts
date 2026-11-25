@@ -82,7 +82,7 @@ test("真实账户 V1：自助改密码保留当前设备、撤销另一设备�
     await expect(dialog).toBeHidden();
     const trigger = page.getByRole("button", { name: "修改密码", exact: true });
     await expect(trigger).toBeFocused();
-    await expect(page.getByRole("region", { name: "当前用户" })).not.toContainText("密码已修改。");
+    await expect(page.getByText("密码已修改。", { exact: true })).toHaveCount(0);
     await trigger.click();
     for (const label of ["当前密码", "新密码", "确认新密码"]) await expect(dialog.getByLabel(label, { exact: true })).toHaveValue("");
     await page.keyboard.press("Escape");
