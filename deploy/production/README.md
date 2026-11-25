@@ -144,12 +144,32 @@ curl -fL -o compose.bridge.yaml https://raw.githubusercontent.com/qlqqs/ROOMusic
 
 | 入站端口 | 使用场景 |
 | --- | --- |
-| TCP `ROOMUSIC_HTTP_PORT`（默认 8090） | UPnP 和 Cast 接收端从 ROOMusic 拉取音频 |
+| TCP `ROOMUSIC_HTTP_PORT`（默认 8090） | UPnP、Cast 接收端与 SlimProto 播放器从 ROOMusic 拉取音频 |
 | UDP 5353 | AirPlay 和 Cast 的 mDNS 组播发现与应答 |
 | UDP 1900 | UPnP 设备的 SSDP 组播公告 |
 | UDP 临时端口 | UPnP 设备向 M-SEARCH 的源端口发送单播回包。只放行目的端口 1900 会漏掉这些回包 |
 | UDP 随机高端口 | AirPlay 在会话建立时协商本机计时和控制端口，接收端向这些端口发送计时请求和重传请求 |
 | UDP 319、320 | AirPlay 使用 PTP 精密计时时，分别接收事件报文和通用报文 |
+| TCP 3483、UDP 3483 | SlimProto 播放器（Squeezelite）连接控制端口；UDP 用于播放器广播查找服务器 |
+
+### Squeezelite 播放器（SlimProto）
+
+在“设置 › 局域网设备”打开 SlimProto 后，ROOMusic 在 TCP/UDP 3483 上等待播放器连接。piCorePlayer、moOde 等系统里的 Squeezelite 会自动查找服务器；
+它已经配置成连接别的服务器（例如 Lyrion Music Server）时，把服务器地址改成这台机器的局域网 IP。同机已经运行 Lyrion Music Server 时 3483 被占用，
+设置页会提示端口被占用，停掉它后自动恢复。
+
+USB 解码器直接插在这台机器上时，可以在 ROOMusic 旁边运行一个 Squeezelite 容器，让解码器成为一台 SlimProto 设备。在部署目录里：
+
+```bash
+curl -fL -o compose.squeezelite.yaml https://raw.githubusercontent.com/qlqqs/ROOMusic/main/deploy/production/compose.squeezelite.yaml
+curl -fL -o squeezelite.Dockerfile https://raw.githubusercontent.com/qlqqs/ROOMusic/main/deploy/production/squeezelite.Dockerfile
+docker build -f squeezelite.Dockerfile -t roomusic-squeezelite:2.0.0-1613 .
+docker compose -f compose.yaml -f compose.squeezelite.yaml up -d
+```
+
+镜像从固定的 Squeezelite 上游提交在本机编译，不需要另找第三方镜像；已有带 Squeezelite 的镜像时，把 `ROOMUSIC_SQUEEZELITE_IMAGE` 设成它，跳过构建。
+
+容器使用 host 网络并映射 `/dev/snd`；`ROOMUSIC_SQUEEZELITE_OUTPUT` 是 ALSA 输出设备名（`squeezelite -l` 可以列出），`ROOMUSIC_SQUEEZELITE_NAME` 是设备列表里显示的名称。
 
 ## 4. 备份与恢复
 
