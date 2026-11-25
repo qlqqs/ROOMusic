@@ -51,7 +51,7 @@ export function sourceInactiveText(reason: SourceInactiveReason | null): string 
     case "bundled_key_rejected":
       return "ROOMusic 内置的应用密钥被 AcoustID 拒绝了，升级到新版本后恢复。";
     case "key_missing":
-      return "填入密钥后可用。";
+      return "填好下面的密钥后才能用。";
     case "key_invalid":
       return "密钥无效，请重新填写。";
     case "search_unconfigured":

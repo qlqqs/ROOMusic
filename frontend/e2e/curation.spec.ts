@@ -57,10 +57,12 @@ for (const width of [1440, 375, 390]) {
     await expectMinimumFontSize(page, `自动整理 ${width}`);
     await page.screenshot({ path: `/tmp/roomusic-e1-curation-${width}.png`, fullPage: true });
 
-    // AcoustID 的两把密钥：输入框与保存后的末四位都不撑出横向滚动。
+    // AcoustID 的两把密钥：点“填写”展开的输入框与保存后的末四位都不撑出横向滚动。
     const sources = page.getByRole("region", { name: "外部源", exact: true });
     for (const [label, value] of [["应用密钥", "abcdEFGH1234"], ["用户密钥", "userKEY9876"]] as const) {
+      await sources.getByRole("button", { name: `填写 AcoustID 的${label}` }).click();
       const form = sources.getByRole("form", { name: `AcoustID 的${label}` });
+      await expectNoHorizontalOverflow(page, `${label}输入框 ${width}`);
       await form.getByRole("textbox").fill(value);
       await form.getByRole("button", { name: "保存" }).click();
     }

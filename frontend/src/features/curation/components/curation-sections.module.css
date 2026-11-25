@@ -1,4 +1,8 @@
 /* 只读的值：等宽数字，长值完整显示并换行。 */
+.value[data-empty] {
+  color: var(--text-secondary);
+}
+
 .value {
   font-size: var(--fs-13);
   font-variant-numeric: tabular-nums;
@@ -65,6 +69,12 @@
 }
 
 /* 没有行尾菜单的源占一个菜单按钮的宽度，让各行的开关对齐。 */
+/* 源或密钥这一行自己不能用的原因：另起一行，比说明深一级，不用警示红（密钥没填不是错误）。 */
+.reason {
+  display: block;
+  color: var(--text-primary);
+}
+
 .menuSpacer {
   display: block;
   inline-size: var(--control-height);

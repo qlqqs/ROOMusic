@@ -153,7 +153,7 @@ describe("进度", () => {
 });
 
 describe("外部源", () => {
-  it("总开关关着时在分组层面说明；开关即改即存，关着的源写出原因", async () => {
+  it("总开关关着时在分组层面说明；开关即改即存，关着的源不另写原因", async () => {
     const { api, curation } = setup();
     const user = userEvent.setup();
     renderApp({ path: "/settings/curation" });
@@ -162,7 +162,9 @@ describe("外部源", () => {
     enableCuration(curation);
     await user.click(await within(sources).findByRole("switch", { name: "LRCLIB" }));
     await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/sources/lrclib")[0]?.body).toEqual({ enabled: false }));
-    expect(await within(sources).findByText("歌词；已关闭，后台不使用它。")).toBeTruthy();
+    const lrclib = within(sources).getByRole<HTMLInputElement>("switch", { name: "LRCLIB" });
+    await waitFor(() => expect(lrclib.checked).toBe(false));
+    expect(document.getElementById(lrclib.getAttribute("aria-describedby") ?? "")?.textContent).toBe("歌词");
   });
 
   it("按来源撤销：确认后分段撤销直到做完，结果写出撤了多少；查看改动进入按来源筛选的操作记录", async () => {
@@ -213,25 +215,32 @@ describe("AcoustID 与两把密钥", () => {
     const user = userEvent.setup();
     renderApp({ path: "/settings/curation" });
     const sources = await group("外部源");
-    expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；填入密钥后可用。")).toBeTruthy();
+    expect(await within(sources).findByText("填好下面的密钥后才能用。")).toBeTruthy();
     expect(within(sources).queryByRole("button", { name: "AcoustID 的更多操作" })).toBeNull();
+    // 没填的密钥收成“未填写”与“填写”，点了才有输入框，焦点进输入框。
+    expect(within(sources).queryByRole("form")).toBeNull();
+    expect(within(sources).getAllByText("未填写")).toHaveLength(2);
     expect(within(sources).getByRole("link", { name: "注册一个应用" }).getAttribute("href")).toBe("https://acoustid.org/new-application");
     expect(within(sources).getByRole("link", { name: "这个页面" }).getAttribute("href")).toBe("https://acoustid.org/api-key");
 
+    await user.click(within(sources).getByRole("button", { name: "填写 AcoustID 的应用密钥" }));
     const application = keyRow(sources, "应用密钥");
+    expect(document.activeElement).toBe(within(application).getByLabelText("应用密钥"));
     const save = within(application).getByRole("button", { name: "保存" });
     expect((save as HTMLButtonElement).disabled).toBe(true);
     await user.type(within(application).getByLabelText("应用密钥"), "  abcdEFGH1234  ");
     await user.click(save);
     await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/sources/acoustid/keys/application")[0]?.body).toEqual({ key: "abcdEFGH1234" }));
     expect(await within(sources).findByText("已保存，末四位 1234")).toBeTruthy();
-    // 只填了一把仍不可用。
-    expect(within(sources).getByText("声学指纹；对上的结果记在 MusicBrainz 名下；填入密钥后可用。")).toBeTruthy();
+    // 只填了一把仍不可用；填好的那把不再显示去哪里申请。
+    expect(within(sources).getByText("填好下面的密钥后才能用。")).toBeTruthy();
+    expect(within(sources).queryByRole("link", { name: "注册一个应用" })).toBeNull();
 
+    await user.click(within(sources).getByRole("button", { name: "填写 AcoustID 的用户密钥" }));
     await user.type(within(keyRow(sources, "用户密钥")).getByLabelText("用户密钥"), "userKEY9876");
     await user.click(within(keyRow(sources, "用户密钥")).getByRole("button", { name: "保存" }));
     expect(await within(sources).findByText("已保存，末四位 9876")).toBeTruthy();
-    expect(within(sources).getByText("声学指纹；对上的结果记在 MusicBrainz 名下")).toBeTruthy();
+    expect(within(sources).queryByText("填好下面的密钥后才能用。")).toBeNull();
     expect(within(sources).queryByRole("form")).toBeNull();
 
     const [replaceApplication] = within(sources).getAllByRole("button", { name: "更换" });
@@ -240,14 +249,16 @@ describe("AcoustID 与两把密钥", () => {
     expect(keyRow(sources, "应用密钥")).toBeTruthy();
     await user.click(within(sources).getByRole("button", { name: "取消" }));
     expect(within(sources).getByText("已保存，末四位 1234")).toBeTruthy();
+    // 取消后焦点回到这一行的“更换”。
+    await waitFor(() => expect(document.activeElement).toBe(within(sources).getAllByRole("button", { name: "更换" })[0]));
 
     const [, clearUser] = within(sources).getAllByRole("button", { name: "清除" });
     if (clearUser === undefined) throw new Error("缺少清除按钮");
     await user.click(clearUser);
     await waitFor(() => expect(api.requestsTo("DELETE", "/api/v1/admin/curation/sources/acoustid/keys/user")).toHaveLength(1));
-    expect(await within(sources).findByLabelText("用户密钥")).toBeTruthy();
+    expect(await within(sources).findByRole("button", { name: "填写 AcoustID 的用户密钥" })).toBeTruthy();
     expect(within(sources).getByText("已保存，末四位 1234")).toBeTruthy();
-    expect(within(sources).getByText("声学指纹；对上的结果记在 MusicBrainz 名下；填入密钥后可用。")).toBeTruthy();
+    expect(within(sources).getByText("填好下面的密钥后才能用。")).toBeTruthy();
   });
 
   it("镜像内置应用密钥时只有用户密钥一行，填上就可用", async () => {
@@ -260,15 +271,16 @@ describe("AcoustID 与两把密钥", () => {
     const user = userEvent.setup();
     renderApp({ path: "/settings/curation" });
     const sources = await group("外部源");
-    expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；填入密钥后可用。")).toBeTruthy();
-    expect(within(sources).queryByRole("form", { name: "AcoustID 的应用密钥" })).toBeNull();
+    expect(await within(sources).findByText("填好下面的密钥后才能用。")).toBeTruthy();
+    expect(within(sources).queryByRole("button", { name: "填写 AcoustID 的应用密钥" })).toBeNull();
     expect(within(sources).queryByRole("link", { name: "注册一个应用" })).toBeNull();
 
+    await user.click(within(sources).getByRole("button", { name: "填写 AcoustID 的用户密钥" }));
     await user.type(within(keyRow(sources, "用户密钥")).getByLabelText("用户密钥"), "userKEY9876");
     await user.click(within(keyRow(sources, "用户密钥")).getByRole("button", { name: "保存" }));
     await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/sources/acoustid/keys/user")[0]?.body).toEqual({ key: "userKEY9876" }));
     expect(await within(sources).findByText("已保存，末四位 9876")).toBeTruthy();
-    expect(within(sources).getByText("声学指纹；对上的结果记在 MusicBrainz 名下")).toBeTruthy();
+    expect(within(sources).queryByText("填好下面的密钥后才能用。")).toBeNull();
   });
 
   it("某一把无效、指纹工具不可用时写出原因；关掉 AcoustID 后密钥的行不出现", async () => {
@@ -284,13 +296,14 @@ describe("AcoustID 与两把密钥", () => {
     const user = userEvent.setup();
     renderApp({ path: "/settings/curation" });
     const sources = await group("外部源");
-    expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；密钥无效，请重新填写。")).toBeTruthy();
+    expect(await within(sources).findByText("密钥无效，请重新填写。")).toBeTruthy();
     expect(within(sources).getAllByText(/AcoustID 说这把密钥无效/)).toHaveLength(1);
     expect(within(sources).getByText("已保存，末四位 u123")).toBeTruthy();
 
     await user.click(within(sources).getByRole("switch", { name: "AcoustID" }));
     await waitFor(() => expect(within(sources).queryByText("已保存，末四位 wxyz")).toBeNull());
-    expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；已关闭，后台不使用它。")).toBeTruthy();
+    await waitFor(() => expect(within(sources).queryByText("密钥无效，请重新填写。")).toBeNull());
+    expect(document.getElementById(within(sources).getByRole("switch", { name: "AcoustID" }).getAttribute("aria-describedby") ?? "")?.textContent).toBe("声学指纹");
   });
 
   it("服务器缺少指纹工具时说明不能使用", async () => {
@@ -300,7 +313,7 @@ describe("AcoustID 与两把密钥", () => {
     refreshSources(curation);
     renderApp({ path: "/settings/curation" });
     const sources = await group("外部源");
-    expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；这台服务器缺少指纹工具（fpcalc），暂时不能使用。")).toBeTruthy();
+    expect(await within(sources).findByText("这台服务器缺少指纹工具（fpcalc），暂时不能使用。")).toBeTruthy();
   });
 
   it("内置的应用密钥被拒时说明升级后恢复", async () => {
@@ -310,7 +323,7 @@ describe("AcoustID 与两把密钥", () => {
     refreshSources(curation);
     renderApp({ path: "/settings/curation" });
     const sources = await group("外部源");
-    expect(await within(sources).findByText("声学指纹；对上的结果记在 MusicBrainz 名下；ROOMusic 内置的应用密钥被 AcoustID 拒绝了，升级到新版本后恢复。")).toBeTruthy();
+    expect(await within(sources).findByText("ROOMusic 内置的应用密钥被 AcoustID 拒绝了，升级到新版本后恢复。")).toBeTruthy();
   });
 
   it("保存失败时就近提示是哪一把，输入框保留", async () => {
@@ -320,7 +333,8 @@ describe("AcoustID 与两把密钥", () => {
     const user = userEvent.setup();
     renderApp({ path: "/settings/curation" });
     const sources = await group("外部源");
-    await user.type(await within(sources).findByLabelText("用户密钥"), "bad key");
+    await user.click(await within(sources).findByRole("button", { name: "填写 AcoustID 的用户密钥" }));
+    await user.type(within(sources).getByLabelText("用户密钥"), "bad key");
     await user.click(within(keyRow(sources, "用户密钥")).getByRole("button", { name: "保存" }));
     expect(await within(sources).findByText("用户密钥没有保存")).toBeTruthy();
     expect((within(sources).getByLabelText("用户密钥") as HTMLInputElement).value).toBe("bad key");
@@ -624,9 +638,9 @@ describe("M8 艺人资料外部源", () => {
       ["Fanart.tv", "个人密钥（可选）", "登录 Fanart.tv 后在这个页面取得；填了以后新上传的图片能更早用上。", "这个页面", "https://fanart.tv/get-an-api-key/"],
       ["TheAudioDB", "API 密钥", "在这个页面查看：免费的测试密钥是 123，订阅后可以换成自己的密钥。", "这个页面", "https://www.theaudiodb.com/free_music_api"],
     ] as const) {
-      const form = sources.getByRole("form", { name: `${provider} 的${name}` });
-      const input = within(form).getByLabelText(name);
-      const descriptionId = input.getAttribute("aria-describedby");
+      // 没填时是“填写”按钮，说明（去哪里申请）挂在它上面。
+      const fill = sources.getByRole("button", { name: `填写 ${provider} 的${name}` });
+      const descriptionId = fill.getAttribute("aria-describedby");
       const description = descriptionId === null ? null : document.getElementById(descriptionId);
       if (description === null) throw new Error(`找不到${name}的说明`);
       expect(description.textContent).toBe(guide);
@@ -669,7 +683,8 @@ describe("M8 艺人资料外部源", () => {
     curation.sources = curation.sources.map((source) => source.id === fanart.id ? { ...source, active: true, inactive_reason: null } : source);
     renderApp({ path: "/settings/curation" });
     const sources = within(await group("外部源"));
-    const form = await sources.findByRole("form", { name: /^Fanart\.tv 的项目密钥/ });
+    await userEvent.click(await sources.findByRole("button", { name: /^填写 Fanart\.tv 的项目密钥/ }));
+    const form = sources.getByRole("form", { name: /^Fanart\.tv 的项目密钥/ });
     const input = within(form).getByLabelText<HTMLInputElement>(/^项目密钥/, { selector: "input" });
     const label = input.labels?.[0]?.textContent;
     const description = document.getElementById(input.getAttribute("aria-describedby") ?? "")?.textContent;

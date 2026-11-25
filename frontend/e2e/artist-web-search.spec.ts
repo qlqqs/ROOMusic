@@ -146,7 +146,7 @@ for (const width of [390, 1440]) {
     await expect(seal).toHaveCount(0);
   });
 
-  test(`${width}px 网络搜索来源行显示两项依赖并链接管家设置`, async ({ page, backend }) => {
+  test(`${width}px 网络搜索来源行写出缺的依赖并链接管家设置`, async ({ page, backend }) => {
     await page.setViewportSize({ width, height: 900 });
     const mock = await backend.start({ signedInAs: "curator" });
     const source = decodeCurationSources(sampleBody("curation/sources")).items.find(({ id }) => id === "web_search");
@@ -161,17 +161,11 @@ for (const width of [390, 1440]) {
     const sources = page.getByRole("region", { name: "外部源" });
     const toggle = sources.getByRole("switch", { name: "网络搜索" });
     await expect(toggle).toBeDisabled();
-    const model = sources.getByRole("link", { name: "对话模型已就绪" });
-    const searchLabel = "搜索来源没有设置，去管家设置";
-    const search = sources.getByRole("link", { name: searchLabel });
-    await expect(model.locator("svg.lucide-sparkles")).toBeVisible();
-    await expect(search.locator("svg.lucide-search")).toBeVisible();
-    await expect(model).toHaveAttribute("href", "/settings/agent");
+    // 只写缺的那一项，不写已就绪的；不再有带警示点的依赖图标。
+    await expect(sources.getByText("需要先在管家设置里配好搜索来源。")).toBeVisible();
+    await expect(sources.getByRole("list", { name: "依赖" })).toHaveCount(0);
+    const search = sources.getByRole("link", { name: "去设置", exact: true });
     await expect(search).toHaveAttribute("href", "/settings/agent");
-    expect(await model.evaluate((element) => getComputedStyle(element, "::after").content)).toBe("none");
-    expect(await search.evaluate((element) => getComputedStyle(element, "::after").content)).toBe('""');
-    await search.hover();
-    await expect(page.getByText(searchLabel, { exact: true })).toBeVisible();
     await screenshot(page, width, "settings");
 
     await search.click();

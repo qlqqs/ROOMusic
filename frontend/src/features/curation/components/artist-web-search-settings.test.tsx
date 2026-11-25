@@ -34,18 +34,20 @@ it.each([
 
   const sources = within(await screen.findByRole("region", { name: "外部源" }));
   const toggle = await sources.findByRole<HTMLInputElement>("switch", { name: "网络搜索" });
-  const dependencies = within(sources.getByRole("list", { name: "依赖" }));
-  const model = dependencies.getByRole("link", { name: modelReady ? "对话模型已就绪" : "对话模型没有设置，去管家设置" });
-  const searchLabel = searchReady ? "搜索来源已就绪" : "搜索来源没有设置，去管家设置";
-  const search = dependencies.getByRole("link", { name: searchLabel });
-  expect(model.getAttribute("href")).toBe("/settings/agent");
-  expect(search.getAttribute("href")).toBe("/settings/agent");
-  expect(model.hasAttribute("data-missing")).toBe(!modelReady);
-  expect(search.hasAttribute("data-missing")).toBe(!searchReady);
-  expect(model.querySelector("svg.lucide-sparkles")).not.toBeNull();
-  expect(search.querySelector("svg.lucide-search")).not.toBeNull();
-  await user.hover(search);
-  expect(await screen.findByText(searchLabel)).toBeTruthy();
+  // 缺的依赖写在这一行的说明里（文字加“去设置”链接），不再用带警示点的图标；都就绪时不写。
+  const description = document.getElementById(toggle.getAttribute("aria-describedby") ?? "");
+  if (description === null) throw new Error("网络搜索没有说明");
+  const missing = [modelReady ? null : "对话模型", searchReady ? null : "搜索来源"].filter((name) => name !== null);
+  if (missing.length === 0) {
+    expect(description.textContent).toBe("艺人图片、艺人简介");
+    expect(within(description).queryByRole("link")).toBeNull();
+  } else {
+    expect(description.textContent).toContain(`需要先在管家设置里配好${missing.join("和")}。`);
+    expect(within(description).getByRole("link", { name: "去设置" }).getAttribute("href")).toBe("/settings/agent");
+    // 依赖缺了就不再写同义的“没有选搜索来源”。
+    expect(description.textContent).not.toContain("还没有在管家设置里选搜索来源");
+  }
+  expect(sources.queryByRole("list", { name: "依赖" })).toBeNull();
   expect(toggle.checked).toBe(enabled);
   const ready = modelReady && searchReady;
   expect(toggle.disabled).toBe(!ready && !enabled);

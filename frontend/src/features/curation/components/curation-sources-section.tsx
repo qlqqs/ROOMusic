@@ -1,5 +1,5 @@
 import { Globe, MoreHorizontal } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, useState } from "react";
 import { FailureNotice, MenuButton, QueryContent, SettingRow, SettingsGroup, Skeleton, Switch } from "../../../shared/ui";
 import { fetchOperations } from "../../governance/api/endpoints";
@@ -9,7 +9,7 @@ import { useCurationSources, useSetCurationSource, useSetCurationSourceKey } fro
 import { useScopeRevert } from "../hooks/use-scope-revert";
 import { ScopeRevertDialog, ScopeRevertResult, type ScopeRevertTarget } from "./scope-revert-dialog";
 import { keyLabel, SourceKeyRow } from "./source-key-row";
-import { requirementsMissing, SourceRequirements } from "./source-requirements";
+import { requirementsMissing } from "./source-requirements";
 import styles from "./curation-sections.module.css";
 
 /** 分组层面的说明：总开关关着、打开它的管理员不可用或已暂停时，所有源都不会被后台使用。 */
@@ -21,19 +21,34 @@ function groupNote(settings: CurationSettingsDTO | undefined): string | null {
   return null;
 }
 
-/** 一个源的说明：它提供什么，加上这一行自己不生效的原因；只用来识别的源说明结果记在哪里。 */
-function sourceDescription(source: CurationSourceDTO): string {
-  const parts = [capabilitiesText(source)];
-  if (isPluginSource(source) && source.upstreams !== undefined && source.upstreams.length > 0) parts.push(`访问 ${source.upstreams.join("、")}`);
-  if (!writesOwnChanges(source)) parts.push(source.capabilities.includes("fingerprint_lookup") ? "对上的结果记在 MusicBrainz 名下" : "查到的图片与简介记在提供它们的源名下");
-  const reason = sourceInactiveText(source.inactive_reason);
-  return reason === null ? parts.join("；") : `${parts.join("；")}；${reason}`;
+const requirementNames: Record<NonNullable<CurationSourceDTO["requirements"]>[number]["kind"], string> = { model: "对话模型", search: "搜索来源" };
+
+/**
+ * 一个源的说明：第一行写它提供什么（插件另写访问的站点）；这一行自己不能用的原因另起一行、用提示色。
+ * 关掉的源不写原因（开关已经说明）；依赖没配好（网络搜索要对话模型与搜索来源）时写缺什么并链接到管家设置，不再另写同义的原因。
+ */
+function SourceDescription({ source }: { source: CurationSourceDTO }) {
+  const upstreams = isPluginSource(source) && source.upstreams !== undefined && source.upstreams.length > 0 ? ` · 访问 ${source.upstreams.join("、")}` : "";
+  const missing = (source.requirements ?? []).filter((requirement) => !requirement.ready).map((requirement) => requirementNames[requirement.kind]);
+  const reason = source.inactive_reason === "source_disabled" || (missing.length > 0 && source.inactive_reason === "search_unconfigured") ? null : sourceInactiveText(source.inactive_reason);
+  return (
+    <>
+      {capabilitiesText(source)}
+      {upstreams}
+      {reason === null ? null : <span className={styles.reason}>{reason}</span>}
+      {missing.length === 0 ? null : (
+        <span className={styles.reason}>
+          需要先在管家设置里配好{missing.join("和")}。<Link to="/settings/agent">去设置</Link>
+        </span>
+      )}
+    </>
+  );
 }
 
 /**
- * “外部源”卡片：每个源一行，写它提供什么，开关即改即存；各行只写自己不生效的原因（总开关等共同原因写在分组层面）。
+ * “外部源”卡片：每个源一行，说明写它提供什么，开关即改即存；各行自己不能用的原因另起一行（总开关等共同原因写在分组层面）。
  * 行尾菜单：查看来自这个源的自动修改（操作记录按来源筛选）、撤销来自它的全部自动修改（分段撤销，见 ScopeRevertDialog）；
- * 只用来识别、自己不写入的源（AcoustID）没有这个菜单。需要密钥的源开着时，下面每把密钥一行（AcoustID 在发布镜像里只有用户密钥，没有内置应用密钥的构建另有应用密钥）。
+ * 只用来识别、自己不写入的源（AcoustID）没有这个菜单。需要密钥的源开着时，下面每把密钥一行（AcoustID 在发布镜像里只有用户密钥，没有内置应用密钥的构建另有应用密钥），没填时收成“未填写 · 填写”。
  */
 export function CurationSourcesSection({ settings, refresh }: { settings: CurationSettingsDTO | undefined; refresh: () => void }) {
   const sources = useCurationSources();
@@ -94,11 +109,10 @@ export function CurationSourcesSection({ settings, refresh }: { settings: Curati
                         source.name
                       )
                     }
-                    description={sourceDescription(source)}
+                    description={<SourceDescription source={source} />}
                   >
                     {({ controlId, descriptionId }) => (
                       <span className={styles.footerRow}>
-                        {source.requirements === undefined || source.requirements === null ? null : <SourceRequirements requirements={source.requirements} />}
                         <Switch
                           id={controlId}
                           aria-describedby={descriptionId}
