@@ -225,6 +225,8 @@ ROOMUSIC_ALLOWED_ORIGINS=http://192.168.1.10:8090,https://music.example.com:8888
 Cookie 的 Secure 属性会跟随访问协议自动设置，不需要额外配置。局域网 IP 和公网域名各自登录。
 经反向代理访问的用户共用同一个登录限速来源。
 
+Subsonic 客户端经 `/rest/` 访问，原样转发即可，不受 Host 与 Origin 检查影响；它和网页登录共用同一个限速来源，见[用 Subsonic 客户端连接](../../docs/subsonic-clients.md)。
+
 ### 播放区事件流与渲染流
 
 事件流 `/api/v1/me/playback/events` 与渲染流 `/api/v1/me/playback/zones/{zone_id}/streams/{seq}` 都是长响应：
