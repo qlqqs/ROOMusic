@@ -48,6 +48,7 @@
   PostgreSQL 官方入口以 root 读取 `POSTGRES_PASSWORD_FILE`，导出密码并清除文件变量后降权；应用通过 `ROOMUSIC_DB_PASSWORD_FILE` 在 config.DatabaseURL 中读取，使用 URL 编码组装，服务和所有 CLI 共用。未配置文件时保留原 DATABASE_URL 行为；文件模式不接受 URL 内另一份密码，读取错误不输出密码或路径。
   生产应用默认使用 host 网络，监听 `0.0.0.0:${ROOMUSIC_HTTP_PORT:-8090}`。数据库保留独立项目网络，只发布 `127.0.0.1:${ROOMUSIC_DB_PORT:-55439}`，应用按该地址连接。健康检查访问实际监听端口；同机多实例的两个端口均需独立。
   ptp 与 app 使用同一镜像，入口为 `/app/roomusic-ptp`，在 host 网络收发 UDP 319/320。ptp 以 `0:0` 和只读根运行，丢弃 ALL 后仅保留 NET_BIND_SERVICE，启用 no-new-privileges。app 丢弃 ALL，以 PUID:PGID 运行。应用经 `ROOMUSIC_PTP_ADDR`（默认 `127.0.0.1:55440`）查询本地时钟；UDP 端口占用或时钟不可达时，兼容设备使用 NTP，必须 PTP 的设备显示“精确对时不可用”。生产镜像对时演练使用独立网络命名空间。
+  局域网设备所需的入站端口（mDNS 5353/UDP、SSDP 1900/UDP 与单播回包、UPnP 与 Cast 拉流的 HTTP 端口、AirPlay 随机计时与控制端口、PTP 319/320）列在 `deploy/production/README.md` 与 `docs/install-nas.md` 的入站端口表里，新增协议时同步两处。
   `deploy/production/compose.bridge.yaml` 配合主文件将应用接回项目网络，恢复容器内 8080 及服务名 postgres，并清除数据库发布端口与 ptp 服务。bridge 部署不支持 AirPlay 原生精确对时。bridge 用户手动添加渲染器并设置 `ROOMUSIC_LAN_URL`；host 模式默认采用发现设备的网卡地址。主文件和无锚点的 NAS 单文件支持 Compose v2.20.1，bridge 覆盖文件需要 v2.24.4。
   `scripts/check-production-compose.sh` 检查 host、bridge 配置及 NAS 单文件与主文件的等价性。备份目录可用 `ROOMUSIC_BACKUP_DIR` 指定，postgres 和 app 挂载同一路径。子网默认由 Docker 分配，可通过 override 设置；不同开发测试项目使用独立网络和目录。
   入口等数据库接受连接后启动，`/readyz` 用于镜像健康检查。生产的 `ROOMUSIC_ALLOWED_ORIGINS` 可选，不配时按主机一致模式，反代须保留 Host（含端口）与 Origin；格式与冲突由后端校验。

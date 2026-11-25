@@ -2,16 +2,19 @@ package app
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/devices/upnp"
+	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
 func assertUPnPSample(t *testing.T, name string, response *httptest.ResponseRecorder, replacements ...string) {
@@ -178,5 +181,133 @@ func TestPostgreSQLUPnPSharingTakeoverAndRevocation(t *testing.T) {
 	requireAPIError(t, f.request(t, "GET", "/api/v1/auth/me", nil, &a, nil), 401, "unauthorized")
 	if occupant := f.device(t, &f.admin, r).OccupiedBy; occupant != nil || r.State().TransportState != "STOPPED" {
 		t.Fatalf("停用成员后设备状态 = %s，占用 = %+v", r.State().TransportState, occupant)
+	}
+}
+
+func upnpRendererWithSlowStop(t *testing.T) (*upnpTestRenderer, chan struct{}, chan struct{}) {
+	t.Helper()
+	started, elapsed := make(chan struct{}), make(chan struct{})
+	var first sync.Once
+	renderer := newUPnPTestRendererWithActionHook(t, "normal", func(action string, _ *http.Request) {
+		if action == "Stop" {
+			first.Do(func() {
+				close(started)
+				time.Sleep(4 * time.Second)
+				close(elapsed)
+			})
+		}
+	})
+	return renderer, started, elapsed
+}
+
+func startUPnPRequest(request func() *httptest.ResponseRecorder) <-chan *httptest.ResponseRecorder {
+	result := make(chan *httptest.ResponseRecorder, 1)
+	go func() { result <- request() }()
+	return result
+}
+
+func waitUPnPResponse(t *testing.T, name string, result <-chan *httptest.ResponseRecorder) *httptest.ResponseRecorder {
+	t.Helper()
+	select {
+	case resp := <-result:
+		return resp
+	case <-time.After(8 * time.Second):
+		t.Fatalf("等待%s响应超时", name)
+		return nil
+	}
+}
+
+func waitUPnPStop(t *testing.T, started <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-started:
+	case <-time.After(8 * time.Second):
+		t.Fatal("旧输出没有发送 SOAP Stop")
+	}
+}
+
+func TestPostgreSQLUPnPTakeoverDoesNotBlockOtherMember(t *testing.T) {
+	r, started, elapsed := upnpRendererWithSlowStop(t)
+	f := newUPnPFixture(t, true)
+	a, b, c := f.createUser(t, "user"), f.createUser(t, "user"), f.createUser(t, "user")
+	f.enable(t)
+	f.add(t, r)
+	da, db, dc := f.device(t, &a, r), f.device(t, &b, r), f.device(t, &c, r)
+	f.play(t, &a, da, f.tracks(t, 40))
+	f.wait(t, 8*time.Second, "成员 A 播放", func() bool { return r.State().BytesRead > 0 })
+
+	takeover := startUPnPRequest(func() *httptest.ResponseRecorder { return f.activate(t, &b, db, true) })
+	waitUPnPStop(t, started)
+	snapshot := startUPnPRequest(func() *httptest.ResponseRecorder {
+		return f.request(t, "GET", zonesSamplePrefix, nil, &c, nil)
+	})
+	competing := startUPnPRequest(func() *httptest.ResponseRecorder { return f.activate(t, &c, dc, true) })
+	deadline := time.Now().Add(time.Second)
+	var snapshotResp, competingResp *httptest.ResponseRecorder
+	select {
+	case snapshotResp = <-snapshot:
+	case <-time.After(time.Until(deadline)):
+		t.Error("旧输出收尾时，成员 C 的快照未在一秒内返回")
+	}
+	select {
+	case competingResp = <-competing:
+	case <-time.After(time.Until(deadline)):
+		t.Error("旧输出收尾时，成员 C 的接管请求未在一秒内返回")
+	}
+	select {
+	case <-elapsed:
+		t.Error("检查成员 C 的请求时，SOAP Stop 已结束")
+	default:
+	}
+	zonesSampleDecode[zones.DeviceResult](t, waitUPnPResponse(t, "成员 B 接管", takeover), 200)
+	if snapshotResp == nil {
+		snapshotResp = waitUPnPResponse(t, "成员 C 快照", snapshot)
+	}
+	if competingResp == nil {
+		competingResp = waitUPnPResponse(t, "成员 C 接管", competing)
+	}
+	if d, ok := deviceFor(zonesSampleDecode[zones.Snapshot](t, snapshotResp, 200), r.udn); !ok || d.OccupiedBy == nil || d.OccupiedBy.UserID != b.id {
+		t.Errorf("成员 C 所见交接占用 = %+v，期望成员 B", d.OccupiedBy)
+	}
+	requireAPIError(t, competingResp, 409, "device_busy")
+}
+
+func TestPostgreSQLUPnPReactivatesSameMemberDuringRevocation(t *testing.T) {
+	r, started, elapsed := upnpRendererWithSlowStop(t)
+	f := newUPnPFixture(t, true)
+	a := f.createUser(t, "user")
+	f.enable(t)
+	f.add(t, r)
+	zonesSampleDecode[upnp.Settings](t, f.request(t, "PUT", upnpAdmin+"/settings", map[string]bool{"shared": false}, &f.admin, nil), 200)
+	grants := upnpAdmin + "/devices/" + url.PathEscape(r.udn) + "/grants"
+	grant := func(ids ...string) *httptest.ResponseRecorder {
+		return f.request(t, "PUT", grants, map[string][]string{"user_ids": append([]string{}, ids...)}, &f.admin, nil)
+	}
+	zonesSampleDecode[map[string][]string](t, grant(a.id), 200)
+	da := f.device(t, &a, r)
+	f.play(t, &a, da, f.tracks(t, 40))
+	f.wait(t, 8*time.Second, "成员 A 播放", func() bool { return r.State().BytesRead > 0 })
+
+	revoked := startUPnPRequest(func() *httptest.ResponseRecorder { return grant() })
+	waitUPnPStop(t, started)
+	regranted := startUPnPRequest(func() *httptest.ResponseRecorder { return grant(a.id) })
+	select {
+	case resp := <-regranted:
+		zonesSampleDecode[map[string][]string](t, resp, 200)
+	case <-time.After(time.Second):
+		t.Error("旧授权的输出收尾时，重新授权未在一秒内返回")
+		zonesSampleDecode[map[string][]string](t, waitUPnPResponse(t, "重新授权", regranted), 200)
+	}
+	select {
+	case <-elapsed:
+		t.Error("同一成员重新激活前，旧输出已完成收尾")
+	default:
+	}
+	activated := startUPnPRequest(func() *httptest.ResponseRecorder { return f.activate(t, &a, da, false) })
+	zonesSampleDecode[map[string][]string](t, waitUPnPResponse(t, "撤权", revoked), 200)
+	zonesSampleDecode[zones.DeviceResult](t, waitUPnPResponse(t, "同一成员重新激活", activated), 200)
+	got := f.device(t, &a, r)
+	if !got.Online || got.OccupiedBy == nil || got.OccupiedBy.UserID != a.id {
+		t.Fatalf("重新激活结果 = %+v，期望同一成员取得新的在线输出", got)
 	}
 }

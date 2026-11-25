@@ -8,6 +8,11 @@ type syncPair struct {
 	originKnown        bool
 }
 
+type clockSample struct {
+	rtt, offset int64
+	accepted    bool
+}
+
 type follower struct {
 	source                  portID
 	grandmaster             uint64
@@ -21,6 +26,10 @@ type follower struct {
 	lastSync                time.Time
 	delaySeq                uint16
 	delaySent               time.Time
+	window                  [8]clockSample
+	windowLen               int
+	lastMeasurement         time.Time
+	deviations              int
 	offset                  int64
 	samples                 int
 	firstSample, lastSample time.Time
@@ -88,20 +97,67 @@ func (f *follower) measure(p arrival, id portID) {
 	}
 	backward := t4 - f.delaySent.UnixNano() - p.correction
 	f.delaySent = time.Time{}
-	path := (backward - f.forward) / 2
+	rtt := backward - f.forward
+	path := rtt / 2
 	if path < -int64(time.Millisecond) || path > int64(250*time.Millisecond) {
+		f.deviations = 0
 		return
 	}
-	sample := f.forward + path
-	if f.samples == 0 || p.at.Sub(f.lastSample) > 3*time.Second || sample-f.offset > int64(5*time.Millisecond) || f.offset-sample > int64(5*time.Millisecond) {
-		f.offset = sample
-		f.samples = 0
-		f.firstSample = p.at
+	f.trackOffset(rtt, f.forward+path, p.at)
+}
+
+func (f *follower) trackOffset(rtt, offset int64, at time.Time) {
+	if f.samples == 0 || at.Sub(f.lastMeasurement) > 3*time.Second {
+		f.samples, f.windowLen, f.deviations = 0, 0, 0
+	}
+	f.lastMeasurement = at
+	if f.windowLen == len(f.window) {
+		copy(f.window[:], f.window[1:])
 	} else {
-		f.offset += (sample - f.offset) / 4
+		f.windowLen++
+	}
+	current := &f.window[f.windowLen-1]
+	*current = clockSample{rtt: rtt, offset: offset}
+	minRTT := rtt
+	for _, previous := range f.window[:f.windowLen-1] {
+		minRTT = min(minRTT, previous.rtt)
+	}
+	if rtt > minRTT+int64(2*time.Millisecond) {
+		f.deviations = 0
+		return
+	}
+	delta := current.offset - f.offset
+	switch {
+	case f.samples > 0 && delta > int64(5*time.Millisecond):
+		f.deviations = max(0, f.deviations) + 1
+	case f.samples > 0 && delta < -int64(5*time.Millisecond):
+		f.deviations = min(0, f.deviations) - 1
+	default:
+		f.deviations = 0
+	}
+	if f.deviations != 0 {
+		if f.deviations > -4 && f.deviations < 4 {
+			return
+		}
+		// 确认主钟跳变后，从当前交换重新累计锁定所需的样本。
+		f.window[0] = *current
+		current = &f.window[0]
+		f.samples, f.windowLen, f.deviations = 0, 1, 0
+	}
+	current.accepted = true
+	best := *current
+	for _, previous := range f.window[:f.windowLen-1] {
+		if previous.accepted && previous.rtt < best.rtt {
+			best = previous
+		}
+	}
+	f.offset = best.offset
+	if f.samples == 0 || at.Sub(f.lastSample) > 3*time.Second {
+		f.samples = 0
+		f.firstSample = at
 	}
 	f.samples++
-	f.lastSample = p.at
+	f.lastSample = at
 }
 
 func (f *follower) status(local uint64, now time.Time) Status {

@@ -4,6 +4,7 @@ package cast
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/netip"
 	"strings"
 	"sync"
@@ -42,6 +43,7 @@ func (r *record) entry(now time.Time) Entry {
 }
 
 type Registry struct {
+	logger    *slog.Logger
 	lifecycle sync.Mutex
 	mu        sync.RWMutex
 	records   map[string]*record
@@ -49,7 +51,13 @@ type Registry struct {
 	stop      func()
 }
 
-func NewRegistry() *Registry { return &Registry{records: make(map[string]*record)} }
+func NewRegistry() *Registry {
+	return NewRegistryWithLogger(slog.Default())
+}
+
+func NewRegistryWithLogger(logger *slog.Logger) *Registry {
+	return &Registry{logger: logger, records: make(map[string]*record)}
+}
 
 func deviceFrom(e mdns.Entry) (Device, bool) {
 	id := strings.TrimSpace(e.TXT["id"])
@@ -168,7 +176,7 @@ func (r *Registry) Start(parent context.Context, manual []Device) error {
 		}
 	}
 	r.mu.Unlock()
-	stop, err := mdns.Start(ctx, service, func(e mdns.Entry) {
+	stop, err := mdns.Start(ctx, service, r.logger, func(e mdns.Entry) {
 		d, ok := deviceFrom(e)
 		if !ok {
 			return

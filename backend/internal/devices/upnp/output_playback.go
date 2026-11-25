@@ -11,7 +11,7 @@ import (
 )
 
 func (o *deviceOutput) run(sub *zones.Subscription) {
-	defer o.finish(sub)
+	defer func() { o.finish(sub) }()
 	timer := time.NewTimer(5 * time.Second)
 	defer timer.Stop()
 	failures := 0
@@ -19,14 +19,16 @@ func (o *deviceOutput) run(sub *zones.Subscription) {
 		before := o.state
 		var err error
 		var poll bool
+		var subscriptionClosed bool
 		select {
 		case <-o.ctx.Done():
 			return
 		case <-sub.Done:
-			return
+			subscriptionClosed = true
 		case msg, ok := <-sub.Events:
 			if !ok {
-				return
+				subscriptionClosed = true
+				break
 			}
 			if !o.receive(msg) {
 				continue
@@ -45,6 +47,14 @@ func (o *deviceOutput) run(sub *zones.Subscription) {
 				err = o.poll()
 			}
 			timer.Reset(o.interval())
+		}
+		if subscriptionClosed {
+			next, err := o.resubscribe()
+			if err != nil {
+				return
+			}
+			sub = next
+			continue
 		}
 		if errors.Is(err, zones.ErrOutputSuperseded) || errors.Is(err, zones.ErrOutputUnknown) {
 			return
@@ -70,6 +80,15 @@ func (o *deviceOutput) run(sub *zones.Subscription) {
 			}
 		}
 	}
+}
+
+func (o *deviceOutput) resubscribe() (*zones.Subscription, error) {
+	if err := o.ctx.Err(); err != nil {
+		return nil, err
+	}
+	kind := deviceKind(o.udn)
+	o.manager.logger.Warn("托管输出订阅已关闭，正在重新订阅", "event", "devices.output.resubscribing", "module", kind, "zone_id", o.zoneID)
+	return o.manager.zones.SubscribeOutput(o.ctx, o.actor.ID, o.sessionID)
 }
 
 func (o *deviceOutput) interval() time.Duration {
@@ -109,8 +128,8 @@ func (o *deviceOutput) release(position zones.ReleaseOutputInput) {
 	}
 	o.manager.mu.Lock()
 	delete(o.manager.owners, o.udn)
-	o.manager.mu.Unlock()
 	close(o.done)
+	o.manager.mu.Unlock()
 }
 
 func (o *deviceOutput) receive(msg zones.Message) bool {

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/textproto"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ const (
 	requestTimeout = 10 * time.Second
 	maxBody        = 1 << 20
 	maxHeaders     = 64 << 10
+	maxExpired     = 4
 )
 
 type Response struct {
@@ -53,12 +55,28 @@ func (r *Response) CheckStatus() error {
 	return nil
 }
 
+type wireReader struct {
+	io.Reader
+	received bool
+}
+
+func (r *wireReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if n > 0 {
+		r.received = true
+	}
+	return n, err
+}
+
 type Client struct {
 	conn         net.Conn
 	mu           sync.Mutex
+	wire         wireReader
+	plainReader  bufio.Reader
 	reader       *bufio.Reader
 	writer       io.Writer
 	seq          uint64
+	expired      map[string]string // 过期 CSeq 对应的请求协议。
 	encrypted    bool
 	instance     string
 	activeRemote uint32
@@ -77,7 +95,11 @@ func Dial(ctx context.Context, address string) (*Client, error) {
 	// 行为参考 airplay2-sender-cpp（Apache-2.0），部分接收端在配对时就核对会话身份头。
 	var identity [12]byte
 	rand.Read(identity[:])
-	return &Client{conn: conn, reader: bufio.NewReader(conn), writer: conn, instance: fmt.Sprintf("%X", identity[:8]), activeRemote: binary.BigEndian.Uint32(identity[8:])}, nil
+	c := &Client{conn: conn, writer: conn, instance: fmt.Sprintf("%X", identity[:8]), activeRemote: binary.BigEndian.Uint32(identity[8:])}
+	c.wire.Reader = conn
+	c.plainReader.Reset(&c.wire)
+	c.reader = &c.plainReader
+	return c, nil
 }
 
 func (c *Client) Close() error { return c.conn.Close() }
@@ -147,29 +169,69 @@ func (c *Client) request(ctx context.Context, method, target, protocol string, h
 	}()
 	c.seq = seq
 	_, err := req.WriteTo(c.writer)
+	keepOpen := false
 	if err == nil {
-		var resp *Response
-		resp, err = readResponse(c.reader, seq, protocol)
-		if err == nil {
-			return resp, nil
+		// 配对前的缓冲区可能预读了密文，解出首个明文字节前也可能只收到半帧。
+		c.wire.received = c.plainReader.Buffered() > 0
+		current := strconv.FormatUint(seq, 10)
+		if _, err = c.reader.Peek(1); err == nil {
+			var resp *Response
+			resp, err = c.readCurrentResponse(current, protocol)
+			if err == nil {
+				return resp, nil
+			}
+		} else if errors.Is(err, os.ErrDeadlineExceeded) && ctx.Err() != context.Canceled &&
+			!c.wire.received && len(c.expired) < maxExpired && (!c.encrypted || c.wire.Reader != nil) {
+			if c.expired == nil {
+				c.expired = make(map[string]string)
+			}
+			c.expired[current] = protocol
+			keepOpen = true
 		}
 	}
-	// 部分写入、超时或帧错误后已无法确定下一条响应的边界。
-	c.conn.Close()
+	if !keepOpen {
+		c.conn.Close()
+	}
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 	return nil, err
 }
 
-func readResponse(r *bufio.Reader, seq uint64, protocol string) (*Response, error) {
+func (c *Client) readCurrentResponse(seq, protocol string) (*Response, error) {
+	for {
+		resp, err := readResponse(c.reader, seq, protocol, c.expired)
+		if err != nil {
+			return nil, err
+		}
+		replySeq := resp.Header.Get("CSeq")
+		if _, stale := c.expired[replySeq]; !stale {
+			return resp, nil
+		}
+		delete(c.expired, replySeq)
+	}
+}
+
+func readResponse(r *bufio.Reader, seq, protocol string, expired map[string]string) (*Response, error) {
 	line, err := r.ReadSlice('\n')
 	if err != nil {
 		return nil, err
 	}
 	fields := strings.Fields(string(line))
-	if len(fields) < 2 || (fields[0] != "RTSP/1.0" && fields[0] != protocol) || len(fields[1]) != 3 {
+	if len(fields) < 2 || len(fields[1]) != 3 {
 		return nil, errors.New("无效的 RTSP 状态行")
+	}
+	expiredHTTP := false
+	if fields[0] != "RTSP/1.0" {
+		for _, p := range expired {
+			if p == "HTTP/1.1" {
+				expiredHTTP = true
+				break
+			}
+		}
+		if fields[0] != "HTTP/1.1" || (protocol != fields[0] && !expiredHTTP) {
+			return nil, errors.New("无效的 RTSP 状态行")
+		}
 	}
 	status, err := strconv.Atoi(fields[1])
 	if err != nil || status < 100 || status > 599 {
@@ -196,9 +258,17 @@ func readResponse(r *bufio.Reader, seq uint64, protocol string) (*Response, erro
 		}
 		h.Add(key, textproto.TrimString(value))
 	}
-	if h.Get("CSeq") != "" || fields[0] == "RTSP/1.0" {
-		if len(h.Values("CSeq")) != 1 || h.Get("CSeq") != strconv.FormatUint(seq, 10) {
+	replySeq := h.Get("CSeq")
+	if replySeq != "" || fields[0] == "RTSP/1.0" || expiredHTTP {
+		replyProtocol, stale := expired[replySeq]
+		if len(h.Values("CSeq")) != 1 || (!stale && replySeq != seq) {
 			return nil, errors.New("RTSP 响应序号不匹配")
+		}
+		if stale {
+			protocol = replyProtocol
+		}
+		if fields[0] != "RTSP/1.0" && fields[0] != protocol {
+			return nil, errors.New("无效的 RTSP 状态行")
 		}
 	}
 	resp := &Response{StatusCode: status, Header: h}

@@ -40,7 +40,20 @@ ROOMusic 由两个容器组成：应用和数据库（PostgreSQL）。在 NAS �
 4. Container Manager → 项目 → 新增：项目名 `roomusic`，路径选上面的文件夹，提示已有 `docker-compose.yml` 时选择使用它，完成后启动。
 5. 打开 `http://NAS地址:8090`。
 
-注意：群晖自带的 Compose 版本较旧，不能使用 `deploy/production/compose.bridge.yaml`；默认的 host 网络可以直接用。开启了 DSM 防火墙时，放行 8090 端口。
+注意：群晖自带的 Compose 版本较旧，不能使用 `deploy/production/compose.bridge.yaml`；默认的 host 网络可以直接用。开启 DSM 防火墙后，放行网页端口；使用局域网播放设备时，还需按下表配置入站规则。
+
+### 局域网设备所需入站端口
+
+在宿主机防火墙上，将下列规则的来源限定为播放设备所在的可信局域网网段，按启用的协议放行。表中端口均为宿主机的目的端口。
+
+| 入站端口 | 使用场景 |
+| --- | --- |
+| TCP `ROOMUSIC_HTTP_PORT`（默认 8090） | UPnP 和 Cast 接收端从 ROOMusic 拉取音频 |
+| UDP 5353 | AirPlay 和 Cast 的 mDNS 组播发现与应答 |
+| UDP 1900 | UPnP 设备的 SSDP 组播公告 |
+| UDP 临时端口 | UPnP 设备向 M-SEARCH 的源端口发送单播回包。只放行目的端口 1900 会漏掉这些回包 |
+| UDP 随机高端口 | AirPlay 在会话建立时协商本机计时和控制端口，接收端向这些端口发送计时请求和重传请求 |
+| UDP 319、320 | AirPlay 使用 PTP 精密计时时，分别接收事件报文和通用报文 |
 
 ## 飞牛 fnOS
 

@@ -96,7 +96,6 @@ func (p *airplayOutput) run(sub *zones.Subscription) {
 	p.cancel()
 	p.closeSource()
 	p.closeSender()
-	sub.Close()
 	p.release(position)
 }
 
@@ -109,6 +108,7 @@ func connectionLost(err error) bool {
 }
 
 func (p *airplayOutput) serve(sub *zones.Subscription) error {
+	defer func() { sub.Close() }()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -117,14 +117,17 @@ func (p *airplayOutput) serve(sub *zones.Subscription) error {
 			packets = p.source.blocks
 		}
 		var disconnected <-chan struct{}
+		var fallbacks <-chan error
 		if p.sender != nil {
 			disconnected = p.sender.Done()
+			fallbacks = p.sender.Fallbacks()
 		}
+		var subscriptionClosed bool
 		select {
 		case <-p.ctx.Done():
 			return nil
-		case <-sub.Done:
-			return nil
+		case cause := <-fallbacks:
+			p.manager.logger.Warn("AirPlay 输出已改用 NTP 计时", "event", "airplay.output.fallback", "module", "airplay", "zone_id", p.zoneID, "udn", p.receiver.Key, "error", cause)
 		case <-disconnected:
 			if err := p.sender.Err(); err != nil {
 				return err
@@ -140,9 +143,12 @@ func (p *airplayOutput) serve(sub *zones.Subscription) error {
 					return err
 				}
 			}
+		case <-sub.Done:
+			subscriptionClosed = true
 		case msg, ok := <-sub.Events:
 			if !ok {
-				return nil
+				subscriptionClosed = true
+				break
 			}
 			if p.receive(msg) {
 				if err := p.applyState(); err != nil && !errors.Is(err, zones.ErrStreamGone) {
@@ -193,6 +199,13 @@ func (p *airplayOutput) serve(sub *zones.Subscription) error {
 					return err
 				}
 			}
+		}
+		if subscriptionClosed {
+			next, err := p.resubscribe()
+			if err != nil {
+				return err
+			}
+			sub = next
 		}
 	}
 }

@@ -42,6 +42,7 @@ var errTaken = errors.New("Cast 输出已被接管")
 func (o Output) Run(ctx context.Context, sub *zones.Subscription) zones.ReleaseOutputInput {
 	c, err := castv2.Dial(ctx, o.Address)
 	if err != nil {
+		sub.Close()
 		if ctx.Err() == nil {
 			o.Logger.Warn("连接 Cast 接收端失败", "address", o.Address, "error", err)
 			o.Offline()
@@ -90,6 +91,7 @@ func (s *session) stopOwnedMedia() {
 }
 
 func (s *session) run(sub *zones.Subscription) error {
+	defer func() { sub.Close() }()
 	e, err := s.client.Request(s.ctx, castv2.ReceiverID, castv2.Receiver, map[string]any{"type": "GET_STATUS"})
 	if err != nil {
 		return err
@@ -100,16 +102,18 @@ func (s *session) run(sub *zones.Subscription) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
+		var subscriptionClosed bool
 		select {
 		case <-s.ctx.Done():
 			return s.ctx.Err()
-		case <-sub.Done:
-			return nil
 		case <-s.client.Done():
 			return net.ErrClosed
+		case <-sub.Done:
+			subscriptionClosed = true
 		case m, ok := <-sub.Events:
 			if !ok {
-				return nil
+				subscriptionClosed = true
+				break
 			}
 			if s.receive(m) {
 				err = s.apply()
@@ -124,6 +128,18 @@ func (s *session) run(sub *zones.Subscription) error {
 			if err == nil && s.transport != "" && s.mediaID != 0 {
 				err = s.client.Poll(s.transport, castv2.Media)
 			}
+		}
+		if subscriptionClosed {
+			if err := s.ctx.Err(); err != nil {
+				return err
+			}
+			s.Logger.Warn("托管输出订阅已关闭，正在重新订阅", "event", "devices.output.resubscribing", "module", "cast", "zone_id", s.ZoneID)
+			next, err := s.Zones.SubscribeOutput(s.ctx, s.UserID, s.SessionID)
+			if err != nil {
+				return err
+			}
+			sub = next
+			continue
 		}
 		if errors.Is(err, zones.ErrStreamGone) {
 			err = nil

@@ -15,22 +15,24 @@ type flight struct {
 }
 
 type Sender struct {
-	mu, writeMu      sync.Mutex
-	device           Device
-	cfg              SenderConfig
-	media            *mediaSession
-	protocol, timing string
-	fallback         error
-	err              error
-	done             chan struct{}
-	wake             chan struct{}
-	paused, next     time.Time
-	pending, silence []byte
-	sent, played     uint64
-	flights          []flight
-	vol              *float64
-	muted            bool
-	metadata         *Metadata
+	mu, writeMu       sync.Mutex
+	device            Device
+	cfg               SenderConfig
+	media             *mediaSession
+	protocol, timing  string
+	fallback          error
+	fallbacks         chan error
+	heartbeatFailures int
+	err               error
+	done              chan struct{}
+	wake              chan struct{}
+	paused, next      time.Time
+	pending, silence  []byte
+	sent, played      uint64
+	flights           []flight
+	vol               *float64
+	muted             bool
+	metadata          *Metadata
 }
 
 func OpenSender(ctx context.Context, d Device, cfg SenderConfig) (*Sender, error) {
@@ -51,7 +53,7 @@ func OpenSender(ctx context.Context, d Device, cfg SenderConfig) (*Sender, error
 	n := rtp.FramesPerPacket * cfg.BitDepth / 4
 	s := &Sender{
 		device: d, cfg: cfg, media: m, protocol: m.protocol, timing: m.timingProtocol(), fallback: m.fallback,
-		done: make(chan struct{}), wake: make(chan struct{}, 1),
+		fallbacks: make(chan error, 1), done: make(chan struct{}), wake: make(chan struct{}, 1),
 		pending: make([]byte, 0, n), silence: make([]byte, n),
 	}
 	go s.maintain()
@@ -69,6 +71,8 @@ func (s *Sender) Protocol() string {
 	defer s.mu.Unlock()
 	return s.protocol
 }
+func (s *Sender) Fallbacks() <-chan error { return s.fallbacks }
+
 func (s *Sender) FallbackReason() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -292,6 +296,7 @@ func (s *Sender) Resume(ctx context.Context) error {
 			return err
 		}
 		s.media = m
+		s.heartbeatFailures = 0
 		s.protocol, s.timing, s.fallback = m.protocol, m.timingProtocol(), m.fallback
 		if err = s.restoreControls(ctx, m); err != nil {
 			m.shutdown(true)
@@ -414,11 +419,17 @@ func (s *Sender) heartbeat() {
 	}
 	_, err := m.command(ctx, method, target, nil, nil)
 	cancel()
-	if err != nil {
-		s.mu.Lock()
-		if s.media == m {
-			s.finish(err, false)
-		}
-		s.mu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.media != m {
+		return
+	}
+	if err == nil {
+		s.heartbeatFailures = 0
+		return
+	}
+	s.heartbeatFailures++
+	if s.heartbeatFailures >= 3 {
+		s.finish(err, false)
 	}
 }

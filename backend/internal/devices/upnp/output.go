@@ -25,11 +25,12 @@ type outputManager struct {
 	lanURL, httpAddr string
 	mu               sync.Mutex
 	owners           map[string]*deviceOutput
+	handovers        map[string]zones.DeviceOccupant // 仅在 Service.mu 内读写。
 	artwork          func(context.Context, string, bool) (string, []byte, error)
 }
 
 func (s *Service) AttachOutput(z *zones.Service, lanURL, httpAddr string, logger *slog.Logger) {
-	s.output = &outputManager{zones: z, lanURL: strings.TrimRight(lanURL, "/"), httpAddr: httpAddr, logger: logger, owners: map[string]*deviceOutput{}}
+	s.output = &outputManager{zones: z, lanURL: strings.TrimRight(lanURL, "/"), httpAddr: httpAddr, logger: logger, owners: map[string]*deviceOutput{}, handovers: map[string]zones.DeviceOccupant{}}
 }
 
 func (s *Service) WithAirPlayArtwork(read func(context.Context, string, bool) (string, []byte, error)) {
@@ -98,7 +99,9 @@ func (s *Service) VisibleDevices(ctx context.Context, userID string) ([]zones.Ma
 		if info := d.Capabilities.AirPlay; info != nil {
 			row.UnavailableReason = string(info.UnavailableReason)
 		}
-		if owner := s.output.owners[d.UDN]; owner != nil {
+		if pending, ok := s.output.handovers[d.UDN]; ok {
+			row.OccupiedBy = &pending
+		} else if owner := s.output.owners[d.UDN]; owner != nil {
 			row.OccupiedBy = &zones.DeviceOccupant{UserID: owner.actor.ID, DisplayName: owner.actor.Username}
 		}
 		out = append(out, row)
@@ -109,64 +112,88 @@ func (s *Service) VisibleDevices(ctx context.Context, userID string) ([]zones.Ma
 func (s *Service) Acquire(ctx context.Context, userID, deviceID, udn string, caps zones.Capabilities, takeover bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.running() {
-		return zones.ErrNotFound
-	}
-	actor, err := s.account(ctx, userID)
-	if err != nil {
-		return err
-	}
-	active, err := identity.HasActiveSession(ctx, s.db, userID)
-	if err != nil {
-		return err
-	}
-	if !active {
-		return zones.ErrNotFound
-	}
-	visible, err := s.visibleLocked(ctx, actor)
-	if err != nil {
-		return err
-	}
-	index := slices.IndexFunc(visible, func(d Entry) bool { return d.UDN == udn })
-	if index < 0 {
-		return zones.ErrNotFound
-	}
-	device := visible[index].Device
 	m := s.output
-	var base string
-	if device.Kind != "airplay" {
-		base, err = m.baseURL(device)
+	protocol := s.protocols[deviceKind(udn)]
+	run := protocol.ctx
+	for {
+		if protocol.ctx != run || run == nil || run.Err() != nil {
+			return zones.ErrNotFound
+		}
+		actor, err := s.account(ctx, userID)
 		if err != nil {
 			return err
 		}
-	} else {
-		info := device.Capabilities.AirPlay
-		if info != nil && info.UnavailableReason == airplay.PrecisionUnavailable {
-			return zones.ErrPrecisionUnavailable
+		active, err := identity.HasActiveSession(ctx, s.db, userID)
+		if err != nil {
+			return err
 		}
-		if info == nil || info.UnavailableReason != "" {
-			return zones.ErrDeviceUnsupported
+		if !active {
+			return zones.ErrNotFound
 		}
-		if (info.RequiresPIN || info.RequiresPassword) && !info.Paired {
-			return zones.ErrDevicePairingRequired
+		device, base, err := s.outputDevice(ctx, actor, udn)
+		if err != nil {
+			return err
 		}
-	}
-	m.mu.Lock()
-	old := m.owners[udn]
-	m.mu.Unlock()
-	if old != nil {
-		if old.actor.ID == userID && old.deviceID == deviceID {
-			return nil
+		if pending, ok := m.handovers[udn]; ok {
+			return &zones.DeviceBusyError{Occupant: pending}
 		}
-		if !takeover {
-			return &zones.DeviceBusyError{Occupant: zones.DeviceOccupant{UserID: old.actor.ID, DisplayName: old.actor.Username}}
+		m.mu.Lock()
+		old := m.owners[udn]
+		m.mu.Unlock()
+		if old == nil {
+			return s.claimOutput(ctx, actor, deviceID, device, base, caps)
 		}
+		if old.ctx.Err() == nil {
+			if old.actor.ID == userID && old.deviceID == deviceID {
+				return nil
+			}
+			if !takeover {
+				return &zones.DeviceBusyError{Occupant: zones.DeviceOccupant{UserID: old.actor.ID, DisplayName: old.actor.Username}}
+			}
+		}
+		m.handovers[udn] = zones.DeviceOccupant{UserID: actor.ID, DisplayName: actor.Username}
 		old.cancel()
+		s.mu.Unlock()
 		<-old.done
+		s.mu.Lock()
+		delete(m.handovers, udn)
 		if old.releaseErr != nil {
 			return old.releaseErr
 		}
+		// 仍持有锁，从头核对本次协议周期、账号授权、在线状态和占用。
 	}
+}
+
+func (s *Service) outputDevice(ctx context.Context, actor identity.User, udn string) (Device, string, error) {
+	visible, err := s.visibleLocked(ctx, actor)
+	if err != nil {
+		return Device{}, "", err
+	}
+	index := slices.IndexFunc(visible, func(d Entry) bool { return d.UDN == udn })
+	if index < 0 {
+		return Device{}, "", zones.ErrNotFound
+	}
+	device := visible[index].Device
+	if device.Kind != "airplay" {
+		base, err := s.output.baseURL(device)
+		return device, base, err
+	}
+	info := device.Capabilities.AirPlay
+	if info != nil && info.UnavailableReason == airplay.PrecisionUnavailable {
+		return Device{}, "", zones.ErrPrecisionUnavailable
+	}
+	if info == nil || info.UnavailableReason != "" {
+		return Device{}, "", zones.ErrDeviceUnsupported
+	}
+	if (info.RequiresPIN || info.RequiresPassword) && !info.Paired {
+		return Device{}, "", zones.ErrDevicePairingRequired
+	}
+	return device, "", nil
+}
+
+func (s *Service) claimOutput(ctx context.Context, actor identity.User, deviceID string, device Device, base string, caps zones.Capabilities) error {
+	m := s.output
+	userID, udn := actor.ID, device.UDN
 	claim, err := m.zones.ClaimOutput(ctx, userID, deviceID, zones.ClaimOutputInput{Protocol: 1, Capabilities: caps, Managed: true})
 	if err != nil {
 		return err
@@ -186,16 +213,16 @@ func (s *Service) Acquire(ctx context.Context, userID, deviceID, udn string, cap
 		go p.run(sub)
 	} else if device.Kind == "cast" {
 		output := cast.Output{Zones: m.zones, UserID: userID, DeviceID: deviceID, ZoneID: o.zoneID, SessionID: o.sessionID, BaseURL: base, Address: device.Address, Logger: m.logger, Online: func() bool { d, ok := s.cast.Lookup(udn); return ok && d.Online }, Offline: func() { s.cast.Offline(udn) }}
-		go func() { position := output.Run(run, sub); sub.Close(); o.cancel(); o.release(position) }()
+		go func() { position := output.Run(run, sub); o.cancel(); o.release(position) }()
 	} else {
 		go o.run(sub)
 	}
 	return nil
 }
 
-func (s *Service) stopOutputs(match func(*deviceOutput) bool) {
+func (s *Service) cancelOutputs(match func(*deviceOutput) bool) []*deviceOutput {
 	if s.output == nil {
-		return
+		return nil
 	}
 	m := s.output
 	m.mu.Lock()
@@ -208,9 +235,18 @@ func (s *Service) stopOutputs(match func(*deviceOutput) bool) {
 			stopped = append(stopped, o)
 		}
 	}
+	return stopped
+}
+
+func (s *Service) waitOutputsLocked(stopped []*deviceOutput) {
+	if len(stopped) == 0 {
+		return
+	}
+	s.mu.Unlock()
 	for _, o := range stopped {
 		<-o.done
 	}
+	s.mu.Lock()
 }
 
 func (s *Service) enforceGrants(ctx context.Context) error {
@@ -222,10 +258,11 @@ func (s *Service) enforceGrants(ctx context.Context) error {
 	if err == nil && !settings.Shared {
 		grants, err = s.grants(ctx, "")
 	}
-	s.stopOutputs(func(o *deviceOutput) bool {
+	stopped := s.cancelOutputs(func(o *deviceOutput) bool {
 		d, exists := s.protocols[deviceKind(o.udn)].registry.Lookup(o.udn)
 		return !exists || !d.Online || err != nil || (!settings.Shared && o.actor.Role != "admin" && !slices.Contains(grants[d.UDN], o.actor.ID))
 	})
+	s.waitOutputsLocked(stopped)
 	return err
 }
 
@@ -241,7 +278,8 @@ func (s *Service) SessionRevoked(userID string) {
 		s.output.logger.Error("查询设备占用者会话失败", "module", "upnp", "user_id", userID, "error", err)
 	}
 	if !active || err != nil {
-		s.stopOutputs(func(o *deviceOutput) bool { return o.actor.ID == userID })
+		stopped := s.cancelOutputs(func(o *deviceOutput) bool { return o.actor.ID == userID })
+		s.waitOutputsLocked(stopped)
 	}
 }
 
@@ -280,6 +318,6 @@ func (s *Service) ReleaseIdle(ctx context.Context, userID, udn, sessionID string
 		return nil
 	}
 	o.cancel()
-	<-o.done
+	s.waitOutputsLocked([]*deviceOutput{o})
 	return o.releaseErr
 }

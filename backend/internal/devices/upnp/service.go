@@ -47,6 +47,7 @@ type Service struct {
 	db                 *sql.DB
 	registry           *Registry
 	mu                 sync.RWMutex
+	protocolMu         sync.Mutex // 协议启停跨越输出收尾，期间允许查询与认领其他设备。
 	cast               *cast.Registry
 	protocols          map[string]*protocol
 	output             *outputManager
@@ -56,19 +57,21 @@ type Service struct {
 }
 
 func NewService(ctx context.Context, db *sql.DB, registry *Registry, credentials *airplay.CredentialStore, ptpAddress string) *Service {
-	receivers := cast.NewRegistry()
+	receivers := cast.NewRegistryWithLogger(registry.logger)
 	return &Service{
 		lifecycle: ctx, db: db, registry: registry, cast: receivers, airplayCredentials: credentials, clock: ptp.Client{Address: ptpAddress}, pendingPIN: make(map[string]*pinChallenge),
 		protocols: map[string]*protocol{
 			"upnp":    {registry: registry},
 			"cast":    {registry: castRegistry{receivers}},
-			"airplay": {registry: airplayRegistry{airplay.NewRegistry()}},
+			"airplay": {registry: airplayRegistry{airplay.NewRegistryWithLogger(registry.logger)}},
 		},
 	}
 }
 
 // Restore 在装配时读取设置。默认关闭的实例不会建立网络监听。
 func (s *Service) Restore(ctx context.Context) error {
+	s.protocolMu.Lock()
+	defer s.protocolMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	settings, err := s.Settings(ctx)
@@ -125,23 +128,32 @@ func (s *Service) startProtocols(ctx context.Context, settings Settings) ([]stri
 	}
 	return started, discoveryErr
 }
-func (s *Service) stopProtocol(kind string) {
-	p := s.protocols[kind]
-	if p.ctx == nil {
-		return
+func (s *Service) stopProtocols(kinds []string) {
+	for _, kind := range kinds {
+		s.protocols[kind].ctx = nil
 	}
-	s.stopOutputs(func(o *deviceOutput) bool { return deviceKind(o.udn) == kind })
-	p.cancel()
-	p.registry.Stop()
-	p.probes.Wait()
-	p.ctx, p.cancel = nil, nil
+	stopped := s.cancelOutputs(func(o *deviceOutput) bool { return slices.Contains(kinds, deviceKind(o.udn)) })
+	s.waitOutputsLocked(stopped)
+	for _, kind := range kinds {
+		p := s.protocols[kind]
+		p.cancel()
+		p.registry.Stop()
+		p.probes.Wait()
+		p.cancel = nil
+	}
 }
 func (s *Service) Close() {
+	s.protocolMu.Lock()
+	defer s.protocolMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for kind := range s.protocols {
-		s.stopProtocol(kind)
+	var stopping []string
+	for kind, p := range s.protocols {
+		if p.ctx != nil {
+			stopping = append(stopping, kind)
+		}
 	}
+	s.stopProtocols(stopping)
 }
 
 type SettingsUpdate struct {
@@ -153,6 +165,8 @@ type SettingsUpdate struct {
 }
 
 func (s *Service) UpdateSettings(ctx context.Context, changes SettingsUpdate) (Settings, error) {
+	s.protocolMu.Lock()
+	defer s.protocolMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	before, err := s.Settings(ctx)
@@ -180,16 +194,16 @@ func (s *Service) UpdateSettings(ctx context.Context, changes SettingsUpdate) (S
 		_, err = s.db.ExecContext(ctx, `UPDATE upnp_settings SET enabled=$1, shared=$2, upnp_enabled=$3, cast_enabled=$4, airplay_enabled=$5 WHERE id=1`, after.Enabled, after.Shared, after.UPnPEnabled, after.CastEnabled, after.AirPlayEnabled)
 	}
 	if err != nil {
-		for _, kind := range started {
-			s.stopProtocol(kind)
-		}
+		s.stopProtocols(started)
 		return Settings{}, err
 	}
-	for kind := range s.protocols {
-		if !after.active(kind) {
-			s.stopProtocol(kind)
+	var stopping []string
+	for kind, p := range s.protocols {
+		if p.ctx != nil && !after.active(kind) {
+			stopping = append(stopping, kind)
 		}
 	}
+	s.stopProtocols(stopping)
 	if before.Shared && !after.Shared {
 		err = s.enforceGrants(ctx)
 	}

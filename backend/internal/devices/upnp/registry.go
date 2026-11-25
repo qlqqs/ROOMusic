@@ -2,6 +2,7 @@ package upnp
 
 import (
 	"context"
+	"log/slog"
 	"net/netip"
 	"slices"
 	"sort"
@@ -34,6 +35,7 @@ func (rec record) entry(now time.Time) Entry {
 }
 
 type Registry struct {
+	logger    *slog.Logger
 	lifecycle sync.Mutex
 	mu        sync.RWMutex
 	run       *discovery
@@ -41,7 +43,11 @@ type Registry struct {
 }
 
 func NewRegistry() *Registry {
-	return &Registry{records: make(map[string]*record)}
+	return NewRegistryWithLogger(slog.Default())
+}
+
+func NewRegistryWithLogger(logger *slog.Logger) *Registry {
+	return &Registry{logger: logger, records: make(map[string]*record)}
 }
 
 func (r *Registry) List() []Entry {
