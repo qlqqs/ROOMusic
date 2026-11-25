@@ -8,9 +8,22 @@ import (
 )
 
 type DeviceFormat struct {
+	Volume        string `json:"volume,omitempty"`
 	Codec         string `json:"codec"`
 	MaxSampleRate int    `json:"max_sample_rate"`
 	MaxBitDepth   int    `json:"max_bit_depth,omitempty"`
+}
+
+// SlimProto 用 null 表示跟随设备声明，其余协议保存具体采样率。
+func (f DeviceFormat) MarshalJSON() ([]byte, error) {
+	type fields DeviceFormat
+	if f.Volume != "" && f.MaxSampleRate == 0 {
+		return json.Marshal(struct {
+			fields
+			MaxSampleRate *int `json:"max_sample_rate"`
+		}{fields: fields(f)})
+	}
+	return json.Marshal(fields(f))
 }
 
 type storedFormat struct {
@@ -23,9 +36,11 @@ var ErrFormat = errors.New("需要有效的 Cast 编码格式与采样率上限"
 var ErrAirPlayFormat = errors.New("AirPlay 支持 44.1 kHz/16 位 ALAC，AirPlay 2 还可选择 48 kHz/24 位")
 
 func (s *Service) formats(ctx context.Context) (map[string]storedFormat, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT udn,codec,max_sample_rate,0,false FROM cast_device_formats
-		UNION ALL SELECT udn,'alac',COALESCE(max_sample_rate,44100),COALESCE(max_bit_depth,16),p.udn IS NOT NULL
-		FROM airplay_device_formats f FULL JOIN airplay_pairings p USING (udn)`)
+	rows, err := s.db.QueryContext(ctx, `SELECT udn,codec,max_sample_rate,0,false,'' FROM cast_device_formats
+		UNION ALL SELECT udn,'alac',COALESCE(max_sample_rate,44100),COALESCE(max_bit_depth,16),p.udn IS NOT NULL,''
+		FROM airplay_device_formats f FULL JOIN airplay_pairings p USING (udn)
+		UNION ALL SELECT udn,'flac',COALESCE(max_sample_rate,0),0,false,volume
+		FROM slimproto_device_formats WHERE max_sample_rate IS NOT NULL OR volume <> 'number'`)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +49,7 @@ func (s *Service) formats(ctx context.Context) (map[string]storedFormat, error) 
 	for rows.Next() {
 		var key string
 		var f storedFormat
-		if err := rows.Scan(&key, &f.Codec, &f.MaxSampleRate, &f.MaxBitDepth, &f.paired); err != nil {
+		if err := rows.Scan(&key, &f.Codec, &f.MaxSampleRate, &f.MaxBitDepth, &f.paired, &f.Volume); err != nil {
 			return nil, err
 		}
 		items[key] = f
@@ -46,6 +61,15 @@ func applyFormat(e *Entry, formats map[string]storedFormat) *DeviceFormat {
 	stored := formats[e.UDN]
 	f := stored.DeviceFormat
 	switch e.Kind {
+	case "slimproto":
+		if f.Codec == "" {
+			f = DeviceFormat{Codec: "flac", Volume: "number"}
+		}
+		if f.MaxSampleRate > 0 {
+			e.Capabilities.MaxSampleRate = min(e.Capabilities.MaxSampleRate, f.MaxSampleRate)
+		}
+		e.Capabilities.Volume = f.Volume
+		return &f
 	case "cast":
 		if f.Codec == "" {
 			f = DeviceFormat{Codec: "mp3", MaxSampleRate: 48000}
@@ -83,8 +107,14 @@ func (s *Service) requireDevice(ctx context.Context, udn string) error {
 }
 
 func (s *Service) SetFormat(ctx context.Context, udn string, f DeviceFormat) (DeviceFormat, error) {
+	if deviceKind(udn) == "slimproto" {
+		return s.setSlimFormat(ctx, udn, f)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if f.Volume != "" {
+		return DeviceFormat{}, ErrFormat
+	}
 	if deviceKind(udn) == "airplay" {
 		return s.setAirPlayFormat(ctx, udn, f)
 	}

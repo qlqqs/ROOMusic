@@ -14,6 +14,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/devices/airplay"
 	"github.com/qlqq/roomusic/backend/internal/devices/cast"
+	"github.com/qlqq/roomusic/backend/internal/devices/slimproto"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
@@ -38,7 +39,7 @@ func (s *Service) WithAirPlayArtwork(read func(context.Context, string, bool) (s
 }
 
 func (m *outputManager) baseURL(d Device) (string, error) {
-	if m.lanURL != "" {
+	if m.lanURL != "" && (d.Kind != "slimproto" || m.httpAddr == "") {
 		return m.lanURL, nil
 	}
 	_, port, err := net.SplitHostPort(m.httpAddr)
@@ -87,7 +88,7 @@ func (s *Service) VisibleDevices(ctx context.Context, userID string) ([]zones.Ma
 	if err != nil {
 		return nil, err
 	}
-	items, err := s.visibleLocked(ctx, actor)
+	items, err := s.visibleLocked(ctx, actor, "")
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +99,9 @@ func (s *Service) VisibleDevices(ctx context.Context, userID string) ([]zones.Ma
 		row := zones.ManagedDevice{Kind: d.Kind, MaxSampleRate: d.Capabilities.MaxSampleRate, UDN: d.UDN, Name: d.Name, InitialVolume: d.initialVolume, Capabilities: playbackCaps(d.Capabilities), FormatDeclared: d.Capabilities.FormatDeclared}
 		if info := d.Capabilities.AirPlay; info != nil {
 			row.UnavailableReason = string(info.UnavailableReason)
+		}
+		if info := d.Capabilities.SlimProto; info != nil && info.Unsupported {
+			row.UnavailableReason = "device_unsupported"
 		}
 		if pending, ok := s.output.handovers[d.UDN]; ok {
 			row.OccupiedBy = &pending
@@ -143,7 +147,7 @@ func (s *Service) Acquire(ctx context.Context, userID, deviceID, udn string, cap
 		if old == nil {
 			return s.claimOutput(ctx, actor, deviceID, device, base, caps)
 		}
-		if old.ctx.Err() == nil {
+		if old.ctx.Err() == nil && old.device.slimPlayer == device.slimPlayer {
 			if old.actor.ID == userID && old.deviceID == deviceID {
 				return nil
 			}
@@ -165,15 +169,17 @@ func (s *Service) Acquire(ctx context.Context, userID, deviceID, udn string, cap
 }
 
 func (s *Service) outputDevice(ctx context.Context, actor identity.User, udn string) (Device, string, error) {
-	visible, err := s.visibleLocked(ctx, actor)
+	visible, err := s.visibleLocked(ctx, actor, udn)
 	if err != nil {
 		return Device{}, "", err
 	}
-	index := slices.IndexFunc(visible, func(d Entry) bool { return d.UDN == udn })
-	if index < 0 {
+	if len(visible) == 0 {
 		return Device{}, "", zones.ErrNotFound
 	}
-	device := visible[index].Device
+	device := visible[0].Device
+	if info := device.Capabilities.SlimProto; info != nil && info.Unsupported {
+		return Device{}, "", zones.ErrDeviceUnsupported
+	}
 	if device.Kind != "airplay" {
 		base, err := s.output.baseURL(device)
 		return device, base, err
@@ -211,6 +217,9 @@ func (s *Service) claimOutput(ctx context.Context, actor identity.User, deviceID
 		receiver := airplay.Device{Key: device.UDN, Name: device.Name, Model: device.Model, Address: device.Address, LocalAddress: device.LocalAddress, Info: *device.Capabilities.AirPlay}
 		p := airplayOutput{deviceOutput: o, receiver: receiver, clock: &s.clock, credentials: s.airplayCredentials, registry: s.protocols["airplay"].registry}
 		go p.run(sub)
+	} else if device.Kind == "slimproto" {
+		output := slimproto.Output{Zones: m.zones, UserID: userID, DeviceID: deviceID, ZoneID: o.zoneID, SessionID: o.sessionID, BaseURL: base, Player: device.slimPlayer, Logger: m.logger, Offline: func() { s.slim.Offline(udn, device.slimPlayer) }}
+		go func() { position := output.Run(run, sub); o.cancel(); o.release(position) }()
 	} else if device.Kind == "cast" {
 		output := cast.Output{Zones: m.zones, UserID: userID, DeviceID: deviceID, ZoneID: o.zoneID, SessionID: o.sessionID, BaseURL: base, Address: device.Address, Logger: m.logger, Online: func() bool { d, ok := s.cast.Lookup(udn); return ok && d.Online }, Offline: func() { s.cast.Offline(udn) }}
 		go func() { position := output.Run(run, sub); o.cancel(); o.release(position) }()

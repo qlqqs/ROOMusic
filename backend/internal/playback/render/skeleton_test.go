@@ -358,14 +358,6 @@ func TestRenderExplicitLayout(t *testing.T) {
 	}
 }
 
-// 在启动边界截获解码参数，不创建子进程或音频夹具。
-type downmixDecoderStarter struct{ args []string }
-
-func (s *downmixDecoderStarter) Start(_ context.Context, options ffmpeg.StartOptions) (*ffmpeg.Process, error) {
-	s.args = options.Args
-	return nil, context.Canceled
-}
-
 func TestRenderDownmixExplicitLayout(t *testing.T) {
 	// 5.1 后环绕掩码不同于默认六声道的侧环绕布局，确保使用显式 WAV 掩码。
 	track := Track{Codec: "wav_extensible", SampleRate: 44100, Channels: 6, BitDepth: 16, Layout: 0x3f}
@@ -423,7 +415,7 @@ func TestRenderDownmixExplicitLayout(t *testing.T) {
 			if !tc.enabled && (out.SourceBits != 16 || out.Samples[0][0] != 0.25 || out.Samples[1][0] != 0.5) {
 				t.Fatalf("Tail 未保持前两声道及无损位深：%+v", out)
 			}
-			starter := &downmixDecoderStarter{}
+			starter := &recordingProcessStarter{}
 			_, err = openDecoder(context.Background(), starter, nil, track, spec.Start, plan.sourcePCM, 0, spec.Settings.Leveling)
 			if !errors.Is(err, context.Canceled) {
 				t.Fatalf("未到达解码启动边界：%v", err)

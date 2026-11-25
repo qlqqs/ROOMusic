@@ -99,6 +99,7 @@ func TestPostgreSQLUPnPAPISamples(t *testing.T) {
 		"uuid:00000000-0000-4000-8000-000000000003", r.udn)
 	assertUPnPSample(t, "manual-removed", f.request(t, "DELETE", devicePath, nil, &f.admin, headers))
 	assertUPnPSample(t, "list-empty", f.request(t, "GET", upnpAdmin+"/devices", nil, &f.admin, headers))
+	t.Run("SlimProto", func(t *testing.T) { checkSlimProtoAPISamples(t, f) })
 }
 
 func TestPostgreSQLUPnPSharingTakeoverAndRevocation(t *testing.T) {

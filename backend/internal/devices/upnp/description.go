@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/devices/airplay"
+	"github.com/qlqq/roomusic/backend/internal/devices/slimproto"
 )
 
 const (
@@ -21,13 +22,14 @@ const (
 )
 
 type Capabilities struct {
-	AirPlay        *airplay.Info `json:"airplay"`
-	Pause          bool          `json:"pause"`
-	Volume         string        `json:"volume"`
-	StreamFormats  []string      `json:"stream_formats"`
-	FormatDeclared bool          `json:"format_declared"`
-	MaxSampleRate  int           `json:"max_sample_rate"`
-	MaxBitDepth    int           `json:"max_bit_depth"`
+	SlimProto      *SlimProtoInfo `json:"slimproto,omitempty"`
+	AirPlay        *airplay.Info  `json:"airplay"`
+	Pause          bool           `json:"pause"`
+	Volume         string         `json:"volume"`
+	StreamFormats  []string       `json:"stream_formats"`
+	FormatDeclared bool           `json:"format_declared"`
+	MaxSampleRate  int            `json:"max_sample_rate"`
+	MaxBitDepth    int            `json:"max_bit_depth"`
 }
 
 type Device struct {
@@ -39,6 +41,7 @@ type Device struct {
 	LocalAddress string       `json:"-"`
 	Capabilities Capabilities `json:"capabilities"`
 
+	slimPlayer       *slimproto.Player
 	initialVolume    *float64
 	discoveryContext context.Context
 	peerIP           netip.Addr

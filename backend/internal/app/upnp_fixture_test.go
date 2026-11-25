@@ -256,23 +256,28 @@ func (f *upnpFixture) tracksAtRate(t *testing.T, rate int, seconds ...int) []str
 	library := createPlaybackLibrary(t, f.integrationTestApplication)
 	var tracks []string
 	for i, duration := range seconds {
-		name := fmt.Sprintf("upnp-%d.flac", i)
-		generator := exec.CommandContext(t.Context(), requireTestFFmpeg(t), "-v", "error", "-f", "lavfi",
-			"-i", fmt.Sprintf("sine=frequency=%d:sample_rate=%d:duration=%d", 440+i*100, rate, duration), "-ac", "2", "-c:a", "flac", "-f", "flac", "pipe:1")
-		var stderr bytes.Buffer
-		generator.Stderr = &stderr
-		audio, err := generator.Output()
-		if err != nil {
-			t.Fatalf("生成合成音频: %v %s", err, &stderr)
-		}
-		id := library.addTrack(t, f.integrationTestApplication, playbackTrackSpec{relative: name, content: audio, sampleRate: rate, bitDepth: 16, channels: 2})
-		mustExec(t, f.integrationTestApplication, "UPDATE tracks SET duration_seconds=$1 WHERE id=$2", duration, id)
-		if i == 0 {
-			mustExec(t, f.integrationTestApplication, "UPDATE tracks SET title='海 & 浪' WHERE id=$1", id)
-		}
-		tracks = append(tracks, id)
+		tracks = append(tracks, f.addTrackAtRate(t, library, i, rate, duration))
 	}
 	return tracks
+}
+
+func (f *upnpFixture) addTrackAtRate(t *testing.T, library playbackLibrary, index, rate, duration int) string {
+	t.Helper()
+	name := fmt.Sprintf("upnp-%d.flac", index)
+	generator := exec.CommandContext(t.Context(), requireTestFFmpeg(t), "-v", "error", "-f", "lavfi",
+		"-i", fmt.Sprintf("sine=frequency=%d:sample_rate=%d:duration=%d", 440+index*100, rate, duration), "-ac", "2", "-c:a", "flac", "-f", "flac", "pipe:1")
+	var stderr bytes.Buffer
+	generator.Stderr = &stderr
+	audio, err := generator.Output()
+	if err != nil {
+		t.Fatalf("生成合成音频: %v %s", err, &stderr)
+	}
+	id := library.addTrack(t, f.integrationTestApplication, playbackTrackSpec{relative: name, content: audio, sampleRate: rate, bitDepth: 16, channels: 2})
+	mustExec(t, f.integrationTestApplication, "UPDATE tracks SET duration_seconds=$1 WHERE id=$2", duration, id)
+	if index == 0 {
+		mustExec(t, f.integrationTestApplication, "UPDATE tracks SET title='海 & 浪' WHERE id=$1", id)
+	}
+	return id
 }
 
 func (f *upnpFixture) wait(t *testing.T, timeout time.Duration, why string, ready func() bool) {

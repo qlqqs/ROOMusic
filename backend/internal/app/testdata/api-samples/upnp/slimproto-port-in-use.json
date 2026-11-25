@@ -1,0 +1,12 @@
+{
+  "body": {
+    "airplay_enabled": false,
+    "cast_enabled": false,
+    "enabled": true,
+    "shared": true,
+    "slimproto_enabled": true,
+    "slimproto_unavailable": "port_in_use",
+    "upnp_enabled": false
+  },
+  "status": 200
+}

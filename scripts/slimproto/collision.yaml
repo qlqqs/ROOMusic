@@ -1,0 +1,62 @@
+services:
+  app:
+    ports: !reset []
+    network_mode: service:port-holder
+    depends_on:
+      port-holder:
+        condition: service_healthy
+
+  port-holder:
+    image: python:3.13-alpine@sha256:bf12ecc0bea3f171d55145dd02c78b5eeb09f30ee2ac9cc2b4c9e4e8f5e30741
+    command:
+      - python3
+      - -u
+      - -c
+      - |
+        import socket
+        import time
+        from pathlib import Path
+        tcp = socket.socket()
+        tcp.bind(("0.0.0.0", 3483))
+        tcp.listen()
+        udp = socket.socket(type=socket.SOCK_DGRAM)
+        udp.bind(("0.0.0.0", 3483))
+        Path("/tmp/occupied").touch()
+        print("TCP/UDP 3483 已占用")
+        time.sleep(600)
+    ports: ["0.0.0.0::8080"]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/occupied"]
+      interval: 1s
+      timeout: 2s
+      retries: 10
+    networks:
+      default:
+        aliases: [app]
+    cpus: 1
+    mem_limit: 64m
+
+  cast:
+    image: alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db9275e198ad
+    entrypoint: ["/roomusic-fake-cast", "-name", "ROOMusic SlimProto Cast Probe", "-http-addr", "0.0.0.0:8099"]
+    volumes:
+      - ${SLIMPROTO_WORK:?}/roomusic-fake-cast:/roomusic-fake-cast:ro
+    ports: ["127.0.0.1::8099"]
+    cpus: 1
+    mem_limit: 128m
+
+  renderer:
+    image: alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db9275e198ad
+    entrypoint: ["/roomusic-fake-renderer", "-name", "ROOMusic SlimProto UPnP Probe"]
+    volumes:
+      - ${SLIMPROTO_WORK:?}/roomusic-fake-renderer:/roomusic-fake-renderer:ro
+    cpus: 1
+    mem_limit: 128m
+
+  homepod-advert:
+    image: alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db9275e198ad
+    entrypoint: ["/airplay-probe", "advertise-homepod"]
+    volumes:
+      - ${SLIMPROTO_WORK:?}/airplay-probe:/airplay-probe:ro
+    cpus: 1
+    mem_limit: 128m

@@ -59,13 +59,18 @@ func TestPostgreSQLCastProtocolStopsDiscovery(t *testing.T) {
 	f := newUPnPFixture(t, false)
 	before := ownUDPSockets(t)
 	assertUPnPSample(t, "settings", f.request(t, "GET", upnpAdmin+"/settings", nil, &f.admin, nil))
+	settings := zonesSampleDecode[upnp.Settings](t, f.request(t, "PUT", upnpAdmin+"/settings",
+		map[string]bool{"slimproto_enabled": false}, &f.admin, nil), 200)
+	if settings.SlimProtoEnabled {
+		t.Fatal("Cast 单协议测试需要关闭 SlimProto")
+	}
 	enableCast(t, f)
 	if active := ownUDPSockets(t); len(active) <= len(before) {
 		t.Fatal("启用 Cast 时没有打开 mDNS 套接字")
 	}
-	settings := zonesSampleDecode[upnp.Settings](t, f.request(t, "PUT", upnpAdmin+"/settings",
+	settings = zonesSampleDecode[upnp.Settings](t, f.request(t, "PUT", upnpAdmin+"/settings",
 		map[string]bool{"cast_enabled": false}, &f.admin, nil), 200)
-	if !settings.Enabled || settings.CastEnabled || settings.UPnPEnabled {
+	if !settings.Enabled || settings.CastEnabled || settings.UPnPEnabled || settings.SlimProtoEnabled {
 		t.Fatalf("单独关闭 Cast 后的设置 = %+v", settings)
 	}
 	if after := ownUDPSockets(t); !reflect.DeepEqual(before, after) {

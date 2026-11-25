@@ -1,0 +1,39 @@
+{
+  "body": {
+    "items": [
+      {
+        "address": "192.168.44.2",
+        "capabilities": {
+          "airplay": null,
+          "format_declared": true,
+          "max_bit_depth": 24,
+          "max_sample_rate": 192000,
+          "pause": true,
+          "slimproto": {
+            "declared_max_sample_rate": 192000,
+            "firmware": "2.0.0",
+            "model_name": "SqueezeLite",
+            "unsupported": false
+          },
+          "stream_formats": [
+            "flac"
+          ],
+          "volume": "number"
+        },
+        "format": {
+          "codec": "flac",
+          "max_sample_rate": null,
+          "volume": "number"
+        },
+        "kind": "slimproto",
+        "manual": false,
+        "model": "squeezelite",
+        "name": "书房",
+        "online": true,
+        "udn": "slim:02:00:00:00:00:01",
+        "user_ids": []
+      }
+    ]
+  },
+  "status": 200
+}

@@ -37,6 +37,14 @@ type testCursor func(string) (zones.Entry, bool)
 
 func (f testCursor) Next(after string) (zones.Entry, bool) { return f(after) }
 
+// 在启动边界记录 ffmpeg 参数，不创建子进程。
+type recordingProcessStarter struct{ args []string }
+
+func (s *recordingProcessStarter) Start(_ context.Context, options ffmpeg.StartOptions) (*ffmpeg.Process, error) {
+	s.args = options.Args
+	return nil, context.Canceled
+}
+
 func pinnedFFmpeg(t *testing.T) string {
 	t.Helper()
 	path := os.Getenv("ROOMUSIC_TEST_FFMPEG")

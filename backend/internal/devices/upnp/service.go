@@ -11,6 +11,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/devices/airplay"
 	"github.com/qlqq/roomusic/backend/internal/devices/cast"
+	"github.com/qlqq/roomusic/backend/internal/devices/slimproto"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/ptp"
@@ -28,11 +29,13 @@ var (
 )
 
 type Settings struct {
-	UPnPEnabled    bool `json:"upnp_enabled"`
-	CastEnabled    bool `json:"cast_enabled"`
-	AirPlayEnabled bool `json:"airplay_enabled"`
-	Enabled        bool `json:"enabled"`
-	Shared         bool `json:"shared"`
+	SlimProtoEnabled     bool    `json:"slimproto_enabled"`
+	SlimProtoUnavailable *string `json:"slimproto_unavailable"`
+	UPnPEnabled          bool    `json:"upnp_enabled"`
+	CastEnabled          bool    `json:"cast_enabled"`
+	AirPlayEnabled       bool    `json:"airplay_enabled"`
+	Enabled              bool    `json:"enabled"`
+	Shared               bool    `json:"shared"`
 }
 
 type AdminDevice struct {
@@ -48,6 +51,7 @@ type Service struct {
 	registry           *Registry
 	mu                 sync.RWMutex
 	protocolMu         sync.Mutex // 协议启停跨越输出收尾，期间允许查询与认领其他设备。
+	slim               *slimproto.Registry
 	cast               *cast.Registry
 	protocols          map[string]*protocol
 	output             *outputManager
@@ -58,7 +62,7 @@ type Service struct {
 
 func NewService(ctx context.Context, db *sql.DB, registry *Registry, credentials *airplay.CredentialStore, ptpAddress string) *Service {
 	receivers := cast.NewRegistryWithLogger(registry.logger)
-	return &Service{
+	s := &Service{
 		lifecycle: ctx, db: db, registry: registry, cast: receivers, airplayCredentials: credentials, clock: ptp.Client{Address: ptpAddress}, pendingPIN: make(map[string]*pinChallenge),
 		protocols: map[string]*protocol{
 			"upnp":    {registry: registry},
@@ -66,6 +70,9 @@ func NewService(ctx context.Context, db *sql.DB, registry *Registry, credentials
 			"airplay": {registry: airplayRegistry{airplay.NewRegistryWithLogger(registry.logger)}},
 		},
 	}
+	s.slim = slimproto.NewRegistry("", registry.logger, s.configureSlimPlayer)
+	s.protocols["slimproto"] = &protocol{registry: slimRegistry{s.slim}}
+	return s
 }
 
 // Restore 在装配时读取设置。默认关闭的实例不会建立网络监听。
@@ -83,7 +90,7 @@ func (s *Service) Restore(ctx context.Context) error {
 }
 
 func (v Settings) active(kind string) bool {
-	return v.Enabled && (kind == "upnp" && v.UPnPEnabled || kind == "cast" && v.CastEnabled || kind == "airplay" && v.AirPlayEnabled)
+	return v.Enabled && (kind == "upnp" && v.UPnPEnabled || kind == "cast" && v.CastEnabled || kind == "airplay" && v.AirPlayEnabled || kind == "slimproto" && v.SlimProtoEnabled)
 }
 func (s *Service) running() bool {
 	for _, p := range s.protocols {
@@ -97,7 +104,7 @@ func (s *Service) running() bool {
 // 恢复实例时保留成功启动的协议；管理员更新设置时可按列表撤回本次启动。
 func (s *Service) startProtocols(ctx context.Context, settings Settings) ([]string, error) {
 	var pending []string
-	for _, kind := range []string{"upnp", "cast", "airplay"} {
+	for _, kind := range []string{"upnp", "cast", "airplay", "slimproto"} {
 		if settings.active(kind) && s.protocols[kind].ctx == nil {
 			pending = append(pending, kind)
 		}
@@ -114,17 +121,28 @@ func (s *Service) startProtocols(ctx context.Context, settings Settings) ([]stri
 		targets[d.Kind] = append(targets[d.Kind], ManualDevice{UDN: d.UDN, Address: d.Address})
 	}
 	var started []string
+	type cycle struct {
+		ctx    context.Context
+		cancel context.CancelFunc
+	}
+	cycles := make(map[string]cycle, len(pending))
 	var discoveryErr error
+	// 在所有网络监听就绪后一次性发布周期，避免认领尚未提交的设置。
+	s.mu.Unlock()
 	for _, kind := range pending {
-		p := s.protocols[kind]
 		run, cancel := context.WithCancel(s.lifecycle)
-		if err := p.registry.Start(run, targets[kind]); err != nil {
+		if err := s.protocols[kind].registry.Start(run, targets[kind]); err != nil {
 			cancel()
 			discoveryErr = errors.Join(discoveryErr, fmt.Errorf("%w (%s): %w", ErrDiscovery, kind, err))
 			continue
 		}
-		p.ctx, p.cancel = run, cancel
 		started = append(started, kind)
+		cycles[kind] = cycle{run, cancel}
+	}
+	s.mu.Lock()
+	for kind, cycle := range cycles {
+		p := s.protocols[kind]
+		p.ctx, p.cancel = cycle.ctx, cycle.cancel
 	}
 	return started, discoveryErr
 }
@@ -136,9 +154,11 @@ func (s *Service) stopProtocols(kinds []string) {
 	s.waitOutputsLocked(stopped)
 	for _, kind := range kinds {
 		p := s.protocols[kind]
+		s.mu.Unlock()
 		p.cancel()
 		p.registry.Stop()
 		p.probes.Wait()
+		s.mu.Lock()
 		p.cancel = nil
 	}
 }
@@ -157,11 +177,12 @@ func (s *Service) Close() {
 }
 
 type SettingsUpdate struct {
-	Enabled        *bool `json:"enabled"`
-	Shared         *bool `json:"shared"`
-	UPnPEnabled    *bool `json:"upnp_enabled"`
-	CastEnabled    *bool `json:"cast_enabled"`
-	AirPlayEnabled *bool `json:"airplay_enabled"`
+	SlimProtoEnabled *bool `json:"slimproto_enabled"`
+	Enabled          *bool `json:"enabled"`
+	Shared           *bool `json:"shared"`
+	UPnPEnabled      *bool `json:"upnp_enabled"`
+	CastEnabled      *bool `json:"cast_enabled"`
+	AirPlayEnabled   *bool `json:"airplay_enabled"`
 }
 
 func (s *Service) UpdateSettings(ctx context.Context, changes SettingsUpdate) (Settings, error) {
@@ -174,6 +195,9 @@ func (s *Service) UpdateSettings(ctx context.Context, changes SettingsUpdate) (S
 		return Settings{}, err
 	}
 	after := before
+	if changes.SlimProtoEnabled != nil {
+		after.SlimProtoEnabled = *changes.SlimProtoEnabled
+	}
 	if changes.Enabled != nil {
 		after.Enabled = *changes.Enabled
 	}
@@ -191,7 +215,7 @@ func (s *Service) UpdateSettings(ctx context.Context, changes SettingsUpdate) (S
 	}
 	started, err := s.startProtocols(ctx, after)
 	if err == nil && after != before {
-		_, err = s.db.ExecContext(ctx, `UPDATE upnp_settings SET enabled=$1, shared=$2, upnp_enabled=$3, cast_enabled=$4, airplay_enabled=$5 WHERE id=1`, after.Enabled, after.Shared, after.UPnPEnabled, after.CastEnabled, after.AirPlayEnabled)
+		_, err = s.db.ExecContext(ctx, `UPDATE upnp_settings SET enabled=$1, shared=$2, upnp_enabled=$3, cast_enabled=$4, airplay_enabled=$5, slimproto_enabled=$6 WHERE id=1`, after.Enabled, after.Shared, after.UPnPEnabled, after.CastEnabled, after.AirPlayEnabled, after.SlimProtoEnabled)
 	}
 	if err != nil {
 		s.stopProtocols(started)
@@ -207,10 +231,14 @@ func (s *Service) UpdateSettings(ctx context.Context, changes SettingsUpdate) (S
 	if before.Shared && !after.Shared {
 		err = s.enforceGrants(ctx)
 	}
+	after.SlimProtoUnavailable = s.slimUnavailable()
 	return after, err
 }
 
 func deviceKind(udn string) string {
+	if strings.HasPrefix(udn, "slim:") {
+		return "slimproto"
+	}
 	if strings.HasPrefix(udn, "airplay:") {
 		return "airplay"
 	}
@@ -298,7 +326,7 @@ func disabledProtocol(kind string) error {
 func (s *Service) Add(ctx context.Context, kind, address string) (AdminDevice, error) {
 	s.mu.RLock()
 	p := s.protocols[kind]
-	if p == nil {
+	if p == nil || kind == "slimproto" {
 		s.mu.RUnlock()
 		return AdminDevice{}, ErrKind
 	}
@@ -382,10 +410,10 @@ func (s *Service) SetGrants(ctx context.Context, udn string, ids []string) ([]st
 func (s *Service) Visible(ctx context.Context, actor identity.User) ([]Entry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.visibleLocked(ctx, actor)
+	return s.visibleLocked(ctx, actor, "")
 }
 
-func (s *Service) visibleLocked(ctx context.Context, actor identity.User) ([]Entry, error) {
+func (s *Service) visibleLocked(ctx context.Context, actor identity.User, udn string) ([]Entry, error) {
 	items := []Entry{}
 	if !s.running() {
 		return items, nil
@@ -409,7 +437,15 @@ func (s *Service) visibleLocked(ctx context.Context, actor identity.User) ([]Ent
 		return nil, err
 	}
 	project := s.deviceProjection(ctx, formats)
-	for _, e := range s.entries() {
+	var entries []Entry
+	if udn == "" {
+		entries = s.entries()
+	} else if p := s.protocols[deviceKind(udn)]; p.ctx != nil {
+		if e, ok := p.registry.Lookup(udn); ok {
+			entries = []Entry{e}
+		}
+	}
+	for _, e := range entries {
 		if e.Online && (grants == nil || len(grants[e.UDN]) > 0) {
 			project(&e)
 			items = append(items, e)

@@ -17,6 +17,13 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	78: `UPDATE upnp_settings SET slimproto_enabled=false WHERE id=1;
+ INSERT INTO playback_devices(id,user_id,kind,name,external_id,max_sample_rate)
+ VALUES ('f7800000-0000-4000-8000-000000000001','f6900000-0000-4000-8000-000000000001','slimproto','合成 SlimProto 播放器','slim:02:00:00:00:00:01',384000);
+ INSERT INTO playback_zones(id,user_id,device_id,position_seconds)
+ VALUES ('f7800000-0000-4000-8000-000000000002','f6900000-0000-4000-8000-000000000001','f7800000-0000-4000-8000-000000000001',12);
+ INSERT INTO slimproto_device_formats(udn,declared_max_sample_rate,max_sample_rate,volume)
+ VALUES ('slim:02:00:00:00:00:01',768000,384000,'fixed');`,
 	77: `INSERT INTO playback_devices(id,user_id,kind,name,external_id,max_sample_rate)
  VALUES ('f7700000-0000-4000-8000-000000000001','f6900000-0000-4000-8000-000000000001','airplay','合成接收端','airplay:02:00:00:00:00:01',48000);
  INSERT INTO playback_zones(id,user_id,device_id,position_seconds)
@@ -488,16 +495,23 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if m.Version == 71 {
 				rollbackExec(t, db, beforeSourcePluginMigration)
 			}
-			if m.Version == 69 || m.Version == 70 || m.Version == 75 || m.Version == 76 || m.Version == 77 {
+			if m.Version == 69 || m.Version == 70 || m.Version == 75 || m.Version == 76 || m.Version == 77 || m.Version == 78 {
 				rollbackExec(t, db, beforeUPnPMigration)
 			}
-			if m.Version == 75 || m.Version == 76 || m.Version == 77 {
+			if m.Version == 75 || m.Version == 76 || m.Version == 77 || m.Version == 78 {
 				rollbackExec(t, db, upnpDiscoveryRollbackFixture)
 				rollbackExec(t, db, upnpPlaybackRollbackFixture)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
+			if m.Version == 78 {
+				var enabled bool
+				err := db.QueryRowContext(t.Context(), "SELECT enabled AND NOT shared AND slimproto_enabled FROM upnp_settings WHERE id=1").Scan(&enabled)
+				if err != nil || !enabled {
+					t.Fatalf("0078 保留旧设置并默认开启 SlimProto = %t，错误 %v", enabled, err)
+				}
+			}
 			if m.Version == 76 {
 				var defaultEnabled bool
 				err := db.QueryRowContext(t.Context(), "SELECT airplay_enabled FROM upnp_settings WHERE id=1").Scan(&defaultEnabled)
