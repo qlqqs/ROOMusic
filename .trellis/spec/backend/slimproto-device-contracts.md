@@ -35,7 +35,8 @@
 
 ### 3.3 开流与状态
 
-- `strm s`：单台 autostart `1`（编组见 §8），格式 `f`，PCM 字段全 `?`，threshold 255 KB，采样率 ≥ 176400 时 output_threshold 20，server_port 为 HTTP 端口，server_ip 为本连接的本机 IPv4，请求串 `GET /upnp/streams/{token} HTTP/1.0`。
+- `strm s`：单台 autostart `1`（编组见 §8），格式 `f`，PCM 字段全 `?`，threshold 255 KB，server_port 为 HTTP 端口，server_ip 为本连接的本机 IPv4，请求串 `GET /upnp/streams/{token} HTTP/1.0`。
+- `output_threshold`（载荷 `p[12]`）以 0.1 秒为单位。采样率 `rate` ≥ 176400 Hz 时取 `min(20, 3528000 / rate)`，使用整数除法。低于 176400 Hz 时该字段为 0。Squeezelite 1479 之前不按缓冲容量下调起播门槛，因此将其限制在默认输出缓冲 441000 帧的 80%（352800 帧）。
 - STMs 回报 `playing`；`strm p`/`strm u` 以 STMp/STMr 为准；跳转与上下首为 `strm q` 后重新开流；取消预取发 `strm f`。
 - 同格式曲目在一条长流里。格式变化时，只有当前流已交付完（`Delivered`）、收到 STMd、且播放区给出接续流，才对接续流发 `strm s`；接续流的 STMs 晋升 `seq`。STMu 且没有接续流时回报 `ended`。
 - 位置：本条流起始偏移加 `elapsed_ms`（Squeezelite 已扣除声卡缓冲），播放中每秒回报。
@@ -126,3 +127,6 @@
 - 单元（`testing/synctest` 驱动生产循环的时钟）：时钟估计、`strm u`/`strm a` 的取值、暂停继续、接续流门槛、单台故障剔除、主设备掉线。
 - PostgreSQL 集成：编组接口、容量与角色守卫、成员区守卫、组音量、微调、重启恢复；分发器的字节一致与慢读者隔离；迁移 0079 往返。
 - 真实播放器：`sg docker -c scripts/test-slimproto-sync.sh`，两台 Squeezelite 接按计划出声时刻计时的读取程序，比较每秒脉冲的时刻差。
+- 跳帧可听性：`sg docker -c scripts/test-slimproto-skip.sh`，成员 +800 ppm，播放正弦、和弦、白噪声三段，按每次 `strm a` 导出两台同时段 WAV 与 `report.json` 到 `temp/slimproto-skip/<时间戳>/`（保留）。只导出与测量，不判定能否听出。Squeezelite 跳帧直接移动读指针、不淡化，2026-11-25 实测正弦与和弦切点的样本跳变高出段内 p99 12.7–25.3 dB、8 kHz 以上能量高出基线 74–91 dB，白噪声段无可测差别。
+- 版本矩阵：`sg docker -c scripts/test-slimproto-versions.sh [MICRO_VERSION]`，从上游固定提交构建 piCorePlayer 9/10/11.1（1468/1476/1524）、moOde 10.3.7（1541）、Debian 13（1517）与现行 1613，逐个跑单台套件和 60 秒、+300 ppm 的编组套件。两个原入口接受 `ROOMUSIC_SLIMPROTO_PLAYER_IMAGE` 传入现成镜像，不传时自建自删。
+- 已知：1524 首轮无漂移编组出现一次 44 ms 峰值后两边交替修正，单行复测 p95 0.355 ms 通过，根因未定（夹具单机串行 12 个套件，读取程序可能被调度延迟）。

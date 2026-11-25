@@ -2,6 +2,7 @@
 
 from bisect import bisect_left
 import math
+import os
 from pathlib import Path
 import re
 from statistics import median
@@ -64,11 +65,11 @@ class Player(Receiver):
 
 
 class Suite:
-    def __init__(self, work, compose_args):
+    def __init__(self, work, compose_args, titles=TRACKS):
         self.compose_args = compose_args
         base = self.app_base()
         self.admin = setup(base)
-        tracks = library(self.admin, TRACKS)
+        tracks = library(self.admin, titles)
         self.admin.api("PUT", ADMIN + "/settings", SETTINGS)
         login = credentials("member")
         self.admin.api("POST", "/api/v1/users", login)
@@ -179,7 +180,7 @@ class Suite:
 
     def check_recovery(self, end, pulses, corrections):
         events = sorted(row["at_ns"] for rows in corrections for row in rows if row["at_ns"] < end)
-        assert events, "+100 ppm 场景没有观察到 strm a"
+        assert events, "漂移场景没有观察到 strm a"
         pairs, _ = self.compare(pulses, end + 4 * SECOND)
         for at in events:
             following = [abs(a - b) / 1e6 for a, b in pairs if a > at + 80_000_000][:3]
@@ -224,6 +225,9 @@ class Suite:
 
     def jitter(self):
         self.playback.command("stop")
+        if os.environ.get("ROOMUSIC_SLIMPROTO_PLAYER_IMAGE"):
+            self.compose("exec", "-T", "-u", "0", "member", "sh", "-ec",
+                         "command -v tc >/dev/null || apk add --no-cache iproute2-tc")
         tc = ("exec", "-T", "-u", "0", "member", "tc", "qdisc")
         self.compose(*tc, "replace", "dev", "eth0", "root", "netem", "delay", "5ms", "2ms")
         try:
@@ -269,13 +273,14 @@ class Suite:
         self.playback.command("stop")
         self.compose("kill", "-s", "SIGKILL", "member")
         until("设置漂移前成员离线", lambda: admin_device(self.admin, SIDECAR_KEY) is None)
-        self.member.ppm.write_text("100\n")
+        ppm = int(os.environ.get("ROOMUSIC_SLIMPROTO_SYNC_PPM", "100"))
+        self.member.ppm.write_text(f"{ppm}\n")
         start = time.monotonic_ns()
         self.compose("start", "member")
         self.device(SIDECAR_KEY)
-        until("成员 PCM 计时器采用 +100 ppm", lambda: any(
-            row["ppm"] == 100 for row in self.member.events_of("clock", start)))
-        self.measure("成员 +100 ppm", self.play("Long"), duration, "Long", drift=True)
+        until(f"成员 PCM 计时器采用 {ppm:+d} ppm", lambda: any(
+            row["ppm"] == ppm for row in self.member.events_of("clock", start)))
+        self.measure(f"成员 {ppm:+d} ppm", self.play("Long"), duration, "Long", drift=True)
 
 
 if __name__ == "__main__":
@@ -283,6 +288,12 @@ if __name__ == "__main__":
     if mode == "generate":
         ffmpeg, seconds = args
         generate(Path(path), ffmpeg, int(seconds))
+    elif mode == "record":
+        suite = Suite(Path(path), args, titles=("Skip",))
+        marks = [player.mark()[0] for player in suite.players]
+        suite.play("Skip")
+        until("两台播完测量曲目", lambda: all("STAT: STMu" in player.log(mark)
+                                      for player, mark in zip(suite.players, marks)), 180)
     elif mode == "run":
         seconds, *compose_args = args
         suite = Suite(Path(path), compose_args)

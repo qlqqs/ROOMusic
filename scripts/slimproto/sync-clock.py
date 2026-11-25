@@ -1,11 +1,12 @@
 """用宿主机单调钟模拟按固定采样率消耗 32 位双声道 PCM 的声卡。"""
 
+import argparse
+from contextlib import nullcontext
 import fcntl
 import json
 import re
 import select
 import struct
-import sys
 import time
 from pathlib import Path
 
@@ -19,7 +20,7 @@ SKIP = re.compile(r"skip ahead interval: (\d+)")
 FRAME_SPAN = struct.Struct("<qIIi")
 
 
-def capture(directory, pipe, player, spans, emit):
+def capture(directory, pipe, player, spans, emit, audio):
     pipe_size = fcntl.fcntl(pipe, fcntl.F_SETPIPE_SZ, 4096)
     ppm = int((directory / "ppm").read_text())
     rate = 44100
@@ -53,6 +54,10 @@ def capture(directory, pipe, player, spans, emit):
             start, first, frames = now, now, 0
         spans.write(FRAME_SPAN.pack(first, count, rate, ppm))
 
+        if audio is not None:
+            audio.write(data)
+            frames += count
+            continue
         left = memoryview(data).cast("i")[::2]
         for index, sample in enumerate(left):
             if sample > PULSE_THRESHOLD:
@@ -66,18 +71,25 @@ def capture(directory, pipe, player, spans, emit):
         frames += count
 
 
-def run(directory):
+def run(directory, record):
     with (directory / "player.log").open() as player, \
             (directory / "events.jsonl").open("w", buffering=1) as events, \
-            (directory / "frames.bin").open("wb") as spans:
+            (directory / "frames.bin").open("wb") as spans, \
+            ((directory / "audio.raw").open("wb") if record else nullcontext()) as audio:
         def emit(kind, at, **fields):
             events.write(json.dumps({"kind": kind, "at_ns": at, **fields}) + "\n")
 
         while True:
             with (directory / "audio.fifo").open("rb", buffering=0) as pipe:
-                capture(directory, pipe, player, spans, emit)
+                capture(directory, pipe, player, spans, emit, audio)
             spans.flush()
+            if record:
+                return
 
 
 if __name__ == "__main__":
-    run(Path(sys.argv[1]))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("directory", type=Path)
+    parser.add_argument("--record", action="store_true", help="保存一次播放的全部 PCM，在管道关闭后退出")
+    args = parser.parse_args()
+    run(args.directory, args.record)

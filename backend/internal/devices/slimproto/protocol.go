@@ -132,7 +132,8 @@ func startStream(ip netip.Addr, port uint16, path string, rate int, options ...b
 		return nil, errors.New("开流参数须同时指定自动起播和缓冲阈值")
 	}
 	if rate >= 176400 {
-		p[12] = 20
+		// 旧版 Squeezelite 不按缓冲容量下调起播门槛，因此将门槛限制在默认容量的 80%（352800 帧）。
+		p[12] = byte(min(20, 3528000/rate))
 	}
 	be.PutUint16(p[18:], port)
 	addr := ip.As4()

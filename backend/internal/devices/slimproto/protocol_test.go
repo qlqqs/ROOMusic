@@ -126,8 +126,13 @@ func TestSlimProtoStreamCommands(t *testing.T) {
 		auto, streamThreshold, outThreshold byte
 	}{
 		{96000, '1', 255, 0},
+		{176399, '1', 255, 0},
 		{176400, '0', 37, 20},
-		{384000, '1', 255, 20},
+		{192000, '1', 255, 18},
+		{352800, '1', 255, 10},
+		{384000, '1', 255, 9},
+		{705600, '1', 255, 5},
+		{768000, '1', 255, 4},
 	} {
 		want := []byte{0, byte(28 + len(request)), 's', 't', 'r', 'm',
 			's', tc.auto, 'f', '?', '?', '?', '?', tc.streamThreshold, 0, 0, '0', 0, tc.outThreshold, 0,

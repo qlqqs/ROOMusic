@@ -11,7 +11,7 @@ compose=(docker compose --env-file /dev/null -p "$project" -f "$fixtures/compose
 sidecar=("${compose[@]}" -f "$root/deploy/production/compose.squeezelite.yaml" -f "$fixtures/sidecar.yaml")
 collision=(docker compose --env-file /dev/null -p "$project-collision" -f "$fixtures/compose.yaml" -f "$fixtures/collision.yaml")
 export SLIMPROTO_WORK="$work" SLIMPROTO_RUN_USER="$(id -u):$(id -g)"
-export ROOMUSIC_SQUEEZELITE_IMAGE="$project:local"
+export ROOMUSIC_SQUEEZELITE_IMAGE="${ROOMUSIC_SLIMPROTO_PLAYER_IMAGE:-$project:local}"
 export ROOMUSIC_SQUEEZELITE_NAME="ROOMusic USB DAC Probe"
 export SLIMPROTO_FFMPEG=
 receiver_clock= sidecar_clock= image_built= main_started= collision_started=
@@ -82,9 +82,11 @@ SLIMPROTO_FFMPEG=$("$root/scripts/ffmpeg-pinned.sh")
 (cd "$root/backend" && CGO_ENABLED=0 GOOS=linux mise exec -- go build -o "$work/" \
   ./cmd/roomusic ./cmd/roomusic-fake-cast ./cmd/roomusic-fake-renderer ./cmd/airplay-probe)
 python3 "$fixtures/playback.py" generate "$work/music" "$SLIMPROTO_FFMPEG"
-docker build -q -t "$ROOMUSIC_SQUEEZELITE_IMAGE" -f "$root/deploy/production/squeezelite.Dockerfile" "$root/deploy/production" >/dev/null
-image_built=1
-docker run --rm --network none --entrypoint apk "$ROOMUSIC_SQUEEZELITE_IMAGE" list --installed squeezelite
+if [[ -z "${ROOMUSIC_SLIMPROTO_PLAYER_IMAGE:-}" ]]; then
+  docker build -q -t "$ROOMUSIC_SQUEEZELITE_IMAGE" -f "$root/deploy/production/squeezelite.Dockerfile" "$root/deploy/production" >/dev/null
+  image_built=1
+  docker run --rm --network none --entrypoint apk "$ROOMUSIC_SQUEEZELITE_IMAGE" list --installed squeezelite
+fi
 
 docker compose --env-file /dev/null -p "$project" -f "$root/deploy/production/compose.squeezelite.yaml" config --quiet
 
