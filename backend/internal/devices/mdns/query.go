@@ -3,6 +3,8 @@ package mdns
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"math/rand/v2"
 	"net"
 	"net/netip"
 	"strings"
@@ -11,14 +13,9 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/devices/lan"
 	"golang.org/x/net/dns/dnsmessage"
-	"golang.org/x/sync/semaphore"
 )
 
-const searchInterval = 30 * time.Second
-
-// 定向查询与组播监听都绑定 UDP 5353，单播应答只交付给一个套接字。
-// 串行打开临时查询套接字，避免后一台设备的查询取走前一台的应答。
-var lookupSlot = semaphore.NewWeighted(1)
+var searchInterval = 30 * time.Second
 
 func question(name dnsmessage.Name, typ dnsmessage.Type) dnsmessage.Question {
 	return dnsmessage.Question{Name: name, Type: typ, Class: dnsmessage.ClassINET}
@@ -27,6 +24,7 @@ func question(name dnsmessage.Name, typ dnsmessage.Type) dnsmessage.Question {
 type browser struct {
 	socket  *socket
 	service string
+	id      uint16
 	query   []byte
 	target  netip.Addr
 }
@@ -38,52 +36,124 @@ func prepare(service string, target netip.Addr) (browser, error) {
 		return browser{}, err
 	}
 	q := dnsmessage.Message{Questions: []dnsmessage.Question{question(name, dnsmessage.TypePTR)}}
+	if target.IsValid() {
+		q.ID = uint16(1 + rand.Uint32N(65535))
+	}
 	data, err := q.Pack()
-	return browser{service: service, query: data, target: target}, err
+	return browser{service: service, query: data, target: target, id: q.ID}, err
 }
 
 // Start 在每张局域网网卡单独打开 UDP 5353，避免宿主机组播成员数上限遗漏网卡。
 // 各网卡的结果串行交付；stop 取消查询并等待回调退出。
-func Start(ctx context.Context, service string, receive func(Entry)) (func(), error) {
+func Start(ctx context.Context, service string, logger *slog.Logger, receive func(Entry)) (func(), error) {
 	query, err := prepare(service, netip.Addr{})
 	if err != nil {
 		return nil, err
 	}
-	links, loop, err := lanLinks(netip.Addr{})
-	if err != nil {
+	ctx, cancel := context.WithCancel(ctx)
+	var delivery sync.Mutex
+	deliver := func(e Entry) {
+		delivery.Lock()
+		defer delivery.Unlock()
+		receive(e)
+	}
+	session := browseSession{logger: logger.With("module", "mdns"), query: query, receive: deliver, workers: make(map[int]*browseWorker)}
+	if err := session.rescan(ctx); err != nil {
+		cancel()
 		return nil, err
 	}
-	var sockets []*socket
-	var lastErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(searchInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				for _, w := range session.workers {
+					w.stop()
+				}
+				return
+			case <-ticker.C:
+				if err := session.rescan(ctx); err != nil {
+					session.logger.Warn("mDNS 网卡刷新失败", "event", "mdns.interfaces.failed", "error", err)
+				}
+			}
+		}
+	}()
+	return func() { cancel(); <-done }, nil
+}
+
+type browseSession struct {
+	logger  *slog.Logger
+	query   browser
+	receive func(Entry)
+	workers map[int]*browseWorker
+	waiting bool
+}
+
+func (s *browseSession) rescan(ctx context.Context) error {
+	links, loop, err := listLinks(netip.Addr{})
+	if err != nil {
+		return err
+	}
+	if len(links) == 0 && !s.waiting {
+		s.logger.Info("等待局域网网卡以开始 mDNS 发现", "event", "mdns.interfaces.waiting", "service", s.query.service)
+	}
+	s.waiting = len(links) == 0
+	wanted := make(map[int]link)
 	for _, l := range links {
-		s, err := openSocket(l, loop)
+		if _, exists := wanted[l.iface.Index]; !exists {
+			wanted[l.iface.Index] = l
+		}
+	}
+	for index, w := range s.workers {
+		if w.local == wanted[index].local {
+			select {
+			case <-w.done:
+			default:
+				continue
+			}
+		}
+		w.stop()
+		delete(s.workers, index)
+	}
+	var lastErr error
+	for index, l := range wanted {
+		if s.workers[index] != nil {
+			continue
+		}
+		b := s.query
+		b.socket, err = openBrowseSocket(l, loop)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		sockets = append(sockets, s)
+		workerCtx, stop := context.WithCancel(ctx)
+		w := &browseWorker{local: l.local, cancel: stop, done: make(chan struct{})}
+		s.workers[index] = w
+		go func() {
+			defer close(w.done)
+			if err := b.run(workerCtx, s.receive, searchInterval); err != nil && workerCtx.Err() == nil {
+				s.logger.Warn("mDNS 接收中断，下轮重开网卡套接字", "event", "mdns.receive.failed", "interface_index", index, "error", err)
+			}
+		}()
 	}
-	if len(sockets) == 0 && lastErr != nil {
-		return nil, lastErr
+	if len(s.workers) == 0 {
+		return lastErr
 	}
-	ctx, cancel := context.WithCancel(ctx)
-	var workers sync.WaitGroup
-	var delivery sync.Mutex
-	for _, s := range sockets {
-		b := query
-		b.socket = s
-		workers.Go(func() {
-			b.run(ctx, func(e Entry) {
-				delivery.Lock()
-				defer delivery.Unlock()
-				receive(e)
-			}, searchInterval)
-		})
-	}
-	return func() {
-		cancel()
-		workers.Wait()
-	}, nil
+	return nil
+}
+
+type browseWorker struct {
+	local  netip.Addr
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+func (w *browseWorker) stop() {
+	w.cancel()
+	<-w.done
 }
 
 // Lookup 仅返回指定 IP 应答且 A 记录与之相符的服务。
@@ -100,31 +170,16 @@ func LookupMatch(ctx context.Context, service string, ip netip.Addr, accept func
 	if err != nil {
 		return Entry{}, err
 	}
-	if err := lookupSlot.Acquire(ctx, 1); err != nil {
-		return Entry{}, err
-	}
-	defer lookupSlot.Release(1)
-	links, loop, err := lanLinks(netip.Addr{})
+	links, loop, err := listLinks(netip.Addr{})
 	if err != nil {
 		return Entry{}, err
 	}
 	if len(links) == 0 {
 		return Entry{}, errors.New("没有可用的局域网 IPv4 组播接口")
 	}
-	listen := links[0]
-	for _, l := range links {
-		if l.local == ip {
-			listen = l
-			break
-		}
-	}
-	b.socket, err = openSocket(listen, loop)
+	b.socket, err = openQuerySocket(linkForTarget(links, ip), loop)
 	if err != nil {
 		return Entry{}, err
-	}
-	// 单播由内核选路，保留所有可用网卡以便从应答识别实际的本机地址。
-	for _, l := range links {
-		b.socket.links[l.iface.Index] = l
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -141,17 +196,31 @@ func LookupMatch(ctx context.Context, service string, ip netip.Addr, accept func
 	return Entry{}, err
 }
 
-func (b *browser) search() {
-	if b.target.IsValid() {
-		dest := net.UDPAddrFromAddrPort(netip.AddrPortFrom(b.target, 5353))
-		b.socket.send(b.query, link{}, dest)
-		if b.target == b.socket.link.local {
-			// 同机共享 5353 时，单播可能由另一个监听者接收。
-			b.socket.multicast(b.query, b.socket.link)
+func linkForTarget(links []link, target netip.Addr) link {
+	best := links[0]
+	bits := -1
+	for _, l := range links {
+		if l.local == target {
+			return l
 		}
-		return
+		if l.prefix.Contains(target) && l.prefix.Bits() > bits {
+			best, bits = l, l.prefix.Bits()
+		}
 	}
-	b.socket.multicast(b.query, b.socket.link)
+	return best
+}
+
+func (b *browser) search(data []byte, l link) {
+	if b.target.IsValid() {
+		dest := net.UDPAddrFromAddrPort(netip.AddrPortFrom(b.target, uint16(mdnsPort)))
+		if b.target != l.local {
+			b.socket.send(data, l, dest)
+			return
+		}
+		// 本机单播按本地路由交付，同时发组播让共享监听端口的服务都能应答。
+		b.socket.send(data, link{}, dest)
+	}
+	b.socket.multicast(data, l)
 }
 
 type source struct {
@@ -169,7 +238,7 @@ func (b *browser) run(ctx context.Context, receive func(Entry), interval time.Du
 	for ctx.Err() == nil {
 		now := time.Now()
 		if !now.Before(nextSearch) {
-			b.search()
+			b.search(b.query, b.socket.link)
 			nextSearch = now.Add(interval)
 		}
 		if !now.Before(nextExpiry) {
@@ -193,11 +262,11 @@ func (b *browser) run(ctx context.Context, receive func(Entry), interval time.Du
 			}
 			return err
 		}
-		if p.peer.Port() != 5353 || (b.target.IsValid() && b.target != p.peer.Addr()) {
+		if int(p.peer.Port()) != mdnsPort || (b.target.IsValid() && b.target != p.peer.Addr()) {
 			continue
 		}
 		var msg dnsmessage.Message
-		if msg.Unpack(p.data) != nil || !msg.Response || msg.RCode != dnsmessage.RCodeSuccess {
+		if msg.Unpack(p.data) != nil || (b.target.IsValid() && msg.ID != b.id) || !msg.Response || msg.RCode != dnsmessage.RCodeSuccess {
 			continue
 		}
 		src := source{p.peer.Addr(), p.link.iface.Index}
@@ -227,7 +296,7 @@ func (b *browser) resolve(records *peerCache, src source, now time.Time, receive
 	if b.target.IsValid() {
 		retry = time.Second
 	}
-	var query dnsmessage.Message
+	query := dnsmessage.Message{Header: dnsmessage.Header{ID: b.id}}
 	for _, q := range missing {
 		key := rrKey{strings.ToLower(q.Name.String()), q.Type}
 		if until := records.asked[key]; !now.Before(until) {
@@ -242,9 +311,5 @@ func (b *browser) resolve(records *peerCache, src source, now time.Time, receive
 	if err != nil {
 		return
 	}
-	if b.target.IsValid() && b.target != l.local {
-		b.socket.send(data, l, net.UDPAddrFromAddrPort(netip.AddrPortFrom(src.ip, 5353)))
-	} else {
-		b.socket.multicast(data, l)
-	}
+	b.search(data, l)
 }

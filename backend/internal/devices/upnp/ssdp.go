@@ -5,11 +5,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"net/netip"
 	"net/textproto"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/ipv4"
@@ -94,17 +97,21 @@ func parseSSDP(data []byte, ip netip.Addr, notify bool, now time.Time) (announce
 	return a, false
 }
 
+var listLinks = lanLinks
+
 type ssdpLink struct {
+	addr           netip.Addr
+	stopped        atomic.Bool
+	readers        sync.WaitGroup
 	search, notify *net.UDPConn
 }
 
-func openLinks() ([]ssdpLink, error) {
+func lanLinks() (map[int]netip.Addr, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
 	}
-	group := net.UDPAddrFromAddrPort(netip.MustParseAddrPort(ssdpGroup))
-	var links []ssdpLink
+	links := make(map[int]netip.Addr)
 	var lastErr error
 	for _, iface := range interfaces {
 		if iface.Flags&(net.FlagUp|net.FlagMulticast) != net.FlagUp|net.FlagMulticast {
@@ -120,12 +127,7 @@ func openLinks() ([]ssdpLink, error) {
 			if err != nil || !IsLANAddress(prefix.Addr()) {
 				continue
 			}
-			link, err := openLink(iface, prefix.Addr(), group)
-			if err != nil {
-				lastErr = err
-				continue
-			}
-			links = append(links, link)
+			links[iface.Index] = prefix.Addr()
 			break
 		}
 	}
@@ -135,10 +137,10 @@ func openLinks() ([]ssdpLink, error) {
 	return links, nil
 }
 
-func openLink(iface net.Interface, addr netip.Addr, group *net.UDPAddr) (ssdpLink, error) {
+func openLink(iface net.Interface, addr netip.Addr, group *net.UDPAddr) (*ssdpLink, error) {
 	conn, err := net.ListenUDP("udp4", net.UDPAddrFromAddrPort(netip.AddrPortFrom(addr, 0)))
 	if err != nil {
-		return ssdpLink{}, err
+		return nil, err
 	}
 	p := ipv4.NewPacketConn(conn)
 	if err = p.SetMulticastInterface(&iface); err == nil {
@@ -146,22 +148,45 @@ func openLink(iface net.Interface, addr netip.Addr, group *net.UDPAddr) (ssdpLin
 	}
 	if err != nil {
 		conn.Close()
-		return ssdpLink{}, err
+		return nil, err
 	}
 	notify, err := net.ListenMulticastUDP("udp4", &iface, group)
 	if err != nil {
 		conn.Close()
-		return ssdpLink{}, err
+		return nil, err
 	}
-	return ssdpLink{search: conn, notify: notify}, nil
+	return &ssdpLink{addr: addr, search: conn, notify: notify}, nil
 }
 
-func readAnnouncements(conn *net.UDPConn, local netip.Addr, notify bool, receive func(announcement)) {
+func (l *ssdpLink) listen(ctx context.Context, index int, logger *slog.Logger, receive func(announcement)) {
+	read := func(conn *net.UDPConn, local netip.Addr, notify bool) {
+		err := readAnnouncements(conn, local, notify, receive)
+		if !l.stopped.Swap(true) && ctx.Err() == nil {
+			logger.Warn("SSDP 接收中断，下轮重开网卡套接字", "event", "ssdp.receive.failed", "interface_index", index, "error", err)
+		}
+	}
+	// 通知共享监听端口，由描述连接确认本机地址；搜索响应使用发出请求的网卡地址。
+	l.readers.Go(func() { read(l.notify, netip.Addr{}, true) })
+	l.readers.Go(func() { read(l.search, l.addr, false) })
+}
+
+func (l *ssdpLink) close() {
+	l.stopped.Store(true)
+	l.search.Close()
+	l.notify.Close()
+	l.readers.Wait()
+}
+
+func readAnnouncements(conn *net.UDPConn, local netip.Addr, notify bool, receive func(announcement)) error {
 	var buf [ssdpPacketLimit + 1]byte
 	for {
 		n, peer, err := conn.ReadFromUDPAddrPort(buf[:])
 		if err != nil {
-			return
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				continue
+			}
+			return err
 		}
 		if a, ok := parseSSDP(buf[:n], peer.Addr(), notify, time.Now()); ok {
 			a.local = local

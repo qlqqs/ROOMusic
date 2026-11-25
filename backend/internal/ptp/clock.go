@@ -3,6 +3,9 @@ package ptp
 import (
 	"bytes"
 	"context"
+	"errors"
+	"log/slog"
+	"maps"
 	"math"
 	"net/netip"
 	"sync"
@@ -10,6 +13,9 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/devices/mdns"
 )
+
+var linkScanInterval = 30 * time.Second
+var errLinksChanged = errors.New("PTP 局域网网卡已变化")
 
 type peerClock struct {
 	link                              link
@@ -288,7 +294,7 @@ func (e *engine) tick(now time.Time) {
 	}
 }
 
-func (e *engine) serve(parent context.Context, state *state) error {
+func (e *engine) serve(parent context.Context, state *state, logger *slog.Logger) error {
 	ctx, cancel := context.WithCancel(parent)
 	packets := make(chan arrival, 64)
 	discovery := make(chan mdns.Entry, 32)
@@ -296,7 +302,7 @@ func (e *engine) serve(parent context.Context, state *state) error {
 	var readers sync.WaitGroup
 	e.listen(ctx, &readers, packets, failures)
 	defer func() { cancel(); e.close(); readers.Wait() }()
-	stop, err := mdns.Start(ctx, "_airplay._tcp.local.", func(d mdns.Entry) {
+	stop, err := mdns.Start(ctx, "_airplay._tcp.local.", logger, func(d mdns.Entry) {
 		select {
 		case discovery <- d:
 		case <-ctx.Done():
@@ -305,6 +311,8 @@ func (e *engine) serve(parent context.Context, state *state) error {
 	if err == nil {
 		defer func() { cancel(); stop() }()
 	}
+	scan := time.NewTicker(linkScanInterval)
+	defer scan.Stop()
 	tick := time.NewTicker(125 * time.Millisecond)
 	defer tick.Stop()
 	state.publish(e.localStatus(), nil)
@@ -314,6 +322,11 @@ func (e *engine) serve(parent context.Context, state *state) error {
 			return ctx.Err()
 		case err := <-failures:
 			return err
+		case <-scan.C:
+			interfaces, err := listLinks()
+			if err == nil && !maps.Equal(interfaces, e.interfaces) {
+				return errLinksChanged
+			}
 		case p := <-packets:
 			e.received(p)
 		case d := <-discovery:
