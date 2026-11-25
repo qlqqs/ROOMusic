@@ -13,7 +13,6 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
-	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 )
 
 // 与 catalog/artwork 的单张封面大小上限一致。
@@ -52,7 +51,7 @@ func New(opts Options) *Client {
 	images := sources.NewRequester(Declaration(), requests)
 	requests.Limiter = opts.ManifestLimiter
 	if requests.Limiter == nil {
-		requests.Limiter = sources.DefaultLimiter(musicbrainz.Declaration())
+		requests.Limiter = images.Limiter()
 	}
 	requests.AllowRedirect = func(u *url.URL) bool { return allowedHost(u) && strings.HasSuffix(u.Path, "/index.json") }
 	return &Client{baseURL: base, manifest: sources.NewRequester(Declaration(), requests), images: images}

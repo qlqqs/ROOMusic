@@ -13,6 +13,7 @@ import (
 
 // scanSlot 是遍历顺序中的一个条目；worker 只填充 audio 的解析结果，其余效果由 apply 执行。
 type scanSlot struct {
+	observedSize                         int64
 	relative                             string
 	audio                                []scanAudio
 	cue                                  *parser.CueDocument
@@ -184,6 +185,7 @@ func (pipeline *scanPipeline) apply(slot scanSlot) error {
 		}
 	}
 	if slot.heldKind != "" {
+		pipeline.feedback.observeHeld(pipeline.root.ID, slot.relative, slot.observedSize, slot.heldKind)
 		return pipeline.hold(slot.heldKind, slot.relative)
 	}
 	return slot.terminalError
@@ -202,6 +204,7 @@ func (pipeline *scanPipeline) applyCue(slot scanSlot) error {
 		if err := pipeline.diagnose(slot.relative, "unsupported_cue", "CUE 文件无法解析"); err != nil {
 			return err
 		}
+		pipeline.feedback.observeHeld(pipeline.root.ID, slot.relative, slot.observedSize, ingest.HeldCueSheet)
 		return pipeline.hold(ingest.HeldCueSheet, slot.relative)
 	}
 	for _, diagnostic := range document.Diagnostics {
@@ -233,6 +236,7 @@ func (pipeline *scanPipeline) applyCue(slot scanSlot) error {
 		parentFacts[reference.Path] = audio
 	}
 	if cueFailed {
+		pipeline.feedback.observeHeld(pipeline.root.ID, slot.relative, slot.observedSize, ingest.HeldCueSheet)
 		return pipeline.hold(ingest.HeldCueSheet, slot.relative)
 	}
 	for _, cue := range document.Tracks {

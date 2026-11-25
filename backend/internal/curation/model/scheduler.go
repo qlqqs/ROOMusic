@@ -12,13 +12,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 )
 
 var ErrStopped = errors.New("后台整理条件已变更")
 
 type Options struct {
+	Lookup        LookupQueue
 	Now           func() time.Time
 	PollInterval  time.Duration
 	ReviewBackoff []time.Duration
@@ -112,7 +112,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 }
 
 func (s *Scheduler) poll(ctx context.Context) error {
-	progress, actor, err := s.conditions(ctx)
+	progress, actor, err := s.conditions(ctx, false)
 	if err != nil || progress.State != "idle" {
 		return err
 	}
@@ -134,18 +134,27 @@ func (s *Scheduler) poll(ctx context.Context) error {
 		}
 		items, err = s.writer.ClaimedItems(ctx, conversation)
 	case errors.Is(err, sql.ErrNoRows):
-		var due bool
-		err = s.db.QueryRowContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`) SELECT EXISTS(
- SELECT 1 FROM curation_pending_items p WHERE `+curation.PendingTargetVisibleSQL+`
- AND p.status='waiting_model' AND p.target_type=ANY($2::text[]) AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1))`, now, progress.targets).Scan(&due)
-		if err != nil || !due {
+		var checkpoint curation.ModelItemCheckpoint
+		checkpoint, err = s.writer.BeforeModelItem(ctx, actor, now)
+		if err != nil || checkpoint.Reason != "" {
+			return err
+		}
+		var kind TaskKind
+		var releaseID string
+		kind, releaseID, err = s.nextKind(ctx, now, progress.targets)
+		if err != nil || kind == "" {
 			return err
 		}
 		conversation, err = s.launcher.CreateConversation(ctx, actor, "自动整理 "+now.Format("01-02 15:04"), progress.Model)
 		if err != nil {
 			return err
 		}
-		items, err = s.writer.ClaimPendingItems(ctx, conversation, now, s.options.BatchSize, progress.targets...)
+		limit := s.options.BatchSize
+		// 当前处理器按会话领取。配置日额度时把领取边界放在单项，运行内可完成该项的所有步骤。
+		if progress.DailyTokenLimit != nil || kind == LookupCandidate {
+			limit = 1
+		}
+		items, err = s.writer.ClaimModelKind(ctx, conversation, now, limit, progress.targets, string(kind), releaseID)
 		if err != nil || len(items) == 0 {
 			return errors.Join(err, s.launcher.DeleteConversation(ctx, actor, conversation))
 		}
@@ -153,8 +162,18 @@ func (s *Scheduler) poll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !batchSourcesReady(items, progress.targets) {
+	if len(items) == 0 || !batchSourcesReady(items, progress.targets) {
 		return s.release(ctx, conversation, false, nil)
+	}
+	if items[0].Route == "lookup" {
+		if s.options.Lookup == nil {
+			return s.release(ctx, conversation, false, nil)
+		}
+		ready, err := s.options.Lookup.LookupTierReady(ctx, items[0].TargetID, now)
+		if err != nil || !ready {
+			return errors.Join(err, s.release(ctx, conversation, false, nil))
+		}
+		ctx = s.options.Lookup.LookupTierContext(ctx)
 	}
 	return s.runBatch(ctx, actor, progress.Model, conversation, plan, items, retries)
 }
@@ -178,7 +197,7 @@ func batchSourcesReady(items []curation.PendingItem, targets []string) bool {
 }
 
 func (s *Scheduler) checkRunConditions(ctx context.Context, actor string, items []curation.PendingItem) error {
-	progress, enabler, err := s.conditions(ctx)
+	progress, enabler, err := s.conditions(ctx, false)
 	if err != nil {
 		return err
 	}
@@ -211,11 +230,25 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		params.Text = firstMessage(items)
 	}
 	var usageErr error
+	startingItem := plan == ""
 	params.BeforeStep = func(ctx context.Context) error {
 		if usageErr != nil {
 			return usageErr
 		}
-		return s.checkRunConditions(ctx, actor, items)
+		if err := s.checkRunConditions(ctx, actor, items); err != nil {
+			return err
+		}
+		if startingItem {
+			checkpoint, err := s.writer.BeforeModelItem(ctx, actor, s.options.Now())
+			if err != nil {
+				return err
+			}
+			if checkpoint.Reason != "" {
+				return ErrStopped
+			}
+			startingItem = false
+		}
+		return nil
 	}
 	params.Usage = func(ctx context.Context, in, out int64) {
 		if err := s.writer.AddModelUsage(ctx, s.options.Now(), in, out); err != nil {

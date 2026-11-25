@@ -11,6 +11,7 @@ type ProgramStatus interface {
 	State() string
 	CurrentBatch() (id string, openedAt time.Time, operations int, ok bool)
 	LastPassFinishedAt() *time.Time
+	QueueProgress(context.Context) (ProgramQueues, error)
 }
 
 type ReleaseProgress struct {
@@ -31,7 +32,25 @@ type BatchProgress struct {
 	OpenedAt   time.Time `json:"opened_at"`
 	Operations int       `json:"operations"`
 }
+
+var ProgramQueueSubjects = [...]string{"release", "artwork", "lyrics", "artist_media", "fingerprint"}
+
+type QueueProgress struct {
+	ID                          string     `json:"id"`
+	State                       string     `json:"state"`
+	Remaining                   int64      `json:"remaining"`
+	Ready                       int64      `json:"ready"`
+	SuccessfulRequestsPerSecond *float64   `json:"successful_requests_per_second"`
+	CompletedItemsPerSecond     *float64   `json:"completed_items_per_second"`
+	ETASeconds                  *int64     `json:"eta_seconds"`
+	PauseReason                 *string    `json:"pause_reason"`
+	Source                      *string    `json:"source"`
+	RetryAt                     *time.Time `json:"retry_at"`
+}
+type ProgramQueues [len(ProgramQueueSubjects)]QueueProgress
+
 type Progress struct {
+	Queues             ProgramQueues   `json:"queues"`
 	State              string          `json:"state"`
 	RuleVersion        int16           `json:"rule_version"`
 	Releases           ReleaseProgress `json:"releases"`
@@ -44,7 +63,7 @@ func (w *Writer) Progress(ctx context.Context, ruleVersion int16, status Program
 	p := Progress{State: "unavailable", RuleVersion: ruleVersion}
 	r := &p.Releases
 	err := w.db.QueryRowContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
- SELECT count(*),count(*) FILTER (WHERE s.status <> 'try_later'),
+ SELECT count(*),count(*) FILTER (WHERE s.status NOT IN ('pending','try_later')),
  count(*) FILTER (WHERE s.status='matched'),count(*) FILTER (WHERE s.status='uncertain'),
  count(*) FILTER (WHERE s.status='no_match'),count(*) FILTER (WHERE s.status='try_later'),count(*) FILTER (WHERE s.status='unlisted'),
  count(*) FILTER (WHERE s.status='no_usable_candidates'),
@@ -55,10 +74,18 @@ func (w *Writer) Progress(ctx context.Context, ruleVersion int16, status Program
 		return Progress{}, err
 	}
 	if status != nil {
+		p.Queues, err = status.QueueProgress(ctx)
+		if err != nil {
+			return Progress{}, err
+		}
 		p.State = status.State()
 		p.LastPassFinishedAt = status.LastPassFinishedAt()
 		if id, openedAt, n, ok := status.CurrentBatch(); ok {
 			p.Batch = &BatchProgress{id, openedAt, n}
+		}
+	} else {
+		for i, id := range ProgramQueueSubjects {
+			p.Queues[i] = QueueProgress{ID: id, State: "unavailable"}
 		}
 	}
 	return p, nil

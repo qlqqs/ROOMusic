@@ -7,14 +7,16 @@ import (
 )
 
 type Limiter struct {
-	mu            sync.Mutex
-	interval      time.Duration
-	now           func() time.Time
-	after         func(time.Duration) <-chan time.Time
-	changed       chan struct{}
-	next          time.Time
-	busy          bool
-	conversations int
+	mu        sync.Mutex
+	interval  time.Duration
+	now       func() time.Time
+	after     func(time.Duration) <-chan time.Time
+	changed   chan struct{}
+	next      time.Time
+	busy      bool
+	waiting   [4]int
+	lastStart time.Time
+	level     int
 }
 
 func NewLimiter(interval time.Duration, now func() time.Time, after func(time.Duration) <-chan time.Time) *Limiter {
@@ -52,13 +54,20 @@ func (l *Limiter) notify() {
 func (l *Limiter) acquire(ctx context.Context, background bool) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	rank := 0
+	if background {
+		rank = 1
+		if queue, ok := ctx.Value(queueKey{}).(queueRequest); ok {
+			rank += int(min(queue.priority, QueueLocalComplete))
+		}
+	}
+	l.waiting[rank]++
+	defer func() { l.waiting[rank]--; l.notify() }()
 	var deadline time.Time
 	var timeout <-chan time.Time
 	if !background {
 		deadline = l.now().Add(10 * time.Second)
 		timeout = l.after(10 * time.Second)
-		l.conversations++
-		defer func() { l.conversations--; l.notify() }()
 	}
 	for {
 		if err := ctx.Err(); err != nil {
@@ -69,7 +78,7 @@ func (l *Limiter) acquire(ctx context.Context, background bool) error {
 			return ErrRateLimited
 		}
 		var tick <-chan time.Time
-		if !l.busy && (!background || l.conversations == 0) {
+		if !l.busy && l.isNext(rank) {
 			delay := l.next.Sub(now)
 			if delay <= 0 {
 				l.busy = true
@@ -95,11 +104,35 @@ func (l *Limiter) acquire(ctx context.Context, background bool) error {
 	}
 }
 
+func (l *Limiter) isNext(rank int) bool {
+	for _, count := range l.waiting[:rank] {
+		if count > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (l *Limiter) effectiveInterval() time.Duration {
+	if l.interval >= time.Minute {
+		return l.interval
+	}
+	return min(time.Minute, l.interval<<l.level)
+}
+
+func (l *Limiter) setLevel(level int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.level = level
+	l.next = l.lastStart.Add(l.effectiveInterval())
+}
+
 func (l *Limiter) release(outbound bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if outbound {
-		l.next = l.now().Add(l.interval)
+		l.lastStart = l.now()
+		l.next = l.lastStart.Add(l.effectiveInterval())
 	}
 	l.busy = false
 	l.notify()
@@ -109,5 +142,6 @@ func (l *Limiter) release(outbound bool) {
 func (l *Limiter) startSerial() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.next = l.now().Add(l.interval)
+	l.lastStart = l.now()
+	l.next = l.lastStart.Add(l.effectiveInterval())
 }

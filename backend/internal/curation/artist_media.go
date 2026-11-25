@@ -15,6 +15,23 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
+const PrimaryArtistRolesSQL = `('release_artist','album_artist','track_artist')`
+
+// MusicBrainz 默认开启。管理员关闭后艺人可直接走联网识别，来源限流期间仍等待发行结论。
+const ReleaseRecognitionPendingSQL = `(NOT EXISTS (
+ SELECT FROM curation_source_settings WHERE source='musicbrainz' AND NOT enabled)
+ AND (recognition.target_id IS NULL OR recognition.needs_work OR recognition.status IN ('pending','try_later')))`
+
+// 从有效的主署名读取艺人与发行的双向关系。散曲和多艺人专辑沿用相同的主署名合同。
+const ArtistReleaseCreditsSQL = `WITH ` + catalog.ArtistMediaFamilyCTE + `, credits AS NOT MATERIALIZED (
+ SELECT DISTINCT member.canonical_id artist_id,COALESCE(m.release_id,c.release_id) release_id
+ FROM artist_effective_credits c JOIN artist_media_family member ON member.artist_id=c.artist_id
+ ` + catalog.CurationCreditJoins + `
+ LEFT JOIN tracks t ON t.id=c.track_id LEFT JOIN media m ON m.id=t.medium_id
+ WHERE c.role IN ` + PrimaryArtistRolesSQL + ` AND ` + catalog.UsableCurationCredit + `
+ AND (c.track_id IS NULL OR t.source_status='present')
+ ) `
+
 // ArtistMediaLinksCTE 读取 family 中可用于补资料的对应。管理员指定或模型确认的首选条目
 // 覆盖同源并入方；只含旧发行对应的家族仍可逐个尝试原有的 MBID。
 const ArtistMediaLinksCTE = `media_links AS (

@@ -74,6 +74,20 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 	if err != nil {
 		return "", err
 	}
+	if plannedReleaseID != "" {
+		for _, plan := range plans {
+			if !plan.MemberChanged {
+				continue
+			}
+			// 扫描中断前先撤销展示发行的已有确认。已在等待的发行由终态比较成员签名，
+			// 避免曲目表追平上轮实测大小时重新开始静默计时。
+			if _, err = tx.ExecContext(ctx, `UPDATE releases SET curation_confirmed=false,curation_changed_at=now()
+ WHERE id=COALESCE(NULLIF($2,'')::uuid,$1::uuid) AND curation_confirmed`, releaseID, mergeTargetID); err != nil {
+				return "", err
+			}
+			break
+		}
+	}
 	discs := make([]int, 0, len(candidate.Mediums))
 	for disc := range candidate.Mediums {
 		discs = append(discs, disc)
@@ -211,8 +225,8 @@ func persistRelease(ctx context.Context, tx *sql.Tx, rootID string, candidate Or
 				return "", err
 			}
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind,album_artist,year,source_type,media_type,genres,catalog_number,edition,label,barcode)
-			VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, releaseID, groupID, candidate.Title, candidate.Artist, rootID, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), genres, nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode))
+		_, err := tx.ExecContext(ctx, `INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind,album_artist,year,source_type,media_type,genres,catalog_number,edition,label,barcode,curation_confirmed,curation_changed_at)
+			VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,false,now())`, releaseID, groupID, candidate.Title, candidate.Artist, rootID, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), genres, nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode))
 		return releaseID, err
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE releases SET title=$1,artist=$2,relative_directory=$3,candidate_anchor=$4,candidate_kind=$5,album_artist=$6,year=$7,source_type=$8,media_type=$9,genres=$10,catalog_number=$11,edition=$12,label=$13,barcode=$14 WHERE id=$15::uuid`, candidate.Title, candidate.Artist, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), genres, nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode), plannedReleaseID)

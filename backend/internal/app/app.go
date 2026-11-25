@@ -370,6 +370,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	var programStatus curation.ProgramStatus
 	programDone := make(chan struct{})
 	if database != nil && !assembly.disableProgram {
+		assembly.program.ConfirmScan = libraryService.StartCurationConfirmation
 		worker := program.NewWorker(database, curationWriter, sourceGate, scanRunning, logger, assembly.program)
 		programStatus = worker
 		go func() { defer close(programDone); worker.Run(lifecycle) }()
@@ -389,6 +390,9 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	diagnosticService := newDiagnostics(database, settings, libraryService, assembly)
 	diagnosticsapi.Register(mux, guard, diagnosticService, logger)
 	supervisor, launcher := registerSteward(lifecycle, mux, database, guard, instanceSecrets, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{forgetPassword: subsonic.Forget, tavilyEndpoint: tavilyEndpoint, mockHost: mockHost, writer: curationWriter, sources: sourceGate, matcher: matcher, music: music, covers: covers, diagnostics: diagnosticService, backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
+	if worker, ok := programStatus.(*program.Worker); ok {
+		assembly.model.Lookup = worker
+	}
 	scheduler := model.NewScheduler(database, curationWriter, sourceGate, launcher, logger, assembly.model)
 	modelDone := make(chan struct{})
 	if database != nil && launcher != nil && !assembly.disableModel {

@@ -219,7 +219,8 @@ func (r *Requester) do(ctx context.Context, spec requestSpec) (response, error) 
 		keyInput += "\x00" + spec.accept
 	}
 	key := cacheKey(keyInput)
-	e, hit, failed := r.cache.lookup(ctx, key, background, spec.decode != nil || spec.binaryCache)
+	queue, queued := ctx.Value(queueKey{}).(queueRequest)
+	e, hit, failed := r.cache.lookup(ctx, key, background && !queued, spec.decode != nil || spec.binaryCache)
 	if failed {
 		r.hit(ctx)
 		return response{}, ErrTryLater
@@ -248,50 +249,9 @@ func (r *Requester) do(ctx context.Context, spec requestSpec) (response, error) 
 		r.cache.warning(ctx)
 	}
 	for attempt := 1; ; attempt++ {
-		res, err := r.attempt(ctx, c, background, request, attempt, spec)
-		if err != nil {
-			return response{}, err
-		}
-		if r.maxRedirects > 0 && res.denied != nil {
-			return response{}, fmt.Errorf("%w: %w", failure, res.denied)
-		}
-		if err := ctx.Err(); err != nil {
-			return response{}, err
-		}
-		if res.status != 0 && !(res.body == nil && res.retry) {
-			if spec.binaryCache && !res.retry {
-				if res.body == nil || !spec.acceptResponse(res.status, res.contentType, res.body) {
-					return response{}, failure
-				}
-				if res.status == 200 || res.status == 404 {
-					r.cache.storeContent(ctx, key, res.status, []byte(base64.StdEncoding.EncodeToString(res.body)), res.contentType, res.status == 404, background)
-				}
-				return res, nil
-			}
-			empty, retry, err := spec.interpret(res)
-			if ctx.Err() != nil {
-				return response{}, ctx.Err()
-			}
-			if err == nil || errors.Is(err, ErrNotFound) {
-				if spec.decode != nil && res.body != nil {
-					body := res.body
-					if spec.prepare != nil && res.status == http.StatusNotFound {
-						body = nil
-					}
-					r.cache.store(ctx, key, res.status, body, empty, background)
-				}
-				if err != nil {
-					return response{}, err
-				}
-				return res, nil
-			}
-			if !errors.Is(err, ErrUnavailable) && !retry {
-				return response{}, err
-			}
-			res.retry = res.retry || retry
-		}
-		if !background || !res.retry {
-			return response{}, failure
+		res, err := r.attempt(ctx, c, background, request, attempt, spec, key, queue, failure)
+		if err != nil || !res.retry {
+			return res, err
 		}
 		if attempt >= 5 {
 			r.cache.fail(key)
@@ -353,13 +313,131 @@ func retryAfterDelay(header string, now time.Time) (time.Duration, bool) {
 	return max(0, date.Sub(now)), true
 }
 
-func (r *Requester) attempt(ctx context.Context, c caller, background bool, request *http.Request, attempt int, spec requestSpec) (response, error) {
+func (r *Requester) attempt(ctx context.Context, c caller, background bool, request *http.Request, attempt int, spec requestSpec, key string, queue queueRequest, failure error) (response, error) {
+	source := r.cache.source
+	if queue.policy != nil {
+		if pause := queue.policy.Pause(source); pause != nil {
+			return response{}, pause
+		}
+	}
 	if err := r.limiter.acquire(ctx, background); err != nil {
 		return response{}, err
 	}
+	held := true
+	defer func() {
+		if held {
+			r.limiter.release(false)
+		}
+	}()
+	if queue.policy != nil {
+		// 等待许可期间，先前的请求可能刚让来源进入冷却。
+		if pause := queue.policy.Pause(source); pause != nil {
+			return response{}, pause
+		}
+	}
+	start := func() {
+		if r.wikimedia || queue.policy != nil {
+			r.limiter.startSerial()
+		} else {
+			r.limiter.release(true)
+			held = false
+		}
+	}
+	res, err := r.fetchAttempt(ctx, c, request, attempt, spec, start)
+	if err != nil {
+		return response{}, err
+	}
+	if res.denied != nil {
+		if r.maxRedirects > 0 {
+			return response{}, fmt.Errorf("%w: %w", failure, res.denied)
+		}
+		return response{}, failure
+	}
+	if err := ctx.Err(); err != nil && (queue.policy == nil || res.body == nil) {
+		return response{}, err
+	}
+	throttled := res.status == http.StatusTooManyRequests || res.status == http.StatusServiceUnavailable
+	network := res.retry && res.body == nil && !throttled && attempt == 1
+	if queue.policy != nil && throttled {
+		return response{}, r.pauseQueue(queue, "rate_limited", res.retryAfter, false)
+	}
+	result, err := r.decodeResponse(ctx, spec, res, key, background, failure)
+	if queue.policy == nil {
+		return result, err
+	}
+	if (err == nil && !result.retry) || errors.Is(err, ErrNotFound) {
+		if res.status >= 200 && res.status < 300 || res.status == http.StatusNotFound {
+			r.limiter.setLevel(queue.policy.recovered(source))
+			if res.status != http.StatusNotFound && queue.success != nil {
+				queue.success(source)
+			}
+		}
+		if ctx.Err() != nil {
+			return response{}, ctx.Err()
+		}
+		return result, err
+	}
+	if err := ctx.Err(); err != nil {
+		return response{}, err
+	}
+	if result.retry || errors.Is(err, ErrTryLater) || errors.Is(err, ErrUnavailable) {
+		if pause := r.pauseQueue(queue, "source_unavailable", res.retryAfter, network); pause != nil {
+			return response{}, pause
+		}
+	}
+	return result, err
+}
+
+func (r *Requester) pauseQueue(queue queueRequest, reason, retryAfter string, network bool) *QueuePause {
+	pause, level := queue.policy.failed(r.cache.source, reason, retryAfter, network)
+	r.limiter.setLevel(level)
+	return pause
+}
+
+// decodeResponse 只缓存来源适配器已确认有效的响应，重试交给外层调度。
+func (r *Requester) decodeResponse(ctx context.Context, spec requestSpec, res response, key string, background bool, failure error) (response, error) {
+	if res.status != 0 && !(res.body == nil && res.retry) {
+		if spec.binaryCache && !res.retry {
+			if res.body == nil || !spec.acceptResponse(res.status, res.contentType, res.body) {
+				return response{}, failure
+			}
+			if res.status == 200 || res.status == 404 {
+				r.cache.storeContent(ctx, key, res.status, []byte(base64.StdEncoding.EncodeToString(res.body)), res.contentType, res.status == 404, background)
+			}
+			return res, nil
+		}
+		empty, retry, err := spec.interpret(res)
+		if ctx.Err() != nil && ctx.Value(queueKey{}) == nil {
+			return response{}, ctx.Err()
+		}
+		if err == nil || errors.Is(err, ErrNotFound) {
+			if spec.decode != nil && res.body != nil {
+				body := res.body
+				if spec.prepare != nil && res.status == http.StatusNotFound {
+					body = nil
+				}
+				r.cache.store(ctx, key, res.status, body, empty, background)
+			}
+			if err != nil {
+				return response{}, err
+			}
+			res.retry = false
+			return res, nil
+		}
+		if !errors.Is(err, ErrUnavailable) && !retry {
+			return response{}, err
+		}
+		res.retry = res.retry || retry
+	}
+	if !background || !res.retry {
+		return response{}, failure
+	}
+	return res, nil
+}
+
+func (r *Requester) fetchAttempt(ctx context.Context, c caller, request *http.Request, attempt int, spec requestSpec, start func()) (response, error) {
 	baseClient, err := r.newClient(r.mockHost.EgressOptions(egress.Options{Policy: egress.PublicOnly, Timeout: spec.timeout, MaxRedirects: r.maxRedirects}))
 	if err != nil {
-		r.limiter.release(false)
 		return response{}, nil
 	}
 	client := *baseClient
@@ -386,7 +464,6 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 	}
 	defer client.CloseIdleConnections()
 	if err := c.check(ctx); err != nil {
-		r.limiter.release(false)
 		return response{}, err
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, spec.timeout)
@@ -395,7 +472,6 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 	if spec.prepare != nil {
 		headers, err := spec.prepare(req.Context(), req.URL)
 		if err != nil {
-			r.limiter.release(false)
 			return response{}, err
 		}
 		for k, v := range headers {
@@ -404,17 +480,11 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 	}
 	if spec.form != nil {
 		if err := prepareForm(req, spec.form); err != nil {
-			r.limiter.release(false)
 			return response{}, err
 		}
 	}
 	started := time.Now()
-	if r.wikimedia {
-		r.limiter.startSerial()
-		defer r.limiter.release(false)
-	} else {
-		r.limiter.release(true)
-	}
+	start()
 	res := fetch(&client, req, spec.limit, spec.binaryCache)
 	if logger := r.cache.logger; logger != nil {
 		attrs := []any{"event", "sources.request.finished", "module", "sources", "message", "外部源请求结束", "source", r.cache.source, "domain", req.URL.Hostname(), "duration_ms", time.Since(started).Milliseconds(), "attempt", attempt}

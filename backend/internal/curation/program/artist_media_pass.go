@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
@@ -20,7 +19,7 @@ type artistEvidence struct {
 	ImageRank, BioRank                 int
 	Albums, Tracks                     json.RawMessage
 	NoLink                             bool
-	hasCredits                         bool
+	hasCredits, waitingForRecognition  bool
 	pendingStatus                      string
 	albumAuth, trackAuth               []metadata.Authenticity
 }
@@ -40,22 +39,23 @@ func (e artistEvidence) resolution() string {
 // 模型可能已提交最后一项资料并正准备完成自己的认领。释放后遗留的齐全项仍由程序收尾。
 func (e artistEvidence) shouldClose() bool {
 	reason := e.resolution()
-	return e.pendingStatus != "" && reason != "" && !(reason == "filled" && e.pendingStatus == "in_progress")
+	return !e.waitingForRecognition && e.pendingStatus != "" && reason != "" && !(reason == "filled" && e.pendingStatus == "in_progress")
 }
-
-const primaryArtistRolesSQL = `('release_artist','album_artist','track_artist')`
 
 const artistMediaCandidatesSQL = `SELECT a.id FROM artists a
 WHERE a.id>COALESCE(NULLIF($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
   AND NOT EXISTS (SELECT FROM artist_overrides o WHERE o.artist_id=a.id AND o.redirect_artist_id IS NOT NULL)
   AND (
-    EXISTS (SELECT FROM artist_media_family f JOIN external_links l ON l.object_id=f.artist_id
+    EXISTS (SELECT FROM curation_work_states w WHERE w.subject='artist_media' AND w.target_id=a.id AND w.needs_work)
+    OR EXISTS (SELECT FROM artist_external_bios b WHERE b.artist_id=a.id AND b.source LIKE 'plugin:%')
+    OR EXISTS (SELECT FROM artist_external_artworks i WHERE i.artist_id=a.id AND i.source LIKE 'plugin:%')
+    OR EXISTS (SELECT FROM artist_media_family f JOIN external_links l ON l.object_id=f.artist_id
       WHERE f.canonical_id=a.id AND l.object_type='artist' AND l.source IN ('musicbrainz','wikidata'))
     OR (
       (NOT EXISTS (SELECT FROM artist_media_family f JOIN (` + catalog.ArtistImageRowsSQL + `) m USING(artist_id) WHERE f.canonical_id=a.id)
         OR NOT EXISTS (SELECT FROM artist_media_family f JOIN (` + catalog.ArtistBioRowsSQL + `) m USING(artist_id) WHERE f.canonical_id=a.id))
       AND EXISTS (SELECT FROM artist_media_family f JOIN artist_effective_credits c USING(artist_id)
-        WHERE f.canonical_id=a.id AND c.role IN ` + primaryArtistRolesSQL + `
+        WHERE f.canonical_id=a.id AND c.role IN ` + curation.PrimaryArtistRolesSQL + `
         AND (EXISTS (SELECT FROM tracks t WHERE t.id=c.track_id AND t.source_status='present')
           OR EXISTS (SELECT FROM media m JOIN tracks t ON t.medium_id=m.id
             WHERE m.release_id=c.release_id AND t.source_status='present')))
@@ -70,7 +70,7 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 	`+curation.ArtistMediaLinksCTE+`, credit_sources AS MATERIALIZED (
 		SELECT f.canonical_id,c.track_id,c.release_id,spelling.spelling AS name, `+catalog.UsableCurationCredit+` AS usable
 		FROM family f JOIN artist_effective_credits c USING(artist_id) `+catalog.CurationCreditJoins+`
-		WHERE c.role IN `+primaryArtistRolesSQL+`
+		WHERE c.role IN `+curation.PrimaryArtistRolesSQL+`
 	), placeholder_names AS (
 		SELECT canonical_id,name FROM credit_sources GROUP BY canonical_id,name HAVING NOT bool_or(usable)
 		EXCEPT SELECT artist_id,display_name FROM artist_overrides WHERE display_name IS NOT NULL
@@ -97,7 +97,7 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 		(SELECT COALESCE(jsonb_agg(to_jsonb(sample) ORDER BY name,year),'[]') FROM (
 			SELECT DISTINCT ON (r.title,r.year) r.title AS name,r.year,COALESCE(d.selected_source,'') AS source,
 				rc.release_id IS NOT NULL AS corrected, a.release_id IS NOT NULL AS automatic
-			FROM credited_tracks c JOIN release_effective r ON r.id=c.release_id
+			FROM credited_tracks c JOIN curation_stable_releases stable ON stable.id=c.release_id JOIN release_effective r ON r.id=c.release_id
 			LEFT JOIN release_field_decisions d ON d.release_id=r.id AND d.field_key='title'
 			LEFT JOIN release_corrections rc ON rc.release_id=r.id AND rc.field='title'
 			LEFT JOIN release_auto_values a ON a.release_id=r.id AND a.field='title'
@@ -106,13 +106,16 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 		(SELECT COALESCE(jsonb_agg(to_jsonb(sample) ORDER BY name),'[]') FROM (
 			SELECT DISTINCT ON(t.title) t.title AS name, COALESCE(o.source_kind,'') AS source,COALESCE(o.inferred,false) AS inferred,
 				tc.track_id IS NOT NULL AS corrected, a.track_id IS NOT NULL AS automatic
-			FROM credited_tracks c JOIN track_effective t ON t.id=c.id
+			FROM credited_tracks c JOIN curation_stable_releases stable ON stable.id=c.release_id JOIN track_effective t ON t.id=c.id
 			LEFT JOIN track_observations o ON o.track_id=t.id AND o.field_name='title'
 			LEFT JOIN track_corrections tc ON tc.track_id=t.id AND tc.field='title'
 			LEFT JOIN track_auto_values a ON a.track_id=t.id AND a.field='title'
 			WHERE c.canonical_id=p.canonical_id ORDER BY t.title,t.id LIMIT 12
 		) sample),
 		EXISTS(SELECT FROM credited_tracks c WHERE c.canonical_id=p.canonical_id),
+		EXISTS(SELECT FROM credited_tracks c LEFT JOIN curation_work_states recognition
+			ON recognition.subject='release' AND recognition.target_id=c.release_id
+			WHERE c.canonical_id=p.canonical_id AND `+curation.ReleaseRecognitionPendingSQL+`),
 		COALESCE((SELECT status FROM curation_pending_items pi WHERE pi.artist_id=p.canonical_id
 			AND pi.target_type='artist' AND pi.kind='artist_identity' AND pi.status<>'resolved'),'')
 	FROM page p JOIN artists a ON a.id=p.canonical_id LEFT JOIN artist_profiles profile ON profile.artist_id=p.canonical_id
@@ -125,7 +128,7 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 	for rows.Next() {
 		var e artistEvidence
 		var ids, qids, markers, names []byte
-		if err := rows.Scan(&e.ID, &e.Name, &ids, &qids, &e.ImageRank, &e.BioRank, &markers, &names, &e.Albums, &e.Tracks, &e.hasCredits, &e.pendingStatus); err != nil {
+		if err := rows.Scan(&e.ID, &e.Name, &ids, &qids, &e.ImageRank, &e.BioRank, &markers, &names, &e.Albums, &e.Tracks, &e.hasCredits, &e.waitingForRecognition, &e.pendingStatus); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(ids, &e.MBIDs); err != nil {
@@ -255,43 +258,6 @@ func (w *Worker) artistProviders(ctx context.Context) (artistProviders, error) {
 	return artistProviders{active: active, namedPlugin: namedPlugin, digest: digest([]any{state, changed})}, err
 }
 
-func (w *Worker) walkArtistMedia(ctx context.Context, priority func() error) error {
-	if err := w.closeInactiveArtistItems(ctx, priority); err != nil {
-		return err
-	}
-	var after string
-	for {
-		if err := priority(); err != nil {
-			return err
-		}
-		page, err := artistMediaPage(ctx, w.db, artistMediaCandidatesSQL, after, pageSize)
-		if err != nil || len(page) == 0 {
-			return err
-		}
-		ids := make([]string, 0, len(page))
-		for _, e := range page {
-			ids = append(ids, e.ID)
-		}
-		after = page[len(page)-1].ID
-		providers, err := w.artistProviders(ctx)
-		if err != nil {
-			return err
-		}
-		states, err := curation.LoadWorkStates(ctx, w.db, "artist_media", ids)
-		if err != nil {
-			return err
-		}
-		for _, e := range page {
-			if err := priority(); err != nil {
-				return err
-			}
-			if err := w.processArtistMedia(ctx, e, providers, states[e.ID]); err != nil {
-				return err
-			}
-		}
-	}
-}
-
 // 资料补齐、失去主署名或并入后，仍需收尾此前已创建的待定项。
 func (w *Worker) closeInactiveArtistItems(ctx context.Context, priority func() error) error {
 	var after string
@@ -319,6 +285,9 @@ func (w *Worker) closeInactiveArtistItems(ctx context.Context, priority func() e
 
 func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, providers artistProviders, state curation.WorkState) error {
 	const subject = "artist_media"
+	if e.waitingForRecognition {
+		return nil
+	}
 	if e.shouldClose() {
 		if err := w.finishArtistState(ctx, e, providers, nil); err != nil {
 			return err
@@ -342,17 +311,8 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 	if err := w.ready(ctx); err != nil {
 		return err
 	}
-	if err := w.rotateBatch(ctx); err != nil {
-		return err
-	}
-	if e.ImageRank < catalog.ArtistMediaLicensedRank && e.BioRank < catalog.ArtistMediaLicensedRank && w.batch.Operations >= 499 {
-		if err := w.closeBatch(ctx); err != nil {
-			return err
-		}
-	}
 	u := unit{w: w, ruleVersion: resourceRuleVersion, subject: subject, id: e.ID, generation: state.Generation + 1}
-	retry, err := w.enrichArtist(ctx, &u, &e, providers)
-	if err != nil {
+	if err := w.enrichArtist(ctx, &u, &e, providers); err != nil {
 		return err
 	}
 	if err := w.ready(ctx); err != nil {
@@ -361,16 +321,10 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 	state.Subject, state.TargetID, state.RuleVersion = subject, e.ID, resourceRuleVersion
 	state.InputDigest = digest([]any{e, providers.digest})
 	state.Generation = u.generation
-	if retry {
-		delay := min(24*time.Hour, 10*time.Minute<<min(state.RetryCount, 8))
-		next := w.opts.Now().Add(delay)
-		state.Status, state.RetryCount, state.NextAttemptAt = "try_later", state.RetryCount+1, &next
-	} else {
-		state.Status, state.RetryCount, state.NextAttemptAt = "done", 0, nil
-		state.Attempts++
-		if e.ImageRank == 0 && e.BioRank == 0 {
-			state.Status = "no_match"
-		}
+	state.Status, state.RetryCount, state.NextAttemptAt = "done", 0, nil
+	state.Attempts++
+	if e.ImageRank == 0 && e.BioRank == 0 {
+		state.Status = "no_match"
 	}
 	if e.NoLink && (e.pendingStatus != "" || providers.active["web_search"]) {
 		return w.finishArtistState(ctx, e, providers, &state)
@@ -401,6 +355,9 @@ func (w *Worker) finishArtistState(ctx context.Context, observed artistEvidence,
 		return errReleaseChanged
 	}
 	e := page[0]
+	if e.waitingForRecognition {
+		return errReleaseChanged
+	}
 	if reason := e.resolution(); reason != "" {
 		if e.shouldClose() {
 			if err := curation.ResolvePendingItems(ctx, tx, e.ID, "artist_identity", reason); err != nil {

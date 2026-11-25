@@ -293,8 +293,11 @@ func TestFrontCoverDownloadFallback(t *testing.T) {
 }
 
 func TestCoverArtLimiters(t *testing.T) {
-	if New(Options{}).ManifestLimiter() != musicbrainz.New(musicbrainz.Options{}).Limiter() {
-		t.Fatal("默认清单限速器与 MusicBrainz 不是同一实例")
+	defaultClient := New(Options{})
+	if defaultClient.ManifestLimiter() != sources.DefaultLimiter(Declaration()) ||
+		defaultClient.ManifestLimiter() != defaultClient.images.Limiter() ||
+		defaultClient.ManifestLimiter() == musicbrainz.New(musicbrainz.Options{}).Limiter() {
+		t.Fatal("默认清单和图片应共用 CAA 的限速器，并独立于 MusicBrainz")
 	}
 	newLimiter := func() (*sources.Limiter, *int) {
 		now := time.Unix(1700000000, 0)

@@ -24,10 +24,11 @@ var (
 
 // trackPlan 是暂存行上一条观察的曲目规划：沿用哪条曲目（空串表示新建），以及要保存的指纹与文件状态。
 type trackPlan struct {
-	TrackID     string
-	Fingerprint sql.NullString
-	Size        sql.NullInt64
-	ModifiedAt  sql.NullTime
+	MemberChanged bool
+	TrackID       string
+	Fingerprint   sql.NullString
+	Size          sql.NullInt64
+	ModifiedAt    sql.NullTime
 }
 
 // loadTrackPlans 读取候选中全部观察的规划：键为规范化相对路径的曲目规划，以及候选要沿用的 Release
@@ -39,9 +40,11 @@ func loadTrackPlans(ctx context.Context, tx *sql.Tx, scanID, rootID string, cand
 			paths = append(paths, NormalizedPath(track.Observation.RelativePath))
 		}
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT relative_path, COALESCE(planned_track_id::text,''), content_fingerprint, source_size, source_modified_at, COALESCE(planned_release_id::text,'')
-		FROM scan_observations
-		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND relative_path=ANY($3::text[]) AND planned`, scanID, rootID, paths)
+	rows, err := tx.QueryContext(ctx, `SELECT o.relative_path, COALESCE(o.planned_track_id::text,''), o.content_fingerprint, o.source_size, o.source_modified_at, COALESCE(o.planned_release_id::text,''),
+        t.id IS NULL OR t.source_status<>'present' OR o.source_size IS DISTINCT FROM t.source_size
+        OR o.relative_path<>t.relative_path OR o.planned_release_id IS DISTINCT FROM COALESCE(m.origin_release_id,m.release_id)
+        FROM scan_observations o LEFT JOIN tracks t ON t.id=o.planned_track_id LEFT JOIN media m ON m.id=t.medium_id
+        WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.relative_path=ANY($3::text[]) AND o.planned`, scanID, rootID, paths)
 	if err != nil {
 		return nil, "", err
 	}
@@ -51,7 +54,7 @@ func loadTrackPlans(ctx context.Context, tx *sql.Tx, scanID, rootID string, cand
 	for rows.Next() {
 		var path, plannedRelease string
 		var plan trackPlan
-		if err := rows.Scan(&path, &plan.TrackID, &plan.Fingerprint, &plan.Size, &plan.ModifiedAt, &plannedRelease); err != nil {
+		if err := rows.Scan(&path, &plan.TrackID, &plan.Fingerprint, &plan.Size, &plan.ModifiedAt, &plannedRelease, &plan.MemberChanged); err != nil {
 			return nil, "", err
 		}
 		if len(plans) > 0 && plannedRelease != releaseID {

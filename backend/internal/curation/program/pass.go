@@ -17,112 +17,17 @@ import (
 const pageSize = 100
 
 type pageStates struct {
-	pluginChange               sql.NullTime
 	releases, artworks, lyrics map[string]curation.WorkState
 	fingerprintAvailable       bool
-	offlineReleases            map[string]bool
 }
 
-func (w *Worker) walk(ctx context.Context, lyrics bool, priority func() error, fingerprintAvailable bool) error {
-	var after *catalog.CurationCursor
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		next, err := w.page(ctx, after, lyrics, priority, fingerprintAvailable)
-		if failureCode(err) == "scan_running" {
-			if err := w.closeBatch(ctx); err != nil {
-				return err
-			}
-			w.rest(ctx, err)
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		if next == nil {
-			return nil
-		}
-		after = next
-	}
-}
-
-func (w *Worker) page(ctx context.Context, after *catalog.CurationCursor, lyrics bool, priority func() error, fingerprintAvailable bool) (*catalog.CurationCursor, error) {
-	if err := w.ready(ctx); err != nil {
-		return nil, err
-	}
-	w.setState("running")
-	page, err := catalog.PageCurationReleases(ctx, w.db, after, pageSize)
-	if err != nil || len(page) == 0 {
-		return nil, err
-	}
-	ids := make([]string, len(page))
-	for i, p := range page {
-		ids[i] = p.ID
-	}
-	entries, err := w.writer.LoadCurationEvidence(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-	states := pageStates{fingerprintAvailable: fingerprintAvailable, offlineReleases: make(map[string]bool)}
-	cap := sources.CoverArt
+func (w *Worker) walk(ctx context.Context, lyrics bool, _ func() error, _ bool) error {
+	subject := "release"
 	if lyrics {
-		cap = sources.LyricsLookup
+		subject = "lyrics"
 	}
-	if ids := w.sources.PluginIDs(cap); len(ids) > 0 {
-		err = w.db.QueryRowContext(ctx, `SELECT GREATEST(max(s.updated_at),max(k.updated_at)) FROM curation_source_settings s
- LEFT JOIN curation_source_keys k ON k.source=s.source WHERE s.enabled AND s.source=ANY($1::text[])`, ids).Scan(&states.pluginChange)
-		if err != nil {
-			return nil, err
-		}
-	}
-	states.releases, err = curation.LoadWorkStates(ctx, w.db, "release", ids)
-	if err != nil {
-		return nil, err
-	}
-	if lyrics {
-		var tracks []string
-		for _, e := range entries {
-			for _, t := range e.Tracks {
-				tracks = append(tracks, t.ID)
-			}
-		}
-		states.lyrics, err = curation.LoadWorkStates(ctx, w.db, "lyrics", tracks)
-	} else {
-		states.artworks, err = curation.LoadWorkStates(ctx, w.db, "artwork", ids)
-	}
-	if err != nil {
-		return nil, err
-	}
-	for _, id := range ids {
-		e, visible := entries[id]
-		if !visible {
-			continue
-		}
-		if lyrics {
-			for _, t := range e.Tracks {
-				if err := priority(); err != nil {
-					return nil, err
-				}
-				if !lyricsGap(t) {
-					continue
-				}
-				if err := w.process(ctx, &e, "lyrics", t.ID, states); err != nil {
-					return nil, err
-				}
-			}
-		} else {
-			if err := w.process(ctx, &e, "release", id, states); err != nil {
-				return nil, err
-			}
-			if !states.offlineReleases[id] && artworkGap(e) {
-				if err := w.process(ctx, &e, "artwork", id, states); err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
-	return &page[len(page)-1], nil
+	w.marker = nil
+	return w.drainQueues(ctx, []string{subject})
 }
 
 func subjectDigest(subject string, e catalog.CurationEvidence, id string) string {
@@ -296,7 +201,7 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	}
 	now := w.opts.Now()
 	// 新启用的插件或更新的密钥可以补齐上一轮留下的空缺。
-	ordinary := offline != nil || state.Status == "no_usable_candidates" && review.BlockDigest != blockedLinkDigest(input) || needsWork(subject, state, workDigest, now, false) || subject != "release" && states.pluginChange.Time.After(state.UpdatedAt)
+	ordinary := offline != nil || state.Status == "no_usable_candidates" && review.BlockDigest != blockedLinkDigest(input) || needsWork(subject, state, workDigest, now, false) || subject != "release" && currentAttempt(ctx) != nil
 	if subject == "release" && !ordinary {
 		tracks, artists, merges := matchBackfills(state, input)
 		if tracks || artists || merges {
@@ -309,21 +214,15 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	if err := w.ready(ctx); err != nil {
 		return err
 	}
-	if err := w.rotateBatch(ctx); err != nil {
-		return err
-	}
 	u := unit{w: w, subject: subject, id: id, ruleVersion: version, generation: state.Generation + 1, releaseID: e.ID, inputDigest: digest, releaseState: states.releases[e.ID]}
 	u.offline = offline != nil
 	u.programOnly = subject == "release" && state.IdentityDigest == inputs.identity && review.UnlistedSince != nil && (state.Status == "unlisted" || state.Status == "try_later")
 	if subject == "release" {
-		u.identityDigest = inputs.identity
+		u.releaseInput, u.identityDigest = &input, inputs.identity
 	}
 	var out outcome
 	var err error
 	if offline != nil {
-		if states.offlineReleases != nil {
-			states.offlineReleases[id] = true
-		}
 		out, err = w.concludeMatch(ctx, &u, input, *offline)
 	} else {
 		out, err = w.evaluate(ctx, &u, input, !ordinary)
@@ -337,7 +236,11 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 		state.MatchRuleVersion, state.RequeryMatchVersion = version, 0
 	}
 	if failureCode(err) == "source_disabled" {
-		return nil
+		return err
+	}
+	var local *fingerprintRetry
+	if !errors.As(err, &local) && curation.IsSourceUnavailable(err) {
+		return sourceFailure(ctx, u.source(), err)
 	}
 	retry := errors.Is(err, sources.ErrTryLater)
 	if err != nil && !retry {
@@ -345,9 +248,9 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	}
 	// 出站期间或过滤写入时也可能失去权限，保存结论或退避前再次核对。
 	if err := w.sources.Check(ctx, u.source()); err != nil {
-		if failureCode(err) == "source_disabled" {
-			return nil
-		}
+		return err
+	}
+	if err := w.ready(ctx); err != nil {
 		return err
 	}
 	if retry || out.status == "try_later" {
@@ -355,7 +258,6 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 			state.Result = nil
 		}
 		delay := min(24*time.Hour, 10*time.Minute<<min(state.RetryCount, 8))
-		var local *fingerprintRetry
 		if errors.As(err, &local) {
 			delay = max(delay, local.delay)
 		}
@@ -363,7 +265,7 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 		state.Status, state.NextAttemptAt, state.RetryCount = "try_later", &next, state.RetryCount+1
 		if out.status == "try_later" {
 			state.Generation = u.generation
-			return w.saveConclusion(ctx, e, state, out, states)
+			return w.saveConclusion(ctx, e, state, out, states, u.source())
 		}
 		if err := curation.SaveWorkState(ctx, w.db, state); err != nil {
 			return err
@@ -390,10 +292,26 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	if out.status == "no_usable_candidates" {
 		out.review.BlockDigest = blockedLinkDigest(input)
 	}
-	return w.saveConclusion(ctx, e, state, out, states)
+	return w.saveConclusion(ctx, e, state, out, states, u.source())
 }
 
-func (w *Worker) saveConclusion(ctx context.Context, e *catalog.CurationEvidence, state curation.WorkState, out outcome, states pageStates) error {
+func (w *Worker) saveConclusion(ctx context.Context, e *catalog.CurationEvidence, state curation.WorkState, out outcome, states pageStates, source string) error {
+	for {
+		err := w.saveConclusionOnce(ctx, e, state, out, states)
+		if !retrySnapshot(err) {
+			return err
+		}
+		// 并行队列可能只改了同一行的排队投影。保留已取回的结论，用新快照复核证据。
+		if err := w.ready(ctx); err != nil {
+			return err
+		}
+		if err := w.sources.Check(ctx, source); err != nil {
+			return err
+		}
+	}
+}
+
+func (w *Worker) saveConclusionOnce(ctx context.Context, e *catalog.CurationEvidence, state curation.WorkState, out outcome, states pageStates) error {
 	tx, err := w.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return err
@@ -416,14 +334,15 @@ func (w *Worker) saveConclusion(ctx context.Context, e *catalog.CurationEvidence
 		postIdentity = IdentityDigest(fresh)
 	}
 	if postDigest != state.InputDigest || state.Subject == "release" && postIdentity != state.IdentityDigest {
-		var expected catalog.CurationEvidence
+		expected := *e
+		if state.Subject == "release" {
+			expected = withAddedMedia(expected, fresh)
+		}
 		switch {
 		case state.Subject == "release" && out.status == "matched":
-			expected = afterMatch(*e, fresh, out)
+			expected = afterMatch(expected, fresh, out)
 		case state.Subject != "release" && (out.status == "done" || out.status == "try_later"):
 			expected = afterMedia(*e, fresh, state.Subject, state.TargetID)
-		default:
-			return errReleaseChanged
 		}
 		if subjectDigest(state.Subject, subjectEvidence(state.Subject, expected, states.releases[e.ID]), state.TargetID) != postDigest ||
 			state.Subject == "release" && IdentityDigest(expected) != postIdentity {
@@ -451,6 +370,20 @@ func (w *Worker) saveConclusion(ctx context.Context, e *catalog.CurationEvidence
 		}
 		related = &s
 	}
+	if state.Subject == "release" {
+		// 与模型结项沿用相同锁序，在待定项之后锁定工作状态并复核取证时的结论。
+		var generation int
+		var status string
+		previous := states.releases[e.ID]
+		err := tx.QueryRowContext(ctx, `SELECT generation,status FROM curation_work_states
+ WHERE subject='release' AND target_id=$1 FOR UPDATE`, e.ID).Scan(&generation, &status)
+		if errors.Is(err, sql.ErrNoRows) || err == nil && (generation != previous.Generation || status != previous.Status) {
+			return errReleaseChanged
+		}
+		if err != nil {
+			return err
+		}
+	}
 	if err := curation.SaveWorkState(ctx, tx, state); err != nil {
 		return err
 	}
@@ -465,6 +398,19 @@ func (w *Worker) saveConclusion(ctx context.Context, e *catalog.CurationEvidence
 	}
 	*e = fresh
 	return nil
+}
+
+// 独立媒体队列可以在识别期间补齐封面或歌词。撤销、删除和其它证据仍须重新取项。
+func withAddedMedia(before, after catalog.CurationEvidence) catalog.CurationEvidence {
+	before.ExternalArtwork = before.ExternalArtwork || after.ExternalArtwork
+	before.ArtworkFile = before.ArtworkFile || after.ArtworkFile
+	before.Tracks = slices.Clone(before.Tracks)
+	for i, t := range before.Tracks {
+		if i < len(after.Tracks) && t.ID == after.Tracks[i].ID {
+			before.Tracks[i].ExternalLyrics = t.ExternalLyrics || after.Tracks[i].ExternalLyrics
+		}
+	}
+	return before
 }
 
 func afterMedia(before, after catalog.CurationEvidence, subject, id string) catalog.CurationEvidence {

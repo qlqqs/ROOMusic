@@ -183,6 +183,22 @@ function batchCounts(data: CurationData, batchId: string): { operations: number;
   return { operations: records.length, reverted: records.filter((record) => record.revertedBy !== null).length };
 }
 
+// 五条程序队列都空闲、已排空时的进度（整理链 B）。
+export function idleQueues() {
+  return (["release", "artwork", "lyrics", "artist_media", "fingerprint"] as const).map((id) => ({
+    id,
+    state: "idle" as const,
+    remaining: 0,
+    ready: 0,
+    successful_requests_per_second: null,
+    completed_items_per_second: null,
+    eta_seconds: 0,
+    pause_reason: null,
+    source: null,
+    retry_at: null,
+  }));
+}
+
 export function respondToCurationProgress(data: CurationData): ApiResult {
   const open = data.batches.find((batch) => batch.closedAt === null);
   return {
@@ -192,6 +208,7 @@ export function respondToCurationProgress(data: CurationData): ApiResult {
       last_pass_finished_at: stateOf(data) === "idle" && data.settings.enabled ? "2026-01-05T00:10:00Z" : null,
       model: modelProgressOf(data),
       pending: { waiting_model: data.model.items.waiting_model },
+      queues: idleQueues(),
       releases: data.releases,
       rule_version: 101,
       state: stateOf(data),

@@ -68,11 +68,20 @@ func (w *Writer) ClaimPendingItems(ctx context.Context, conversation string, now
 	if len(targetTypes) == 0 {
 		targetTypes = []string{"release", "artist"}
 	}
+	return w.ClaimModelKind(ctx, conversation, now, n, targetTypes, "", "")
+}
+
+// ClaimModelKind 在同一语句内复核类别、释放时间及可见性并领取；第二档还限定已巡检的发行。
+func (w *Writer) ClaimModelKind(ctx context.Context, conversation string, now time.Time, n int, targets []string, kind, releaseID string) ([]PendingItem, error) {
 	return pendingRows(w.db.QueryContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`), picked AS (
- SELECT p.id FROM curation_pending_items p WHERE `+PendingTargetVisibleSQL+` AND p.status='waiting_model' AND p.target_type=ANY($4::text[])
- AND (p.next_attempt_at IS NULL OR p.next_attempt_at <= $2) ORDER BY p.created_at,p.id LIMIT $3 FOR UPDATE OF p SKIP LOCKED
+ SELECT p.id, CASE WHEN $5='' THEN 0 ELSE `+QueueRankSQL+` END AS priority`+modelQueueFromSQL+`
+ AND p.target_type=ANY($4::text[]) AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$2)
+ AND ($5='' OR `+modelKindSQL+`=$5) AND ($6='' OR p.target_id=NULLIF($6,'')::uuid)
+ ORDER BY priority,p.created_at,p.id LIMIT $3 FOR UPDATE OF p SKIP LOCKED
  ), claimed AS (UPDATE curation_pending_items SET status='in_progress',conversation_id=$1,claimed_at=$2,updated_at=now(),next_attempt_at=NULL
- WHERE id IN (SELECT id FROM picked) RETURNING *) SELECT `+pendingColumns+` FROM claimed ORDER BY created_at,id`, conversation, now, n, targetTypes))
+ WHERE id IN (SELECT id FROM picked) RETURNING *)
+ SELECT `+pendingColumns+` FROM (SELECT c.*,p.priority FROM claimed c JOIN picked p ON p.id=c.id) ordered
+ ORDER BY priority,created_at,id`, conversation, now, n, targets, kind, releaseID))
 }
 
 func (w *Writer) ClaimedItems(ctx context.Context, conversation string) ([]PendingItem, error) {

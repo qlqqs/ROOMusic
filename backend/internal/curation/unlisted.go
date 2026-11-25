@@ -17,7 +17,7 @@ func (w *Writer) RecheckUnlisted(ctx context.Context, releaseID string) error {
 	}
 	var visible, queued bool
 	err := w.db.QueryRowContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`), queued AS (
- UPDATE curation_work_states SET next_attempt_at=LEAST(COALESCE(next_attempt_at,now()),now()),updated_at=now()
+ UPDATE curation_work_states SET needs_work=true,manual_requested_at=clock_timestamp(),next_attempt_at=LEAST(COALESCE(next_attempt_at,now()),now()),updated_at=now()
  WHERE subject='release' AND target_id=$1 AND status='unlisted' AND EXISTS (SELECT FROM visible WHERE id=$1)
  RETURNING target_id)
  SELECT EXISTS(SELECT FROM visible WHERE id=$1), EXISTS(SELECT FROM queued)`, releaseID).Scan(&visible, &queued)

@@ -29,6 +29,7 @@ func TestPostgreSQLCurationModelDailyLimit(t *testing.T) {
 	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "daily_token_limit": limit})
 	first := f.next(t, false)
 	conversation := f.item(t, item.ID).ConversationID
+	second := f.pending(t, f.b)
 	// 为本次运行准备可压缩的历史；六个保留回合之外还有首个用户回合。
 	store := runtime.NewStore(f.application.database)
 	detail, err := store.GetConversation(t.Context(), f.admin.id, conversation)
@@ -52,18 +53,36 @@ func TestPostgreSQLCurationModelDailyLimit(t *testing.T) {
 		t.Fatalf("审查后用量 %+v", usage)
 	}
 	summary.complete(t)
-	schedulerWait(t, "达到上限并释放待定项", func() bool { return f.item(t, item.ID).Status == "waiting_model" })
+	// 摘要用量恰好达到上限。本项仍可继续提交，第二项等到次日。
+	finish := f.next(t, false)
+	if usage := f.progress(t).Today; usage.InputTokens != highInput+26 || usage.OutputTokens != 21 {
+		t.Fatalf("摘要后用量 %+v", usage)
+	}
+	checkpoint, err := f.writer.BeforeModelItem(t.Context(), f.admin.id, f.clock.options().Now())
+	requireCurationOK(t, err)
+	nextDay := f.clock.options().Now().Add(24 * time.Hour)
+	if checkpoint.Reason != "limit_reached" || checkpoint.RetryAt == nil || !checkpoint.RetryAt.Equal(nextDay) {
+		t.Fatalf("此时开始下一项应等到次日：%+v", checkpoint)
+	}
+	finish.tool(t, "shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "资料不足"})
+	f.next(t, false).complete(t)
+	schedulerWait(t, "当前项提交后达到上限", func() bool { return f.progress(t).State == "limit_reached" })
+	if got := f.item(t, item.ID); got.Status != "shelved" {
+		t.Fatalf("已开始的项未能提交：%+v", got)
+	}
+	if got := f.item(t, second.ID); got.Status != "waiting_model" || got.ConversationID != "" || got.Attempts != 0 {
+		t.Fatalf("下一项应原样留在队列：%+v", got)
+	}
 	got := f.progress(t)
-	if got.State != "limit_reached" || got.Today.InputTokens != highInput+26 || got.Today.OutputTokens != 21 || got.Today.Date != "2026-01-02" {
-		t.Fatalf("当日上限及摘要用量 %+v", got)
+	if got.Today.InputTokens != highInput+52 || got.Today.OutputTokens != 35 || got.Today.Date != "2026-01-02" {
+		t.Fatalf("当日上限及总用量 %+v", got)
 	}
-	select {
-	case <-f.requests:
-		t.Fatal("达到上限当日仍启动模型")
-	case <-time.After(100 * time.Millisecond):
-	}
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM steward_conversations WHERE kind='curation'`)
 	f.clock.now.Add(int64(24 * time.Hour))
 	tomorrow := f.next(t, false)
+	if f.item(t, second.ID).Status != "in_progress" {
+		t.Fatal("次日未领取第二项")
+	}
 	if usage := f.progress(t).Today; usage.Date != "2026-01-03" || usage.InputTokens != 0 || usage.OutputTokens != 0 {
 		t.Fatalf("次日用量 %+v", usage)
 	}

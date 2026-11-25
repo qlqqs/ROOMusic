@@ -1,0 +1,3914 @@
+{
+  "acoustid_enabled": false,
+  "by_shape": [
+    {
+      "shape": "artist_alias",
+      "samples": 2,
+      "requests": {
+        "count": 22,
+        "mean": 11,
+        "max": 12
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "lrclib/api/search": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "musicbrainz/lookup": {
+          "count": 3,
+          "mean": 1.5,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 1,
+          "mean": 0.5,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 5,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 2,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "barcode_catalog",
+      "samples": 6,
+      "requests": {
+        "count": 84,
+        "mean": 14,
+        "max": 14
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 12,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 24,
+          "mean": 4,
+          "max": 4
+        },
+        "lrclib/api/search": {
+          "count": 24,
+          "mean": 4,
+          "max": 4
+        },
+        "musicbrainz/lookup": {
+          "count": 12,
+          "mean": 2,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 6,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 6,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 18,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 6,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "chinese",
+      "samples": 10,
+      "requests": {
+        "count": 128,
+        "mean": 12.8,
+        "max": 14
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 20,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 35,
+          "mean": 3.5,
+          "max": 4
+        },
+        "lrclib/api/search": {
+          "count": 35,
+          "mean": 3.5,
+          "max": 4
+        },
+        "musicbrainz/lookup": {
+          "count": 19,
+          "mean": 1.9,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 10,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 9,
+          "mean": 0.9,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 29,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 10,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "compilation_classical",
+      "samples": 6,
+      "requests": {
+        "count": 90,
+        "mean": 15,
+        "max": 16
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 12,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 30,
+          "mean": 5,
+          "max": 5
+        },
+        "lrclib/api/search": {
+          "count": 30,
+          "mean": 5,
+          "max": 5
+        },
+        "musicbrainz/lookup": {
+          "count": 9,
+          "mean": 1.5,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 6,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 3,
+          "mean": 0.5,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 15,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 6,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "cue_cd",
+      "samples": 4,
+      "requests": {
+        "count": 52,
+        "mean": 13,
+        "max": 14
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 8,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 14,
+          "mean": 3.5,
+          "max": 4
+        },
+        "lrclib/api/search": {
+          "count": 14,
+          "mean": 3.5,
+          "max": 4
+        },
+        "musicbrainz/discid": {
+          "count": 4,
+          "mean": 1,
+          "max": 1
+        },
+        "musicbrainz/lookup": {
+          "count": 4,
+          "mean": 1,
+          "max": 1
+        },
+        "musicbrainz/search": {
+          "count": 4,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 4,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 12,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 4,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "multi_edition",
+      "samples": 6,
+      "requests": {
+        "count": 48,
+        "mean": 8,
+        "max": 11
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 9,
+          "mean": 1.5,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 15,
+          "mean": 2.5,
+          "max": 3
+        },
+        "lrclib/api/search": {
+          "count": 12,
+          "mean": 2,
+          "max": 3
+        },
+        "musicbrainz/lookup": {
+          "count": 9,
+          "mean": 1.5,
+          "max": 2
+        },
+        "wikidata/w/api.php": {
+          "count": 3,
+          "mean": 0.5,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 9,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 6,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "negative_artist_merge",
+      "samples": 2,
+      "requests": {
+        "count": 22,
+        "mean": 11,
+        "max": 11
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "lrclib/api/search": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "musicbrainz/lookup": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "wikidata/w/api.php": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 4,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 2,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "negative_compilation",
+      "samples": 2,
+      "requests": {
+        "count": 30,
+        "mean": 15,
+        "max": 15
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 10,
+          "mean": 5,
+          "max": 5
+        },
+        "lrclib/api/search": {
+          "count": 10,
+          "mean": 5,
+          "max": 5
+        },
+        "musicbrainz/lookup": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 6,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 2,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "negative_homonym",
+      "samples": 2,
+      "requests": {
+        "count": 30,
+        "mean": 15,
+        "max": 15
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 8,
+          "mean": 4,
+          "max": 4
+        },
+        "lrclib/api/search": {
+          "count": 8,
+          "mean": 4,
+          "max": 4
+        },
+        "musicbrainz/lookup": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "musicbrainz/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 8,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 2,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "negative_near_candidate",
+      "samples": 2,
+      "requests": {
+        "count": 26,
+        "mean": 13,
+        "max": 13
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "lrclib/api/search": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "musicbrainz/lookup": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        },
+        "searxng/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 6,
+      "entered_model_items": 2,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 8,
+          "input_tokens": 35736,
+          "output_tokens": 563
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 6,
+          "input_tokens": 30872,
+          "output_tokens": 446
+        },
+        "review": {
+          "calls": 2,
+          "input_tokens": 2245,
+          "output_tokens": 220
+        }
+      },
+      "completed_samples": 0,
+      "completion_rate": 0,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 12,
+      "wrong_merges": 0,
+      "wrong_fields": 2
+    },
+    {
+      "shape": "negative_truncated",
+      "samples": 2,
+      "requests": {
+        "count": 34,
+        "mean": 17,
+        "max": 17
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 10,
+          "mean": 5,
+          "max": 5
+        },
+        "lrclib/api/search": {
+          "count": 10,
+          "mean": 5,
+          "max": 5
+        },
+        "musicbrainz/lookup": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        },
+        "searxng/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 6,
+      "entered_model_items": 2,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 8,
+          "input_tokens": 35899,
+          "output_tokens": 564
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 6,
+          "input_tokens": 60496,
+          "output_tokens": 448
+        },
+        "review": {
+          "calls": 2,
+          "input_tokens": 5158,
+          "output_tokens": 220
+        }
+      },
+      "completed_samples": 0,
+      "completion_rate": 0,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 14,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "negative_wrong_id",
+      "samples": 2,
+      "requests": {
+        "count": 26,
+        "mean": 13,
+        "max": 13
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 8,
+          "mean": 4,
+          "max": 4
+        },
+        "lrclib/api/search": {
+          "count": 8,
+          "mean": 4,
+          "max": 4
+        },
+        "musicbrainz/lookup": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "searxng/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 4,
+      "entered_model_items": 2,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 8,
+          "input_tokens": 35828,
+          "output_tokens": 563
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 6,
+          "input_tokens": 32136,
+          "output_tokens": 446
+        },
+        "review": {
+          "calls": 2,
+          "input_tokens": 2249,
+          "output_tokens": 220
+        }
+      },
+      "completed_samples": 0,
+      "completion_rate": 0,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 12,
+      "wrong_merges": 0,
+      "wrong_fields": 2
+    },
+    {
+      "shape": "picard",
+      "samples": 6,
+      "requests": {
+        "count": 78,
+        "mean": 13,
+        "max": 15
+      },
+      "endpoints": {
+        "coverartarchive/image": {
+          "count": 1,
+          "mean": 0.16666666666666666,
+          "max": 1
+        },
+        "coverartarchive/manifest": {
+          "count": 11,
+          "mean": 1.8333333333333333,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 24,
+          "mean": 4,
+          "max": 5
+        },
+        "lrclib/api/search": {
+          "count": 24,
+          "mean": 4,
+          "max": 5
+        },
+        "musicbrainz/lookup": {
+          "count": 12,
+          "mean": 2,
+          "max": 2
+        },
+        "wikidata/w/api.php": {
+          "count": 6,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 12,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 6,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "poor_tags",
+      "samples": 8,
+      "requests": {
+        "count": 68,
+        "mean": 8.5,
+        "max": 12
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 12,
+          "mean": 1.5,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 18,
+          "mean": 2.25,
+          "max": 3
+        },
+        "lrclib/api/search": {
+          "count": 18,
+          "mean": 2.25,
+          "max": 3
+        },
+        "musicbrainz/lookup": {
+          "count": 10,
+          "mean": 1.25,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 4,
+          "mean": 0.5,
+          "max": 1
+        },
+        "searxng/search": {
+          "count": 2,
+          "mean": 0.25,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 4,
+          "mean": 0.5,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 14,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 8,
+          "input_tokens": 35711,
+          "output_tokens": 565
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 4,
+      "completion_rate": 0.5,
+      "open_pending_items": 2,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "stream_album",
+      "samples": 15,
+      "requests": {
+        "count": 188,
+        "mean": 12.533333333333333,
+        "max": 16
+      },
+      "endpoints": {
+        "coverartarchive/image": {
+          "count": 1,
+          "mean": 0.06666666666666667,
+          "max": 1
+        },
+        "coverartarchive/manifest": {
+          "count": 22,
+          "mean": 1.4666666666666666,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 66,
+          "mean": 4.4,
+          "max": 6
+        },
+        "lrclib/api/search": {
+          "count": 66,
+          "mean": 4.4,
+          "max": 6
+        },
+        "musicbrainz/lookup": {
+          "count": 13,
+          "mean": 0.8666666666666667,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 15,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 5,
+          "mean": 0.3333333333333333,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 28,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 15,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "stream_single",
+      "samples": 8,
+      "requests": {
+        "count": 40,
+        "mean": 5,
+        "max": 5
+      },
+      "endpoints": {
+        "lrclib/api/get": {
+          "count": 8,
+          "mean": 1,
+          "max": 1
+        },
+        "lrclib/api/search": {
+          "count": 8,
+          "mean": 1,
+          "max": 1
+        },
+        "musicbrainz/lookup": {
+          "count": 8,
+          "mean": 1,
+          "max": 1
+        },
+        "musicbrainz/search": {
+          "count": 8,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 8,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 16,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 8,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "title_typo",
+      "samples": 3,
+      "requests": {
+        "count": 39,
+        "mean": 13,
+        "max": 13
+      },
+      "endpoints": {
+        "lrclib/api/get": {
+          "count": 12,
+          "mean": 4,
+          "max": 4
+        },
+        "lrclib/api/search": {
+          "count": 12,
+          "mean": 4,
+          "max": 4
+        },
+        "musicbrainz/search": {
+          "count": 12,
+          "mean": 4,
+          "max": 4
+        },
+        "searxng/search": {
+          "count": 3,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 12,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 12,
+          "input_tokens": 53724,
+          "output_tokens": 844
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 0,
+      "completion_rate": 0,
+      "open_pending_items": 3,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "unlisted",
+      "samples": 6,
+      "requests": {
+        "count": 60,
+        "mean": 10,
+        "max": 10
+      },
+      "endpoints": {
+        "lrclib/api/get": {
+          "count": 18,
+          "mean": 3,
+          "max": 3
+        },
+        "lrclib/api/search": {
+          "count": 18,
+          "mean": 3,
+          "max": 3
+        },
+        "musicbrainz/search": {
+          "count": 18,
+          "mean": 3,
+          "max": 3
+        },
+        "searxng/search": {
+          "count": 6,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 18,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 24,
+          "input_tokens": 107284,
+          "output_tokens": 1697
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 0,
+      "completion_rate": 0,
+      "open_pending_items": 6,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    }
+  ],
+  "model": "first_candidate",
+  "samples": [
+    {
+      "id": "cue-01",
+      "shape": "cue_cd",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "disc_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/discid": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "cue-02",
+      "shape": "cue_cd",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "disc_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/discid": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "cue-03",
+      "shape": "cue_cd",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "disc_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/discid": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "cue-04",
+      "shape": "cue_cd",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "disc_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/discid": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "picard-01",
+      "shape": "picard",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/image": 1,
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "picard-02",
+      "shape": "picard",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "picard-03",
+      "shape": "picard",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "picard-04",
+      "shape": "picard",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "picard-05",
+      "shape": "picard",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "picard-06",
+      "shape": "picard",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-01",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/image": 1,
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-02",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-03",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-04",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 6,
+        "lrclib/api/search": 6,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-05",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-06",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-07",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-08",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 6,
+        "lrclib/api/search": 6,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-09",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-10",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-11",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-12",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 6,
+        "lrclib/api/search": 6,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-13",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-14",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "stream-15",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "loose-01",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "recording",
+        "rule": "recording_text"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "loose-02",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "recording",
+        "rule": "recording_text"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "loose-03",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "recording",
+        "rule": "recording_text"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "loose-04",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "recording",
+        "rule": "recording_text"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "loose-05",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "recording",
+        "rule": "recording_text"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "loose-06",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "recording",
+        "rule": "recording_text"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "loose-07",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "artist",
+        "rule": "common_credit"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "loose-08",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "artist",
+        "rule": "common_credit"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "identifier-01",
+      "shape": "barcode_catalog",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "identifier-02",
+      "shape": "barcode_catalog",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "identifier-03",
+      "shape": "barcode_catalog",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "identifier-04",
+      "shape": "barcode_catalog",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "catalog_number",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "identifier-05",
+      "shape": "barcode_catalog",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "catalog_number",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "identifier-06",
+      "shape": "barcode_catalog",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "catalog_number",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "poor-01",
+      "shape": "poor_tags",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "poor-02",
+      "shape": "poor_tags",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "poor-03",
+      "shape": "poor_tags",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "poor-04",
+      "shape": "poor_tags",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "poor-05",
+      "shape": "poor_tags",
+      "complete": false,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 1,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "missing_link",
+          "target": "poor-05/artist 雾谷二重奏",
+          "field": "artist",
+          "expected": "1901d5db-e50b-58cd-9757-1dc79b44e702",
+          "actual": "未建立"
+        }
+      ]
+    },
+    {
+      "id": "poor-06",
+      "shape": "poor_tags",
+      "complete": false,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 1,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "missing_link",
+          "target": "poor-06/artist 雪杉组合",
+          "field": "artist",
+          "expected": "17f734e1-699b-55c4-9206-2187799a8244",
+          "actual": "未建立"
+        }
+      ]
+    },
+    {
+      "id": "poor-07",
+      "shape": "poor_tags",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "",
+        "pending_status": "waiting_route"
+      },
+      "requests": {},
+      "reasons": [
+        {
+          "kind": "open_pending",
+          "target": "poor-07",
+          "field": "release_match",
+          "expected": "已结束",
+          "actual": "waiting_route"
+        }
+      ]
+    },
+    {
+      "id": "poor-08",
+      "shape": "poor_tags",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "",
+        "pending_status": "waiting_route"
+      },
+      "requests": {},
+      "reasons": [
+        {
+          "kind": "open_pending",
+          "target": "poor-08",
+          "field": "release_match",
+          "expected": "已结束",
+          "actual": "waiting_route"
+        }
+      ]
+    },
+    {
+      "id": "chinese-01",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "chinese-02",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "chinese-03",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "chinese-04",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "chinese-05",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "chinese-06",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "chinese-07",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "chinese-08",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "chinese-09",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "chinese-10",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "collection-01",
+      "shape": "compilation_classical",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "collection-02",
+      "shape": "compilation_classical",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "collection-03",
+      "shape": "compilation_classical",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "collection-04",
+      "shape": "compilation_classical",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "collection-05",
+      "shape": "compilation_classical",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "collection-06",
+      "shape": "compilation_classical",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "alias-01",
+      "shape": "artist_alias",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "alias-02",
+      "shape": "artist_alias",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "typo-01",
+      "shape": "title_typo",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "pending_status": "waiting_route"
+      },
+      "requests": {
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/search": 4,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "missing_field",
+          "target": "typo-01",
+          "field": "label",
+          "expected": "Fir Quay Records",
+          "actual": ""
+        },
+        {
+          "kind": "missing_field",
+          "target": "typo-01",
+          "field": "title",
+          "expected": "Crimson Kite",
+          "actual": "Cramson Kite"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-01",
+          "field": "release",
+          "expected": "faae8006-b5f5-5ddf-b288-e069b9c3084a",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-01",
+          "field": "release_group",
+          "expected": "778d0057-72df-51c7-acd9-6ae02096d909",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-01/artist Lantern Skies",
+          "field": "artist",
+          "expected": "627f41ae-3c6c-5b8e-88a1-4eaf36e525f4",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-01/track-01 Cramson Kite · Threshold",
+          "field": "track",
+          "expected": "6e004791-10ea-5bce-a377-8af993dd7398",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-01/track-02 Cramson Kite · Footbridge",
+          "field": "track",
+          "expected": "b0e845ff-8d25-5bc2-a5e3-ad5b8112a06d",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-01/track-03 Cramson Kite · Lighthouse",
+          "field": "track",
+          "expected": "eb9cd094-e103-5560-90af-78cf59cb9eb8",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-01/track-04 Cramson Kite · Rain Garden",
+          "field": "track",
+          "expected": "682b3d1f-0768-5c31-a6ed-ecc14843b651",
+          "actual": "未建立"
+        },
+        {
+          "kind": "open_pending",
+          "target": "typo-01",
+          "field": "release_match",
+          "expected": "已结束",
+          "actual": "waiting_route"
+        }
+      ]
+    },
+    {
+      "id": "typo-02",
+      "shape": "title_typo",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "pending_status": "waiting_route"
+      },
+      "requests": {
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/search": 4,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "missing_field",
+          "target": "typo-02",
+          "field": "label",
+          "expected": "Fir Quay Records",
+          "actual": ""
+        },
+        {
+          "kind": "missing_field",
+          "target": "typo-02",
+          "field": "title",
+          "expected": "Opal River",
+          "actual": "Opel River"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-02",
+          "field": "release",
+          "expected": "4f003f72-c338-5058-8d96-eb44817bcd71",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-02",
+          "field": "release_group",
+          "expected": "2b68a3a6-e711-55fe-9998-1c44fa785f79",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-02/artist Flint Reed",
+          "field": "artist",
+          "expected": "a3259484-be9d-553f-b170-05d7274bad81",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-02/track-01 Opel River · Threshold",
+          "field": "track",
+          "expected": "cdc013ab-d8f8-51e2-9253-b661c6fafa31",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-02/track-02 Opel River · Footbridge",
+          "field": "track",
+          "expected": "531884b7-7dab-5c89-8a4d-0e4c98480ed7",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-02/track-03 Opel River · Lighthouse",
+          "field": "track",
+          "expected": "a192a5a6-097d-5bb1-9af9-6c23264df09a",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-02/track-04 Opel River · Rain Garden",
+          "field": "track",
+          "expected": "de0c312e-2c2a-50c2-b616-afe407768bbe",
+          "actual": "未建立"
+        },
+        {
+          "kind": "open_pending",
+          "target": "typo-02",
+          "field": "release_match",
+          "expected": "已结束",
+          "actual": "waiting_route"
+        }
+      ]
+    },
+    {
+      "id": "typo-03",
+      "shape": "title_typo",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "pending_status": "waiting_route"
+      },
+      "requests": {
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/search": 4,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "missing_field",
+          "target": "typo-03",
+          "field": "label",
+          "expected": "Fir Quay Records",
+          "actual": ""
+        },
+        {
+          "kind": "missing_field",
+          "target": "typo-03",
+          "field": "title",
+          "expected": "Thistle Fields",
+          "actual": "Thesle Fields"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-03",
+          "field": "release",
+          "expected": "7bc286f3-2448-524d-8898-fa999786ca9a",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-03",
+          "field": "release_group",
+          "expected": "c56307bb-372a-555d-b2be-bf1d68d7e37f",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-03/artist Gorse Hall",
+          "field": "artist",
+          "expected": "e3cdcad2-dc89-5e5e-bcdf-ea2b9568bbde",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-03/track-01 Thesle Fields · Threshold",
+          "field": "track",
+          "expected": "217d9d1d-0f41-5acf-a12e-f90aa8d770bf",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-03/track-02 Thesle Fields · Footbridge",
+          "field": "track",
+          "expected": "bab830f5-8f16-516e-ae1e-9f5afdc2d025",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-03/track-03 Thesle Fields · Lighthouse",
+          "field": "track",
+          "expected": "fe204b05-14fd-5cb9-aaea-d6d69c563607",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "typo-03/track-04 Thesle Fields · Rain Garden",
+          "field": "track",
+          "expected": "93808956-031e-5075-aad7-2276b28e2b39",
+          "actual": "未建立"
+        },
+        {
+          "kind": "open_pending",
+          "target": "typo-03",
+          "field": "release_match",
+          "expected": "已结束",
+          "actual": "waiting_route"
+        }
+      ]
+    },
+    {
+      "id": "edition-01-1",
+      "shape": "multi_edition",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "edition-01-2",
+      "shape": "multi_edition",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 2,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "edition-02-1",
+      "shape": "multi_edition",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "edition-02-2",
+      "shape": "multi_edition",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 2,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "edition-03-1",
+      "shape": "multi_edition",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "edition-03-2",
+      "shape": "multi_edition",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 2,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "unlisted-01",
+      "shape": "unlisted",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "pending_status": "waiting_route"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/search": 3,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "open_pending",
+          "target": "unlisted-01",
+          "field": "release_match",
+          "expected": "已结束",
+          "actual": "waiting_route"
+        }
+      ]
+    },
+    {
+      "id": "unlisted-02",
+      "shape": "unlisted",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "pending_status": "waiting_route"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/search": 3,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "open_pending",
+          "target": "unlisted-02",
+          "field": "release_match",
+          "expected": "已结束",
+          "actual": "waiting_route"
+        }
+      ]
+    },
+    {
+      "id": "unlisted-03",
+      "shape": "unlisted",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "pending_status": "waiting_route"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/search": 3,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "open_pending",
+          "target": "unlisted-03",
+          "field": "release_match",
+          "expected": "已结束",
+          "actual": "waiting_route"
+        }
+      ]
+    },
+    {
+      "id": "unlisted-04",
+      "shape": "unlisted",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "pending_status": "waiting_route"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/search": 3,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "open_pending",
+          "target": "unlisted-04",
+          "field": "release_match",
+          "expected": "已结束",
+          "actual": "waiting_route"
+        }
+      ]
+    },
+    {
+      "id": "unlisted-05",
+      "shape": "unlisted",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "pending_status": "waiting_route"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/search": 3,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "open_pending",
+          "target": "unlisted-05",
+          "field": "release_match",
+          "expected": "已结束",
+          "actual": "waiting_route"
+        }
+      ]
+    },
+    {
+      "id": "unlisted-06",
+      "shape": "unlisted",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "pending_status": "waiting_route"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/search": 3,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "open_pending",
+          "target": "unlisted-06",
+          "field": "release_match",
+          "expected": "已结束",
+          "actual": "waiting_route"
+        }
+      ]
+    },
+    {
+      "id": "homonym-01",
+      "shape": "negative_homonym",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 3,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "homonym-02",
+      "shape": "negative_homonym",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 3,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "near-01",
+      "shape": "negative_near_candidate",
+      "complete": false,
+      "match": {
+        "status": "matched",
+        "method": "model",
+        "candidate_count": 1,
+        "pending_status": "resolved",
+        "resolution": "model_matched"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "searxng/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [
+        {
+          "kind": "wrong_field",
+          "target": "near-01",
+          "field": "label",
+          "source": "model/metrics-main",
+          "expected": "保留写入前的值",
+          "actual": "Fir Quay Records",
+          "before": null,
+          "after": "Fir Quay Records",
+          "counted_for": "near-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "near-01",
+          "field": "release",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "5b14532c-05a9-583f-a3f8-31de399944a6",
+          "before": null,
+          "after": "5b14532c-05a9-583f-a3f8-31de399944a6",
+          "counted_for": "near-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "near-01",
+          "field": "release_group",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "81928710-5435-5857-8c1e-ba2f3ad319a9",
+          "before": null,
+          "after": "81928710-5435-5857-8c1e-ba2f3ad319a9",
+          "counted_for": "near-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "near-01/artist Rook Clock",
+          "field": "artist",
+          "source": "source/musicbrainz/artist_credit",
+          "expected": "不建立外部对应",
+          "actual": "be3aff71-1dd9-5239-bb0e-9f41cde7b51c",
+          "before": null,
+          "after": "be3aff71-1dd9-5239-bb0e-9f41cde7b51c",
+          "counted_for": "near-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "near-01/track-01 Undertow · Threshold",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "8ab945ab-ba4a-5557-ab6b-1e080797c99e",
+          "before": null,
+          "after": "8ab945ab-ba4a-5557-ab6b-1e080797c99e",
+          "counted_for": "near-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "near-01/track-02 Undertow · Footbridge",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "3f71ba70-fb25-5b6b-94c3-f6a547fad5e8",
+          "before": null,
+          "after": "3f71ba70-fb25-5b6b-94c3-f6a547fad5e8",
+          "counted_for": "near-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "near-01/track-03 Undertow · Lighthouse",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "70b1d5f0-c206-5048-9f12-d312cf03bb16",
+          "before": null,
+          "after": "70b1d5f0-c206-5048-9f12-d312cf03bb16",
+          "counted_for": "near-01"
+        }
+      ]
+    },
+    {
+      "id": "near-02",
+      "shape": "negative_near_candidate",
+      "complete": false,
+      "match": {
+        "status": "matched",
+        "method": "model",
+        "candidate_count": 1,
+        "pending_status": "resolved",
+        "resolution": "model_matched"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "searxng/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [
+        {
+          "kind": "wrong_field",
+          "target": "near-02",
+          "field": "label",
+          "source": "model/metrics-main",
+          "expected": "保留写入前的值",
+          "actual": "Fir Quay Records",
+          "before": null,
+          "after": "Fir Quay Records",
+          "counted_for": "near-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "near-02",
+          "field": "release",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "e6b10412-8bad-580e-9e99-133dde4ad3e3",
+          "before": null,
+          "after": "e6b10412-8bad-580e-9e99-133dde4ad3e3",
+          "counted_for": "near-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "near-02",
+          "field": "release_group",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "09e73e48-b202-5745-86f9-e40c17840d5d",
+          "before": null,
+          "after": "09e73e48-b202-5745-86f9-e40c17840d5d",
+          "counted_for": "near-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "near-02/artist Moss Window",
+          "field": "artist",
+          "source": "source/musicbrainz/artist_credit",
+          "expected": "不建立外部对应",
+          "actual": "b3655d41-aff1-5fca-8751-2c39c4bfa237",
+          "before": null,
+          "after": "b3655d41-aff1-5fca-8751-2c39c4bfa237",
+          "counted_for": "near-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "near-02/track-01 Portraits · Threshold",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "a26574cc-2737-5d22-bf59-11d23378d1df",
+          "before": null,
+          "after": "a26574cc-2737-5d22-bf59-11d23378d1df",
+          "counted_for": "near-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "near-02/track-02 Portraits · Footbridge",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "50ddb003-f784-5f23-8ba1-03314398d42e",
+          "before": null,
+          "after": "50ddb003-f784-5f23-8ba1-03314398d42e",
+          "counted_for": "near-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "near-02/track-03 Portraits · Lighthouse",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "e1c43624-6253-5092-a8f3-bc5f6f56eafa",
+          "before": null,
+          "after": "e1c43624-6253-5092-a8f3-bc5f6f56eafa",
+          "counted_for": "near-02"
+        }
+      ]
+    },
+    {
+      "id": "compilation-01",
+      "shape": "negative_compilation",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "compilation-02",
+      "shape": "negative_compilation",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "wrong-id-01",
+      "shape": "negative_wrong_id",
+      "complete": false,
+      "match": {
+        "status": "matched",
+        "method": "model",
+        "candidate_count": 1,
+        "pending_status": "resolved",
+        "resolution": "model_matched"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "wrong_field",
+          "target": "wrong-id-01",
+          "field": "label",
+          "source": "model/metrics-main",
+          "expected": "保留写入前的值",
+          "actual": "Fir Quay Records",
+          "before": null,
+          "after": "Fir Quay Records",
+          "counted_for": "wrong-id-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "wrong-id-01",
+          "field": "release",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "23e1ab96-396c-5f6a-9b71-3dc5f50a00d8",
+          "before": null,
+          "after": "23e1ab96-396c-5f6a-9b71-3dc5f50a00d8",
+          "counted_for": "wrong-id-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "wrong-id-01",
+          "field": "release_group",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "05ee02d9-7af0-5e8e-a577-e66bd6ca515f",
+          "before": null,
+          "after": "05ee02d9-7af0-5e8e-a577-e66bd6ca515f",
+          "counted_for": "wrong-id-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "wrong-id-01/track-01 Swallow Light · Threshold",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "19eea52c-2494-519c-a974-caacd226a9c3",
+          "before": null,
+          "after": "19eea52c-2494-519c-a974-caacd226a9c3",
+          "counted_for": "wrong-id-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "wrong-id-01/track-02 Swallow Light · Footbridge",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "49db9f8c-ffca-5052-ab14-0ee48ace1ff2",
+          "before": null,
+          "after": "49db9f8c-ffca-5052-ab14-0ee48ace1ff2",
+          "counted_for": "wrong-id-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "wrong-id-01/track-03 Swallow Light · Lighthouse",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "f6bc9a0d-bcd7-575b-a223-6973eb70eb37",
+          "before": null,
+          "after": "f6bc9a0d-bcd7-575b-a223-6973eb70eb37",
+          "counted_for": "wrong-id-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "wrong-id-01/track-04 Swallow Light · Rain Garden",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "f1db0d93-5657-52cd-9627-fcda5866440c",
+          "before": null,
+          "after": "f1db0d93-5657-52cd-9627-fcda5866440c",
+          "counted_for": "wrong-id-01"
+        }
+      ]
+    },
+    {
+      "id": "wrong-id-02",
+      "shape": "negative_wrong_id",
+      "complete": false,
+      "match": {
+        "status": "matched",
+        "method": "model",
+        "candidate_count": 1,
+        "pending_status": "resolved",
+        "resolution": "model_matched"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "wrong_field",
+          "target": "wrong-id-02",
+          "field": "label",
+          "source": "model/metrics-main",
+          "expected": "保留写入前的值",
+          "actual": "Fir Quay Records",
+          "before": null,
+          "after": "Fir Quay Records",
+          "counted_for": "wrong-id-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "wrong-id-02",
+          "field": "release",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "24fa8ce4-4c1f-5dd5-8fee-cae077ace876",
+          "before": null,
+          "after": "24fa8ce4-4c1f-5dd5-8fee-cae077ace876",
+          "counted_for": "wrong-id-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "wrong-id-02",
+          "field": "release_group",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "91e42975-10bb-55e4-81bd-8746b2d3abfe",
+          "before": null,
+          "after": "91e42975-10bb-55e4-81bd-8746b2d3abfe",
+          "counted_for": "wrong-id-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "wrong-id-02/track-01 Spool of Rain · Threshold",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "08d8d479-2a5c-55b4-be0a-21b9fcbd2a50",
+          "before": null,
+          "after": "08d8d479-2a5c-55b4-be0a-21b9fcbd2a50",
+          "counted_for": "wrong-id-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "wrong-id-02/track-02 Spool of Rain · Footbridge",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "a3a77674-5d9d-5245-81ae-82feac9e94fc",
+          "before": null,
+          "after": "a3a77674-5d9d-5245-81ae-82feac9e94fc",
+          "counted_for": "wrong-id-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "wrong-id-02/track-03 Spool of Rain · Lighthouse",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "ad616834-ca11-570c-9850-27a6493ad190",
+          "before": null,
+          "after": "ad616834-ca11-570c-9850-27a6493ad190",
+          "counted_for": "wrong-id-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "wrong-id-02/track-04 Spool of Rain · Rain Garden",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "不建立外部对应",
+          "actual": "cb8403d0-0d25-5fd3-b0f2-cabdc81fa89b",
+          "before": null,
+          "after": "cb8403d0-0d25-5fd3-b0f2-cabdc81fa89b",
+          "counted_for": "wrong-id-02"
+        }
+      ]
+    },
+    {
+      "id": "distinct-artist-01",
+      "shape": "negative_artist_merge",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "distinct-artist-02",
+      "shape": "negative_artist_merge",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "truncated-01",
+      "shape": "negative_truncated",
+      "complete": false,
+      "match": {
+        "status": "matched",
+        "method": "model",
+        "candidate_count": 28,
+        "pending_status": "resolved",
+        "resolution": "model_matched"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "searxng/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [
+        {
+          "kind": "wrong_link",
+          "target": "truncated-01",
+          "field": "release",
+          "source": "model/metrics-main/model",
+          "expected": "298c4d44-3e94-5c69-a192-833f73d14753",
+          "actual": "05b60dc0-9015-5d34-9935-67ba3c5aac92",
+          "before": null,
+          "after": "05b60dc0-9015-5d34-9935-67ba3c5aac92",
+          "counted_for": "truncated-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "truncated-01",
+          "field": "release_group",
+          "source": "model/metrics-main/model",
+          "expected": "ed333afa-04ab-53da-a019-6d286f80c38c",
+          "actual": "fdd970bf-1633-519a-bb53-3e15157ff743",
+          "before": null,
+          "after": "fdd970bf-1633-519a-bb53-3e15157ff743",
+          "counted_for": "truncated-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "truncated-01/track-01 Greatest Hits · Threshold",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "464002f0-034a-5010-920d-d57999ee80a6",
+          "actual": "2af69bdf-2fbf-5115-8bff-dfd5133e08e6",
+          "before": null,
+          "after": "2af69bdf-2fbf-5115-8bff-dfd5133e08e6",
+          "counted_for": "truncated-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "truncated-01/track-02 Greatest Hits · Footbridge",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "b41c5631-9374-5709-b7c6-76da4ba76692",
+          "actual": "1993bd4c-2ae6-59ba-b3bf-472523c82e72",
+          "before": null,
+          "after": "1993bd4c-2ae6-59ba-b3bf-472523c82e72",
+          "counted_for": "truncated-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "truncated-01/track-03 Greatest Hits · Lighthouse",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "90039440-24db-52b2-b95b-e7e1e9f4b1db",
+          "actual": "560f052f-683e-5870-951c-b631a0f0c6f6",
+          "before": null,
+          "after": "560f052f-683e-5870-951c-b631a0f0c6f6",
+          "counted_for": "truncated-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "truncated-01/track-04 Greatest Hits · Rain Garden",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "221e87f6-bd5d-54b4-bdcf-1d453faf960c",
+          "actual": "058f175d-3b92-5980-83ed-036a1c5761f2",
+          "before": null,
+          "after": "058f175d-3b92-5980-83ed-036a1c5761f2",
+          "counted_for": "truncated-01"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "truncated-01/track-05 Greatest Hits · Sundial",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "f5b5151b-686a-5676-afd5-9f850df8338a",
+          "actual": "8d36c645-fb4e-5f22-a7aa-31b1507c6e6e",
+          "before": null,
+          "after": "8d36c645-fb4e-5f22-a7aa-31b1507c6e6e",
+          "counted_for": "truncated-01"
+        }
+      ]
+    },
+    {
+      "id": "truncated-02",
+      "shape": "negative_truncated",
+      "complete": false,
+      "match": {
+        "status": "matched",
+        "method": "model",
+        "candidate_count": 28,
+        "pending_status": "resolved",
+        "resolution": "model_matched"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "searxng/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [
+        {
+          "kind": "wrong_link",
+          "target": "truncated-02",
+          "field": "release",
+          "source": "model/metrics-main/model",
+          "expected": "6331cd3d-c4e2-5be7-80bc-9efd7e592bbc",
+          "actual": "1381c7b4-ab1d-53e2-a13b-a818bae7d90b",
+          "before": null,
+          "after": "1381c7b4-ab1d-53e2-a13b-a818bae7d90b",
+          "counted_for": "truncated-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "truncated-02",
+          "field": "release_group",
+          "source": "model/metrics-main/model",
+          "expected": "70e19203-7db2-5291-9f64-5e2814c26402",
+          "actual": "611f93b2-d77b-512b-9bc9-d8e276c22832",
+          "before": null,
+          "after": "611f93b2-d77b-512b-9bc9-d8e276c22832",
+          "counted_for": "truncated-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "truncated-02/track-01 Live in Concert · Threshold",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "0ae4eed0-98ac-53b7-a0bc-33d594b4b3b8",
+          "actual": "c476900b-a68a-54cd-af10-b288941afcd8",
+          "before": null,
+          "after": "c476900b-a68a-54cd-af10-b288941afcd8",
+          "counted_for": "truncated-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "truncated-02/track-02 Live in Concert · Footbridge",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "9b3339a8-a4cf-5a1f-80a4-407ec05cc3d8",
+          "actual": "03b61772-8496-57fb-98df-c60f4eb5295e",
+          "before": null,
+          "after": "03b61772-8496-57fb-98df-c60f4eb5295e",
+          "counted_for": "truncated-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "truncated-02/track-03 Live in Concert · Lighthouse",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "d3896797-305e-5dc4-a15a-3b185cc71b2a",
+          "actual": "e9bfbae5-3fab-5c9a-a79f-00fa7108471d",
+          "before": null,
+          "after": "e9bfbae5-3fab-5c9a-a79f-00fa7108471d",
+          "counted_for": "truncated-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "truncated-02/track-04 Live in Concert · Rain Garden",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "5fa1a0c9-8eab-59f0-9a36-2749ecfaf1e0",
+          "actual": "b0683504-db76-5e3e-9842-eac5b7fb9afa",
+          "before": null,
+          "after": "b0683504-db76-5e3e-9842-eac5b7fb9afa",
+          "counted_for": "truncated-02"
+        },
+        {
+          "kind": "wrong_link",
+          "target": "truncated-02/track-05 Live in Concert · Sundial",
+          "field": "track",
+          "source": "model/metrics-main/model",
+          "expected": "08dd6966-2ae0-5f64-a6db-48d2461805c8",
+          "actual": "bff68806-62ad-5d15-b2d2-47e721496d14",
+          "before": null,
+          "after": "bff68806-62ad-5d15-b2d2-47e721496d14",
+          "counted_for": "truncated-02"
+        }
+      ]
+    }
+  ],
+  "token_estimate": "请求与 SSE 响应分别按字节数除以 4 向下取整",
+  "total": {
+    "shape": "合计",
+    "samples": 92,
+    "requests": {
+      "count": 1065,
+      "mean": 11.576086956521738,
+      "max": 17
+    },
+    "endpoints": {
+      "coverartarchive/image": {
+        "count": 2,
+        "mean": 0.021739130434782608,
+        "max": 1
+      },
+      "coverartarchive/manifest": {
+        "count": 134,
+        "mean": 1.4565217391304348,
+        "max": 2
+      },
+      "lrclib/api/get": {
+        "count": 318,
+        "mean": 3.4565217391304346,
+        "max": 6
+      },
+      "lrclib/api/search": {
+        "count": 315,
+        "mean": 3.4239130434782608,
+        "max": 6
+      },
+      "musicbrainz/discid": {
+        "count": 4,
+        "mean": 0.043478260869565216,
+        "max": 1
+      },
+      "musicbrainz/lookup": {
+        "count": 125,
+        "mean": 1.358695652173913,
+        "max": 3
+      },
+      "musicbrainz/search": {
+        "count": 93,
+        "mean": 1.0108695652173914,
+        "max": 4
+      },
+      "searxng/search": {
+        "count": 17,
+        "mean": 0.18478260869565216,
+        "max": 1
+      },
+      "wikidata/w/api.php": {
+        "count": 57,
+        "mean": 0.6195652173913043,
+        "max": 1
+      }
+    },
+    "estimated_musicbrainz_seconds": 222,
+    "entered_model_items": 6,
+    "program_decidable_entered_samples": 0,
+    "model_usage": {
+      "artist_identity": {
+        "calls": 68,
+        "input_tokens": 304182,
+        "output_tokens": 4796
+      },
+      "other": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "pending_step": {
+        "calls": 18,
+        "input_tokens": 123504,
+        "output_tokens": 1340
+      },
+      "review": {
+        "calls": 6,
+        "input_tokens": 9652,
+        "output_tokens": 660
+      }
+    },
+    "completed_samples": 73,
+    "completion_rate": 0.7934782608695652,
+    "open_pending_items": 11,
+    "open_exceptions": 0,
+    "wrong_links": 38,
+    "wrong_merges": 0,
+    "wrong_fields": 4
+  }
+}

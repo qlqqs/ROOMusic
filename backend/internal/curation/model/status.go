@@ -50,16 +50,18 @@ func (s *Scheduler) targetSources(ctx context.Context, p *schedulingConditions) 
 	return nil
 }
 
-func (s *Scheduler) conditions(ctx context.Context) (p schedulingConditions, actor string, err error) {
+func (s *Scheduler) conditions(ctx context.Context, checkBudget bool) (p schedulingConditions, actor string, err error) {
 	settings, err := s.writer.Settings(ctx)
 	if err != nil {
 		return p, "", err
 	}
 	p.Model, p.DailyTokenLimit = settings.Model, settings.DailyTokenLimit
 	now := s.options.Now()
-	p.Today, err = s.writer.TodayUsage(ctx, now)
-	if err != nil {
-		return p, "", err
+	if checkBudget {
+		p.Today, err = s.writer.TodayUsage(ctx, now)
+		if err != nil {
+			return p, "", err
+		}
 	}
 	unavailable := func(reason string) { p.State = "unavailable"; p.UnavailableReason = &reason }
 	switch {
@@ -90,7 +92,7 @@ func (s *Scheduler) conditions(ctx context.Context) (p schedulingConditions, act
 		switch {
 		case reason != "":
 			unavailable(reason)
-		case p.DailyTokenLimit != nil && p.Today.InputTokens+p.Today.OutputTokens >= *p.DailyTokenLimit:
+		case checkBudget && p.DailyTokenLimit != nil && p.Today.InputTokens+p.Today.OutputTokens >= *p.DailyTokenLimit:
 			p.State = "limit_reached"
 		case cooling:
 			unavailable("provider_error")
@@ -102,7 +104,7 @@ func (s *Scheduler) conditions(ctx context.Context) (p schedulingConditions, act
 }
 
 func (s *Scheduler) ModelStatus(ctx context.Context) (curation.ModelProgress, error) {
-	conditions, _, err := s.conditions(ctx)
+	conditions, _, err := s.conditions(ctx, true)
 	p := conditions.ModelProgress
 	if err != nil {
 		return p, err
@@ -113,14 +115,14 @@ func (s *Scheduler) ModelStatus(ctx context.Context) (curation.ModelProgress, er
  count(*) FILTER (WHERE status='waiting_human'),count(*) FILTER (WHERE status='shelved'),
  count(*) FILTER (WHERE status='in_progress' AND next_attempt_at IS NOT NULL)>0
  FROM curation_pending_items p WHERE `+curation.PendingTargetVisibleSQL).Scan(&p.Items.WaitingModel, &p.Items.InProgress, &p.Items.WaitingHuman, &p.Items.Shelved, &waitingReview)
-	if p.State == "idle" {
+	if p.State == "idle" || p.State == "limit_reached" {
 		s.mu.RLock()
 		running := s.running
 		s.mu.RUnlock()
 		switch {
 		case running:
 			p.State = "running"
-		case waitingReview:
+		case waitingReview && p.State == "idle":
 			p.State = "waiting_review"
 		}
 	}

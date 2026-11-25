@@ -141,9 +141,6 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		return err
 	}
 	if err := w.sources.Check(ctx, "musicbrainz"); err != nil {
-		if failureCode(err) == "source_disabled" {
-			return nil
-		}
 		return err
 	}
 	var local catalog.CurationArtistCredits
@@ -195,7 +192,7 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 			markers["artist_links"] = "unavailable"
 		}
 	case failureCode(err) == "source_disabled" || curation.IsSourceUnavailable(err):
-		return nil
+		return sourceFailure(ctx, "musicbrainz", err)
 	case err != nil:
 		return err
 	default:
@@ -206,7 +203,7 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 			links, proposals, err = w.identifyArtists(ctx, local, *e, match, false)
 			if err != nil {
 				if failureCode(err) == "source_disabled" || curation.IsSourceUnavailable(err) {
-					return nil
+					return sourceFailure(ctx, "musicbrainz", err)
 				}
 				return err
 			}
@@ -215,9 +212,6 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 			}
 			request := curation.LinkRequest{ReleaseID: e.ID, ExternalSource: "musicbrainz", Source: source}
 			if err := writeArtistLinks(ctx, w.db, w.writer, request, links, u.write); err != nil {
-				if failureCode(err) == "source_disabled" {
-					return nil
-				}
 				return err
 			}
 			markers["artist_links"] = "none"
@@ -229,9 +223,6 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 			requests := planTrackFields(*e, match)
 			source.Basis = "按已有 MusicBrainz 对应补全曲目字段"
 			if err := writeTrackFields(ctx, w.writer, requests, source, u.write); err != nil {
-				if failureCode(err) == "source_disabled" {
-					return nil
-				}
 				return err
 			}
 			markers["track_fields"] = "none"
@@ -241,9 +232,6 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		}
 	}
 	if err := w.sources.Check(ctx, "musicbrainz"); err != nil {
-		if failureCode(err) == "source_disabled" {
-			return nil
-		}
 		return err
 	}
 	tx, err := w.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
@@ -267,9 +255,11 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		return err
 	}
 	err = tx.QueryRowContext(ctx, `UPDATE curation_work_states SET result=result || $5::jsonb,updated_at=now(),
- local_rule_version=$7,match_rule_version=$8,identity_digest=$9,gap_digest=$10
+ local_rule_version=$7,match_rule_version=$8,identity_digest=$9,gap_digest=$10,
+ needs_work=manual_requested_at IS DISTINCT FROM $11::timestamptz,
+ manual_requested_at=CASE WHEN manual_requested_at IS DISTINCT FROM $11 THEN manual_requested_at END
  WHERE subject='release' AND target_id=$1 AND status='matched' AND generation=$2 AND rule_version=$3 AND input_digest=$4 AND updated_at=$6
- RETURNING result,updated_at`, e.ID, s.Generation, s.RuleVersion, s.InputDigest, jsonValue(markers), s.UpdatedAt, LocalRuleVersion, MatchRuleVersion, d.identity, d.gap).Scan(&s.Result, &s.UpdatedAt)
+ RETURNING result,updated_at`, e.ID, s.Generation, s.RuleVersion, s.InputDigest, jsonValue(markers), s.UpdatedAt, LocalRuleVersion, MatchRuleVersion, d.identity, d.gap, s.ManualRequestedAt).Scan(&s.Result, &s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errReleaseChanged
 	}

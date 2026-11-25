@@ -2,6 +2,10 @@ package app
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
@@ -10,9 +14,6 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
 	"github.com/qlqq/roomusic/backend/internal/sources/lrclib"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 // 工作者进入 After 时将控制权交给测试，只有测试推进时钟才会开始下一次轮询。
@@ -48,6 +49,7 @@ func (c *programClock) advance(t *testing.T, d time.Duration) {
 
 // 每种能力只返回夹具中显式登记的候选。计数只在闸门放行之后增加。
 type programSource struct {
+	callsMu                  sync.Mutex
 	calls                    map[string]int
 	releases                 map[string]sources.Release
 	barcode, catalog, search map[string][]sources.Release
@@ -62,11 +64,18 @@ func newProgramSource() *programSource {
 	return &programSource{calls: map[string]int{}, releases: map[string]sources.Release{}, barcode: map[string][]sources.Release{}, catalog: map[string][]sources.Release{}, search: map[string][]sources.Release{}, recordings: map[string]sources.Recording{}, isrc: map[string][]sources.Recording{}}
 }
 func (s *programSource) call(method string) error {
+	s.callsMu.Lock()
 	s.calls[method]++
+	s.callsMu.Unlock()
 	if s.hook != nil {
 		return s.hook(method)
 	}
 	return nil
+}
+func (s *programSource) callCount(method string) int {
+	s.callsMu.Lock()
+	defer s.callsMu.Unlock()
+	return s.calls[method]
 }
 func (s *programSource) ReleaseByID(_ context.Context, id string) (sources.Release, error) {
 	return s.releases[id], s.call("ReleaseByID")

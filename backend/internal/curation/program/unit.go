@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 )
 
@@ -15,6 +16,7 @@ type unit struct {
 	generation             int
 	releaseID, inputDigest string
 	releaseState           curation.WorkState
+	releaseInput           *catalog.CurationEvidence
 	checked                bool
 	offline, programOnly   bool
 	identityDigest         string
@@ -35,8 +37,14 @@ func (u *unit) key(step string) string {
 }
 
 func (w *Worker) closeBatch(ctx context.Context) error {
-	id, _, n, open := w.CurrentBatch()
-	if !open {
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	return w.closeLockedBatch(ctx)
+}
+
+func (w *Worker) closeLockedBatch(ctx context.Context) error {
+	id, n := w.batch.ID, w.batch.Operations
+	if id == "" {
 		return nil
 	}
 	discarded := false
@@ -50,15 +58,13 @@ func (w *Worker) closeBatch(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	w.mu.Lock()
 	w.batch = curation.Batch{}
-	w.mu.Unlock()
 	return nil
 }
 
-func (w *Worker) rotateBatch(ctx context.Context) error {
+func (w *Worker) rotateLockedBatch(ctx context.Context) error {
 	if w.batch.ID != "" && (w.batch.Operations >= 500 || w.opts.Now().Sub(w.batchStarted) >= time.Hour) {
-		return w.closeBatch(ctx)
+		return w.closeLockedBatch(ctx)
 	}
 	return nil
 }
@@ -72,7 +78,11 @@ func (u *unit) write(ctx context.Context, step string, write func(batch, key str
 			return err
 		}
 		e, ok := entries[u.releaseID]
-		if !ok || u.identityDigest != "" && IdentityDigest(e) != u.identityDigest || subjectDigest(u.subject, subjectEvidence(u.subject, e, u.releaseState), u.id) != u.inputDigest {
+		if !ok || u.identityDigest != "" && IdentityDigest(e) != u.identityDigest {
+			return errReleaseChanged
+		}
+		current := subjectDigest(u.subject, subjectEvidence(u.subject, e, u.releaseState), u.id)
+		if current != u.inputDigest && (u.releaseInput == nil || ReleaseDigest(withAddedMedia(*u.releaseInput, e)) != current) {
 			return errReleaseChanged
 		}
 		u.checked = true
@@ -80,23 +90,26 @@ func (u *unit) write(ctx context.Context, step string, write func(batch, key str
 	if err := w.sources.Check(ctx, u.source()); err != nil {
 		return err
 	}
-	if err := w.rotateBatch(ctx); err != nil {
-		return err
-	}
 	return u.writeInBatch(ctx, step, write)
 }
 
-// 同一艺人的两项写入在单元开始时预留批次容量。
+// 领取、轮换和记账在同一批次锁内完成，网络取证在锁外。
 func (u *unit) writeInBatch(ctx context.Context, step string, write func(batch, key string) error) error {
 	w := u.w
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	if err := w.ready(ctx); err != nil {
+		return err
+	}
+	if err := w.rotateLockedBatch(ctx); err != nil {
+		return err
+	}
 	if w.batch.ID == "" {
 		b, err := w.writer.OpenBatch(ctx, "program")
 		if err != nil {
 			return err
 		}
-		w.mu.Lock()
 		w.batch, w.batchStarted = b, w.opts.Now()
-		w.mu.Unlock()
 	}
 	err := write(w.batch.ID, u.key(step))
 	// 同代回填可能已完成对应和部分合并后中断。重算的署名会解析到新身份，
@@ -133,14 +146,12 @@ func (u *unit) writeInBatch(ctx context.Context, step string, write func(batch, 
 	if err != nil {
 		return err
 	}
-	w.mu.Lock()
 	w.batch.Operations = b.Operations
-	w.mu.Unlock()
 	if b.Operations == 0 {
-		return w.closeBatch(ctx)
+		return w.closeLockedBatch(ctx)
 	}
 	if u.subject == "artist_media" {
 		return nil
 	}
-	return w.rotateBatch(ctx)
+	return w.rotateLockedBatch(ctx)
 }
