@@ -25,6 +25,7 @@
 | L2 | 新设备走开放生态：实现 SlimProto 服务端，接入 Squeezelite 类播放器；不自写设备端，不仿制 Roon 协议 | 主代理推荐，qlqq 未反对。Squeezelite 是开源设备端，piCorePlayer、moOde 等系统和不少播放器内置，支持高码率、DSD 与多台同步 |
 | L4 | 高精度多房间加 Snapcast 子任务；SlimProto 编组照常做（毫秒级，给 piCorePlayer 这类用户）；SlimProto 的服务器端漂移补偿等实测发现跳过时有咔哒声再加 | qlqq 2026-11-25 选择。SlimProto 同步是毫秒级（时间戳以毫秒为单位，靠跳过修正），Snapcast 客户端按采样点校正，官方称偏差通常低于 0.2 ms，是唯一现成、精度能超过 RAAT 的路 |
 | L5 | 没有网络功能、插在 NAS 上的 USB 解码器，用 Squeezelite 边车容器接入，只写文档与示例，不写新后端代码 | 主代理取，回答 qlqq“设备不支持怎么办” |
+| L6 | Snapcast 子任务暂缓：先用真实设备试 SlimProto 编组，漂移下的跳帧修正听得出来时，再做 Snapcast 或给 SlimProto 加服务器端漂移补偿 | qlqq 2026-11-25 选择。SlimProto 编组实测时钟一致时 p95 0.35 ms，+100 ppm 时 p95 9.2 ms、峰值 10.3 ms（每几分钟一次 strm a），Snapcast 的精度优势只剩漂移场景 |
 | L3 | 按“规划完直接实现、本地合并、不推送”进行；审查先行 | 沿用 M7/M8 的做法。审查会通读现有设备层，SlimProto 的设计要复用它的托管输出与取流约定 |
 
 ## 子任务
@@ -51,3 +52,14 @@
 - 每个子任务合入后，没有启用新功能的实例行为不变。
 - 仓库里不出现从那份逆向文档搬来的内容：Roon 的服务号、端口与组播地址、内部类名、厂商例外表、协议报文定义。
 - README、路线图与对应 spec 同步新状态。
+
+## 进度（2026-11-25）
+
+| 子任务 | 状态 |
+| --- | --- |
+| `11-25-lan-protocol-audit` | 已合入并归档 |
+| `11-25-slimproto-squeezelite` | 已合入并归档 |
+| `11-25-slimproto-sync-groups` | 已合入并归档 |
+| `11-25-snapcast-multiroom` | 暂缓（L6），规划与协议调研保留 |
+
+待 qlqq：真实设备试用 SlimProto 单台与编组；审阅各子任务 PRD 里主代理替他定的决定（审查 F1–F10、S1–S11、G1–G11）。

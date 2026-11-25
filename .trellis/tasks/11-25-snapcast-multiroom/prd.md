@@ -1,6 +1,6 @@
 # Snapcast 服务端：高精度多房间同步
 
-状态：规划中（草稿）。协议事实见 `research/snapcast-protocol.md`。父任务 `11-25-lan-hires-multiroom`。依赖：`11-25-slimproto-squeezelite` 合入（复用它对局域网设备公共层的扩展方式），与 `11-25-slimproto-sync-groups` 共用“一个播放区输出到多台设备”的编组模型，先做者定义模型，后做者复用。
+状态：暂缓（qlqq 2026-11-25，见父任务 L6）。规划草稿与协议调研保留，重启时从这里继续。协议事实见 `research/snapcast-protocol.md`。父任务 `11-25-lan-hires-multiroom`。依赖：`11-25-slimproto-squeezelite` 合入（复用它对局域网设备公共层的扩展方式），与 `11-25-slimproto-sync-groups` 共用“一个播放区输出到多台设备”的编组模型，先做者定义模型，后做者复用。
 
 ## 目标
 
