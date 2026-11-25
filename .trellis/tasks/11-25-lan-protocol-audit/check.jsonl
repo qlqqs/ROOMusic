@@ -1,5 +1,0 @@
-{"file": ".trellis/tasks/11-25-lan-protocol-audit/prd.md", "reason": "验收标准"}
-{"file": ".trellis/tasks/11-25-lan-protocol-audit/design.md", "reason": "修复项与文件边界，检查越界改动"}
-{"file": ".trellis/tasks/11-25-lan-protocol-audit/research/audit.md", "reason": "复现测试的判据"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试与门禁"}
-{"file": ".trellis/spec/backend/playback-zone-service-contracts.md", "reason": "锁顺序与托管输出生命周期"}

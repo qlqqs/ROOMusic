@@ -1,7 +1,0 @@
-{"file": ".trellis/tasks/11-25-lan-protocol-audit/prd.md", "reason": "检查清单、范围与验收"}
-{"file": ".trellis/tasks/11-25-lan-protocol-audit/design.md", "reason": "修复项 F1–F10、分组与文件边界"}
-{"file": ".trellis/tasks/11-25-lan-protocol-audit/research/audit.md", "reason": "每条缺陷的证据、修复方案与复现测试"}
-{"file": ".trellis/spec/backend/upnp-device-contracts.md", "reason": "UPnP、Cast、AirPlay 的既有合同"}
-{"file": ".trellis/spec/backend/playback-zone-service-contracts.md", "reason": "托管输出、锁与事务的服务端合同"}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "新增 Warn/Info 日志的字段与脱敏"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试与门禁"}
