@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "device_grouped",
+      "message": "设备已编组，请先移出播放组"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

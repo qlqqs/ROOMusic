@@ -34,6 +34,7 @@ type Capabilities struct {
 
 // PersistedDevice 不含在线状态、输出会话等仅属于运行时的字段。
 type PersistedDevice struct {
+	SyncDelayMS       int
 	ExternalID        string
 	MaxSampleRate     int
 	VolumeDisplayOnly bool
@@ -62,8 +63,9 @@ type PersistedZone struct {
 
 // UserState 是同一快照内的设备与播放区，均按设备创建时间、设备 ID 升序排列。
 type UserState struct {
-	Devices []PersistedDevice
-	Zones   []PersistedZone
+	GroupMembers map[string][]string
+	Devices      []PersistedDevice
+	Zones        []PersistedZone
 }
 
 // Store 将存储原语绑定到调用者的事务，不负责开始、提交或回滚事务。

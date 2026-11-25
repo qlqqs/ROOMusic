@@ -13,6 +13,8 @@ import (
 )
 
 type renderHandle struct {
+	groupIDs     []string
+	group        *groupStream
 	session      RenderSession
 	stream       *Stream
 	generation   uint64
@@ -33,6 +35,9 @@ type renderHandle struct {
 
 func (h *renderHandle) close() {
 	h.once.Do(func() {
+		if h.group != nil {
+			h.group.close()
+		}
 		if h.upnp != nil {
 			h.upnp.remove()
 		}
@@ -61,7 +66,19 @@ func (z *zoneRuntime) hasRenderSeq(seq int64) bool { return z.handleFor(&seq) !=
 // 推送设备的网络编码在发送端完成，固定出口采样格式由管理员的物理设备设置决定。
 func (s *Service) negotiateRender(z *zoneRuntime) (StreamFormat, error) {
 	if z.device.Kind != "airplay" {
-		return s.options.Renderer.Negotiate(cloneCapabilities(z.device.Capabilities), z.persisted.Settings.Quality)
+		caps := z.device.Capabilities
+		if len(z.group) > 0 {
+			rate := z.device.MaxSampleRate
+			for _, m := range z.group {
+				if m.expected() {
+					rate = min(rate, m.maxSampleRate)
+				}
+			}
+			caps = limitSampleRate(caps, rate)
+		} else {
+			caps = cloneCapabilities(caps)
+		}
+		return s.options.Renderer.Negotiate(caps, z.persisted.Settings.Quality)
 	}
 	for _, f := range z.device.Capabilities.StreamFormats {
 		if f.Codec == "alac" && f.MaxBitDepth != nil && f.MaxSampleRate != nil {
@@ -113,7 +130,16 @@ func (s *Service) createRender(userID string, z *zoneRuntime, entryID string, se
 		url += "/index.m3u8"
 	}
 	stream := &Stream{Seq: spec.Seq, URL: url, MimeType: mimeType, Quality: quality, Format: projected, Segments: []StreamSegment{{EntryID: entryID, Track: z.cursorTracks[entry.TrackID], TrackStartSeconds: seconds}}}
-	return &renderHandle{session: session, stream: stream, generation: z.generation, entryID: entryID, startSeconds: seconds, wake: make(chan struct{}, 1), done: make(chan struct{})}, ""
+	var groupIDs []string
+	if len(z.group) > 0 {
+		groupIDs = append(groupIDs, z.device.DeviceID)
+		for _, m := range z.group {
+			if m.expected() {
+				groupIDs = append(groupIDs, m.DeviceID)
+			}
+		}
+	}
+	return &renderHandle{groupIDs: groupIDs, session: session, stream: stream, generation: z.generation, entryID: entryID, startSeconds: seconds, wake: make(chan struct{}, 1), done: make(chan struct{})}, ""
 }
 func (s *Service) replaceNext(userID string, z *zoneRuntime, entryID string, seconds float64) string {
 	awaiting := z.nextHandle != nil && z.resumeAwaitingSeq == z.nextHandle.stream.Seq

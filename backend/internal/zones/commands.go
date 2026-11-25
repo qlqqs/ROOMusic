@@ -82,6 +82,9 @@ func (s *Service) Command(ctx context.Context, userID, zoneID string, command Co
 }
 
 func (s *Service) commandLocked(ctx context.Context, userID string, z *zoneRuntime, c Command) (CommandResult, error) {
+	if startsOutput(c.Command) && z.leaderZoneID != "" {
+		return CommandResult{}, ErrDeviceGrouped
+	}
 	tracks, err := s.loadSummaries(ctx, z.persisted.Queue.Entries)
 	if err != nil {
 		return CommandResult{}, err
@@ -199,6 +202,9 @@ func (s *Service) commandLocked(ctx context.Context, userID string, z *zoneRunti
 	return result, nil
 }
 func (s *Service) startAllowed(z *zoneRuntime) error {
+	if z.leaderZoneID != "" {
+		return ErrDeviceGrouped
+	}
 	if !z.online {
 		return ErrZoneOffline
 	}

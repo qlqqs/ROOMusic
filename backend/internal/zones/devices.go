@@ -2,6 +2,7 @@ package zones
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -158,40 +159,77 @@ func (s *Service) deleteDevice(ctx context.Context, userID, deviceID string, bef
 		}
 		return ErrNotFound
 	}
-	z.dispatch.Lock()
-	defer z.dispatch.Unlock()
 	z.mu.Lock()
+	related := []*zoneRuntime{z}
+	var leader *zoneRuntime
+	if z.leaderZoneID != "" {
+		leader = u.zones[z.leaderZoneID]
+		related = append(related, leader)
+	}
+	for _, m := range z.group {
+		related = append(related, u.devices[m.DeviceID])
+	}
+	z.mu.Unlock()
+	unlock := lockGroupZones(related)
+	defer unlock()
 	if before == nil && !z.visible() {
-		z.mu.Unlock()
 		return ErrNotFound
 	}
 	if z.online || z.managedVisible {
-		z.mu.Unlock()
 		if before != nil {
 			return nil
 		}
 		return ErrDeviceOnline
 	}
 	if before != nil && !z.device.LastSeenAt.Before(*before) {
-		z.mu.Unlock()
 		return nil
 	}
-	var deleted bool
-	err = s.transact(ctx, func(store *Store) error {
-		var e error
-		deleted, e = store.DeleteDevice(ctx, userID, z.device.DeviceID, before)
+	var leaderZone Zone
+	if leader != nil {
+		tracks, e := s.loadSummaries(ctx, leader.persisted.Queue.Entries)
+		if e != nil {
+			return e
+		}
+		leaderZone = s.zoneOf(leader, tracks)
+	}
+	err = s.transact(ctx, func(st *Store) error {
+		if leader != nil {
+			if e := st.changeGroupMember(ctx, userID, leader.persisted.ZoneID, z.device.DeviceID, false); e != nil {
+				return e
+			}
+			p := leader.persisted
+			p.Revision++
+			if e := st.UpdateZone(ctx, userID, p); e != nil {
+				return e
+			}
+		}
+		deleted, e := st.DeleteDevice(ctx, userID, z.device.DeviceID, before)
+		if e == nil && !deleted {
+			return ErrNotFound
+		}
 		return e
 	})
 	if err != nil {
-		z.mu.Unlock()
-		return err
-	}
-	if !deleted {
-		z.mu.Unlock()
-		if before != nil {
+		if before != nil && errors.Is(err, ErrNotFound) {
 			return nil
 		}
-		return ErrNotFound
+		return err
+	}
+	if leader != nil {
+		leader.removeMember(z.device.DeviceID)
+		leader.persisted.Revision++
+		leaderZone.Revision, leaderZone.Group = leader.persisted.Revision, leader.zoneGroup()
+		if leader.visible() {
+			s.publishDevice(userID, deviceOf(leader))
+			s.publishZone(userID, leaderZone)
+		}
+	}
+	for _, m := range z.group {
+		member := u.devices[m.DeviceID]
+		member.leaderZoneID = ""
+		if member.visible() {
+			s.publishDevice(userID, deviceOf(member))
+		}
 	}
 	z.deleted = true
 	s.cancelTimers(z)
@@ -204,12 +242,7 @@ func (s *Service) deleteDevice(ctx context.Context, userID, deviceID string, bef
 			break
 		}
 	}
-	message := struct {
-		DeviceID string `json:"device_id"`
-		ZoneID   string `json:"zone_id"`
-	}{z.device.DeviceID, z.persisted.ZoneID}
-	z.mu.Unlock()
-	s.publish(userID, "device_removed", message)
+	s.publish(userID, "device_removed", map[string]string{"device_id": z.device.DeviceID, "zone_id": z.persisted.ZoneID})
 	return nil
 }
 

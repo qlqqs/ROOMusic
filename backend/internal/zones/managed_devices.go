@@ -117,7 +117,7 @@ func (s *Service) syncManaged(ctx context.Context, userID string, u *userRuntime
 		z.mu.Unlock()
 		z.dispatch.Unlock()
 	}
-	return nil
+	return s.refreshGroupProjection(ctx, userID, u)
 }
 
 func managedName(raw string) string {
@@ -194,6 +194,19 @@ func (s *Service) refreshManaged(ctx context.Context, userID string, z *zoneRunt
 
 func (s *Service) acquireManaged(ctx context.Context, userID string, z *zoneRuntime, takeover bool) error {
 	z.mu.Lock()
+	if z.device.Kind == "slimproto" {
+		z.mu.Unlock()
+		finish, err := z.reserveAcquisition(ctx)
+		if err != nil {
+			return err
+		}
+		defer finish()
+		z.mu.Lock()
+		if z.leaderZoneID != "" {
+			z.mu.Unlock()
+			return ErrDeviceGrouped
+		}
+	}
 	d := z.device
 	visible := z.visible() && !z.deleted
 	z.mu.Unlock()
@@ -239,6 +252,9 @@ func (s *Service) ActivateDevice(ctx context.Context, userID, deviceID string, t
 	defer z.mu.Unlock()
 	if !z.visible() {
 		return DeviceResult{}, ErrNotFound
+	}
+	if z.leaderZoneID != "" {
+		return DeviceResult{}, ErrDeviceGrouped
 	}
 	return DeviceResult{timestamp(s.Now()), deviceOf(z)}, nil
 }

@@ -87,6 +87,11 @@ func (s *Service) scanOffline() {
 }
 func (s *Service) markOffline(z *zoneRuntime) {
 	z.online = false
+	for i, m := range z.group {
+		if m.State == "active" || m.State == "joining" {
+			z.group[i].State = "waiting"
+		}
+	}
 	wasPlaying := z.intent == "play"
 	if z.stream != nil {
 		z.lostStream = cloneStream(z.stream)

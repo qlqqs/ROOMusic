@@ -50,6 +50,7 @@
         }
       ],
       "fault": null,
+      "group": null,
       "has_next": false,
       "intent": "play",
       "mode": "sequential",

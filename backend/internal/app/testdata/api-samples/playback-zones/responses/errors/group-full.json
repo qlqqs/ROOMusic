@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "group_full",
+      "message": "播放组最多容纳八台设备"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

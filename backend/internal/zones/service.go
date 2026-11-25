@@ -46,6 +46,9 @@ type userRuntime struct {
 	order      []*zoneRuntime
 }
 type zoneRuntime struct {
+	acquisition       chan struct{}
+	group             []groupSlot
+	leaderZoneID      string
 	unavailableReason string
 	managedVisible    bool
 	formatDeclared    bool
@@ -179,6 +182,15 @@ func (s *Service) user(ctx context.Context, userID string) (*userRuntime, error)
 		u.zones[p.ZoneID] = z
 		u.devices[p.DeviceID] = z
 		u.order = append(u.order, z)
+	}
+	for zoneID, ids := range state.GroupMembers {
+		leader := u.zones[zoneID]
+		for _, id := range ids {
+			member := u.devices[id]
+			member.leaderZoneID = zoneID
+			member.offlinePaused = false
+			leader.group = append(leader.group, groupSlot{GroupMemberState: GroupMemberState{id, "offline"}, maxSampleRate: member.device.MaxSampleRate})
+		}
 	}
 	s.users[userID] = u
 	return u, nil
@@ -330,11 +342,20 @@ func deviceOf(z *zoneRuntime) Device {
 		device.UnavailableReason = z.unavailableReason
 		device.Online, device.OutputSessionID = z.managedVisible, nil
 	}
+	if d.Kind == "slimproto" {
+		device.SyncDelayMS = cloneValue(&d.SyncDelayMS)
+	}
+	if z.leaderZoneID != "" {
+		device.Group = &DeviceGroup{z.leaderZoneID, "member"}
+	} else if len(z.group) > 0 {
+		device.Group = &DeviceGroup{z.persisted.ZoneID, "leader"}
+	}
 	return device
 }
 func (s *Service) zoneOf(z *zoneRuntime, tracks map[string]catalog.TrackSummary) Zone {
 	p := z.persisted
 	out := Zone{ZoneID: p.ZoneID, DeviceID: p.DeviceID, Revision: p.Revision, QueueRevision: p.QueueRevision, QueueLength: len(p.Queue.Entries), Mode: p.Queue.Mode, Settings: settingsOf(p.Settings), Intent: z.intent, Status: z.status, Fault: cloneValue(z.fault), Failures: append([]Failure{}, z.failures...), PausedAt: cloneValue(z.pausedAt), Stream: cloneStream(z.stream), NextStream: cloneStream(z.nextStream), Event: cloneZoneEvent(z.event), Position: Position{Seconds: p.PositionSeconds, At: timestamp(p.PositionSavedAt)}}
+	out.Group = z.zoneGroup()
 	if z.signal != nil {
 		out.Signal = append(json.RawMessage(nil), z.signal...)
 	}

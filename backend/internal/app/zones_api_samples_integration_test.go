@@ -372,8 +372,61 @@ func TestPostgreSQLZonesAPIResponseSamples(t *testing.T) {
 		samples.recordZonesPayload("events/zone-signal-dsd", events.zone(t, id, func(z zones.Zone) bool { return z.Signal != nil }))
 	}
 
+	c.groupSamples()
 	samples.finish()
 }
+
+func (c zonesSampleCalls) groupSamples() {
+	c.t.Helper()
+	f := c.f
+	caps := zones.Capabilities{
+		StreamFormats: []zones.StreamFormatCapability{{Codec: "flac", MIMEType: "audio/flac", Lossless: true}},
+		MaxChannels:   2, DSD: "none", Volume: "number",
+	}
+	outputs := &zonestest.GroupOutputs{Service: f.service}
+	for i := 1; i <= 9; i++ {
+		volume := 0.5
+		if i == 1 {
+			volume = 0.25
+		}
+		outputs.Devices = append(outputs.Devices, zones.ManagedDevice{
+			Kind: "slimproto", UDN: fmt.Sprintf("slim:02:00:00:00:00:%02x", i), Name: fmt.Sprintf("合成播放器 %d", i),
+			MaxSampleRate: 48000, InitialVolume: &volume, Capabilities: caps, FormatDeclared: true,
+		})
+	}
+	f.service.SetManagedOutputs(outputs)
+	snapshot := zonesSampleDecode[zones.Snapshot](c.t, c.call("", "GET", "", nil, 200), 200)
+	byUDN := make(map[string]zones.Device)
+	for _, device := range snapshot.Devices {
+		byUDN[device.ExternalID] = device
+	}
+	devices := make([]zones.Device, len(outputs.Devices))
+	for i, item := range outputs.Devices {
+		device, ok := byUDN[item.UDN]
+		if !ok {
+			c.t.Fatalf("样本快照缺少设备 %s", item.UDN)
+		}
+		devices[i] = device
+	}
+	leader, member := devices[0], devices[1]
+	groupPath := "/zones/" + leader.ZoneID + "/group"
+	memberBody := map[string]any{"device_id": member.DeviceID, "takeover": false}
+	c.call("errors/group-unsupported", "POST", groupPath+"/members", memberBody, 409)
+	c.call("", "POST", "/devices/"+leader.DeviceID+"/activate", map[string]bool{}, 200)
+	c.call("group-add-member", "POST", groupPath+"/members", memberBody, 200)
+	c.call("errors/device-grouped", "POST", "/devices/"+member.DeviceID+"/activate", map[string]bool{"takeover": false}, 409)
+	c.call("group-volume", "PUT", groupPath+"/volume", map[string]float64{"volume": 0.8}, 200)
+	c.call("sync-delay", "PUT", "/devices/"+member.DeviceID+"/sync-delay", map[string]int{"sync_delay_ms": -125}, 200)
+	for _, device := range devices[2:8] {
+		c.call("", "POST", groupPath+"/members", map[string]string{"device_id": device.DeviceID}, 200)
+	}
+	c.call("errors/group-full", "POST", groupPath+"/members", map[string]string{"device_id": devices[8].DeviceID}, 409)
+	for _, device := range devices[2:8] {
+		c.call("", "DELETE", groupPath+"/members/"+device.DeviceID, nil, 200)
+	}
+	c.call("group-remove-member", "DELETE", groupPath+"/members/"+member.DeviceID, nil, 200)
+}
+
 func (c zonesSampleCalls) commandError(name, id string, body map[string]any, status int) {
 	c.call("errors/"+name, "POST", "/zones/"+id+"/commands", body, status)
 }

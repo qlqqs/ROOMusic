@@ -1,0 +1,92 @@
+{
+  "body": {
+    "device": {
+      "capabilities": {
+        "dsd": "none",
+        "exclusive": false,
+        "max_channels": 2,
+        "stream_formats": [
+          {
+            "codec": "flac",
+            "lossless": true,
+            "max_bit_depth": null,
+            "max_sample_rate": 48000,
+            "mime_type": "audio/flac"
+          }
+        ],
+        "volume": "number"
+      },
+      "device_id": "00000000-0000-4000-8000-000000000001",
+      "external_id": "slim:02:00:00:00:00:02",
+      "format_declared": true,
+      "kind": "slimproto",
+      "last_seen_at": "2026-01-01T00:00:00Z",
+      "max_sample_rate": 48000,
+      "muted": false,
+      "name": "合成播放器 2",
+      "online": true,
+      "output_session_id": null,
+      "sync_delay_ms": -125,
+      "volume": 0.8,
+      "zone_id": "00000000-0000-4000-8000-000000000002"
+    },
+    "server_time": "2026-01-01T00:00:00Z",
+    "zone": {
+      "current": null,
+      "device_id": "00000000-0000-4000-8000-000000000003",
+      "event": null,
+      "failures": [],
+      "fault": null,
+      "group": null,
+      "has_next": false,
+      "intent": "pause",
+      "mode": "sequential",
+      "next_stream": null,
+      "paused_at": "2026-01-01T00:00:00Z",
+      "position": {
+        "at": "2026-01-01T00:00:00Z",
+        "duration_seconds": null,
+        "seconds": 0,
+        "seekable": false
+      },
+      "queue_length": 0,
+      "queue_revision": 0,
+      "revision": 15,
+      "settings": {
+        "convolution": {
+          "before_peq": false,
+          "enabled": false,
+          "ir_id": null
+        },
+        "crossfade": false,
+        "crossfade_seconds": 5,
+        "downmix": {
+          "enabled": true
+        },
+        "gapless": true,
+        "headroom": {
+          "clip_indicator": false,
+          "db": -3,
+          "enabled": false
+        },
+        "leveling": "auto",
+        "peq": {
+          "bands": [],
+          "enabled": false,
+          "preamp_db": 0
+        },
+        "quality": "lossless",
+        "sample_rate": {
+          "custom_rate": null,
+          "filter": "linear_precise",
+          "strategy": "none"
+        }
+      },
+      "signal": null,
+      "status": "idle",
+      "stream": null,
+      "zone_id": "00000000-0000-4000-8000-000000000004"
+    }
+  },
+  "status": 200
+}
