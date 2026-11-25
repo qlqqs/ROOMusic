@@ -9,6 +9,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"golang.org/x/text/language"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 )
 
 // 歌词的显示形态与来源：synced 的每行带开始时间，plain 的每行没有；source 区分内嵌标签与外置文件。
@@ -35,15 +39,59 @@ type LyricsLine struct {
 
 // Lyrics 是解析后的歌词。synced 的行按 StartMS 非递减排列；时间相同的行保持原顺序（双语对照靠它分组）。
 type Lyrics struct {
-	Kind   string       `json:"kind"`
-	Source string       `json:"source"`
-	Lines  []LyricsLine `json:"lines"`
+	Kind     string       `json:"kind"`
+	Source   string       `json:"source"`
+	Lines    []LyricsLine `json:"lines"`
+	Language string       `json:"-"`
 }
 
 // TrackLyrics 是歌词接口的响应：曲目没有可显示的歌词时 Lyrics 为 nil（JSON null）。
 type TrackLyrics struct {
 	TrackID string  `json:"track_id"`
 	Lyrics  *Lyrics `json:"lyrics"`
+}
+
+// MatchTrackForLyrics 沿用曲目搜索的顺序，选出标题与艺人均精确匹配的第一首。
+func (s *Store) MatchTrackForLyrics(ctx context.Context, artist, title string) (TrackSummary, error) {
+	normalize := func(value string) string { return strings.ToLower(strings.Join(strings.Fields(value), " ")) }
+	if textnorm.LoadEmbedded() == nil {
+		normalize = textnorm.Text
+	}
+	artistKey, titleKey := normalize(artist), normalize(title)
+	query := title
+	if titleKey == "" {
+		query = artist
+	}
+	return searchSnapshot(ctx, s, func(snapshot *Store, state CatalogState, generation int64) (TrackSummary, error) {
+		plan := newSearchPlan(query, "tracks", state.SearchMode, generation)
+		if plan.empty {
+			return TrackSummary{}, ErrTrackNotFound
+		}
+		plan.artistAliases = state.ArtistsState == "ready"
+		plan, err := snapshot.prepareSearchPlan(ctx, plan)
+		if err != nil {
+			return TrackSummary{}, err
+		}
+		const pageSize = 50
+		for offset := 0; ; offset += pageSize {
+			hits, more, err := snapshot.searchPage(ctx, plan, pageSize, offset)
+			if err != nil {
+				return TrackSummary{}, err
+			}
+			items, err := snapshot.completeSearch(ctx, "tracks", hits)
+			if err != nil {
+				return TrackSummary{}, err
+			}
+			for _, hit := range items.([]SearchTrackItem) {
+				if (titleKey == "" || normalize(hit.Title) == titleKey) && (artistKey == "" || normalize(hit.Artist) == artistKey) {
+					return hit.TrackSummary, nil
+				}
+			}
+			if !more {
+				return TrackSummary{}, ErrTrackNotFound
+			}
+		}
+	})
 }
 
 // LoadTrackLyrics 读取 present 曲目的歌词并解析；曲目不存在或已缺失时返回 ErrTrackNotFound。
@@ -105,11 +153,20 @@ func ParseLyrics(raw string) (Lyrics, bool) {
 	var entries []entry
 	var plainLines []string
 	var offset int64
+	var lang string
 	offsetSet := false
 	for _, line := range strings.Split(raw, "\n") {
 		line = strings.TrimRight(line, "\r")
 		trimmed := strings.TrimSpace(line)
 		if match := lyricsMetaPattern.FindStringSubmatch(trimmed); match != nil {
+			if lang == "" && (strings.EqualFold(match[1], "lang") || strings.EqualFold(match[1], "la")) {
+				if tag, err := language.Parse(strings.TrimSpace(match[2])); err == nil {
+					base, confidence := tag.Base()
+					if confidence == language.Exact {
+						lang = base.ISO3()
+					}
+				}
+			}
 			if !offsetSet && strings.EqualFold(match[1], "offset") {
 				if value, ok := parseLyricsOffset(match[2]); ok {
 					offset, offsetSet = value, true
@@ -143,7 +200,7 @@ func ParseLyrics(raw string) (Lyrics, bool) {
 			if len(lines) > maxLyricsLines {
 				lines = lines[:maxLyricsLines]
 			}
-			return Lyrics{Kind: LyricsKindSynced, Source: LyricsSourceEmbedded, Lines: lines}, true
+			return Lyrics{Kind: LyricsKindSynced, Source: LyricsSourceEmbedded, Lines: lines, Language: lang}, true
 		}
 	}
 
@@ -166,7 +223,7 @@ func ParseLyrics(raw string) (Lyrics, bool) {
 	if len(lines) == 0 {
 		return Lyrics{}, false
 	}
-	return Lyrics{Kind: LyricsKindPlain, Source: LyricsSourceEmbedded, Lines: lines}, true
+	return Lyrics{Kind: LyricsKindPlain, Source: LyricsSourceEmbedded, Lines: lines, Language: lang}, true
 }
 
 // splitLyricsTimestamps 取出行首连续的合法时间戳（毫秒）与其后的剩余文本；遇到秒不小于 60 的标签就停止，该标签留在文本里。

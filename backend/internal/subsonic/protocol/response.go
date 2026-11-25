@@ -80,6 +80,11 @@ type Response struct {
 	Genres        *Genres       `xml:"genres,omitempty" json:"genres,omitempty"`
 	ArtistInfo2   *ArtistInfo   `xml:"artistInfo2,omitempty" json:"artistInfo2,omitempty"`
 	AlbumInfo     *AlbumInfo    `xml:"albumInfo,omitempty" json:"albumInfo,omitempty"`
+	Starred2      *SearchResult `xml:"starred2,omitempty" json:"starred2,omitempty"`
+	Playlists     *Playlists    `xml:"playlists,omitempty" json:"playlists,omitempty"`
+	Playlist      *Playlist     `xml:"playlist,omitempty" json:"playlist,omitempty"`
+	Lyrics        *Lyrics       `xml:"lyrics,omitempty" json:"lyrics,omitempty"`
+	LyricsList    *LyricsList   `xml:"lyricsList,omitempty" json:"lyricsList,omitempty"`
 
 	JukeboxStatus   *JukeboxStatus   `xml:"jukeboxStatus,omitempty" json:"jukeboxStatus,omitempty"`
 	JukeboxPlaylist *JukeboxPlaylist `xml:"jukeboxPlaylist,omitempty" json:"jukeboxPlaylist,omitempty"`

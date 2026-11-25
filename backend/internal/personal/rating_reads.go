@@ -52,7 +52,14 @@ func (s *Service) LookupRatings(ctx context.Context, user string, trackIDs, grou
 		return RatingLookup{}, err
 	}
 	defer tx.Rollback()
+	result, err := s.lookupRatings(ctx, tx, user, tracks, groups, artists)
+	if err != nil {
+		return RatingLookup{}, err
+	}
+	return result, tx.Commit()
+}
 
+func (s *Service) lookupRatings(ctx context.Context, tx *sql.Tx, user string, tracks, groups, artists []string) (RatingLookup, error) {
 	result := RatingLookup{Tracks: []TrackRating{}, Albums: []AlbumRating{}, Artists: []ArtistRating{}}
 	trackRatings, err := readRatingValues(ctx, tx, `SELECT track_id,rating FROM rating_tracks WHERE user_id=$1 AND track_id=ANY($2::uuid[])`, user, tracks)
 	if err != nil {
@@ -90,9 +97,6 @@ func (s *Service) LookupRatings(ctx context.Context, user string, trackIDs, grou
 			}
 			result.Artists = append(result.Artists, status)
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return RatingLookup{}, err
 	}
 	return result, nil
 }
