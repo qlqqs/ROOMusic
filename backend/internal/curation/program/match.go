@@ -20,6 +20,7 @@ type TrackPair struct {
 }
 
 type MatchResult struct {
+	Verification                                  *MatchVerification `json:"verification,omitempty"`
 	Level, Rule, GroupID, Route, RepresentativeID string
 	Credits                                       []sources.Credit
 	TrackTitles                                   map[string]string
@@ -118,7 +119,13 @@ func tags(tracks []catalog.CurationTrack, kind string) []string {
 	return slices.Sorted(maps.Keys(keys))
 }
 
-func DiscTOCs(e catalog.CurationEvidence) []sources.DiscTOC { return e.DiscTOCs() }
+func DiscTOCs(e catalog.CurationEvidence) []sources.DiscTOC {
+	var discs []sources.DiscTOC
+	for _, toc := range e.DiscTOCs() {
+		discs = append(discs, sources.DiscTOC{Offsets: toc.Offsets, Leadout: toc.Leadout})
+	}
+	return discs
+}
 
 func linkConflicts(e catalog.CurationEvidence, objectType, id, existing, candidate string) []string {
 	var codes []string

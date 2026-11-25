@@ -10,7 +10,8 @@
     },
     "inactive_reason": null,
     "model": "",
-    "paused": false
+    "paused": false,
+    "web_daily_token_limit": null
   },
   "status": 200
 }

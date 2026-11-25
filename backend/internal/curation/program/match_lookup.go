@@ -492,7 +492,7 @@ func insufficientEvidence(e catalog.CurationEvidence) bool {
 	if e.CandidateKind == "loose_unknown" && len(e.Tracks) == 1 {
 		titlePlaceholder, artistPlaceholder = e.Tracks[0].TitlePlaceholder, e.Tracks[0].ArtistPlaceholder
 	}
-	if !titlePlaceholder || !artistPlaceholder || len(e.Barcodes) > 0 || e.CatalogNumber != "" || len(DiscTOCs(e)) > 0 {
+	if !titlePlaceholder || !artistPlaceholder || len(e.Barcodes) > 0 || e.CatalogNumber != "" || len(e.DiscTOCs()) > 0 {
 		return false
 	}
 	for _, t := range e.Tracks {

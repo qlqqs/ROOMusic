@@ -18,6 +18,7 @@ import (
 	"golang.org/x/text/transform"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
@@ -32,12 +33,12 @@ type Page struct {
 	Truncated bool   `json:"truncated"`
 }
 
-func validatePageURL(address string) error {
+func validatePageURL(address string, mockHost sources.MockHost) error {
 	u, err := url.Parse(address)
 	if err != nil || len(address) > 2048 || u.User != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return failure("fetch_blocked_address")
 	}
-	if (u.Port() != "" && u.Port() != "80" && u.Port() != "443") || strings.HasSuffix(u.Host, ":") {
+	if (u.Port() != "" && u.Port() != "80" && u.Port() != "443" && !mockHost.Matches(u)) || strings.HasSuffix(u.Host, ":") {
 		return failure("fetch_blocked_port")
 	}
 	return nil
@@ -50,8 +51,17 @@ func pageHeaders(req *http.Request) {
 	req.Header.Set("Accept", "text/html, text/plain, application/json, application/xml, text/xml, application/xhtml+xml")
 }
 
-// FetchPage 对所有调用者只允许公网，逐跳检查地址、端口与重定向次数。
-func (s *Service) FetchPage(ctx context.Context, address string) (page Page, err error) {
+// FetchPage 逐跳检查公网地址、端口与重定向次数。
+func (s *Service) FetchPage(ctx context.Context, address string) (Page, error) {
+	return s.fetchPage(ctx, address, sources.MockHost{})
+}
+
+// FetchCurationPage 允许后台整理读取已配置的受控来源。
+func (s *Service) FetchCurationPage(ctx context.Context, address string) (Page, error) {
+	return s.fetchPage(ctx, address, s.tavilyMockHost)
+}
+
+func (s *Service) fetchPage(ctx context.Context, address string, mockHost sources.MockHost) (page Page, err error) {
 	started := time.Now()
 	defer func() {
 		count := 0
@@ -60,19 +70,19 @@ func (s *Service) FetchPage(ctx context.Context, address string) (page Page, err
 		}
 		s.logRequest(ctx, "fetch_page", address, started, count, err)
 	}()
-	if err := validatePageURL(address); err != nil {
+	if err := validatePageURL(address, mockHost); err != nil {
 		return page, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
-	client, err := s.newClient(egress.Options{Policy: egress.PublicOnly, MaxRedirects: 5, Timeout: requestTimeout})
+	client, err := s.newClient(mockHost.EgressOptions(egress.Options{Policy: egress.PublicOnly, MaxRedirects: 5, Timeout: requestTimeout}))
 	if err != nil {
 		return page, failure("fetch_failed")
 	}
 	defer client.CloseIdleConnections()
 	redirect := client.CheckRedirect
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if err := validatePageURL(req.URL.String()); err != nil {
+		if err := validatePageURL(req.URL.String(), mockHost); err != nil {
 			return err
 		}
 		if err := redirect(req, via); err != nil {

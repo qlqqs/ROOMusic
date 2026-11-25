@@ -307,10 +307,19 @@ export function exceptionLinkVerb(exception: CurationExceptionDTO): string {
   return change !== undefined && change.before !== null && change.before !== "" ? "改为对应" : "对应到";
 }
 
-/** 审查的结论：没通过；转给你确认（按规则转的另写明）。 */
+const suggestionReasonText: Record<CurationExceptionDTO["reason_code"], string> = {
+  review_rejected: "审查没通过",
+  review_uncertain: "审查拿不准",
+  verification_declined: "核对后判断不需要改",
+  no_evidence: "没有找到佐证",
+  unverified_fact: "事实无法核实",
+};
+
+/** 没采用的原因（整理链 E 起不再等人确认）：有审查的写审查结论，按规则拦下的另写明。 */
 export function exceptionReviewText(exception: CurationExceptionDTO): string {
+  if (exception.review === null) return suggestionReasonText[exception.reason_code];
   if (exception.review.decision === "rejected") return "审查没通过";
-  return exception.review.source === "policy" ? "按规则转给你确认" : "审查转给你确认";
+  return exception.review.source === "policy" ? "按规则没有自动执行" : "审查拿不准";
 }
 
 export const riskText: Record<"low" | "medium" | "high", string> = { low: "低", medium: "中", high: "高" };

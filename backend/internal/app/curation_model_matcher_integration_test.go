@@ -124,6 +124,11 @@ func TestPostgreSQLCurationModelApply(t *testing.T) {
 	batch := f.batch(t, "model")
 	opt := program.ApplyOptions{Key: uuid.New(), Batch: batch, PendingItemID: item.ID,
 		Source: curation.Source{Kind: "model", Provider: model, Basis: "合成比对依据"}}
+	_, err = matcher.Apply(ctx, plan, opt)
+	curationCRequireProblem(t, err, 409, "approval_required")
+	f.assertCount(t, 0, `SELECT count(*) FROM operations WHERE batch_id=$1`, batch)
+	opt.ApprovedReviewID = uuid.New()
+
 	got, err := matcher.Apply(ctx, plan, opt)
 	requireCurationOK(t, err)
 	if len(got.OperationIDs) != 3 || got.OperationID != got.OperationIDs[0] {
@@ -171,7 +176,10 @@ func TestPostgreSQLCurationModelRecording(t *testing.T) {
 	f := newProgramFixture(t)
 	f.enable(t)
 	ctx := t.Context()
-	recording := sources.Recording{ID: uuid.New(), Title: "合成单曲"}
+	track, _ := externalTrack(t, f.application, f.a)
+	mustExec(t, f.application, `UPDATE tracks SET title='夏夜',artist='Artist A',duration_seconds=100 WHERE id=$1`, track)
+	duration := int64(100000)
+	recording := sources.Recording{ID: uuid.New(), Title: "夏夜", LengthMS: &duration, Artists: []sources.Credit{{Name: "Artist A"}}}
 	f.source.recordings[recording.ID] = recording
 	conversation := modelConversation(t, f.curationFixture)
 	item := modelClaim(t, f.curationFixture, conversation, modelPending(t, f.curationFixture, f.a, "recording_match", modelDigest(t, f)))
@@ -179,8 +187,10 @@ func TestPostgreSQLCurationModelRecording(t *testing.T) {
 	plan, err := matcher.Plan(ctx, item, recording.ID)
 	requireCurationOK(t, err)
 
+	if !plan.Verification.Direct || plan.Verification.Method != "recording_duration_text" {
+		t.Fatalf("单曲完整结构核对 %+v", plan.Verification)
+	}
 	// 模拟在计划生成后，同一个录音对应已由前一轮写入。
-	track, _ := externalTrack(t, f.application, f.a)
 	link := curationCLink("track", track, recording.ID)
 	original := curationCApplyLinks(t, f.curationFixture, curationCLinkRequest(f.a, "", link))
 	_, err = matcher.Apply(ctx, plan, program.ApplyOptions{Key: uuid.New(), Batch: f.batch(t, "model"),

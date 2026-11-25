@@ -97,7 +97,7 @@ func New(opts Options) (*Server, error) {
 		if empty {
 			return missing()
 		}
-		return ok(artistSearchPage(mediaURL(r, "")))
+		return response{status: 200, html: artistDirectoryHTML}
 	})
 	s.route("GET /searxng/artists/portrait.png", func(_ *http.Request, empty bool) response {
 		if empty {
@@ -142,6 +142,7 @@ type response struct {
 	status int
 	json   any
 	image  []byte
+	html   string
 	events []frame
 }
 
@@ -331,6 +332,9 @@ func (res response) write(w http.ResponseWriter, scenario string) {
 	if res.image != nil {
 		w.Header().Set("Content-Type", http.DetectContentType(res.image))
 		body = res.image
+	} else if res.html != "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		body = []byte(res.html)
 	} else {
 		w.Header().Set("Content-Type", "application/json")
 		body, _ = json.Marshal(res.json)

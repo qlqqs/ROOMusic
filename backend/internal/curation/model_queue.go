@@ -12,10 +12,10 @@ const QueueRankSQL = `CASE WHEN s.manual_requested_at IS NOT NULL THEN 0
  WHEN r.queue_added_at>settings.queue_baseline_at AND COALESCE(s.attempts,0)=0 THEN 1
  WHEN r.queue_has_id THEN 2 WHEN r.queue_class IN ('has_gaps','insufficient') THEN 3 ELSE 4 END`
 
-// 只有已经进入 waiting_model 的项才能交给当前模型处理；E 自行决定何时启用待路由项。
+// SQL 分类与调度器的模型任务一一对应。
 const modelKindSQL = `CASE WHEN p.route='lookup' THEN 'lookup'
  WHEN p.route='web' OR p.kind='artist_identity' THEN 'web'
- WHEN p.kind='release_merge' THEN 'verify'
+ WHEN p.kind IN ('release_merge','verify_artist_credit','verify_artist_merge','verify_name') THEN 'verify'
  WHEN p.kind IN ('release_match','recording_match') THEN 'select' END`
 
 const modelQueueFromSQL = ` FROM curation_pending_items p
@@ -24,7 +24,7 @@ const modelQueueFromSQL = ` FROM curation_pending_items p
  CROSS JOIN LATERAL (SELECT work.manual_requested_at, p.attempts) s
  LEFT JOIN curation_work_states r ON r.subject='release' AND r.target_id=COALESCE(p.target_id,work.queue_release_id)
  CROSS JOIN curation_settings settings
- WHERE settings.id=1 AND p.status='waiting_model' AND ` + PendingTargetVisibleSQL + `
+ WHERE settings.id=1 AND p.status IN ('waiting_model','waiting_route') AND ` + PendingTargetVisibleSQL + `
  AND (p.kind<>'artist_identity' OR NOT EXISTS (` + ArtistReleaseCreditsSQL + `
  SELECT FROM credits c JOIN visible v ON v.id=c.release_id LEFT JOIN curation_work_states recognition
  ON recognition.subject='release' AND recognition.target_id=c.release_id
@@ -79,6 +79,10 @@ type ModelItemCheckpoint struct {
 }
 
 func (w *Writer) BeforeModelItem(ctx context.Context, actor string, now time.Time) (ModelItemCheckpoint, error) {
+	return w.BeforeModelKind(ctx, actor, now, "")
+}
+
+func (w *Writer) BeforeModelKind(ctx context.Context, actor string, now time.Time, kind string) (ModelItemCheckpoint, error) {
 	settings, err := w.Settings(ctx)
 	if err != nil {
 		return ModelItemCheckpoint{}, err
@@ -89,17 +93,24 @@ func (w *Writer) BeforeModelItem(ctx context.Context, actor string, now time.Tim
 	if settings.Paused {
 		return ModelItemCheckpoint{Reason: "paused"}, nil
 	}
-	if settings.DailyTokenLimit == nil {
+	if settings.DailyTokenLimit == nil && (kind != "web" || settings.WebDailyTokenLimit == nil) {
 		return ModelItemCheckpoint{}, nil
 	}
-	today, err := w.TodayUsage(ctx, now)
+	today, web, err := w.DailyUsage(ctx, now)
 	if err != nil {
 		return ModelItemCheckpoint{}, err
 	}
-	if today.InputTokens+today.OutputTokens >= *settings.DailyTokenLimit {
-		y, m, d := now.Date()
-		next := time.Date(y, m, d+1, 0, 0, 0, 0, now.Location())
+	if today.AtLimit(settings.DailyTokenLimit) || kind == "web" && web.AtLimit(settings.WebDailyTokenLimit) {
+		next := NextBudgetDay(now)
 		return ModelItemCheckpoint{Reason: "limit_reached", RetryAt: &next}, nil
 	}
 	return ModelItemCheckpoint{}, nil
+}
+
+// HasWaitingWebRoute 只查看明确升级到联网的任务。未启动的艺人资料仍由程序按来源重新计算。
+func (w *Writer) HasWaitingWebRoute(ctx context.Context, now time.Time) (bool, error) {
+	var ready bool
+	err := w.db.QueryRowContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
+ SELECT EXISTS(SELECT 1`+modelQueueFromSQL+` AND p.route='web' AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1))`, now).Scan(&ready)
+	return ready, err
 }

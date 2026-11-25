@@ -11,9 +11,16 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
+// ModelClaimDigest 绑定发给模型的完整指纹和识别摘要。相同领取行可能被程序重新判定。
+func (p PendingItem) ModelClaimDigest() string { return p.InputDigest + "/" + p.IdentityDigest }
+
 type ModelRun struct {
+	ClaimDigests           map[string]string
 	ConversationID, Model  string
 	ActorID, PendingItemID string
+	TaskKind               string
+	Abandon                func(context.Context, string, string) error
+	EvidencePage           func(context.Context, string, string) (string, error)
 	ToolInputDigest        string
 	Batch                  func(context.Context) (string, error)
 }
@@ -77,18 +84,11 @@ func checkWrite(ctx context.Context, tx *sql.Tx, spec operations.Spec, confirmed
 			return err
 		}
 		if run, ok := ModelRunFrom(ctx); ok && run.PendingItemID != "" {
-			var claimed bool
 			column := "target_id"
 			if spec.Type == operations.TypeArtistLink {
 				column = "artist_id"
 			}
-			err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM curation_pending_items WHERE id=$1 AND `+column+`=$2 AND conversation_id=$3 AND status='in_progress' FOR SHARE)`, run.PendingItemID, targetID, run.ConversationID).Scan(&claimed)
-			if err != nil {
-				return err
-			}
-			if !claimed {
-				return operations.Conflict("out_of_batch", "待定项不属于本次运行")
-			}
+			return checkClaimedTarget(ctx, tx, run, targetID, column, "")
 		}
 		return nil
 	}
@@ -105,6 +105,23 @@ func checkWrite(ctx context.Context, tx *sql.Tx, spec operations.Spec, confirmed
 	}
 	if !admin {
 		return operations.Conflict("curation_disabled", "采纳者须是启用的管理员")
+	}
+	return nil
+}
+
+func checkClaimedTarget(ctx context.Context, tx *sql.Tx, run *ModelRun, targetID, column, kind string) error {
+	var current PendingItem
+	err := tx.QueryRowContext(ctx, `SELECT input_digest,COALESCE(identity_digest,'') FROM curation_pending_items
+ WHERE id=$1 AND `+column+`=$2 AND conversation_id=$3 AND status='in_progress' AND ($4='' OR kind=$4) FOR SHARE`,
+		run.PendingItemID, targetID, run.ConversationID, kind).Scan(&current.InputDigest, &current.IdentityDigest)
+	if err == sql.ErrNoRows {
+		return operations.Conflict("out_of_batch", "待定项不属于本次运行")
+	}
+	if err != nil {
+		return err
+	}
+	if run.ClaimDigests != nil && run.ClaimDigests[run.PendingItemID] != current.ModelClaimDigest() {
+		return operations.Conflict("item_stale", "领取时的证据已变化")
 	}
 	return nil
 }

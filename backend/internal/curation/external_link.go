@@ -35,6 +35,7 @@ type ExternalSummary struct {
 	Country    string `json:"country"`
 }
 type LinkRequest struct {
+	verification                *verificationWrite
 	RequireAll                  bool
 	CheckEvidence               func(context.Context, *sql.Tx) error
 	ExpectedRevision            int64
@@ -81,7 +82,7 @@ func (r LinkRequest) normalizedLinks() ([]LinkIntent, error) {
 		if (l.ObjectType != "release" && l.ObjectType != "track" && l.ObjectType != "release_group_match" && l.ObjectType != "release_group" && l.ObjectType != "artist") || !uuid.Valid(l.ObjectID) || !validExternalID(l.ExternalID) || (l.ExternalGroupID != "" && (l.ObjectType != "release" || !validExternalID(l.ExternalGroupID))) || seen[l.key()] {
 			return nil, operations.Invalid("invalid_input", "外部对应的对象或编号无效")
 		}
-		if (l.ObjectType == "artist" || l.ObjectType == "release_group_match") && (r.Source.Kind != "source" || r.Source.Provider != "musicbrainz") {
+		if (l.ObjectType == "artist" || l.ObjectType == "release_group_match") && !(l.ObjectType == "artist" && r.verification != nil && r.verification.item.Kind == "verify_artist_credit") && (r.Source.Kind != "source" || r.Source.Provider != "musicbrainz") {
 			return nil, operations.Invalid("invalid_input", "艺人与发行组级对应只接受 MusicBrainz 程序来源")
 		}
 		seen[l.key()] = true
@@ -193,6 +194,11 @@ func (w *Writer) ApplyLinks(ctx context.Context, request LinkRequest) (LinkAppli
 		if err := checkWrite(ctx, tx, spec, request.ConfirmedBy, id, request.ExpectedRevision, release.EditRevision()); err != nil {
 			return operations.Outcome{}, err
 		}
+		if request.verification != nil {
+			if err := request.verification.check(ctx, tx); err != nil {
+				return operations.Outcome{}, err
+			}
+		}
 		if request.CheckEvidence != nil {
 			if err := request.CheckEvidence(ctx, tx); err != nil {
 				return operations.Outcome{}, err
@@ -229,6 +235,9 @@ func (w *Writer) ApplyLinks(ctx context.Context, request LinkRequest) (LinkAppli
 		out, err := externalOutcome(ctx, release, map[string]any{}, after)
 		applied.OperationID = operationID
 		out.Response = applied
+		if err == nil && request.verification != nil {
+			err = request.verification.finish(ctx, tx, operationID)
+		}
 		return out, err
 	})
 	if err != nil {

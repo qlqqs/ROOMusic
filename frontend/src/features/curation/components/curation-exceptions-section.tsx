@@ -121,16 +121,16 @@ export function CurationExceptionsSection({
     },
     {
       id: "review",
-      header: "审查",
+      header: "原因",
       cell: (item) => (
         <ul className={styles.lines}>
           <li>
             {exceptionReviewText(item)}
-            {item.review.risk === null
+            {item.review === null || item.review.risk === null
               ? ""
               : `（风险${riskText[item.review.risk]}）`}
           </li>
-          {item.review.reasons.map((reason, index) => (
+          {(item.review?.reasons ?? item.reasons).map((reason, index) => (
             <li key={index} className={styles.untrusted}>
               {reason}
             </li>
@@ -198,7 +198,7 @@ export function CurationExceptionsSection({
       }
     >
       <p className={styles.groupNote}>
-        模型提出、但审查没通过或转给你确认的修改。采纳记为你的人工确认；不采纳的，以后不再提出。
+        模型提出、但没有自动执行的修改：审查没通过、审查拿不准或找不到佐证。不需要处理；想采纳的可以手动采纳，记为你的人工确认，不采纳的以后不再提出。
       </p>
       <QueryContent
         query={exceptions}

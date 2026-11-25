@@ -118,7 +118,7 @@ func requireReleaseMergeReviewLayout(t *testing.T, f *curationFixture, merge rel
 	}
 }
 
-func TestPostgreSQLStewardReviewPolicyV4MergeEvidence(t *testing.T) {
+func TestPostgreSQL整理审查策略五版发行并入证据(t *testing.T) {
 	t.Run("证据取自对应操作后态", func(t *testing.T) {
 		f := newSchedulerFixture(t)
 		f.enable(t)
@@ -165,12 +165,11 @@ func TestPostgreSQLStewardReviewPolicyV4MergeEvidence(t *testing.T) {
 		requireCurationOK(t, os.Remove(files[0]))
 		conversation := f.item(t, item.ID).ConversationID
 		review.review(t, "approved")
-		f.next(t, false).complete(t)
-		requireReleaseMergeResolution(t, f.curationFixture, item.ID, "model_merged")
+		modelWaitResolution(t, f, item.ID, "model_merged")
 		requireReleaseMergeReviewLayout(t, f.curationFixture, merge, source, 2)
 		detail, err := runtime.NewStore(f.application.database).GetConversation(t.Context(), f.admin.id, conversation)
 		requireCurationOK(t, err)
-		if runtime.ReviewPolicyVersion != 4 || len(detail.Plans) != 1 || detail.Plans[0].Review == nil || detail.Plans[0].Review.PolicyVersion != 4 {
+		if runtime.ReviewPolicyVersion != 5 || len(detail.Plans) != 1 || detail.Plans[0].Review == nil || detail.Plans[0].Review.PolicyVersion != 5 {
 			t.Fatalf("审查策略版本 %d，方案 %+v", runtime.ReviewPolicyVersion, detail.Plans)
 		}
 	})
@@ -200,18 +199,17 @@ func TestPostgreSQLStewardReviewPolicyV4MergeEvidence(t *testing.T) {
 			t.Errorf("先前并入的碟 %+v，期望来自目标、原发行 %s、原碟号 1", disc, f.b)
 		}
 		review.review(t, "approved")
-		f.next(t, false).complete(t)
-		requireReleaseMergeResolution(t, f.curationFixture, second.ID, "model_merged")
+		modelWaitResolution(t, f, second.ID, "model_merged")
 		requireReleaseMergeReviewLayout(t, f.curationFixture, merge, source, 3)
 	})
 
 	t.Run("拒绝已保存的旧版批准", func(t *testing.T) {
 		f := newSchedulerFixture(t)
-		// 将保存的批准降为第 3 版，保留方案、结论、摘要和有效期。
-		mustExec(t, f.application, `CREATE FUNCTION test_save_v3_merge_review() RETURNS trigger LANGUAGE plpgsql AS $$
-			BEGIN NEW.policy_version := 3; RETURN NEW; END $$`)
-		mustExec(t, f.application, `CREATE TRIGGER test_save_v3_merge_review BEFORE INSERT ON steward_reviews
-			FOR EACH ROW EXECUTE FUNCTION test_save_v3_merge_review()`)
+		// 将保存的批准降为第 4 版，保留方案、结论、摘要和有效期。
+		mustExec(t, f.application, `CREATE FUNCTION test_save_v4_merge_review() RETURNS trigger LANGUAGE plpgsql AS $$
+			BEGIN NEW.policy_version := 4; RETURN NEW; END $$`)
+		mustExec(t, f.application, `CREATE TRIGGER test_save_v4_merge_review BEFORE INSERT ON steward_reviews
+			FOR EACH ROW EXECUTE FUNCTION test_save_v4_merge_review()`)
 		_, item := startReleaseMergeModel(t, f)
 		f.next(t, false).tool(t, releaseMergeProposalTool, releaseMergeProposal(item.ID))
 		f.next(t, true).review(t, "approved")
@@ -219,18 +217,18 @@ func TestPostgreSQLStewardReviewPolicyV4MergeEvidence(t *testing.T) {
 			return f.item(t, item.ID).ReviewRetries == 1
 		})
 		b3RequireCount(t, f.application, 1, `SELECT count(*) FROM steward_reviews
-			WHERE policy_version=3 AND status='completed' AND items->0->>'decision'='approved'`)
+			WHERE policy_version=4 AND status='completed' AND items->0->>'decision'='approved'`)
 		b3RequireCount(t, f.application, 1, `SELECT count(*) FROM steward_plan_items WHERE tool_name='merge_releases' AND decision='pending'`)
 		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE operation_type='release_auto_merge'`)
 		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_merges`)
 	})
 
-	t.Run("缺外部对应直接转人工", func(t *testing.T) {
+	t.Run("缺外部对应即结项留建议", func(t *testing.T) {
 		f := newSchedulerFixture(t)
 		_, item := startReleaseMergeModel(t, f)
 		mustExec(t, f.application, `DELETE FROM external_links WHERE object_type='release' AND object_id=$1`, f.b)
 		f.next(t, false).tool(t, releaseMergeProposalTool, releaseMergeProposal(item.ID))
-		f.next(t, false).complete(t)
+		modelWaitResolution(t, f, item.ID, "suggestion_recorded")
 		exceptions, total, err := f.writer.ListExceptions(t.Context(), "open", 1, 10)
 		requireCurationOK(t, err)
 		if total != 1 || len(exceptions) != 1 || exceptions[0].Tool != releaseMergeProposalTool ||
@@ -239,8 +237,8 @@ func TestPostgreSQLStewardReviewPolicyV4MergeEvidence(t *testing.T) {
 			t.Fatalf("缺对应时的例外 %+v", exceptions)
 		}
 		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_merges`)
-		if got := f.item(t, item.ID); got.Status != "waiting_human" {
-			t.Fatalf("缺对应时的待定项 %+v", got)
+		if f.progress(t).Items.WaitingHuman != 0 {
+			t.Fatal("缺失外部对应的发行仍计入人工待办")
 		}
 	})
 }

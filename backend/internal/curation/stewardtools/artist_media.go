@@ -22,7 +22,7 @@ import (
 func (a adapter) mediaTool(available availability) tool.Definition {
 	return tool.Definition{Name: "submit_artist_media", Description: "提交有网页引用的艺人图片或简介。图片同时提供图片地址与所在网页，简介用中文或英文纯文本。", MinRole: tool.RoleAdmin, Scope: tool.ScopeShared, Revertible: true, Available: available, InvalidInputCode: "invalid_input",
 		Input:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_id":` + idSchema + `,"image":{"type":"object","additionalProperties":false,"properties":{"url":` + urlSchema + `,"page_url":` + urlSchema + `},"required":["url","page_url"]},"bio":{"type":"object","additionalProperties":false,"properties":{"text":{"type":"string"},"lang":{"type":"string","enum":["zh","en"]}},"required":["text","lang"]},"citations":{"type":"array","maxItems":5,"items":{"type":"object","additionalProperties":false,"properties":{"url":` + urlSchema + `,"title":{"type":"string","maxLength":500}},"required":["url","title"]}}},"required":["item_id","citations"]}`),
-		Output: json.RawMessage(`{"type":"object"}`), Handler: a.submitMedia}
+		Output: json.RawMessage(`{"type":"object"}`), Handler: a.submitMedia, Preview: a.previewMedia}
 }
 
 type mediaInput struct {
@@ -226,6 +226,16 @@ func (a adapter) submitMedia(ctx context.Context, c tool.Caller, raw json.RawMes
 		return nil, err
 	}
 	if needImage || needBio {
+		if c.ReviewID == "" || c.ReviewDecision != "approved" {
+			return nil, &tool.Error{Code: tool.CodePermissionDenied, Message: "提交网页资料需要独立审查"}
+		}
+		proof, err := a.previewMedia(ctx, c, raw)
+		if err != nil {
+			return nil, err
+		}
+		if proof.Contradicted {
+			return nil, toolError(operations.Conflict("no_evidence", "没有可以核实的媒体出处"))
+		}
 		data, err := a.prepareMedia(ctx, in, needImage)
 		if err != nil {
 			return nil, toolError(err)

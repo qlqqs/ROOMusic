@@ -37,7 +37,7 @@ func TestPostgreSQLCurationExceptionStore(t *testing.T) {
 	requireCurationOK(t, err)
 	waiting, err := f.writer.PendingItem(ctx, item.ID)
 	requireCurationOK(t, err)
-	if waiting.Status != "waiting_human" || waiting.ConversationID != conversation || waiting.NextAttemptAt != nil {
+	if waiting.Status != "resolved" || waiting.Resolution == nil || *waiting.Resolution != "suggestion_recorded" || waiting.ConversationID != conversation || waiting.NextAttemptAt != nil {
 		t.Fatalf("创建例外后待定项为 %+v", waiting)
 	}
 
@@ -51,7 +51,7 @@ func TestPostgreSQLCurationExceptionStore(t *testing.T) {
 	if first.PendingItemID != item.ID || first.Kind != item.Kind || first.PlanItemID != spec.PlanItemID ||
 		first.Status != "open" || first.DecidedBy != nil || first.DecidedAt != nil || len(first.OperationIDs) != 0 ||
 		first.Provider != "synthetic-model" || first.ConversationID == nil || *first.ConversationID != conversation ||
-		first.Tool != spec.Tool || first.Release.ID != f.a || first.Release.Title != "Album A" || !reflect.DeepEqual(first.Review, spec.Review) {
+		first.Tool != spec.Tool || first.ReasonCode != "review_uncertain" || !first.CanAccept || !slices.Equal(first.Reasons, spec.Review.Reasons) || first.Release.ID != f.a || first.Release.Title != "Album A" || !reflect.DeepEqual(first.Review, spec.Review) {
 		t.Fatalf("存下的例外为 %+v", first)
 	}
 	requireExternalJSON(t, first.Input, spec.Input)
@@ -155,7 +155,7 @@ func TestPostgreSQLCurationExceptionStore(t *testing.T) {
 	expectPage("all", 1, 5, 2, fieldID, matchID)
 	resolved, err := f.writer.PendingItem(ctx, item.ID)
 	requireCurationOK(t, err)
-	if resolved.Status != "resolved" || resolved.Resolution == nil || *resolved.Resolution != "human_accepted" || resolved.ResolvedAt == nil {
+	if resolved.Status != "resolved" || resolved.Resolution == nil || *resolved.Resolution != "suggestion_recorded" || resolved.ResolvedAt == nil {
 		t.Fatalf("例外处理完毕后的待定项为 %+v", resolved)
 	}
 }

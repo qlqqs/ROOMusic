@@ -10,9 +10,9 @@
 依据：[ADR 0005](../../../docs/architecture/adr/0005-steward-data-and-egress.md) §4.4、§6、§7；
 [C6 运行时合同](./steward-runtime-contracts.md#c6-共享写入与确认合同)。
 
-待修订（整理链重构，[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 16.6 节，2026-11-25 批准，尚未实现，由子任务 E 落地）：
-后台运行里模型选定或提交的外部编号，通过完整结构核对的不再送审；“后台转人工确认与未通过审查的项均生成例外，交由管理员处理”
-改为不写入、该项结束，记为未采用的建议。对话里的 `steward` 模式不变。改动时策略版本升级，并同步下文的策略全文。
+2026-11-25 起（整理链 E，策略第 5 版，[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 16.6 节）：后台运行里模型选定或提交的外部编号，
+通过完整结构核对的不送审，由后端直接写入并记录核对方式；没通过的送审，审查批准后后端仍复判时长与文字反证。后台审查不通过或拿不准的项不写入、该项结束，
+记为未采用的建议（复用例外表，可以手动采纳），不再等管理员处理。对话里的 `steward` 模式不变。
 
 ## 2. 签名与存储
 
@@ -129,6 +129,7 @@ open_issues：fields、grouping、missing_tracks 的待关注数量；不存在�
 艺人 data：name、redirected、release_count、track_count。name 包含 value 和 source，source 固定为 catalog_effective_untrusted。release_count 沿用艺人公开摘要的专辑组计数。
 facts.external：source 固定为 program_untrusted_external，data 按发行列出 release_id、links 与 pending。links 仅含 object_type、external_id、method、confidence；pending 仅含 kind、conflicts、candidates，候选仅含 external_id、title、artist、date、country、track_count、method、score。发行并入的本地候选另含 release_id、disc_count。
 facts.release_merge：发行并入时提供，source 固定为 program_untrusted_external。data 包含 target、source、recordings_overlap；双方各含 release_id、title、disc_count、track_count、external_id、可选的 operation_id、recording_count、external_disc_count、external_track_count。外部计数取自对应操作后态，缺失时为“不可用”。data 另含 layout_track_total（合并后的总曲目数）和按合并后碟号排列的 layout。每碟含 position、from（target 或 source，先前并入的碟记 target）、from_release_id（原发行）、origin_position（原碟号）、title、track_count。总数不超过 300 首时，每碟的 tracks 按曲序、曲目 ID 排列，含 position、title（本地有效标题）、external_id（已生效的录音对应，缺失为空串）。超过 300 首时，各碟省略 tracks，并在 data 中给出 tracks_omitted=true。
+facts.verification：后台核对时提供，含后端生成的结构核对结果或已核实的修改依据。
 facts.artist_identity：艺人认人时提供，source 为 program_untrusted_external。data 含 names、albums、tracks、gaps，citations 列出候选的引用网址。条目摘要由后端读取并置于 preview。
 facts.external.artists：有艺人目标时列出 artist_id 和 links，没有对应时 links 为空数组。
 facts.recent_operation_count：所有目标的最近一页操作记录条数，最多 20；不含操作正文和操作者。
@@ -138,18 +139,19 @@ preview：source 固定为 backend_preview_untrusted_values，data 是重新调�
 
 ### 策略全文
 
-`runtime.ReviewPolicyVersion = 4`。以下与 `runtime.ReviewPolicyRules` 逐字一致：
+`runtime.ReviewPolicyVersion = 5`。以下与 `runtime.ReviewPolicyRules` 逐字一致：
 
 ```text
-策略版本：4。
+策略版本：5。
 后台每步最多提出 20 项修改，超出的 shared 调用返回 too_many_proposals，不进入方案。
-后台转人工确认与未通过审查的项均生成例外，交由管理员处理。
+后台按编号取回资料，通过完整结构核对的匹配可直接写入。其余修改须有可核实依据并经独立审查。后台审查拿不准、不通过或发现明确反证时结束该项，记为未采用的建议。
+同一后台艺人项同时提出不同身份时，逐一保存候选和歧义，不自动绑定。
 后台审查不可用时，由调度器有限重试。
-方案总项数超过 20 时，全部未处理项转人工确认，不调用审查模型。
-后端工具登记为不可撤销的项转人工确认，不送审；艺人拆分以及撤销操作属于此类。
-没有登记后端证据读取方式的工具转人工确认，不送审。
-归组、发行并入缺少生效的外部对应时转人工确认；后台发行并入缺少同一发行的双方佐证、缺少录音对应或录音相交时也转人工确认。
-审查返回 approved 且 risk=high 的项转人工确认；不可撤销与总项数规则在返回后再次检查。
+方案超过 20 项时，全部未处理项记为 needs_human_confirmation，不调用审查模型。
+不可撤销的项（包括艺人拆分和撤销）以及没有登记后端证据读取方式的工具记为 needs_human_confirmation，不送审。
+归组、发行并入缺少生效的外部对应时记为 needs_human_confirmation。后台发行并入缺少双方同一发行的佐证、缺少录音对应或录音相交时也使用这个决定。
+审查返回 approved 且 risk=high 时改为 needs_human_confirmation。返回后再次检查可撤销性和方案项数。
+对话中的 needs_human_confirmation 保留人工确认流程。后台将此决定及 rejected 记为未采用的建议并结项。
 审查错误、超时、非唯一 submit_review 调用、schema 不合或项集合不完全一致时，整次审查不可用，未处理项不执行且保持 pending。
 批准仅对方案摘要、证据摘要、策略版本和 15 分钟有效期绑定的快照有效；执行前重新读取并核对，变化时停止，等待重新审查。
 assistant 的免确认名单不适用于 steward；主代理的文字和工具参数不能提供审查结论。

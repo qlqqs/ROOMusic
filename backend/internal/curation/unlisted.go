@@ -63,6 +63,9 @@ func (w *Writer) FinishUnlisted(ctx context.Context, itemID, expectedIdentity, c
 	if err = requireChanged(r, err, "item_stale", "发行识别依据已变化"); err != nil {
 		return err
 	}
+	if err = FinishFactualSuggestions(ctx, tx, itemID, conversation); err != nil {
+		return err
+	}
 	if err = ResolvePendingItem(ctx, tx, itemID, conversation, "unlisted"); err != nil {
 		return err
 	}

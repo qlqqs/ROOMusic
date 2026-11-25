@@ -38,14 +38,14 @@ type LookupQueue interface {
 	LookupTierContext(context.Context) context.Context
 }
 
-func (s *Scheduler) nextKind(ctx context.Context, now time.Time, targets []string) (TaskKind, string, error) {
-	kinds, err := s.writer.ReadyModelKinds(ctx, now, targets)
+func (s *Scheduler) nextKind(ctx context.Context, now time.Time, conditions schedulingConditions) (TaskKind, string, error) {
+	kinds, err := s.writer.ReadyModelKinds(ctx, now, []string{"release", "artist"})
 	if err != nil {
 		return "", "", err
 	}
 	var releaseID string
 	order := QueueOrder{Ready: func(ctx context.Context, kind TaskKind, now time.Time) (bool, error) {
-		if !kinds[string(kind)] {
+		if !kinds[string(kind)] || !conditions.allows(kind) || (kind == WebFallback && conditions.WebLimitReached) {
 			return false, nil
 		}
 		if kind != LookupCandidate {

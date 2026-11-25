@@ -19,15 +19,22 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
+type prepareArtistMedia func(context.Context, json.RawMessage) (curation.ConfirmedArtistMedia, error)
+
 type ExceptionResolver struct {
-	accepting sync.Map
-	db        *sql.DB
-	writer    *curation.Writer
-	matcher   *program.ModelMatcher
+	prepareMedia prepareArtistMedia
+	accepting    sync.Map
+	db           *sql.DB
+	writer       *curation.Writer
+	matcher      *program.ModelMatcher
 }
 
-func NewExceptionResolver(db *sql.DB, writer *curation.Writer, matcher *program.ModelMatcher) *ExceptionResolver {
-	return &ExceptionResolver{db: db, writer: writer, matcher: matcher}
+func NewExceptionResolver(db *sql.DB, writer *curation.Writer, matcher *program.ModelMatcher, prepare ...prepareArtistMedia) *ExceptionResolver {
+	r := &ExceptionResolver{db: db, writer: writer, matcher: matcher}
+	if len(prepare) > 0 {
+		r.prepareMedia = prepare[0]
+	}
+	return r
 }
 
 type proposal struct {
@@ -56,6 +63,25 @@ func (r *ExceptionResolver) load(ctx context.Context, id string) (curation.Model
 	if err == nil {
 		err = json.Unmarshal(e.Input, &in)
 	}
+	if err == nil && e.Tool == "submit_verification" && e.Kind == "verify_name" {
+		item, itemErr := r.writer.PendingItem(ctx, e.PendingItemID)
+		if itemErr != nil {
+			return e, in, itemErr
+		}
+		var candidate struct {
+			Field   string          `json:"field"`
+			After   json.RawMessage `json:"after"`
+			TrackID string          `json:"track_id"`
+		}
+		if err = json.Unmarshal(item.Evidence, &candidate); err == nil {
+			in.ReleaseID, in.TrackID = item.TargetID, candidate.TrackID
+			in.Changes = map[string]governance.RawCorrectionChange{candidate.Field: {Mode: catalog.CorrectionSet, Value: candidate.After}}
+			e.Tool = "correct_release"
+			if in.TrackID != "" {
+				e.Tool = "correct_track"
+			}
+		}
+	}
 	return e, in, err
 }
 
@@ -69,11 +95,20 @@ func (r *ExceptionResolver) Accept(ctx context.Context, id, actor, requestID str
 		return e, decidedException()
 	}
 	defer r.accepting.Delete(e.ID)
+	if !e.CanAccept {
+		if e.Status == "open" {
+			return e, operations.Conflict("nothing_to_apply", "这条建议没有可采纳的修改")
+		}
+		return e, decidedException()
+	}
+	ctx = curation.WithSuggestionDecision(ctx, id, actor, false)
 	if err = r.writer.ClaimException(ctx, id, actor); err != nil {
 		return e, err
 	}
 	key := curation.DerivedKey(e.ID, "accept")
-	ctx = operations.WithReviewOrigin(ctx, e.Review.ID, "human")
+	if e.Review.ID != "" {
+		ctx = operations.WithReviewOrigin(ctx, e.Review.ID, "human")
+	}
 	switch e.Tool {
 	case "correct_release", "correct_track":
 		err = r.acceptCorrection(ctx, e, in, actor, key, requestID)
@@ -83,6 +118,29 @@ func (r *ExceptionResolver) Accept(ctx context.Context, id, actor, requestID str
 		err = r.acceptArtistIdentity(ctx, e, in, actor, key)
 	case "resolve_release_match":
 		err = r.acceptMatch(ctx, e, in, actor, key)
+	case "submit_verification":
+		err = r.writer.AcceptVerification(ctx, e, actor, key)
+	case "submit_artist_media":
+		var media curation.ConfirmedArtistMedia
+		if r.prepareMedia == nil {
+			err = operations.ErrUnavailable
+			break
+		}
+		media, err = r.prepareMedia(ctx, e.Input)
+		if err == nil {
+			var changes []program.MatchChange
+			if media.ImageURL != "" {
+				changes = append(changes, program.MatchChange{Field: "image", After: media.ImageURL})
+			}
+			if media.Text != "" {
+				changes = append(changes, program.MatchChange{Field: "bio", After: media.Text})
+			}
+			if err = compareChanges(e, changes); err == nil {
+				err = r.writer.AcceptArtistMedia(ctx, e, media, actor, key, requestID)
+			}
+		}
+	default:
+		err = operations.Conflict("nothing_to_apply", "这条建议没有可执行的修改")
 	}
 	if err != nil {
 		var failure *operations.Failure
@@ -144,7 +202,7 @@ func (r *ExceptionResolver) acceptCorrection(ctx context.Context, e curation.Mod
 	if err != nil {
 		return err
 	}
-	if item.Status != "waiting_human" || !strings.EqualFold(in.ReleaseID, item.TargetID) {
+	if !(curation.SuggestionRecorded(item) || (item.Status == "resolved" && e.ReasonCode == "unverified_fact")) || !strings.EqualFold(in.ReleaseID, item.TargetID) {
 		return staleException()
 	}
 	parse := governance.ParseCorrectionChanges
@@ -195,6 +253,16 @@ func (r *ExceptionResolver) acceptCorrection(ctx context.Context, e curation.Mod
 		if err := curation.CheckMatchItem(ctx, tx, item, "", true); err != nil {
 			return operations.Outcome{}, err
 		}
+		if item.Kind == "verify_name" {
+			entries, err := catalog.LoadCurationEvidence(ctx, tx, []string{item.TargetID}, r.writer.ArtworkExists)
+			if err != nil {
+				return operations.Outcome{}, err
+			}
+			current, ok := entries[item.TargetID]
+			if !ok || curation.ReleaseIdentityDigest(current) != item.IdentityDigest {
+				return operations.Outcome{}, staleException()
+			}
+		}
 		var changes []program.MatchChange
 		for _, field := range currentFields {
 			change, ok := fields[field.Field]
@@ -241,7 +309,7 @@ func (r *ExceptionResolver) acceptMerge(ctx context.Context, e curation.ModelExc
 	if err != nil {
 		return err
 	}
-	if item.Status != "waiting_human" || !strings.EqualFold(item.ID, in.ItemID) {
+	if !curation.SuggestionRecorded(item) || !strings.EqualFold(item.ID, in.ItemID) {
 		return staleException()
 	}
 	p, err := r.writer.PreviewReleaseMerge(ctx, item)
@@ -279,7 +347,7 @@ func (r *ExceptionResolver) acceptArtistIdentity(ctx context.Context, e curation
 	if err != nil {
 		return err
 	}
-	if item.Kind != "artist_identity" || item.Status != "waiting_human" || !strings.EqualFold(in.ItemID, item.ID) {
+	if item.Kind != "artist_identity" || !curation.SuggestionRecorded(item) || !strings.EqualFold(in.ItemID, item.ID) {
 		return staleException()
 	}
 	plan, err := r.matcher.PlanArtistIdentity(ctx, item, in.Source, in.ExternalID)
@@ -308,7 +376,7 @@ func (r *ExceptionResolver) acceptMatch(ctx context.Context, e curation.ModelExc
 	if err != nil {
 		return err
 	}
-	if item.Status != "waiting_human" || !strings.EqualFold(in.ItemID, item.ID) {
+	if !curation.SuggestionRecorded(item) || !strings.EqualFold(in.ItemID, item.ID) {
 		return staleException()
 	}
 	plan, err := r.confirmedPlan(ctx, e, item, in.ExternalID, actor, key)
@@ -327,7 +395,7 @@ func (r *ExceptionResolver) acceptMatch(ctx context.Context, e curation.ModelExc
 }
 
 func (r *ExceptionResolver) matchStarted(ctx context.Context, e curation.ModelException, actor, key string) (bool, error) {
-	if e.Tool != "resolve_release_match" {
+	if e.Tool != "resolve_release_match" && e.Tool != "submit_artist_media" {
 		return false, nil
 	}
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
@@ -395,6 +463,7 @@ func (r *ExceptionResolver) Decline(ctx context.Context, id, actor string) (cura
 		return e, err
 	}
 	defer tx.Rollback()
+	ctx = curation.WithSuggestionDecision(ctx, id, actor, true)
 	if e.Tool == "merge_releases" {
 		if err = governance.LockCatalogWrites(ctx, tx); err != nil {
 			return e, err
@@ -408,7 +477,7 @@ func (r *ExceptionResolver) Decline(ctx context.Context, id, actor string) (cura
 		if err != nil {
 			return e, err
 		}
-		if ids[item.ArtistID] != item.ArtistID || item.Status != "waiting_human" {
+		if ids[item.ArtistID] != item.ArtistID || !curation.SuggestionRecorded(item) {
 			return e, staleException()
 		}
 		if err = curation.CheckMatchItem(ctx, tx, item, "", true); err != nil {
@@ -441,6 +510,40 @@ func (r *ExceptionResolver) Decline(ctx context.Context, id, actor string) (cura
 				return e, err
 			}
 		}
+	case e.Tool == "submit_artist_media":
+		var media struct {
+			Image *struct{ URL string }
+			Bio   json.RawMessage
+		}
+		if err = json.Unmarshal(e.Input, &media); err != nil {
+			return e, err
+		}
+		if media.Image != nil {
+			if err = curation.SuppressWebMedia(ctx, tx, item.ArtistID, "artist_image", media.Image.URL, actor); err != nil {
+				return e, err
+			}
+		}
+		if len(media.Bio) > 0 {
+			if err = curation.SuppressWebMedia(ctx, tx, item.ArtistID, "artist_bio", "artist", actor); err != nil {
+				return e, err
+			}
+		}
+	case e.Tool == "submit_verification" && item.Kind == "verify_artist_credit":
+		var proposal curation.ArtistCreditProposal
+		if err = json.Unmarshal(item.Evidence, &proposal); err != nil {
+			return e, err
+		}
+		if err = curation.SuppressExternalLink(ctx, tx, "artist", proposal.Local.ArtistID, "musicbrainz", proposal.External.ArtistID, "", actor); err != nil {
+			return e, err
+		}
+	case e.Tool == "submit_verification" && item.Kind == "verify_artist_merge":
+		var candidate curation.VerificationCandidate
+		if err = json.Unmarshal(item.Evidence, &candidate); err != nil {
+			return e, err
+		}
+		if err = r.writer.SuppressArtistMerge(ctx, tx, candidate.ArtistA, candidate.ArtistB, "", actor); err != nil {
+			return e, err
+		}
 	case e.Tool == "merge_releases":
 		candidate, err := curation.ReleaseMergeCandidate(item)
 		if err != nil {
@@ -449,7 +552,7 @@ func (r *ExceptionResolver) Decline(ctx context.Context, id, actor string) (cura
 		if err = r.writer.SuppressReleaseMerge(ctx, tx, item.TargetID, candidate.ReleaseID, "", actor); err != nil {
 			return e, err
 		}
-	case item.Kind == "recording_match":
+	case e.Tool == "resolve_release_match" && item.Kind == "recording_match":
 		var evidence struct {
 			Tracks []struct {
 				ID string `json:"id"`
@@ -463,7 +566,7 @@ func (r *ExceptionResolver) Decline(ctx context.Context, id, actor string) (cura
 				return e, err
 			}
 		}
-	default:
+	case e.Tool == "resolve_release_match":
 		if err = curation.SuppressExternalLink(ctx, tx, "release", item.TargetID, "musicbrainz", strings.ToLower(in.ExternalID), "", actor); err != nil {
 			return e, err
 		}

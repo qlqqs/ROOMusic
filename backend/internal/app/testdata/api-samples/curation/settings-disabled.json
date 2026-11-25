@@ -7,7 +7,8 @@
     "enabled_by": null,
     "inactive_reason": "disabled",
     "model": "",
-    "paused": false
+    "paused": false,
+    "web_daily_token_limit": null
   },
   "status": 200
 }

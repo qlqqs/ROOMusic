@@ -357,6 +357,11 @@ func (w *Worker) saveConclusionOnce(ctx context.Context, e *catalog.CurationEvid
 		if err := curation.SaveArtistCreditProposals(ctx, tx, e.ID, postIdentity, out.proposals); err != nil {
 			return err
 		}
+		if out.review.RecheckedAt == nil && !out.match.Offline && out.status == "matched" {
+			if err := saveNameDifferences(ctx, tx, fresh, out.match); err != nil {
+				return err
+			}
+		}
 		if err := savePending(ctx, tx, fresh, state, out.match); err != nil {
 			return err
 		}
@@ -474,6 +479,7 @@ func releaseResult(out outcome) []byte {
 	m := out.match
 	r := struct {
 		releaseReviewState
+		Verification    *MatchVerification `json:"verification,omitempty"`
 		Blocked         []blockedCandidate `json:"blocked,omitempty"`
 		Level           string             `json:"level,omitempty"`
 		Rule            string             `json:"rule,omitempty"`
@@ -489,7 +495,7 @@ func releaseResult(out outcome) []byte {
 		ReleaseMerge    string             `json:"release_merge,omitempty"`
 		ArtistLinks     string             `json:"artist_links,omitempty"`
 		TrackFields     string             `json:"track_fields,omitempty"`
-	}{releaseReviewState: out.review, Level: m.Level, Rule: m.Rule, Route: m.Route, Credits: m.Credits, ExternalGroupID: m.GroupID, Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks}
+	}{Verification: m.Verification, releaseReviewState: out.review, Level: m.Level, Rule: m.Rule, Route: m.Route, Credits: m.Credits, ExternalGroupID: m.GroupID, Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks}
 	if m.Release != nil {
 		r.ExternalID, r.ExternalGroupID = m.Release.ID, m.Release.Group.ID
 		if out.status == "matched" {

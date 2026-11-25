@@ -26,6 +26,8 @@ type comparison struct {
 	conflicts                                                    []string
 	countEqual, durationsOK, titleMatch, artistMatch, labelMatch bool
 	isrcAgree, acoustidAgree                                     int
+	comparable, within                                           int
+	differences                                                  []DurationDifference
 }
 
 func (c *comparison) conflict(code string) {
@@ -193,6 +195,12 @@ func (c *comparison) compareTracks(e catalog.CurationEvidence, method string, re
 			}
 		} else {
 			other = remote[i]
+			if method == "model" && !t.PositionInferred {
+				positioned, ok := at[trackPosition{t.Disc, t.Position}]
+				if !ok || positioned.RecordingID != other.RecordingID {
+					c.conflict("position_conflict")
+				}
+			}
 		}
 		c.pairs = append(c.pairs, TrackPair{t.ID, other.RecordingID})
 		title := other.Title
@@ -220,6 +228,9 @@ func (c *comparison) compareTracks(e catalog.CurationEvidence, method string, re
 				within++
 			} else {
 				c.conflict("duration_mismatch")
+				if method == "model" {
+					c.differences = append(c.differences, DurationDifference{t.Disc, t.Position, int64(t.DurationSeconds)*1000 - *other.LengthMS})
+				}
 			}
 		}
 		for _, id := range t.Identifiers["mb_recording"] {
@@ -242,6 +253,7 @@ func (c *comparison) compareTracks(e catalog.CurationEvidence, method string, re
 			}
 		}
 	}
+	c.comparable, c.within = comparable, within
 	c.durationsOK = comparable > 0 && comparable*2 >= len(local) && within == comparable
 	if inferred && within != len(local) {
 		c.conflict("inferred_positions")

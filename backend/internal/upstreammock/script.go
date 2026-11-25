@@ -84,6 +84,7 @@ type wireMessage struct {
 type turn struct {
 	model, user, result    string
 	pendingResult, baseURL string
+	curation               string
 	tools                  []string
 	nativeSearch           bool
 }
@@ -115,21 +116,24 @@ func (input modelInput) turn() turn {
 			var plain string
 			if json.Unmarshal(m.Content, &plain) == nil {
 				t.user, t.result = plain, ""
-				continue
-			}
-			var blocks []struct{ Type, Text, Content string }
-			if json.Unmarshal(m.Content, &blocks) != nil {
-				continue
-			}
-			t.user, t.result = "", ""
-			for _, b := range blocks {
-				switch b.Type {
-				case "text", "input_text":
-					t.user += b.Text
-				case "tool_result":
-					t.result = b.Content
+			} else {
+				var blocks []struct{ Type, Text, Content string }
+				if json.Unmarshal(m.Content, &blocks) != nil {
+					continue
+				}
+				t.user, t.result = "", ""
+				for _, b := range blocks {
+					switch b.Type {
+					case "text", "input_text":
+						t.user += b.Text
+					case "tool_result":
+						t.result = b.Content
+					}
 				}
 			}
+		}
+		if _, body, found := strings.Cut(t.user, `<roomusic-source type="curation_pending" trust="untrusted">`); found {
+			t.curation, _, _ = strings.Cut(body, "</roomusic-source>")
 		}
 		if strings.HasPrefix(strings.TrimSpace(t.result), `<roomusic-source kind="tool" name="read_pending_items">`) {
 			t.pendingResult = t.result
@@ -165,6 +169,12 @@ func (s script) reply(t turn) reply {
 			return reply{Calls: []call{{"submit_review", object{"items": items}}}}
 		}
 	}
+	if t.curation != "" {
+		if response := s.curationReply(t); response.Text != "" || len(response.Calls) > 0 {
+			return response
+		}
+	}
+
 	if slices.Contains(t.tools, "read_pending_items") && strings.Contains(t.user, "read_pending_items") && t.result == "" {
 		return reply{Calls: []call{{"read_pending_items", object{}}}}
 	}
@@ -174,6 +184,84 @@ func (s script) reply(t turn) reply {
 		}
 	}
 	return reply{Text: "这是 ROOMusic 外部接口 mock 的合成回复。"}
+}
+
+type pendingItem struct {
+	ID       string `json:"item_id"`
+	Kind     string `json:"kind"`
+	Evidence struct {
+		Names         []string
+		Title, Artist string
+		Gaps          struct{ Image, Bio bool }
+		Tracks        json.RawMessage
+	}
+	Candidates []struct {
+		ID string `json:"external_id"`
+	}
+}
+
+func (s script) curationReply(t turn) reply {
+	var items []pendingItem
+	if json.Unmarshal([]byte(t.curation), &items) != nil || len(items) == 0 {
+		return reply{}
+	}
+	if len(t.tools) == 0 {
+		decisions := make([]object, 0, len(items))
+		for _, item := range items {
+			d := object{"item_id": item.ID, "decision": "upgrade"}
+			if len(item.Candidates) > 0 && item.Candidates[0].ID != "" {
+				d["decision"], d["external_id"] = "select", item.Candidates[0].ID
+			}
+			decisions = append(decisions, d)
+		}
+		raw, _ := json.Marshal(object{"items": decisions})
+		return reply{Text: string(raw)}
+	}
+	item := items[0]
+	abandon := reply{Calls: []call{{"shelve_pending_item", object{"item_id": item.ID, "reason": "合成样例没有可核实的资料。"}}}}
+	if slices.Contains(t.tools, "web_search") && item.Kind == "artist_identity" && len(item.Evidence.Names) > 0 {
+		switch {
+		case t.result == "":
+			return reply{Calls: []call{{"web_search", object{"q": strings.Join(item.Evidence.Names, " ")}}}}
+		case strings.Contains(t.result, `name="web_search"`):
+			return reply{Calls: []call{{"fetch_page", object{"url": t.baseURL + "/searxng/artists/coast"}}}}
+		case strings.Contains(t.result, `name="fetch_page"`):
+			return reply{Calls: s.artistCalls(t.baseURL, item.ID, item.Evidence.Gaps.Image, item.Evidence.Gaps.Bio)}
+		}
+	}
+	if slices.Contains(t.tools, "search_music_metadata") {
+		entity, title := "release", item.Evidence.Title
+		if item.Kind == "recording_match" {
+			entity = "recording"
+			var tracks []struct{ Title string }
+			if json.Unmarshal(item.Evidence.Tracks, &tracks) == nil && len(tracks) > 0 {
+				title = tracks[0].Title
+			}
+		}
+		switch {
+		case t.result == "" && title != "":
+			return reply{Calls: []call{{"search_music_metadata", object{"entity": entity, "query": title}}}}
+		case strings.Contains(t.result, `name="search_music_metadata"`):
+			_, body, _ := strings.Cut(t.result, ">")
+			var data struct{ Results []struct{ MBID string } }
+			if json.Unmarshal([]byte(html.UnescapeString(strings.TrimSuffix(body, "</roomusic-source>"))), &data) == nil && len(data.Results) > 0 {
+				return reply{Calls: []call{{"get_music_metadata", object{"entity": entity, "mbid": data.Results[0].MBID}}}}
+			}
+		case strings.Contains(t.result, `name="get_music_metadata"`):
+			_, body, _ := strings.Cut(t.result, ">")
+			var data struct{ Metadata struct{ MBID string } }
+			if json.Unmarshal([]byte(html.UnescapeString(strings.TrimSuffix(body, "</roomusic-source>"))), &data) == nil && data.Metadata.MBID != "" {
+				return reply{Calls: []call{{"resolve_release_match", object{"item_id": item.ID, "external_id": data.Metadata.MBID, "basis": object{"note": "已读取合成外部资料。"}}}}}
+			}
+		}
+	}
+	if t.result != "" {
+		return reply{Text: "处理完成。"}
+	}
+	if slices.Contains(t.tools, "submit_verification") && strings.HasPrefix(item.Kind, "verify_") {
+		return reply{Calls: []call{{"submit_verification", object{"item_id": item.ID, "verdict": "uncertain", "reason": "合成样例没有指定核对结论。"}}}}
+	}
+	return abandon
 }
 
 func (s script) pendingCalls(t turn) []call {
@@ -187,17 +275,7 @@ func (s script) pendingCalls(t turn) []call {
 		_, body, _ := strings.Cut(result, ">")
 		result = html.UnescapeString(strings.TrimSuffix(body, "</roomusic-source>"))
 	}
-	var items []struct {
-		ID       string `json:"item_id"`
-		Kind     string `json:"kind"`
-		Evidence struct {
-			Names []string                  `json:"names"`
-			Gaps  struct{ Image, Bio bool } `json:"gaps"`
-		} `json:"evidence"`
-		Candidates []struct {
-			ID string `json:"external_id"`
-		}
-	}
+	var items []pendingItem
 	if json.Unmarshal([]byte(result), &items) != nil {
 		return nil
 	}

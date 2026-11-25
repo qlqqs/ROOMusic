@@ -4,8 +4,6 @@ import (
 	"cmp"
 	"math"
 	"slices"
-
-	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
 func (e CurationEvidence) SortedTracks() []CurationTrack {
@@ -25,13 +23,19 @@ func (e CurationEvidence) DiscPositions() []int {
 	return slices.Compact(discs)
 }
 
+// DiscTOC 以 CD 帧记录每首曲目的起点和整碟的结束位置。
+type DiscTOC struct {
+	Offsets []int
+	Leadout int
+}
+
 // DiscTOCs 只有所有介质都能从同一镜像的连续 CUE 索引重建时才返回目录。
-func (e CurationEvidence) DiscTOCs() []sources.DiscTOC {
+func (e CurationEvidence) DiscTOCs() []DiscTOC {
 	byDisc := map[int][]CurationTrack{}
 	for _, t := range e.SortedTracks() {
 		byDisc[t.Disc] = append(byDisc[t.Disc], t)
 	}
-	var out []sources.DiscTOC
+	var out []DiscTOC
 	for _, d := range e.DiscPositions() {
 		rows := byDisc[d]
 		if len(rows) == 0 || len(rows) > 99 {
@@ -41,7 +45,7 @@ func (e CurationEvidence) DiscTOCs() []sources.DiscTOC {
 		if first.ParentFile == "" || first.CueSheetPath == "" || last.CueEndFrames == nil {
 			return nil
 		}
-		toc := sources.DiscTOC{}
+		var toc DiscTOC
 		prev := -1
 		for i, t := range rows {
 			if t.SourceKind != "cue_virtual" || t.SourceRootID != first.SourceRootID || t.CueSheetPath != first.CueSheetPath || t.ParentFile != first.ParentFile || t.Position != i+1 || t.CueIndexFrames == nil || *t.CueIndexFrames <= prev {

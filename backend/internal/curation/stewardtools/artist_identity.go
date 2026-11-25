@@ -74,7 +74,7 @@ func (a adapter) previewIdentity(ctx context.Context, c tool.Caller, raw json.Ra
 	if err != nil {
 		return tool.Preview{}, err
 	}
-	_, items, err := a.claimed(ctx, c)
+	run, items, err := a.claimed(ctx, c)
 	if err != nil {
 		return tool.Preview{}, err
 	}
@@ -96,7 +96,17 @@ func (a adapter) previewIdentity(ctx context.Context, c tool.Caller, raw json.Ra
 	for _, change := range plan.Changes {
 		p.Changes = append(p.Changes, tool.Change{Field: change.Field, Before: change.Before, After: change.After})
 	}
-	return p, nil
+	_, proof, err := artistPageEvidence(ctx, run, item, in.Basis.Citations)
+	if err != nil {
+		if !missingPageEvidence(err) {
+			return p, toolError(err)
+		}
+		p.Contradicted = true
+		p.Verification = json.RawMessage(`{"reason":"no_verified_page"}`)
+		return p, nil
+	}
+	p.Verification, err = json.Marshal(proof)
+	return p, err
 }
 
 func (a adapter) resolveIdentity(ctx context.Context, c tool.Caller, raw json.RawMessage) (json.RawMessage, error) {
@@ -119,6 +129,16 @@ func (a adapter) resolveIdentity(ctx context.Context, c tool.Caller, raw json.Ra
 	plan, err := a.matcher.PlanArtistIdentity(ctx, item, in.Source, in.ExternalID)
 	if err != nil {
 		return nil, toolError(err)
+	}
+	if c.ReviewID == "" || c.ReviewDecision != "approved" {
+		return nil, &tool.Error{Code: tool.CodePermissionDenied, Message: "身份写入需要独立审查"}
+	}
+	proof, err := a.previewIdentity(ctx, c, raw)
+	if err != nil {
+		return nil, err
+	}
+	if proof.Contradicted {
+		return nil, toolError(operations.Conflict("no_evidence", "身份对应缺少网页佐证"))
 	}
 	batch, err := run.Batch(ctx)
 	if err != nil {

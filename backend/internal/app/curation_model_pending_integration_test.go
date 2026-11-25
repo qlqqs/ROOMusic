@@ -165,11 +165,7 @@ func TestPostgreSQLCurationPendingLifecycle(t *testing.T) {
 	expectWaiting(0, nil)
 
 	claim(next)
-	mustExec(t, f.application, `UPDATE curation_pending_items SET status='waiting_human' WHERE id=$1`, item.ID)
 	requireCurationOK(t, f.writer.RecoverInProgress(ctx))
-	if status := load().Status; status != "waiting_human" {
-		t.Fatalf("恢复后状态为 %q，期望 waiting_human", status)
-	}
 	requireCurationOK(t, curation.ResolvePendingItems(ctx, f.application.database, f.a, item.Kind, "program_matched"))
 	resolved := load()
 	if resolved.Status != "resolved" || resolved.Resolution == nil || *resolved.Resolution != "program_matched" || resolved.ResolvedAt == nil {

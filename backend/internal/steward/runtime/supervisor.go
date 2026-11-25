@@ -19,6 +19,8 @@ const (
 
 var (
 	ErrBackgroundBusy   = errors.New("已有后台整理正在运行")
+	ErrItemLimit        = errors.New("已到单项额度")
+	ErrItemCompleted    = errors.New("当前项已处理")
 	ErrRunStopped       = errors.New("已停止自动整理")
 	ErrRunLimit         = errors.New("同时运行的会话已达上限")
 	ErrSupervisorClosed = errors.New("管家正在关闭")

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log/slog"
@@ -38,6 +39,8 @@ func TestPostgreSQLCurationMetrics(t *testing.T) {
 	clock := newProgramClock()
 	opts := clock.options()
 	opts.FullPassInterval = time.Minute
+	// D 接入实际巡检后移除此临时注入。
+	opts.NamesPatrolled = func(context.Context, string) (bool, error) { return true, nil }
 	immediate := func() *sources.Limiter { return sources.NewLimiter(0, nil, nil) }
 	app := newConfiguredIntegrationTestApplication(t, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})), config.Server{UpstreamMockURL: upstream.URL},
 		WithCurationProgram(true, opts), WithCurationModel(true, model.Options{Now: opts.Now, PollInterval: 10 * time.Millisecond, BatchSize: 1}),
@@ -68,6 +71,16 @@ func TestPostgreSQLCurationMetrics(t *testing.T) {
 		target := metricsModelTarget{SampleID: s.ID, ReleaseID: s.Expect.Release, GroupID: s.Expect.Group, Fields: s.Expect.Fields}
 		if len(s.Expect.Recordings) == 1 {
 			target.RecordingID = s.Expect.Recordings[0]
+		}
+		for _, release := range s.External.Releases {
+			if release.ID == target.ReleaseID {
+				target.SearchTitle = release.Title
+			}
+			for _, track := range release.Tracks {
+				if track.ID == target.RecordingID {
+					target.SearchTitle = track.Title
+				}
+			}
 		}
 		targets[e.release] = target
 		for name, id := range e.artists {

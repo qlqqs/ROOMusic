@@ -30,13 +30,16 @@ type MatchChange struct {
 	After  any    `json:"after"`
 }
 type MatchPlan struct {
-	Changes []MatchChange `json:"changes"`
-	Target  string        `json:"target"`
-	write   matchWritePlan
-	match   MatchResult
-	item    curation.PendingItem
+	Verification MatchVerification `json:"verification"`
+	Changes      []MatchChange     `json:"changes"`
+	Target       string            `json:"target"`
+	write        matchWritePlan
+	match        MatchResult
+	item         curation.PendingItem
 }
 type ApplyOptions struct {
+	// ApprovedReviewID 由后台的审查执行器传入。
+	ApprovedReviewID string
 	// Finish 在匹配结论的同一事务记录人工采纳及其操作编号。
 	Finish                                                 func(context.Context, *sql.Tx, []string) error
 	Source                                                 curation.Source
@@ -182,7 +185,7 @@ func (m *ModelMatcher) Plan(ctx context.Context, item curation.PendingItem, exte
 	if err != nil {
 		return MatchPlan{}, err
 	}
-	plan := MatchPlan{write: p, match: match, item: item, Target: e.Title}
+	plan := MatchPlan{Verification: *match.Verification, write: p, match: match, item: item, Target: e.Title}
 	before := e.ExternalID
 	if match.Mode == "single" {
 		before = e.Tracks[0].ExternalID
@@ -265,6 +268,8 @@ func (m *ModelMatcher) readMatch(ctx context.Context, kind string, e catalog.Cur
 		if rec.ID != id {
 			return r, matchConflict("external_id_mismatch")
 		}
+		r.Verification = verifyRecording(e, rec)
+		r.Rule, r.Level = r.Verification.Method, "recording"
 		r.Status, r.Recording, r.Pairs = "matched", &rec, []TrackPair{{e.Tracks[0].ID, rec.ID}}
 		return r, nil
 	case "release_match":
@@ -284,6 +289,7 @@ func (m *ModelMatcher) readMatch(ctx context.Context, kind string, e catalog.Cur
 			return r, matchConflict("media_count_mismatch")
 		}
 		var c comparison
+		c.compareRelease(e, "model", release)
 		c.compareTracks(e, "model", release)
 		if slices.Contains(c.conflicts, "position_conflict") {
 			return r, matchConflict("position_conflict")
@@ -291,6 +297,8 @@ func (m *ModelMatcher) readMatch(ctx context.Context, kind string, e catalog.Cur
 		if !c.countEqual || len(c.pairs) == 0 {
 			return r, matchConflict("track_count")
 		}
+		r.Verification = verifyAlbum(e, release, c)
+		r.Rule, r.Level = r.Verification.Method, "release"
 		r.Status, r.Release, r.Pairs = "matched", &release, c.pairs
 		return r, nil
 	default:
@@ -302,11 +310,27 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 	if !uuid.Valid(opt.Key) || opt.Source.Kind != "model" || p.evidence.ID == "" || (opt.PendingItemID != "" && opt.PendingItemID != plan.item.ID) {
 		return MatchApplied{}, operations.Invalid("invalid_input", "匹配写入参数无效")
 	}
+	proof := plan.match.Verification
+	if opt.ConfirmedBy == "" {
+		if proof.Contradicted {
+			return MatchApplied{}, matchConflict("contradictory_evidence")
+		}
+		if !proof.Direct {
+			if !uuid.Valid(opt.ApprovedReviewID) {
+				return MatchApplied{}, operations.Conflict("approval_required", "此编号需要独立审查")
+			}
+			ctx = operations.WithReviewOrigin(ctx, opt.ApprovedReviewID, "approved")
+		}
+	}
 	conversation := opt.ConversationID
 	if conversation == "" {
 		conversation = plan.item.ConversationID
 	}
 	opt.Source.WriterLevel = catalog.LevelModelExternal
+	if proof.Method != "" {
+		opt.Source.Basis = proof.Method
+		p.links.Method = proof.Method
+	}
 	p.links.Source, p.links.ConversationID, p.links.ConfirmedBy = opt.Source, conversation, opt.ConfirmedBy
 	// 目录锁内重读摘要；同键回放由操作日志先行处理。
 	p.links.CheckEvidence = func(ctx context.Context, tx *sql.Tx) error {
@@ -389,7 +413,13 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 	if err := curation.SaveWorkState(ctx, tx, state); err != nil {
 		return MatchApplied{}, err
 	}
+	if err := saveNameDifferences(ctx, tx, fresh, plan.match); err != nil {
+		return MatchApplied{}, err
+	}
 	if opt.ConfirmedBy == "" {
+		if err := curation.FinishFactualSuggestions(ctx, tx, plan.item.ID, conversation); err != nil {
+			return MatchApplied{}, err
+		}
 		if err := curation.ResolvePendingItem(ctx, tx, plan.item.ID, conversation, "model_matched"); err != nil {
 			return MatchApplied{}, err
 		}
@@ -490,5 +520,9 @@ func (m *ModelMatcher) ResumeConfirmation(ctx context.Context, item curation.Pen
 	if s.Match.Release != nil {
 		write.fields = missingFields(before, *s.Match.Release)
 	}
-	return MatchPlan{match: s.Match, write: write, item: item}, nil
+	var verification MatchVerification
+	if s.Match.Verification != nil {
+		verification = *s.Match.Verification
+	}
+	return MatchPlan{Verification: verification, match: s.Match, write: write, item: item}, nil
 }

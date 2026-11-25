@@ -76,8 +76,15 @@ const artistClosuresSQL = `WITH roots(id) AS (VALUES ($1::uuid),($2::uuid)), mem
  UNION ALL SELECT o.artist_id,o.redirect_artist_id FROM artist_overrides o JOIN roots r ON o.redirect_artist_id=r.id)`
 
 func checkArtistEvidence(ctx context.Context, tx *sql.Tx, a, b, externalID string) error {
+	strong, err := artistEvidence(ctx, tx, a, b, externalID)
+	if err == nil && !strong {
+		return operations.Conflict("no_strong_evidence", "两位艺人缺少唯一且一致的 MusicBrainz 对应")
+	}
+	return err
+}
+func artistEvidence(ctx context.Context, q operations.Queryer, a, b, externalID string) (bool, error) {
 	var strong bool
-	err := tx.QueryRowContext(ctx, artistClosuresSQL+`, links AS MATERIALIZED (
+	err := q.QueryRowContext(ctx, artistClosuresSQL+`, links AS MATERIALIZED (
  SELECT m.root,l.object_id,l.external_id,l.operation_id FROM members m JOIN external_links l ON l.object_id=m.id
  WHERE l.source='musicbrainz' AND l.object_type='artist' FOR SHARE OF l)
  SELECT NOT EXISTS(SELECT 1 FROM links WHERE external_id<>$3) AND
@@ -85,14 +92,11 @@ func checkArtistEvidence(ctx context.Context, tx *sql.Tx, a, b, externalID strin
  WHERE l.external_id=$3 AND o.operation_type='external_link' AND o.target_type='release' AND o.after_state->>'source'='musicbrainz'
  AND o.after_state->'links' @> jsonb_build_array(jsonb_build_object('object_type','artist','object_id',l.object_id,'external_id',l.external_id))
  AND NOT EXISTS(SELECT 1 FROM operations r WHERE r.reverts_operation_id=o.id))=2`, a, b, externalID).Scan(&strong)
-	if err == nil && !strong {
-		return operations.Conflict("no_strong_evidence", "两位艺人缺少唯一且一致的 MusicBrainz 对应")
-	}
-	return err
+	return strong, err
 }
 
-func checkArtistSeparation(ctx context.Context, tx *sql.Tx, a, b string) error {
-	var suppressed, manual bool
+func checkArtistSeparation(ctx context.Context, tx operations.Queryer, a, b string) error {
+	var suppressed, manual, together bool
 	err := tx.QueryRowContext(ctx, artistClosuresSQL+`, routed_keys AS (
  SELECT k.id,m.root FROM artist_name_keys k
  LEFT JOIN artist_name_bindings binding ON binding.key_id=k.id
@@ -106,9 +110,21 @@ func checkArtistSeparation(ctx context.Context, tx *sql.Tx, a, b string) error {
  AND EXISTS(SELECT 1 FROM operations_artist_targets tq JOIN members q ON q.id=tq.artist_id
  WHERE tq.operation_id=o.id AND q.root<>p.root))
  OR EXISTS(SELECT 1 FROM artist_candidate_ignores i JOIN routed_keys p ON p.id=i.left_key_id
- JOIN routed_keys q ON q.id=i.right_key_id WHERE p.root<>q.root)`, a, b).Scan(&suppressed, &manual)
+ JOIN routed_keys q ON q.id=i.right_key_id WHERE p.root<>q.root),
+ EXISTS (WITH credits AS (
+ SELECT c.track_id,c.layer,c.position,m.root FROM artist_credits c JOIN tracks t ON t.id=c.track_id JOIN media medium ON medium.id=t.medium_id
+ JOIN artist_names n ON n.id=c.name_id JOIN artist_name_keys k ON k.id=n.key_id
+ LEFT JOIN artist_assignment_overrides ta ON ta.track_id=t.id AND ta.key_id=k.id
+ LEFT JOIN artist_assignment_overrides ra ON ra.release_id=medium.release_id AND ra.key_id=k.id
+ LEFT JOIN artist_name_bindings binding ON binding.key_id=k.id
+ JOIN members m ON m.id=COALESCE(ta.artist_id,ra.artist_id,binding.artist_id,k.initial_artist_id)
+ WHERE c.role='track_artist')
+ SELECT FROM credits x JOIN credits y USING(track_id,layer) WHERE x.root<>y.root AND x.position<>y.position)`, a, b).Scan(&suppressed, &manual, &together)
 	if err != nil {
 		return err
+	}
+	if together {
+		return operations.Conflict("no_strong_evidence", "两位艺人曾在同一曲目并列署名")
 	}
 	if suppressed {
 		return operations.Conflict("nothing_to_apply", "这两位艺人已标记不再自动合并")

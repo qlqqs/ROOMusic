@@ -235,7 +235,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		return valid, err
 	})
 	api.Register(mux)
-	return supervisor, backgroundLauncher{api: api, store: store, sources: configuration.sources}
+	return supervisor, backgroundLauncher{api: api, store: store, sources: configuration.sources, web: webService}
 }
 
 // withCurrentStewardUser 在预览及实际调用前重读身份，覆盖长对话、确认后执行与 MCP。
@@ -312,7 +312,7 @@ func reviewTargetInput(ctx context.Context, db *sql.DB, item runtime.PlanItem) (
 			}
 		}
 		return json.Marshal(map[string]string{"release_id": in.TargetID, "merge_source_release_id": in.SourceID})
-	case "resolve_artist_identity":
+	case "resolve_artist_identity", "submit_artist_media":
 		var in struct {
 			ItemID string `json:"item_id"`
 			Basis  struct {
@@ -338,7 +338,7 @@ func reviewTargetInput(ctx context.Context, db *sql.DB, item runtime.PlanItem) (
 			"artist_id":       artistID,
 			"artist_identity": map[string]any{"source": "program_untrusted_external", "data": evidence, "citations": in.Basis.Citations},
 		})
-	case "resolve_release_match":
+	case "resolve_release_match", "submit_verification":
 		var input struct {
 			ItemID string `json:"item_id"`
 		}
@@ -346,14 +346,15 @@ func reviewTargetInput(ctx context.Context, db *sql.DB, item runtime.PlanItem) (
 			return nil, err
 		}
 		var releaseID string
-		err := db.QueryRowContext(ctx, `SELECT target_id::text FROM curation_pending_items WHERE id=$1::uuid AND target_type='release'`, input.ItemID).Scan(&releaseID)
+		var artistID string
+		err := db.QueryRowContext(ctx, `SELECT COALESCE(target_id::text,''),COALESCE(artist_id::text,'') FROM curation_pending_items WHERE id=$1::uuid`, input.ItemID).Scan(&releaseID, &artistID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, runtime.ErrReviewUnavailable
 		}
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(map[string]string{"release_id": releaseID})
+		return json.Marshal(map[string]string{"release_id": releaseID, "artist_id": artistID})
 	default:
 		if !catalogtools.SupportsReviewEvidence(item.Tool) {
 			return nil, runtime.ErrReviewEvidenceUnsupported

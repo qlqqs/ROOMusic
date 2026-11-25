@@ -23,6 +23,7 @@ type Source struct {
 }
 
 type Request struct {
+	verification                *verificationWrite
 	ExpectedRevision            int64
 	ConfirmedBy, ConversationID string
 	OnlyEmpty                   bool
@@ -149,6 +150,11 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 		if err := checkWrite(ctx, tx, spec, request.ConfirmedBy, releaseID, request.ExpectedRevision, locked.EditRevision()); err != nil {
 			return operations.Outcome{}, err
 		}
+		if request.verification != nil {
+			if err := request.verification.check(ctx, tx); err != nil {
+				return operations.Outcome{}, err
+			}
+		}
 		if request.ExpectedRevision != 0 && request.Source.Kind == "model" {
 			manual, err := loadManualFields(ctx, tx, target, id)
 			if err != nil {
@@ -174,7 +180,10 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 		}
 		applied.OperationID = operationID
 		out.Response = applied
-		return out, nil
+		if request.verification != nil {
+			err = request.verification.finish(ctx, tx, operationID)
+		}
+		return out, err
 	})
 	if err != nil {
 		var failure *operations.Failure

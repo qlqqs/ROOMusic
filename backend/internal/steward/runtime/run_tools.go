@@ -37,11 +37,14 @@ func (s *runState) executeCalls(ctx context.Context, calls []provider.ToolCall, 
 					} else {
 						preview, err = s.registry.PreviewCall(ctx, caller, call.Name, call.Arguments)
 					}
-					if err == nil {
+					if err == nil && s.params.Background && preview.BackgroundDirect {
+						caller.SharedExecution = true
+					} else if err == nil {
 						pending = append(pending, PlanItem{Tool: call.Name, CallID: call.ID, ToolCallID: stored[i].ID, Position: stored[i].Position, Input: call.Arguments, Preview: preview, Revertible: definition.Revertible, IdempotencyKey: stored[i].IdempotencyKey, Untrusted: stored[i].Untrusted})
 						continue
 					}
-				} else {
+				}
+				if err == nil {
 					output, err = s.invokeWithReconciliation(ctx, caller, call.Name, call.Arguments)
 					if s.definitions[call.Name].Scope == tool.ScopeShared && databaseUnavailable(err) && ctx.Err() == nil {
 						// 原键对账后仍不确定，停止模型续跑，不保存确定失败的工具结果。

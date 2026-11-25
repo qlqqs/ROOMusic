@@ -294,7 +294,7 @@ func TestBackgroundBeforeStepStopsAfterToolAndSkipsMemory(t *testing.T) {
 	assertReleased(t, store, p)
 }
 
-func TestBackgroundUsageAndReviewEscalation(t *testing.T) {
+func Test后台审查未采用时记录用量和建议(t *testing.T) {
 	store := &backgroundRunStore{}
 	store.detail.Conversation.Mode = "steward"
 	store.detail.Messages = c10History(t, summaryInputThreshold+1)
@@ -377,13 +377,12 @@ func TestBackgroundUsageAndReviewEscalation(t *testing.T) {
 		t.Errorf("Escalate=%v，期望 %v", escalations, want)
 	}
 	plan := store.detail.Plans[0]
-	for i, want := range []struct{ decision, code string }{{"escalated", "escalated_to_human"}, {"rejected_by_review", "rejected_by_review"}} {
-		item := plan.Items[i]
+	for _, item := range plan.Items {
 		var output struct {
 			Code        string `json:"code"`
 			ExceptionID string `json:"exception_id"`
 		}
-		if err := json.Unmarshal(item.Result, &output); err != nil || item.Decision != want.decision || output.Code != want.code || output.ExceptionID != "exception-"+item.ID {
+		if err := json.Unmarshal(item.Result, &output); err != nil || item.Decision != "rejected_by_review" || output.Code != "rejected_by_review" || output.ExceptionID != "exception-"+item.ID {
 			t.Errorf("方案项 %s decision=%s result=%s err=%v", item.ID, item.Decision, item.Result, err)
 		}
 	}
