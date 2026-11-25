@@ -1,4 +1,4 @@
-import { PencilLine, Sparkles, TriangleAlert } from "lucide-react";
+import { PencilLine, TriangleAlert, Wand } from "lucide-react";
 import { useId, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { failureOf, isHttpFailure, isOutcomeUncertain } from "../../../shared/api";
@@ -71,7 +71,7 @@ function FieldEditor({ field, draft, error, disabled, onChange }: { field: Track
           <p className={styles.fact}>
             <span className={styles.factLabel}>自动补全</span>
             <span className={styles.factValue}>{field.auto.value}</span>
-            <StatusTag tone="neutral" icon={<Sparkles size={12} />}>
+            <StatusTag tone="neutral" icon={<Wand size={12} />}>
               {sourceName(field.auto.provider)}
             </StatusTag>
           </p>

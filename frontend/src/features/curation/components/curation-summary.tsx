@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Sparkles } from "lucide-react";
+import { Wand } from "lucide-react";
 import { useState } from "react";
 import { formatCount } from "../../../shared/lib/number";
 import { Button, Notice, PendingStatusRow, StatusRow } from "../../../shared/ui";
@@ -11,7 +11,7 @@ import { useCurationProgress, useCurationSettings } from "../hooks/use-curation"
 import { processedRatio } from "./curation-progress-section";
 import styles from "./curation-sections.module.css";
 
-const icon = <Sparkles size={16} />;
+const icon = <Wand size={16} />;
 
 /**
  * 概览“资料库状态”里的自动整理一行（管理员）：未打开写“未打开”；打开后写状态与“已处理 N / M 个发行”，右侧是百分比；整行链接到设置。

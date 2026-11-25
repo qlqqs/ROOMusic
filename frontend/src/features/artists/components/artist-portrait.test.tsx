@@ -18,7 +18,7 @@ it.each<{ image: ArtistImageDTO | null; sourceName: string; kind: string; glyph:
   { image: artistImage, sourceName: "Wikimedia Commons · CC BY 4.0", kind: "licensed", glyph: "book-open" },
   { image: { ...artistImage, source: "plugin:synthetic-media", license: null }, sourceName: "插件 synthetic-media", kind: "plugin", glyph: "puzzle" },
   { image: manualDetail.image, sourceName: "管理员提供", kind: "manual", glyph: "user-round-pen" },
-  { image: { ...artistImage, source: "web_search", license: null }, sourceName: "网络搜索", kind: "web", glyph: "sparkles" },
+  { image: { ...artistImage, source: "web_search", license: null }, sourceName: "网络搜索", kind: "web", glyph: "globe" },
 ])("显示 $sourceName 的印章、图标与悬停提示", async ({ image, sourceName, kind, glyph }) => {
   const user = userEvent.setup();
   render(<ArtistPortrait artist={artist} image={image} links={links} media={null} />);

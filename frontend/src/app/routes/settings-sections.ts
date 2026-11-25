@@ -1,4 +1,4 @@
-import { AudioLines, BarChart3, Bot, DatabaseBackup, FolderSearch, History, Info, MonitorSmartphone, Speaker, Sparkles, UserRound, Users, type LucideIcon } from "lucide-react";
+import { AudioLines, BarChart3, Bot, DatabaseBackup, FolderSearch, History, Info, MonitorSmartphone, Speaker, UserRound, Users, Wand, type LucideIcon } from "lucide-react";
 import type { UserRole } from "../../features/auth";
 
 export type SettingsSection = {
@@ -20,7 +20,7 @@ export const settingsSections: readonly SettingsSection[] = [
   { to: "/settings/about", label: "关于", icon: Info, adminOnly: false },
   { to: "/settings/library", label: "音乐目录", icon: FolderSearch, adminOnly: true, group: "管理", wide: true },
   { to: "/settings/members", label: "成员", icon: Users, adminOnly: true, group: "管理" },
-  { to: "/settings/curation", label: "自动整理", icon: Sparkles, adminOnly: true, group: "管理" },
+  { to: "/settings/curation", label: "自动整理", icon: Wand, adminOnly: true, group: "管理" },
   { to: "/settings/devices", label: "局域网设备", icon: Speaker, adminOnly: true, group: "管理" },
   { to: "/settings/clients", label: "第三方客户端", icon: MonitorSmartphone, adminOnly: true, group: "管理" },
   { to: "/settings/operations", label: "操作记录", icon: History, adminOnly: true, group: "管理" },

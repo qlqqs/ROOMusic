@@ -1,4 +1,4 @@
-import { PencilLine, Sparkles, TriangleAlert } from "lucide-react";
+import { PencilLine, TriangleAlert, Wand } from "lucide-react";
 import { sourceName } from "../change-summary";
 import { useId, useMemo, useRef, useState, type RefObject } from "react";
 import { failureOf, isHttpFailure } from "../../../shared/api";
@@ -68,7 +68,7 @@ function FieldEditor({ field, draft, error, disabled, onChange }: FieldEditorPro
             <p className={styles.fact}>
               <span className={styles.factLabel}>当前显示</span>
               <span className={styles.factValue}>{displayValue(field.effective_value)}</span>
-              <StatusTag tone="neutral" icon={<Sparkles size={12} />}>
+              <StatusTag tone="neutral" icon={<Wand size={12} />}>
                 自动补全 · {sourceName(field.auto.provider)}
               </StatusTag>
             </p>
