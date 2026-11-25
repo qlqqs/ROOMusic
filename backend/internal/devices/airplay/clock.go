@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/bits"
 	"time"
 
@@ -96,10 +97,16 @@ func (s *Sender) replaceWithNTP(old *mediaSession, cause error) error {
 		return err
 	}
 	s.media = m
+	s.heartbeatFailures = 0
 	s.protocol, s.timing, s.fallback = m.protocol, m.timingProtocol(), errors.Join(cause, m.fallback)
 	s.next = time.Time{}
 	s.flights = nil
 	s.played = s.sent
+	slog.Warn("AirPlay 播放中失去 PTP 时钟，已用 NTP 重建会话", "event", "airplay.sender.fallback", "module", "airplay", "udn", s.device.Key, "error", s.fallback)
+	select {
+	case s.fallbacks <- s.fallback:
+	default:
+	}
 	s.signal()
 	return nil
 }
