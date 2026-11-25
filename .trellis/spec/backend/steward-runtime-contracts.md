@@ -500,6 +500,8 @@ UUID 校验格式并转小写；分页默认 `page=1/page_size=20`，页码最�
 | personal / `list_playlists` | read | 分页；`Playlists` → `{items,pagination}` |
 | personal / `get_playlist` | read | `playlist_id`*、分页；`PlaylistItems` → `{playlist,items,pagination,page_after_item_id}`，playlist 含 revision |
 | personal / `set_favorite` | personal | `kind`*：track/album/artist、`target_id`*、`favorited`*；album 的 ID 是专辑组；`SetFavorite` → 收藏状态与 revision |
+| personal / `list_ratings` | read | `kind`*：track/album/artist、`min_rating`（1–5）、`sort`（rating/recent）、分页（默认 20、最大 50）；`RatedTracks/Albums/Artists` → `{items,pagination}`（2026-11-25） |
+| personal / `set_rating` | personal | `kind`*、`target_id`*、`rating`*（0–5，0 清除）；`SetRating` → `{target_kind,target_id,rating,rated_at}`，未知目标 `not_found`（2026-11-25） |
 | personal / `create_playlist` | personal | `name`*（去空白后 1–100 字符）、可选 `track_ids`（最多 10,000）；`Execute(create)` → playlist 与 added/existing/duplicate_count |
 | personal / `rename_playlist` | personal | `playlist_id`*、`expected_revision`*、`name`*；`Execute(rename)` → `{playlist,changed}` |
 | personal / `delete_playlist` | personal | `playlist_id`*、`expected_revision`*；`Execute(delete)` → `{playlist_id,deleted}` |

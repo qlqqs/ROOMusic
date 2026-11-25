@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_rating",
+      "message": "最低评分须为 1 至 5 的整数"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

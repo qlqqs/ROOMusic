@@ -18,18 +18,27 @@ type RatingResult struct {
 }
 
 func (s *Service) SetRating(ctx context.Context, userID, kind, targetID string, rating int) (RatingResult, error) {
+	return s.setTypedRating(ctx, userID, kind, targetID, rating, false)
+}
+
+// SetRatingForExistingTarget 与 SetRating 共用写入流程，清除时也校验目录目标。
+func (s *Service) SetRatingForExistingTarget(ctx context.Context, userID, kind, targetID string, rating int) (RatingResult, error) {
+	return s.setTypedRating(ctx, userID, kind, targetID, rating, true)
+}
+
+func (s *Service) setTypedRating(ctx context.Context, userID, kind, targetID string, rating int, requireTarget bool) (RatingResult, error) {
 	if kind != "track" && kind != "album" && kind != "artist" {
 		return RatingResult{}, ErrInvalidInput
 	}
-	return s.setRating(ctx, userID, kind, targetID, rating)
+	return s.setRating(ctx, userID, kind, targetID, rating, requireTarget)
 }
 
 // SetRatingByID 接受客户端的无类型身份；包括清除在内，均须先找到目录目标。
 func (s *Service) SetRatingByID(ctx context.Context, userID, targetID string, rating int) (RatingResult, error) {
-	return s.setRating(ctx, userID, "", targetID, rating)
+	return s.setRating(ctx, userID, "", targetID, rating, false)
 }
 
-func (s *Service) setRating(ctx context.Context, userID, kind, targetID string, rating int) (RatingResult, error) {
+func (s *Service) setRating(ctx context.Context, userID, kind, targetID string, rating int, requireTarget bool) (RatingResult, error) {
 	ids, err := normalizeIDs([]string{targetID}, 1)
 	if err != nil || rating < 0 || rating > 5 {
 		return RatingResult{}, ErrInvalidInput
@@ -60,7 +69,7 @@ func (s *Service) setRating(ctx context.Context, userID, kind, targetID string, 
 		}
 		if canonical, ok := resolved[targetID]; ok {
 			result.ResolvedArtistID = &canonical
-		} else if rating != 0 {
+		} else if rating != 0 || requireTarget {
 			return RatingResult{}, ErrNotFound
 		}
 	}
@@ -74,7 +83,7 @@ func (s *Service) setRating(ctx context.Context, userID, kind, targetID string, 
 			ratedAt, err = writeArtistRating(ctx, tx, userID, targetID, *result.ResolvedArtistID, rating)
 		}
 	case "track", "album":
-		ratedAt, err = writeMediaRating(ctx, tx, s.catalogFor(tx), userID, kind, targetID, rating)
+		ratedAt, err = writeMediaRating(ctx, tx, s.catalogFor(tx), userID, kind, targetID, rating, requireTarget)
 	}
 	if err != nil {
 		return RatingResult{}, err
@@ -89,7 +98,7 @@ func (s *Service) setRating(ctx context.Context, userID, kind, targetID string, 
 	return result, nil
 }
 
-func writeMediaRating(ctx context.Context, tx *sql.Tx, source Catalog, user, kind, id string, rating int) (time.Time, error) {
+func writeMediaRating(ctx context.Context, tx *sql.Tx, source Catalog, user, kind, id string, rating int, requireTarget bool) (time.Time, error) {
 	table, column := "rating_tracks", "track_id"
 	if kind == "album" {
 		table, column = "rating_albums", "group_id"
@@ -97,6 +106,17 @@ func writeMediaRating(ctx context.Context, tx *sql.Tx, source Catalog, user, kin
 	var at time.Time
 	where := " WHERE user_id=$1 AND " + column + "=$2"
 	if rating == 0 {
+		if requireTarget {
+			var err error
+			if kind == "track" {
+				err = requireTrack(ctx, source, id)
+			} else {
+				_, err = loadAlbumSnapshot(ctx, source, id)
+			}
+			if err != nil {
+				return at, err
+			}
+		}
 		_, err := tx.ExecContext(ctx, "DELETE FROM "+table+where, user, id)
 		return at, err
 	}

@@ -1,4 +1,4 @@
-// Package stewardtools 将本人收藏与歌单服务适配为管家工具。
+// Package stewardtools 将本人收藏、评分与歌单服务适配为管家工具。
 package stewardtools
 
 import (
@@ -19,14 +19,18 @@ const revisionProperty = `"expected_revision":{"type":"integer","minimum":1,"max
 const tracksProperty = `"track_ids":{"type":"array","items":` + idSchema + `}`
 const nameProperty = `"name":{"type":"string","minLength":1,"maxLength":100}`
 const kindProperty = `"kind":{"type":"string","enum":["track","album","artist"]}`
+const ratingFilterProperties = `"min_rating":{"type":"integer","minimum":1,"maximum":5},"sort":{"type":"string","enum":["rating","recent"]}`
 
 type input struct {
 	personal.Command
-	Kind      string `json:"kind"`
-	TargetID  string `json:"target_id"`
-	Favorited bool   `json:"favorited"`
-	Page      int    `json:"page"`
-	PageSize  int    `json:"page_size"`
+	Kind      string  `json:"kind"`
+	TargetID  string  `json:"target_id"`
+	Favorited bool    `json:"favorited"`
+	Rating    float64 `json:"rating"`
+	MinRating float64 `json:"min_rating"`
+	Sort      string  `json:"sort"`
+	Page      int     `json:"page"`
+	PageSize  int     `json:"page_size"`
 }
 
 func definition(name, description, properties, required string, scope tool.Scope, run func(context.Context, string, input) (any, error)) tool.Definition {
@@ -117,6 +121,18 @@ func StewardTools(service *personal.Service) []tool.Definition {
 					return service.FavoriteArtists(ctx, user, page)
 				}
 			}),
+		definition("list_ratings", "列出本人评过分的曲目、专辑或艺人。kind 为 track、album 或 artist。min_rating 筛选最低星级（1 至 5，默认 1），sort 为 rating（高分优先，默认）或 recent（最近评分优先）。page 默认 1，page_size 默认 20、最大 50。返回 items、pagination。", kindProperty+`,`+ratingFilterProperties+`,`+pageProperties, `"kind"`, tool.ScopeRead,
+			func(ctx context.Context, user string, p input) (any, error) {
+				params := personal.RatedListParams{MinRating: int(p.MinRating), Sort: p.Sort, Page: personal.Page{Number: p.Page, Size: p.PageSize}}
+				switch p.Kind {
+				case "track":
+					return service.RatedTracks(ctx, user, params)
+				case "album":
+					return service.RatedAlbums(ctx, user, params)
+				default:
+					return service.RatedArtists(ctx, user, params)
+				}
+			}),
 		definition("list_playlists", "列出本人的歌单，返回 items 与 pagination。page 默认 1，page_size 默认及最大 20。", strings.Replace(pageProperties, `"maximum":50`, `"maximum":20`, 1), "", tool.ScopeRead,
 			func(ctx context.Context, user string, p input) (any, error) {
 				return service.Playlists(ctx, user, personal.Page{Number: p.Page, Size: p.PageSize})
@@ -128,6 +144,12 @@ func StewardTools(service *personal.Service) []tool.Definition {
 		definition("set_favorite", "收藏或取消收藏。kind 为 track、album、artist，target_id 分别是曲目、专辑组、艺人 UUID，favorited 指定目标状态。返回收藏状态与 revision。", kindProperty+`,"target_id":`+idSchema+`,"favorited":{"type":"boolean"}`, `"kind","target_id","favorited"`, tool.ScopePersonal,
 			func(ctx context.Context, user string, p input) (any, error) {
 				return service.SetFavorite(ctx, user, p.Kind, p.TargetID, p.Favorited)
+			}),
+		definition("set_rating", "设置本人的评分。kind 为 track、album 或 artist，target_id 分别为曲目、专辑组、艺人 UUID。rating 为 1 至 5 星，0 表示清除。返回 target_kind、target_id、rating、rated_at，清除后后两项为 null。", kindProperty+`,"target_id":`+idSchema+`,"rating":{"type":"integer","minimum":0,"maximum":5}`, `"kind","target_id","rating"`, tool.ScopePersonal,
+			func(ctx context.Context, user string, p input) (any, error) {
+				result, err := service.SetRatingForExistingTarget(ctx, user, p.Kind, p.TargetID, int(p.Rating))
+				result.ResolvedArtistID = nil
+				return result, err
 			}),
 		definition("create_playlist", "创建本人歌单，name 必填，可附 track_ids（最多 10000）。返回 playlist 与加入、已有、重复数量。", nameProperty+`,`+tracksProperty, `"name"`, tool.ScopePersonal, write(service, "create")),
 		definition("rename_playlist", "修改本人歌单名称。expected_revision 来自 get_playlist；返回 playlist 与 changed，版本冲突时重读歌单。", playlistProperty+`,`+revisionProperty+`,`+nameProperty, `"playlist_id","expected_revision","name"`, tool.ScopePersonal, write(service, "rename")),
