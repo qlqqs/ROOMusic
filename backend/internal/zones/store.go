@@ -55,6 +55,7 @@ type PersistedZone struct {
 	Queue           queue.State
 	PositionSeconds float64
 	PositionSavedAt time.Time
+	LastPlayedAt    *time.Time
 	Settings        PlaybackSettings
 	Revision        int64
 	QueueRevision   int64
@@ -127,12 +128,12 @@ UPDATE playback_zones SET
  history=COALESCE($7::text[]::uuid[], '{}'::uuid[]),
  shuffle_bag=COALESCE($8::text[]::uuid[], '{}'::uuid[]),
  leveling=$9, crossfade=$10, crossfade_seconds=$11, gapless=$12, quality=$13,
- revision=$14, queue_revision=$15, imported_at=$16, headroom=$17::jsonb, sample_rate=$18::jsonb, downmix=$19::jsonb, peq=$20::jsonb, convolution=$21::jsonb
+ revision=$14, queue_revision=$15, imported_at=$16, headroom=$17::jsonb, sample_rate=$18::jsonb, downmix=$19::jsonb, peq=$20::jsonb, convolution=$21::jsonb, last_played_at=$22
 WHERE user_id=$1::uuid AND id=$2::uuid`,
 		userID, zone.ZoneID, zone.Queue.Mode, zone.Queue.CurrentEntryID,
 		zone.PositionSeconds, zone.PositionSavedAt, zone.Queue.History, zone.Queue.Bag,
 		zone.Settings.Leveling, zone.Settings.Crossfade, zone.Settings.CrossfadeSeconds,
-		zone.Settings.Gapless, zone.Settings.Quality, zone.Revision, zone.QueueRevision, zone.ImportedAt, headroom, sampleRate, downmix, peq, convolution)
+		zone.Settings.Gapless, zone.Settings.Quality, zone.Revision, zone.QueueRevision, zone.ImportedAt, headroom, sampleRate, downmix, peq, convolution, zone.LastPlayedAt)
 	if err != nil {
 		return fmt.Errorf("update playback zone: %w", err)
 	}

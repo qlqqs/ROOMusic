@@ -356,6 +356,7 @@ func (s *Service) zoneOf(z *zoneRuntime, tracks map[string]catalog.TrackSummary)
 	p := z.persisted
 	out := Zone{ZoneID: p.ZoneID, DeviceID: p.DeviceID, Revision: p.Revision, QueueRevision: p.QueueRevision, QueueLength: len(p.Queue.Entries), Mode: p.Queue.Mode, Settings: settingsOf(p.Settings), Intent: z.intent, Status: z.status, Fault: cloneValue(z.fault), Failures: append([]Failure{}, z.failures...), PausedAt: cloneValue(z.pausedAt), Stream: cloneStream(z.stream), NextStream: cloneStream(z.nextStream), Event: cloneZoneEvent(z.event), Position: Position{Seconds: p.PositionSeconds, At: timestamp(p.PositionSavedAt)}}
 	out.Group = z.zoneGroup()
+	out.LastPlayedAt = cloneValue(p.LastPlayedAt)
 	if z.signal != nil {
 		out.Signal = append(json.RawMessage(nil), z.signal...)
 	}

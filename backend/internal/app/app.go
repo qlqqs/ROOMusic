@@ -434,6 +434,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	subsonicapi.Register(mux, subsonic, guard, buildinfo.Current().Version, subsonicapi.Browse{
 		Catalog: catalog.NewStore(database), Personal: personalService, Listening: listeningService,
 		ReadArtwork: readArtwork, DataDirectory: settings.DataDirectory,
+		Zones: zonesService,
 	})
 	identityapi.New(database, guard, assembly.loginThrottle, logger).WithPasswordObserver(subsonic).WithSessionRevoked(func(userID string) {
 		subsonic.Forget(userID)

@@ -75,11 +75,14 @@ func (s *Service) RenameDevice(ctx context.Context, userID, deviceID, name strin
 		return nil
 	})
 }
-func (s *Service) SetVolume(ctx context.Context, userID, deviceID string, volume float64, muted bool) (DeviceResult, error) {
+func (s *Service) SetVolume(ctx context.Context, userID, deviceID string, volume float64, muted bool, expectedRevision ...int64) (DeviceResult, error) {
 	if !validID(deviceID) || !finite(volume) || volume < 0 || volume > 1 {
 		return DeviceResult{}, ErrInvalidInput
 	}
 	return s.updateDevice(ctx, userID, deviceID, func(z *zoneRuntime, d *PersistedDevice) error {
+		if len(expectedRevision) != 0 && (z.persisted.Revision != expectedRevision[0] || d.Muted != muted) {
+			return ErrRevisionConflict
+		}
 		if d.Capabilities.Volume == "fixed" {
 			return ErrVolumeFixed
 		}

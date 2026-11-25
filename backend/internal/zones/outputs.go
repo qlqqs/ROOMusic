@@ -258,6 +258,10 @@ func (s *Service) ReportOutput(ctx context.Context, userID, sessionID string, in
 		p.PositionSeconds = 0
 		p.PositionSavedAt = now
 	}
+	if apply && in.Kind == "status" && in.Status == "playing" && handle != nil &&
+		z.intent == "play" && z.rebuild == nil && (z.status != "playing" || promote) {
+		p.LastPlayedAt = &now
+	}
 	if apply || !z.online {
 		p.Revision++
 	}

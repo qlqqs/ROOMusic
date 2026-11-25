@@ -80,6 +80,9 @@ type Response struct {
 	Genres        *Genres       `xml:"genres,omitempty" json:"genres,omitempty"`
 	ArtistInfo2   *ArtistInfo   `xml:"artistInfo2,omitempty" json:"artistInfo2,omitempty"`
 	AlbumInfo     *AlbumInfo    `xml:"albumInfo,omitempty" json:"albumInfo,omitempty"`
+
+	JukeboxStatus   *JukeboxStatus   `xml:"jukeboxStatus,omitempty" json:"jukeboxStatus,omitempty"`
+	JukeboxPlaylist *JukeboxPlaylist `xml:"jukeboxPlaylist,omitempty" json:"jukeboxPlaylist,omitempty"`
 }
 
 func Failure(code int, message string) Response {
