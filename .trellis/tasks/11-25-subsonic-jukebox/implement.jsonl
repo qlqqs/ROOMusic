@@ -7,3 +7,4 @@
 {"file": ".trellis/spec/backend/playback-zone-service-contracts.md", "reason": "播放区服务层"}
 {"file": ".trellis/spec/backend/zones-data-contracts.md", "reason": "播放区数据"}
 {"file": ".trellis/tasks/11-25-subsonic-jukebox/prd.md", "reason": "本子任务需求"}
+{"file": ".trellis/spec/backend/subsonic-contracts.md", "reason": "Subsonic 已有接口、实体转换与测试约定"}

@@ -34,3 +34,11 @@
 
 - 抽取 render 单曲路径是本任务风险最大的改动，单独提交，方便回退。
 - 本机 ffmpeg 可能没有 `libmp3lame`。测试按 `HasEncoder` 跳过并如实记录，生产镜像需要确认带有该编码器。
+
+## 开工时的现状（2026-11-25，browse 已合入）
+
+- 协议实体转换在 `backend/internal/subsonic/entities.go`：`Song`、`Album`、`Artist(…, subsonic.PersonalState)`。输出歌曲、专辑、艺人一律用它们，不另写转换。
+- 本人状态在 `backend/internal/subsonic/httpapi/browse_ratings.go` 的 `ratedEntities` 里批量读取，同一响应只读一次，按 ID 取回，不按位置对齐。新接口输出实体时也走它。
+- 接口约定、错误码与测试清单见 `.trellis/spec/backend/subsonic-contracts.md`。处理器的依赖通过 `httpapi.Browse` 注入（`app.go`）；需要新依赖就在这个结构上加字段。
+- personal、stream、jukebox 三个子任务并行，都会改 `routes.go` 的接口表、`app.go` 的注入和 `dependency_rules_test.go`，合入时的冲突由主代理解决。迁移编号已预先分配：jukebox 用 0084，stream 需要迁移时用 0085，personal 不加迁移。
+- `getNowPlaying` 的条目是歌曲，用 `subsonic.Song` 并走 `ratedEntities` 带上本人状态。

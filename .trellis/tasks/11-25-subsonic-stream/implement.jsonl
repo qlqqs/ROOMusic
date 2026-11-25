@@ -13,3 +13,4 @@
 {"file": ".trellis/spec/backend/zones-data-contracts.md", "reason": "播放区设置文档与默认值"}
 {"file": ".trellis/spec/backend/convolution-contracts.md", "reason": "房间校正"}
 {"file": ".trellis/spec/backend/peq-contracts.md", "reason": "均衡"}
+{"file": ".trellis/spec/backend/subsonic-contracts.md", "reason": "Subsonic 已有接口、实体转换与测试约定"}

@@ -28,3 +28,11 @@
 
 - `go test ./internal/subsonic/... ./internal/personal/... -run 'Subsonic|Star|Playlist|Lyrics'`
 - 集成测试用 `ROOMUSIC_TEST_RUN` 收窄。
+
+## 开工时的现状（2026-11-25，browse 已合入）
+
+- 协议实体转换在 `backend/internal/subsonic/entities.go`：`Song`、`Album`、`Artist(…, subsonic.PersonalState)`。输出歌曲、专辑、艺人一律用它们，不另写转换。
+- 本人状态在 `backend/internal/subsonic/httpapi/browse_ratings.go` 的 `ratedEntities` 里批量读取，同一响应只读一次，按 ID 取回，不按位置对齐。新接口输出实体时也走它。
+- 接口约定、错误码与测试清单见 `.trellis/spec/backend/subsonic-contracts.md`。处理器的依赖通过 `httpapi.Browse` 注入（`app.go`）；需要新依赖就在这个结构上加字段。
+- personal、stream、jukebox 三个子任务并行，都会改 `routes.go` 的接口表、`app.go` 的注入和 `dependency_rules_test.go`，合入时的冲突由主代理解决。迁移编号已预先分配：jukebox 用 0084，stream 需要迁移时用 0085，personal 不加迁移。
+- `starred`：本任务负责接上。在 `ratedEntities` 里同一次批量读取中用 `personal.LookupFavorites` 补 `PersonalState.StarredAt`（艺人按收藏的锚点规则），函数可改名为 `personalEntities`。浏览类接口因此都带 `starred`。`getCoverArt` 已支持 `pl-<歌单 ID>`，`getPlaylists` / `getPlaylist` 的 `coverArt` 直接用这个格式。

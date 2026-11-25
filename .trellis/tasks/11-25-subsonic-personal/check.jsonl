@@ -2,3 +2,4 @@
 {"file": ".trellis/spec/backend/database-verification.md", "reason": "数据库验证方法"}
 {"file": ".trellis/tasks/11-25-opensubsonic-api/design.md", "reason": "协议约定核对"}
 {"file": ".trellis/tasks/11-25-subsonic-personal/prd.md", "reason": "验收标准"}
+{"file": ".trellis/spec/backend/subsonic-contracts.md", "reason": "Subsonic 已有接口、实体转换与测试约定"}
