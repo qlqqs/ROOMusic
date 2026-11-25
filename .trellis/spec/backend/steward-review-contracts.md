@@ -10,6 +10,10 @@
 依据：[ADR 0005](../../../docs/architecture/adr/0005-steward-data-and-egress.md) §4.4、§6、§7；
 [C6 运行时合同](./steward-runtime-contracts.md#c6-共享写入与确认合同)。
 
+待修订（整理链重构，[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 16.6 节，2026-11-25 批准，尚未实现，由子任务 E 落地）：
+后台运行里模型选定或提交的外部编号，通过完整结构核对的不再送审；“后台转人工确认与未通过审查的项均生成例外，交由管理员处理”
+改为不写入、该项结束，记为未采用的建议。对话里的 `steward` 模式不变。改动时策略版本升级，并同步下文的策略全文。
+
 ## 2. 签名与存储
 
 - `RunParams.ReviewModel string`：空值使用本次对话模型；`ReviewPlanID string`：入口指定的待重新审查方案。

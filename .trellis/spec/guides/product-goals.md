@@ -68,6 +68,15 @@ M7（外部数据源与自动整理）把上面这条分工延伸到扫描之后
 
 在各子任务实现之前，本文其余部分描述的仍是现状：运行只由登录用户发起，外部产出不会自动写入。
 
+2026-11-25 修订（整理链重构，[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 16 节，分步实施，尚未实现）：
+
+- 结局只有三种：自动写入（可撤销）、保持本地原样、稍后自动重试。不再有等管理员处理的例外；审查拿不准或不通过的项不写入、该项结束，
+  记为“未采用的建议”，可以查看和手动采纳，不计待办。上面“人只处理模型上交或判断不了的”与“例外等管理员处理”两句由此取代。
+- 模型的产出写入前由后端核对，依据是结构、外部源、库内写法或带引用的网页；只有模型自己的判断不写入。
+- 独立审查的适用范围收窄：模型选定或提交的外部编号通过完整结构核对（曲目数相等、可比时长全部在容差内、曲目多于 4 首）的直接写入，
+  不另起审查；其余后台写入仍经独立审查。
+- 模型用量不是优化目标，限制模型只为防止写错与防止失控。
+
 ## Long-Term Change Management
 
 ROOMusic does not use runtime logs as a substitute for Git. Logs are ephemeral
@@ -150,6 +159,9 @@ These rules survive later phases and adapter changes:
   authoritative cross-directory merge.
   2026-11-22 起（[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 7 节，尚未实现）允许一种自动归组与合并的依据：已保存且生效的外部对应
   指向同一个外部对象。这是强证据，不是相似度；弱相似仍然只能产生候选。
+  2026-11-25 起（ADR 0006 第 16 节，尚未实现）另有两种依据：发行组级对应可以用于专辑归组与艺人对应；
+  艺人合并可依据外部登记的别名、库内佐证或带引用的网页加模型判断，并要求两个名字从未在同一首曲目上并列署名。
+  多个模型一致仍然只能产生候选；发行合并的依据不变。
 - A failed, canceled, offline, permission-denied, or incomplete scan cannot
   mark previously observed sources missing. Only a complete successful scan can
   perform negative reconciliation.
