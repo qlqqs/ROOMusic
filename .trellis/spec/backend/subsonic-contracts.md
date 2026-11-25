@@ -75,6 +75,7 @@ Subsonic 的 `p=` 登录成功**不**补写副本：只有网页入口知道该�
 | `getOpenSubsonicExtensions` | 只列已实现的扩展，骨架阶段只有 `formPost` v1；后续子任务实现 `songLyrics`、`transcodeOffset` 时再追加 |
 | `getMusicFolders` | 一个虚拟文件夹 `id=1`、`name="ROOMusic"` |
 | `getUser` | 只能查本人；`streamRole`、`downloadRole`、`jukeboxRole` 为 true，`folder=[1]` |
+| `setRating` | `id` 是曲目、专辑组或艺人（`personal.SetRatingByID` 判断类型）；`rating=0` 清除，1–5 设置。缺参数或非整数 → 10，整数越界 → 0，ID 不存在 → 70，失败都不写入。与网页端评分是同一份数据，见 `personal-contracts.md` §9 |
 
 ## 5. 鉴权
 

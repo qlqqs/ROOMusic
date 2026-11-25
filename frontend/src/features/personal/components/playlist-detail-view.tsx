@@ -19,6 +19,7 @@ import { PLAYLIST_ITEMS_PAGE_SIZE, usePlaylistCommands, usePlaylistDetail, usePl
 import { overLimitText, playlistDurationText, playlistMessages } from "../playlist-text";
 import { CollectionHero, SongsHeading } from "./collection-hero";
 import { FavoriteStatusScope } from "./favorite-status-scope";
+import { RatingStatusScope } from "./rating-status-scope";
 import { PlaylistCover } from "./playlist-cover";
 import { RenamePlaylistDialog } from "./rename-playlist-dialog";
 import { TrackTable, TrackTableRow } from "./track-table";
@@ -392,21 +393,23 @@ function PlaylistItems({ data, order, busy, renderTrackActions, actionsOf, onDro
   }
   return (
     <FavoriteStatusScope trackIds={trackIds}>
-      {/* DndContext 在表格外面：它在自己的位置渲染读屏说明与播报区，放进表体会让 rowgroup 里出现不是 row 的元素。 */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={dragEnd}
-        accessibility={{ announcements, screenReaderInstructions: { draggable: "按空格键拿起，用上下方向键移动，再按空格键放下；按 Esc 取消。" } }}
-      >
-        <TrackTable label="歌单曲目" sortable>
-          <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-            {rows.map((item) => (
-              <PlaylistRow key={item.id} item={item} disabled={busy} actions={renderTrackActions(item, actionsOf(item))} />
-            ))}
-          </SortableContext>
-        </TrackTable>
-      </DndContext>
+      <RatingStatusScope trackIds={trackIds}>
+        {/* DndContext 在表格外面：它在自己的位置渲染读屏说明与播报区，放进表体会让 rowgroup 里出现不是 row 的元素。 */}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={dragEnd}
+          accessibility={{ announcements, screenReaderInstructions: { draggable: "按空格键拿起，用上下方向键移动，再按空格键放下；按 Esc 取消。" } }}
+        >
+          <TrackTable label="歌单曲目" sortable>
+            <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+              {rows.map((item) => (
+                <PlaylistRow key={item.id} item={item} disabled={busy} actions={renderTrackActions(item, actionsOf(item))} />
+              ))}
+            </SortableContext>
+          </TrackTable>
+        </DndContext>
+      </RatingStatusScope>
     </FavoriteStatusScope>
   );
 }

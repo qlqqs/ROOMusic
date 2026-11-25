@@ -182,3 +182,44 @@ PUT/DELETE 不需幂等键。READ COMMITTED 事务先确保本人 state，再锁
 - `RefreshArtistResolution(ctx,tx,mapping map[string]string) error`由app注入治理/后台发布：按1000原ID分批，先收集全部受影响用户，再UUID升序锁state，完成全部解析刷新后每个实际变化用户revision仅+1；调用方持CATP且失败整体回滚。无私表跨界或内部提交。
 
 必测合并前双收藏→合并后单项/精确分页→取消所有等价锚点→restore旧ID恢复；两个用户隔离、不可用身份保留；解析刷新失败连治理记录回滚；整理期间空列表503和写409。错误做法是先分页后Go去重或逐批递增同用户版本；正确做法是数据库先聚合及全映射后统一递增。
+
+## 9. 评分（2026-11-25，迁移 0082）
+
+### 9.1 数据
+
+- `rating_tracks(user_id,track_id,rating,rated_at)`、`rating_albums(user_id,group_id,rating,rated_at,saved_title,saved_artist)`、`rating_artists(user_id,artist_id,resolved_artist_id,rating,rated_at)`；主键都是（用户，目标），`rating SMALLINT CHECK 1..5`，`rated_at` 默认 `clock_timestamp()`。目标外键 `ON DELETE RESTRICT`，用户删除级联。
+- 清除评分就是删除记录，没有 0 星行。专辑另存评分时的标题与艺人：专辑组不可用时不覆盖旧快照（同收藏）。艺人照艺人收藏保存原锚点与解析 ID。
+- 索引：各目标列、`rating_albums(user_id,rating DESC,rated_at DESC,group_id)`（highest）、`rating_artists(user_id,resolved_artist_id,rated_at DESC,artist_id)`。
+
+### 9.2 服务与接口
+
+- `(*Service).SetRating(ctx,userID,kind,targetID string,rating int) (RatingResult,error)`：`rating` 0 是清除，1–5 是设置；`SetRatingByID` 给 Subsonic 用，先经 `catalog.(*Store).PersonalTargetKind` 判断 ID 是曲目、专辑组还是艺人，找不到返回 `ErrNotFound`。
+- `LookupRatings(ctx,user,trackIDs,groupIDs,artistIDs)`、`HighestRatedAlbums(ctx,user,offset,limit)`（评分降序、评分时间新到旧、group_id）。
+- 网页端：
+
+| 方法与路径 | 请求 | 响应 |
+| --- | --- | --- |
+| `PUT /api/v1/me/ratings/{tracks\|albums\|artists}/{id}` | `{"rating":1..5}` | `{target_kind,target_id,resolved_artist_id?,rating,rated_at}` |
+| `DELETE` 同上 | 无体 | 同上，`rating`/`rated_at` 为 null |
+| `POST /api/v1/me/ratings/lookup` | 可选 `track_ids`/`group_ids`/`artist_ids`（10000/1000/1000） | `{tracks,albums,artists}`，按首次出现顺序去重，没有评分是 null；艺人项带 `resolved_artist_id` |
+
+- 错误矩阵沿用收藏：400 `invalid_input`/`invalid_json`、401、403 同源、404 `not_found`、409 `artist_catalog_not_ready`（艺人写）、503 `artist_catalog_preparing`（艺人读）/`database_unavailable`。
+
+### 9.3 锁与版本
+
+- 写评分与收藏共用每用户的 `personal_favorite_state` 行锁（先 CATP 或艺人写闸，再锁本人 state），但**不增加 `revision`**：评分写入不能让带旧版本号翻收藏列表返回 409。
+- 艺人评分：设置时改写本人所有等价锚点（同 `resolved_artist_id`）的评分与时间，再写入请求锚点；清除时删除全部等价锚点；读取时等价锚点取最近一次的评分。
+
+### 9.4 跟随整理
+
+- 扫描腾空组与治理合并都走 `albumfavorites`：按 CATP 之后**收藏与评分的用户并集**升序一次锁 state（`lockAlbumSources`），再分别搬收藏和评分；不能分两次加锁。目标已有评分时保留目标；多个来源搬到同一目标时取最近一次的评分。
+- 治理合并记录的前态新增 `Ratings []MergedAlbumRating`（`json:"ratings,omitempty"`），旧记录没有这个字段按空处理。撤销时按记录恢复来源评分，只删除“本次复制、且星数与时间仍与记录相同”的目标行：用户在合并之后改过的目标评分保留。
+- `RefreshArtistResolution` 同时刷新 `rating_artists.resolved_artist_id`；只有收藏变化的用户递增 `revision`（并检查 `MaxRevision`），只有评分变化的用户不递增。
+
+### 9.5 必测
+
+- 网页三类的设置、改值、清除与 lookup；Subsonic `setRating` 双向互通与错误不写入（AC1–AC2）。
+- highest 的排序、分页与用户隔离（AC3）；合并 A→B 的三类用户与旧格式记录的撤销（AC4）；扫描转移与失败整体回滚，用户同时有收藏与评分（AC5）；艺人合并显示最近评分、合并后设置再拆分两锚点都是新值（AC6）；带旧版本号翻收藏列表中间写评分不 409（AC8）。
+- 样本：`api-samples/ratings/*` 由 `TestPostgreSQLPersonalAPIResponseSamples` 录制，前端 `api-contract.test.ts` 登记。
+
+错误做法：评分沿用收藏的 `revision` 递增，或扫描转移时先锁收藏用户、再锁评分用户。正确做法：共用锁但不递增版本，并按用户并集一次加锁。

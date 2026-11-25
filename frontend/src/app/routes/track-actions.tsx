@@ -4,14 +4,15 @@ import { useId, useRef, useState } from "react";
 import { Button, MenuButton, useRowContextMenu, VisuallyHidden, type MenuAction } from "../../shared/ui";
 import { useMediaQuery } from "../../shared/lib/use-media-query";
 import { useArtistLinksReady } from "../../features/catalog";
-import { AddToPlaylistDialog, FavoriteButton, useFavoriteMenuAction, type FavoriteTarget } from "../../features/personal";
+import { AddToPlaylistDialog, FavoriteButton, RatingBadge, useFavoriteMenuAction, useRatingMenuAction, type FavoriteTarget } from "../../features/personal";
 import { usePlaybackCapabilities, usePlayerEngine, type CapabilityTable, type PlayerController, type PlayerTrack } from "../../features/player";
 import { unplayableReason } from "./track-playback";
 import styles from "./track-actions.module.css";
 
 // 曲目行的统一动作：行内播放、心形与“更多操作”（下一首播放、加入队列、添加到歌单…；前往艺人、前往专辑；再加页面自己的项）。
 // 专辑、历史、收藏、歌单（以后还有搜索结果与艺人页）都用它，由 app 组合：player 与 personal 互不导入。
-// 心形需要放在页面的 FavoriteStatusScope 里（一页一次批量读取收藏状态）。
+// 心形与星级需要放在页面的 FavoriteStatusScope 与 RatingStatusScope 里（一页各一次批量读取）。
+// 评过分的曲目在动作图标左边显示只读的小星；评分在“更多操作”的第一项“评分…”，弹出星级浮层。
 // 所在行加 data-context-row 后，右键这一行（或行内按菜单键、Shift+F10）弹出同一组动作，最前面多一项“播放”。
 
 export const QUEUE_FULL_TEXT = "队列已满，请先移除一些条目。";
@@ -69,6 +70,7 @@ export function TrackActions({ track, present, playLabel = "播放", onPlay, ret
   const narrow = useMediaQuery(NARROW);
   const root = useRef<HTMLDivElement>(null);
   const favoriteTarget: FavoriteTarget = { kind: "track", id: track.trackId, title: track.title };
+  const rating = useRatingMenuAction(favoriteTarget);
   const reason = present && capability.isError ? `无法检查播放能力，${retryHint}` : unplayableReason(track, present, capability.data);
   function play() {
     const table = capability.data;
@@ -85,6 +87,7 @@ export function TrackActions({ track, present, playLabel = "播放", onPlay, ret
   }
   // 图标与专辑页头的“更多”同一套；跳转类的项单独一组（菜单项是按钮，在 onSelect 里跳转，与用户菜单的“设置”相同）。
   const actions: MenuAction[] = [
+    rating.action,
     { id: "next", label: "下一首播放", icon: <ListStart size={16} />, disabled: reason !== null, onSelect: () => add("next") },
     { id: "enqueue", label: "加入队列", icon: <ListEnd size={16} />, disabled: reason !== null, onSelect: () => add("enqueue") },
     {
@@ -122,6 +125,7 @@ export function TrackActions({ track, present, playLabel = "播放", onPlay, ret
   return (
     <div className={styles.row} ref={root}>
       <div className={styles.actions}>
+        <RatingBadge kind="track" id={track.trackId} />
         <span className={playPlacement === "lead" ? styles.lead : styles.inline}>
           <Button variant="icon" icon={<Play size={16} />} label={playLabel} disabled={reason !== null} aria-describedby={reason === null ? undefined : reasonId} onClick={play} data-track-play="" />
         </span>
@@ -150,6 +154,7 @@ export function TrackActions({ track, present, playLabel = "播放", onPlay, ret
         />
       ) : null}
       {contextMenu}
+      {rating.popover}
     </div>
   );
 }

@@ -8,14 +8,14 @@ import { ArtistLinksScope } from "../../features/catalog";
 import { setDockOpen, useDockState, useStewardEntry } from "../../features/steward";
 import { useMediaQuery } from "../../shared/lib/use-media-query";
 import { Button, ModalDialog } from "../../shared/ui";
-import { CurrentTrackFavorite, SaveQueueAsPlaylist } from "../player-personal-actions";
+import { CurrentTrackPersonal, SaveQueueAsPlaylist } from "../player-personal-actions";
 import type { PlayerTrack } from "../../features/player";
 import styles from "./app-shell.module.css";
 
 // 播放器的插槽（模块级函数，引用保持不变）：播放栏的心形放不下提示文字，失败的那句只给读屏；全屏里完整显示。
 // 队列抽屉标题旁是“存为歌单”。
-const renderBarTrackActions = (track: PlayerTrack) => <CurrentTrackFavorite track={track} message="screen-reader" />;
-const renderFullscreenTrackActions = (track: PlayerTrack) => <CurrentTrackFavorite track={track} />;
+const renderBarTrackActions = (track: PlayerTrack) => <CurrentTrackPersonal track={track} variant="bar" />;
+const renderFullscreenTrackActions = (track: PlayerTrack) => <CurrentTrackPersonal track={track} variant="fullscreen" />;
 const renderQueueActions = (tracks: readonly PlayerTrack[]) => <SaveQueueAsPlaylist tracks={tracks} />;
 import { LazyPage } from "../routes/lazy-page";
 import { Brand } from "./brand";

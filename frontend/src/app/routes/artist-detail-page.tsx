@@ -5,7 +5,7 @@ import { useViewerScope } from "../../features/auth";
 import { artistIdOf, ArtistDetailView, type ArtistDetailDTO, type ArtistDetailSearch } from "../../features/artists";
 import type { TrackSummaryDTO } from "../../features/catalog";
 import { useArtistAdminActions, useArtistCommands, type ArtistCommands } from "../../features/governance";
-import { FavoriteButton, FavoriteStatusScope } from "../../features/personal";
+import { FavoriteButton, FavoriteStatusScope, RatingControl, RatingStatusScope } from "../../features/personal";
 import { MenuButton } from "../../shared/ui";
 import { ArtistPlayActions } from "./artist-playback";
 import { TrackActions } from "./track-actions";
@@ -20,17 +20,20 @@ function ArtistTrackActions({ item }: { item: TrackSummaryDTO }) {
   return <TrackActions track={track} present={item.present} playLabel={`播放 ${track.title}`} retryHint="请在“播放全部”旁重试。" />;
 }
 
-/** 收藏这位艺人（艺人的收藏状态单独一次读取）。 */
+/** 收藏这位艺人与本人评分（艺人的收藏状态与评分各单独一次读取）。 */
 function ArtistFavorite({ detail }: { detail: ArtistDetailDTO }) {
   const artistIds = useMemo(() => [detail.artist.id], [detail.artist.id]);
   return (
     <FavoriteStatusScope artistIds={artistIds}>
       <FavoriteButton target={{ kind: "artist", id: detail.artist.id, title: detail.artist.name }} />
+      <RatingStatusScope artistIds={artistIds}>
+        <RatingControl target={{ kind: "artist", id: detail.artist.id, title: detail.artist.name }} placement="header" />
+      </RatingStatusScope>
     </FavoriteStatusScope>
   );
 }
 
-/** 头部的操作行（所有成员）：播放全部、随机播放与心形；普通成员没有“更多”（里面没有别的项）。 */
+/** 头部的操作行（所有成员）：播放全部、随机播放、心形与星级；普通成员没有“更多”（里面没有别的项）。 */
 function ArtistHeaderActions({ detail }: { detail: ArtistDetailDTO }) {
   return <ArtistPlayActions artistId={detail.artist.id} extra={<ArtistFavorite detail={detail} />} />;
 }

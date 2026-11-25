@@ -11,7 +11,7 @@ export function lookupIdsKey(ids: { trackIds: readonly string[]; groupIds: reado
 
 // 全部以 ["viewer", 代次, "personal", …] 开头：换用户或重新登录后旧缓存不会被命中。revision 没有时写 null。
 export const personalKeys = {
-  /** 本人的全部收藏与歌单查询：窗口重新聚焦、其他标签页通知变化时一起重新读取。 */
+  /** 本人的全部收藏、评分与歌单查询：窗口重新聚焦、其他标签页通知变化时一起重新读取。 */
   all: (generation: number) => viewerQueryKey(generation, "personal"),
   /** 收藏的全部查询（两栏、批量状态、“播放全部”候选）：任何一个心形切换之后失效。 */
   favorites: (generation: number) => viewerQueryKey(generation, "personal", "favorites"),
@@ -27,6 +27,17 @@ export const personalKeys = {
   /** 心形切换的写操作（前缀）：批量状态据此叠加进行中的切换。 */
   favoriteToggles: (generation: number) => viewerQueryKey(generation, "personal", "favorite-toggle"),
   favoriteToggle: (generation: number, kind: FavoriteKind, id: string) => viewerQueryKey(generation, "personal", "favorite-toggle", kind, id.toLowerCase()),
+  /** 评分的全部查询（批量状态）：任何一处评分写入之后失效。 */
+  ratings: (generation: number) => viewerQueryKey(generation, "personal", "ratings"),
+  /** 全部批量评分状态（前缀）：写入成功后按目标修补每一份。 */
+  ratingLookups: (generation: number) => viewerQueryKey(generation, "personal", "ratings", "lookup"),
+  ratingLookup: (generation: number, ids: { trackIds: readonly string[]; groupIds: readonly string[] }) =>
+    viewerQueryKey(generation, "personal", "ratings", "lookup", lookupIdsKey(ids)),
+  ratingArtistLookup: (generation: number, artistIds: readonly string[]) =>
+    viewerQueryKey(generation, "personal", "ratings", "lookup", { artistIds: [...new Set(artistIds.map((id) => id.toLowerCase()))].sort() }),
+  /** 评分的写操作（前缀）：批量状态据此叠加进行中的写入。 */
+  ratingWrites: (generation: number) => viewerQueryKey(generation, "personal", "rating-write"),
+  ratingWrite: (generation: number, kind: FavoriteKind, id: string) => viewerQueryKey(generation, "personal", "rating-write", kind, id.toLowerCase()),
   /** 歌单的全部查询：列表、各歌单的详情、条目、候选与“在哪些歌单里”。 */
   playlists: (generation: number) => viewerQueryKey(generation, "personal", "playlists"),
   playlistList: (generation: number, params: { page: number; pageSize: number }) => viewerQueryKey(generation, "personal", "playlists", "list", params),

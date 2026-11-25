@@ -1,0 +1,12 @@
+.badge {
+  display: inline-flex;
+  flex: none;
+  gap: 1px;
+  align-items: center;
+  margin-inline-end: var(--space-1);
+  color: var(--color-accent);
+}
+
+.badge svg {
+  fill: currentColor;
+}

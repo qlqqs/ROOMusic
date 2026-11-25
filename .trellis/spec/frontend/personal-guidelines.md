@@ -118,3 +118,19 @@
 再去掉这个浏览器放不了的，用一次 `playTracks` 替换当前队列（原来的队列满了也不影响）。提示把三组数分开说：
 “已选择 N 首。跳过了 M 首文件缺失、U 首不能在这里播放。另有 O 首超出 10,000 首的上限，这次没有放进来。”；一首都不能播放、读取失败或会话变了时当前队列不变。
 行内的“下一首播放 / 加入队列”仍按队列剩余容量整批检查，放不下就整批拒绝。
+
+## 星级（评分，2026-11-25）
+
+- 组件都在 `features/personal`：`RatingStatusScope`（一页一次 `POST /me/ratings/lookup`，艺人另发一次；做法同 `FavoriteStatusScope`，`keepPreviousData`）、
+  `RatingStars`（无状态滑块）、`RatingControl`（接上范围与写入）、`useRatingPopover`（浮层）、`useRatingMenuAction`（“更多操作”里的“评分…”）、`RatingBadge`（曲目行只读小星）。
+  凡是放了心形范围、又有曲目行动作的地方（`TrackFavoritesScope`、专辑页、艺人页、我喜欢的音乐、歌单、播放器栏）都要同时放 `RatingStatusScope`，否则 `useRatingStatus` 抛错。
+- 星级是 `role="slider"`，一个 Tab 停留点；读屏名“评分《标题》”（艺人“评分“名字””），值“3 星”/“未评分”，预览时“3 星，按 Enter 保存”。
+  方向键与 Home/End 只移动预览，Enter 写入；Delete/Backspace 清除；数字 1–5 直接写入；Esc 先放弃预览（`stopPropagation`，不关浮层）。点当前星级清除。
+  不用 radiogroup：radio 的方向键每按一下就选中一次，会逐级写入。
+- 写入乐观：进行中的值经 `useMutationState`（写操作键 `[personal, "rating-write", kind, id]`）叠加显示，失败后回到服务端的值并说“评分没有保存，请稍后再试。”。
+  评分的 PUT/DELETE 是幂等的，结果不确定时只让评分查询失效重读，不像心形那样锁住目标。跨标签页同步用 `PersonalScope` 的 `"ratings"`。
+- 放置：专辑页、艺人页头部在心形右侧，`placement="header"` 时宽屏前面一条细线、窄屏（≤767px）排到操作行最后单独一行；曲目行“更多操作”第一项“评分…”（提示列是当前星级），
+  评过分的行在动作图标左侧显示只读小星（`role="img"`，读“N 星”）；播放器栏心形右边一颗星（评过分实心带数字，读屏名“评分《标题》：3 星”），点开浮层；全屏播放器直接放五颗星。
+- 浮层 fixed 定位在打开它的元素旁（菜单选中时焦点已回到“更多操作”，取 `document.activeElement` 作锚点），打开时焦点在星级上（div 不受 React `autoFocus` 管，挂载后手动 `focus()`）；
+  写入成功后停 600ms 再关并还焦点，失败时不关。Esc、外部按下、Tab 离开、滚动或缩放时关闭。
+- 测试：`fake-personal.ts` 带一个内存评分替身；交互用例在 `rating-interactions.test.tsx`。
