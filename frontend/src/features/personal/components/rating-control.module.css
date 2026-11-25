@@ -1,0 +1,38 @@
+/* 星级与它的提示：提示在旁边换行，不撑开所在的行。 */
+.control {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+
+.message {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  overflow-wrap: anywhere;
+}
+
+.message:empty {
+  display: none;
+}
+
+/* 头部：宽屏时与左边的心形隔一条细线；窄屏（与外壳的断点相同）时排到操作行最后、单独一行，不挤掉别的按钮。 */
+.header::before {
+  content: "";
+  width: 1px;
+  height: 18px;
+  margin-inline: var(--space-1) 0;
+  background: var(--color-neutral-300);
+}
+
+@media (max-width: 767px) {
+  .header {
+    order: 99;
+    flex-basis: 100%;
+  }
+
+  .header::before {
+    display: none;
+  }
+}

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { Profiler, type ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSessionController, SessionProvider, ViewerScopeProvider } from "../../features/auth";
-import { FavoriteStatusScope } from "../../features/personal";
+import { FavoriteStatusScope, RatingStatusScope } from "../../features/personal";
 import { MAX_QUEUE_ENTRIES, PlayerProvider, type PlayerTrack } from "../../features/player";
 import { installFakeApi, installFakeSession } from "../../test/fake-api";
 import { playerHarness } from "../../test/fake-zones";
@@ -42,7 +42,9 @@ async function setup(items: readonly PlayerTrack[]) {
       <SessionProvider controller={controller}>
         <ViewerScopeProvider viewer={state.viewer} generation={state.generation}>
           <PlayerProvider userId={state.viewer.id} controller={engine}>
-            <FavoriteStatusScope trackIds={ids}>{children}</FavoriteStatusScope>
+            <FavoriteStatusScope trackIds={ids}>
+              <RatingStatusScope trackIds={ids}>{children}</RatingStatusScope>
+            </FavoriteStatusScope>
           </PlayerProvider>
         </ViewerScopeProvider>
       </SessionProvider>
@@ -161,7 +163,7 @@ describe("统一曲目行动作", () => {
     view(<TrackActions track={track} present playLabel="从这首开始播放" retryHint="请在专辑头部重试。" albumLink={false} />);
     await ready();
     await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
-    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["下一首播放", "加入队列", "添加到歌单…"]);
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["评分…", "下一首播放", "加入队列", "添加到歌单…"]);
     expect(screen.getByRole("menu").querySelector('[role="separator"]')).toBeNull();
   });
 
@@ -177,7 +179,7 @@ describe("统一曲目行动作", () => {
       await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
       const items = () => screen.getAllByRole("menuitem").map((item) => item.textContent);
       // 艺人数据没有就绪（没有 ArtistLinksScope）时没有“前往艺人”；“前往专辑”带着专辑名。
-      expect(items()).toEqual(["收藏", "下一首播放", "加入队列", "添加到歌单…", "前往专辑 历史专辑 1"]);
+      expect(items()).toEqual(["收藏", "评分…", "下一首播放", "加入队列", "添加到歌单…", "前往专辑 历史专辑 1"]);
       await waitFor(() => expect(screen.getByRole("menuitem", { name: "收藏" }).hasAttribute("disabled")).toBe(false));
       await userEvent.click(screen.getByRole("menuitem", { name: "收藏" }));
       await waitFor(() => expect(api.requestsTo("PUT", `/api/v1/me/favorites/tracks/${encodeURIComponent(track.trackId)}`)).toHaveLength(1));

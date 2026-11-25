@@ -3,7 +3,7 @@ import { Info, MoreHorizontal, PencilLine } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { AlbumDetailView, type AlbumSearch, type ReleaseActionsContext, type ReleaseDetailDTO, type ReleaseTrackDTO } from "../../features/catalog";
 import { EditTrackDialog, ReleaseHistory, useReleaseAdminActions, useReleaseCommands, type ReleaseCommands } from "../../features/governance";
-import { AddToPlaylistButton, FavoriteButton, FavoriteStatusScope } from "../../features/personal";
+import { AddToPlaylistButton, FavoriteButton, FavoriteStatusScope, RatingControl, RatingStatusScope } from "../../features/personal";
 import { playerTrackOf, playerTracksOf, TrackLoudness, useAlbumPlayback, useCurrentTrackMarker } from "../../features/player";
 import { useViewerScope } from "../../features/auth";
 import { formatCount } from "../../shared/lib/number";
@@ -26,13 +26,15 @@ function trackIdsOf(release: ReleaseDetailDTO): string[] {
   return release.media.flatMap((medium) => medium.tracks.map((track) => track.id));
 }
 
-/** 这个专辑与选中版本每一首曲目的收藏状态，一次读出；版本详情还没到时先只读专辑。 */
+/** 这个专辑与选中版本每一首曲目的收藏状态与本人评分，各一次读出；版本详情还没到时先只读专辑。 */
 function AlbumFavoritesScope({ groupId, release, children }: { groupId: string; release: ReleaseDetailDTO | undefined; children: ReactNode }) {
   const groupIds = useMemo(() => [groupId], [groupId]);
   const trackIds = useMemo(() => (release === undefined ? [] : trackIdsOf(release)), [release]);
   return (
     <FavoriteStatusScope groupIds={groupIds} trackIds={trackIds}>
-      {children}
+      <RatingStatusScope groupIds={groupIds} trackIds={trackIds}>
+        {children}
+      </RatingStatusScope>
     </FavoriteStatusScope>
   );
 }
@@ -40,7 +42,7 @@ function AlbumFavoritesScope({ groupId, release, children }: { groupId: string; 
 const noActions: readonly MenuAction[] = [];
 
 /**
- * 专辑头部的操作区：一条操作行——圆形“播放整张专辑”（唯一的主要操作）、随机播放、收藏这张专辑（按专辑收藏，不分版本）、
+ * 专辑头部的操作区：一条操作行——圆形“播放整张专辑”（唯一的主要操作）、随机播放、收藏这张专辑（按专辑收藏，不分版本）、五颗星的本人评分（同样按专辑，窄屏时单独一行）、
  * 把当前版本整张加入歌单、“更多操作”（下一首播放、加入队列，管理员另有“管理”分组）；下方是播放的状态与结果、管理员的线索与结果提示。
  */
 function AlbumActionRow({ release, groupId, adminActions = noActions, adminPanel = null }: { release: ReleaseDetailDTO; groupId: string; adminActions?: readonly MenuAction[]; adminPanel?: ReactNode }) {
@@ -54,6 +56,7 @@ function AlbumActionRow({ release, groupId, adminActions = noActions, adminPanel
           {playback.shuffle}
         </span>
         <FavoriteButton target={{ kind: "album", id: groupId, title: release.title }} />
+        <RatingControl target={{ kind: "album", id: groupId, title: release.title }} placement="header" />
         <AddToPlaylistButton iconOnly trackIds={() => trackIdsOf(release)} subject={`《${release.title}》的 ${formatCount(count)} 首`} disabled={count === 0} />
         <MenuButton label="更多操作" iconOnly icon={<MoreHorizontal size={18} />} actions={[...playback.actions, ...adminActions]} />
       </div>

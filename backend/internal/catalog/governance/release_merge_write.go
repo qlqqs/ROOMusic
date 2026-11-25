@@ -35,6 +35,7 @@ type mergeRecordState struct {
 	Target    MergeReleaseRef                      `json:"target"`
 	Media     []mergeRecordedMedium                `json:"media"`
 	Favorites []albumfavorites.MergedAlbumFavorite `json:"favorites,omitempty"`
+	Ratings   []albumfavorites.MergedAlbumRating   `json:"ratings,omitempty"`
 }
 
 // LockCatalogWrites 取得目录写锁（与扫描写入同一把），供不直接依赖扫描包的调用方在并入相关的事务里使用。
@@ -125,7 +126,7 @@ func releaseMergeExecutor(request ReleaseMergeRequest, check func(context.Contex
 			return empty, err
 		}
 		if !s.sourceGroupVisible {
-			before.Favorites, err = albumfavorites.MoveMergedAlbumFavorites(ctx, tx, s.source.GroupID, s.target.GroupID)
+			before.Favorites, before.Ratings, err = albumfavorites.MoveMergedAlbumState(ctx, tx, s.source.GroupID, s.target.GroupID)
 			if err != nil {
 				return empty, err
 			}

@@ -110,6 +110,8 @@ import {
   decodePlaylistQueue,
   decodePlaylistRenamed,
   decodePlaylistsPage,
+  decodeRatingLookup,
+  decodeRatingResult,
 } from "../features/personal/api/decoders";
 import { decodeAlbumResults, decodeTrackResults, decodeSearchSuggestions } from "../features/search/api/decoders";
 import { decode as d, decodeErrorEnvelope } from "../shared/api";
@@ -618,6 +620,14 @@ const successContracts: Record<string, Contract> = {
   "listening/history-queue-truncated": { status: 200, decode: decodeHistoryQueue },
   "listening/track-plays-deleted": { status: 200, decode: decodeTrackPlaysDeleted },
   "listening/track-plays-deleted-empty": { status: 200, decode: decodeTrackPlaysDeleted },
+  "ratings/track-put": { status: 200, decode: decodeRatingResult },
+  "ratings/track-delete": { status: 200, decode: decodeRatingResult },
+  "ratings/album-put": { status: 200, decode: decodeRatingResult },
+  "ratings/artist-put": { status: 200, decode: decodeRatingResult },
+  "ratings/artist-delete": { status: 200, decode: decodeRatingResult },
+  "ratings/lookup": { status: 200, decode: decodeRatingLookup },
+  "ratings/lookup-empty": { status: 200, decode: decodeRatingLookup },
+  "ratings/artist-lookup": { status: 200, decode: decodeRatingLookup },
   "favorites/album-delete": { status: 200, decode: decodeFavoriteToggle },
   "favorites/album-put": { status: 200, decode: decodeFavoriteToggle },
   "favorites/albums-empty": { status: 200, decode: decodeFavoriteAlbumsPage },

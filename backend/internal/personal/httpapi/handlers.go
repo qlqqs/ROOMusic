@@ -22,6 +22,7 @@ func New(guard *identity.Guard, service *personal.Service) *Handlers {
 
 // Register 只对匹配的写方法执行同源检查；方法错误复用平台 API fallback。
 func (h *Handlers) Register(mux *http.ServeMux) {
+	h.registerRatings(mux)
 	favorites := http.NewServeMux()
 	queue := http.NewServeMux()
 	h.route(queue, "GET /api/v1/me/favorites/tracks/queue", false, h.favoriteQueue)
