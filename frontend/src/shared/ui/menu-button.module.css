@@ -1,4 +1,5 @@
-.menu { position: fixed; z-index: 30; display: grid; width: min(240px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow-y: auto; padding: var(--space-1); border: 1px solid var(--color-divider); border-radius: var(--radius-lg); background: var(--color-bg); box-shadow: var(--shadow-md); }
+/* 列宽固定为菜单宽度：项里不换行的长名字（右侧小字）只能省略，不把菜单撑出横向滚动条。 */
+.menu { position: fixed; z-index: 30; display: grid; grid-template-columns: minmax(0, 1fr); width: min(240px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow: hidden auto; padding: var(--space-1); border: 1px solid var(--color-divider); border-radius: var(--radius-lg); background: var(--color-bg); box-shadow: var(--shadow-md); }
 .menu button { min-height: var(--control-height); padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); border: 0; background: transparent; color: var(--text-primary); text-align: left; overflow-wrap: anywhere; font: inherit; font-size: var(--fs-13); }
 .menu button:focus-visible { outline: var(--focus-ring); outline-offset: -2px; background: var(--color-selected); }
 .menu button:disabled { color: var(--text-secondary); }
@@ -10,6 +11,8 @@
 .menu button[data-danger]:enabled, .menu button[data-danger]:enabled .icon { color: var(--color-warning); }
 /* 项右侧的灰色小字：靠右，过长时省略。 */
 .menu button[data-hint] { display: flex; align-items: center; gap: var(--space-2); }
+/* 带小字的项：项名不换行、不被挤窄，小字占剩下的宽度。 */
+.label { flex: none; white-space: nowrap; }
 .hint { min-width: 0; margin-inline-start: auto; overflow: hidden; color: var(--text-secondary); font-size: var(--fs-12); text-overflow: ellipsis; white-space: nowrap; }
 
 /* 分组：组与组之间一条淡分隔线，组标题是不可聚焦的小字。 */

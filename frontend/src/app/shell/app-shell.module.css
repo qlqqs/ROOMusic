@@ -94,6 +94,8 @@
     grid-template-rows: var(--layout-deskbar-height) minmax(0, 1fr);
     height: 100dvh;
     min-height: 0;
+    /* 管家卡片滑入的头几帧越过右边距，裁掉，不让窗口闪出滚动条。 */
+    overflow: clip;
   }
 
   .topbar {

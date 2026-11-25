@@ -1,8 +1,9 @@
 import { Heart, PencilLine } from "lucide-react";
-import type { CSSProperties, ReactNode, RefObject } from "react";
+import { useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { formatCount } from "../../../shared/lib/number";
 import { formatDate } from "../../../shared/lib/time";
 import { Avatar, Button } from "../../../shared/ui";
+import { artworkPath, type ArtworkDTO } from "../../catalog";
 import styles from "./collection-hero.module.css";
 
 type CollectionHeroProps = {
@@ -47,11 +48,22 @@ export function CollectionHero({ title, cover, tint, onRename, renameBusy = fals
   );
 }
 
-/** 我喜欢的音乐的封面：金色淡底上一颗实心心形。装饰性的。 */
-export function LikedCover() {
+/**
+ * 我喜欢的音乐的封面：最近收藏的那首曲目的专辑封面铺满，中间一颗白色实心心形；
+ * 没有收藏、那张专辑没有封面或封面加载失败时，是金色淡底上一颗金色心形。装饰性的。
+ */
+export function LikedCover({ artwork }: { artwork: ArtworkDTO | null }) {
+  // 换了封面就用新的 key 重新挂载，失败状态不沿用到下一张。
+  return <LikedCoverImage key={artwork?.resource_id ?? "none"} artwork={artwork} />;
+}
+
+function LikedCoverImage({ artwork }: { artwork: ArtworkDTO | null }) {
+  const [failed, setFailed] = useState(false);
+  const photo = artwork !== null && !failed;
   return (
-    <div className={styles.liked} aria-hidden="true">
-      <Heart fill="currentColor" />
+    <div className={styles.liked} data-photo={photo ? "" : undefined} aria-hidden="true">
+      {photo ? <img className={styles.likedImage} src={artworkPath(artwork.resource_id)} alt="" onError={() => setFailed(true)} /> : null}
+      <Heart className={styles.likedHeart} fill="currentColor" strokeWidth={1.5} />
     </div>
   );
 }

@@ -66,6 +66,7 @@
 }
 
 .liked {
+  position: relative;
   display: grid;
   place-items: center;
   width: 100%;
@@ -74,9 +75,32 @@
   color: var(--color-accent-600);
 }
 
-.liked svg {
+/* 封面铺满（裁成正方形），中心压一层淡淡的暗晕，亮色封面上的白色心形也看得清。 */
+.likedImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.liked[data-photo]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgb(0 0 0 / 0.28) 0%, rgb(0 0 0 / 0.08) 55%, rgb(0 0 0 / 0) 80%);
+}
+
+.likedHeart {
+  position: relative;
+  z-index: 1;
   width: 40%;
   height: 40%;
+}
+
+.liked[data-photo] .likedHeart {
+  color: #fff;
+  filter: drop-shadow(0 4px 12px rgb(0 0 0 / 0.3));
 }
 
 @container (min-width: 560px) {

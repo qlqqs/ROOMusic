@@ -164,7 +164,7 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
   };
   const item = (action: MenuAction) => <button type="button" key={action.id} role="menuitem" tabIndex={-1} disabled={action.disabled} data-icon={action.icon === undefined ? undefined : ""} data-danger={action.danger ? "" : undefined} data-hint={action.hint === undefined ? undefined : ""} onClick={() => { close(); action.onSelect(); }}>
     {action.icon === undefined ? null : <span className={styles.icon} aria-hidden="true">{action.icon}</span>}
-    {action.description === undefined ? action.label : <span className={styles.text}><span>{action.label}</span>{" "}<span className={styles.description}>{action.description}</span></span>}
+    {action.description === undefined ? action.hint === undefined ? action.label : <span className={styles.label}>{action.label}</span> : <span className={styles.text}><span>{action.label}</span>{" "}<span className={styles.description}>{action.description}</span></span>}
     {/* 空格让可访问名称是“前往艺人 某某”而不是连在一起；弹性容器里只有空白的文字不占位。 */}
     {action.hint === undefined ? null : <>{" "}<span className={styles.hint}>{action.hint}</span></>}
   </button>;

@@ -5,6 +5,7 @@ import { pageCountOf } from "../../../shared/lib/pagination";
 import { useClampedPage } from "../../../shared/lib/use-clamped-page";
 import { Button, EmptyState, FailureNotice, Page, Pagination, Skeleton } from "../../../shared/ui";
 import { useViewerScope } from "../../auth";
+import { useArtworkTint } from "../../catalog";
 import type { FavoriteTrackDTO } from "../api/decoders";
 import { useFavoriteTracks } from "../hooks/use-favorites";
 import { useRetainedRows } from "../hooks/use-retained-rows";
@@ -28,12 +29,16 @@ type LikedTracksViewProps = {
 const pageSearch = (page: number) => ({ page: page > 1 ? page : undefined });
 
 /**
- * 我喜欢的音乐：心形封面的页头（头像与用户名、“播放全部”）、“歌曲 N”，收藏的曲目按收藏时间倒序；没有收藏时是说明怎么收藏的空状态。在这一页里取消收藏后，这一行留在原处、心形变空心，离开这一页或按“刷新”后才消失。
+ * 我喜欢的音乐：最近收藏曲目的封面压心形的页头（头像与用户名、“播放全部”）、“歌曲 N”，收藏的曲目按收藏时间倒序；没有收藏时是说明怎么收藏的空状态。在这一页里取消收藏后，这一行留在原处、心形变空心，离开这一页或按“刷新”后才消失。
  * 翻页时带上第一页的集合版本，期间收藏有变化就重新读这一页，不把两个版本的结果拼在一起。
  */
 export function LikedTracksView({ page, renderPlayAll, renderTrackActions }: LikedTracksViewProps) {
   const carried = useCarriedRevision(page);
   const list = useFavoriteTracks(page, carried.revision);
+  // 页头封面取最近收藏的那首（第一页第一行）；在第一页时与列表是同一个查询。
+  const newest = useFavoriteTracks(1, page === 1 ? carried.revision : null);
+  const newestArtwork = newest.data?.items[0]?.track.release.artwork ?? null;
+  const tint = useArtworkTint(newestArtwork);
   const changed = carried.dropIfChanged(list.error);
   const navigate = useNavigate();
   const { viewer } = useViewerScope();
@@ -62,8 +67,8 @@ export function LikedTracksView({ page, renderPlayAll, renderTrackActions }: Lik
       header={
         <CollectionHero
           title="我喜欢的音乐"
-          cover={<LikedCover />}
-          tint="var(--color-accent-100)"
+          cover={<LikedCover artwork={newestArtwork} />}
+          tint={newestArtwork === null ? "var(--color-accent-100)" : tint}
           owner={viewer.username}
           actions={loaded && !empty ? renderPlayAll() : null}
         />
