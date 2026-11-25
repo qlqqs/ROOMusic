@@ -576,3 +576,27 @@ star/unstar 原子批量写入、getStarred2、浏览实体带 starred；私有�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 76: Subsonic 播放流与听歌记录
+<!-- trellis-session: v=2 fp=c6e2f4c8d96e1345 -->
+
+**Date**: 2026-11-25
+**Task**: Subsonic 播放流与听歌记录
+**Branch**: `main`
+
+### Summary
+
+抽出单曲渲染路径（会话行为不变）与 RenderTrack；第三方客户端设备 kind=subsonic（迁移 0085）存放播放设置；stream 直发/渲染、download、scrobble、getNowPlaying；设置 › 播放可选客户端设备并删除。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b3fc56c3` | refactor(render): 抽出单曲渲染路径，新增 RenderTrack 与打开源文件 |
+| `4fd957e7` | feat(subsonic): 播放流、下载与听歌记录 |
+| `2bb8a563` | feat(web): 设置 › 播放可改第三方客户端设备 |
+
+### Status
+
+[OK] **Completed**
