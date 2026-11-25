@@ -17,6 +17,11 @@ type Stream = {
 };
 const now = () => new Date().toISOString();
 type Upnp = { max_sample_rate: number; format_declared: boolean; occupied_by: { user_id: string; display_name: string } | null };
+type GroupMemberState = NonNullable<Zone["group"]>["members"][number]["state"];
+type ZoneGroupDTO = { members: { device_id: string; state: GroupMemberState }[] };
+type DeviceGroupDTO = { zone_id: string; role: "leader" | "member" };
+/** 每组最多 8 台（含主设备），与服务端一致。 */
+const MAX_GROUP_DEVICES = 8;
 
 /** 只模拟现有界面用到的播放区合同（F3 可显式预置额外设备）；音频仍由原生 Audio 解码，不模拟浏览器媒体事件或计次。 */
 export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) {
@@ -37,15 +42,26 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
     position: { seconds: 0, at: now(), duration_seconds: null as number | null, seekable: false },
     stream: null as Stream | null, next_stream: null, paused_at: null as string | null, signal: null as unknown,
     event: null as { seq: number; kind: "track_started"; entry_id: string } | null,
+    group: null as ZoneGroupDTO | null,
   };
-  type MockDevice = typeof device & Partial<Upnp>;
+  // SlimProto 设备带同步微调；在组里时带 group（不在组里时省略）。
+  type MockDevice = typeof device & Partial<Upnp> & { group?: DeviceGroupDTO; sync_delay_ms?: number };
   const remotes = new Map<string, { device: MockDevice; zone: typeof zone; entries: Entry[] }>();
   const snapshot = () => ({ server_time: now(), protocol: 1,
     devices: [...(registered ? [device] : []), ...[...remotes.values()].map((row) => row.device)],
     zones: [...(registered ? [zone] : []), ...[...remotes.values()].map((row) => row.zone)],
   });
+  const remoteByDevice = (deviceId: string) => [...remotes.values()].find((row) => row.device.device_id === deviceId);
+  /** 把成员挂到主设备的播放区上（加入与预置共用）；主设备与成员的 Device.group 一起改。 */
+  const joinGroup = (leader: { device: MockDevice; zone: typeof zone }, member: MockDevice, state: GroupMemberState) => {
+    const members = leader.zone.group?.members ?? [];
+    leader.zone.group = { members: [...members.filter((item) => item.device_id !== member.device_id), { device_id: member.device_id, state }] };
+    leader.zone.revision += 1;
+    leader.device.group = { zone_id: leader.zone.zone_id, role: "leader" };
+    member.group = { zone_id: leader.zone.zone_id, role: "member" };
+  };
   const rowOf = (zoneId: string) => {
-    if (zoneId === MOCK_ZONE) return { device, zone, entries };
+    if (zoneId === MOCK_ZONE) return { device: device as MockDevice, zone, entries };
     const row = remotes.get(zoneId);
     if (!row) throw new Error(`播放区夹具没有登记 ${zoneId}`);
     return row;
@@ -194,8 +210,8 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
       zone.signal = structuredClone(signal);
       update();
     },
-    /** F3 的远端设备；与本机使用同一份 DTO 形状，但各自保有队列、设置和音量。 */
-    addDevice(options: { name: string; online: boolean; fixed?: boolean; track: TrackSummaryDTO; upnp?: Upnp }) {
+    /** F3 的远端设备；与本机使用同一份 DTO 形状，但各自保有队列、设置和音量。kind 只对局域网设备（给了 upnp）有效，缺省为 upnp。 */
+    addDevice(options: { name: string; online: boolean; fixed?: boolean; track: TrackSummaryDTO; upnp?: Upnp; kind?: "upnp" | "slimproto"; volume?: number }) {
       const suffix = String(remotes.size + 2).padStart(3, "0");
       const deviceId = `00000000-0000-4000-8000-00000000d${suffix}`;
       const zoneId = `00000000-0000-4000-8000-00000000e${suffix}`;
@@ -205,11 +221,24 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
         current: remoteEntries[0] ?? null, queue_length: remoteEntries.length,
         intent: "pause" as const, status: "paused" as const, paused_at: now(), stream: null };
       remotes.set(zoneId, { device: { ...structuredClone(device), device_id: deviceId, zone_id: zoneId,
-        name: options.name, online: options.online, kind: options.upnp === undefined ? "browser" : "upnp",
+        name: options.name, online: options.online, kind: options.upnp === undefined ? "browser" : (options.kind ?? "upnp"),
         ...options.upnp,
+        ...(options.kind === "slimproto" ? { sync_delay_ms: 0 } : {}),
+        ...(options.volume === undefined ? {} : { volume: options.volume }),
         capabilities: { ...device.capabilities, volume: options.fixed ? "fixed" : "number" } }, zone: remoteZone, entries: remoteEntries });
       return { deviceId, zoneId };
     },
+    /** 预置编组：成员按给定状态挂到主设备的播放区上（模拟重启后恢复的组）。 */
+    seedGroup(leaderZoneId: string, members: readonly { deviceId: string; state: GroupMemberState }[]) {
+      const leader = rowOf(leaderZoneId);
+      for (const { deviceId, state } of members) {
+        const member = remoteByDevice(deviceId);
+        if (member === undefined) throw new Error(`播放区夹具没有登记设备 ${deviceId}`);
+        joinGroup(leader, member.device, state);
+      }
+    },
+    /** 设备此刻的 DTO（断言写回用）。 */
+    deviceOf: (deviceId: string) => structuredClone(remoteByDevice(deviceId)?.device),
     register(tracks: readonly TrackSummaryDTO[]) { for (const track of tracks) known.set(track.track_id, track); },
     queueSnapshot: () => structuredClone(queue()),
     currentTrack: () => zone.current?.track.track_id,
@@ -231,10 +260,17 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
         return json({ server_time: now(), protocol: 1, session_id: SESSION, device, zone });
       }
       if (path.endsWith("/release")) return route.fulfill({ status: 204 });
-      const lanMatch = new RegExp(`^${BASE}/devices/([^/]+)/(activate|sample-rate)$`).exec(path);
+      const lanMatch = new RegExp(`^${BASE}/devices/([^/]+)/(activate|sample-rate|sync-delay)$`).exec(path);
       if (lanMatch !== null) {
-        const renderer = [...remotes.values()].find((row) => row.device.device_id === lanMatch[1])?.device;
-        if (renderer?.kind !== "upnp") throw new Error("局域网设备夹具不存在");
+        const renderer = remoteByDevice(lanMatch[1] ?? "")?.device;
+        if (renderer === undefined || renderer.kind === "browser") throw new Error("局域网设备夹具不存在");
+        if (lanMatch[2] === "sync-delay" && method === "PUT") {
+          if (renderer.kind !== "slimproto") return json({ error: { code: "group_unsupported", message: "只有 SlimProto 设备能设同步微调" } }, 409);
+          const { sync_delay_ms } = d.object({ sync_delay_ms: d.integer() })(input, "$");
+          if (Math.abs(sync_delay_ms) > 500) return json({ error: { code: "invalid_input", message: "同步微调超出范围" } }, 400);
+          renderer.sync_delay_ms = sync_delay_ms;
+          return json({ server_time: now(), device: renderer });
+        }
         if (lanMatch[2] === "activate" && method === "POST") {
           const { takeover } = d.object({ takeover: d.boolean() })(input, "$");
           const owner = renderer.occupied_by;
@@ -261,6 +297,44 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
           if (row.device.online) return json({ error: { code: "device_online", message: "设备在线" } }, 409);
           remotes.delete(row.zone.zone_id);
           return route.fulfill({ status: 204 });
+        }
+      }
+      const groupMatch = new RegExp(`^${BASE}/zones/([^/]+)/group/(members|volume)(?:/([^/]+))?$`).exec(path);
+      if (groupMatch !== null) {
+        const leader = rowOf(groupMatch[1] ?? "");
+        if (leader.device.kind !== "slimproto") return json({ error: { code: "group_unsupported", message: "只有 SlimProto 设备能编组" } }, 409);
+        const members = leader.zone.group?.members ?? [];
+        if (groupMatch[2] === "members" && method === "POST") {
+          const { device_id, takeover } = d.object({ device_id: d.uuid(), takeover: d.boolean() })(input, "$");
+          const member = remoteByDevice(device_id)?.device;
+          if (member === undefined) return json({ error: { code: "not_found", message: "设备不存在" } }, 404);
+          if (member.kind !== "slimproto") return json({ error: { code: "group_unsupported", message: "只有 SlimProto 设备能编组" } }, 409);
+          if (member.group !== undefined) return json({ error: { code: "device_grouped", message: "这台设备已在组里" } }, 409);
+          if (members.length + 1 >= MAX_GROUP_DEVICES) return json({ error: { code: "group_full", message: "组已满" } }, 409);
+          const owner = member.occupied_by;
+          if (owner != null && owner.user_id !== viewer.id && !takeover) return json({ error: { code: "device_busy", message: `${owner.display_name} 正在使用这台设备` } }, 409);
+          member.occupied_by = { user_id: viewer.id, display_name: viewer.username };
+          joinGroup(leader, member, "joining");
+          return json({ server_time: now(), zone: leader.zone, device: member });
+        }
+        if (groupMatch[2] === "members" && method === "DELETE" && groupMatch[3] !== undefined) {
+          const member = remoteByDevice(groupMatch[3])?.device;
+          if (member === undefined || !members.some((item) => item.device_id === member.device_id)) return json({ error: { code: "not_found", message: "不在组里" } }, 404);
+          const rest = members.filter((item) => item.device_id !== member.device_id);
+          leader.zone.group = rest.length === 0 ? null : { members: rest };
+          leader.zone.revision += 1;
+          if (rest.length === 0) delete leader.device.group;
+          delete member.group;
+          return json({ server_time: now(), zone: leader.zone, device: member });
+        }
+        if (groupMatch[2] === "volume" && method === "PUT") {
+          // 组音量：可调的设备里最响的一台到 volume，其余按原比例缩放；原来都是 0 时全部设为 volume。
+          const { volume } = d.object({ volume: d.number({ min: 0, max: 1 }) })(input, "$");
+          const devices = [leader.device, ...members.flatMap((item) => remoteByDevice(item.device_id)?.device ?? [])];
+          const adjustable = devices.filter((item) => item.capabilities.volume !== "fixed");
+          const top = Math.max(0, ...adjustable.map((item) => item.volume));
+          for (const item of adjustable) item.volume = top === 0 ? volume : item.volume * volume / top;
+          return json({ server_time: now(), devices });
         }
       }
       const zoneMatch = new RegExp(`^${BASE}/zones/([^/]+)/(queue|commands)$`).exec(path);

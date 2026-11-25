@@ -6,6 +6,8 @@ import {
   decodeClaimResult,
   decodeCommandResult,
   decodeDeviceResult,
+  decodeGroupMemberResult,
+  decodeGroupVolumeResult,
   decodeRegisterResult,
   decodeReportResult,
   decodeSnapshot,
@@ -13,6 +15,7 @@ import {
   type ClaimResult,
   type CommandResult,
   type DeviceResult,
+  type GroupVolumeResult,
   type RegisterResult,
   type ReportResult,
 } from "./decoders";
@@ -101,6 +104,26 @@ export function putDeviceSampleRate(deviceId: string, rate: number): Promise<Api
   return apiRequest({ method: "PUT", path: `${BASE}/devices/${idOf(deviceId)}/sample-rate`, body: { max_sample_rate: rate } }, decodeDeviceResult);
 }
 
+/** 把一台 SlimProto 设备加入播放区所在的组（主设备须正在用）：别人在用时 409 device_busy，takeover 为 true 时接管。 */
+export function addGroupMember(zoneId: string, deviceId: string, takeover: boolean): Promise<ApiResponse<RegisterResult>> {
+  return apiRequest({ method: "POST", path: `${BASE}/zones/${idOf(zoneId)}/group/members`, body: { device_id: deviceId, takeover } }, decodeGroupMemberResult);
+}
+
+/** 把设备移出播放组；它回到自己的播放区（暂停）。 */
+export function removeGroupMember(zoneId: string, deviceId: string): Promise<ApiResponse<RegisterResult>> {
+  return apiRequest({ method: "DELETE", path: `${BASE}/zones/${idOf(zoneId)}/group/members/${idOf(deviceId)}` }, decodeGroupMemberResult);
+}
+
+/** 组音量：服务端按各台原来的比例缩放组内能调音量的设备，最响的一台到 volume。 */
+export function putGroupVolume(zoneId: string, volume: number): Promise<ApiResponse<GroupVolumeResult>> {
+  return apiRequest({ method: "PUT", path: `${BASE}/zones/${idOf(zoneId)}/group/volume`, body: { volume } }, decodeGroupVolumeResult);
+}
+
+/** SlimProto 设备的同步微调，毫秒，−500…500。 */
+export function putSyncDelay(deviceId: string, ms: number): Promise<ApiResponse<DeviceResult>> {
+  return apiRequest({ method: "PUT", path: `${BASE}/devices/${idOf(deviceId)}/sync-delay`, body: { sync_delay_ms: ms } }, decodeDeviceResult);
+}
+
 export function sendZoneCommand(zoneId: string, command: ZoneCommand): Promise<ApiResponse<CommandResult>> {
   return apiRequest({ method: "POST", path: `${BASE}/zones/${idOf(zoneId)}/commands`, body: command }, decodeCommandResult);
 }
@@ -152,6 +175,10 @@ export const browserZoneApi: ZoneApi = {
   deleteDevice: async (deviceId) => {
     await deleteDevice(deviceId);
   },
+  addGroupMember: async (zoneId, deviceId, takeover) => (await addGroupMember(zoneId, deviceId, takeover)).data,
+  removeGroupMember: async (zoneId, deviceId) => (await removeGroupMember(zoneId, deviceId)).data,
+  putGroupVolume: async (zoneId, volume) => (await putGroupVolume(zoneId, volume)).data,
+  putSyncDelay: async (deviceId, ms) => (await putSyncDelay(deviceId, ms)).data,
   claimOutput: async (deviceId, body) => (await claimOutput(deviceId, body)).data,
   postOutputReport: async (sessionId, body) => (await postOutputReport(sessionId, body)).data,
   releaseOutput,

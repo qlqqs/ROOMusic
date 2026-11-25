@@ -55,8 +55,8 @@ export type PlayerStatus = "idle" | "loading" | "playing" | "paused" | "bufferin
 /** 停在暂停的几种故障：渲染器暂时不可用（可重试）、浏览器拒绝自动播放、这台设备放不了服务器给的格式。 */
 export type PlayerFault = { kind: "transient" } | { kind: "autoplay_blocked" } | { kind: "no_stream_format" };
 
-/** 被服务端拒绝、用户能自己处理的命令（目前只有目标设备已离线）。seq 每次拒绝递增，界面据此重新公告。 */
-export type CommandRejection = { seq: number; reason: "zone_offline" };
+/** 被服务端拒绝、用户能自己处理的命令：目标设备已离线，或它正作为成员在别的播放组里。seq 每次拒绝递增，界面据此重新公告。 */
+export type CommandRejection = { seq: number; reason: "zone_offline" | "device_grouped" };
 
 /** 值得向读屏公告的播放区事件。seq 取产生事件时的 revision，界面据此只公告一次。 */
 export type PlayerEvent =
@@ -128,7 +128,18 @@ export type Zone = {
   /** 正在放的那首的信号路径（dsp-pipeline 设计 §9.1）；没有在渲染时是 null。 */
   signal: Signal | null;
   event: PlayerEvent | null;
+  /** 这个播放区同时在其他 SlimProto 设备上播放时的成员（不含主设备）；没有编组时是 null。 */
+  group: ZoneGroup | null;
 };
+
+/** 组内成员的状态：同步中、正在加入、等下一次开流入组、本次播放中掉出、离线、被占用。服务端以后增加的状态按 waiting 处理。 */
+export const groupMemberStates = ["active", "joining", "waiting", "dropped", "offline", "busy"] as const;
+export type GroupMemberState = (typeof groupMemberStates)[number];
+
+export type ZoneGroup = { members: readonly { deviceId: string; state: GroupMemberState }[] };
+
+/** 设备所在的播放组：zoneId 是主设备的播放区；leader 是主设备本身，member 是被加入的设备。 */
+export type DeviceGroup = { zoneId: string; role: "leader" | "member" };
 
 export type Device = {
   deviceId: string;
@@ -144,6 +155,10 @@ export type Device = {
   outputSessionId: string | null;
   /** 服务器托管的局域网设备（UPnP/DLNA、Google Cast、AirPlay）才有：采样率上限、设备是否声明了支持的格式、现在谁在用（没人用时为 null）。 */
   lan: LanDeviceInfo | null;
+  /** 在组里时所在的播放组；不在组里时是 null。 */
+  group: DeviceGroup | null;
+  /** 同步微调（毫秒，−500…500，补偿功放或音箱自身的延迟）；只有 SlimProto 设备有，其余是 null。 */
+  syncDelayMs: number | null;
 };
 
 /** unavailableReason：设备现在不能用的原因（例如 AirPlay 设备需要的精确对时不可用），由服务器给出；能用时为 null。 */

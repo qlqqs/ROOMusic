@@ -3,7 +3,7 @@ import type { Locator } from "@playwright/test";
 import { personalTrack } from "../src/test/personal-data";
 import { expectNoHorizontalOverflow } from "./support/checks";
 import { expect, test } from "./support/fixtures";
-import { LAN_DEVICE_API, manualRenderer, rendererIp, slimProtoPlayer } from "./support/lan-devices";
+import { LAN_DEVICE_API, manualRenderer, rendererIp } from "./support/lan-devices";
 import { heading } from "./support/locators";
 
 const screenshots = resolve(import.meta.dirname, "../../temp/lan-device-shots");

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../shared/api";
 import { deferred } from "../../../test/deferred";
 import { fakeZoneServer, testPlayerController } from "../../../test/fake-zones";
+import { groupOf, leaderOf, memberOf, slimDevice, slimZone } from "../../../test/group-data";
 import { playerTrack } from "../../../test/player-data";
 import type { PlayerController, PlayerSnapshot } from "../zones/controller";
 import { DeviceButton } from "./device-picker";
@@ -223,5 +224,111 @@ describe("播放设备列表的局域网操作", () => {
     await user.click(remoteActions(await open(user)).getByRole("button", { name: "转到这台设备" }));
     expect(transfer).toHaveBeenCalledExactlyOnceWith(snapshot.zone?.zoneId, remoteZoneId);
     expect(activate).not.toHaveBeenCalled();
+  });
+});
+
+describe("播放设备列表的编组", () => {
+  /**
+   * 本机之外有三台在线的 SlimProto（客厅、书房、卧室）与一台离线的（阳台）。grouped 时客厅是主设备、书房是成员；
+   * target 是正在控制的设备（null 为本机）。
+   */
+  function viewGroups(options: { target: "客厅" | "卧室" | null; grouped: boolean; leaderVisible?: boolean }) {
+    const server = fakeZoneServer();
+    engine = testPlayerController(server).controller;
+    const local = { ...server.device(), online: true };
+    const base = { ...server.zone(), current: { entryId: "entry-1", track: playerTrack("示例曲目") } };
+    const leaderZone = slimZone(base, slimDevice(1, "客厅"), { group: options.grouped ? groupOf([slimDevice(2, "书房"), "active"]) : null });
+    const leader = slimDevice(1, "客厅", { group: options.grouped ? leaderOf(leaderZone) : null });
+    const member = slimDevice(2, "书房", { group: options.grouped ? memberOf(leaderZone) : null });
+    const bedroom = slimDevice(3, "卧室");
+    const balcony = slimDevice(4, "阳台", { online: false });
+    const devices = [leader, member, bedroom, balcony];
+    const zoneOf = (device: typeof leader) => (device === leader ? leaderZone : slimZone(server.zone(), device));
+    const targetDevice = devices.find((device) => device.name === options.target) ?? null;
+    snapshot = {
+      ...engine.getSnapshot(),
+      isLocal: targetDevice === null,
+      device: targetDevice ?? local,
+      zone: targetDevice === null ? base : zoneOf(targetDevice),
+      devices: [
+        { device: local, zone: base, isLocal: true, isTarget: targetDevice === null, occupant: null },
+        ...devices.filter((device) => options.leaderVisible !== false || device !== leader)
+          .map((device) => ({ device, zone: zoneOf(device), isLocal: false, isTarget: device === targetDevice, occupant: null })),
+      ],
+    };
+    render(<DeviceButton />);
+    return { leader, member, leaderZone };
+  }
+
+  async function open(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: /^(播放设备|正在控制：)/ }));
+    return within(screen.getByRole("dialog", { name: "播放设备" }));
+  }
+  const actions = (picker: ReturnType<typeof within>, name: string) => within(picker.getByRole("group", { name: `${name}的操作` }));
+
+  it("只有正在控制的在线 SlimProto 设备有“编组”按钮，没有组时不强调", async () => {
+    const user = userEvent.setup();
+    viewGroups({ target: "卧室", grouped: false });
+    const picker = await open(user);
+    const button = actions(picker, "卧室").getByRole("button", { name: "编组" });
+    expect(button.closest("[data-grouped]")).toBeNull();
+    for (const name of ["客厅", "书房", "阳台", "测试设备"]) expect(actions(picker, name).queryByRole("button", { name: /^编组/ }), name).toBeNull();
+  });
+
+  it("主设备即使不是控制目标也有“编组”按钮，读屏名写出台数并加强调", async () => {
+    const user = userEvent.setup();
+    viewGroups({ target: null, grouped: true });
+    const picker = await open(user);
+    const button = actions(picker, "客厅").getByRole("button", { name: "编组（2 台）" });
+    expect(button.closest("[data-grouped]")).not.toBeNull();
+    expect(actions(picker, "卧室").queryByRole("button", { name: /^编组/ })).toBeNull();
+  });
+
+  it("成员行写出在谁的组里、不能单独选用或转过去，只能移出组", async () => {
+    const user = userEvent.setup();
+    const { leaderZone, member } = viewGroups({ target: null, grouped: true });
+    const remove = vi.spyOn(engine, "removeGroupMember").mockResolvedValue(undefined);
+    const select = vi.spyOn(engine, "setControlTarget").mockImplementation(() => undefined);
+    const activate = vi.spyOn(engine, "activateDevice").mockResolvedValue(undefined);
+    const picker = await open(user);
+    expect(picker.getByText("在「客厅」的组里")).toBeTruthy();
+    expect(picker.queryByRole("button", { name: /书房/ }), "成员行不是可点选的按钮").toBeNull();
+    const memberActions = actions(picker, "书房");
+    expect(memberActions.queryByRole("button", { name: "转到这台设备" })).toBeNull();
+    expect(memberActions.queryByRole("button", { name: /^编组/ })).toBeNull();
+    await user.click(picker.getByText("在「客厅」的组里"));
+    expect(select).not.toHaveBeenCalled();
+    expect(activate).not.toHaveBeenCalled();
+    await user.click(memberActions.getByRole("button", { name: "移出组" }));
+    expect(remove).toHaveBeenCalledExactlyOnceWith(leaderZone.zoneId, member.deviceId);
+    // 不是成员的设备照常可以转过去。
+    expect(actions(picker, "卧室").getByRole("button", { name: "转到这台设备" })).toBeTruthy();
+  });
+
+  it("主设备不在列表里时，成员行写“另一台设备”", async () => {
+    const user = userEvent.setup();
+    viewGroups({ target: null, grouped: true, leaderVisible: false });
+    const picker = await open(user);
+    expect(picker.getByText("在「另一台设备」的组里")).toBeTruthy();
+  });
+
+  it("移出组失败时在列表里提示", async () => {
+    const user = userEvent.setup();
+    viewGroups({ target: null, grouped: true });
+    vi.spyOn(engine, "removeGroupMember").mockRejectedValue(new ApiError({ kind: "http", status: 409, code: "zone_offline", message: "离线", requestId: "group-test" }));
+    const picker = await open(user);
+    await user.click(actions(picker, "书房").getByRole("button", { name: "移出组" }));
+    expect(await picker.findByText("那台设备已离线。")).toBeTruthy();
+  });
+
+  it("点“编组”打开主设备的编组面板，关闭后回到设备列表", async () => {
+    const user = userEvent.setup();
+    viewGroups({ target: "客厅", grouped: true });
+    const picker = await open(user);
+    await user.click(actions(picker, "客厅").getByRole("button", { name: "编组（2 台）" }));
+    const panel = screen.getByRole("dialog", { name: "编组：客厅" });
+    await user.click(within(panel).getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog", { name: "编组：客厅" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "播放设备" })).toBeTruthy();
   });
 });

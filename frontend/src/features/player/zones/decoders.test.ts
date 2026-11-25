@@ -14,6 +14,8 @@ import {
   decodeClaimResult,
   decodeCommandResult,
   decodeDeviceResult,
+  decodeGroupMemberResult,
+  decodeGroupVolumeResult,
   decodeRegisterResult,
   decodeReportResult,
   decodeSnapshot,
@@ -57,6 +59,8 @@ const registeredDevice: Device = {
   volumeControllable: true,
   outputSessionId: null,
   lan: null,
+  group: null,
+  syncDelayMs: null,
 };
 
 const claimedDevice: Device = {
@@ -90,6 +94,7 @@ function idleZone(overrides: Partial<Zone> = {}): Zone {
     pausedAt: sampleTime,
     signal: null,
     event: null,
+    group: null,
     ...overrides,
   };
 }
@@ -436,5 +441,87 @@ describe("队列移动增量的目标下标合同", () => {
 
   it.each([-1, 0.5, 10_000, "0", null, undefined])("拒绝无效的目标下标 %s", (toIndex) => {
     expect(() => queueChangeDecoder({ kind: "move", queue_revision: 8, entry_id: id(5), to_index: toIndex }, "$")).toThrow("$.to_index");
+  });
+});
+
+describe("SlimProto 编组字段", () => {
+  const slim = (overrides: Partial<Device>): Device => ({
+    ...registeredDevice,
+    name: "合成播放器 2",
+    kind: "slimproto",
+    online: true,
+    lan: { maxSampleRate: 48000, formatDeclared: true, occupiedBy: null, unavailableReason: null },
+    ...overrides,
+  });
+
+  const addSample = () => response("group-add-member") as { zone: Record<string, unknown>; device: Record<string, unknown> };
+
+  it("加入成员的响应映射成员设备的组身份、同步微调，以及主设备播放区的成员与状态", () => {
+    expect(decodeGroupMemberResult(response("group-add-member"))).toStrictEqual({
+      serverTime: sampleTime,
+      device: slim({ deviceId: id(1), zoneId: id(3), group: { zoneId: id(2), role: "member" }, syncDelayMs: 0 }),
+      zone: idleZone({ zoneId: id(2), deviceId: id(4), revision: 2, group: { members: [{ deviceId: id(1), state: "waiting" }] } }),
+    });
+  });
+
+  it("移出成员的响应里设备不再带组，主设备播放区的 group 为 null", () => {
+    expect(decodeGroupMemberResult(response("group-remove-member"))).toStrictEqual({
+      serverTime: sampleTime,
+      device: slim({ deviceId: id(1), zoneId: id(2), volume: 0.8, group: null, syncDelayMs: -125 }),
+      zone: idleZone({ zoneId: id(4), deviceId: id(3), revision: 15, group: null }),
+    });
+  });
+
+  it("组音量的响应按顺序映射主设备与成员，各自保留音量与角色", () => {
+    expect(decodeGroupVolumeResult(response("group-volume"))).toStrictEqual({
+      serverTime: sampleTime,
+      devices: [
+        slim({ deviceId: id(1), zoneId: id(2), name: "合成播放器 1", volume: 0.4, group: { zoneId: id(2), role: "leader" }, syncDelayMs: 0 }),
+        slim({ deviceId: id(3), zoneId: id(4), volume: 0.8, group: { zoneId: id(2), role: "member" }, syncDelayMs: 0 }),
+      ],
+    });
+  });
+
+  it("同步微调的响应映射负毫秒值", () => {
+    expect(decodeDeviceResult(response("sync-delay")).device).toStrictEqual(
+      slim({ deviceId: id(1), zoneId: id(3), volume: 0.8, group: { zoneId: id(2), role: "member" }, syncDelayMs: -125 }),
+    );
+  });
+
+  it("旧服务器缺省的组字段与同步微调解成 null，空成员列表也当作没有编组", () => {
+    const { group: _group, ...zone } = addSample().zone;
+    expect(zoneDecoder(zone, "$").group).toBeNull();
+    expect(zoneDecoder({ ...zone, group: null }, "$").group).toBeNull();
+    expect(zoneDecoder({ ...zone, group: { members: [] } }, "$").group).toBeNull();
+    const { group: _deviceGroup, sync_delay_ms: _delay, ...device } = addSample().device;
+    expect(deviceDecoder(device, "$")).toMatchObject({ group: null, syncDelayMs: null });
+  });
+
+  it("服务端以后增加的成员状态按 waiting 处理，未知角色按 member 处理", () => {
+    const { zone, device } = addSample();
+    const members = [{ device_id: id(1), state: "resyncing" }, { device_id: id(5), state: "active" }];
+    expect(zoneDecoder({ ...zone, group: { members } }, "$").group).toStrictEqual({
+      members: [{ deviceId: id(1), state: "waiting" }, { deviceId: id(5), state: "active" }],
+    });
+    expect(deviceDecoder({ ...device, group: { zone_id: id(2), role: "observer" } }, "$").group).toStrictEqual({ zoneId: id(2), role: "member" });
+  });
+
+  it.each([
+    [{ group: { members: [{ device_id: "invalid", state: "active" }] } }, "group.members[0].device_id"],
+    [{ group: { members: [{ device_id: id(1), state: 3 }] } }, "group.members[0].state"],
+    [{ group: { members: Array.from({ length: 17 }, (_, index) => ({ device_id: id(100 + index), state: "active" })) } }, "group.members"],
+    [{ group: {} }, "group.members"],
+  ])("拒绝畸形的播放区组字段 %#", (patch, field) => {
+    const { zone } = addSample();
+    expect(() => zoneDecoder({ ...zone, ...patch }, "$")).toThrow(`$.${field}`);
+  });
+
+  it.each([
+    [{ sync_delay_ms: 1.5 }, "sync_delay_ms"],
+    [{ sync_delay_ms: "0" }, "sync_delay_ms"],
+    [{ group: { zone_id: "invalid", role: "member" } }, "group.zone_id"],
+  ])("拒绝畸形的设备组字段 %j", (patch, field) => {
+    const { device } = addSample();
+    expect(() => deviceDecoder({ ...device, ...patch }, "$")).toThrow(`$.${field}`);
   });
 });
