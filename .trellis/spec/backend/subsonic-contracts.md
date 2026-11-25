@@ -1,6 +1,6 @@
 # Subsonic 兼容接口合同
 
-`backend/internal/subsonic` 让 Symfonium、Feishin 等 Subsonic/OpenSubsonic 客户端用 ROOMusic 的账号连接。本文记录骨架（2026-11-25，迁移 0081）的协议外壳、鉴权、登录密码副本、实例开关与网页端设置接口，以及浏览、搜索与封面（§4.1–4.3）、点唱机（§4.4，迁移 0084）。播放、收藏等接口由后续子任务追加到本文。产品裁决见任务 `.trellis/tasks/11-25-opensubsonic-api/`。
+`backend/internal/subsonic` 让 Symfonium、Feishin 等 Subsonic/OpenSubsonic 客户端用 ROOMusic 的账号连接。本文记录骨架（2026-11-25，迁移 0081）的协议外壳、鉴权、登录密码副本、实例开关与网页端设置接口，以及浏览、搜索与封面（§4.1–4.3）、点唱机（§4.4，迁移 0084）、收藏歌单与歌词（§4.5）。播放流与听歌记录由 stream 子任务追加到本文。产品裁决见任务 `.trellis/tasks/11-25-opensubsonic-api/`。
 
 ## 1. 范围与触发
 
@@ -95,7 +95,7 @@ Subsonic 的 `p=` 登录成功**不**补写副本：只有网页入口知道该�
 | --- | --- |
 | `ping` | 空外壳 |
 | `getLicense` | `license{valid=true}` |
-| `getOpenSubsonicExtensions` | 只列已实现的扩展，骨架阶段只有 `formPost` v1；后续子任务实现 `songLyrics`、`transcodeOffset` 时再追加 |
+| `getOpenSubsonicExtensions` | 只列已实现的扩展：`formPost` v1、`songLyrics` v1；stream 子任务实现 `transcodeOffset` 时再追加 |
 | `getMusicFolders` | 一个虚拟文件夹 `id=1`、`name="ROOMusic"` |
 | `getUser` | 只能查本人；`streamRole`、`downloadRole`、`jukeboxRole` 为 true，`folder=[1]` |
 | `setRating` | `id` 是曲目、专辑组或艺人（`personal.SetRatingByID` 判断类型）；`rating=0` 清除，1–5 设置。缺参数或非整数 → 10，整数越界 → 0，ID 不存在 → 70，失败都不写入。与网页端评分是同一份数据，见 `personal-contracts.md` §9 |
@@ -159,6 +159,24 @@ ID 直接用 ROOMusic 的 UUID：歌曲是曲目 ID，专辑是专辑组 ID，�
 - 下标换算：先读队列，按队列版本核对顺序。写入带 `ExpectedRevision`，冲突时重读、重新换算，再写一次；仍冲突返回 0，不留部分写入。
 - 局域网设备的认领沿用 `devices/upnp` 的规则：本人要有有效的网页会话（浏览器可以关着）。
 
+### 4.5 收藏、歌单与歌词
+
+浏览、收藏、歌单、点唱机输出的实体都经 `ratedEntities`：同一次只读事务里批量读评分（`LookupRatings`）和收藏时间（`LookupFavorites`），填进 `PersonalState{Rating, StarredAt}`，输出 `userRating` 与 `starred`。
+
+| 接口 | 映射 | 要点 |
+| --- | --- | --- |
+| `star` / `unstar` | `personal.SetFavorites` | `id`、`albumId`、`artistId` 都可重复，至少给一个（否则 10）。先校验全部 ID，有一个不存在整体 70、不写入。整批在一个事务里，实际有变化时收藏 revision 只加一次；重复 star 保留原收藏时间。艺人按收藏的锚点规则：star 保留第一条等价请求的锚点，unstar 去掉本人的全部等价锚点 |
+| `getStarred2` | 收藏三张列表 | 与网页端“收藏”一致：保留不可用的专辑、艺人与缺失曲目；艺人的收藏时间取等价锚点里最新的 |
+| `getPlaylists` | `personal.Playlists` | 只列本人的；`username` 是别人时 50 |
+| `getPlaylist` | `PlaylistTracks` | 别人的或不存在 70；`coverArt` 为 `pl-<歌单 ID>` |
+| `createPlaylist` | `Execute` | 没有 `playlistId`：新建，每个请求一个新的随机幂等键（协议没有幂等语义，同名同曲目再建是另一个歌单）。有 `playlistId`：读出当前歌单后 `replace_items` 整体替换 |
+| `updatePlaylist` | `Execute` | `name` 改名，`songIndexToRemove`（按原顺序的零基下标）删除后再追加 `songIdToAdd`；改名与曲目变化合为一次 revision。`public`、`comment` 接受但忽略，歌单始终私有 |
+| `deletePlaylist` | `Execute` | 别人的或不存在 70 |
+| `getLyricsBySongId` | `catalog.LoadTrackLyrics` | 返回 `lyricsList.structuredLyrics[]`：`lang`（`[lang:]`/`[la:]` 标签，没有时 `und`）、`synced`、`line[{start?, value}]`；纯文本行省略 `start`，同步首行的 0 毫秒保留；没有歌词时空列表 |
+| `getLyrics` | `catalog.MatchTrackForLyrics` | 按现有曲目搜索的顺序取标题与艺人规范化后完全一致的第一首，返回可显示行用换行连接的纯文本；匹配不上返回空 `lyrics` |
+
+歌单写入一律“读当前歌单 → 在内存里算出新曲目列表 → 带 revision 的命令”，修改类请求的幂等键由用户 ID 加命令内容（含 revision）算出。`revision_conflict` 时重读、重算一次，仍冲突返回 0，不留部分写入。
+
 ## 5. 鉴权
 
 1. 实例关闭 → 40（先于参数检查，不泄露原因）。
@@ -213,6 +231,8 @@ ID 直接用 ROOMusic 的 UUID：歌曲是曲目 ID，专辑是专辑组 ID，�
   **正确**：它会去重并统一小写，按 ID 建映射再取（§4.2）。
 - **错误**：`highest` 先按评分取一页再过滤不可用专辑，导致页面变短、偏移错位。
   **正确**：偏移只计可用专辑，不够一页时继续读下一批。
+- **错误**：新建歌单的幂等键只由用户与请求内容算出。同名同曲目的歌单以后再也建不出来，旧歌单删掉后还会返回已不存在的 ID。
+  **正确**：新建用随机键；只有带 revision 的修改类请求按内容算键（§4.5）。
 - **错误**：改密后靠清缓存来让旧密码失效。
   **正确**：缓存绑定当前密码哈希，哈希一变就不会命中；`Forget` 只是额外的清理。
 

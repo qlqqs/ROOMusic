@@ -36,24 +36,37 @@ func Register(mux *http.ServeMux, service *auth.Service, guard *identity.Guard, 
 			return protocol.Response{License: &protocol.License{Valid: true}}
 		},
 		"getOpenSubsonicExtensions": func(*http.Request) protocol.Response {
-			return protocol.Response{Extensions: []protocol.Extension{{Name: "formPost", Versions: []int{1}}}}
+			return protocol.Response{Extensions: []protocol.Extension{
+				{Name: "formPost", Versions: []int{1}},
+				{Name: "songLyrics", Versions: []int{1}},
+			}}
 		},
 		"getMusicFolders": func(*http.Request) protocol.Response {
 			return protocol.Response{MusicFolders: &protocol.MusicFolders{Folders: []protocol.MusicFolder{{ID: 1, Name: "ROOMusic"}}}}
 		},
-		"getUser":        getUser,
-		"setRating":      h.setRating,
-		"getArtists":     h.getArtists,
-		"getArtist":      h.getArtist,
-		"getAlbum":       h.getAlbum,
-		"getSong":        h.getSong,
-		"getAlbumList2":  h.getAlbumList2,
-		"getArtistInfo2": h.getArtistInfo2,
-		"getAlbumInfo2":  h.getAlbumInfo2,
-		"search3":        h.search3,
-		"getRandomSongs": h.getRandomSongs,
-		"getGenres":      h.getGenres,
-		"jukeboxControl": h.jukeboxControl,
+		"getUser":           getUser,
+		"setRating":         h.setRating,
+		"getArtists":        h.getArtists,
+		"getArtist":         h.getArtist,
+		"getAlbum":          h.getAlbum,
+		"getSong":           h.getSong,
+		"getAlbumList2":     h.getAlbumList2,
+		"getArtistInfo2":    h.getArtistInfo2,
+		"getAlbumInfo2":     h.getAlbumInfo2,
+		"search3":           h.search3,
+		"getRandomSongs":    h.getRandomSongs,
+		"getGenres":         h.getGenres,
+		"star":              h.star,
+		"unstar":            h.unstar,
+		"getStarred2":       h.getStarred2,
+		"getPlaylists":      h.getPlaylists,
+		"getPlaylist":       h.getPlaylist,
+		"createPlaylist":    h.createPlaylist,
+		"updatePlaylist":    h.updatePlaylist,
+		"deletePlaylist":    h.deletePlaylist,
+		"getLyricsBySongId": h.getLyricsBySongID,
+		"getLyrics":         h.getLyrics,
+		"jukeboxControl":    h.jukeboxControl,
 	}
 	h.binaryEndpoints = map[string]func(http.ResponseWriter, *http.Request) error{"getCoverArt": h.getCoverArt}
 	mux.HandleFunc("/rest/", h.rest)

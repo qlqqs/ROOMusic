@@ -36,7 +36,7 @@ func browseFailure(err error) protocol.Response {
 	case errors.Is(err, errParameter):
 		return protocol.Failure(protocol.MissingParameter, "Invalid or missing parameter")
 	case errors.Is(err, errNotFound), errors.Is(err, sql.ErrNoRows), errors.Is(err, fs.ErrNotExist),
-		errors.Is(err, catalog.ErrReleaseGroupNotFound), errors.Is(err, catalog.ErrArtistNotFound), errors.Is(err, personal.ErrNotFound):
+		errors.Is(err, catalog.ErrReleaseGroupNotFound), errors.Is(err, catalog.ErrArtistNotFound), errors.Is(err, catalog.ErrTrackNotFound), errors.Is(err, personal.ErrNotFound):
 		return protocol.Failure(protocol.NotFound, "Requested data was not found")
 	default:
 		return protocol.Failure(protocol.General, "Service unavailable")
