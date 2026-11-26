@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/backend/sources-contracts.md", "reason": "来源请求与退避"}
-{"file": ".trellis/spec/backend/steward-web-contracts.md", "reason": "网页读取的出站策略"}
-{"file": ".trellis/spec/backend/steward-runtime-contracts.md", "reason": "模型接口出站"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量约定"}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移约定"}
-{"file": "docs/architecture/adr/0005-steward-data-and-egress.md", "reason": "出站地址策略 ADR"}
