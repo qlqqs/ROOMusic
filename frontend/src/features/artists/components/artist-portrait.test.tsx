@@ -115,6 +115,15 @@ it("来源弹层显示作者、许可和外部对应，普通成员没有写入�
   expect(document.activeElement).toBe(seal);
 });
 
+it.each([true, false])("艺人来源按 judged_by_model=%s 显示身份判断依据", async (judged_by_model) => {
+  const user = userEvent.setup();
+  render(<ArtistPortrait artist={artist} image={artistImage} links={{ ...links, judged_by_model }} media={null} />);
+  await user.click(screen.getByRole("button", { name: /^图片来源/ }));
+  const dialog = within(screen.getByRole("dialog", { name: "图片来源" }));
+  expect(dialog.getByRole("link", { name: "MusicBrainz" })).toBeTruthy();
+  expect(dialog.queryByText("由模型判断是同一人") !== null).toBe(judged_by_model);
+});
+
 it("非 HTTP(S) 的来源与许可地址保留为文本", async () => {
   const user = userEvent.setup();
   render(

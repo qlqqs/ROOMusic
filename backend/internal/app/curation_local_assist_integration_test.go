@@ -497,6 +497,7 @@ func TestPostgreSQLLocalAssistBeforeMatch(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatal("本地模型没有收到无标签目录")
 		}
+		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind IN ('release_match','recording_match')`, release)
 		queries := metricQueriesSince(t, mock, time.Time{})
 		if slices.ContainsFunc(queries, func(q metricSourceQuery) bool { return strings.Contains(q.value, title) }) {
 			t.Errorf("模型尚未提交，本发行已查询 MusicBrainz：%v", queries)

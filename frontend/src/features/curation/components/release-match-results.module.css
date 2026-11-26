@@ -19,7 +19,7 @@
 
 .namesTitle {
   margin: var(--space-3) 0 0;
-  color: var(--color-neutral-600);
+  color: var(--text-secondary);
   font-size: 0.875em;
 }
 
@@ -31,7 +31,7 @@
 
 .field {
   margin-right: var(--space-2);
-  color: var(--color-neutral-600);
+  color: var(--text-secondary);
 }
 
 .result {
@@ -49,6 +49,6 @@
   padding: 0 var(--space-2);
   border: 1px solid var(--color-divider);
   border-radius: 4px;
-  color: var(--color-neutral-600);
+  color: var(--text-secondary);
   font-size: 0.875em;
 }

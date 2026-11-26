@@ -1,11 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { decodeCurationSources } from "../features/curation/api/decoders";
+import { decodeConflictPage, decodeCurationSources } from "../features/curation/api/decoders";
 import type { OperationChangesDTO } from "../features/governance/api/decoders";
 import { sampleBody } from "../test/api-samples";
 import { albumGroup, failure } from "../test/catalog-data";
-import { enableCuration, refreshSources, seedBatch, seedSuppression, type CurationData } from "../test/curation-data";
+import { enableCuration, refreshSources, respondToMatchSelection, seedBatch, seedSuppression, type CurationData } from "../test/curation-data";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
 import { installCatalogApi } from "../test/fake-catalog";
 import { installCurationApi } from "../test/fake-curation";
@@ -70,6 +70,61 @@ describe("自动整理设置：入口与权限", () => {
     renderApp({ path: "/settings/curation" });
     expect(await screen.findByRole("heading", { level: 1, name: "需要管理员权限" })).toBeTruthy();
     expect(api.requests.filter((request) => request.path.startsWith("/api/v1/admin/curation"))).toHaveLength(0);
+  });
+});
+
+describe("有冲突的专辑", () => {
+  it("空列表显示没有分不出版本的专辑", async () => {
+    setup();
+    renderApp({ path: "/settings/curation" });
+    expect(await within(await group("有冲突的专辑")).findByText("没有分不出版本的专辑。")).toBeTruthy();
+  });
+
+  it.each([
+    ["item_stale", "候选已经变了，页面刷新后请再看一下。"],
+    ["insufficient_corroboration", "这一版的曲目结构和本地对不上，没有写入。"],
+  ])("列出候选，挑选遇到 %s 后同键重试，成功后移除这一条", async (code, message) => {
+    const { api, curation } = setup();
+    const item = decodeConflictPage(sampleBody("curation/conflicts")).items[0];
+    const sample = item?.candidates[0];
+    if (item === undefined || sample === undefined) throw new Error("缺少冲突候选样本");
+    const first = { ...sample, title: "原始发行", country: "JP", date: "1998" };
+    const second = { ...first, external_id: releaseOf(albumB()), title: "再版", country: "GB", date: "2003" };
+    curation.conflicts = [{ ...item, release_id: releaseOf(albumA()), title: albumA().representative.title, candidates: [first, second] }];
+
+    const path = `/api/v1/admin/curation/releases/${releaseOf(albumA())}/match-selection`;
+    let attempts = 0;
+    api.on("POST", path, ({ body }) => {
+      attempts++;
+      if (attempts === 1) return httpFailure(409, code, message);
+      const result = respondToMatchSelection(curation, releaseOf(albumA()), body);
+      return jsonResponse(result.status, result.body);
+    });
+
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const section = within(await group("有冲突的专辑"));
+    expect(await section.findByRole("button", { name: "选这一版：原始发行" })).toBeTruthy();
+    expect(section.getByText("1998 · JP · 1 首")).toBeTruthy();
+    expect(section.getByText("2003 · GB · 1 首")).toBeTruthy();
+
+    const pick = () => section.getByRole("button", { name: "选这一版：再版" });
+    await user.click(pick());
+    expect((await section.findByRole("alert")).textContent).toContain(message);
+    await user.click(pick());
+    expect(await section.findByText("没有分不出版本的专辑。")).toBeTruthy();
+    expect(section.queryByRole("button", { name: /^选这一版/ })).toBeNull();
+    expect(section.queryByText(albumA().representative.title)).toBeNull();
+
+    const requests = api.requestsTo("POST", path);
+    expect(requests.map(({ body }) => body)).toEqual(Array.from({ length: 2 }, () => ({
+      source: item.source,
+      snapshot_id: item.snapshot_id,
+      external_id: second.external_id,
+    })));
+    const key = requests[0]?.headers.get("Idempotency-Key");
+    expect(key).toMatch(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/);
+    expect(requests[1]?.headers.get("Idempotency-Key")).toBe(key);
   });
 });
 

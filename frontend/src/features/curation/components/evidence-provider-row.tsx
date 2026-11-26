@@ -50,7 +50,7 @@ export function EvidenceProviderRow({ refresh }: { refresh: () => void }) {
               const count = counts[provider.id].data;
               const name = sourceName(provider.id);
               return (
-                <span key={provider.id} className={styles.iconLabel} title={name} aria-label={`${name} ${count === undefined ? "读取中" : `${formatCount(count)} 条`}`}>
+                <span key={provider.id} className={styles.iconLabel} title={name} role="img" aria-label={`${name} ${count === undefined ? "读取中" : `${formatCount(count)} 条`}`}>
                   {index > 0 ? <span aria-hidden="true"> · </span> : null}
                   {provider.icon}
                   <span aria-hidden="true">{count === undefined ? "…" : formatCount(count)}</span>

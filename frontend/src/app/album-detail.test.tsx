@@ -2,7 +2,7 @@ import { fireEvent, isInaccessible, screen, waitFor, within } from "@testing-lib
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decodeReleaseDetail, type ReleaseGroupSummaryDTO } from "../features/catalog/api/decoders";
-import type { ReleaseMatchResultDTO } from "../features/curation/api/decoders";
+import { decodeConflictPage, type ReleaseMatchResultDTO } from "../features/curation/api/decoders";
 import { formatDateTime } from "../shared/lib/time";
 import { sampleBody } from "../test/api-samples";
 import { albumGroup, albumGroups, groupDetailOf, mediaOf, releaseDetailOf, releaseEvidenceOf, releaseVersions } from "../test/catalog-data";
@@ -829,6 +829,60 @@ describe("专辑详情：外部识别", () => {
     await waitFor(() => expect(api.requestsTo("GET", path)).toHaveLength(role === "admin" ? 1 : 0));
     expect(screen.queryByText("外部识别")).toBeNull();
     expect(api.requestsTo("POST", /^\/api\/v1\/admin\/curation\/releases\/[^/]+\/recheck$/)).toHaveLength(0);
+  });
+
+  it("在外部识别的冲突来源行列出供挑选的候选", async () => {
+    const album = symphonies();
+    const { api } = setup({ groups: [album] });
+    const item = decodeConflictPage(sampleBody("curation/conflicts")).items[0];
+    if (item === undefined) throw new Error("缺少冲突候选样本");
+    api.on("GET", matchPath(album.representative.id), () => jsonResponse(200, { results: [item] }));
+
+    const user = userEvent.setup();
+    renderApp({ path: `/albums/${album.id}` });
+    await user.click(await screen.findByText("外部识别"));
+    const source = await screen.findByText("有冲突");
+    const row = source.closest("li");
+    if (row === null) throw new Error("缺少冲突来源行");
+    expect(within(row).getByText("MusicBrainz")).toBeTruthy();
+    for (const candidate of item.candidates) {
+      expect(within(row).getByRole("button", { name: `选这一版：${candidate.title}` })).toBeTruthy();
+    }
+  });
+
+  it("显示字段及本地到 MusicBrainz 的写法，按修订和依据采用可采用的曲名", async () => {
+    const album = symphonies();
+    const id = album.representative.id;
+    const { api } = setup({ groups: [album] });
+    const fixture = decodeReleaseDetail(sampleBody("releases/match-names"));
+    const adoptable = fixture.musicbrainz_names.find((name) => name.can_adopt);
+    if (adoptable === undefined) throw new Error("缺少可采用的曲名样本");
+    const names = [adoptable, {
+      ...adoptable, target_type: "release", target_id: id,
+      effective_value: "本地专辑名", local_value: "本地专辑名", musicbrainz_value: "外部专辑名", can_adopt: false,
+    }];
+    api.on("GET", `/api/v1/releases/${id}`, () => jsonResponse(200, { ...releaseDetailOf(album.representative), musicbrainz_names: names }));
+    api.on("GET", matchPath(id), () => sampleResponse("curation/match-results"));
+    const path = `/api/v1/admin/curation/releases/${id}/adopt-name`;
+    api.on("POST", path, () => jsonResponse(200, { operation_id: adoptable.basis_operation_id }));
+
+    const user = userEvent.setup();
+    renderApp({ path: `/albums/${album.id}` });
+    await user.click(await screen.findByText("外部识别"));
+    expect(await screen.findByText("MusicBrainz 的写法")).toBeTruthy();
+    expect(screen.getByText("曲目的曲目标题").parentElement?.textContent).toContain(`${adoptable.local_value} → ${adoptable.musicbrainz_value}`);
+    expect(screen.getByText("本地专辑名 → 外部专辑名")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "采用 MusicBrainz 的写法：外部专辑名" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: `采用 MusicBrainz 的写法：${adoptable.musicbrainz_value}` }));
+    const requests = api.requestsTo("POST", path);
+    expect(requests.map(({ body }) => body)).toEqual([{
+      target_id: adoptable.target_id,
+      field: adoptable.field,
+      basis_operation_id: adoptable.basis_operation_id,
+      expected_revision: adoptable.revision,
+    }]);
+    expect(requests[0]?.headers.get("Idempotency-Key")).toMatch(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/);
   });
 
   it("折叠时显示来源摘要，展开后读出各行详情，普通未匹配可请求重查", async () => {

@@ -70,8 +70,30 @@ func TestPostgreSQLCurationFixedSelectedReport(t *testing.T) {
 							t.Errorf("%s 声纹对应 %v，期望 %s", file, got, want)
 						}
 					}
+				case "embedded-artist":
+					if mode == "script" {
+						if !slices.Contains(row.MatchStatus, "matched/search") || !slices.Equal(row.Links["专辑/release"], []string{sample.Expect.Release}) ||
+							!slices.Equal(row.Links["专辑/release_group"], []string{sample.Expect.Group}) || row.Writes["专辑/title"] != "微雨塘" {
+							t.Errorf("本地辅助标题由 MusicBrainz 接替时，工作结论和对应必须一致：%+v", row)
+						}
+					} else if !slices.Contains(row.MatchStatus, "unmatched/search") || len(row.Links) != 0 {
+						t.Errorf("纯程序应保持未匹配：%+v", row)
+					}
 				case "one-char", "romanized":
 					if mode == "script" {
+						wantCalls := 1
+						if sample.ID == "one-char" {
+							wantCalls = 2 // 识别与名字核对各一次。
+						}
+						if row.Requests[modelEndpoint] != wantCalls || len(row.Wrong) != 0 {
+							t.Errorf("模型只运行必要的判断，且零错写：%+v", row)
+						}
+						for i, recording := range sample.Expect.Recordings {
+							file := sample.Local.Tracks[i].File
+							if !slices.Equal(row.Links[file+"/track"], []string{recording}) {
+								t.Errorf("%s 实际录音 %v，期望 %s", file, row.Links[file+"/track"], recording)
+							}
+						}
 						if !row.Correct || row.Requests["musicbrainz/release/search"] == 0 ||
 							row.Requests[lookup] == 0 || !slices.Contains(row.MatchStatus, "matched/model") ||
 							!slices.Equal(row.Links["专辑/release"], []string{sample.Expect.Release}) ||
@@ -398,5 +420,43 @@ func TestPostgreSQLCurationFixedScoring(t *testing.T) {
 			})
 			tc.run(t)
 		})
+	}
+}
+
+func assertFixedJudgeQueries(t *testing.T, sample fixedSample, mode string, queries []metricSourceQuery) {
+	t.Helper()
+	var search []string
+	for _, query := range queries {
+		if query.service == "musicbrainz" && query.field == "query" {
+			search = append(search, query.value)
+		}
+	}
+	title := sample.External.Releases[0].Title
+	corrected := slices.IndexFunc(search, func(q string) bool { return strings.Contains(q, title) })
+	if mode == "program" && corrected >= 0 || mode == "script" && corrected < 1 {
+		t.Errorf("%s/%s 原文线索应只在普通搜索之后由脚本轮提出：%v", sample.ID, mode, search)
+	}
+}
+
+func assertFixedLocalTitleConclusion(t *testing.T, app *integrationTestApplication, mode string, part fixedPartition) {
+	t.Helper()
+	if len(part.ids) != 1 {
+		t.Fatalf("本地辅助标题夹具应归为一张专辑，实际 %v", part.ids)
+	}
+	release := part.ids[0]
+	want := "unmatched"
+	if mode == "script" {
+		want = "matched"
+	}
+	state := b3WorkState(t, app, "release", release)
+	rows, err := curation.NewWriter(app.database, app.dataDirectory, nil).ReleaseMatchResults(t.Context(), release)
+	requireCurationOK(t, err)
+	i := slices.IndexFunc(rows, func(r curation.ReleaseMatchResult) bool { return r.Source == "musicbrainz" })
+	if state.Status != want || i < 0 || rows[i].Status != want {
+		t.Fatalf("%s 工作状态与 MusicBrainz 结论应同为 %s，实际 %s、%+v", mode, want, state.Status, rows)
+	}
+	if mode == "script" {
+		b3RequireCount(t, app, 1, `SELECT count(*) FROM release_auto_values v JOIN operations o ON o.id=v.operation_id
+			WHERE v.release_id=$1 AND v.field='title' AND o.origin->>'provider'='musicbrainz' AND v.text_value='微雨塘'`, release)
 	}
 }

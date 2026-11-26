@@ -272,7 +272,14 @@ func fixedBatch(t *testing.T, mode string, batch []fixedSample, corpus fixedCorp
 		if total != row.requestCount() {
 			t.Fatalf("样本 %s 出站未对账：mock=%d，明细=%d", s.ID, total, row.requestCount())
 		}
-		row.score(t, app, s, part, metricQueriesSince(t, mock, begin))
+		queries := metricQueriesSince(t, mock, begin)
+		if s.ID == "one-char" || s.ID == "romanized" {
+			assertFixedJudgeQueries(t, s, mode, queries)
+		}
+		if s.ID == "embedded-artist" {
+			assertFixedLocalTitleConclusion(t, app, mode, part)
+		}
+		row.score(t, app, s, part, queries)
 		report.Rows = append(report.Rows, row)
 	}
 }

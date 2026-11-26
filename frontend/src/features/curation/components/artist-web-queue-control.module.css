@@ -6,7 +6,7 @@
 
 /* 进度只是旁注：小一号、淡一些，数字等宽，刷新时不跳动。 */
 .status {
-  color: var(--color-neutral-600);
+  color: var(--text-secondary);
   font-size: 0.875em;
   font-variant-numeric: tabular-nums;
 }

@@ -29,7 +29,7 @@
 .artist,
 .facts,
 .pending {
-  color: var(--color-neutral-600);
+  color: var(--text-secondary);
 }
 
 .facts,
