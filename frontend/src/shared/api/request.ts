@@ -71,8 +71,8 @@ export async function apiRequest<T>(spec: ApiRequestSpec, decode: (input: unknow
   let body: JsonBody;
   try {
     response = await fetch(spec.path, init);
-    // 204 没有响应体：解码器拿到 null。
-    if (response.status === 204) return { status: 204, data: decode(null, 204) };
+    // 204 没有响应体，202 受理时也可能没有（例如重新巡检）：解码器拿到 null。
+    if (response.status === 204 || (response.status === 202 && response.headers.get("Content-Length") === "0")) return { status: response.status, data: decode(null, response.status) };
     body = await readJsonBody(response);
   } catch (error) {
     if (spec.signal?.aborted) throw new ApiError({ kind: "aborted" }, { cause: error });

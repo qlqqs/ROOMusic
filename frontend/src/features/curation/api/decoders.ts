@@ -280,10 +280,19 @@ export const decodeCurationExceptionAccepted = d.defineDecoder(exceptionAccepted
 export const decodeCurationExceptionDeclined = d.defineDecoder(exceptionDeclinedDecoder);
 export const decodeCurationConversationPage = d.defineDecoder(curationConversationPageDecoder);
 
+// 发行的本地分类（整理链 A）：同一快照的计数，四类之和等于 total；versions 是三种规则版本。
+const classificationsDecoder = d.object({
+  releases: d.object({ has_gaps: count(), insufficient: count(), local_complete: count(), tagged_id: count(), total: count() }),
+  versions: d.object({ external_match_rule: d.integer({ min: 1 }), local_rule: d.integer({ min: 1 }), patrol_prompt: d.integer({ min: 1 }) }),
+});
+export const decodeCurationClassifications = d.defineDecoder(classificationsDecoder);
+
 export type CurationSettingsDTO = d.Infer<typeof settingsDecoder>;
 export type CurationSourceDTO = d.Infer<typeof sourceDecoder>;
 export type CurationSourcesDTO = d.Infer<typeof sourcesDecoder>;
 export type CurationProgressDTO = d.Infer<typeof progressDecoder>;
+export type CurationQueueDTO = CurationProgressDTO["queues"][number];
+export type CurationClassificationsDTO = d.Infer<typeof classificationsDecoder>;
 export type CurationModelProgressDTO = d.Infer<typeof modelProgressDecoder>;
 export type CurationExceptionDTO = d.Infer<typeof exceptionDecoder>;
 export type CurationExceptionPageDTO = d.Infer<typeof exceptionPageDecoder>;

@@ -2,18 +2,21 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { failureOf, isHttpFailure } from "../../../shared/api";
 import { useViewerScope } from "../../auth";
 import { governanceKeys } from "../../governance";
+import { fetchOperations } from "../../governance/api/endpoints";
 import type { CurationProgressDTO, CurationSettingsDTO, CurationSourceDTO, CurationSourcesDTO } from "../api/decoders";
 import {
   acceptCurationException,
   clearSuppression,
   declineCurationException,
   fetchCurationBatches,
+  fetchCurationClassifications,
   fetchCurationConversations,
   fetchCurationExceptions,
   fetchCurationProgress,
   fetchCurationSettings,
   fetchCurationSources,
   fetchSuppressions,
+  requestRepatrol,
   setCurationSource,
   setCurationSourceKey,
   updateCurationSettings,
@@ -30,8 +33,8 @@ export function useCurationSettings() {
   });
 }
 
-/** 设置里可以改的几项（至少一项）：总开关、暂停、整理用的模型（空串 = 对话模型）、每日 token 上限（null = 不限）。 */
-export type CurationSettingsChange = { enabled?: boolean; paused?: boolean; model?: string; daily_token_limit?: number | null };
+/** 设置里可以改的几项（至少一项）：总开关、暂停、整理用的模型（空串 = 对话模型）、每日 token 上限与联网兜底的每日上限（null = 不限）。 */
+export type CurationSettingsChange = { enabled?: boolean; paused?: boolean; model?: string; daily_token_limit?: number | null; web_daily_token_limit?: number | null };
 
 /**
  * 改设置：成功后写回设置；外部源的“能不能用”与后台进度（含模型层）都跟着变，让它们重新读取。
@@ -130,6 +133,39 @@ export function useCurationProgress(settings?: CurationSettingsDTO) {
     queryFn: ({ signal }) => fetchCurationProgress(signal),
     select: (response) => response.data,
     refetchInterval: (query) => progressRefetchInterval(query.state.data?.data, settings),
+  });
+}
+
+/** 可见发行按本地分类的计数；每次实时计算，跟着页面读取，不轮询。 */
+export function useCurationClassifications() {
+  const { generation } = useViewerScope();
+  return useQuery({
+    queryKey: curationKeys.classifications(generation),
+    queryFn: ({ signal }) => fetchCurationClassifications(signal),
+    select: (response) => response.data,
+  });
+}
+
+/** 来自某个来源（例如库内佐证、网页佐证）的自动修改条数：操作记录按来源筛选的总数，含撤销记录。 */
+export function useEvidenceCount(provider: string) {
+  const { generation } = useViewerScope();
+  return useQuery({
+    queryKey: curationKeys.evidenceCount(generation, provider),
+    queryFn: () => fetchOperations({ page: 1, pageSize: 1, provider }),
+    select: (response) => response.data.pagination.total,
+  });
+}
+
+/** 重新巡检全部名字：成功后进度跟着变（巡检进入模型队列）。 */
+export function useRepatrol() {
+  const queryClient = useQueryClient();
+  const scope = useViewerScope();
+  return useMutation({
+    mutationFn: () => requestRepatrol(),
+    onSuccess: () => {
+      if (!scope.isCurrent()) return;
+      void queryClient.invalidateQueries({ queryKey: curationKeys.progress(scope.generation) });
+    },
   });
 }
 

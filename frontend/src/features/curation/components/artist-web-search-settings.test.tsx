@@ -81,7 +81,7 @@ it.each([
   });
   renderApp({ path: "/settings/curation" });
 
-  const table = within(await screen.findByRole("table", { name: "等你处理的例外" }));
+  const table = within(await screen.findByRole("table", { name: "未采用的建议" }));
   expect(table.getByRole("columnheader", { name: "对象" })).toBeTruthy();
   expect(table.getByRole("link", { name: artist.name }).getAttribute("href")).toBe(`/artists/${artist.id}`);
   const external = table.getByRole("link", { name: id });

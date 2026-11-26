@@ -40,7 +40,9 @@ import {
   respondToClearSuppression,
   respondToCurationBatch,
   respondToCurationBatches,
+  respondToCurationClassifications,
   respondToCurationProgress,
+  respondToRepatrol,
   respondToCurationSettings,
   respondToCurationSources,
   respondToScopeRevert,
@@ -552,6 +554,8 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
       return guarded(method, path, true, () => respondToSetCurationSourceKey(mock.curation, sourceId, keyName, method === "PUT" ? (sent as string) : null));
     }
     if (key === "GET /api/v1/admin/curation/progress") return guarded(method, path, true, () => respondToCurationProgress(mock.curation));
+    if (key === "GET /api/v1/admin/curation/classifications") return guarded(method, path, true, () => respondToCurationClassifications(mock.curation));
+    if (key === "POST /api/v1/admin/curation/repatrol") return guarded(method, path, true, () => respondToRepatrol(mock.curation));
     if (key === "GET /api/v1/admin/curation/batches") return guarded(method, path, true, () => respondToCurationBatches(mock.curation, search));
     const curationBatch = /^\/api\/v1\/admin\/curation\/batches\/([^/]+)$/.exec(path);
     if (curationBatch !== null && method === "GET") return guarded(method, path, true, () => respondToCurationBatch(mock.curation, curationBatch[1] ?? ""));

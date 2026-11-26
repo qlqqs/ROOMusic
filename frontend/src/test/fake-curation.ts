@@ -1,4 +1,4 @@
-import { curationDataOf, respondToAcceptException, respondToClearSuppression, respondToCurationConversations, respondToCurationExceptions, respondToDeclineException, respondToCurationBatch, respondToCurationBatches, respondToCurationProgress, respondToCurationSettings, respondToCurationSources, respondToScopeRevert, respondToSetCurationSource, respondToSetCurationSourceKey, respondToSuppressions, respondToUpdateCurationSettings, type CurationData } from "./curation-data";
+import { curationDataOf, respondToAcceptException, respondToClearSuppression, respondToCurationConversations, respondToCurationExceptions, respondToDeclineException, respondToCurationBatch, respondToCurationBatches, respondToCurationClassifications, respondToCurationProgress, respondToRepatrol, respondToCurationSettings, respondToCurationSources, respondToScopeRevert, respondToSetCurationSource, respondToSetCurationSourceKey, respondToSuppressions, respondToUpdateCurationSettings, type CurationData } from "./curation-data";
 import { failure } from "./catalog-data";
 import type { FakeApi } from "./fake-api";
 import type { GovernanceData } from "./governance-data";
@@ -13,7 +13,8 @@ const searchOf = (path: string) => new URL(path, "http://localhost").searchParam
  */
 export function installCurationApi(api: FakeApi, governance: GovernanceData | null = null): CurationData {
   const data = curationDataOf(governance);
-  const answer = (result: { status: number; body: unknown }) => (result.status === 204 ? new Response(null, { status: 204 }) : jsonResponse(result.status, result.body));
+  const answer = (result: { status: number; body: unknown }) =>
+    result.status === 204 ? new Response(null, { status: 204 }) : result.status === 202 && result.body === null ? new Response(null, { status: 202, headers: { "Content-Length": "0" } }) : jsonResponse(result.status, result.body);
   const base = "/api/v1/admin/curation";
   api.on("GET", `${base}/settings`, () => answer(respondToCurationSettings(data)));
   api.on("PUT", `${base}/settings`, (request) => answer(respondToUpdateCurationSettings(data, request.body)));
@@ -28,6 +29,8 @@ export function installCurationApi(api: FakeApi, governance: GovernanceData | nu
   });
   api.on("DELETE", keyPath, (request) => answer(respondToSetCurationSourceKey(data, idFrom(request.path, keyPath), keyName(request.path), null)));
   api.on("GET", `${base}/progress`, () => answer(respondToCurationProgress(data)));
+  api.on("GET", `${base}/classifications`, () => answer(respondToCurationClassifications(data)));
+  api.on("POST", `${base}/repatrol`, () => answer(respondToRepatrol(data)));
   api.on("GET", `${base}/batches`, (request) => answer(respondToCurationBatches(data, searchOf(request.path))));
   api.on("GET", /^\/api\/v1\/admin\/curation\/batches\/[^/]+$/, (request) => answer(respondToCurationBatch(data, idFrom(request.path, /\/batches\/([^/]+)$/))));
   api.on("POST", `${base}/reverts`, (request) => answer(respondToScopeRevert(data, request.headers.get("Idempotency-Key"), request.body)));

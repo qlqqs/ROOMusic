@@ -3,6 +3,7 @@ import { apiRequest } from "../../../shared/api";
 import {
   decodeCurationBatch,
   decodeCurationBatchPage,
+  decodeCurationClassifications,
   decodeCurationConversationPage,
   decodeCurationExceptionAccepted,
   decodeCurationExceptionDeclined,
@@ -15,6 +16,7 @@ import {
   decodeSuppressionPage,
   type CurationBatchDTO,
   type CurationBatchPageDTO,
+  type CurationClassificationsDTO,
   type CurationConversationPageDTO,
   type CurationExceptionDTO,
   type CurationExceptionPageDTO,
@@ -37,9 +39,15 @@ export function fetchCurationSettings(signal?: AbortSignal): Promise<ApiResponse
 
 /**
  * 改总开关、暂停、整理用的模型或每日 token 上限（至少一项）；总开关从关到开时服务器同时解除暂停。
- * model 为空串表示用开启者的对话模型；daily_token_limit 为 null 表示不限。返回改后的设置。
+ * model 为空串表示用开启者的对话模型；daily_token_limit、web_daily_token_limit（联网兜底的单独上限）为 null 表示不限。返回改后的设置。
  */
-export function updateCurationSettings(change: { enabled?: boolean; paused?: boolean; model?: string; daily_token_limit?: number | null }): Promise<ApiResponse<CurationSettingsDTO>> {
+export function updateCurationSettings(change: {
+  enabled?: boolean;
+  paused?: boolean;
+  model?: string;
+  daily_token_limit?: number | null;
+  web_daily_token_limit?: number | null;
+}): Promise<ApiResponse<CurationSettingsDTO>> {
   return apiRequest({ method: "PUT", path: "/api/v1/admin/curation/settings", body: change }, decodeCurationSettings);
 }
 
@@ -62,6 +70,16 @@ export function setCurationSourceKey(id: string, name: string, key: string | nul
 /** 后台循环的状态与进度。 */
 export function fetchCurationProgress(signal?: AbortSignal): Promise<ApiResponse<CurationProgressDTO>> {
   return apiRequest({ method: "GET", path: "/api/v1/admin/curation/progress", signal }, decodeCurationProgress);
+}
+
+/** 可见发行按本地分类的计数（每次实时计算，不轮询）。 */
+export function fetchCurationClassifications(signal?: AbortSignal): Promise<ApiResponse<CurationClassificationsDTO>> {
+  return apiRequest({ method: "GET", path: "/api/v1/admin/curation/classifications", signal }, decodeCurationClassifications);
+}
+
+/** 让所有稳定的名字重新巡检（无请求体，202 空体）；已排队或正在跑的旧巡检随之失效。 */
+export function requestRepatrol(): Promise<ApiResponse<null>> {
+  return apiRequest({ method: "POST", path: "/api/v1/admin/curation/repatrol" }, () => null);
 }
 
 /** 批次，最新的在前。 */

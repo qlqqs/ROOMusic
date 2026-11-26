@@ -62,7 +62,7 @@ describe("自动整理设置：入口与权限", () => {
     await user.click(within(nav).getByRole("link", { name: "自动整理" }));
     expect(await heading("自动整理")).toBeTruthy();
     expect(history.location.pathname).toBe("/settings/curation");
-    for (const name of ["自动整理", "进度", "模型判断", "例外", "外部源", "批次", "不再提出"]) expect(await group(name)).toBeTruthy();
+    for (const name of ["自动整理", "进度", "模型判断", "未采用的建议", "外部源", "批次", "不再提出"]) expect(await group(name)).toBeTruthy();
   });
 
   it("成员打开地址看到需要管理员权限，不请求自动整理接口", async () => {
@@ -113,6 +113,40 @@ describe("总开关与暂停", () => {
     await waitFor(() => expect(screen.queryByRole("switch", { name: "暂停" })).toBeNull());
   });
 
+  it("联网每日上限单独保存；今天写出其中联网的用量，联网到上限时说明其它判断照常", async () => {
+    const { api, curation } = setup();
+    enableCuration(curation);
+    curation.web = { today: { input_tokens: 300, output_tokens: 200 }, limitReached: true, retryAt: "2026-01-06T00:00:00Z" };
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const model = await group("模型判断");
+    expect(await within(model).findByText(/其中联网 500/)).toBeTruthy();
+    expect(within(model).getByText(/^联网到了上限，其它判断照常，.+ 恢复联网。$/)).toBeTruthy();
+    const webLimit = within(model).getByRole("group", { name: "联网每日上限" });
+    expect(within(model).getByText("不限：联网兜底只受每日上限约束。")).toBeTruthy();
+    await user.click(within(webLimit).getByRole("checkbox", { name: "不限" }));
+    const input = within(webLimit).getByRole("spinbutton", { name: "联网每日上限" });
+    await user.clear(input);
+    await user.type(input, "200");
+    await user.tab();
+    await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings").at(-1)?.body).toEqual({ web_daily_token_limit: 2_000_000 }));
+  });
+
+  it("重新巡检：图标按钮，确认后提交，写明已开始", async () => {
+    const { api, curation } = setup();
+    enableCuration(curation);
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const model = await group("模型判断");
+    await user.click(await within(model).findByRole("button", { name: "重新巡检全部名字" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "重新巡检全部名字？" }));
+    expect(dialog.getByText(/会消耗模型用量/)).toBeTruthy();
+    await user.click(dialog.getByRole("button", { name: "重新巡检" }));
+    await waitFor(() => expect(api.requestsTo("POST", "/api/v1/admin/curation/repatrol")).toHaveLength(1));
+    expect(curation.repatrols).toBe(1);
+    expect(await within(model).findByText("已开始重新巡检。")).toBeTruthy();
+  });
+
   it("保存失败时回到服务器的值并就近提示", async () => {
     const { api } = setup();
     api.on("PUT", "/api/v1/admin/curation/settings", () => new Response(JSON.stringify({ error: { code: "database_unavailable", message: "数据库暂时不可用" }, request_id: "r" }), { status: 503, headers: { "Content-Type": "application/json" } }));
@@ -147,8 +181,69 @@ describe("进度", () => {
     expect(await within(progress).findByText("正在整理")).toBeTruthy();
     expect(within(progress).getByRole("progressbar", { name: "已处理的发行" }).getAttribute("aria-valuenow")).toBe("4");
     expect(within(progress).getByText("对上 3 · 拿不准 1 · 没对上 0 · 稍后再试 2")).toBeTruthy();
-    expect(within(await group("模型判断")).getByText("等模型 1 · 处理中 0 · 等你处理 0 · 搁置 0")).toBeTruthy();
+    expect(within(await group("模型判断")).getByText("等模型 1 · 处理中 0 · 搁置 0")).toBeTruthy();
     expect(within(progress).getByRole("link", { name: "查看改动" }).getAttribute("href")).toBe(`/settings/operations?batch=${BATCH}`);
+  });
+});
+
+describe("进度：队列、分类与佐证来源（整理链 G）", () => {
+  const queue = (id: "release" | "artwork" | "lyrics" | "artist_media" | "fingerprint") => ({
+    id,
+    state: "idle" as const,
+    remaining: 0,
+    ready: 0,
+    successful_requests_per_second: null,
+    completed_items_per_second: null,
+    eta_seconds: 0,
+    pause_reason: null,
+    source: null,
+    retry_at: null,
+  });
+
+  it("每条队列一行：剩余、每分钟多少项与预计时间；被限流时写来源与恢复时刻；排空写已完成", async () => {
+    const { curation } = setup();
+    enableCuration(curation);
+    curation.state = "running";
+    curation.queues = [
+      { ...queue("release"), state: "paused", remaining: 120, eta_seconds: null, pause_reason: "rate_limited", source: "musicbrainz", retry_at: "2026-01-05T08:30:00Z" },
+      { ...queue("artwork"), state: "running", remaining: 30, ready: 30, completed_items_per_second: 0.5, eta_seconds: 60 },
+      { ...queue("lyrics"), state: "running", remaining: 900, ready: 900, completed_items_per_second: 0.25, eta_seconds: 3600 },
+      queue("artist_media"),
+      { ...queue("fingerprint"), remaining: 4, eta_seconds: null, pause_reason: "waiting_for_stability" },
+    ];
+    renderApp({ path: "/settings/curation" });
+    const progress = await group("进度");
+    expect(await within(progress).findByLabelText(/^识别队列：MusicBrainz 限流，约 .+ 恢复 · 剩 120$/)).toBeTruthy();
+    expect(within(progress).getByLabelText("封面队列：剩 30 · 每分钟 30 项 · 约 1 分钟")).toBeTruthy();
+    expect(within(progress).getByLabelText("歌词队列：剩 900 · 每分钟 15 项 · 约 1 小时")).toBeTruthy();
+    expect(within(progress).getByLabelText("艺人资料队列：已完成")).toBeTruthy();
+    expect(within(progress).getByLabelText("声纹队列：等文件拷完 · 剩 4")).toBeTruthy();
+  });
+
+  it("结果写出未收录与无可用候选；本地分类写四类计数", async () => {
+    const { curation } = setup();
+    enableCuration(curation);
+    curation.releases = { total: 10, processed: 10, matched: 6, uncertain: 0, no_match: 0, try_later: 0, unlisted: 3, no_usable_candidates: 1 };
+    curation.classifications = { total: 10, tagged_id: 2, has_gaps: 5, local_complete: 2, insufficient: 1 };
+    renderApp({ path: "/settings/curation" });
+    const progress = await group("进度");
+    expect(await within(progress).findByText("对上 6 · 拿不准 0 · 没对上 0 · 外部库未收录 3 · 无可用候选 1")).toBeTruthy();
+    expect(await within(progress).findByText("带编号 2 · 有缺口 5 · 本地完整 2 · 信息不足 1")).toBeTruthy();
+  });
+
+  it("依据库内或网页写入：各写条数，菜单里可以查看与整批撤销", async () => {
+    const { curation, governance } = setup();
+    enableCuration(curation);
+    seedAutoOperation(governance, { type: "external_link", releaseId: releaseOf(albumA()), changes: linkChanges("Sample Symphonies"), provider: "library_evidence" });
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const progress = await group("进度");
+    expect(await within(progress).findByLabelText("库内佐证 1 条")).toBeTruthy();
+    expect(await within(progress).findByLabelText("网络搜索 0 条")).toBeTruthy();
+    await user.click(within(progress).getByRole("button", { name: "依据库内或网页写入的更多操作" }));
+    expect(screen.getByRole("menuitem", { name: "查看依据库内佐证的改动" })).toBeTruthy();
+    await user.click(screen.getByRole("menuitem", { name: "撤销依据库内佐证的全部自动修改" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 });
 
@@ -468,7 +563,7 @@ describe("模型判断（E2）", () => {
     const meter = within(model).getByRole("progressbar", { name: "今天的用量" });
     expect(meter.getAttribute("aria-valuenow")).toBe("2000000");
     expect(meter.getAttribute("aria-valuemax")).toBe("10000000");
-    expect(within(model).getByText("等模型 3 · 处理中 2 · 等你处理 0 · 搁置 1")).toBeTruthy();
+    expect(within(model).getByText("等模型 3 · 处理中 2 · 搁置 1")).toBeTruthy();
     expect((await within(model).findByRole("link", { name: "自动整理 01-05 08:00" })).getAttribute("href")).toBe("/steward/00000000-0000-4000-9000-000000000099");
   });
 
@@ -495,7 +590,7 @@ describe("模型判断（E2）", () => {
     await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings").at(-1)?.body).toEqual({ daily_token_limit: 5_000_000 }));
     expect(await within(model).findByText("每天 500 万 token，达到后当天不再启动新的判断。")).toBeTruthy();
 
-    await user.click(within(model).getByRole("checkbox", { name: "不限" }));
+    await user.click(within(within(model).getByRole("group", { name: "每日上限" })).getByRole("checkbox", { name: "不限" }));
     await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings").at(-1)?.body).toEqual({ daily_token_limit: null }));
     expect(await within(model).findByText("不限：后台整理不按天停下。")).toBeTruthy();
     expect(within(model).queryByRole("progressbar", { name: "今天的用量" })).toBeNull();
@@ -515,12 +610,26 @@ describe("模型判断（E2）", () => {
   });
 });
 
+describe("未采用的建议（E2、整理链 G）", () => {
+  it("判断为不需要改的建议只能不采纳，没有采纳按钮", async () => {
+    const { curation } = setup();
+    enableCuration(curation);
+    seedException(curation, { can_accept: false, reason_code: "verification_declined", review: null, reasons: ["只是繁简写法不同"] });
+    renderApp({ path: "/settings/curation" });
+    const table = await within(await group("未采用的建议")).findByRole("table", { name: "未采用的建议" });
+    expect(within(table).getByText("核对后判断不需要改")).toBeTruthy();
+    expect(within(table).getByText("只是繁简写法不同")).toBeTruthy();
+    expect(within(table).queryByRole("button", { name: /^采纳/ })).toBeNull();
+    expect(within(table).getByRole("button", { name: /^不采纳/ })).toBeTruthy();
+  });
+});
+
 describe("例外（E2）", () => {
   it("没有例外时只写一句；有时列出发行、前后值、审查结论与理由", async () => {
     const { curation } = setup();
     enableCuration(curation);
     renderApp({ path: "/settings/curation" });
-    expect(await within(await group("例外")).findByText("没有等你处理的例外。")).toBeTruthy();
+    expect(await within(await group("未采用的建议")).findByText("没有未采用的建议。")).toBeTruthy();
   });
 
   it("采纳：确认框列出改动，成功后行消失、等你处理减一；“查看过程”链接到会话", async () => {
@@ -529,8 +638,8 @@ describe("例外（E2）", () => {
     const exception = seedException(curation);
     const user = userEvent.setup();
     renderApp({ path: "/settings/curation" });
-    const section = await group("例外");
-    const table = await within(section).findByRole("table", { name: "等你处理的例外" });
+    const section = await group("未采用的建议");
+    const table = await within(section).findByRole("table", { name: "未采用的建议" });
     expect(within(table).getByText("标题：旧标题 → 新标题")).toBeTruthy();
     expect(within(table).getByText("审查拿不准（风险中）")).toBeTruthy();
     expect(within(table).getByText("标题需要人工核对")).toBeTruthy();
@@ -540,7 +649,7 @@ describe("例外（E2）", () => {
     expect(within(dialog).getByText(/字段写进人工修正/)).toBeTruthy();
     await user.click(within(dialog).getByRole("button", { name: "采纳" }));
     await waitFor(() => expect(api.requestsTo("POST", `/api/v1/admin/curation/exceptions/${exception.id}/accept`)).toHaveLength(1));
-    expect(await within(section).findByText("没有等你处理的例外。")).toBeTruthy();
+    expect(await within(section).findByText("没有未采用的建议。")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
@@ -562,7 +671,7 @@ describe("例外（E2）", () => {
     });
     const user = userEvent.setup();
     renderApp({ path: "/settings/curation" });
-    const table = await within(await group("例外")).findByRole("table", { name: "等你处理的例外" });
+    const table = await within(await group("未采用的建议")).findByRole("table", { name: "未采用的建议" });
     const link = within(table).getByRole("link", { name: "11111111-1111-4111-8111-111111111111" });
     expect(link.getAttribute("href")).toBe("https://musicbrainz.org/release/11111111-1111-4111-8111-111111111111");
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");
@@ -575,7 +684,7 @@ describe("例外（E2）", () => {
     expect(within(dialog).getByText(/以后程序与模型都不再提出这个值/)).toBeTruthy();
     await user.click(within(dialog).getByRole("button", { name: "不采纳" }));
     await waitFor(() => expect(api.requestsTo("POST", `/api/v1/admin/curation/exceptions/${exception.id}/decline`)).toHaveLength(1));
-    expect(await within(await group("例外")).findByText("没有等你处理的例外。")).toBeTruthy();
+    expect(await within(await group("未采用的建议")).findByText("没有未采用的建议。")).toBeTruthy();
   });
 
   it("采纳失败：内容变了写原因并刷新列表；外部源暂时不可用时框留着，可以重试", async () => {
@@ -586,7 +695,7 @@ describe("例外（E2）", () => {
     api.on("POST", path, () => httpFailure(503, "source_unavailable", "外部源暂时不可用"));
     const user = userEvent.setup();
     renderApp({ path: "/settings/curation" });
-    const table = await within(await group("例外")).findByRole("table", { name: "等你处理的例外" });
+    const table = await within(await group("未采用的建议")).findByRole("table", { name: "未采用的建议" });
     await user.click(within(table).getByRole("button", { name: /^采纳/ }));
     const dialog = await screen.findByRole("dialog", { name: "采纳这项修改？" });
     await user.click(within(dialog).getByRole("button", { name: "采纳" }));
@@ -604,7 +713,7 @@ describe("例外（E2）", () => {
     curation.settings = { ...curation.settings, enabled_by: { id: "00000000-0000-4000-8000-0000000000ff", username: "other" } };
     seedException(curation);
     renderApp({ path: "/settings/curation" });
-    const table = await within(await group("例外")).findByRole("table", { name: "等你处理的例外" });
+    const table = await within(await group("未采用的建议")).findByRole("table", { name: "未采用的建议" });
     expect(within(table).queryByRole("link", { name: /查看过程/ })).toBeNull();
   });
 });

@@ -163,6 +163,11 @@ describe("apiRequest 无效响应", () => {
     expect(failure.kind === "invalid_response" && failure.status).toBe(502);
   });
 
+  it("202 受理且没有响应体时，解码器拿到 null", async () => {
+    stubFetch(() => new Response(null, { status: 202, headers: { "Content-Length": "0" } }));
+    await expect(apiRequest({ method: "POST", path: "/api/v1/admin/curation/repatrol" }, () => null)).resolves.toEqual({ status: 202, data: null });
+  });
+
   it("接受带 charset 的 application/json", async () => {
     stubFetch(() => jsonResponse(200, { ok: true }, { "Content-Type": "application/json; charset=utf-8" }));
     await expect(apiRequest({ method: "GET", path: "/api/v1/auth/me" }, decodeOk)).resolves.toMatchObject({ status: 200 });

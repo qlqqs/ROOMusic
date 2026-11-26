@@ -2,6 +2,7 @@ import { correctionFieldLabels, displayValue, sourceName, trackFieldLabels, type
 import { formatCount } from "../../shared/lib/number";
 import type {
   CurationExceptionDTO,
+  CurationQueueDTO,
   CurationSourceDTO,
   JsonValue,
   ModelState,
@@ -21,6 +22,56 @@ export const programStateText: Record<ProgramState, string> = {
   disabled: "未打开",
   unavailable: "后台整理没有运行",
 };
+
+/** 五条程序队列的名字（行名用短名，读屏名与提示用“…队列”）。 */
+export const queueNames: Record<CurationQueueDTO["id"], string> = {
+  release: "识别",
+  artwork: "封面",
+  lyrics: "歌词",
+  artist_media: "艺人资料",
+  fingerprint: "声纹",
+};
+
+const queuePauseText: Record<NonNullable<CurationQueueDTO["pause_reason"]>, string> = {
+  disabled: "未打开",
+  paused: "已暂停",
+  waiting_for_scan: "等扫描结束",
+  waiting_for_stability: "等文件拷完",
+  waiting_for_fingerprint: "等声纹算完",
+  source_disabled: "来源没有打开",
+  rate_limited: "限流",
+  source_unavailable: "暂时连不上",
+};
+
+/** 预计时间：不到一分钟写“不到 1 分钟”，一小时内按分钟，再长按小时（保留一位小数）。 */
+export function etaText(seconds: number): string {
+  if (seconds < 60) return "不到 1 分钟";
+  if (seconds < 3600) return `约 ${formatCount(Math.round(seconds / 60))} 分钟`;
+  const hours = seconds / 3600;
+  return `约 ${hours < 10 ? hours.toFixed(1).replace(/\.0$/, "") : formatCount(Math.round(hours))} 小时`;
+}
+
+/**
+ * 一条队列的一句话：暂停时写原因（来源限流或连不上时带来源与恢复时刻）；排空写“已完成”；
+ * 否则写剩余、实测速度（每分钟多少项）与预计时间，没有速度样本时只写剩余。
+ */
+export function queueText(queue: CurationQueueDTO, formatTime: (iso: string) => string): string {
+  if (queue.pause_reason !== null) {
+    const reason = queuePauseText[queue.pause_reason];
+    const source = queue.source === null ? "" : `${sourceName(queue.source)} `;
+    const until = queue.retry_at === null ? "" : `，约 ${formatTime(queue.retry_at)} 恢复`;
+    const left = queue.remaining > 0 ? ` · 剩 ${formatCount(queue.remaining)}` : "";
+    return `${source}${reason}${until}${left}`;
+  }
+  if (queue.remaining === 0) return "已完成";
+  const parts = [`剩 ${formatCount(queue.remaining)}`];
+  if (queue.completed_items_per_second !== null) {
+    const perMinute = queue.completed_items_per_second * 60;
+    parts.push(`每分钟 ${perMinute >= 10 ? formatCount(Math.round(perMinute)) : perMinute.toFixed(1).replace(/\.0$/, "")} 项`);
+  }
+  if (queue.eta_seconds !== null) parts.push(etaText(queue.eta_seconds));
+  return parts.join(" · ");
+}
 
 const capabilityText: Record<SourceCapability, string> = {
   release_lookup: "发行",
