@@ -42,7 +42,13 @@ const queuePauseText: Record<NonNullable<CurationQueueDTO["pause_reason"]>, stri
   source_disabled: "来源没有打开",
   rate_limited: "限流",
   source_unavailable: "暂时连不上",
+  invalid_response: "返回的数据有误",
+  invalid_query: "查询条件有误",
+  fingerprint_failed: "声纹没算出来",
 };
+
+/** 专辑专属错误：等的是这一张的重试，不是整个来源恢复。 */
+const albumRetryReasons = new Set<NonNullable<CurationQueueDTO["pause_reason"]>>(["invalid_response", "invalid_query", "fingerprint_failed"]);
 
 /** 预计时间：不到一分钟写“不到 1 分钟”，一小时内按分钟，再长按小时（保留一位小数）。 */
 export function etaText(seconds: number): string {
@@ -59,8 +65,10 @@ export function etaText(seconds: number): string {
 export function queueText(queue: CurationQueueDTO, formatTime: (iso: string) => string): string {
   if (queue.pause_reason !== null) {
     const reason = queuePauseText[queue.pause_reason];
-    const source = queue.source === null ? "" : `${sourceName(queue.source)} `;
-    const until = queue.retry_at === null ? "" : `，约 ${formatTime(queue.retry_at)} 恢复`;
+    const albumRetry = albumRetryReasons.has(queue.pause_reason);
+    // 本机算声纹失败时来源是内部的 local_fingerprint，不写出来。
+    const source = queue.source === null || queue.pause_reason === "fingerprint_failed" ? "" : `${sourceName(queue.source)} `;
+    const until = queue.retry_at === null ? "" : `，约 ${formatTime(queue.retry_at)} ${albumRetry ? "重试这一张" : "恢复"}`;
     const left = queue.remaining > 0 ? ` · 剩 ${formatCount(queue.remaining)}` : "";
     return `${source}${reason}${until}${left}`;
   }
@@ -246,12 +254,20 @@ export function modelUnavailableText(reason: ModelUnavailableReason, mine: boole
       return mine ? "模型接口的密钥需要重新填写。" : "开启者的模型接口密钥需要重新填写。";
     case "tool_unsupported":
       return mine ? "当前模型不支持工具调用，换一个支持的模型。" : "开启者配置的模型不支持工具调用。";
+    case "tool_unsupported_override":
+      return mine ? "你在 Agent 设置里把这个模型标成了不支持工具调用，换一个模型或改掉这项设置。" : "开启者在 Agent 设置里把模型标成了不支持工具调用。";
     case "enabler_unavailable":
       return "开启者已经不是启用的管理员，重新打开总开关后由你接手。";
     case "source_disabled":
       return "MusicBrainz 已关闭，模型判断要用它查资料。";
     case "provider_error":
       return "模型接口最近出错了，过一会儿自动再试。";
+    case "configuration":
+      return "模型接口拒绝了请求，改好配置或测试连接成功后继续。";
+    case "provider_quota":
+      return "服务商的额度或余额不足，会定时自动再试。";
+    case "empty_replies":
+      return "模型连续没有给出回答，测试连接成功后继续。";
   }
 }
 
@@ -278,7 +294,14 @@ export function modelPauseText(kind: ModelPauseKind, detail: string | null, retr
 
 /** 需要开启者去 Agent 设置里处理的原因。 */
 export function needsAgentSettings(reason: ModelUnavailableReason | null): boolean {
-  return reason === "not_configured" || reason === "key_needs_reentry" || reason === "tool_unsupported";
+  return (
+    reason === "not_configured" ||
+    reason === "key_needs_reentry" ||
+    reason === "tool_unsupported" ||
+    reason === "tool_unsupported_override" ||
+    reason === "configuration" ||
+    reason === "empty_replies"
+  );
 }
 
 /** token 数：整万写“n 万”，否则写原数。 */

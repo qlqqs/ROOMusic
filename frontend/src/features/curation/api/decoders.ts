@@ -70,7 +70,19 @@ const count = () => d.integer({ min: 0 });
 
 export const MODEL_STATES = ["idle", "running", "waiting_review", "paused", "disabled", "waiting_for_scan", "limit_reached", "unavailable"] as const;
 export type ModelState = (typeof MODEL_STATES)[number];
-export const MODEL_UNAVAILABLE_REASONS = ["not_configured", "key_needs_reentry", "tool_unsupported", "enabler_unavailable", "source_disabled", "provider_error"] as const;
+// 模型暂停时，后端把暂停类别（configuration、provider_quota、empty_replies）也写进不可用原因；tool_unsupported_override 是在 Agent 设置里手动标成了不支持工具调用。
+export const MODEL_UNAVAILABLE_REASONS = [
+  "not_configured",
+  "key_needs_reentry",
+  "tool_unsupported",
+  "tool_unsupported_override",
+  "enabler_unavailable",
+  "source_disabled",
+  "provider_error",
+  "configuration",
+  "provider_quota",
+  "empty_replies",
+] as const;
 export type ModelUnavailableReason = (typeof MODEL_UNAVAILABLE_REASONS)[number];
 /**
  * 模型暂停的原因（ADR 0009 第 6.5 节）：configuration 是配置被拒（密钥、模型名、不支持工具），改配置或手动测试成功才恢复；
@@ -118,6 +130,10 @@ export const QUEUE_PAUSE_REASONS = [
   "source_disabled",
   "rate_limited",
   "source_unavailable",
+  // 识别队列只剩等重试的专辑时，写那张专辑的出错原因（专辑专属错误，第三次记为查询出错）。
+  "invalid_response",
+  "invalid_query",
+  "fingerprint_failed",
 ] as const;
 const rate = () => d.nullable(d.number({ min: 0 }));
 const queueDecoder = d.object({
@@ -162,7 +178,8 @@ export type MatchResultStatus = (typeof MATCH_RESULT_STATUSES)[number];
 // 有冲突时列出几张都对得上的候选，管理员挑一张（会重新做结构核对）；snapshot_id 是提交挑选时要带的这次候选快照。
 const matchCandidateDecoder = d.object({
   source: d.string({ min: 1, max: 100 }),
-  entity: d.oneOf(["release", "release_group"] as const),
+  // 单曲专辑的冲突候选是录音（recording），挑选时按单曲核对。
+  entity: d.oneOf(["release", "release_group", "recording"] as const),
   external_id: d.uuid(),
   title: d.string({ max: 1000 }),
   artist: d.string({ max: 1000 }),
