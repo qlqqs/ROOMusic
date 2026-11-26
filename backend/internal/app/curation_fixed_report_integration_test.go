@@ -15,20 +15,21 @@ import (
 )
 
 type fixedRow struct {
-	ID          string              `json:"id"`
-	Mode        string              `json:"mode"`
-	Expected    string              `json:"expected"`
-	Actual      string              `json:"actual"`
-	MatchStatus []string            `json:"program_status,omitempty"`
-	Links       map[string][]string `json:"external_ids,omitempty"`
-	Writes      map[string]string   `json:"writes,omitempty"`
-	Issues      []string            `json:"issues,omitempty"`
-	Wrong       []string            `json:"wrong,omitempty"`
-	ScanDiff    []string            `json:"scan_diff,omitempty"`
-	Missing     []string            `json:"missing,omitempty"`
-	Requests    map[string]int      `json:"requests_by_endpoint"`
-	ElapsedMS   int64               `json:"elapsed_ms"`
-	Correct     bool                `json:"correct"`
+	ID            string              `json:"id"`
+	Mode          string              `json:"mode"`
+	Expected      string              `json:"expected"`
+	Actual        string              `json:"actual"`
+	MatchStatus   []string            `json:"program_status,omitempty"`
+	Links         map[string][]string `json:"external_ids,omitempty"`
+	Writes        map[string]string   `json:"writes,omitempty"`
+	LocalExisting map[string]string   `json:"local_existing,omitempty"`
+	Issues        []string            `json:"issues,omitempty"`
+	Wrong         []string            `json:"wrong,omitempty"`
+	ScanDiff      []string            `json:"scan_diff,omitempty"`
+	Missing       []string            `json:"missing,omitempty"`
+	Requests      map[string]int      `json:"requests_by_endpoint"`
+	ElapsedMS     int64               `json:"elapsed_ms"`
+	Correct       bool                `json:"correct"`
 }
 
 func newFixedRow(s fixedSample, mode string) fixedRow {
@@ -36,7 +37,7 @@ func newFixedRow(s fixedSample, mode string) fixedRow {
 	if mode == "script" {
 		expected = s.Script
 	}
-	return fixedRow{ID: s.ID, Mode: mode, Expected: expected, Links: map[string][]string{}, Writes: map[string]string{}}
+	return fixedRow{ID: s.ID, Mode: mode, Expected: expected, Links: map[string][]string{}, Writes: map[string]string{}, LocalExisting: map[string]string{}}
 }
 func (r fixedRow) requestCount() int {
 	sum := 0
@@ -79,17 +80,30 @@ func (r *fixedRow) score(t *testing.T, app *integrationTestApplication, s fixedS
 			r.Missing = append(r.Missing, target+"/"+kind)
 		}
 	}
-	checkFields := func(target, id string, required, optional map[string]string) {
-		actual := fields[id]
+	checkFields := func(target string, subject metricObject, required, optional map[string]string) {
+		actual := fields[subject.id]
 		for k, v := range actual {
 			r.Writes[target+"/"+k] = v.value
-			if required[k] != v.value && optional[k] != v.value {
+			if _, needed := required[k]; !needed && optional[k] != v.value && v.value != "" {
 				r.Wrong = append(r.Wrong, fmt.Sprintf("%s/%s 错写 %q", target, k, v.value))
 			}
 		}
-		for k := range required {
-			if _, ok := actual[k]; !ok {
-				r.Missing = append(r.Missing, target+"/"+k)
+		if len(required) == 0 {
+			return
+		}
+		effective := metricEffectiveFields(t, app, subject, slices.Sorted(maps.Keys(required)))
+		for k, expected := range required {
+			key := target + "/" + k
+			value := effective[k]
+			switch {
+			case !value.Valid:
+				r.Wrong = append(r.Wrong, fmt.Sprintf("%s 错写 NULL，预期 %q", key, expected))
+			case value.String != expected:
+				r.Wrong = append(r.Wrong, fmt.Sprintf("%s 错写 %q，预期 %q", key, value.String, expected))
+			default:
+				if _, written := actual[k]; !written {
+					r.LocalExisting[key] = value.String
+				}
 			}
 		}
 	}
@@ -142,7 +156,7 @@ func (r *fixedRow) score(t *testing.T, app *integrationTestApplication, s fixedS
 		if r.Mode == "script" {
 			maps.Copy(optional, s.OptionalScriptFields)
 		}
-		checkFields("专辑", id, required, optional)
+		checkFields("专辑", metricObject{"release", id}, required, optional)
 		if s.ID == "named-bonus" {
 			titles := programString(t, app, `SELECT coalesce(string_agg(title, ' / ' ORDER BY position),'') FROM media WHERE release_id=$1`, id)
 			if !strings.Contains(titles, "初声") || !strings.Contains(titles, "夜声") {
@@ -193,7 +207,7 @@ func (r *fixedRow) score(t *testing.T, app *integrationTestApplication, s fixedS
 					}
 				}
 			}
-			checkFields(file, track, tf, extra)
+			checkFields(file, metricObject{"track", track}, tf, extra)
 			if i < len(s.ExpectedTitles) && tr.Title != s.ExpectedTitles[i] {
 				r.ScanDiff = append(r.ScanDiff, file+" 标题 "+tr.Title)
 			}

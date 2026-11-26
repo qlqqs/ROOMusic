@@ -270,6 +270,53 @@ func TestPostgreSQLCurationFixedScoring(t *testing.T) {
 				t.Errorf("待名字核对期间应保留标题 %q，实际 %q", sample.Local.Tracks[0].Title, current)
 			}
 		}},
+		{"required-effective-values", func(t *testing.T) {
+			putReleaseLinks(t, sample, part)
+			target := sample
+			target.Expect.TrackFields = []map[string]string{{"title": sample.Local.Tracks[0].Title}}
+			file := sample.Local.Tracks[0].File
+			artist := sample.Expect.Fields["album_artist"]
+			label := sample.Expect.Fields["label"]
+			score := func() fixedRow {
+				t.Helper()
+				row := newFixedRow(target, "program")
+				row.score(t, app, target, part, nil)
+				return row
+			}
+
+			// 扫描已有专辑艺人与曲名，尚无厂牌。缺少有效值进入认错。
+			row := score()
+			if row.Correct || len(row.Writes)+len(row.Missing) != 0 || !slices.Equal(row.Wrong, []string{`专辑/label 错写 NULL，预期 "弦湾唱片"`}) ||
+				!maps.Equal(row.LocalExisting, map[string]string{"专辑/album_artist": artist, file + "/title": sample.Local.Tracks[0].Title}) {
+				t.Errorf("扫描值、必需空值或报告分栏不符：%+v", row)
+			}
+
+			writeFields(t, release, map[string]any{"label": label})
+			row = score()
+			if !row.Correct || !maps.Equal(row.Writes, map[string]string{"专辑/label": label}) ||
+				!maps.Equal(row.LocalExisting, map[string]string{"专辑/album_artist": artist, file + "/title": sample.Local.Tracks[0].Title}) {
+				t.Errorf("本地与自动层共同满足必需字段时应认对：%+v", row)
+			}
+
+			endpoint := "/api/v1/releases/" + release + "/corrections"
+			var state struct{ Revision int }
+			getJSON(t, app, &admin, endpoint, &state)
+			resp := app.request(t, "PATCH", endpoint, correctionBody(state.Revision, map[string]any{"label": setChange("人工厂牌")}),
+				&admin, idempotencyHeader(uuid.New()))
+			if resp.Code != 200 {
+				t.Fatalf("人工覆盖厂牌失败：%d %s", resp.Code, resp.Body)
+			}
+			row = score()
+			if row.Correct || row.Writes["专辑/label"] != label ||
+				!slices.Equal(row.Wrong, []string{`专辑/label 错写 "人工厂牌"，预期 "弦湾唱片"`}) {
+				t.Errorf("人工生效值错误时应认错，并保留自动层实际写入：%+v", row)
+			}
+			report := fixedReport{Rows: []fixedRow{row}, Totals: map[string]fixedTotal{}}
+			report.summarize("program", 0)
+			if report.Totals["program"].Wrong != 1 {
+				t.Errorf("有效值错误未计入认错：%+v", report.Totals)
+			}
+		}},
 		{"group", func(t *testing.T) {
 			target := sample
 			target.Program = "release_group"
@@ -345,6 +392,7 @@ func TestPostgreSQLCurationFixedScoring(t *testing.T) {
 			t.Cleanup(func() {
 				mustExec(t, app, `DELETE FROM external_links`)
 				mustExec(t, app, `DELETE FROM release_auto_values`)
+				mustExec(t, app, `DELETE FROM release_corrections`)
 				mustExec(t, app, `DELETE FROM track_auto_values`)
 				mustExec(t, app, `DELETE FROM curation_work_states`)
 			})
