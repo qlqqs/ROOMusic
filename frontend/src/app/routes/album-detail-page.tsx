@@ -164,11 +164,11 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
   const renderAdminSections = useCallback(
     ({ release, groupId: currentGroupId }: { release: ReleaseDetailDTO; groupId: string }) => (
       <>
-        <ReleaseMatchResults key={`match-${release.id}`} releaseId={release.id} />
+        <ReleaseMatchResults key={`match-${release.id}`} releaseId={release.id} names={release.musicbrainz_names} refresh={refresh} />
         <ReleaseHistory key={`history-${release.id}`} release={{ id: release.id, title: release.title }} groupId={currentGroupId} commands={historyCommands} />
       </>
     ),
-    [historyCommands],
+    [historyCommands, refresh],
   );
   return (
     <>

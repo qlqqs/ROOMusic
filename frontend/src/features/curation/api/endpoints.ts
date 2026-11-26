@@ -5,12 +5,11 @@ import {
   decodeCurationBatchPage,
   decodeCurationClassifications,
   decodeCurationConversationPage,
-  decodeCurationExceptionAccepted,
-  decodeCurationExceptionDeclined,
-  decodeCurationExceptionPage,
   decodeCurationModelRetry,
   decodeArtistWebQueue,
+  decodeConflictPage,
   decodeCurationProgress,
+  decodeMatchSelection,
   decodeReleaseMatchResults,
   decodeCurationSettings,
   decodeCurationSource,
@@ -21,10 +20,9 @@ import {
   type CurationBatchPageDTO,
   type CurationClassificationsDTO,
   type CurationConversationPageDTO,
-  type CurationExceptionDTO,
-  type CurationExceptionPageDTO,
   type CurationModelProgressDTO,
   type ArtistWebQueueDTO,
+  type ConflictPageDTO,
   type CurationProgressDTO,
   type ReleaseMatchResultDTO,
   type CurationSettingsDTO,
@@ -98,6 +96,40 @@ export function fetchReleaseMatchResults(releaseId: string, signal?: AbortSignal
   return apiRequest({ method: "GET", path: `/api/v1/admin/curation/releases/${releaseId}/match-results`, signal }, decodeReleaseMatchResults);
 }
 
+/** 有冲突的专辑一页（管理员）：几版都对得上、分不出是哪一版的，等管理员挑一张。 */
+export function fetchCurationConflicts(page: number, pageSize: number, signal?: AbortSignal): Promise<ApiResponse<ConflictPageDTO>> {
+  return apiRequest({ method: "GET", path: `/api/v1/admin/curation/conflicts?page=${page}&page_size=${pageSize}`, signal }, decodeConflictPage);
+}
+
+/**
+ * 管理员挑一张候选（会重新做结构核对再写入）：带这次候选快照与外部编号，用幂等键防重复提交。
+ * 快照过期回 409 item_stale，结构核对不过回 409 insufficient_corroboration。
+ */
+export function selectMatchCandidate(releaseId: string, choice: { source: string; snapshotId: string; externalId: string }, idempotencyKey: string): Promise<ApiResponse<ReleaseMatchResultDTO>> {
+  return apiRequest(
+    {
+      method: "POST",
+      path: `/api/v1/admin/curation/releases/${releaseId}/match-selection`,
+      body: { source: choice.source, snapshot_id: choice.snapshotId, external_id: choice.externalId },
+      idempotencyKey,
+    },
+    decodeMatchSelection,
+  );
+}
+
+/** 管理员一键采用 MusicBrainz 的写法（自动层，可撤销）；依据过期时回 409。成功只需知道已写入。 */
+export function adoptMusicBrainzName(releaseId: string, name: { targetId: string; field: string; basisOperationId: string; revision: number }, idempotencyKey: string): Promise<ApiResponse<null>> {
+  return apiRequest(
+    {
+      method: "POST",
+      path: `/api/v1/admin/curation/releases/${releaseId}/adopt-name`,
+      body: { target_id: name.targetId, field: name.field, basis_operation_id: name.basisOperationId, expected_revision: name.revision },
+      idempotencyKey,
+    },
+    () => null,
+  );
+}
+
 /** 手动重查一张普通未匹配的发行（只走程序，不交模型）；服务器接受后返回 202 空体，结果由后台写回。 */
 export function recheckRelease(releaseId: string): Promise<ApiResponse<null>> {
   return apiRequest({ method: "POST", path: `/api/v1/admin/curation/releases/${releaseId}/recheck` }, () => null);
@@ -114,11 +146,6 @@ export function retryCurationModel(): Promise<ApiResponse<CurationModelProgressD
 /** 可见发行按本地分类的计数（每次实时计算，不轮询）。 */
 export function fetchCurationClassifications(signal?: AbortSignal): Promise<ApiResponse<CurationClassificationsDTO>> {
   return apiRequest({ method: "GET", path: "/api/v1/admin/curation/classifications", signal }, decodeCurationClassifications);
-}
-
-/** 让所有稳定的名字重新巡检（无请求体，202 空体）；已排队或正在跑的旧巡检随之失效。 */
-export function requestRepatrol(): Promise<ApiResponse<null>> {
-  return apiRequest({ method: "POST", path: "/api/v1/admin/curation/repatrol" }, () => null);
 }
 
 /** 批次，最新的在前。 */
@@ -152,22 +179,6 @@ export function fetchSuppressions(page: number, signal?: AbortSignal): Promise<A
 /** 清除一条标记（封面与歌词的一对一起清除）；成功是 204。 */
 export function clearSuppression(id: string): Promise<ApiResponse<null>> {
   return apiRequest({ method: "DELETE", path: `/api/v1/admin/curation/suppressions/${encodeURIComponent(id)}` }, () => null);
-}
-
-/** 例外（M7 D）：status 为 open 时只列待处理的，all 列全部；新的在前。 */
-export function fetchCurationExceptions(status: "open" | "all", page: number, pageSize: number, signal?: AbortSignal): Promise<ApiResponse<CurationExceptionPageDTO>> {
-  const query = new URLSearchParams({ status, page: String(page), page_size: String(pageSize) });
-  return apiRequest({ method: "GET", path: `/api/v1/admin/curation/exceptions?${query.toString()}`, signal }, decodeCurationExceptionPage);
-}
-
-/** 采纳一条例外：服务器按当时的状态重新核对后执行，记为当前管理员的人工确认；前值变了返回 409 exception_stale。 */
-export function acceptCurationException(id: string): Promise<ApiResponse<{ exception: CurationExceptionDTO; operation_ids: string[] }>> {
-  return apiRequest({ method: "POST", path: `/api/v1/admin/curation/exceptions/${encodeURIComponent(id)}/accept` }, decodeCurationExceptionAccepted);
-}
-
-/** 不采纳一条例外：写“不再提出”的标记，之后程序与模型都不再提出同一个值。 */
-export function declineCurationException(id: string): Promise<ApiResponse<{ exception: CurationExceptionDTO }>> {
-  return apiRequest({ method: "POST", path: `/api/v1/admin/curation/exceptions/${encodeURIComponent(id)}/decline` }, decodeCurationExceptionDeclined);
 }
 
 /** 当前管理员名下的自动整理会话（M7 D），新的在前；不在普通会话列表里，打开、接回与续聊用管家的会话页。 */

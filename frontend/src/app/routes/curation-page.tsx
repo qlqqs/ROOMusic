@@ -1,15 +1,15 @@
-import { CurationBatchesSection, CurationExceptionsSection, CurationModelSection, CurationProgressSection, CurationSourcesSection, CurationSwitchSection, PluginsSection, SuppressionsSection, useCurationSettings } from "../../features/curation";
+import { CurationBatchesSection, CurationConflictsSection, CurationModelSection, CurationProgressSection, CurationSourcesSection, CurationSwitchSection, PluginsSection, SuppressionsSection, useCurationSettings } from "../../features/curation";
 import { useViewerScope } from "../../features/auth";
 import { useStewardModels } from "../../features/steward";
 import { Page } from "../../shared/ui";
 import { useReleaseDataRefresh } from "./use-release-refresh";
 
 /**
- * 自动整理（管理员，M7 E1、E2，整理链 G）：总开关与暂停、后台进度（含五条队列、本地分类与依据库内或网页的修改）、模型判断（整理用的模型、每日上限与联网上限、用量、重新巡检）、未采用的建议、各外部源与插件（M8）、批次与按批撤销、“不再提出”的标记。
- * 管理员专用，由路由层的 AdminGate 把关。batchPage、markerPage、exceptionPage 来自地址（第 1 页没有该参数）。撤销与采纳之后由 app 决定刷新哪些数据（目录、歌词等）。
+ * 自动整理（管理员，M7 E1、E2，ADR 0009）：总开关与暂停、后台进度（含五条队列与本地分类）、模型判断（整理用的模型、共用的每日上限、单次最多发送、用量与暂停原因）、有冲突的专辑（挑一版）、各外部源与插件（M8）、批次与按批撤销、“不再提出”的标记。
+ * 管理员专用，由路由层的 AdminGate 把关。batchPage、markerPage、conflictPage 来自地址（第 1 页没有该参数）。撤销与挑选之后由 app 决定刷新哪些数据（目录、歌词等）。
  * 当前管理员就是开启者时，模型的不可用原因链接到他的 Agent 设置；他的审查模型与有效的整理模型相同时提示另选一个（U11）。
  */
-export function CurationPage({ batchPage, markerPage, exceptionPage }: { batchPage: number; markerPage: number; exceptionPage: number }) {
+export function CurationPage({ batchPage, markerPage, conflictPage }: { batchPage: number; markerPage: number; conflictPage: number }) {
   const refresh = useReleaseDataRefresh();
   const settings = useCurationSettings();
   const { viewer } = useViewerScope();
@@ -22,7 +22,7 @@ export function CurationPage({ batchPage, markerPage, exceptionPage }: { batchPa
       <CurationSwitchSection />
       <CurationProgressSection settings={settings.data} refresh={refresh} />
       <CurationModelSection settings={settings.data} mine={mine} sameReviewModel={sameReviewModel} />
-      <CurationExceptionsSection page={exceptionPage} mine={mine} refresh={refresh} />
+      <CurationConflictsSection page={conflictPage} refresh={refresh} />
       <CurationSourcesSection settings={settings.data} refresh={refresh} />
       <PluginsSection />
       <CurationBatchesSection page={batchPage} refresh={refresh} />

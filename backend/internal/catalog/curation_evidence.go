@@ -92,10 +92,11 @@ type CurationTrack struct {
 }
 
 type CurationEvidence struct {
-	FileDigest  string           `json:"-"`
-	Legacy      LegacyCandidates `json:"-"`
-	LocalTitle  string           `json:"local_title,omitempty"`
-	LocalArtist string           `json:"local_artist,omitempty"`
+	AutomaticTitle, AutomaticAlbumArtist string           `json:"-"`
+	FileDigest                           string           `json:"-"`
+	Legacy                               LegacyCandidates `json:"-"`
+	LocalTitle                           string           `json:"local_title,omitempty"`
+	LocalArtist                          string           `json:"local_artist,omitempty"`
 	// 补空计划采用的字段输入，人工字段会由写入事务跳过。
 	FieldInputs map[string]json.RawMessage `json:"-"`
 	// 由整理写入方在受治理事务中复核。
@@ -284,13 +285,16 @@ func curationHeaders(ctx context.Context, q Queryer, ids []string, artworkExists
 		e.TitlePlaceholder = e.Authenticity["title"] == metadata.Placeholder
 		e.ArtistPlaceholder = e.SelectedArtistAuth() == metadata.Placeholder
 		e.EffectiveTitleAuth, e.EffectiveArtistAuth, e.EffectiveYear = e.Authenticity["title"], e.SelectedArtistAuth(), e.Year
-		for name, dest := range map[string]*metadata.Authenticity{"title": &e.EffectiveTitleAuth, "album_artist": &e.EffectiveArtistAuth} {
-			if raw, ok := autoValues[name]; ok && !e.Corrected[name] {
-				var value string
-				if err := json.Unmarshal(raw, &value); err != nil {
+		for _, auto := range []struct {
+			name  string
+			value *string
+			auth  *metadata.Authenticity
+		}{{"title", &e.AutomaticTitle, &e.EffectiveTitleAuth}, {"album_artist", &e.AutomaticAlbumArtist, &e.EffectiveArtistAuth}} {
+			if raw, ok := autoValues[auto.name]; ok && !e.Corrected[auto.name] {
+				if err := json.Unmarshal(raw, auto.value); err != nil {
 					return nil, err
 				}
-				*dest = metadata.FieldAuthenticity(name, value, "automatic", false, false)
+				*auto.auth = metadata.FieldAuthenticity(auto.name, *auto.value, "automatic", false, false)
 			}
 		}
 		if raw, ok := autoValues["year"]; ok && !e.Corrected["year"] {

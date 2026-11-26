@@ -42,16 +42,16 @@ import {
   respondToCurationBatches,
   respondToCurationClassifications,
   respondToCurationProgress,
-  respondToRepatrol,
   respondToCurationSettings,
   respondToCurationSources,
   respondToScopeRevert,
   respondToSetCurationSource,
   respondToSetCurationSourceKey,
   respondToSuppressions,
-  respondToCurationExceptions,
   respondToAcceptException,
   respondToDeclineException,
+  respondToCurationConflicts,
+  respondToMatchSelection,
   respondToCurationConversations,
   respondToUpdateCurationSettings,
   type CurationData,
@@ -555,7 +555,6 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     }
     if (key === "GET /api/v1/admin/curation/progress") return guarded(method, path, true, () => respondToCurationProgress(mock.curation));
     if (key === "GET /api/v1/admin/curation/classifications") return guarded(method, path, true, () => respondToCurationClassifications(mock.curation));
-    if (key === "POST /api/v1/admin/curation/repatrol") return guarded(method, path, true, () => respondToRepatrol(mock.curation));
     if (key === "GET /api/v1/admin/curation/batches") return guarded(method, path, true, () => respondToCurationBatches(mock.curation, search));
     const curationBatch = /^\/api\/v1\/admin\/curation\/batches\/([^/]+)$/.exec(path);
     if (curationBatch !== null && method === "GET") return guarded(method, path, true, () => respondToCurationBatch(mock.curation, curationBatch[1] ?? ""));
@@ -563,7 +562,9 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     if (key === "GET /api/v1/admin/curation/suppressions") return guarded(method, path, true, () => respondToSuppressions(mock.curation, search));
     const curationMarker = /^\/api\/v1\/admin\/curation\/suppressions\/([^/]+)$/.exec(path);
     if (curationMarker !== null && method === "DELETE") return guarded(method, path, true, () => respondToClearSuppression(mock.curation, curationMarker[1] ?? ""));
-    if (key === "GET /api/v1/admin/curation/exceptions") return guarded(method, path, true, () => respondToCurationExceptions(mock.curation, search));
+    if (key === "GET /api/v1/admin/curation/conflicts") return guarded(method, path, true, () => respondToCurationConflicts(mock.curation, search));
+    const matchSelection = /^\/api\/v1\/admin\/curation\/releases\/([^/]+)\/match-selection$/.exec(path);
+    if (matchSelection !== null && method === "POST") return guarded(method, path, true, () => respondToMatchSelection(mock.curation, matchSelection[1] ?? "", body));
     const curationException = /^\/api\/v1\/admin\/curation\/exceptions\/([^/]+)\/(accept|decline)$/.exec(path);
     if (curationException !== null && method === "POST") {
       const id = curationException[1] ?? "";

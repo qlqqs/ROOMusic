@@ -1,14 +1,14 @@
 import { Link } from "@tanstack/react-router";
-import { Check, CircleAlert, PlugZap, RefreshCw } from "lucide-react";
+import { Check, CircleAlert, PlugZap } from "lucide-react";
 import { useRef, useState, type KeyboardEvent } from "react";
 import { flushSync } from "react-dom";
 import { formatCount } from "../../../shared/lib/number";
 import { formatDateTime } from "../../../shared/lib/time";
-import { Button, ConfirmDialog, FailureNotice, QueryContent, SettingRow, SettingsGroup, Skeleton } from "../../../shared/ui";
+import { Button, FailureNotice, QueryContent, SettingRow, SettingsGroup, Skeleton } from "../../../shared/ui";
 import { utf8ByteLength } from "../../auth";
 import type { CurationModelProgressDTO, CurationSettingsDTO } from "../api/decoders";
 import { modelPauseText, modelStateText, modelUnavailableText, needsAgentSettings, tokenText } from "../curation-text";
-import { useCurationConversations, useCurationProgress, useRepatrol, useRetryCurationModel, useUpdateCurationSettings, type CurationSettingsChange } from "../hooks/use-curation";
+import { useCurationConversations, useCurationProgress, useRetryCurationModel, useUpdateCurationSettings, type CurationSettingsChange } from "../hooks/use-curation";
 import styles from "./curation-sections.module.css";
 
 const AGENT_SETTINGS = "/settings/agent";
@@ -18,7 +18,7 @@ const MAX_LIMIT_TOKENS = 1_000_000_000_000;
 
 /**
  * “模型判断”卡片（M7 D、E2，整理链 G，ADR 0009 第 6 节）：模型层的状态与暂停原因（能测试连接时行尾有按钮）、整理用的模型、同时运行数、
- * 单次最多发送、整理与艺人联网共用的每日 token 上限、今天的用量、待定项各状态的数目、重新巡检、最近的后台会话。
+ * 单次最多发送、整理与艺人联网共用的每日 token 上限、今天的用量、待定项各状态的数目、最近的后台会话。
  * 模型与上限即改即存（照备份的“自动清理”：离开或回车时保存，勾“不限”立即保存），失败回到服务器的值并就近提示。
  * mine：当前管理员就是开启者（原因说的是他自己的管家设置，可以链接过去）；sameReviewModel：他的审查模型与有效的整理模型相同（U11）。
  */
@@ -122,7 +122,6 @@ function ModelRows({
       <SettingRow label="待定项" plainLabel>
         <span className={styles.value}>{counts.every(([, n]) => n === 0) ? "没有" : counts.map(([label, n]) => `${label} ${formatCount(n)}`).join(" · ")}</span>
       </SettingRow>
-      <RepatrolRow />
       <RecentConversations />
     </>
   );
@@ -399,37 +398,6 @@ function RetryModelButton() {
       <Button variant="icon" icon={<PlugZap size={16} />} label="测试模型连接" onClick={() => retry.mutate()} disabled={retry.isPending} />
       {retry.isError ? <FailureNotice error={retry.error} context="write" /> : null}
     </>
-  );
-}
-
-/**
- * 重新巡检（整理链 D）：所有稳定的艺人名与专辑名重新交给模型检查一遍；更换模型或提示词升级时默认不重做，需要时在这里手动发起。
- * 行尾只有一个图标按钮，确认后提交；巡检排在模型队列最前，消耗模型用量。
- */
-function RepatrolRow() {
-  const repatrol = useRepatrol();
-  const [open, setOpen] = useState(false);
-  const label = "重新巡检全部名字";
-  return (
-    <SettingRow label="名字巡检" description={repatrol.isSuccess ? "已开始重新巡检。" : "检查艺人名与专辑名的别名和错字；只看新出现的名字。"} plainLabel>
-      <>
-        <Button variant="icon" icon={<RefreshCw size={16} />} label={label} onClick={() => setOpen(true)} disabled={repatrol.isPending} />
-        <ConfirmDialog
-          open={open}
-          title="重新巡检全部名字？"
-          confirmLabel="重新巡检"
-          pending={repatrol.isPending}
-          error={repatrol.isError ? <FailureNotice error={repatrol.error} context="write" /> : undefined}
-          onCancel={() => {
-            setOpen(false);
-            repatrol.reset();
-          }}
-          onConfirm={() => repatrol.mutate(undefined, { onSuccess: () => setOpen(false) })}
-        >
-          <p>所有艺人名与专辑名会重新交给模型检查一遍，会消耗模型用量。已有的巡检结果在新结果出来之前继续使用。</p>
-        </ConfirmDialog>
-      </>
-    </SettingRow>
   );
 }
 

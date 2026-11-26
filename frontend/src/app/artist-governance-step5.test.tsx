@@ -52,7 +52,7 @@ function seedSplit(context: Setup, options: { sources?: boolean; emptyKeys?: boo
   source.artist.name = "旧身份";
   source.redirect_artist_id = primary;
   source.revision = 4;
-  seedArtistIntegration(data, primary, { mergedSources: options.sources === false ? [] : [{ artist_id: otherId, name: "旧身份", revision: 4, name_key_ids: options.emptyKeys ? [] : [keyA, keyB], operation_id: artistTestId(720), merged_at: "2026-11-04T12:00:00Z" }] });
+  seedArtistIntegration(data, primary, { mergedSources: options.sources === false ? [] : [{ artist_id: otherId, name: "旧身份", revision: 4, name_key_ids: options.emptyKeys ? [] : [keyA, keyB], operation_id: artistTestId(720), merged_at: "2026-11-04T12:00:00Z", judged_by_model: false }] });
 }
 
 /** 页头的“更多操作”（曲目行也各有一个“更多操作”）。 */

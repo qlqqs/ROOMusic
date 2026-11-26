@@ -837,12 +837,12 @@ describe("专辑详情：外部识别", () => {
     const { api } = setup({ groups: [album] });
     const user = userEvent.setup();
     const checkedAt = "2026-01-05T08:30:00Z";
-    const queried = { checked_at: checkedAt, reason: "", conflicts: [] };
+    const queried = { checked_at: checkedAt, reason: "", conflicts: [], candidates: [], snapshot_id: null, selection: null };
     const results: ReleaseMatchResultDTO[] = [
       { ...queried, source: "musicbrainz", status: "unmatched" },
       { ...queried, source: "acoustid", status: "unmatched", reason: "candidates_revoked" },
       { ...queried, source: "coverartarchive", status: "matched", checked_at: null },
-      { ...queried, source: "lrclib", status: "conflict", conflicts: ["track_count"] },
+      { ...queried, source: "lrclib", status: "conflict", conflicts: ["track_count"], candidates: [], snapshot_id: null, selection: null },
     ];
     const recheck = `/api/v1/admin/curation/releases/${id}/recheck`;
     api.on("GET", matchPath(id), () => jsonResponse(200, { results }));

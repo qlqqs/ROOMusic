@@ -189,3 +189,9 @@ embedded-artist 在纯程序轮仍未收录。脚本轮由本地辅助从“堤�
 - `ROOMUSIC_CURATION_METRICS_SUITE=fixed ROOMUSIC_CURATION_METRICS_OUT=../../../temp/curation-fixed/merge9.json ROOMUSIC_TEST_RUN='^TestPostgreSQLCurationMetrics$' mise exec -- ./scripts/test-integration.sh` 通过。
 - 手动艺人队列的网页开关、原生搜索、工具次数、token 上限、缺失用量和到达上限时保留候选的 PostgreSQL 定向验证通过。
 - 在 backend 运行 `mise exec -- go build ./...` 与 `mise exec -- go vet ./...` 通过。指定的整包单元测试唯一失败为既有的 `steward/web.TestC8MusicRateLimitUserAgentAndFailures`（503 被重试）；其余包通过或没有包内用例。`git diff --check` 和 `git diff --cached --check` 通过，未解决的索引项为零。合并保留在工作目录中，未提交。
+
+### 本地辅助标题被 MusicBrainz 接替后的结论复核
+
+上文 `merge9.json` 记录的是修复前的结果。程序已经按本地辅助标题命中「微雨塘」，随后将标题提升为 MusicBrainz 值。结案时重新读取的证据里，本地辅助标题随之消失，旧校验将它当成并发修改，导致识别结论未能提交。现在核对本次计划中的字段与实际生效值，随后在同一事务中保存工作状态和逐来源结论。
+
+定向固定样本直接核对了数据库中的两处状态。纯程序轮均为 `unmatched`，没有发行对应；脚本轮均为 `matched`，发行、发行组、四个录音均为指定编号，3 次请求中包含 1 次本地辅助模型调用。完整 28 张见 `temp/curation-fixed/after-local-match.json`。纯程序认对 16、认错 0、请求 65；脚本认对 19、认错 0、请求 84。`legacy-many` 的脚本轮工作状态也从 `done` 恢复为 `matched/search`。

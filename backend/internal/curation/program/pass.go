@@ -136,6 +136,7 @@ func subjectEvidence(subject string, e catalog.CurationEvidence, state curation.
 type outcome struct {
 	keepSourceResult bool
 
+	trackRequests                                                      []curation.TrackRequest
 	localRequests                                                      localCreditRequests
 	checkedAt                                                          time.Time
 	status, group, trackFields, artistLinks, matchReason, releaseMerge string
@@ -520,9 +521,16 @@ func afterMatch(before, after catalog.CurationEvidence, out outcome) catalog.Cur
 		if auto == nil {
 			auto = make(map[string]bool)
 		}
-		for field := range missingFields(before, *r) {
+		for field, intent := range missingFields(before, *r) {
 			if after.Automatic[field] {
 				auto[field] = true
+				// 外部字段取代同一字段的本地辅助值后，该本地值从识别输入中消失。
+				if field == "title" && after.LocalTitle == "" && intent.Value == after.AutomaticTitle {
+					before.LocalTitle = ""
+				}
+				if field == "album_artist" && after.LocalArtist == "" && intent.Value == after.AutomaticAlbumArtist {
+					before.LocalArtist = ""
+				}
 			}
 		}
 		before.Automatic = auto
@@ -531,10 +539,26 @@ func afterMatch(before, after catalog.CurationEvidence, out outcome) catalog.Cur
 	for _, p := range out.match.Pairs {
 		partners[p.TrackID] = p.RecordingID
 	}
+	trackFields := make(map[string]map[string]catalog.CorrectionIntent)
+	for _, req := range out.trackRequests {
+		trackFields[req.TrackID] = req.Fields
+	}
 	before.Tracks = slices.Clone(before.Tracks)
-	for i, t := range before.Tracks {
-		if t.ExternalID == "" && i < len(after.Tracks) && after.Tracks[i].ID == t.ID && partners[t.ID] == after.Tracks[i].ExternalID {
-			before.Tracks[i].ExternalID = after.Tracks[i].ExternalID
+	for i := range before.Tracks {
+		t := &before.Tracks[i]
+		if i >= len(after.Tracks) || after.Tracks[i].ID != t.ID {
+			continue
+		}
+		fresh := after.Tracks[i]
+		if t.ExternalID == "" && partners[t.ID] == fresh.ExternalID {
+			t.ExternalID = fresh.ExternalID
+		}
+		fields := trackFields[t.ID]
+		if fresh.TitleAutomatic && !fresh.TitleCorrected && fresh.LocalTitle == "" && fields["title"].Value == fresh.EffectiveTitle {
+			t.LocalTitle = ""
+		}
+		if fresh.ArtistAutomatic && !fresh.ArtistCorrected && fresh.LocalArtist == "" && fields["artist"].Value == fresh.EffectiveArtist {
+			t.LocalArtist = ""
 		}
 	}
 	return before

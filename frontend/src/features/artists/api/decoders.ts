@@ -106,9 +106,12 @@ export type ArtistImageDTO = d.Infer<typeof artistImageDecoder>;
 export type ArtistBioDTO = d.Infer<typeof artistBioDecoder>;
 
 // 艺人当前对应的外部条目（自动整理按发行写入，或管理员指定）：MusicBrainz 是 MBID，Wikidata 是 Q 号。
+// judged_by_model：当前生效的对应是模型判断的同一人（ADR 0009 第 6.4 节，可撤销），operation_id 是写入它的操作，没有时为 null。
 const artistLinksDecoder = d.object({
   musicbrainz: d.nullable(d.uuid()),
   wikidata: d.nullable(d.string({ pattern: /^Q[1-9][0-9]{0,11}$/ })),
+  judged_by_model: d.boolean(),
+  operation_id: d.nullable(d.uuid()),
 });
 export type ArtistLinksDTO = d.Infer<typeof artistLinksDecoder>;
 

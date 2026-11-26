@@ -11,7 +11,7 @@ const mbid = "abcd1234-0000-4000-8000-000000000002";
 
 afterEach(() => vi.unstubAllGlobals());
 
-function openPopover(response: Response, links: ArtistLinksDTO = { musicbrainz: null, wikidata: null }) {
+function openPopover(response: Response, links: ArtistLinksDTO = { musicbrainz: null, wikidata: null, judged_by_model: false, operation_id: null }) {
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response);
   vi.stubGlobal("fetch", fetch);
   const onApply = vi.fn<(preview: ArtistLinkPreviewDTO) => Promise<boolean>>().mockResolvedValue(true);
@@ -60,7 +60,7 @@ it.each([
 });
 
 it("与当前对应相同时显示已对应并隐藏确认按钮", async () => {
-  const { onApply } = openPopover(Response.json(sample), { musicbrainz: sample.musicbrainz, wikidata: sample.wikidata });
+  const { onApply } = openPopover(Response.json(sample), { musicbrainz: sample.musicbrainz, wikidata: sample.wikidata, judged_by_model: false, operation_id: null });
   expect(await screen.findByLabelText("已是当前对应")).toBeTruthy();
   expect(screen.queryByRole("button", { name: /对应到这位/ })).toBeNull();
   expect(onApply).not.toHaveBeenCalled();
@@ -68,7 +68,7 @@ it("与当前对应相同时显示已对应并隐藏确认按钮", async () => {
 
 it("仅 Wikidata 已匹配时，仍能确认更换 MusicBrainz 对应", async () => {
   const preview = { ...sample, name_matches: true };
-  openPopover(Response.json(preview), { musicbrainz: mbid, wikidata: preview.wikidata });
+  openPopover(Response.json(preview), { musicbrainz: mbid, wikidata: preview.wikidata, judged_by_model: false, operation_id: null });
   await screen.findByText(preview.name);
   expect(screen.queryByLabelText("已是当前对应")).toBeNull();
   expect(screen.queryByRole("button", { name: "对应到这位" })).not.toBeNull();

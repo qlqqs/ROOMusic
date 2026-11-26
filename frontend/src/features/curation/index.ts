@@ -1,5 +1,5 @@
 export { CurationBatchesSection } from "./components/curation-batches-section";
-export { CurationExceptionsSection } from "./components/curation-exceptions-section";
+export { CurationConflictsSection } from "./components/curation-conflicts-section";
 export { CurationModelSection } from "./components/curation-model-section";
 export { CurationProgressSection } from "./components/curation-progress-section";
 export { ArtistWebQueueControl } from "./components/artist-web-queue-control";

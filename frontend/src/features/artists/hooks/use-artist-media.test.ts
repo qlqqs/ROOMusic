@@ -208,9 +208,9 @@ describe("useArtistMedia", () => {
     const ids = ["00000000-0000-4000-8000-000000000002", "00000000-0000-4000-8000-000000000003"];
     let finishFirst = () => {};
     fetch.mockImplementationOnce(() => new Promise<Response>((resolve) => {
-      finishFirst = () => resolve(Response.json(sampleBody("curation/exception-declined")));
+      finishFirst = () => resolve(Response.json(sampleBody("curation/artist-web-search/candidate-decline")));
     }));
-    fetch.mockResolvedValueOnce(Response.json(sampleBody("curation/exception-declined")));
+    fetch.mockResolvedValueOnce(Response.json(sampleBody("curation/artist-web-search/candidate-decline")));
     let decision: Promise<boolean> | undefined;
 
     act(() => { decision = result.current.decideCandidates(ids, "decline"); });

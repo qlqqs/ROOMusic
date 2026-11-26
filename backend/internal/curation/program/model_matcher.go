@@ -471,7 +471,7 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 	if err != nil {
 		return MatchApplied{}, err
 	}
-	conclusion := outcome{status: "matched", group: group, match: plan.match, releaseMerge: mergeDone}
+	conclusion := outcome{status: "matched", group: group, match: plan.match, trackRequests: p.tracks, releaseMerge: mergeDone}
 	digest := ReleaseDigest(fresh)
 	if fresh.FileDigest != p.evidence.FileDigest || !allMatchLinks(fresh, p.links.Links) || ReleaseDigest(afterMatch(p.evidence, fresh, conclusion)) != digest {
 		return MatchApplied{}, staleItem()
@@ -539,6 +539,11 @@ func allMatchLinks(e catalog.CurationEvidence, links []curation.LinkIntent) bool
 	return true
 }
 
+type confirmedLocalNames struct {
+	Title  string `json:"title,omitempty"`
+	Artist string `json:"artist,omitempty"`
+}
+
 // 已采纳的匹配分多条受治理操作写入。快照只保存重放所需的候选、对应与可变证据，
 // 曲库路径等未改动证据重读后用原 input_digest 核对。
 type confirmedMatch struct {
@@ -549,6 +554,8 @@ type confirmedMatch struct {
 	LinkGroup                                                                bool
 	GroupID, GroupExternalID, GroupChangeSource, ExternalID, ExternalGroupID string
 	ReleaseGroupMatchID                                                      string
+	LocalNames                                                               *confirmedLocalNames           `json:"local_names,omitempty"`
+	TrackLocalNames                                                          map[string]confirmedLocalNames `json:"track_local_names,omitempty"`
 	TrackExternalIDs                                                         []string
 	Automatic                                                                map[string]bool
 }
@@ -559,8 +566,17 @@ func (p MatchPlan) ConfirmationSnapshot() ([]byte, error) {
 		GroupResult: p.write.group.result, JoinID: p.write.group.joinID, LinkGroup: p.write.group.link,
 		GroupID: e.GroupID, GroupExternalID: e.GroupExternalID, GroupChangeSource: e.GroupChangeSource,
 		ExternalID: e.ExternalID, ExternalGroupID: e.ExternalGroupID, ReleaseGroupMatchID: e.ReleaseGroupMatchID, Automatic: e.Automatic}
+	if e.LocalTitle != "" || e.LocalArtist != "" {
+		s.LocalNames = &confirmedLocalNames{e.LocalTitle, e.LocalArtist}
+	}
 	for _, track := range e.Tracks {
 		s.TrackExternalIDs = append(s.TrackExternalIDs, track.ExternalID)
+		if track.LocalTitle != "" || track.LocalArtist != "" {
+			if s.TrackLocalNames == nil {
+				s.TrackLocalNames = make(map[string]confirmedLocalNames)
+			}
+			s.TrackLocalNames[track.ID] = confirmedLocalNames{track.LocalTitle, track.LocalArtist}
+		}
 	}
 	return json.Marshal(s)
 }
@@ -585,9 +601,16 @@ func (m *ModelMatcher) ResumeConfirmation(ctx context.Context, item curation.Pen
 	before.GroupID, before.GroupExternalID, before.GroupChangeSource = s.GroupID, s.GroupExternalID, s.GroupChangeSource
 	before.ReleaseGroupMatchID = s.ReleaseGroupMatchID
 	before.ExternalID, before.ExternalGroupID, before.Automatic = s.ExternalID, s.ExternalGroupID, s.Automatic
+	if s.LocalNames != nil {
+		before.LocalTitle, before.LocalArtist = s.LocalNames.Title, s.LocalNames.Artist
+	}
 	before.Tracks = slices.Clone(fresh.Tracks)
 	for i, id := range s.TrackExternalIDs {
-		before.Tracks[i].ExternalID = id
+		t := &before.Tracks[i]
+		t.ExternalID = id
+		if names, ok := s.TrackLocalNames[t.ID]; ok {
+			t.LocalTitle, t.LocalArtist = names.Title, names.Artist
+		}
 	}
 	if ReleaseDigest(before) != item.InputDigest {
 		return MatchPlan{}, staleItem()
@@ -599,18 +622,18 @@ func (m *ModelMatcher) ResumeConfirmation(ctx context.Context, item curation.Pen
 	if s.JoinID != "" && fresh.GroupID == s.JoinID {
 		group = "joined"
 	}
-	if ReleaseDigest(afterMatch(before, fresh, outcome{match: s.Match, group: group})) != ReleaseDigest(fresh) {
-		return MatchPlan{}, staleItem()
-	}
 	write := matchWritePlan{evidence: before, group: groupPlan{result: s.GroupResult, joinID: s.JoinID, link: s.LinkGroup},
 		links: curation.LinkRequest{ReleaseID: item.TargetID, ExternalSource: "musicbrainz", Method: s.Match.Method, Confidence: "certain", External: s.External, Links: s.Links}}
 	if s.Match.Release != nil {
 		write.fields = missingFields(before, *s.Match.Release)
 		write.albumCredit = &curation.ReleaseArtistCredit{ReleaseID: s.Match.Release.ID, Artists: s.Match.Release.Artists}
 	}
-	if s.Match.RepresentativeID != "" {
+	if s.Match.Method != "model" || s.Match.RepresentativeID != "" {
 		write.tracks = planTrackFields(before, s.Match)
 		write.trackTitleSource = s.Match.RepresentativeID
+	}
+	if ReleaseDigest(afterMatch(before, fresh, outcome{match: s.Match, group: group, trackRequests: write.tracks})) != ReleaseDigest(fresh) {
+		return MatchPlan{}, staleItem()
 	}
 	var verification MatchVerification
 	if s.Match.Verification != nil {

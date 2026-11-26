@@ -2,10 +2,8 @@ import { correctionFieldLabels, displayValue, sourceName, trackFieldLabels, type
 import { formatCount } from "../../shared/lib/number";
 import { formatDateTime } from "../../shared/lib/time";
 import type {
-  CurationExceptionDTO,
   CurationQueueDTO,
   CurationSourceDTO,
-  JsonValue,
   MatchResultStatus,
   ModelPauseKind,
   ModelState,
@@ -288,128 +286,6 @@ export function tokenText(tokens: number): string {
   return tokens % 10_000 === 0 && tokens >= 10_000 ? `${formatCount(tokens / 10_000)} 万` : formatCount(tokens);
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const WIKIDATA_ID = /^Q[1-9][0-9]{0,11}$/;
-
-/**
- * 例外里匹配的外部条目：来源与种类的说明（“MusicBrainz 发行”“Wikidata 条目”）、编号与它的地址（编号格式不对时没有地址）；外部编号是不可信文本。
- */
-export function exceptionExternal(exception: CurationExceptionDTO): { label: string; id: string; url: string | null } | null {
-  const raw = exception.input["external_id"];
-  if (typeof raw !== "string") return null;
-  if (exception.tool === "resolve_artist_identity") {
-    if (exception.input["source"] === "wikidata") return { label: "Wikidata 条目", id: raw, url: WIKIDATA_ID.test(raw) ? `https://www.wikidata.org/wiki/${raw}` : null };
-    return { label: "MusicBrainz 艺人", id: raw, url: UUID.test(raw) ? `https://musicbrainz.org/artist/${raw.toLowerCase()}` : null };
-  }
-  if (exception.tool !== "resolve_release_match") return null;
-  const kind = exception.kind === "recording_match" ? "recording" : "release";
-  return { label: exception.kind === "recording_match" ? "MusicBrainz 录音" : "MusicBrainz 发行", id: raw, url: UUID.test(raw) ? `https://musicbrainz.org/${kind}/${raw.toLowerCase()}` : null };
-}
-
-function fieldValueText(value: JsonValue): string {
-  if (value === null || typeof value === "string" || typeof value === "number") return displayValue(value);
-  if (Array.isArray(value) && value.every((part) => typeof part === "string")) return displayValue(value as string[]);
-  return "—";
-}
-
-function countOf(value: JsonValue): number {
-  return typeof value === "number" ? value : 0;
-}
-
-/** 预览里发行的快照 {id,title,group_id} 的标题；读不出来时是 null。 */
-function releaseTitleOf(value: JsonValue): string | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const title = (value as { readonly [key: string]: JsonValue })["title"];
-  return typeof title === "string" ? title : null;
-}
-
-/** 并入时合并期间不生效的来源内容（hidden 的各项计数）是否有任何一项。 */
-function hasHidden(value: JsonValue): boolean {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  return Object.values(value).some((part) => part === true || (typeof part === "number" && part > 0));
-}
-
-/**
- * 例外提出的修改，逐行：字段写“标题：A → B”；匹配另有外部对应（新建或替换）、曲目对应数、专辑对应与归组。
- * 外部对应那一行由调用方带链接显示，这里只给其余各行。值都是不可信文本。
- */
-export function exceptionChangeLines(exception: CurationExceptionDTO): string[] {
-  const lines: string[] = [];
-  for (const change of exception.preview.changes) {
-    switch (change.field) {
-      case "external_link":
-        break;
-      case "track_links":
-        lines.push(`曲目对应：${formatCount(countOf(change.before))} → ${formatCount(countOf(change.after))} 首`);
-        break;
-      case "group_external_link":
-        lines.push("建立专辑的外部对应");
-        break;
-      case "group":
-        lines.push("归入已有的专辑");
-        break;
-      // 整张并入（M7 H）：before 是来源，after 是目标；令牌不显示。
-      case "release_merge":
-        lines.push(`把《${releaseTitleOf(change.before) ?? "另一个发行"}》整张并入《${releaseTitleOf(change.after) ?? "这个发行"}》`);
-        break;
-      case "merge_token":
-        break;
-      case "favorites_moved":
-        if (countOf(change.after) > 0) lines.push(`${formatCount(countOf(change.after))} 个专辑收藏转到合并后的专辑`);
-        break;
-      case "hidden":
-        if (hasHidden(change.after)) lines.push("被并入的发行上的修正等内容在合并期间不生效，撤销之后恢复");
-        break;
-      default: {
-        const label = exception.tool === "correct_track" ? trackFieldLabel(change.field, exception.track?.title) : change.field in correctionFieldLabels ? correctionFieldLabels[change.field as CorrectableField] : change.field;
-        lines.push(`${label}：${fieldValueText(change.before)} → ${fieldValueText(change.after)}`);
-      }
-    }
-  }
-  return lines;
-}
-
-/** 曲目字段的名字，带曲目名：“《Intro》曲目标题”。 */
-function trackFieldLabel(field: string, title: string | undefined): string {
-  const label = field === "title" || field === "artist" ? trackFieldLabels[field] : field;
-  return title === undefined ? label : `《${title}》${label}`;
-}
-
-/** 匹配的外部对应是新建还是替换现有的。 */
-export function exceptionLinkVerb(exception: CurationExceptionDTO): string {
-  const change = exception.preview.changes.find((item) => item.field === "external_link");
-  return change !== undefined && change.before !== null && change.before !== "" ? "改为对应" : "对应到";
-}
-
-const suggestionReasonText: Record<CurationExceptionDTO["reason_code"], string> = {
-  review_rejected: "审查没通过",
-  review_uncertain: "审查拿不准",
-  verification_declined: "核对后判断不需要改",
-  no_evidence: "没有找到佐证",
-  unverified_fact: "事实无法核实",
-};
-
-/** 没采用的原因（整理链 E 起不再等人确认）：有审查的写审查结论，按规则拦下的另写明。 */
-export function exceptionReviewText(exception: CurationExceptionDTO): string {
-  if (exception.review === null) return suggestionReasonText[exception.reason_code];
-  if (exception.review.decision === "rejected") return "审查没通过";
-  return exception.review.source === "policy" ? "按规则没有自动执行" : "审查拿不准";
-}
-
-export const riskText: Record<"low" | "medium" | "high", string> = { low: "低", medium: "中", high: "高" };
-
-/** 采纳与不采纳的错误文案（其余按通用文案）。 */
-export const EXCEPTION_MESSAGES: Readonly<Record<string, string>> = {
-  exception_stale: "提出之后内容变了，这一项没有执行。可以查看过程，或等模型重新判断。",
-  exception_decided: "这一项已经被处理了。",
-  not_found: "这一项已经被处理了。",
-  curation_disabled: "自动整理关着、暂停中或正在扫描，现在不能采纳匹配。",
-  source_disabled: "MusicBrainz 已关闭，现在不能采纳匹配。",
-  nothing_to_apply: "要写的内容都已经在了，或被标记为不再提出。",
-  source_unavailable: "外部资料暂时取不到，没有完成。可以稍后在这里重试，已写入的部分会接着做完。",
-};
-
 /** 一个来源的识别结论（ADR 0009 第 4.6 节）。 */
 export const matchStatusText: Record<MatchResultStatus, string> = { matched: "已匹配", unmatched: "未匹配", conflict: "有冲突" };
 
@@ -432,4 +308,17 @@ const matchConflictTexts: Record<string, string> = {
 /** 冲突在哪：已知的代码写成短语，其余写“其他差异”。 */
 export function matchConflictText(code: string): string {
   return matchConflictTexts[code] ?? "其他差异";
+}
+
+const conflictReasonTexts: Record<string, string> = {
+  ambiguous_editions: "几版都对得上，分不出是哪一版",
+  different_release_groups: "几张同名专辑不在同一个发行组",
+};
+
+/** 有冲突的原因：已知的写成一句，其余按冲突代码写“冲突在哪”。 */
+export function conflictReasonText(reason: string, conflicts: readonly string[]): string {
+  const known = conflictReasonTexts[reason];
+  if (known !== undefined) return known;
+  if (conflicts.length > 0) return `冲突：${[...new Set(conflicts.map(matchConflictText))].join("、")}`;
+  return "和本地对不上";
 }

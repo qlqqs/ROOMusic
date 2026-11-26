@@ -1,4 +1,4 @@
-import { decodeArtistWebQueue, decodeCurationBatch, decodeCurationBatchPage, decodeCurationConversationPage, decodeCurationExceptionAccepted, decodeCurationExceptionDeclined, decodeCurationExceptionPage, decodeCurationProgress, decodeCurationSettings, decodeCurationSource, decodeCurationSources, decodeReleaseMatchResults, decodeScopeRevert, decodeSuppressionPage } from "../features/curation/api/decoders";
+import { decodeArtistWebQueue, decodeConflictPage, decodeCurationBatch, decodeCurationBatchPage, decodeCurationConversationPage, decodeCurationExceptionAccepted, decodeCurationExceptionDeclined, decodeCurationProgress, decodeCurationSettings, decodeCurationSource, decodeCurationSources, decodeMatchSelection, decodeReleaseMatchResults, decodeScopeRevert, decodeSuppressionPage } from "../features/curation/api/decoders";
 import {
   decodeAllowlist,
   decodeAllowlistEntry,
@@ -539,6 +539,7 @@ const successContracts: Record<string, Contract> = {
   "release-groups/get-default": { status: 200, decode: decodeReleaseGroupDetail },
   "release-groups/comparison": { status: 200, decode: decodeReleaseComparison },
   "releases/get": { status: 200, decode: decodeReleaseDetail },
+  "releases/match-names": { status: 200, decode: decodeReleaseDetail },
   "releases/get-single": { status: 200, decode: decodeReleaseDetail },
   "releases/get-work": { status: 200, decode: decodeReleaseDetail },
   "releases/get-cue": { status: 200, decode: decodeReleaseDetail },
@@ -554,7 +555,6 @@ const successContracts: Record<string, Contract> = {
   "operations/track-correction-list": { status: 200, decode: decodeOperationPage },
   "operations/track-auto-list": { status: 200, decode: decodeOperationPage },
   "operations/track-auto-reverted": { status: 200, decode: decodeRevertResult },
-  "curation/exceptions-track": { status: 200, decode: decodeCurationExceptionPage },
   "corrections/get-corrected": { status: 200, decode: decodeCorrectionState },
   "corrections/patched": { status: 200, decode: decodeCorrectionResult },
   // 自动整理（M7 A）：带自动层的修正状态、自动整理的操作记录与它的撤销响应。
@@ -574,6 +574,8 @@ const successContracts: Record<string, Contract> = {
   "curation/source-key-set": { status: 200, decode: decodeCurationSource },
   "curation/source-key-cleared": { status: 200, decode: decodeCurationSource },
   "curation/progress": { status: 200, decode: decodeCurationProgress },
+  "curation/conflicts": { status: 200, decode: decodeConflictPage },
+  "curation/match-selection": { status: 200, decode: decodeMatchSelection },
   "curation/artist-web-search/artist-candidates": { status: 200, decode: decodeArtistWebSearch },
   "curation/artist-web-search/artist-start": { status: 202, decode: decodeArtistWebSearch },
   "curation/artist-web-search/artist-unconfigured": { status: 200, decode: decodeArtistWebSearch },
@@ -591,10 +593,6 @@ const successContracts: Record<string, Contract> = {
   "curation/suppressions": { status: 200, decode: decodeSuppressionPage },
   "curation/suppressions-release-merge": { status: 200, decode: decodeSuppressionPage },
   "curation/settings-model": { status: 200, decode: decodeCurationSettings },
-  "curation/exceptions": { status: 200, decode: decodeCurationExceptionPage },
-  "curation/exceptions-merge": { status: 200, decode: decodeCurationExceptionPage },
-  "curation/exception-accepted": { status: 200, decode: decodeCurationExceptionAccepted },
-  "curation/exception-declined": { status: 200, decode: decodeCurationExceptionDeclined },
   "curation/conversations": { status: 200, decode: decodeCurationConversationPage },
   "operations/link-reverted": { status: 200, decode: decodeRevertResult },
   "group-changes/joined": { status: 200, decode: decodeGroupChangeResult },
@@ -817,8 +815,6 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/root-scan-interval-invalid-input": { status: 400, code: "invalid_input" },
   "errors/backup-retention-invalid": { status: 400, code: "invalid_input" },
   "errors/curation-key-not-supported": { status: 400, code: "key_not_supported" },
-  "errors/exception-stale": { status: 409, code: "exception_stale" },
-  "errors/exception-decided": { status: 409, code: "exception_decided" },
   "errors/curation-conversation": { status: 409, code: "curation_conversation" },
   "errors/curation-plan": { status: 409, code: "curation_plan" },
   "errors/release-merged": { status: 409, code: "release_merged" },
@@ -979,7 +975,6 @@ const errorContracts: Record<string, { status: number; code: string }> = {
 
 // 空响应没有 JSON 响应体，样本只核对 HTTP 状态和空体。
 const emptyResponseContracts: Record<string, { status: number }> = {
-  "curation/repatrol": { status: 202 },
   "curation/match-recheck": { status: 202 },
   "dsp/responses/preset-delete": { status: 204 },
   "steward/tokens/revoked": { status: 204 },

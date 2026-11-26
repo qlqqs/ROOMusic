@@ -9,7 +9,7 @@ import { decodeArtistDetail, decodeArtistWebSearch, type ArtistImageDTO } from "
 import { ArtistPortrait } from "./artist-portrait";
 
 const mbid = "00000000-0000-4000-8000-000000000002";
-const links = { musicbrainz: mbid, wikidata: "Q900001" };
+const links = { musicbrainz: mbid, wikidata: "Q900001", judged_by_model: false, operation_id: null };
 const artist = { id: "00000000-0000-4000-8000-000000000001", name: "青岚室内乐团", image: artistImage.resource };
 const manualDetail = decodeArtistDetail(sampleBody("artists/detail-manual-media"));
 
@@ -121,7 +121,7 @@ it("非 HTTP(S) 的来源与许可地址保留为文本", async () => {
     <ArtistPortrait
       artist={artist}
       image={{ ...artistImage, source_url: "javascript:void(0)", license_url: "//example.test/license" }}
-      links={{ musicbrainz: null, wikidata: null }}
+      links={{ musicbrainz: null, wikidata: null, judged_by_model: false, operation_id: null }}
       media={null}
     />,
   );

@@ -797,6 +797,8 @@ const mergedSourcesDecoder = d.object({
       name_key_ids: d.array(d.uuid(), { max: MAX_SPLIT_NAME_KEYS }),
       operation_id: d.uuid(),
       merged_at: d.timestamp(),
+      // 这次合并是模型判断两位本地艺人是同一人（ADR 0009 第 6.4 节）。
+      judged_by_model: d.boolean(),
     }),
     { max: MAX_MERGED_SOURCES },
   ),

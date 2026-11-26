@@ -159,14 +159,52 @@ export const MATCH_RESULT_STATUSES = ["matched", "unmatched", "conflict"] as con
 export type MatchResultStatus = (typeof MATCH_RESULT_STATUSES)[number];
 // checked_at 是最近一次成功查询的时刻（UTC），历史记录不知道时为 null；reason 为 candidates_revoked 时表示候选都被撤销或被别的专辑占用；
 // conflicts 是冲突在哪的代码（例如 track_count、duration_mismatch）。
-const matchResultDecoder = d.object({
+// 有冲突时列出几张都对得上的候选，管理员挑一张（会重新做结构核对）；snapshot_id 是提交挑选时要带的这次候选快照。
+const matchCandidateDecoder = d.object({
+  source: d.string({ min: 1, max: 100 }),
+  entity: d.oneOf(["release", "release_group"] as const),
+  external_id: d.uuid(),
+  title: d.string({ max: 1000 }),
+  artist: d.string({ max: 1000 }),
+  release_group_id: d.string({ max: 64 }),
+  date: d.string({ max: 32 }),
+  country: d.string({ max: 32 }),
+  barcode: d.string({ max: 64 }),
+  catalog_numbers: d.nullable(d.array(d.string({ max: 200 }), { max: 50 })),
+  method: d.string({ max: 64 }),
+  status: d.string({ max: 64 }),
+  track_count: d.integer({ min: 0 }),
+});
+// selection 是管理员挑过的那一张；没挑过时为 null。
+const matchSelectionDecoder = d.object({
+  external_id: d.uuid(),
+  selected_by: d.uuid(),
+  selected_at: d.timestamp(),
+  operation_ids: d.array(d.uuid(), { max: 50 }),
+});
+const matchResultShape = {
   source: d.string({ min: 1, max: 100 }),
   status: d.oneOf(MATCH_RESULT_STATUSES),
   checked_at: d.nullable(d.timestamp()),
   reason: d.string({ max: 200 }),
   conflicts: d.array(d.string({ min: 1, max: 100 }), { max: 50 }),
-});
+  candidates: d.array(matchCandidateDecoder, { max: 50 }),
+  snapshot_id: d.nullable(d.uuid()),
+  selection: d.nullable(matchSelectionDecoder),
+};
+const matchResultDecoder = d.object(matchResultShape);
 const matchResultsDecoder = d.object({ results: d.array(matchResultDecoder, { max: 50 }) });
+/** POST /admin/curation/releases/{id}/match-selection：挑选成功后这一来源的结论（通常为 matched，带 selection）。 */
+export const decodeMatchSelection = d.defineDecoder(matchResultDecoder);
+// 有冲突的专辑一页（管理员）：每行是一张专辑在一个来源的结论，带专辑 ID 与标题。
+const conflictPageDecoder = d.object({
+  items: d.array(d.object({ release_id: d.uuid(), title: d.string(), ...matchResultShape }), { max: 100 }),
+  pagination: d.object({ page: d.integer({ min: 1 }), page_size: d.integer({ min: 1, max: 100 }), total: d.integer({ min: 0 }) }),
+});
+/** GET /admin/curation/conflicts：有冲突的专辑，分页。 */
+export const decodeConflictPage = d.defineDecoder(conflictPageDecoder);
+export type ConflictPageDTO = d.Infer<typeof conflictPageDecoder>;
+export type MatchCandidateDTO = d.Infer<typeof matchCandidateDecoder>;
 /** GET /admin/curation/releases/{id}/match-results：按来源排序，没有记录时为空数组。 */
 export const decodeReleaseMatchResults = d.defineDecoder(matchResultsDecoder);
 export type ReleaseMatchResultDTO = d.Infer<typeof matchResultDecoder>;

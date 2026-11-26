@@ -120,7 +120,7 @@ func (w *Worker) concludeMatch(ctx context.Context, u *unit, e catalog.CurationE
 			}
 			out.match = m
 		}
-		out.group, out.artistLinks, out.proposals, err = w.applyMatch(ctx, u, e, m, &out.localRequests)
+		out.group, out.artistLinks, out.proposals, err = w.applyMatch(ctx, u, e, m, &out)
 		if errors.Is(err, errArtistCreditUnconfirmed) {
 			out.match.Status, out.match.Route = "uncertain", "select"
 			out.match.Level, out.match.Rule = "", ""

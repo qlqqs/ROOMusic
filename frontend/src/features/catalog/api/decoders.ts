@@ -257,6 +257,23 @@ const releaseDetailDecoder = d.object({
   auto_fields: d.optional(d.array(d.string({ min: 1, max: 64 }), { max: MAX_CORRECTED_FIELDS })),
   // 整张并入这个发行的其他发行（M7 H）：只有管理员的响应带这个键；revertible 为 false 时（之后有人工的结构操作，或来源被改过）不能撤销。
   merged_releases: d.optional(d.array(d.object({ id: d.uuid(), title: d.string(), operation_id: d.uuid(), revertible: d.boolean() }), { max: MAX_MERGED_RELEASES })),
+  // 已认到的版本在 MusicBrainz 上的写法（ADR 0009 第 6.4 节）：只列和本地写法不同的；can_adopt 为 true 时管理员可以一键采用，
+  // 提交时带上 basis_operation_id 与 revision（依据过期时服务器回 409）。还没有认到时是空数组。
+  musicbrainz_names: d.array(
+    d.object({
+      target_type: d.oneOf(["release", "track"] as const),
+      target_id: d.uuid(),
+      field: d.string({ min: 1, max: 64 }),
+      local_value: d.string(),
+      effective_value: d.string(),
+      musicbrainz_value: d.string(),
+      external_id: d.uuid(),
+      basis_operation_id: d.uuid(),
+      revision: d.integer({ min: 0 }),
+      can_adopt: d.boolean(),
+    }),
+    { max: d.unbounded },
+  ),
 });
 
 // 管理员证据里的来源引用必须是有界的安全相对路径：绝对路径、盘符、`file://`、反斜杠与上级目录一律拒绝。

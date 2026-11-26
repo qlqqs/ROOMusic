@@ -38,7 +38,7 @@ test("管理员从来源弹层查看资料，粘贴链接预览后确认指定�
   const write = decodeArtistMediaWrite(sampleBody("artists/set-links"));
   await page.route(`**${api}/link-preview`, (route) => route.fulfill({ json: preview }));
   await page.route(`**${api}/links`, (route) => {
-    detail.links = { musicbrainz: preview.musicbrainz, wikidata: preview.wikidata };
+    detail.links = { musicbrainz: preview.musicbrainz, wikidata: preview.wikidata, judged_by_model: false, operation_id: null };
     detail.revision = revision + 1;
     return route.fulfill({ json: { ...write, artist_id: detail.artist.id, revision: detail.revision } });
   });

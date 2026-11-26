@@ -208,6 +208,7 @@ export function releaseDetailOf(summary: ReleaseSummaryDTO, overrides: ReleaseDe
     evidence: sampleRelease.evidence,
     revision: 1,
     corrected_fields: [],
+    musicbrainz_names: [],
     ...overrides,
     credits: withRefs(overrides.credits ?? [{ role: "album_artist", name: summary.album_artist ?? summary.artist }]),
   };

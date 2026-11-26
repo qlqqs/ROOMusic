@@ -473,13 +473,13 @@ function MembersRoute() {
 
 const membersRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/members", component: MembersRoute });
 
-// batch_page、marker_page、exception_page 是批次、“不再提出”与例外的页码，只在 2 及以上时出现；不合法的值显式写成 undefined。
+// batch_page、marker_page、conflict_page 是批次、“不再提出”与有冲突的专辑的页码，只在 2 及以上时出现；不合法的值显式写成 undefined。
 function CurationRoute() {
-  const { batch_page: batchPage, marker_page: markerPage, exception_page: exceptionPage } = curationRoute.useSearch();
+  const { batch_page: batchPage, marker_page: markerPage, conflict_page: conflictPage } = curationRoute.useSearch();
   return (
     <AdminGate>
       <LazyPage>
-        <CurationPage batchPage={batchPage ?? 1} markerPage={markerPage ?? 1} exceptionPage={exceptionPage ?? 1} />
+        <CurationPage batchPage={batchPage ?? 1} markerPage={markerPage ?? 1} conflictPage={conflictPage ?? 1} />
       </LazyPage>
     </AdminGate>
   );
@@ -488,10 +488,10 @@ function CurationRoute() {
 const curationRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "/curation",
-  validateSearch: (search: Record<string, unknown>): { batch_page?: number | undefined; marker_page?: number | undefined; exception_page?: number | undefined } => ({
+  validateSearch: (search: Record<string, unknown>): { batch_page?: number | undefined; marker_page?: number | undefined; conflict_page?: number | undefined } => ({
     batch_page: parsePageParam(search["batch_page"]),
     marker_page: parsePageParam(search["marker_page"]),
-    exception_page: parsePageParam(search["exception_page"]),
+    conflict_page: parsePageParam(search["conflict_page"]),
   }),
   component: CurationRoute,
 });

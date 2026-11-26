@@ -1,0 +1,38 @@
+.list {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+}
+
+.row + .row {
+  border-top: 1px solid var(--color-divider);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.title {
+  overflow-wrap: anywhere;
+}
+
+.artist,
+.facts,
+.pending {
+  color: var(--color-neutral-600);
+}
+
+.facts,
+.pending {
+  font-size: 0.875em;
+}

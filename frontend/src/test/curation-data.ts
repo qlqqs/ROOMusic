@@ -1,4 +1,5 @@
 import type {
+  ConflictPageDTO,
   CurationClassificationsDTO,
   CurationConversationDTO,
   CurationExceptionDTO,
@@ -54,8 +55,8 @@ export type CurationData = {
   counter: number;
   /** 本地分类的计数（整理链 A）；为 null 时全部算“有缺口”。 */
   classifications: CurationClassificationsDTO["releases"] | null;
-  /** 收到的“重新巡检”请求数（整理链 D）。 */
-  repatrols: number;
+  /** 有冲突的专辑（ADR 0009 第 6.3 节）：默认没有；挑选一张后从这里移除。 */
+  conflicts: ConflictPageDTO["items"];
   /** 五条程序队列（整理链 B）；为 null 时都空闲、已排空。 */
   queues: CurationQueueDTO[] | null;
 };
@@ -89,7 +90,7 @@ export function curationDataOf(governance: GovernanceData | null = null): Curati
     batches: [],
     suppressions: [],
     classifications: null,
-    repatrols: 0,
+    conflicts: [],
     queues: null,
     revertPageSize: 100,
     fingerprintAvailable: true,
@@ -246,12 +247,6 @@ export function respondToRetryCurationModel(data: CurationData): ApiResult {
     data.model.canRetry = false;
   }
   return { status: 200, body: modelProgressOf(data) };
-}
-
-/** 重新巡检：只记一次，返回 202 空体。 */
-export function respondToRepatrol(data: CurationData): ApiResult {
-  data.repatrols += 1;
-  return { status: 202, body: null };
 }
 
 export function respondToCurationProgress(data: CurationData): ApiResult {
@@ -411,14 +406,6 @@ export function seedException(data: CurationData, patch: Partial<CurationExcepti
   return exception;
 }
 
-export function respondToCurationExceptions(data: CurationData, search: URLSearchParams): ApiResult {
-  const status = search.get("status") ?? "open";
-  const page = Number(search.get("page") ?? "1");
-  const pageSize = Number(search.get("page_size") ?? "50");
-  const rows = data.exceptions.filter((item) => status === "all" || item.status === "open");
-  return { status: 200, body: { items: rows.slice((page - 1) * pageSize, page * pageSize), page, page_size: pageSize, total: rows.length } };
-}
-
 function decide(data: CurationData, id: string, status: "accepted" | "declined"): { decided: CurationExceptionDTO } | { error: ApiResult } {
   const index = data.exceptions.findIndex((item) => item.id === id);
   const current = data.exceptions[index];
@@ -446,4 +433,24 @@ export function respondToCurationConversations(data: CurationData, search: URLSe
   const page = Number(search.get("page") ?? "1");
   const pageSize = Number(search.get("page_size") ?? "20");
   return { status: 200, body: { items: data.conversations.slice((page - 1) * pageSize, page * pageSize), pagination: { page, page_size: pageSize, total: data.conversations.length } } };
+}
+
+/** 有冲突的专辑一页。 */
+export function respondToCurationConflicts(data: CurationData, search: URLSearchParams): ApiResult {
+  const page = Number(search.get("page") ?? "1");
+  const size = Number(search.get("page_size") ?? "20");
+  return { status: 200, body: { items: data.conflicts.slice((page - 1) * size, page * size), pagination: { page, page_size: size, total: data.conflicts.length } } };
+}
+
+/** 挑一张候选：快照对不上回 409 item_stale；否则这张专辑记为已匹配并从有冲突的列表里移除。 */
+export function respondToMatchSelection(data: CurationData, releaseId: string, body: unknown): ApiResult {
+  const choice = body as { source?: string; snapshot_id?: string; external_id?: string };
+  const item = data.conflicts.find((conflict) => conflict.release_id === releaseId && conflict.snapshot_id === choice.snapshot_id);
+  if (item === undefined || !item.candidates.some((candidate) => candidate.external_id === choice.external_id)) return failure(409, "item_stale", "候选已经变了");
+  data.conflicts = data.conflicts.filter((conflict) => conflict !== item);
+  const { release_id: _release, title: _title, ...result } = item;
+  return {
+    status: 200,
+    body: { ...result, status: "matched", reason: "", conflicts: [], candidates: [], selection: { external_id: choice.external_id, selected_by: ADMIN.id, selected_at: "2026-01-05T00:20:00Z", operation_ids: [] } },
+  };
 }

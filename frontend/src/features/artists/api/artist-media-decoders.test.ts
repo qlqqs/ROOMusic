@@ -12,8 +12,10 @@ it("读取人工图片与简介、可空来源地址和当前外部对应", () =
   expect(manualDetail.links).toEqual({
     musicbrainz: "00000000-0000-4000-8000-000000000002",
     wikidata: "Q900001",
+    judged_by_model: false,
+    operation_id: "00000000-0000-4000-8000-000000000003",
   });
-  const links = { musicbrainz: null, wikidata: null };
+  const links = { musicbrainz: null, wikidata: null, judged_by_model: false, operation_id: null };
   expect(decodeArtistDetail({ ...manualDetail, links }).links).toEqual(links);
 });
 

@@ -1,4 +1,4 @@
-import { Copyright, Flag, Globe, ImagePlus, Link2, SearchCheck, User, X } from "lucide-react";
+import { Copyright, Flag, Globe, ImagePlus, Link2, SearchCheck, Sparkles, User, X } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { cx } from "../../../shared/lib/class-names";
 import { useTooltip } from "../../../shared/ui";
@@ -47,6 +47,8 @@ function LinkRows({ links }: { links: ArtistLinksDTO }) {
           Wikidata {links.wikidata}
         </PopoverRow>
       )}
+      {/* 对应是模型判断的同一人（ADR 0009 第 6.4 节）：写明依据，撤销在操作记录里。 */}
+      {links.judged_by_model ? <PopoverRow icon={<Sparkles size={15} aria-hidden="true" />}>由模型判断是同一人</PopoverRow> : null}
     </>
   );
 }

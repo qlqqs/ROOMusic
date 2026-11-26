@@ -1,4 +1,4 @@
-import { enableCuration, seedBatch, seedException, seedSuppression } from "../src/test/curation-data";
+import { enableCuration, seedBatch, seedSuppression } from "../src/test/curation-data";
 import { seedAutoOperation } from "../src/test/governance-data";
 import { expectMinimumFontSize, expectNoHorizontalOverflow, expectNoSeriousViolations } from "./support/checks";
 import type { ApiMock } from "./support/api-mock";
@@ -49,7 +49,7 @@ for (const width of [1440, 375, 390]) {
     seedCuration(mock);
     await page.goto("/settings/curation");
     await expect(page.getByRole("heading", { name: "自动整理", exact: true, level: 1 })).toBeVisible();
-    for (const name of ["进度", "模型判断", "未采用的建议", "外部源", "批次", "不再提出"]) await expect(page.getByRole("region", { name, exact: true })).toBeVisible();
+    for (const name of ["进度", "模型判断", "有冲突的专辑", "外部源", "批次", "不再提出"]) await expect(page.getByRole("region", { name, exact: true })).toBeVisible();
     await expect(page.getByText("正在整理", { exact: true })).toBeVisible();
     await expect(page.getByRole("table", { name: "自动整理的批次" }).getByRole("row")).toHaveCount(2);
     await expectNoHorizontalOverflow(page, `自动整理 ${width}`);
@@ -96,7 +96,7 @@ for (const width of [1440, 375, 390]) {
 }
 
 for (const width of [1440, 390]) {
-  test(`模型判断与未采用的建议 ${width}：用量、设置与采纳确认框的布局`, async ({ page, backend }) => {
+  test(`模型判断与有冲突的专辑 ${width}：用量、设置与挑选候选的布局`, async ({ page, backend }) => {
     await page.setViewportSize({ width, height: 900 });
     const mock = await backend.start({ signedInAs: "curator" });
     seedCuration(mock);
@@ -125,41 +125,49 @@ for (const width of [1440, 390]) {
         updated_at: "2026-01-05T08:10:00Z",
       },
     ];
-    seedException(mock.curation);
-    seedException(mock.curation, {
-      tool: "resolve_release_match",
-      input: { item_id: "00000000-0000-4000-c000-000000000001", external_id: "11111111-1111-4111-8111-111111111111", basis: { note: "条码相符" } },
-      preview: {
-        changes: [
-          { field: "external_link", before: null, after: "11111111-1111-4111-8111-111111111111" },
-          { field: "track_links", before: 0, after: 12 },
-          { field: "label", before: null, after: "A Very Long Label Name That Should Wrap Anywhere Without Overflowing The Card" },
-          { field: "group", before: "a", after: "b" },
-        ],
+    mock.curation.conflicts = [
+      {
+        release_id: "00000000-0000-4000-e000-000000000001",
+        title: "A Very Long Album Title That Should Wrap Anywhere Without Overflowing The Card",
+        source: "musicbrainz",
+        status: "conflict",
+        checked_at: "2026-01-05T08:00:00Z",
+        reason: "ambiguous_editions",
+        conflicts: [],
+        snapshot_id: "00000000-0000-4000-e000-000000000002",
+        selection: null,
+        candidates: ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"].map((id, index) => ({
+          source: "musicbrainz",
+          entity: "release" as const,
+          external_id: id,
+          title: `合成专辑（第 ${index + 1} 版）`,
+          artist: "合成艺人",
+          release_group_id: "33333333-3333-4333-8333-333333333333",
+          date: index === 0 ? "2001-04-01" : "2011-04-01",
+          country: index === 0 ? "JP" : "XW",
+          barcode: "",
+          catalog_numbers: null,
+          method: "search",
+          status: "",
+          track_count: 12,
+        })),
       },
-      review: { decision: "rejected", id: "00000000-0000-4000-d000-000000000009", model: "review-model", reasons: ["曲目数与本地不一致，外部发行有一首隐藏曲目；这一句理由也写得很长，检查换行"], risk: "high", source: "model" },
-    });
+    ];
     await page.goto("/settings/curation");
     const model = page.getByRole("region", { name: "模型判断", exact: true });
     await expect(model.getByText("正在判断", { exact: true })).toBeVisible();
     await expect(model.getByRole("progressbar", { name: "今天的用量" })).toBeVisible();
     await expect(model.getByRole("link", { name: "自动整理 01-05 08:00" })).toBeVisible();
-    const exceptions = page.getByRole("region", { name: "未采用的建议", exact: true });
-    await expect(exceptions.getByRole("table", { name: "未采用的建议" })).toBeVisible();
-    await expectNoHorizontalOverflow(page, `模型判断与未采用的建议 ${width}`);
-    await expectNoSeriousViolations(page, `模型判断与未采用的建议 ${width}`);
-    await expectMinimumFontSize(page, `模型判断与未采用的建议 ${width}`);
+    const conflicts = page.getByRole("region", { name: "有冲突的专辑", exact: true });
+    await expect(conflicts.getByRole("button", { name: /^选这一版/ })).toHaveCount(2);
+    await expectNoHorizontalOverflow(page, `模型判断与有冲突的专辑 ${width}`);
+    await expectNoSeriousViolations(page, `模型判断与有冲突的专辑 ${width}`);
+    await expectMinimumFontSize(page, `模型判断与有冲突的专辑 ${width}`);
     await model.screenshot({ path: `/tmp/roomusic-e2-model-${width}.png` });
-    await exceptions.screenshot({ path: `/tmp/roomusic-e2-exceptions-${width}.png` });
+    await conflicts.screenshot({ path: `/tmp/roomusic-e2-conflicts-${width}.png` });
 
-    await exceptions.getByRole("button", { name: /^采纳/ }).first().click();
-    const dialog = page.getByRole("dialog", { name: "采纳这项修改？" });
-    await expect(dialog).toBeVisible();
-    expect(await dialog.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
-    await expectNoSeriousViolations(page, `采纳确认 ${width}`);
-    await dialog.getByRole("button", { name: "采纳" }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect(exceptions.getByRole("table", { name: "未采用的建议" }).getByRole("row")).toHaveCount(2);
+    await conflicts.getByRole("button", { name: /^选这一版/ }).first().click();
+    await expect(conflicts.getByText("没有分不出版本的专辑。")).toBeVisible();
   });
 }
 

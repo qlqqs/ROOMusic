@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CurationExceptionDTO, CurationProgressDTO, CurationSettingsDTO, SuppressionDTO } from "./api/decoders";
-import { exceptionChangeLines, isPairedIdentityMarker, skippedReason, skippedSummary, suppressionSubjectText, suppressionValueText } from "./curation-text";
+import type { CurationProgressDTO, CurationSettingsDTO, SuppressionDTO } from "./api/decoders";
+import { isPairedIdentityMarker, skippedReason, skippedSummary, suppressionSubjectText, suppressionValueText } from "./curation-text";
 import { dismissHint, hintDismissed, shouldShowFirstScanHint } from "./first-scan-hint";
 import { progressRefetchInterval } from "./hooks/use-curation";
 import { idleQueues } from "../../test/curation-data";
@@ -63,21 +63,6 @@ describe("文案", () => {
     expect([suppressionSubjectText(marker("release_merge", {})), suppressionValueText(marker("release_merge", { release_id: "r", title: "Quartet Disc Two" }))]).toEqual(["自动合并发行", "与《Quartet Disc Two》合并"]);
     expect(isPairedIdentityMarker(marker("lyrics_source", {}))).toBe(true);
     expect(isPairedIdentityMarker(marker("lyrics", {}))).toBe(false);
-  });
-
-  it("并入的例外：写来源并入目标与收藏的去向，令牌不显示，来源上有隐藏内容时说明", () => {
-    const exception = {
-      tool: "merge_releases",
-      preview: {
-        changes: [
-          { field: "release_merge", before: { id: "s", title: "Disc Two", group_id: "g" }, after: { id: "t", title: "Disc One", group_id: "g" } },
-          { field: "merge_token", before: null, after: "token" },
-          { field: "favorites_moved", before: null, after: 2 },
-          { field: "hidden", before: null, after: { corrections: 1, reviews: 0, default_version: false, external_artwork: false, links: 0, artist_overrides: 0 } },
-        ],
-      },
-    } as unknown as CurationExceptionDTO;
-    expect(exceptionChangeLines(exception)).toEqual(["把《Disc Two》整张并入《Disc One》", "2 个专辑收藏转到合并后的专辑", "被并入的发行上的修正等内容在合并期间不生效，撤销之后恢复"]);
   });
 
   it("跳过的原因归类计数，未知的码有兜底，临时性失败提示可以再试", () => {

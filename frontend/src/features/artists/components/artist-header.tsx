@@ -28,7 +28,7 @@ export function ArtistHeader({
   trackRoles = [],
   image = null,
   bio = null,
-  links = { musicbrainz: null, wikidata: null },
+  links = { musicbrainz: null, wikidata: null, judged_by_model: false, operation_id: null },
   media = null,
 }: {
   artist: ArtistSummaryDTO;

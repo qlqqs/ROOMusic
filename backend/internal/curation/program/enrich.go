@@ -195,7 +195,7 @@ func linkNeeded(e catalog.CurationEvidence, links []curation.LinkIntent) bool {
 
 var errArtistCreditUnconfirmed = errors.New("共同艺人署名未能对位")
 
-func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvidence, m MatchResult, requests *localCreditRequests) (group, artistStatus string, proposals []curation.ArtistCreditProposal, err error) {
+func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvidence, m MatchResult, out *outcome) (group, artistStatus string, proposals []curation.ArtistCreditProposal, err error) {
 	p, err := planMatch(ctx, w.db, e, m)
 	if err != nil {
 		return "", "", nil, err
@@ -216,7 +216,7 @@ func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvid
 	local, err := catalog.LoadCurationArtistCredits(ctx, w.db, e.ID)
 	switch {
 	case err == nil:
-		p.splits, *requests = planCreditSplits(local, e, m)
+		p.splits, out.localRequests = planCreditSplits(local, e, m)
 		p.artists, proposals, err = w.identifyArtists(ctx, local, e, m, u.offline || u.judge != nil)
 		if err != nil {
 			return "", "", nil, err
@@ -233,6 +233,7 @@ func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvid
 	case m.Level == "artist":
 		return "", "", nil, errArtistCreditUnconfirmed
 	}
+	out.trackRequests = p.tracks
 	group, err = writeMatch(ctx, w.db, w.writer, p, u.write, nil)
 	if m.Level == "artist" && (failureCode(err) == "occupied" || failureCode(err) == "suppressed") {
 		return "", "", nil, errArtistCreditUnconfirmed
