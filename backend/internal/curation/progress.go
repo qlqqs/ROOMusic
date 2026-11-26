@@ -92,7 +92,6 @@ func (w *Writer) Progress(ctx context.Context, ruleVersion int16, status Program
 type RuleVersions struct {
 	LocalRule         int16 `json:"local_rule"`
 	ExternalMatchRule int16 `json:"external_match_rule"`
-	PatrolPrompt      int16 `json:"patrol_prompt"`
 }
 
 type Classifications struct {

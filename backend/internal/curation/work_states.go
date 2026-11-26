@@ -124,7 +124,7 @@ func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
 	target, insert := item.TargetID, `INSERT INTO curation_pending_items AS p(target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,match_rule_version,identity_digest,route)
  SELECT 'release',$1,$2,CASE WHEN $10 IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''),NULLIF($10,'')
  WHERE NOT EXISTS (SELECT FROM curation_pending_items old WHERE old.target_type='release' AND old.target_id=$1 AND old.kind=$2
- AND old.resolution IN ('undetermined','suggestion_recorded') AND COALESCE(old.identity_digest,old.input_digest)=COALESCE(NULLIF($9,''),$4)
+ AND old.match_rule_version IS NOT DISTINCT FROM NULLIF($8::smallint,0) AND old.evidence->'generation' IS NOT DISTINCT FROM $5::jsonb->'generation' AND old.resolution IN ('undetermined','suggestion_recorded') AND COALESCE(old.identity_digest,old.input_digest)=COALESCE(NULLIF($9,''),$4)
  AND old.candidates=COALESCE($6::jsonb,'[]') AND old.conflicts=COALESCE($7::jsonb,'[]'))
  ON CONFLICT(target_type,target_id,kind) WHERE status <> 'resolved' AND kind NOT IN ('verify_artist_credit','verify_artist_merge','verify_name','name_patrol')`
 	if item.TargetType == "artist" {

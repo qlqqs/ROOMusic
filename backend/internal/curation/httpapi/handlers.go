@@ -2,6 +2,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -15,25 +16,53 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 )
 
+type Matcher interface {
+	SelectMatch(context.Context, string, string, string, curation.MatchChoice) (curation.ReleaseMatchResult, error)
+}
 type Handlers struct {
-	model      curation.ModelScheduler
-	exceptions curation.ExceptionResolver
-	program    curation.ProgramStatus
-	versions   curation.RuleVersions
-	sources    *curation.Sources
-	writer     *curation.Writer
-	reverter   *curation.Reverter
-	guard      *identity.Guard
-	logger     *slog.Logger
+	matcher  Matcher
+	model    curation.ModelScheduler
+	program  curation.ProgramStatus
+	versions curation.RuleVersions
+	sources  *curation.Sources
+	writer   *curation.Writer
+	reverter *curation.Reverter
+	guard    *identity.Guard
+	logger   *slog.Logger
 }
 
-func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, program curation.ProgramStatus, model curation.ModelScheduler, exceptions curation.ExceptionResolver, versions curation.RuleVersions, guard *identity.Guard, logger *slog.Logger) *Handlers {
-	return &Handlers{model: model, exceptions: exceptions, sources: sources, writer: writer, reverter: reverter, program: program, versions: versions, guard: guard, logger: logger}
+func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, program curation.ProgramStatus, model curation.ModelScheduler, matcher Matcher, versions curation.RuleVersions, guard *identity.Guard, logger *slog.Logger) *Handlers {
+	return &Handlers{model: model, matcher: matcher, sources: sources, writer: writer, reverter: reverter, program: program, versions: versions, guard: guard, logger: logger}
 }
 
 func (h *Handlers) Register(mux *http.ServeMux) {
 	h.registerArtistMedia(mux)
 	const base = "/api/v1/admin/curation"
+	mux.HandleFunc("GET "+base+"/conflicts", h.admin(func(w http.ResponseWriter, r *http.Request, _ identity.User) {
+		page, size, err := httpserver.ParsePagination(r, 20, 100)
+		if err != nil {
+			h.respond(w, r, nil, operations.Invalid("invalid_input", "分页参数无效"))
+			return
+		}
+		result, err := h.writer.MatchConflicts(r.Context(), page, size)
+		h.respond(w, r, result, err)
+	}))
+	mux.HandleFunc("POST "+base+"/releases/{id}/match-selection", h.admin(func(w http.ResponseWriter, r *http.Request, actor identity.User) {
+		var in curation.MatchChoice
+		if !decode(w, r, &in) {
+			return
+		}
+		result, err := h.matcher.SelectMatch(r.Context(), r.PathValue("id"), actor.ID, r.Header.Get("Idempotency-Key"), in)
+		h.respond(w, r, result, err)
+	}))
+	mux.HandleFunc("POST "+base+"/releases/{id}/adopt-name", h.admin(func(w http.ResponseWriter, r *http.Request, actor identity.User) {
+		var in curation.AdoptName
+		if !decode(w, r, &in) {
+			return
+		}
+		result, err := h.writer.AdoptName(r.Context(), r.PathValue("id"), actor.ID, r.Header.Get("Idempotency-Key"), in)
+		h.respond(w, r, result, err)
+	}))
 	mux.HandleFunc("GET "+base+"/sources", h.admin(h.listSources))
 	mux.HandleFunc("PUT "+base+"/sources/{id}", h.admin(h.setSource))
 	mux.HandleFunc("PUT "+base+"/sources/{id}/keys/{name}", h.admin(h.setSourceKey))
@@ -41,11 +70,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+base+"/classifications", h.admin(h.classifications))
 	mux.HandleFunc("GET "+base+"/releases/{id}/match-results", h.admin(h.releaseMatchResults))
 	mux.HandleFunc("POST "+base+"/releases/{id}/recheck", h.admin(h.recheckUnlisted))
-	mux.HandleFunc("POST "+base+"/repatrol", h.admin(h.repatrol))
 	mux.HandleFunc("GET "+base+"/progress", h.admin(h.progress))
-	mux.HandleFunc("GET "+base+"/exceptions", h.admin(h.listExceptions))
-	mux.HandleFunc("POST "+base+"/exceptions/{id}/accept", h.admin(h.acceptException))
-	mux.HandleFunc("POST "+base+"/exceptions/{id}/decline", h.admin(h.declineException))
 	mux.HandleFunc("POST "+base+"/model/retry", h.admin(func(w http.ResponseWriter, r *http.Request, _ identity.User) {
 		p, err := h.model.RetryModel(r.Context())
 		h.respond(w, r, p, err)
@@ -102,14 +127,6 @@ func decode(w http.ResponseWriter, r *http.Request, body any) bool {
 		return false
 	}
 	return true
-}
-
-func (h *Handlers) repatrol(w http.ResponseWriter, r *http.Request, _ identity.User) {
-	if err := h.writer.Repatrol(r.Context()); err != nil {
-		h.respond(w, r, nil, err)
-		return
-	}
-	w.WriteHeader(http.StatusAccepted)
 }
 
 func (h *Handlers) recheckUnlisted(w http.ResponseWriter, r *http.Request, _ identity.User) {
@@ -286,30 +303,6 @@ func (h *Handlers) suppressions(w http.ResponseWriter, r *http.Request, _ identi
 
 func (h *Handlers) clearSuppression(w http.ResponseWriter, r *http.Request, _ identity.User) {
 	h.respond(w, r, nil, h.writer.ClearSuppression(r.Context(), r.PathValue("id")))
-}
-
-func (h *Handlers) listExceptions(w http.ResponseWriter, r *http.Request, _ identity.User) {
-	page, size, err := httpserver.ParsePagination(r, 50, 100)
-	if err != nil {
-		h.respond(w, r, nil, operations.Invalid("invalid_input", "分页参数无效"))
-		return
-	}
-	status := r.URL.Query().Get("status")
-	if !r.URL.Query().Has("status") {
-		status = "open"
-	}
-	items, total, err := h.writer.ListExceptions(r.Context(), status, page, size)
-	h.respond(w, r, map[string]any{"items": items, "total": total, "page": page, "page_size": size}, err)
-}
-
-func (h *Handlers) acceptException(w http.ResponseWriter, r *http.Request, actor identity.User) {
-	e, err := h.exceptions.Accept(r.Context(), r.PathValue("id"), actor.ID, r.Header.Get("X-Request-ID"))
-	h.respond(w, r, map[string]any{"exception": e, "operation_ids": e.OperationIDs}, err)
-}
-
-func (h *Handlers) declineException(w http.ResponseWriter, r *http.Request, actor identity.User) {
-	e, err := h.exceptions.Decline(r.Context(), r.PathValue("id"), actor.ID)
-	h.respond(w, r, map[string]any{"exception": e}, err)
 }
 
 func (h *Handlers) releaseMatchResults(w http.ResponseWriter, r *http.Request, _ identity.User) {

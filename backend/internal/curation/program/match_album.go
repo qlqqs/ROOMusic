@@ -362,6 +362,9 @@ func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.R
 		if c.passes(method) {
 			passed = append(passed, verifiedEdition{r, c})
 		}
+		candidate.Verification = verifyAlbum(e, *r, c)
+		candidate.Verification.Method = method
+		candidate.Verification.Direct = c.passes(method)
 		candidate.Conflicts = c.conflicts
 		if blockedCodes(c.conflicts) {
 			blocked++

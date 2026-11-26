@@ -76,8 +76,10 @@ type ArtistBio struct {
 }
 
 type ArtistLinks struct {
-	MusicBrainz *string `json:"musicbrainz"`
-	Wikidata    *string `json:"wikidata"`
+	JudgedByModel bool    `json:"judged_by_model"`
+	OperationID   *string `json:"operation_id"`
+	MusicBrainz   *string `json:"musicbrainz"`
+	Wikidata      *string `json:"wikidata"`
 }
 
 type ArtistDetail struct {

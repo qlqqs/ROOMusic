@@ -51,7 +51,7 @@ func TestPostgreSQLCurationFixedSelectedReport(t *testing.T) {
 						}
 					}
 				} else {
-					if row.Requests[modelEndpoint] == 0 {
+					if (sample.ID == "one-char" || sample.ID == "romanized") && row.Requests[modelEndpoint] == 0 {
 						t.Errorf("脚本轮没有模型调用：%v", row.Requests)
 					}
 					if row.Requests["openai/chat/v1/models"] != 0 || row.Requests["openai/v1/models"] != 0 {
@@ -70,12 +70,12 @@ func TestPostgreSQLCurationFixedSelectedReport(t *testing.T) {
 							t.Errorf("%s 声纹对应 %v，期望 %s", file, got, want)
 						}
 					}
-				case "one-char":
+				case "one-char", "romanized":
 					if mode == "script" {
 						if !row.Correct || row.Requests["musicbrainz/release/search"] == 0 ||
 							row.Requests[lookup] == 0 || !slices.Contains(row.MatchStatus, "matched/model") ||
 							!slices.Equal(row.Links["专辑/release"], []string{sample.Expect.Release}) ||
-							row.Writes["专辑/title"] != sample.External.Releases[0].Title {
+							(sample.ID == "one-char" && row.Writes["专辑/title"] != sample.External.Releases[0].Title || sample.ID == "romanized" && row.Writes["专辑/title"] != "") {
 							t.Errorf("正确名字应触发查询、匹配预期版本并纠正标题：%+v", row)
 						}
 					} else if row.Actual != "unlisted" || !slices.Equal(row.MatchStatus, []string{"unmatched/search"}) || len(row.Links)+len(row.Writes) != 0 {

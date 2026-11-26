@@ -41,7 +41,7 @@ const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (SELECT id FROM cur
  LEFT JOIN visible v ON v.id=work.queue_release_id
  LEFT JOIN curation_stable_releases stable ON stable.id=work.queue_release_id
  WHERE work.subject=$1 AND settings.id=1
- AND (work.needs_work OR (work.queue_release_id IS NOT NULL AND (work.status IN ('try_later','unmatched') AND work.next_attempt_at<=$2 OR work.subject='release' AND work.status='try_later' AND work.result ? 'retry')))
+ AND (work.needs_work OR (work.queue_release_id IS NOT NULL AND (work.status IN ('try_later','unmatched','conflict') AND work.next_attempt_at<=$2 OR work.subject='release' AND work.status='try_later' AND work.result ? 'retry')))
  AND (v.id IS NOT NULL OR (work.subject='artist_media' AND work.queue_release_id IS NULL))
  AND (work.subject NOT IN ('lyrics','fingerprint') OR EXISTS (SELECT FROM tracks t JOIN media m ON m.id=t.medium_id
  WHERE t.id=work.target_id AND t.source_status='present' AND m.release_id=work.queue_release_id))

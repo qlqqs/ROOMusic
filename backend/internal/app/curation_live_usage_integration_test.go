@@ -324,7 +324,7 @@ func Test真实模型计量保留分块事件并只取末帧用量(t *testing.T)
 		`[{"item_id":"` + itemID + `","kind":"release_match","evidence":{}}]` +
 		"\n</roomusic-source>"
 	request, err := json.Marshal(map[string]any{
-		"instructions": backgroundPrompt(model.LookupCandidate),
+		"instructions": backgroundPrompt(model.TaskKind("lookup")),
 		"input":        []map[string]string{{"role": "user", "content": message}},
 	})
 	if err != nil {
@@ -363,10 +363,8 @@ func TestMetricsRouteWithSharedTools(t *testing.T) {
 		prompt           model.TaskKind
 		stage, firstTool string
 	}{
-		{"联网字段优先", "web", model.LookupCandidate, "web", "web_search"},
-		{"第二档字段优先", "lookup", model.WebFallback, "lookup", "search_music_metadata"},
-		{"旧联网消息", "", model.WebFallback, "web", "web_search"},
-		{"旧第二档消息", "", model.LookupCandidate, "lookup", "search_music_metadata"},
+		{"联网字段优先", "web", model.TaskKind("lookup"), "web", "web_search"},
+		{"第二档字段优先", "lookup", model.TaskKind("web"), "lookup", "search_music_metadata"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			item := map[string]any{"item_id": id, "release_id": "专辑甲", "kind": "release_match", "evidence": map[string]string{"title": "竹笺折痕"}}

@@ -10,6 +10,7 @@ import (
 )
 
 type unit struct {
+	judge                  *curation.JudgeCursor
 	w                      *Worker
 	subject, id, provider  string
 	ruleVersion            int16

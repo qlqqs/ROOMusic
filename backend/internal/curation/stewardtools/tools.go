@@ -33,15 +33,12 @@ func StewardTools(w *curation.Writer, m *program.ModelMatcher, mockHost ...sourc
 	}
 	available := func(ctx context.Context, c tool.Caller) bool { return c.Source == tool.SourceCuration }
 	return []tool.Definition{
-		a.patrolTool(available), a.localCleanupTool(available),
+		a.localCleanupTool(available),
+		{Name: "submit_judge", Description: "提交识别判断", Scope: tool.ScopePersonal, MinRole: tool.RoleAdmin, Available: available, Input: json.RawMessage(`{"type":"object","properties":{"item_id":{"type":"string"},"decision":{"type":"string"},"selected_id":{"type":"string"},"groups":{"type":"array","items":{"type":"object"}},"reason":{"type":"string"}},"required":["item_id","decision"]}`), Output: json.RawMessage(`{"type":"object"}`), Handler: a.submitJudge},
 		a.backgroundMergeReleases(),
-		a.verificationTool(available), a.identityTool(available), a.mediaTool(available),
-		{Name: "read_pending_items", Description: "读取本次自动整理领取的待定项、冲突与候选资料", Scope: tool.ScopeRead, Untrusted: true, MinRole: tool.RoleAdmin, Available: available,
-			Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_ids":{"type":"array","items":` + idSchema + `}}}`), Output: json.RawMessage(`{"type":"array","items":{"type":"object"}}`), Handler: a.read},
-		{Name: "resolve_release_match", Description: "按 MusicBrainz 编号核对待定项。同组多版结构吻合而无法区分时，提交任一吻合版本，后端只建立发行组级对应", Scope: tool.ScopeShared, Revertible: true, MinRole: tool.RoleAdmin, Available: available,
-			Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_id":` + idSchema + `,"external_id":` + idSchema + `,"basis":{"type":"object","additionalProperties":false,"properties":{"note":` + noteSchema + `},"required":["note"]}},"required":["item_id","external_id","basis"]}`), Output: json.RawMessage(`{"type":"object"}`), Handler: a.resolve, Preview: a.preview},
-		{Name: "shelve_pending_item", Description: "放弃当前档并记录原因，后端按路线升级或结束当前项", Scope: tool.ScopePersonal, MinRole: tool.RoleAdmin, Available: available,
-			Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_id":` + idSchema + `,"reason":` + noteSchema + `,"fact":{"type":"object","additionalProperties":false,"properties":{"field":{"type":"string","enum":["year","label","catalog_number","barcode"]},"value":{"type":"string","minLength":1,"maxLength":4096}},"required":["field","value"]}},"required":["item_id","reason"]}`), Output: json.RawMessage(`{"type":"object"}`), Handler: a.shelve},
+		a.verificationTool(available),
+		{Name: "shelve_pending_item", Description: "结束当前项并保存判断理由", Scope: tool.ScopePersonal, MinRole: tool.RoleAdmin, Available: available,
+			Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_id":` + idSchema + `,"reason":` + noteSchema + `},"required":["item_id","reason"]}`), Output: json.RawMessage(`{"type":"object"}`), Handler: a.shelve},
 	}
 }
 
@@ -217,9 +214,8 @@ func (a adapter) resolve(ctx context.Context, c tool.Caller, raw json.RawMessage
 }
 func (a adapter) shelve(ctx context.Context, c tool.Caller, raw json.RawMessage) (json.RawMessage, error) {
 	var in struct {
-		ID     string                      `json:"item_id"`
-		Reason string                      `json:"reason"`
-		Fact   *curation.FactualSuggestion `json:"fact,omitempty"`
+		ID     string `json:"item_id"`
+		Reason string `json:"reason"`
 	}
 	if json.Unmarshal(raw, &in) != nil {
 		return nil, invalid()
@@ -233,19 +229,28 @@ func (a adapter) shelve(ctx context.Context, c tool.Caller, raw json.RawMessage)
 		return nil, err
 	}
 	ctx = bindItem(ctx, run, c, item)
-	if run.Abandon == nil {
-		return nil, invalid()
-	}
-	if in.Fact != nil {
-		if (run.TaskKind != "lookup" && run.TaskKind != "web") || (item.Kind != "release_match" && item.Kind != "recording_match") {
-			return nil, invalid()
-		}
-		if err := a.writer.StageFactualSuggestion(ctx, item, *in.Fact, run.Model, in.Reason); err != nil {
-			return nil, toolError(err)
-		}
-	}
-	if err := run.Abandon(ctx, item.ID, in.Reason); err != nil {
+	if err := a.writer.FinishUndetermined(ctx, item, run.ConversationID, in.Reason); err != nil {
 		return nil, toolError(err)
 	}
-	return json.Marshal(map[string]string{"item_id": item.ID, "status": "finished_tier"})
+	return json.Marshal(map[string]string{"item_id": item.ID, "status": "undetermined"})
+}
+
+func (a adapter) submitJudge(ctx context.Context, c tool.Caller, raw json.RawMessage) (json.RawMessage, error) {
+	var answer curation.JudgeAnswer
+	if json.Unmarshal(raw, &answer) != nil {
+		return nil, invalid()
+	}
+	run, items, err := a.claimed(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	p, err := selectItem(items, answer.ItemID, false)
+	if err != nil {
+		return nil, err
+	}
+	if p.Kind != "release_match" && p.Kind != "recording_match" {
+		return nil, invalid()
+	}
+	err = a.writer.SubmitJudge(bindItem(ctx, run, c, p), p, answer)
+	return json.RawMessage(`{"status":"submitted"}`), toolError(err)
 }

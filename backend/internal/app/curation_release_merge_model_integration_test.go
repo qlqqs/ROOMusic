@@ -6,12 +6,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/curation"
-	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	curationtools "github.com/qlqq/roomusic/backend/internal/curation/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
-	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 )
 
 const releaseMergeProposalTool = "merge_releases"
@@ -41,8 +38,10 @@ func startReleaseMergeModel(t *testing.T, f *schedulerFixture) (string, curation
 
 func approveReleaseMerge(t *testing.T, f *schedulerFixture, item curation.PendingItem) (op, batch string) {
 	t.Helper()
-	f.next(t, false).tool(t, releaseMergeProposalTool, releaseMergeProposal(item.ID))
-	f.next(t, true).review(t, "approved")
+	q := f.next(t, false)
+	answer, err := json.Marshal(map[string]any{"items": []map[string]string{{"item_id": item.ID, "verdict": "merge", "reason": "对应同一版本的不同录音"}}})
+	requireCurationOK(t, err)
+	q.reply <- q.frame(t, map[string]string{"content": string(answer)}, "stop")
 	modelWaitResolution(t, f, item.ID, "model_merged")
 	op = programString(t, f.application, `SELECT operation_id FROM release_merges WHERE source_release_id=$1 AND target_release_id=$2`, f.b, f.a)
 	batch = programString(t, f.application, `SELECT batch_id FROM operations WHERE id=$1`, op)
@@ -53,29 +52,22 @@ func approveReleaseMerge(t *testing.T, f *schedulerFixture, item curation.Pendin
 }
 
 func TestPostgreSQLCurationModelMergeReleases(t *testing.T) {
-	t.Run("模型提出并经审查写入", func(t *testing.T) {
+	t.Run("模型判断后按证据写入", func(t *testing.T) {
 		f := newSchedulerFixture(t)
-		want := []string{"get_music_metadata", "merge_releases", "resolve_release_match", "search_music_metadata", "shelve_pending_item", "submit_verification"}
-		for _, name := range want {
-			if !backgroundToolAllowed(name) {
-				t.Errorf("后台白名单缺少 %s", name)
-			}
-		}
 		var dedicated []string
 		for _, tool := range curationtools.StewardTools(f.writer, nil) {
 			dedicated = append(dedicated, tool.Name)
 		}
 		slices.Sort(dedicated)
-		if !slices.Equal(dedicated, []string{"merge_releases", "read_pending_items", "resolve_artist_identity", "resolve_release_match", "shelve_pending_item", "submit_artist_media", "submit_local_cleanup", "submit_patrol", "submit_verification"}) {
+		if !slices.Equal(dedicated, []string{"merge_releases", "shelve_pending_item", "submit_judge", "submit_local_cleanup", "submit_verification"}) {
 			t.Fatalf("后台专用工具 %v", dedicated)
 		}
 		_, item := startReleaseMergeModel(t, f)
 		op, batch := approveReleaseMerge(t, f, item)
 		b3RequireCount(t, f.application, 1, `SELECT count(*) FROM operations o JOIN curation_batches b ON b.id=o.batch_id
-			JOIN steward_reviews r ON r.id::text=o.origin->>'review_id'
 			WHERE o.id=$1 AND b.id=$2 AND b.tier='model' AND b.actor_id=$3 AND o.actor_id=$3 AND o.target_id=$4
 			AND o.operation_type='release_auto_merge' AND o.origin->>'source'='curation' AND o.origin->>'provider_kind'='model'
-			AND o.origin->>'provider'='test-main' AND o.origin->>'review_decision'='approved' AND r.policy_version=$5`, op, batch, f.admin.id, f.a, runtime.ReviewPolicyVersion)
+			AND o.origin->>'provider'='test-main' AND o.origin->>'review_id' IS NULL`, op, batch, f.admin.id, f.a)
 		b3RequireCount(t, f.application, 2, `SELECT count(*) FROM operations_release_targets WHERE operation_id=$1 AND release_id IN ($2,$3)`, op, f.a, f.b)
 		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions`)
 	})
@@ -269,23 +261,10 @@ func recordReleaseMergeCurationSamples(t *testing.T, samples *apiSampleRecorder)
 	f.b, _ = insertGroupedRelease(t, f.application, f.rootID, groupedRelease{
 		id: "00000000-0000-4000-8000-000000000200", title: "合成第二碟", artist: "合成艺人", tracks: []string{"present"},
 	})
-	conversation := modelConversation(t, f)
-	_, item := seedReleaseMergePair(t, f)
-	mustExec(t, f.application, `UPDATE curation_pending_items SET status='in_progress',conversation_id=$2,claimed_at=now() WHERE id=$1`, item.ID, conversation)
-	preview, err := governance.NewStore(f.application.database).PreviewReleaseMerge(t.Context(), f.a, f.b)
+	tx, err := f.application.database.BeginTx(t.Context(), nil)
 	requireCurationOK(t, err)
-	raw, err := json.Marshal(map[string]any{"changes": program.ReleaseMergeChanges(preview.Source, preview.Target, preview.Token, preview.Hidden, preview.FavoritesMoved)})
-	requireCurationOK(t, err)
-	input, err := json.Marshal(releaseMergeProposal(item.ID))
-	requireCurationOK(t, err)
-	id, err := f.writer.CreateException(t.Context(), curation.ModelException{
-		PendingItemID: item.ID, PlanItemID: uuid.New(), ConversationID: &conversation, Tool: releaseMergeProposalTool,
-		Input: input, Preview: raw, Provider: "sample-model",
-		Review: curation.ExceptionReview{ID: uuid.New(), Model: "sample-review", Decision: "needs_human_confirmation", Source: "model", Reasons: []string{"并入发行需要人工核对"}},
-	})
-	requireCurationOK(t, err)
-	samples.record("curation/exceptions-merge", f.application.request(t, "GET", curationBase+"/exceptions?status=open", nil, &f.admin, nil), 200)
-	response := f.application.request(t, "POST", curationBase+"/exceptions/"+id+"/decline", nil, &f.admin, nil)
-	readExceptionDecision(t, response, "declined", f.admin.id)
+	defer tx.Rollback()
+	requireCurationOK(t, f.writer.SuppressReleaseMerge(t.Context(), tx, f.a, f.b, "", f.admin.id))
+	requireCurationOK(t, tx.Commit())
 	samples.record("curation/suppressions-release-merge", f.application.request(t, "GET", curationBase+"/suppressions?release_id="+f.a, nil, &f.admin, nil), 200)
 }

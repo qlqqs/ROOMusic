@@ -113,46 +113,40 @@ func TestPostgreSQLProgramModelMatchSameKeyKeepsNewerConclusion(t *testing.T) {
 	ctx := t.Context()
 	db := f.application.database
 	_, remote := f.tagged(t)
-	item := modelClaim(t, f.curationFixture, modelConversation(t, f.curationFixture),
-		modelPending(t, f.curationFixture, f.a, "release_match", modelDigest(t, f)))
 	matcher := program.NewModelMatcher(db, f.writer, f.gate)
-	plan, err := matcher.Plan(ctx, item, remote.ID)
+	local, err := f.writer.LoadCurationEvidence(ctx, []string{f.a})
 	requireCurationOK(t, err)
+	e := local[f.a]
+	requireCurationOK(t, curation.SaveWorkState(ctx, db, curation.WorkState{Subject: "release", TargetID: f.a, Status: "conflict", InputDigest: program.ReleaseDigest(e), FileDigest: e.FileDigest, RuleVersion: program.MatchRuleVersion, MatchRuleVersion: program.MatchRuleVersion}))
 	checked := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
-	requireCurationOK(t, curation.SaveReleaseMatchResult(ctx, db, f.a, curation.ReleaseMatchResult{
-		Source: "musicbrainz", Status: "conflict", CheckedAt: &checked, Conflicts: []string{"track_count"},
-	}))
-	opt := program.ApplyOptions{Key: uuid.New(), Batch: f.batch(t, "model"), PendingItemID: item.ID, ApprovedReviewID: uuid.New(),
-		Source: curation.Source{Kind: "model", Provider: "synthetic", Basis: "合成匹配"}}
-	first, err := matcher.Apply(ctx, plan, opt)
+	choice := curation.MatchChoice{Source: "musicbrainz", SnapshotID: uuid.New(), ExternalID: remote.ID}
+	candidates, err := json.Marshal([]program.Candidate{{Source: choice.Source, ExternalID: remote.ID, Method: "tag_id", Entity: "release"}})
 	requireCurationOK(t, err)
-	if first.OperationID == "" {
-		t.Fatal("模型匹配没有保存操作")
+	requireCurationOK(t, curation.SaveReleaseMatchResult(ctx, db, f.a, curation.ReleaseMatchResult{Source: choice.Source, Status: "conflict", CheckedAt: &checked, SnapshotID: choice.SnapshotID, Candidates: candidates}))
+	key := uuid.New()
+	first, err := matcher.SelectMatch(ctx, f.a, f.admin.id, key, choice)
+	requireCurationOK(t, err)
+	if first.Status != "matched" || first.Selection == nil || len(first.Selection.OperationIDs) == 0 || first.CheckedAt == nil || !first.CheckedAt.Equal(checked) {
+		t.Fatalf("选择后缺少对应操作或来源结论 %+v", first)
 	}
-	f.assertRelease(t, f.a, "matched", "model")
-	rows, err := f.writer.ReleaseMatchResults(ctx, f.a)
+	replay, err := matcher.SelectMatch(ctx, f.a, f.admin.id, key, choice)
 	requireCurationOK(t, err)
-	if len(rows) != 1 || rows[0].Status != "matched" || rows[0].CheckedAt == nil || !rows[0].CheckedAt.Equal(checked) {
-		t.Fatalf("模型写入后的来源结论 %+v", rows)
+	if !reflect.DeepEqual(first, replay) {
+		t.Fatalf("同键回放结果变化 %+v / %+v", first, replay)
 	}
 	newer := checked.Add(time.Hour)
-	next := curation.ReleaseMatchResult{Source: "musicbrainz", Status: "conflict", CheckedAt: &newer, Conflicts: []string{"duration_mismatch"}}
+	next := curation.ReleaseMatchResult{Candidates: json.RawMessage("[]"), Source: "musicbrainz", Status: "conflict", CheckedAt: &newer, Conflicts: []string{"duration_mismatch"}}
 	requireCurationOK(t, curation.SaveReleaseMatchResult(ctx, db, f.a, next))
 	mustExec(t, f.application, `UPDATE curation_work_states SET generation=generation+1,status='conflict' WHERE subject='release' AND target_id=$1`, f.a)
 	state := f.stateFor(t, "release", f.a)
-	replay, err := matcher.Apply(ctx, plan, opt)
-	requireCurationOK(t, err)
-	rows, err = f.writer.ReleaseMatchResults(ctx, f.a)
-	requireCurationOK(t, err)
-	if !reflect.DeepEqual(replay, first) || !reflect.DeepEqual(rows, []curation.ReleaseMatchResult{next}) ||
-		!reflect.DeepEqual(state, f.stateFor(t, "release", f.a)) {
-		t.Fatalf("同键应回放原收据并保留新结论，首次 %+v、回放 %+v、来源结论 %+v", first, replay, rows)
-	}
-	otherKey := opt
-	otherKey.Key = uuid.New()
-	_, err = matcher.Apply(ctx, plan, otherKey)
+	_, err = matcher.SelectMatch(ctx, f.a, f.admin.id, key, choice)
 	curationCRequireProblem(t, err, http.StatusConflict, "item_stale")
-	f.assertCount(t, len(first.OperationIDs), `SELECT count(*) FROM operations WHERE batch_id=$1`, opt.Batch)
+	rows, err := f.writer.ReleaseMatchResults(ctx, f.a)
+	requireCurationOK(t, err)
+	if !reflect.DeepEqual(rows, []curation.ReleaseMatchResult{next}) || !reflect.DeepEqual(state, f.stateFor(t, "release", f.a)) {
+		t.Fatalf("过期选择改变了新结论 %+v", rows)
+	}
+	f.assertCount(t, 1, `SELECT count(*) FROM operations WHERE idempotency_key=$1`, key)
 }
 
 func TestPostgreSQLProgramMergeSameEdition(t *testing.T) {
@@ -358,7 +352,7 @@ func TestPostgreSQLProgramPeriodicRecheckCallsAcoustID(t *testing.T) {
 			t.Fatalf("周期轮 %d 应再次查声纹，实际请求 %d 次，状态 %q，代次 %d", day+1, hits(), state.Status, state.Generation)
 		}
 		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items
- WHERE target_id=$1 AND kind='release_match' AND status='waiting_route' AND route='lookup'`, id)
+ WHERE target_id=$1 AND kind='release_match' AND status='waiting_model' AND route='select'`, id)
 	}
 	response := app.request(t, http.MethodPost, curationBase+"/releases/"+id+"/recheck", nil, &admin, nil)
 	if response.Code != http.StatusAccepted {

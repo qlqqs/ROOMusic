@@ -8,7 +8,7 @@ import (
 
 // 领取和重审使用同一组互斥键。巡检块可能含多个艺人，发行并入涉及两张发行。
 const modelItemsSQL = `WITH items AS (
- SELECT id,target_id,artist_id,kind,
+ SELECT id,target_id,artist_id,kind,evidence,
  CASE WHEN kind='release_merge' THEN candidates->0->>'release_id' END AS merge_release,
  CASE WHEN kind='verify_artist_merge' THEN evidence->>'artist_a' END AS artist_a,
  CASE WHEN kind='verify_artist_merge' THEN evidence->>'artist_b' END AS artist_b
@@ -17,8 +17,7 @@ const modelItemsSQL = `WITH items AS (
 const modelTargetKeysSQL = `, releases_for_item AS (
  SELECT id,target_id AS release_id FROM items WHERE target_id IS NOT NULL
  UNION SELECT p.id,r.id FROM items p JOIN releases r ON r.id::text=p.merge_release
- UNION SELECT n.pending_id,i.release_id FROM items p JOIN curation_patrol_names n ON n.pending_id=p.id
- JOIN curation_patrol_inputs i ON i.name_id=n.id
+
  ), credits AS (` + ArtistReleaseCreditsSQL + ` SELECT * FROM credits),
  target_keys AS (
  SELECT id,'release/'||release_id::text AS key FROM releases_for_item
@@ -28,7 +27,7 @@ const modelTargetKeysSQL = `, releases_for_item AS (
  UNION ALL SELECT id,'artist/'||artist_id::text FROM items WHERE artist_id IS NOT NULL
  UNION ALL SELECT id,'artist/'||v.artist FROM items CROSS JOIN LATERAL
  (VALUES(artist_a),(artist_b)) v(artist) WHERE kind='verify_artist_merge'
- UNION ALL SELECT p.id,'artist/'||n.artist_id::text FROM items p JOIN curation_patrol_names n ON n.pending_id=p.id
+ UNION ALL SELECT id,'pair/'||jsonb_build_array(evidence->>'pair_low',evidence->>'pair_high')::text FROM items WHERE evidence ? 'pair_low'
  ) `
 
 func (w *Writer) ModelTargetKeys(ctx context.Context, ids []string) ([]string, error) {

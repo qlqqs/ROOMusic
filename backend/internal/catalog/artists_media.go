@@ -96,11 +96,11 @@ func (s *Store) readArtistMedia(ctx context.Context, canonical string, result *A
 		return err
 	}
 	return s.database.QueryRowContext(ctx, `WITH `+ArtistMediaFamilyCTE+`, links AS (
- SELECT DISTINCT ON (l.source) l.source,l.external_id
+ SELECT DISTINCT ON (l.source) l.source,l.external_id,l.method,l.operation_id
  FROM artist_media_family f JOIN external_links l ON l.object_id=f.artist_id
  WHERE f.canonical_id=$1::uuid AND l.object_type='artist' AND l.source IN ('musicbrainz','wikidata')
  ORDER BY l.source,`+ArtistMediaOrder+`
  ) SELECT max(external_id) FILTER (WHERE source='musicbrainz'),
-          max(external_id) FILTER (WHERE source='wikidata') FROM links`, canonical).
-		Scan(&result.Links.MusicBrainz, &result.Links.Wikidata)
+          max(external_id) FILTER (WHERE source='wikidata'),coalesce(bool_or(method='model_identity') FILTER(WHERE source='musicbrainz'),false),max(operation_id::text) FILTER(WHERE source='musicbrainz') FROM links`, canonical).
+		Scan(&result.Links.MusicBrainz, &result.Links.Wikidata, &result.Links.JudgedByModel, &result.Links.OperationID)
 }

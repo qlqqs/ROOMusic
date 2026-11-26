@@ -171,7 +171,10 @@ type Release struct {
 }
 type Credit struct{ ArtistID, Name, JoinPhrase string }
 type Label struct{ Name, CatalogNumber string }
-type Group struct{ ID, Title, PrimaryType, FirstReleaseDate string }
+type Group struct {
+	ID, Title, PrimaryType, FirstReleaseDate string
+	SecondaryTypes                           []string
+}
 type Medium struct {
 	Position      int
 	Format, Title string

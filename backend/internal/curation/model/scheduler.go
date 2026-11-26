@@ -8,24 +8,21 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
-	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
 var ErrStopped = errors.New("后台整理条件已变更")
 
 type Options struct {
-	Lookup        LookupQueue
-	Now           func() time.Time
-	PollInterval  time.Duration
-	ReviewBackoff []time.Duration
-	BatchSize     int
+	Lookup       LookupQueue
+	Now          func() time.Time
+	PollInterval time.Duration
+	BatchSize    int
 }
 
 // Launcher 的实现负责管家会话、方案与运行生命周期。
@@ -36,8 +33,6 @@ type Launcher interface {
 	Probe(context.Context, string, string, bool) (int64, int64, *curation.ModelFailure, error)
 	CreateConversation(ctx context.Context, actor, title, model string) (string, error)
 	DeleteConversation(ctx context.Context, actor, id string) error
-	PendingPlan(ctx context.Context, actor, conversation string) (string, error)
-	RejectedSubmissions(ctx context.Context, actor, conversation string, items []curation.PendingItem) ([]curation.RejectedSubmission, error)
 	ResolvePlans(ctx context.Context, conversation string) error
 	Start(context.Context, RunParams) (Run, error)
 }
@@ -53,17 +48,15 @@ type Run interface {
 }
 
 type RunParams struct {
-	Budget             int64
-	Verified           bool
-	Items              []curation.PendingItem
-	ProviderError      func(time.Duration)
-	OnToolCalls        func(context.Context, int) error
-	Run                curation.ModelRun
-	Text, ReviewPlanID string
-	BeforeRequest      func(context.Context) error
-	BeforeStep         func(context.Context) error
-	Usage              func(context.Context, int64, int64)
-	Escalate           func(context.Context, curation.ModelException) (string, error)
+	Budget        int64
+	Verified      bool
+	Items         []curation.PendingItem
+	ProviderError func(time.Duration)
+	Run           curation.ModelRun
+	Text          string
+	BeforeRequest func(context.Context) error
+	BeforeStep    func(context.Context) error
+	Usage         func(context.Context, int64, int64)
 }
 
 type Scheduler struct {
@@ -99,9 +92,7 @@ func NewScheduler(db *sql.DB, writer *curation.Writer, sources *curation.Sources
 	if options.BatchSize <= 0 {
 		options.BatchSize = 5
 	}
-	if options.ReviewBackoff == nil {
-		options.ReviewBackoff = []time.Duration{5 * time.Minute, 30 * time.Minute, 2 * time.Hour}
-	}
+
 	s := &Scheduler{db: db, writer: writer, sources: sources, launcher: launcher, options: options, logger: logger, active: make(map[*modelWork][]string), wake: make(chan struct{}, 1)}
 	if launcher != nil {
 		launcher.OnSettingsChanged(s.Wake)
@@ -116,34 +107,17 @@ func (s *Scheduler) recover(ctx context.Context) error {
 	if err := s.launcher.ResolvePlans(ctx, ""); err != nil {
 		return err
 	}
-	items, err := s.writer.InterruptedSourceItems(ctx)
-	if err != nil {
-		return err
-	}
-	now := s.options.Now()
-	for _, item := range items {
-		next := now
-		if item.ClaimSourceRecoveryAt != nil {
-			next = curation.NextSourceRetry(now, *item.ClaimSourceRecoveryAt, item.SourceRetryCount)
-		} else if !itemAtLimit(taskKind(item), item.ItemToolCalls, item.ItemTokens) {
-			continue
-		}
-		if err := s.deferSourceItem(ctx, item, item.ConversationID, next); err != nil {
-			return err
-		}
-	}
 	return s.writer.RecoverInProgress(ctx)
 }
 
 type modelWork struct {
-	queueKind                        string
-	config                           string
-	verified                         bool
-	budget                           int64
-	text                             string
-	actor, model, conversation, plan string
-	items                            []curation.PendingItem
-	retries                          int
+	queueKind                  string
+	config                     string
+	verified                   bool
+	budget                     int64
+	text                       string
+	actor, model, conversation string
+	items                      []curation.PendingItem
 }
 
 func (s *Scheduler) Wake() {
@@ -221,9 +195,7 @@ func (s *Scheduler) dispatch(ctx context.Context) (bool, error) {
 
 	now := s.options.Now()
 	if progress.State == "idle" {
-		if err := s.writer.MaterializePatrol(ctx, program.PatrolPromptVersion); err != nil {
-			return false, err
-		}
+
 		if err := s.writer.MaterializeVerificationItems(ctx); err != nil {
 			return false, err
 		}
@@ -247,7 +219,7 @@ func (s *Scheduler) dispatch(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	if !s.reserve(w, keys, progress.Concurrency) {
-		if w.conversation != "" && w.plan == "" {
+		if w.conversation != "" {
 			return false, s.release(ctx, w.conversation, false, nil)
 		}
 		return false, nil
@@ -324,45 +296,18 @@ func (s *Scheduler) process(ctx context.Context, w *modelWork) error {
 	}
 	for len(items) > 0 {
 		n := 1
-		if w.plan != "" || w.queueKind != "" {
+		if w.queueKind != "" {
 			n = len(items)
 		}
 		active, rest := items[:n], items[n:]
 		if err := s.itemCheckpoint(ctx, w.actor, active); err != nil {
-			if w.plan != "" {
-				// 等待重审的项重新占用名额。日额度用尽时保留原方案。
-				if errors.Is(err, ErrStopped) {
-					return nil
-				}
-				return err
-			}
 			released := s.writer.ReleaseModelItems(ctx, conversation, itemIDs(items), false, nil)
 			if errors.Is(err, ErrStopped) {
 				return released
 			}
 			return errors.Join(err, released)
 		}
-		runCtx := ctx
-		if kind == LookupCandidate {
-			if s.options.Lookup == nil {
-				return s.release(ctx, conversation, false, nil)
-			}
-			ready, err := s.options.Lookup.LookupTierReady(ctx, active[0].TargetID, s.options.Now())
-			if err != nil || !ready {
-				if releaseErr := s.writer.ReleaseModelItems(ctx, conversation, itemIDs(active), false, nil); releaseErr != nil {
-					return errors.Join(err, releaseErr)
-				}
-				if err != nil {
-					return errors.Join(err, s.release(ctx, conversation, false, nil))
-				}
-				items = rest
-				continue
-			}
-		}
-		if (kind == LookupCandidate || kind == WebFallback) && s.options.Lookup != nil {
-			runCtx = s.options.Lookup.LookupTierContext(ctx)
-		}
-		reason, err := s.runBatch(runCtx, w, conversation, active)
+		reason, err := s.runBatch(ctx, w, conversation, active)
 		if err != nil || reason != "completed" {
 			if len(rest) > 0 {
 				err = errors.Join(err, s.writer.ReleaseModelItems(ctx, conversation, itemIDs(rest), false, nil))
@@ -377,7 +322,7 @@ func (s *Scheduler) process(ctx context.Context, w *modelWork) error {
 // 资料读取经过来源队列：可命中缓存，缺失时按真实来源恢复时刻退回该项。
 func (s *Scheduler) prepareBatch(ctx context.Context, w *modelWork) ([]curation.PendingItem, error) {
 	if s.options.Lookup != nil {
-		ctx = s.options.Lookup.LookupTierContext(ctx)
+		ctx = s.options.Lookup.PreparationContext(ctx)
 	}
 	matcher := program.NewModelMatcher(s.db, s.writer, s.sources)
 	var ready []curation.PendingItem
@@ -477,7 +422,7 @@ func (s *Scheduler) checkRunConditions(ctx context.Context, actor string, items 
 }
 
 func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation string, items []curation.PendingItem) (string, error) {
-	actor, model, plan, retries := w.actor, w.model, w.plan, w.retries
+	actor, model := w.actor, w.model
 	ctx = curation.WithModelConfig(ctx, w.config)
 	settings, err := s.writer.Settings(ctx)
 	if err != nil {
@@ -486,9 +431,6 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 	s.mu.Lock()
 	if s.options.Now().Before(s.providerUntil) || s.running >= settings.ModelConcurrency {
 		s.mu.Unlock()
-		if plan != "" {
-			return "waiting_review", nil
-		}
 		return "curation_stopped", s.release(ctx, conversation, false, nil)
 	}
 	s.running++
@@ -497,7 +439,7 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 	var batch string
 	var batchMu sync.Mutex
 	kind := taskKind(items[0])
-	params := RunParams{Budget: w.budget, Verified: w.verified, Items: items, ReviewPlanID: plan, Run: curation.ModelRun{TaskKind: string(kind), ActorID: actor, Model: model, ConversationID: conversation, Batch: func(ctx context.Context) (string, error) {
+	params := RunParams{Budget: w.budget, Verified: w.verified, Items: items, Run: curation.ModelRun{TaskKind: string(kind), ActorID: actor, Model: model, ConversationID: conversation, Batch: func(ctx context.Context) (string, error) {
 		batchMu.Lock()
 		defer batchMu.Unlock()
 		if batch == "" {
@@ -511,66 +453,15 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 	}}}
 	if w.text != "" {
 		params.Text = w.text
-	} else if plan == "" {
+	} else {
 		var err error
 		params.Text, err = s.taskMessage(ctx, items)
 		if err != nil {
-			if (kind == LookupCandidate || kind == WebFallback) && curation.IsSourceUnavailable(err) {
-				var failures sourceFailures
-				failures.record(curation.SourceRecoveryTime(err))
-				return "completed", s.deferSourceItem(ctx, items[0], conversation, failures.retryAt(s.options.Now(), items[0].SourceRetryCount))
-			}
 			return "internal_error", errors.Join(err, s.release(ctx, conversation, false, nil))
 		}
 	}
 	if len(items) == 1 {
 		params.Run.PendingItemID = items[0].ID
-	}
-	var failures sourceFailures
-	var suggestionDeferred bool
-	trackedID := ""
-	p := items[0]
-	calls, tokens := p.ItemToolCalls, p.ItemTokens
-	if p.ClaimSourceRecoveryAt != nil {
-		failures.record(*p.ClaimSourceRecoveryAt)
-	}
-	sourceRetryAt := func(now time.Time) time.Time {
-		if itemAtLimit(kind, calls, tokens) {
-			// 当前请求可能已用完额度，还没有机会从工具取得来源错误。
-			if recovery := curation.MatchSourceRecoveryTime(ctx); recovery.After(failures.recovery) {
-				failures.record(recovery)
-			}
-			if failures.count == 0 && p.SourceRetryCount > 0 {
-				return now
-			}
-		}
-		return failures.retryAt(now, p.SourceRetryCount)
-	}
-	if kind == LookupCandidate || kind == WebFallback {
-		trackedID = p.ID
-		params.Run.SourceUnavailable = func(ctx context.Context, recovery time.Time) error {
-			if recovery.IsZero() {
-				recovery = s.options.Now()
-			}
-			failures.record(recovery)
-			return s.writer.RecordClaimSourceFailure(ctx, p, conversation, recovery)
-		}
-		params.Run.DeferSuggestion = func() bool {
-			suggestionDeferred = !sourceRetryAt(s.options.Now()).IsZero()
-			return suggestionDeferred
-		}
-	}
-	params.Run.Abandon = func(ctx context.Context, id, reason string) error {
-		for _, item := range items {
-			if id == item.ID {
-				if err := s.checkRunConditions(ctx, actor, items); err != nil {
-					return err
-				}
-				item.ItemToolCalls, item.ItemTokens = calls, tokens
-				return s.abandon(ctx, item, model, conversation, reason, sourceRetryAt(s.options.Now()))
-			}
-		}
-		return ErrStopped
 	}
 	var usageErr error
 	firstRequest := true
@@ -587,17 +478,11 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 		return nil
 	}
 	params.BeforeStep = func(ctx context.Context) error {
-		if suggestionDeferred {
-			return ErrItemCompleted
-		}
 		if usageErr != nil {
 			return usageErr
 		}
 		if err := s.checkRunConditions(ctx, actor, items); err != nil {
 			return err
-		}
-		if itemLimit(kind, calls, tokens) || (itemAtLimit(kind, calls, tokens) && !sourceRetryAt(s.options.Now()).IsZero()) {
-			return ErrItemLimit
 		}
 		if len(items) == 1 {
 			current, err := s.writer.PendingItem(ctx, items[0].ID)
@@ -611,53 +496,16 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 		return nil
 	}
 	params.Usage = func(ctx context.Context, in, out int64) {
-		tokens += in + out
-		err := s.writer.RecordItemUsage(ctx, s.options.Now(), trackedID, conversation, in, out)
+		err := s.writer.RecordItemUsage(ctx, s.options.Now(), "", conversation, in, out)
 		if err != nil {
 			usageErr = err
 			s.logger.ErrorContext(ctx, "记录后台模型用量失败", "conversation_id", conversation, "error", err)
 		}
 	}
-	params.OnToolCalls = func(ctx context.Context, n int) error {
-		if usageErr != nil {
-			return usageErr
-		}
-		if trackedID != "" && n > 0 {
-			if err := s.writer.AddItemCalls(ctx, trackedID, conversation, n); err != nil {
-				return err
-			}
-			calls += n
-		}
-		if itemLimit(kind, calls, tokens) {
-			return ErrItemLimit
-		}
-		return nil
-	}
-	params.Escalate = func(ctx context.Context, e curation.ModelException) (string, error) {
-		var target struct {
-			ItemID    string `json:"item_id"`
-			ReleaseID string `json:"release_id"`
-		}
-		if err := json.Unmarshal(e.Input, &target); err != nil {
-			return "", err
-		}
-		for _, p := range items {
-			matches := strings.EqualFold(target.ItemID, p.ID) || ((e.Tool == "correct_release" || e.Tool == "correct_track") && p.TargetType == "release" && strings.EqualFold(target.ReleaseID, p.TargetID))
-			if matches {
-				e.PendingItemID, e.ConversationID, e.Provider = p.ID, &conversation, model
-				e.ExpectedClaimDigest = p.ModelClaimDigest()
-				return s.writer.CreateException(ctx, e)
-			}
-		}
-		return "", ErrStopped
-	}
 	var providerReported atomic.Bool
 	params.ProviderError = func(delay time.Duration) {
 		providerReported.Store(true)
 		s.pauseProvider(delay)
-	}
-	if plan != "" {
-		params.Budget = 0
 	}
 	r, err := s.launcher.Start(ctx, params)
 	var failure *curation.ModelFailure
@@ -672,16 +520,7 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 		reason = "provider_error"
 	}
 	now := s.options.Now()
-	if itemAtLimit(kind, calls, tokens) && !sourceRetryAt(now).IsZero() {
-		reason = "item_limit"
-	} else if itemLimit(kind, calls, tokens) && reason != "provider_error" && reason != "cancelled" && reason != "review_unavailable" {
-		reason = "item_limit"
-	}
-	if providerReported.Load() {
-		if reason == "review_unavailable" {
-			reason = "provider_error"
-		}
-	} else if reason == "provider_error" && failure == nil {
+	if !providerReported.Load() && reason == "provider_error" && failure == nil {
 		s.pauseProvider(-1)
 	} else if err == nil && reason == "completed" {
 		s.mu.Lock()
@@ -695,7 +534,7 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		var finishErr error
 		if !itemsFinished {
-			if err == nil && failure != nil && plan == "" {
+			if err == nil && failure != nil {
 				switch failure.Class {
 				case "temporary", "provider_quota", "configuration":
 					finishErr = s.writer.SetModelFailure(cleanup, w.config, *failure, now)
@@ -708,7 +547,7 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 						finishErr = s.release(cleanup, conversation, false, nil)
 					}
 				}
-			} else if err == nil && plan == "" && rulesKind(kind, items[0]) && (reason == "completed" || reason == "step_limit" || reason == "token_limit") {
+			} else if err == nil && (reason == "completed" || reason == "step_limit" || reason == "token_limit") {
 				finishErr = s.checkRunConditions(cleanup, actor, items)
 				if finishErr == nil {
 					finishErr = s.writer.FailModelItems(cleanup, w.config, conversation, items, curation.ModelFailure{Class: "empty_reply"}, now)
@@ -719,10 +558,7 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 					finishErr = s.release(cleanup, conversation, false, nil)
 				}
 			} else {
-				finishErr = s.finish(cleanup, actor, model, conversation, reason, retries, now, items, sourceRetryAt(now))
-			}
-			if finishErr == nil && trackedID != "" && (p.SourceRetryCount > 0 || failures.count > 0) {
-				finishErr = s.writer.ClearResolvedSourceFailures(cleanup, trackedID, conversation)
+				finishErr = s.release(cleanup, conversation, false, nil)
 			}
 			itemsFinished = finishErr == nil
 		}
@@ -769,138 +605,4 @@ func (s *Scheduler) pauseProvider(delay time.Duration) {
 	}
 	s.mu.Unlock()
 	s.Wake()
-}
-
-func (s *Scheduler) finish(ctx context.Context, actor, model, id, reason string, retries int, now time.Time, items []curation.PendingItem, retryAt time.Time) error {
-	if !retryAt.IsZero() && reason != "review_unavailable" && reason != "item_limit" {
-		reason = "try_later"
-	}
-	switch reason {
-	case "item_limit", "try_later":
-		if retryAt.IsZero() {
-			if err := s.checkRunConditions(ctx, actor, items); err != nil {
-				if errors.Is(err, ErrStopped) {
-					return s.release(ctx, id, false, nil)
-				}
-				return err
-			}
-		}
-		if err := s.launcher.ResolvePlans(ctx, id); err != nil {
-			return err
-		}
-		p, err := s.writer.PendingItem(ctx, items[0].ID)
-		if err != nil {
-			return err
-		}
-		if p.Status != "in_progress" || p.ConversationID != id {
-			return nil
-		}
-		if p.ModelClaimDigest() != items[0].ModelClaimDigest() {
-			return s.release(ctx, id, false, nil)
-		}
-		run := curation.ModelRun{ActorID: actor, ConversationID: id, PendingItemID: p.ID}
-		err = s.abandon(curation.WithModelRun(ctx, &run), p, model, id, reason, retryAt)
-		var failure *operations.Failure
-		if errors.As(err, &failure) && failure.Code == "item_stale" {
-			return s.release(ctx, id, false, nil)
-		}
-		return err
-	case "review_unavailable":
-		if retries < min(3, len(s.options.ReviewBackoff)) {
-			items, err := s.writer.ClaimedItems(ctx, id)
-			if err != nil {
-				return err
-			}
-			if len(items) == 0 {
-				return s.launcher.ResolvePlans(ctx, id)
-			}
-			if int(items[0].ReviewRetries) > retries {
-				return nil
-			}
-			return s.writer.RetryClaimedReview(ctx, id, now.Add(s.options.ReviewBackoff[retries]))
-		}
-		next := now.Add(24 * time.Hour)
-		return s.release(ctx, id, false, &next)
-	case "completed", "step_limit", "token_limit":
-		err := s.checkRunConditions(ctx, actor, items)
-		if err == nil {
-			return s.releaseUnhandled(ctx, actor, model, id, items)
-		}
-		if !errors.Is(err, ErrStopped) {
-			return err
-		}
-	case "cancelled", "curation_stopped", "provider_error":
-	default:
-		s.logger.ErrorContext(ctx, "后台模型运行异常结束", "event", "curation.model.run_failed", "conversation_id", id, "reason", reason)
-	}
-	return s.release(ctx, id, false, nil)
-}
-
-func (s *Scheduler) releaseUnhandled(ctx context.Context, actor, model, conversation string, items []curation.PendingItem) error {
-	claimed, err := s.writer.ClaimedItems(ctx, conversation)
-	if err != nil {
-		return err
-	}
-	current := make(map[string]string, len(claimed))
-	for _, item := range claimed {
-		current[item.ID] = item.ModelClaimDigest()
-	}
-	var pending []curation.PendingItem
-	for _, item := range items {
-		if current[item.ID] == item.ModelClaimDigest() {
-			pending = append(pending, item)
-		}
-	}
-	if len(pending) == 0 {
-		return s.writer.ReleaseModelItems(ctx, conversation, itemIDs(items), false, nil)
-	}
-	if err := s.saveRejections(ctx, actor, conversation, pending); err != nil {
-		return err
-	}
-	var reason string
-	switch taskKind(pending[0]) {
-	case SelectCandidate:
-		reason = "第一档连续三次未得到可执行的决定"
-	case LookupCandidate:
-		reason = "第二档连续三次未得到可执行的决定"
-	case WebFallback:
-		reason = "联网档连续三次未得到可执行的决定"
-	}
-	if reason != "" {
-		for _, item := range pending {
-			if item.Attempts < 2 {
-				continue
-			}
-			// 成功执行的决定已经释放领取，只有第三次未处理且证据仍相同的项才放弃本档。
-			err := s.abandon(ctx, item, model, conversation, reason, time.Time{})
-			var failure *operations.Failure
-			if errors.As(err, &failure) && failure.Code == "item_stale" {
-				err = s.writer.ReleaseModelItems(ctx, conversation, []string{item.ID}, false, nil)
-			}
-			if err != nil {
-				return err
-			}
-		}
-	}
-	if err := s.writer.ReleaseModelItems(ctx, conversation, itemIDs(pending), true, nil); err != nil {
-		return err
-	}
-	return s.writer.ReleaseModelItems(ctx, conversation, itemIDs(items), false, nil)
-}
-
-func (s *Scheduler) saveRejections(ctx context.Context, actor, conversation string, items []curation.PendingItem) error {
-	rejected, err := s.launcher.RejectedSubmissions(ctx, actor, conversation, items)
-	if err != nil {
-		return err
-	}
-	for _, submission := range rejected {
-		for _, item := range items {
-			if item.ID == submission.ItemID {
-				if err := s.writer.RecordRejectedModelTool(ctx, item, conversation, string(taskKind(item)), submission); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
 }

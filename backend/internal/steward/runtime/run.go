@@ -403,6 +403,7 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 					step.content.BackendActions, step.calls = actions, actions
 				}
 			} else {
+				step.calls = nil
 				itemEnd = RunEnd{Reason: EndCompleted}
 			}
 		}

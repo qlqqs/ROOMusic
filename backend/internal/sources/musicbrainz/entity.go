@@ -10,12 +10,13 @@ type Entity struct {
 			Resource string `json:"resource"`
 		} `json:"url"`
 	} `json:"relations,omitempty"`
-	SortName    string   `json:"sort-name"`
-	Type        string   `json:"type"`
-	Status      string   `json:"status"`
-	PrimaryType string   `json:"primary-type"`
-	ISRCs       []string `json:"isrcs"`
-	Aliases     []struct {
+	SortName       string   `json:"sort-name"`
+	Type           string   `json:"type"`
+	Status         string   `json:"status"`
+	SecondaryTypes []string `json:"secondary-types"`
+	PrimaryType    string   `json:"primary-type"`
+	ISRCs          []string `json:"isrcs"`
+	Aliases        []struct {
 		Name    string `json:"name"`
 		Locale  string `json:"locale"`
 		Primary bool   `json:"primary"`

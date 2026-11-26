@@ -40,6 +40,7 @@ type MatchPlan struct {
 	item         curation.PendingItem
 }
 type ApplyOptions struct {
+	checkSelection func(context.Context, *sql.Tx) error
 	// ApprovedReviewID 由后台的审查执行器传入。
 	ApprovedReviewID string
 	// Finish 在匹配结论的同一事务记录人工采纳及其操作编号。
@@ -344,11 +345,11 @@ func (m *ModelMatcher) readMatch(ctx context.Context, kind string, e catalog.Cur
 }
 func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptions) (MatchApplied, error) {
 	p := plan.write
-	if !uuid.Valid(opt.Key) || opt.Source.Kind != "model" || p.evidence.ID == "" || (opt.PendingItemID != "" && opt.PendingItemID != plan.item.ID) {
+	if !uuid.Valid(opt.Key) || (opt.Source.Kind != "model" && opt.checkSelection == nil) || p.evidence.ID == "" || (opt.PendingItemID != "" && opt.PendingItemID != plan.item.ID) {
 		return MatchApplied{}, operations.Invalid("invalid_input", "匹配写入参数无效")
 	}
 	proof := plan.match.Verification
-	if proof.Contradicted {
+	if proof != nil && proof.Contradicted {
 		return MatchApplied{}, matchConflict("contradictory_evidence")
 	}
 	if opt.ConfirmedBy == "" && !proof.Direct {
@@ -361,16 +362,24 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 	if conversation == "" {
 		conversation = plan.item.ConversationID
 	}
-	opt.Source.WriterLevel = catalog.LevelModelExternal
-	if proof.Method != "" {
+	if opt.Source.Kind == "model" {
+		opt.Source.WriterLevel = catalog.LevelModelExternal
+	}
+	if proof != nil && proof.Method != "" {
 		opt.Source.Basis = proof.Method
 		p.links.Method = proof.Method
 	}
 	p.links.ApprovedReviewID = opt.ApprovedReviewID
 	p.links.Source, p.links.ConversationID, p.links.ConfirmedBy = opt.Source, conversation, opt.ConfirmedBy
+	checkCurrent := opt.checkSelection
+	if checkCurrent == nil {
+		checkCurrent = func(ctx context.Context, tx *sql.Tx) error {
+			return curation.CheckMatchItem(ctx, tx, plan.item, conversation, opt.ConfirmedBy != "")
+		}
+	}
 	// 目录锁内重读摘要；同键回放由操作日志先行处理。
 	p.links.CheckEvidence = func(ctx context.Context, tx *sql.Tx) error {
-		if err := curation.CheckMatchItem(ctx, tx, plan.item, conversation, opt.ConfirmedBy != ""); err != nil {
+		if err := checkCurrent(ctx, tx); err != nil {
 			return err
 		}
 		e, err := m.evidence(ctx, tx, p.evidence.ID)
@@ -443,7 +452,7 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 		return MatchApplied{}, err
 	}
 	defer tx.Rollback()
-	if err := curation.CheckMatchItem(ctx, tx, plan.item, conversation, opt.ConfirmedBy != ""); err != nil {
+	if err := checkCurrent(ctx, tx); err != nil {
 		if opt.ConfirmedBy == "" && failureCode(err) == "item_stale" {
 			// 同会话同键的治理操作已经回放；原项已成功结清时直接返回原操作，保留其后的新结论。
 			var completed bool

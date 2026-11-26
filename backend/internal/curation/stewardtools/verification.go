@@ -13,7 +13,7 @@ import (
 
 func (a adapter) verificationTool(allowed availability) tool.Definition {
 	return tool.Definition{Name: "submit_verification", Description: "判断当前署名、艺人身份或真实名字差异。相同身份选 same，确切错字选 typo，亦可提交不同、写法差异、译名差异或无法判断。", Scope: tool.ScopeShared, MinRole: tool.RoleAdmin, Available: allowed, Revertible: true,
-		Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_id":` + idSchema + `,"verdict":{"type":"string","enum":["same","different","typo","style","translation","uncertain"]},"reason":` + noteSchema + `,"citation":{"type":"object","additionalProperties":false,"properties":{"url":` + urlSchema + `,"quote":{"type":"string","minLength":1,"maxLength":2000}},"required":["url","quote"]}},"required":["item_id","verdict","reason"]}`), Output: json.RawMessage(`{"type":"object"}`), Preview: a.previewVerification, Handler: a.submitVerification}
+		Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_id":` + idSchema + `,"verdict":{"type":"string","enum":["same","different","typo","keep","undetermined"]},"reason":` + noteSchema + `,"citation":{"type":"object","additionalProperties":false,"properties":{"url":` + urlSchema + `,"quote":{"type":"string","minLength":1,"maxLength":2000}},"required":["url","quote"]}},"required":["item_id","verdict","reason"]}`), Output: json.RawMessage(`{"type":"object"}`), Preview: a.previewVerification, Handler: a.submitVerification}
 }
 
 type verificationSubmission struct {
@@ -48,7 +48,7 @@ func (a adapter) prepareVerification(ctx context.Context, c tool.Caller, raw jso
 		return v, invalid()
 	}
 	positive := v.in.Verdict == "typo" && !identity || v.in.Verdict == "same" && identity
-	if !positive && !(v.in.Verdict == "different" && identity || !identity && (v.in.Verdict == "style" || v.in.Verdict == "translation") || v.in.Verdict == "uncertain") {
+	if !positive && !(v.in.Verdict == "different" && identity || !identity && v.in.Verdict == "keep" || v.in.Verdict == "undetermined") {
 		return v, invalid()
 	}
 	v.plan, err = a.matcher.VerificationPlan(ctx, v.item, v.in)
@@ -56,7 +56,7 @@ func (a adapter) prepareVerification(ctx context.Context, c tool.Caller, raw jso
 	if errors.As(err, &failure) {
 		switch failure.Code {
 		case "no_evidence":
-			v.route = positive || v.in.Verdict == "uncertain"
+			v.route = positive || v.in.Verdict == "undetermined"
 			err = nil
 		case "no_strong_evidence", "manual_structure", "nothing_to_apply":
 			v.blocked = true
@@ -82,7 +82,7 @@ func (a adapter) prepareVerification(ctx context.Context, c tool.Caller, raw jso
 		return v, err
 	}
 	candidate := v.plan.Candidate
-	v.preview = tool.Preview{Summary: "核对名字与身份", Target: candidate.Before, BackgroundDirect: !positive || v.route || v.stale || v.blocked, Verification: proof}
+	v.preview = tool.Preview{Summary: "核对名字与身份", Target: candidate.Before, BackgroundDirect: true, Verification: proof}
 	if candidate.Field != "" {
 		v.preview.Changes = []tool.Change{{Field: candidate.Field, Before: candidate.Before, After: candidate.After}}
 	}
@@ -101,35 +101,13 @@ func (a adapter) submitVerification(ctx context.Context, c tool.Caller, raw json
 	if v.stale {
 		return a.retryStaleVerification(ctx, v.item)
 	}
-	if v.route {
-		if v.run.Abandon == nil {
-			return nil, outOfBatch()
-		}
-		err = v.run.Abandon(ctx, v.item.ID, v.in.Reason)
-		return json.RawMessage(`{"status":"handled"}`), toolError(err)
+	if v.in.Verdict == "different" && !v.blocked {
+		err = a.writer.FinishIdentityNegative(ctx, v.item, v.in.Reason, v.run.Model)
+		return json.RawMessage(`{"status":"different"}`), toolError(err)
 	}
-	if v.preview.BackgroundDirect {
-		suggestionTool := "submit_verification"
-		if v.blocked || v.in.Verdict == "different" || v.in.Verdict == "style" || v.in.Verdict == "translation" {
-			// 采纳“不同身份”或“保留原写法”不能反过来执行合并或改名。
-			suggestionTool = "observation"
-			v.preview.Changes = []tool.Change{}
-		}
-		preview, err := json.Marshal(v.preview)
-		if err != nil {
-			return nil, err
-		}
-		id, err := a.writer.RecordSuggestion(ctx, curation.ModelException{Tool: suggestionTool, Input: raw, Preview: preview, Evidence: v.preview.Verification, PendingItemID: v.item.ID, ConversationID: &v.run.ConversationID, Provider: v.run.Model, ReasonCode: "verification_declined", Reasons: []string{v.in.Reason}})
-		if err != nil {
-			return nil, toolError(err)
-		}
-		if id == "" {
-			return json.RawMessage(`{"status":"try_later"}`), nil
-		}
-		return json.Marshal(map[string]string{"suggestion_id": id})
-	}
-	if c.ReviewID == "" || c.ReviewDecision != "approved" {
-		return nil, &tool.Error{Code: tool.CodePermissionDenied, Message: "这项修改需要独立审查"}
+	if v.route || v.blocked || v.in.Verdict == "keep" || v.in.Verdict == "undetermined" {
+		err = a.writer.FinishUndetermined(ctx, v.item, v.run.ConversationID, v.in.Reason)
+		return json.RawMessage(`{"status":"kept"}`), toolError(err)
 	}
 	batch, err := v.run.Batch(ctx)
 	if err != nil {

@@ -493,6 +493,19 @@ func (r *Requester) decodeResponse(ctx context.Context, spec requestSpec, res re
 	return res, nil
 }
 
+type requestPermitKey struct{}
+
+// WithRequestPermit 在发出新请求或跟随重定向之前消耗本项的许可，缓存命中不消耗许可。
+func WithRequestPermit(ctx context.Context, permit func(context.Context) error) context.Context {
+	return context.WithValue(ctx, requestPermitKey{}, permit)
+}
+func checkRequestPermit(ctx context.Context) error {
+	if permit, ok := ctx.Value(requestPermitKey{}).(func(context.Context) error); ok {
+		return permit(ctx)
+	}
+	return nil
+}
+
 func (r *Requester) fetchAttempt(ctx context.Context, c caller, request *http.Request, attempt int, spec requestSpec, start func()) (response, error) {
 	baseClient, err := r.newClient(r.mockHost.EgressOptions(egress.Options{Policy: egress.PublicOnly, Timeout: spec.timeout, MaxRedirects: r.maxRedirects}))
 	if err != nil {
@@ -518,6 +531,9 @@ func (r *Requester) fetchAttempt(ctx context.Context, c caller, request *http.Re
 			}
 		}
 		permitErr = c.check(next.Context())
+		if permitErr == nil {
+			permitErr = checkRequestPermit(next.Context())
+		}
 		return permitErr
 	}
 	defer client.CloseIdleConnections()
@@ -542,6 +558,9 @@ func (r *Requester) fetchAttempt(ctx context.Context, c caller, request *http.Re
 		}
 	}
 	started := time.Now()
+	if err := checkRequestPermit(ctx); err != nil {
+		return response{}, err
+	}
 	start()
 	res := fetch(&client, req, spec.limit, spec.binaryCache)
 	if logger := r.cache.logger; logger != nil {

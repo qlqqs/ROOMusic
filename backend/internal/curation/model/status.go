@@ -21,7 +21,7 @@ type schedulingConditions struct {
 
 // 按待定项目标检查来源。没有注册网络搜索的调度器仍可处理发行项。
 func (s *Scheduler) targetSources(ctx context.Context, p *schedulingConditions) error {
-	for _, source := range []string{"musicbrainz", "web_search"} {
+	for _, source := range []string{"musicbrainz"} {
 		err := s.sources.Check(ctx, source)
 		if err == nil {
 			p.sources = append(p.sources, source)
@@ -62,10 +62,8 @@ func (s *Scheduler) targetSources(ctx context.Context, p *schedulingConditions) 
 
 func (p schedulingConditions) allows(kind TaskKind) bool {
 	switch kind {
-	case SelectCandidate, LookupCandidate:
+	case SelectCandidate:
 		return slices.Contains(p.sources, "musicbrainz")
-	case WebFallback:
-		return slices.Contains(p.sources, "web_search")
 	default:
 		return true
 	}
@@ -184,12 +182,10 @@ func (s *Scheduler) ModelStatus(ctx context.Context) (curation.ModelProgress, er
 	if err != nil {
 		return p, err
 	}
-	var waitingReview bool
 	err = s.db.QueryRowContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
  SELECT count(*) FILTER (WHERE status IN ('waiting_model','waiting_route')),count(*) FILTER (WHERE status='in_progress'),
- 0,count(*) FILTER (WHERE status='shelved'),
- count(*) FILTER (WHERE status='in_progress' AND next_attempt_at IS NOT NULL)>0
- FROM curation_pending_items p WHERE `+curation.PendingTargetVisibleSQL).Scan(&p.Items.WaitingModel, &p.Items.InProgress, &p.Items.WaitingHuman, &p.Items.Shelved, &waitingReview)
+ 0,count(*) FILTER (WHERE status='shelved')
+ FROM curation_pending_items p WHERE `+curation.PendingTargetVisibleSQL).Scan(&p.Items.WaitingModel, &p.Items.InProgress, &p.Items.WaitingHuman, &p.Items.Shelved)
 	s.mu.RLock()
 	p.Running = s.running
 	if s.probing {
@@ -197,17 +193,11 @@ func (s *Scheduler) ModelStatus(ctx context.Context) (curation.ModelProgress, er
 	}
 	p.CanRetry = p.CanRetry && s.slotsUsed() < p.Concurrency
 	s.mu.RUnlock()
-	if p.State == "idle" {
-		switch {
-		case p.Running > 0:
-			p.State = "running"
-		case waitingReview && p.State == "idle":
-			p.State = "waiting_review"
-		}
+	if p.State == "idle" && p.Running > 0 {
+		p.State = "running"
 	}
 	return p, err
 }
-
 func (s *Scheduler) RetryModel(ctx context.Context) (curation.ModelProgress, error) {
 	p, actor, err := s.conditions(ctx, true)
 	if err != nil {

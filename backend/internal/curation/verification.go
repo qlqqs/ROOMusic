@@ -16,6 +16,8 @@ import (
 
 // VerificationCandidate 的 before/after 与外部定位由生产提案的后端提供，提交判断的工具只接收结论。
 type VerificationCandidate struct {
+	PairLow       string `json:"pair_low,omitempty"`
+	PairHigh      string `json:"pair_high,omitempty"`
 	ReleaseID     string `json:"release_id"`
 	TrackID       string `json:"track_id,omitempty"`
 	Field         string `json:"field"`
@@ -49,11 +51,14 @@ func QueueVerification(ctx context.Context, tx *sql.Tx, kind, digest string, v V
 		return operations.Invalid("invalid_input", "核对项种类或目标无效")
 	}
 	// 文字纠正跳过规范化后相同的写法；不同本地身份即使仅有标点之别，也交给合并佐证规则。
-	if v.Before == "" || v.After == "" || v.Before == v.After || (kind == "verify_name" && normalizedName(v.Before) == normalizedName(v.After)) {
+	if v.Before == "" || v.After == "" || (kind == "verify_name" && (!v.Structure || !nearbyName(v.Before, v.After))) {
 		return nil
 	}
 	if kind == "verify_artist_merge" && (!uuid.Valid(v.ArtistA) || !uuid.Valid(v.ArtistB) || v.ArtistA == v.ArtistB) {
 		return operations.Invalid("invalid_input", "艺人对无效")
+	}
+	if kind == "verify_artist_merge" {
+		v.PairLow, v.PairHigh = namePair(v.Before, v.After)
 	}
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -61,16 +66,19 @@ func QueueVerification(ctx context.Context, tx *sql.Tx, kind, digest string, v V
 	}
 	id := DerivedKey(v.ReleaseID, operations.Fingerprint([]any{kind, digest, v}))
 	_, err = tx.ExecContext(ctx, `INSERT INTO curation_pending_items(id,target_type,target_id,kind,status,rule_version,input_digest,identity_digest,evidence)
- VALUES($1,'release',$2,$3,'waiting_model',1,$4,$4,$5) ON CONFLICT(id) DO NOTHING`, id, v.ReleaseID, kind, digest, raw)
+ SELECT $1,'release',$2,$3,'waiting_model',2,$4,$4,$5::jsonb WHERE NOT EXISTS(SELECT FROM curation_artist_negative_pairs WHERE name_low=$5::jsonb->>'pair_low' AND name_high=$5::jsonb->>'pair_high') ON CONFLICT(id) DO NOTHING`, id, v.ReleaseID, kind, digest, raw)
 	return err
 }
 
 // MaterializeVerificationItems 同时接入升级前和程序新留下的有效署名提案。
 func (w *Writer) MaterializeVerificationItems(ctx context.Context) error {
+	if err := w.refreshLegacyNames(ctx); err != nil {
+		return err
+	}
 	_, err := w.db.ExecContext(ctx, `INSERT INTO curation_pending_items(id,target_type,target_id,kind,status,rule_version,input_digest,identity_digest,evidence)
- SELECT p.id,'release',p.release_id,'verify_artist_credit','waiting_model',1,p.identity_digest,p.identity_digest,p.evidence
+ SELECT p.id,'release',p.release_id,'verify_artist_credit','waiting_model',2,p.identity_digest,p.identity_digest,p.evidence
  FROM curation_artist_credit_proposals p JOIN curation_work_states s ON s.subject='release' AND s.target_id=p.release_id AND s.identity_digest=p.identity_digest
- WHERE p.status='open' AND NOT EXISTS(SELECT FROM curation_pending_items old WHERE old.id=p.id) AND `+proposalSourceExists+` ON CONFLICT(id) DO NOTHING`)
+ WHERE p.status='open' AND NOT EXISTS(SELECT FROM curation_artist_negative_pairs WHERE name_low=p.evidence->>'pair_low' AND name_high=p.evidence->>'pair_high') AND NOT EXISTS(SELECT FROM curation_pending_items old WHERE old.id=p.id) AND `+proposalSourceExists+` ON CONFLICT(id) DO NOTHING`)
 	return err
 }
 
@@ -226,7 +234,7 @@ func verificationPlan(ctx context.Context, q operations.Queryer, item PendingIte
 	if item.Kind == "verify_artist_credit" {
 		v, err := creditCandidate(ctx, q, item, manual)
 		p.Candidate = v
-		p.Method = "external_credit"
+		p.Method = "model_identity"
 		return p, err
 	}
 	v := &p.Candidate
@@ -243,7 +251,7 @@ func verificationPlan(ctx context.Context, q operations.Queryer, item PendingIte
 		}
 		*v = nameProof.VerificationCandidate
 		p.nameProof = nameProof
-		if !v.Structure || normalizedName(v.Before) == normalizedName(v.After) {
+		if !v.Structure || !nearbyName(v.Before, v.After) {
 			return p, noEvidence()
 		}
 		var original string
@@ -302,38 +310,21 @@ func verificationPlan(ctx context.Context, q operations.Queryer, item PendingIte
 		if err := checkArtistSeparation(ctx, q, v.ArtistA, v.ArtistB); err != nil {
 			return p, err
 		}
-		if cite != nil && !webArtistIdentity(citationPage, cite.Quote, v.Before, v.After) {
-			return p, operations.Conflict("no_strong_evidence", "网页引文未能明确证实两个名字属于同一艺人")
-		}
 		if manual {
 			p.Method = "manual_confirmation"
 			return p, nil
 		}
-		if v.ExternalID != "" {
-			strong, err := artistEvidence(ctx, q, v.ArtistA, v.ArtistB, v.ExternalID)
-			if err != nil {
-				return p, err
-			}
-			if strong {
-				p.Method = "external_identity"
-				return p, nil
-			}
-		}
-		proof, err := libraryArtistEvidence(ctx, q, *v)
-		if err != nil {
-			return p, err
-		}
-		if proof != nil {
-			p.Support = proof
-			p.Method = "library_identity"
-			return p, nil
-		}
-		if cite == nil {
+		if v.ExternalID == "" {
 			return p, noEvidence()
 		}
-		p.citationPage = citationPage
-		p.Method = "web_identity"
-		p.Citation = cite
+		var linked bool
+		if err := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM external_links WHERE source='musicbrainz' AND object_type='artist' AND object_id IN ($1,$2) AND external_id=$3)`, v.ArtistA, v.ArtistB, v.ExternalID).Scan(&linked); err != nil {
+			return p, err
+		}
+		if !linked {
+			return p, staleVerification()
+		}
+		p.Method = "model_identity"
 	default:
 		return p, operations.Invalid("invalid_input", "未知核对项目")
 	}
@@ -472,6 +463,16 @@ func (v verificationWrite) check(ctx context.Context, tx *sql.Tx) error {
 			return staleVerification()
 		}
 	}
+	if v.item.Kind != "verify_name" {
+		a, b := namePair(v.plan.Candidate.Before, v.plan.Candidate.After)
+		var denied bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM curation_artist_negative_pairs WHERE name_low=$1 AND name_high=$2)`, a, b).Scan(&denied); err != nil {
+			return err
+		}
+		if denied {
+			return staleVerification()
+		}
+	}
 	fresh, err := verificationPlan(ctx, tx, v.item, v.plan.Citation, v.plan.citationPage, manual, v.plan.nameProof)
 	if err != nil {
 		return err
@@ -518,7 +519,7 @@ func (w *Writer) applyVerification(ctx context.Context, write verificationWrite,
 	source := p.source(model)
 	switch item.Kind {
 	case "verify_artist_credit":
-		out, err := w.ApplyLinks(ctx, LinkRequest{verification: &write, RequireAll: true, ReleaseID: item.TargetID, Source: source, ExternalSource: "musicbrainz", Method: p.Method, Confidence: "reviewed", BatchID: batch, Key: write.key, ConversationID: item.ConversationID, ConfirmedBy: write.actor, Links: []LinkIntent{{ObjectType: "artist", ObjectID: v.ArtistA, ExternalID: v.ExternalID, ArtistPrimaryName: v.ExternalValue}}})
+		out, err := w.ApplyLinks(ctx, LinkRequest{verification: &write, RequireAll: true, ReleaseID: item.TargetID, Source: source, ExternalSource: "musicbrainz", Method: p.Method, Confidence: "certain", BatchID: batch, Key: write.key, ConversationID: item.ConversationID, ConfirmedBy: write.actor, Links: []LinkIntent{{ObjectType: "artist", ObjectID: v.ArtistA, ExternalID: v.ExternalID, ArtistPrimaryName: v.ExternalValue}}})
 		return out.OperationID, err
 	case "verify_name":
 		req := Request{verification: &write, ReleaseID: item.TargetID, ExpectedRevision: p.Revision, Fields: map[string]catalog.CorrectionIntent{v.Field: {Mode: catalog.CorrectionSet, Value: v.After}}, Source: source, BatchID: batch, Key: write.key, ConversationID: item.ConversationID}

@@ -225,3 +225,5 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 ## 程序识别规则 105
 
 MusicBrainz 人数与扫描署名不同时，只有完整姓名与连接词拼接等于本地显示文字才拆分。release_match_credit_parts 保存角色、位置、局部原文、艺人编号、具体依据行和操作。扫描文字仍用于显示；依据撤销或原文变化会撤回对应的拆分。人工修正优先。
+
+生效的 MusicBrainz 对应或合并来自身份模型时，艺人详情 links 和合并来源返回 judged_by_model 与 operation_id。程序与人工确立的身份仍按各自操作呈现。

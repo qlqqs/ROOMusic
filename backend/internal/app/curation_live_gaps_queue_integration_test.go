@@ -23,7 +23,7 @@ type liveGapsLookup struct{ policy *sources.QueuePolicy }
 func (l liveGapsLookup) LookupTierReady(context.Context, string, time.Time) (bool, error) {
 	return l.policy.Pause("musicbrainz") == nil, nil
 }
-func (l liveGapsLookup) LookupTierContext(ctx context.Context) context.Context {
+func (l liveGapsLookup) PreparationContext(ctx context.Context) context.Context {
 	return l.policy.Context(ctx, sources.QueueModelLookup, nil)
 }
 

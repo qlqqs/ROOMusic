@@ -422,6 +422,7 @@ func recordReleaseMatchResultSamples(t *testing.T, samples *apiSampleRecorder) {
 	}))
 	a := curationBase + "/releases/" + f.a
 	b := curationBase + "/releases/" + f.b
+	samples.record("curation/conflicts", f.application.request(t, http.MethodGet, curationBase+"/conflicts", nil, &f.admin, nil), http.StatusOK)
 	samples.record("curation/match-results", f.application.request(t, http.MethodGet, a+"/match-results", nil, &f.admin, nil), http.StatusOK)
 	samples.record("curation/match-results-empty", f.application.request(t, http.MethodGet, b+"/match-results", nil, &f.admin, nil), http.StatusOK)
 

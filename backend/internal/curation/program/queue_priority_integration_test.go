@@ -53,10 +53,8 @@ func TestPostgreSQL整理队列五档取项与模型查询门槛(t *testing.T) {
 	requirePendingRefreshOK(t, f.writer.RecheckUnlisted(ctx, manual))
 
 	gate := curation.NewSources(f.db, curation.SourceRegistration{Declaration: musicbrainz.Declaration()})
-	patrolled := true
 	w := NewWorker(f.db, f.writer, gate, func(context.Context) (bool, error) { return false, nil }, nil, Options{
-		Now:            func() time.Time { return now },
-		NamesPatrolled: func(_ context.Context, id string) (bool, error) { return id == ids[0] && patrolled, nil },
+		Now: func() time.Time { return now },
 	})
 	marker, err := w.projectionMarker(ctx, now)
 	requirePendingRefreshOK(t, err)
@@ -68,17 +66,7 @@ func TestPostgreSQL整理队列五档取项与模型查询门槛(t *testing.T) {
 		if !found || item.TargetID != ids[i] || item.Rank != want.rank {
 			t.Fatalf("期望领取%s（档 %d），实际 %+v，找到=%v", want.name, want.rank, item, found)
 		}
-		ready, err := w.LookupTierReady(ctx, ids[0], now)
-		requirePendingRefreshOK(t, err)
-		if ready != (want.rank == 4) {
-			t.Fatalf("队首为%s时第二档就绪=%v", want.name, ready)
-		}
 		requirePendingRefreshOK(t, w.acknowledgeQueueItem(ctx, item))
 	}
-	patrolled = false
-	ready, err := w.LookupTierReady(ctx, ids[0], now)
-	requirePendingRefreshOK(t, err)
-	if ready {
-		t.Fatal("队列排空后仍须完成名字巡检")
-	}
+
 }

@@ -19,11 +19,13 @@ type ProposalLocalCredit struct {
 }
 
 type ProposalExternalCredit struct {
-	Provider    string   `json:"provider"`
-	ArtistID    string   `json:"artist_id"`
-	CreditName  string   `json:"credit_name"`
-	PrimaryName string   `json:"primary_name"`
-	Aliases     []string `json:"aliases"`
+	Country        string   `json:"country,omitempty"`
+	Disambiguation string   `json:"disambiguation,omitempty"`
+	Provider       string   `json:"provider"`
+	ArtistID       string   `json:"artist_id"`
+	CreditName     string   `json:"credit_name"`
+	PrimaryName    string   `json:"primary_name"`
+	Aliases        []string `json:"aliases"`
 }
 
 type ProposalCreditBasis struct {
@@ -35,6 +37,8 @@ type ProposalCreditBasis struct {
 }
 
 type ArtistCreditProposal struct {
+	PairLow        string                 `json:"pair_low,omitempty"`
+	PairHigh       string                 `json:"pair_high,omitempty"`
 	Kind           string                 `json:"kind"`
 	ID             string                 `json:"proposal_id"`
 	ReleaseID      string                 `json:"release_id"`
@@ -118,11 +122,12 @@ func SaveArtistCreditProposals(ctx context.Context, tx *sql.Tx, releaseID, diges
 		}
 		p.Kind, p.ReleaseID, p.IdentityDigest = "artist_credit_identity", releaseID, digest
 		p.ID = DerivedKey(releaseID, strings.Join([]string{p.Kind, p.Local.TrackID, p.Local.Role, strconv.Itoa(pos), p.Local.ArtistID, p.External.ArtistID, digest}, "/"))
+		p.PairLow, p.PairHigh = namePair(p.Local.Name, p.External.CreditName)
 		raw, err := json.Marshal(p)
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO curation_artist_credit_proposals(id,release_id,identity_digest,operation_id,evidence) VALUES($1,$2,$3,$4,$5)
+		_, err = tx.ExecContext(ctx, `INSERT INTO curation_artist_credit_proposals(id,release_id,identity_digest,operation_id,evidence) SELECT $1,$2,$3,$4,$5::jsonb WHERE NOT EXISTS(SELECT FROM curation_artist_negative_pairs WHERE name_low=$5::jsonb->>'pair_low' AND name_high=$5::jsonb->>'pair_high')
   ON CONFLICT(id) DO UPDATE SET operation_id=excluded.operation_id,evidence=excluded.evidence,status='open'
   WHERE curation_artist_credit_proposals.status IN ('stale','open')`, p.ID, releaseID, digest, p.Basis.OperationID, raw)
 		if err != nil {

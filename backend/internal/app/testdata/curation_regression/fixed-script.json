@@ -6,77 +6,6 @@
   "rules": [
     {
       "when": {
-        "last_user_contains": "\"kind\":\"artist_identity\"",
-        "tool_available": "shelve_pending_item"
-      },
-      "reply": {
-        "tool_calls": [
-          {
-            "name": "shelve_pending_item",
-            "arguments": {
-              "item_id": "$current_item",
-              "reason": "本组固定样本未提供独立的艺人联网资料。"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "when": {
-        "last_user_contains": "Hoshi no Mado",
-        "tool_available": "submit_verification"
-      },
-      "reply": {
-        "tool_calls": [
-          {
-            "name": "submit_verification",
-            "arguments": {
-              "item_id": "$current_item",
-              "verdict": "translation",
-              "reason": "两种写法与固定样本的名字差异一致。"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "when": {
-        "last_user_contains": "枝航圃",
-        "tool_available": "submit_verification"
-      },
-      "reply": {
-        "tool_calls": [
-          {
-            "name": "submit_verification",
-            "arguments": {
-              "item_id": "$current_item",
-              "verdict": "typo",
-              "reason": "两种写法与固定样本的名字差异一致。"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "when": {
-        "last_user_contains": "沉心",
-        "tool_available": "submit_verification"
-      },
-      "reply": {
-        "tool_calls": [
-          {
-            "name": "submit_verification",
-            "arguments": {
-              "item_id": "$current_item",
-              "verdict": "typo",
-              "reason": "两种写法与固定样本的名字差异一致。"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "when": {
         "last_user_contains": "µåÎí",
         "tool_available": "submit_local_cleanup"
       },
@@ -128,104 +57,38 @@
     },
     {
       "when": {
-        "last_user_contains": "枝航圃",
-        "tool_available": "search_music_metadata"
+        "item_kind": "release_match",
+        "last_user_contains": "枝航圃"
       },
       "reply": {
-        "tool_calls": [
-          {
-            "name": "search_music_metadata",
-            "arguments": {
-              "entity": "release",
-              "query": "枝航谱"
-            }
-          }
-        ]
+        "text": "{\"decision\":\"judge\",\"groups\":[{\"name\":{\"release\":\"枝航谱\"}}]}"
       }
     },
     {
       "when": {
-        "last_user_contains": "Hoshi no Mado",
-        "tool_available": "search_music_metadata"
+        "item_kind": "release_match",
+        "last_user_contains": "Hoshi no Mado"
       },
       "reply": {
-        "tool_calls": [
-          {
-            "name": "search_music_metadata",
-            "arguments": {
-              "entity": "release",
-              "query": "星の窓"
-            }
-          }
-        ]
+        "text": "{\"decision\":\"judge\",\"groups\":[{\"name\":{\"release\":\"星の窓\"}}]}"
       }
     },
     {
       "when": {
-        "last_user_contains": "堤灯社 - 微雨塘",
-        "tool_available": "search_music_metadata"
+        "item_kind": "verify_name",
+        "last_user_contains": "枝航圃"
       },
       "reply": {
-        "tool_calls": [
-          {
-            "name": "search_music_metadata",
-            "arguments": {
-              "entity": "release",
-              "query": "微雨塘"
-            }
-          }
-        ]
+        "text": "{\"verdict\":\"typo\",\"reason\":\"扫描标题错字\"}"
       }
     },
     {
       "when": {
-        "last_user_contains": "Harvest Echo",
-        "tool_available": "shelve_pending_item"
+        "item_kind": "verify_name",
+        "last_user_contains": "沉心"
       },
       "reply": {
-        "tool_calls": [
-          {
-            "name": "shelve_pending_item",
-            "arguments": {
-              "item_id": "$current_item",
-              "reason": "固定样本没有可核对的对应。"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "when": {
-        "last_user_contains": "Swallow Light",
-        "tool_available": "shelve_pending_item"
-      },
-      "reply": {
-        "tool_calls": [
-          {
-            "name": "shelve_pending_item",
-            "arguments": {
-              "item_id": "$current_item",
-              "reason": "固定样本没有可核对的对应。"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "when": {
-        "last_user_contains": "镜舟 - 昏灯",
-        "tool_available": "shelve_pending_item"
-      },
-      "reply": {
-        "tool_calls": [
-          {
-            "name": "shelve_pending_item",
-            "arguments": {
-              "item_id": "$current_item",
-              "reason": "固定样本没有可核对的对应。"
-            }
-          }
-        ]
+        "text": "{\"verdict\":\"typo\",\"reason\":\"扫描曲名错字\"}"
       }
     }
   ]

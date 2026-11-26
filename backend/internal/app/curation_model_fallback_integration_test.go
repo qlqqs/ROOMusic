@@ -22,7 +22,7 @@ type testLookupGate struct{ ready atomic.Bool }
 func (g *testLookupGate) LookupTierReady(context.Context, string, time.Time) (bool, error) {
 	return g.ready.Load(), nil
 }
-func (*testLookupGate) LookupTierContext(ctx context.Context) context.Context { return ctx }
+func (*testLookupGate) PreparationContext(ctx context.Context) context.Context { return ctx }
 
 func modelRouteFixture(t *testing.T, f *schedulerFixture, item curation.PendingItem, route string) curation.PendingItem {
 	t.Helper()

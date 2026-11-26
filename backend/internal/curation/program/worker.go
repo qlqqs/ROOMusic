@@ -15,9 +15,8 @@ import (
 )
 
 const (
-	LocalRuleVersion    int16 = 3
-	MatchRuleVersion    int16 = 105
-	PatrolPromptVersion int16 = 1
+	LocalRuleVersion int16 = 3
+	MatchRuleVersion int16 = 106
 
 	// 资料主题与并入继续使用原来的版本和幂等键。
 	resourceRuleVersion int16 = 101
@@ -28,7 +27,6 @@ type Options struct {
 	CachedReleaseCredits                         func(string) (*sources.Release, error)
 	Fingerprints                                 Fingerprints
 	ConfirmScan                                  func(context.Context) error
-	NamesPatrolled                               func(context.Context, string) (bool, error)
 	Now                                          func() time.Time
 	After                                        func(time.Duration) <-chan time.Time
 	PollInterval, ScanInterval, FullPassInterval time.Duration
@@ -59,9 +57,6 @@ type Worker struct {
 }
 
 func NewWorker(db *sql.DB, writer *curation.Writer, sourceGate *curation.Sources, scanRunning func(context.Context) (bool, error), logger *slog.Logger, opts Options) *Worker {
-	if writer != nil && opts.NamesPatrolled == nil {
-		opts.NamesPatrolled = writer.NamesPatrolled
-	}
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}

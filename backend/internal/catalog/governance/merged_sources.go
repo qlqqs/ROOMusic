@@ -17,12 +17,13 @@ import (
 
 // ArtistMergedSource 是仍可恢复的旧身份；名字键只提示当前可按别名拆回的部分。
 type ArtistMergedSource struct {
-	ArtistID    string    `json:"artist_id"`
-	Name        string    `json:"name"`
-	Revision    int64     `json:"revision"`
-	NameKeyIDs  []string  `json:"name_key_ids"`
-	OperationID string    `json:"operation_id"`
-	MergedAt    time.Time `json:"merged_at"`
+	JudgedByModel bool      `json:"judged_by_model"`
+	ArtistID      string    `json:"artist_id"`
+	Name          string    `json:"name"`
+	Revision      int64     `json:"revision"`
+	NameKeyIDs    []string  `json:"name_key_ids"`
+	OperationID   string    `json:"operation_id"`
+	MergedAt      time.Time `json:"merged_at"`
 }
 type ArtistMergedSources struct {
 	Items []ArtistMergedSource `json:"items"`
@@ -59,9 +60,9 @@ func readArtistMergedSources(ctx context.Context, q operations.Queryer, id strin
 	if target.RedirectArtistID != nil {
 		id = *target.RedirectArtistID
 	}
-	rows, err := q.QueryContext(ctx, `SELECT a.id::text,COALESCE(p.effective_display_name,a.initial_name),a.edit_revision,o.redirect_operation_id::text
+	rows, err := q.QueryContext(ctx, `SELECT a.id::text,COALESCE(p.effective_display_name,a.initial_name),a.edit_revision,o.redirect_operation_id::text,coalesce(op.origin->>'basis'='model_identity',false)
  FROM artist_overrides o JOIN artists a ON a.id=o.artist_id
- LEFT JOIN artist_profiles p ON p.artist_id=a.id
+ LEFT JOIN operations op ON op.id=o.redirect_operation_id LEFT JOIN artist_profiles p ON p.artist_id=a.id
  WHERE o.redirect_artist_id=$1::uuid ORDER BY a.id`, id)
 	if err != nil {
 		return result, err
@@ -70,7 +71,7 @@ func readArtistMergedSources(ctx context.Context, q operations.Queryer, id strin
 	for rows.Next() {
 		var source ArtistMergedSource
 		var operationID *string
-		if err := rows.Scan(&source.ArtistID, &source.Name, &source.Revision, &operationID); err != nil {
+		if err := rows.Scan(&source.ArtistID, &source.Name, &source.Revision, &operationID, &source.JudgedByModel); err != nil {
 			rows.Close()
 			return result, err
 		}

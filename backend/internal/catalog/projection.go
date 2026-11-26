@@ -85,6 +85,7 @@ type ReleaseEvidenceSummary struct {
 }
 
 type ReleaseDetail struct {
+	MusicBrainzNames []MatchName `json:"musicbrainz_names"`
 	ReleaseSummary
 	CandidateKind string                   `json:"candidate_kind"`
 	Genres        []string                 `json:"genres"`

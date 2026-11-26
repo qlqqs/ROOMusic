@@ -18,6 +18,7 @@ type script struct {
 }
 type rule struct {
 	When struct {
+		Kind   string `json:"item_kind"`
 		User   string `json:"last_user_contains"`
 		Result string `json:"tool_result_contains"`
 		Tool   string `json:"tool_available"`
@@ -146,8 +147,14 @@ func (s script) reply(t turn) reply {
 	if slices.Contains(t.tools, "roomusic_probe") {
 		return reply{Calls: []call{{"roomusic_probe", object{}}}}
 	}
+	if t.curation != "" && len(t.tools) == 0 {
+		return s.judgeReply(t)
+	}
 	for _, r := range s.Rules {
 		w := r.When
+		if w.Kind != "" {
+			continue
+		}
 		if (w.Model == "" || w.Model == t.model) && (w.Tool == "" || slices.Contains(t.tools, w.Tool)) && strings.Contains(t.user, w.User) && strings.Contains(t.result, w.Result) {
 			return bindScriptItem(r.Reply, t.curation)
 		}
@@ -171,8 +178,8 @@ func (s script) reply(t turn) reply {
 		}
 	}
 	if t.curation != "" {
-		if slices.Contains(t.tools, "submit_patrol") || slices.Contains(t.tools, "submit_local_cleanup") {
-			return patrolLocalReply(t)
+		if slices.Contains(t.tools, "submit_local_cleanup") {
+			return localReply(t)
 		}
 		if response := s.curationReply(t); response.Text != "" || len(response.Calls) > 0 {
 			return response
@@ -207,7 +214,7 @@ func bindScriptItem(rep reply, current string) reply {
 	return rep
 }
 
-func patrolLocalReply(t turn) reply {
+func localReply(t turn) reply {
 	var items []struct {
 		ID       string `json:"item_id"`
 		Kind     string
@@ -221,15 +228,6 @@ func patrolLocalReply(t turn) reply {
 		return reply{Text: "合成整理已结束。"}
 	}
 	item := items[0]
-	if item.Kind == "name_patrol" && slices.Contains(t.tools, "submit_patrol") {
-		results := []object{}
-		if item.Evidence.Kind == "artist" {
-			for _, name := range item.Evidence.Names {
-				results = append(results, object{"id": name.ID, "canonical": name.Name + " | ", "confidence": "low"})
-			}
-		}
-		return reply{Calls: []call{{"submit_patrol", object{"item_id": item.ID, "results": results, "issues": []object{}}}}}
-	}
 	if item.Kind == "local_cleanup" && slices.Contains(t.tools, "submit_local_cleanup") {
 		return reply{Calls: []call{{"submit_local_cleanup", object{"item_id": item.ID}}}}
 	}
@@ -350,4 +348,36 @@ func (s script) pendingCalls(t turn) []call {
 		}
 	}
 	return calls
+}
+
+func (s script) judgeReply(t turn) reply {
+	var items []json.RawMessage
+	if json.Unmarshal([]byte(t.curation), &items) != nil {
+		return reply{}
+	}
+	rows := make([]object, 0, len(items))
+	for _, raw := range items {
+		var p pendingItem
+		if json.Unmarshal(raw, &p) != nil {
+			continue
+		}
+		row := object{"decision": "undetermined", "reason": "未提供可区分的本地线索"}
+		if strings.HasPrefix(p.Kind, "verify_") || p.Kind == "release_merge" {
+			row = object{"verdict": "undetermined", "reason": "未提供能确定身份的资料"}
+		}
+		for _, rule := range s.Rules {
+			if rule.When.Kind != p.Kind || (rule.When.Model != "" && rule.When.Model != t.model) || !strings.Contains(string(raw), rule.When.User) {
+				continue
+			}
+			var scripted object
+			if json.Unmarshal([]byte(rule.Reply.Text), &scripted) == nil {
+				row = scripted
+			}
+			break
+		}
+		row["item_id"] = p.ID
+		rows = append(rows, row)
+	}
+	raw, _ := json.Marshal(object{"items": rows})
+	return reply{Text: string(raw)}
 }

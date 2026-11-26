@@ -3,6 +3,7 @@ package program
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -197,16 +198,28 @@ func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvid
 	if err != nil {
 		return "", "", nil, err
 	}
-	p.links.RequireAll = m.Level == "artist"
+	p.links.RequireAll = m.Level == "artist" || u.judge != nil
+	if c := u.judge; c != nil {
+		p.links.Source = curation.Source{Kind: "model", Provider: curation.NormalizeProvider(c.Model), WriterLevel: catalog.LevelModelExternal, Basis: m.Rule}
+		p.links.ConversationID = c.Conversation
+		p.links.CheckEvidence = func(ctx context.Context, tx *sql.Tx) error {
+			var valid bool
+			err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM curation_work_states WHERE subject='release' AND target_id=$1 AND generation=$2 AND result->'judge'->>'item_id'=$3 AND file_digest=curation_release_file_digest(target_id) AND EXISTS(SELECT FROM curation_eligible_releases WHERE id=target_id) FOR SHARE)`, e.ID, c.Generation, c.ItemID).Scan(&valid)
+			if err == nil && !valid {
+				return errReleaseChanged
+			}
+			return err
+		}
+	}
 	local, err := catalog.LoadCurationArtistCredits(ctx, w.db, e.ID)
 	switch {
 	case err == nil:
 		p.splits = planCreditSplits(local, e, m)
-		p.artists, proposals, err = w.identifyArtists(ctx, local, e, m, u.offline)
+		p.artists, proposals, err = w.identifyArtists(ctx, local, e, m, u.offline || u.judge != nil)
 		if err != nil {
 			return "", "", nil, err
 		}
-		if u.programOnly {
+		if u.programOnly && u.judge == nil {
 			proposals = nil
 		}
 		if m.Level == "artist" && (len(p.artists) == 0 || len(p.artists) != len(m.Credits)) {
@@ -364,10 +377,14 @@ func writeMatch(ctx context.Context, db operations.Queryer, writer *curation.Wri
 			plan.result = "linked"
 		}
 	}
-	if err := writeCreditSplits(ctx, writer, request, p.splits, write); err != nil {
+	artistRequest := request
+	if len(p.artists)+len(p.splits) > 0 && request.Source.Kind == "model" {
+		artistRequest.Source = curation.Source{Kind: "source", Provider: "musicbrainz", WriterLevel: catalog.LevelProgramExternal, Basis: "MusicBrainz 发行的艺人署名"}
+	}
+	if err := writeCreditSplits(ctx, writer, artistRequest, p.splits, write); err != nil {
 		return "", err
 	}
-	if err := writeArtistLinks(ctx, db, writer, request, p.artists, p.splits, write); err != nil {
+	if err := writeArtistLinks(ctx, db, writer, artistRequest, p.artists, p.splits, write); err != nil {
 		return "", err
 	}
 	if len(fields) > 0 {

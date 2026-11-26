@@ -40,6 +40,8 @@ type MatchResult struct {
 }
 
 type Candidate struct {
+	Entity         string                  `json:"entity,omitempty"`
+	Medium         []string                `json:"medium,omitempty"`
 	Verification   *MatchVerification      `json:"verification,omitempty"`
 	Release        *sources.Release        `json:"release,omitempty"`
 	Recording      *sources.Recording      `json:"recording,omitempty"`
@@ -202,6 +204,8 @@ func pendingMatchEvidence(e catalog.CurationEvidence, method string) map[string]
 		e = curation.LocalSearchEvidence(e)
 	}
 	type track struct {
+		Path             string                           `json:"path"`
+		Comments         []metadata.ScanComment           `json:"comments,omitempty"`
 		Authenticity     map[string]metadata.Authenticity `json:"authenticity"`
 		ID               string                           `json:"id"`
 		Title            string                           `json:"title"`
@@ -220,7 +224,7 @@ func pendingMatchEvidence(e catalog.CurationEvidence, method string) map[string]
 	rows := make([]track, 0, len(e.Tracks))
 	for _, t := range e.SortedTracks() {
 		discCounts[t.Disc]++
-		rows = append(rows, track{t.Authenticity, t.ID, t.Title, t.Artist, t.Disc, t.Position, t.PositionInferred, t.DurationSeconds, t.Identifiers, trackISRCs(t)})
+		rows = append(rows, track{t.RelativePath, t.Comments, t.Authenticity, t.ID, t.Title, t.Artist, t.Disc, t.Position, t.PositionInferred, t.DurationSeconds, t.Identifiers, trackISRCs(t)})
 	}
 	auth := maps.Clone(e.Authenticity)
 	if auth == nil {

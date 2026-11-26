@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,12 +12,10 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
-	"github.com/qlqq/roomusic/backend/internal/curation/model"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
-	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	"github.com/qlqq/roomusic/backend/internal/upstreammock"
 )
 
@@ -321,82 +318,16 @@ func TestPostgreSQL整理零候选按来源和模型分流(t *testing.T) {
 		if len(paths) != 3 || paths[0] != "/musicbrainz/ws/2/release" || paths[1] != paths[0] || paths[2] != "/musicbrainz/ws/2/artist" {
 			t.Errorf("无结果时应先放宽并查艺人，请求 %v", paths)
 		}
-		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND status='waiting_route' AND route='lookup'`, id)
+		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND status='waiting_model' AND route='select'`, id)
 	})
 
-	t.Run("艺人在库且巡检和程序高优先项完成后领取第二档", func(t *testing.T) {
-		id, _ := add(t, cMatchAlbum("未登记专辑三", known.Name, 3, known.ID))
-		f := cMatchFixture(app, admin)
-		pending := programString(t, app, `SELECT id FROM curation_pending_items WHERE target_id=$1 AND status='waiting_route' AND route='lookup' AND candidates='[]'`, id)
-		conversation := modelConversation(t, f)
-		state := b3WorkState(t, app, "release", id)
-		if state.Status != "unmatched" || state.IdentityDigest == "" {
-			t.Fatalf("第二档工作状态 %+v", state)
-		}
-
-		ctx := t.Context()
-		gateClock := newProgramClock()
-		gateClock.now.Store(clock.now.Load())
-		gateOptions := gateClock.options()
-		sourceGate := curation.NewSources(app.database, curation.SourceRegistration{Declaration: musicbrainz.Declaration()})
-		worker := program.NewWorker(app.database, f.writer, sourceGate, func(context.Context) (bool, error) { return false, nil }, nil, gateOptions)
-		// 应用内的工作者已完成本轮。用同一隔离库启动可直接检查就绪状态的工作者，并让它停在轮询点。
-		workerCtx, stopWorker := context.WithCancel(ctx)
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			worker.Run(workerCtx)
-		}()
-		defer func() {
-			stopWorker()
-			<-done
-		}()
-		gateClock.wait(t)
-
-		claimWhenReady := func(wantReady bool) []curation.PendingItem {
-			t.Helper()
-			now := gateOptions.Now()
-			ready, err := worker.LookupTierReady(ctx, id, now)
-			requireCurationOK(t, err)
-			if ready != wantReady {
-				t.Fatalf("第二档就绪状态为 %t，期望 %t", ready, wantReady)
-			}
-			if !ready {
-				b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items
-					WHERE id=$1 AND status='waiting_route' AND conversation_id IS NULL`, pending)
-				return nil
-			}
-			items, err := f.writer.ClaimModelKind(ctx, conversation, now, 1, []string{"release"}, string(model.LookupCandidate), id)
-			requireCurationOK(t, err)
-			return items
-		}
-		claimWhenReady(false)
-		mustExec(t, app, `UPDATE curation_patrol_names SET needs_patrol=false,model='合成巡检模型',prompt_version=$2,patrolled_at=now()
-			WHERE id IN (SELECT name_id FROM curation_patrol_inputs WHERE release_id=$1)`, id, program.PatrolPromptVersion)
-		mustExec(t, app, `UPDATE curation_work_states SET needs_work=true,manual_requested_at=$2
-			WHERE subject='release' AND target_id=$1`, id, gateOptions.Now())
-		claimWhenReady(false)
-		mustExec(t, app, `UPDATE curation_work_states SET needs_work=false,manual_requested_at=NULL
-			WHERE subject='release' AND target_id=$1`, id)
-		items := claimWhenReady(true)
-		if len(items) != 1 || items[0].ID != pending || items[0].Route != "lookup" ||
-			items[0].Status != "in_progress" || items[0].ConversationID != conversation {
-			t.Fatalf("第二档应领取指定的零候选项：%+v", items)
-		}
-		err := f.writer.FinishUnlisted(t.Context(), pending, "过期摘要", conversation, "仍未找到")
-		curationCRequireProblem(t, err, http.StatusConflict, "item_stale")
-		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE id=$1 AND status='in_progress'`, pending)
-		requireCurationOK(t, f.writer.FinishUnlisted(t.Context(), pending, state.IdentityDigest, conversation, "仍未找到"))
-		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE id=$1 AND status='resolved' AND resolution='unlisted'`, pending)
-		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='unmatched' AND next_attempt_at=(result->>'unlisted_since')::timestamptz+interval '90 days'`, id)
-	})
 	t.Run("艺人不在库时先登记识别判断", func(t *testing.T) {
 		response := app.request(t, http.MethodPut, curationBase+"/sources/web_search", map[string]bool{"enabled": true}, &admin, nil)
 		if response.Code != http.StatusOK {
 			t.Fatal(response.Code, response.Body.String())
 		}
 		id, _ := add(t, cMatchAlbum("未登记专辑四", "外部库没有的艺人二", 3, uuid.New()))
-		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND status='waiting_route' AND route='lookup' AND candidates='[]'`, id)
+		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND status='waiting_model' AND route='select' AND candidates='[]'`, id)
 	})
 }
 

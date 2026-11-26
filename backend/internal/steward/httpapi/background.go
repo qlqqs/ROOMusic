@@ -28,10 +28,8 @@ type BackgroundParams struct {
 	ConversationID   string
 	Model            string
 	Text             string
-	ReviewPlanID     string
 	SystemSuffix     string
 	Selection        func(string) ([]provider.ToolCall, error)
-	OnToolCalls      func(context.Context, int) error
 	StepLimit        int
 	WebSearchEnabled func(context.Context) bool
 	BeforeRequest    func(context.Context) error
@@ -196,25 +194,12 @@ func (h *Handlers) StartBackground(ctx context.Context, p BackgroundParams) (*ru
 	if p.Model == "" {
 		p.Model = settings.Model
 	}
-	nativeSearch := nativeSearchEnabled(settings) && p.WebSearchEnabled != nil && p.WebSearchEnabled(ctx)
-	beforeStep := p.BeforeStep
-	if nativeSearch {
-		beforeStep = func(ctx context.Context) error {
-			if !p.WebSearchEnabled(ctx) {
-				return runtime.ErrRunStopped
-			}
-			if p.BeforeStep != nil {
-				return p.BeforeStep(ctx)
-			}
-			return nil
-		}
-	}
 	run, err := h.supervisor.Start(ctx, runtime.RunParams{
-		RequestBudget: p.RequestBudget, Background: true, BackgroundItemID: p.ItemID, BackgroundClaims: p.ClaimDigests, Selection: p.Selection, OnToolCalls: p.OnToolCalls, StepLimit: p.StepLimit, NativeSearch: nativeSearch, ConversationID: p.ConversationID, Text: p.Text, ReviewPlanID: p.ReviewPlanID,
+		RequestBudget: p.RequestBudget, Background: true, BackgroundItemID: p.ItemID, BackgroundClaims: p.ClaimDigests, Selection: p.Selection, StepLimit: p.StepLimit, ConversationID: p.ConversationID, Text: p.Text,
 		Caller:   tool.Caller{User: user, Source: tool.SourceCuration, Mode: "steward"},
-		Provider: model, Model: p.Model, ReviewModel: settings.ReviewModel, Protocol: provider.Protocol(settings.Protocol),
+		Provider: model, Model: p.Model, Protocol: provider.Protocol(settings.Protocol),
 		Endpoint: settings.Endpoint, DisplayName: settings.DisplayName, SkipMemory: true, SystemSuffix: p.SystemSuffix,
-		BeforeRequest: p.BeforeRequest, BeforeStep: beforeStep, Usage: p.Usage, Escalate: p.Escalate, Finished: closeClient,
+		BeforeRequest: p.BeforeRequest, BeforeStep: p.BeforeStep, Usage: p.Usage, Finished: closeClient,
 		Check: func(ctx context.Context) error { return h.checkModelKey(ctx, p.UserID, settings) },
 	})
 	if err != nil {

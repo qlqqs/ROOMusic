@@ -13,10 +13,7 @@ const QueueRankSQL = `CASE WHEN s.manual_requested_at IS NOT NULL THEN 0
  WHEN r.queue_has_id THEN 2 WHEN r.queue_class IN ('has_gaps','insufficient') THEN 3 ELSE 4 END`
 
 // SQL 分类与调度器的模型任务一一对应。
-const modelKindSQL = `CASE WHEN p.kind='local_cleanup' THEN 'local' WHEN p.kind='name_patrol' THEN 'patrol_local'
- WHEN p.route='lookup' THEN 'lookup'
- WHEN p.route='web' OR p.kind='artist_identity' THEN 'web'
- WHEN p.kind IN ('release_merge','verify_artist_credit','verify_artist_merge','verify_name') THEN 'verify'
+const modelKindSQL = `CASE WHEN p.kind='local_cleanup' THEN 'local' WHEN p.kind IN ('release_merge','verify_artist_credit','verify_artist_merge','verify_name') THEN 'verify'
  WHEN p.kind IN ('release_match','recording_match') THEN 'select' END`
 
 const modelQueueFromSQL = ` FROM curation_pending_items p
@@ -26,10 +23,6 @@ const modelQueueFromSQL = ` FROM curation_pending_items p
  LEFT JOIN curation_work_states r ON r.subject='release' AND r.target_id=COALESCE(p.target_id,work.queue_release_id)
  CROSS JOIN curation_settings settings
  WHERE settings.id=1 AND p.status IN ('waiting_model','waiting_route') AND ` + PendingTargetVisibleSQL + `
- AND (p.kind<>'artist_identity' OR NOT EXISTS (` + ArtistReleaseCreditsSQL + `
- SELECT FROM credits c JOIN visible v ON v.id=c.release_id LEFT JOIN curation_work_states recognition
- ON recognition.subject='release' AND recognition.target_id=c.release_id
- WHERE c.artist_id=p.artist_id AND ` + ReleaseRecognitionPendingSQL + `))
  AND (COALESCE(p.target_id,work.queue_release_id) IS NULL OR EXISTS (SELECT FROM curation_stable_releases stable
  WHERE stable.id=COALESCE(p.target_id,work.queue_release_id)))`
 
@@ -59,14 +52,6 @@ func (w *Writer) ReadyModelKinds(ctx context.Context, now time.Time, targets []s
 		kinds[kind] = true
 	}
 	return kinds, rows.Err()
-}
-
-// LookupModelTargets 按同一队列顺序返回候选，调用方用巡检完成状态筛选。
-func (w *Writer) LookupModelTargets(ctx context.Context, now time.Time, excluded []string) ([]string, error) {
-	return modelStrings(w.db.QueryContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
- SELECT p.target_id::text `+modelQueueFromSQL+`
- AND p.route='lookup' AND p.target_type='release' AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1)
- AND NOT (p.id=ANY($2::uuid[])) ORDER BY `+QueueRankSQL+`,p.created_at,p.id`, now, excluded))
 }
 
 // ModelItemCheckpoint 说明下一项是否可开始；到达日额度时携带下次可查时间。
@@ -106,12 +91,4 @@ func (w *Writer) CheckDailyBudget(ctx context.Context, now time.Time, limit *int
 		return ModelItemCheckpoint{Reason: "limit_reached", RetryAt: &next}, nil
 	}
 	return ModelItemCheckpoint{}, nil
-}
-
-// HasWaitingWebRoute 只查看明确升级到联网的任务。未启动的艺人资料仍由程序按来源重新计算。
-func (w *Writer) HasWaitingWebRoute(ctx context.Context, now time.Time, excluded []string) (bool, error) {
-	var ready bool
-	err := w.db.QueryRowContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
- SELECT EXISTS(SELECT 1`+modelQueueFromSQL+` AND p.route='web' AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1) AND NOT (p.id=ANY($2::uuid[])))`, now, excluded).Scan(&ready)
-	return ready, err
 }

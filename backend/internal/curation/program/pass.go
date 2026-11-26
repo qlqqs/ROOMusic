@@ -52,6 +52,12 @@ func needsWork(subject string, state curation.WorkState, digest string, now time
 	}
 	previous := state.InputDigest
 	if subject == "release" {
+		if state.Status == "unmatched" || state.Status == "conflict" {
+			r, _ := previousReview(state)
+			if r.Judge != nil {
+				return true
+			}
+		}
 		if state.Status == "pending" || state.ManualRequestedAt != nil {
 			return true
 		}
@@ -66,7 +72,7 @@ func needsWork(subject string, state curation.WorkState, digest string, now time
 	if subject == "release" && state.RequeryMatchVersion == MatchRuleVersion {
 		return true
 	}
-	if subject == "release" && state.Status == "unmatched" {
+	if subject == "release" && (state.Status == "unmatched" || state.Status == "conflict") {
 		return state.NextAttemptAt != nil && !now.Before(*state.NextAttemptAt)
 	}
 	if !fingerprintAvailable || subject != "release" || (state.Status != "no_match" && state.Status != "uncertain") {
@@ -128,6 +134,7 @@ func subjectEvidence(subject string, e catalog.CurationEvidence, state curation.
 }
 
 type outcome struct {
+	keepSourceResult                                                   bool
 	checkedAt                                                          time.Time
 	status, group, trackFields, artistLinks, matchReason, releaseMerge string
 	match                                                              MatchResult
@@ -256,6 +263,8 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	if curation.IsSourceUnavailable(err) {
 		return sourceFailure(ctx, u.source(), err)
 	}
+	// 最后一次出站遭遇来源故障时，恢复后继续保留上一次有效的来源结论。
+	out.keepSourceResult = u.judge != nil && review.Retry != nil && review.Retry.Step == "model_hints" && out.matchReason == "request_limit"
 	retry := errors.Is(err, sources.ErrTryLater)
 	if err != nil && !retry {
 		return err
@@ -291,7 +300,7 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	state.Status, state.Attempts, state.Generation = out.status, state.Attempts+1, u.generation
 	state.RetryCount, state.NextAttemptAt, state.Result = 0, nil, nil
 	out.checkedAt = w.opts.Now().UTC()
-	if out.status == "unmatched" && out.matchReason != "candidates_revoked" {
+	if out.status == "unmatched" && out.matchReason != "candidates_revoked" || out.status == "conflict" && slices.Contains(out.match.Conflicts, "ambiguous_editions") {
 		now = out.checkedAt
 		next := now.Add(90 * 24 * time.Hour)
 		state.NextAttemptAt = &next
@@ -379,7 +388,7 @@ func (w *Worker) saveConclusionOnce(ctx context.Context, e *catalog.CurationEvid
 		if err := curation.SaveArtistCreditProposals(ctx, tx, e.ID, postIdentity, out.proposals); err != nil {
 			return err
 		}
-		if out.review.RecheckedAt == nil && !out.match.Offline && out.status == "matched" {
+		if !out.match.Offline && out.status == "matched" {
 			if err := saveNameDifferences(ctx, tx, fresh, out.match); err != nil {
 				return err
 			}
@@ -412,9 +421,32 @@ func (w *Worker) saveConclusionOnce(ctx context.Context, e *catalog.CurationEvid
 			return err
 		}
 	}
-	if state.Subject == "release" && (out.status == "matched" || out.status == "unmatched" || out.status == "conflict") {
+	if state.Subject == "release" && !out.keepSourceResult && (out.status == "matched" || out.status == "unmatched" || out.status == "conflict") {
 		checked := out.checkedAt
-		err := curation.SaveReleaseMatchResult(ctx, tx, e.ID, curation.ReleaseMatchResult{Source: "musicbrainz", Status: out.status, CheckedAt: &checked, Reason: out.matchReason, Conflicts: out.resultConflicts()})
+		r := curation.ReleaseMatchResult{Source: "musicbrainz", Status: out.status, CheckedAt: &checked, Reason: out.matchReason, Conflicts: out.resultConflicts()}
+		if out.status == "conflict" {
+			rows := out.match.modelCandidates()
+			for i := range rows {
+				rows[i].Entity = "release"
+				if out.match.Mode == "single" {
+					rows[i].Entity = "recording"
+					if rows[i].Recording != nil && len(fresh.Tracks) == 1 {
+						rows[i].Verification = verifyRecording(fresh, *rows[i].Recording)
+						rows[i].Verification.Method = rows[i].Method
+					}
+				}
+				if rows[i].Release != nil {
+					for _, medium := range rows[i].Release.Media {
+						if medium.Format != "" && !slices.Contains(rows[i].Medium, medium.Format) {
+							rows[i].Medium = append(rows[i].Medium, medium.Format)
+						}
+					}
+				}
+			}
+			r.Candidates = jsonValue(rows)
+			r.SnapshotID = curation.DerivedKey(e.ID, digest([]any{state.Generation, state.FileDigest, rows}))
+		}
+		err := curation.SaveReleaseMatchResult(ctx, tx, e.ID, r)
 		if err != nil {
 			return err
 		}
@@ -517,6 +549,7 @@ func releaseResult(out outcome) []byte {
 	m := out.match
 	r := struct {
 		releaseReviewState
+		Snapshot        *MatchSnapshot     `json:"match_snapshot,omitempty"`
 		Verification    *MatchVerification `json:"verification,omitempty"`
 		Blocked         []blockedCandidate `json:"blocked,omitempty"`
 		Level           string             `json:"level,omitempty"`
@@ -534,6 +567,9 @@ func releaseResult(out outcome) []byte {
 		ArtistLinks     string             `json:"artist_links,omitempty"`
 		TrackFields     string             `json:"track_fields,omitempty"`
 	}{Verification: m.Verification, releaseReviewState: out.review, Level: m.Level, Rule: m.Rule, Route: m.Route, Credits: m.Credits, ExternalGroupID: m.GroupID, Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: out.resultConflicts(), Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks, ReleaseMerge: out.releaseMerge}
+	if out.status == "conflict" {
+		r.Snapshot = &m.Snapshot
+	}
 	if m.Release != nil {
 		r.ExternalID, r.ExternalGroupID = m.Release.ID, m.Release.Group.ID
 	}
@@ -569,6 +605,7 @@ func savePending(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidence, st
 	}
 	evidence := pendingMatchEvidence(e, m.Method)
 	evidence["match_snapshot"] = m.savedSnapshot()
+	evidence["generation"] = state.Generation
 	evidence["classification"] = e.Classification().Class
 	return curation.UpsertPendingItem(ctx, tx, curation.PendingItem{TargetID: e.ID, Kind: kind, Route: m.Route, RuleVersion: state.RuleVersion,
 		InputDigest: state.InputDigest, MatchRuleVersion: state.MatchRuleVersion, IdentityDigest: state.IdentityDigest, Evidence: jsonValue(evidence), Candidates: jsonValue(m.modelCandidates()), Conflicts: jsonValue(m.Conflicts)})
@@ -661,6 +698,13 @@ func (w *Worker) saveQueryFailure(ctx context.Context, state, before curation.Wo
 		result["manual_recheck"] = jsonValue(true)
 	}
 	result["retry"] = jsonValue(retry)
+	if retry.Step == "model_hints" {
+		var cursor json.RawMessage
+		if err = tx.QueryRowContext(ctx, `SELECT result->'judge' FROM curation_work_states WHERE subject='release' AND target_id=$1`, state.TargetID).Scan(&cursor); err != nil {
+			return err
+		}
+		result["judge"] = cursor
+	}
 	state.Result = jsonValue(result)
 	if pause != nil {
 		if current := w.policy.Pause(pause.Source); current != nil {

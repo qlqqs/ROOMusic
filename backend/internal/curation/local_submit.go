@@ -85,7 +85,7 @@ func checkedLocalValue(name, value string, field localField, fragments []string)
 
 func (w *Writer) SubmitLocal(ctx context.Context, in LocalInput) error {
 	run, ok := ModelRunFrom(ctx)
-	if !ok || !uuid.Valid(in.ItemID) || run.TaskKind != "patrol_local" {
+	if !ok || !uuid.Valid(in.ItemID) || run.TaskKind != "local" {
 		return operations.Conflict("out_of_batch", "缺少本地整理运行")
 	}
 	digest, owned := run.ClaimDigests[in.ItemID]

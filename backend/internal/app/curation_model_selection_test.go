@@ -7,15 +7,15 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation"
 )
 
-func Test整理第一档选择严格限定已发送的候选(t *testing.T) {
+func Test整理由模型选择时严格限定已发送的候选(t *testing.T) {
 	items := []curation.PendingItem{
 		{ID: "甲项", Candidates: json.RawMessage(`[{"external_id":"甲候选"}]`)},
 		{ID: "乙项", Candidates: json.RawMessage(`[{"external_id":"乙候选"}]`)},
 	}
-	valid := `{"items":[{"item_id":"甲项","decision":"select","external_id":"甲候选"},{"item_id":"乙项","decision":"upgrade"}]}`
+	valid := `{"items":[{"item_id":"甲项","decision":"judge","selected_id":"甲候选"},{"item_id":"乙项","decision":"undetermined","reason":"定不了"}]}`
 	actions, err := selectionActions(valid, items)
 	requireCurationOK(t, err)
-	if len(actions) != 2 || actions[0].ID != "甲项" || actions[0].Name != "resolve_release_match" ||
+	if len(actions) != 2 || actions[0].ID != "甲项" || actions[0].Name != "submit_judge" ||
 		actions[1].ID != "乙项" || actions[1].Name != "shelve_pending_item" {
 		t.Fatalf("后台执行动作 %+v", actions)
 	}
@@ -27,11 +27,11 @@ func Test整理第一档选择严格限定已发送的候选(t *testing.T) {
 	}
 
 	for _, tc := range []struct{ name, reply, wantID string }{
-		{"候选属于别项", `{"items":[{"item_id":"甲项","decision":"select","external_id":"乙候选"},{"item_id":"乙项","decision":"upgrade"}]}`, "乙项"},
-		{"缺少一个决定", `{"items":[{"item_id":"甲项","decision":"upgrade"}]}`, "甲项"},
-		{"重复决定", `{"items":[{"item_id":"甲项","decision":"upgrade"},{"item_id":"乙项","decision":"upgrade"},{"item_id":"甲项","decision":"upgrade"}]}`, "乙项"},
-		{"升级附带编号", `{"items":[{"item_id":"甲项","decision":"upgrade","external_id":"甲候选"},{"item_id":"乙项","decision":"upgrade"}]}`, "乙项"},
-		{"JSON 重复字段", `{"items":[{"item_id":"甲项","decision":"select","decision":"upgrade"},{"item_id":"乙项","decision":"upgrade"}]}`, "乙项"},
+		{"候选属于别项", `{"items":[{"item_id":"甲项","decision":"judge","selected_id":"乙候选"},{"item_id":"乙项","decision":"undetermined","reason":"定不了"}]}`, "乙项"},
+		{"缺少一个决定", `{"items":[{"item_id":"甲项","decision":"undetermined","reason":"定不了"}]}`, "甲项"},
+		{"重复决定", `{"items":[{"item_id":"甲项","decision":"undetermined","reason":"定不了"},{"item_id":"乙项","decision":"undetermined","reason":"定不了"},{"item_id":"甲项","decision":"undetermined","reason":"定不了"}]}`, "乙项"},
+		{"定不了附带编号", `{"items":[{"item_id":"甲项","decision":"undetermined","reason":"定不了","selected_id":"甲候选"},{"item_id":"乙项","decision":"undetermined","reason":"定不了"}]}`, "乙项"},
+		{"JSON 重复字段", `{"items":[{"item_id":"甲项","decision":"select","decision":"undetermined","reason":"定不了"},{"item_id":"乙项","decision":"undetermined","reason":"定不了"}]}`, "乙项"},
 		{"JSON 外的文字", valid + "已完成", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -146,6 +146,7 @@ func isrcCandidates(ctx context.Context, f sources.RecordingFinder, e catalog.Cu
 			return releaseList{}, err
 		}
 		p := recordingSearchEvidence(page, "isrc", false)
+		p.Query = all
 		pages = append(pages, p)
 		if len(page.Items) == 0 {
 			return releaseList{pages: pages}, nil

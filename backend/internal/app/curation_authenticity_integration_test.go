@@ -326,7 +326,7 @@ func TestPostgreSQLCurationClassifications(t *testing.T) {
 	var got curation.Classifications
 	getJSON(t, app, &admin, path, &got)
 	want := curation.Classifications{
-		Versions: curation.RuleVersions{LocalRule: program.LocalRuleVersion, ExternalMatchRule: program.MatchRuleVersion, PatrolPrompt: program.PatrolPromptVersion},
+		Versions: curation.RuleVersions{LocalRule: program.LocalRuleVersion, ExternalMatchRule: program.MatchRuleVersion},
 		Releases: catalog.CurationClassCounts{Total: 4, TaggedID: 1, HasGaps: 1, LocalComplete: 1, Insufficient: 1},
 	}
 	if got != want || got.Releases.Total != got.Releases.TaggedID+got.Releases.HasGaps+got.Releases.LocalComplete+got.Releases.Insufficient {

@@ -3,14 +3,11 @@ package program
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"slices"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/curation"
-	"github.com/qlqq/roomusic/backend/internal/operations"
-	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
@@ -145,11 +142,7 @@ func (m *ModelMatcher) verifyAlbum(ctx context.Context, e catalog.CurationEviden
 	if !slices.Contains(v.Conflicts, "tag_text_mismatch") {
 		return v, nil
 	}
-	_, canonical, err := m.writer.CanonicalPatrolNames(ctx, e.ID, "")
-	if err != nil {
-		return nil, err
-	}
-	return m.verifyArtistText(ctx, e, r, c, canonical, map[string]sources.Artist{})
+	return m.verifyArtistText(ctx, e, r, c, "", map[string]sources.Artist{})
 }
 
 func (m *ModelMatcher) verifyArtistText(ctx context.Context, e catalog.CurationEvidence, r sources.Release, c comparison, canonical string, known map[string]sources.Artist) (*MatchVerification, error) {
@@ -162,102 +155,6 @@ func (m *ModelMatcher) verifyArtistText(ctx context.Context, e catalog.CurationE
 	return verifyAlbum(e, r, c), nil
 }
 
-func (m *ModelMatcher) AddCanonicalNames(ctx context.Context, items []curation.PendingItem) error {
-	for i := range items {
-		p := &items[i]
-		switch p.Kind {
-		case "release_match", "recording_match", "verify_name":
-			var input struct {
-				Tracks  []struct{ ID string }
-				TrackID string `json:"track_id"`
-			}
-			if err := json.Unmarshal(p.Evidence, &input); err != nil {
-				return err
-			}
-			trackID := input.TrackID
-			if p.Kind == "recording_match" && len(input.Tracks) == 1 {
-				trackID = input.Tracks[0].ID
-			}
-			title, artist, err := m.writer.CanonicalPatrolNames(ctx, p.TargetID, trackID)
-			if err != nil {
-				return err
-			}
-			p.CanonicalTitle, p.CanonicalArtist = title, artist
-		}
-	}
-	return nil
-}
-
-// PrepareSelection 补齐可选编号的曲目清单。来源失败交给调度退避，已失效的编号不进入选择题。
-func (m *ModelMatcher) PrepareSelection(ctx context.Context, items []curation.PendingItem) error {
-	if err := m.AnnotatePendingEvidence(ctx, items); err != nil {
-		return err
-	}
-	if err := m.AddCanonicalNames(ctx, items); err != nil {
-		return err
-	}
-	for i := range items {
-		item := &items[i]
-		var rows []Candidate
-		if err := json.Unmarshal(item.Candidates, &rows); err != nil {
-			return err
-		}
-		available := make([]Candidate, 0, len(rows))
-		for _, row := range rows {
-			if !uuid.Valid(row.ExternalID) {
-				continue
-			}
-			switch item.Kind {
-			case "release_match":
-				if !completeRelease(row.Release, row.ExternalID) || !row.Release.Complete {
-					f, ok := m.sources.ReleaseFinder("musicbrainz")
-					if !ok {
-						return operations.Conflict("source_disabled", "发行查询未启用")
-					}
-					r, err := f.ReleaseByID(ctx, row.ExternalID)
-					if errors.Is(err, sources.ErrNotFound) {
-						continue
-					}
-					if err != nil {
-						return err
-					}
-					row.Release = &r
-				}
-				if !completeRelease(row.Release, row.ExternalID) {
-					continue
-				}
-			case "recording_match":
-				if row.Recording == nil || row.Recording.ID != row.ExternalID {
-					f, ok := m.sources.RecordingFinder("musicbrainz")
-					if !ok {
-						return operations.Conflict("source_disabled", "录音查询未启用")
-					}
-					r, err := f.RecordingByID(ctx, row.ExternalID)
-					if errors.Is(err, sources.ErrNotFound) {
-						continue
-					}
-					if err != nil {
-						return err
-					}
-					if r.ID != row.ExternalID {
-						continue
-					}
-					row.Recording = &r
-				}
-			default:
-				return operations.Invalid("invalid_input", "选择项种类无效")
-			}
-			available = append(available, row)
-		}
-		if err := m.selectionEvidence(ctx, item, available); err != nil {
-			return err
-		}
-		item.Candidates = jsonValue(available)
-	}
-	return nil
-}
-
-// 第一档没有读取工具。把实际核对出的反证和使用过的艺人资料附给模型，反证候选排在其余候选之后。
 func (m *ModelMatcher) selectionEvidence(ctx context.Context, item *curation.PendingItem, candidates []Candidate) error {
 	if len(candidates) == 0 {
 		return nil

@@ -22,7 +22,6 @@ import (
 	curationapi "github.com/qlqq/roomusic/backend/internal/curation/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/curation/model"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
-	curationtools "github.com/qlqq/roomusic/backend/internal/curation/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/devices/airplay"
 	"github.com/qlqq/roomusic/backend/internal/devices/upnp"
 	upnpapi "github.com/qlqq/roomusic/backend/internal/devices/upnp/httpapi"
@@ -402,7 +401,6 @@ func Open(lifecycle context.Context, settings config.Server, database *sql.DB, f
 	operationKinds = append(operationKinds, governance.ArtistOperations(artistGovernance, curationWriter)...)
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
-	catalogapi.New(database, guard, settings.DataDirectory, logger, catalogapi.WithAnalysisVersion(analysis.Version)).Register(mux)
 	catalogapi.NewArtistGovernance(database, guard, logger, artistGovernance).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
 	operationsapi.New(database, guard, logger, operationKinds...).Register(mux)
@@ -427,6 +425,7 @@ func Open(lifecycle context.Context, settings config.Server, database *sql.DB, f
 	}
 	progress := playback.NewAnalysisProgressProvider(database, analysis.Version, analysisWorker)
 	matcher := program.NewModelMatcher(database, curationWriter, sourceGate)
+	catalogapi.New(database, guard, settings.DataDirectory, logger, catalogapi.WithAnalysisVersion(analysis.Version), catalogapi.WithMatchNames(matcher.RefreshMatchNames)).Register(mux)
 	diagnosticService := newDiagnostics(database, settings, libraryService, assembly)
 	diagnosticsapi.Register(mux, guard, diagnosticService, logger)
 	supervisor, launcher := registerSteward(lifecycle, mux, database, guard, instanceSecrets, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{forgetPassword: subsonic.Forget, tavilyEndpoint: tavilyEndpoint, mockHost: mockHost, writer: curationWriter, sources: sourceGate, matcher: matcher, music: music, covers: covers, diagnostics: diagnosticService, backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
@@ -440,8 +439,7 @@ func Open(lifecycle context.Context, settings config.Server, database *sql.DB, f
 	} else {
 		close(modelDone)
 	}
-	resolver := model.NewExceptionResolver(database, curationWriter, matcher, curationtools.MediaConfirmationPreparer(mockHost))
-	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), sourceGate, programStatus, scheduler, resolver, curation.RuleVersions{LocalRule: program.LocalRuleVersion, ExternalMatchRule: program.MatchRuleVersion, PatrolPrompt: program.PatrolPromptVersion}, guard, logger).Register(mux)
+	curationapi.New(curationWriter, curation.NewReverter(database, operationKinds...), sourceGate, programStatus, scheduler, matcher, curation.RuleVersions{LocalRule: program.LocalRuleVersion, ExternalMatchRule: program.MatchRuleVersion}, guard, logger).Register(mux)
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		AnalysisProgress: progress,
 	}).Register(mux)

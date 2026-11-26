@@ -1011,6 +1011,8 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 - 普通同组多版直接定到组。需要补推断曲名时只读取最早一版（同日按编号排序），代表版只提供已核对的曲名。同名候选跨组记 `different_release_groups`。
 
+仅在 B2 名字线索产生唯一候选时，四首及以下专辑可由独立本地证据补足标题差异。模型的查询标题须命中外部版，本地艺人、所有碟轨位置、真实本地曲名与可比时长须逐一吻合，并通过原有硬反证检查。普通 S8 和部分吻合继续采用 A2.3 原判据。
+
 ### 23.3 发行组级对应
 
 - `external_links` 新对象类型 `release_group_match`：`object_id` 是这张本地发行，`external_id` 是外部发行组编号，由 `external_link` 操作持有，可撤销并写抑制标记。
@@ -1139,58 +1141,19 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 依据 ADR 0006 第 16.6 节。迁移 0091。模型用量不是优化目标，限制只为防写错与防失控。
 
-### 26.1 任务
+### 26.1 一次识别判断
 
-| 任务 | 领取 | 运行形态与上限 | 去向 |
-| --- | --- | --- | --- |
-| 第一档选择 | 有可用候选的 `release_match`、`recording_match`，发行与录音分批 | 一次主模型请求，不带工具与原生搜索；首条消息含本地真实性、逐碟曲序与时长、每个候选的完整曲目；严格 JSON：`select`（只接受发给该项的编号）或带理由的 `undetermined` | 选定的交 26.2；定不了则按 25.4 结案 |
-| 第二档自己查 | `waiting_route/lookup`（第一档升级与 C 的零候选），`LookupTierReady` 为真才启动 | 管家后台运行，按艺人打包，`search_music_metadata`、`get_music_metadata`、提交任何 MB 编号、放弃；每项 20 次工具调用、15 万 token | 来源可用时放弃或触限：网络搜索可用转 `web`，否则 `FinishUnlisted` |
-| 核对判断 | `verify_artist_credit`（C 的署名提案）、`verify_artist_merge`、`verify_name`；`release_merge` 单独打包 | 只开放提交判断；身份取同一/不同/拿不准，纠正取错字/写法差异/译名差异/拿不准；沿用管家单次运行的总保护 | 写法或译名差异不改；有主张而缺证据转联网 |
-| 联网兜底 | `waiting_route/web`、第二档放弃、无外部对应的 `artist_identity`、待求证的建议；按艺人在库专辑组数降序 | `web_search` 或原生搜索、`fetch_page`、提交；每项 30 次工具调用、30 万 token；计入共享日额度 | 来源可用时无结果或触限即结束；发行识别无对应调用 `FinishUnlisted` |
+程序在 MusicBrainz 实际查询后形成未匹配或有冲突结论，有模型时按可见、稳定的 `curation_eligible_releases` 建识别项。目录本地辅助先行。识别与名字核对单次提交无工具的 JSON，按项领取、分批、预算、错误和结算沿用 25.4。模型可先选本项候选，再按把握递减给名字、同名艺人、原文编号、版本或类型。程序先核对选项，再按组查询。条码和目录号必须逐字出现在单个本地标签、注释或路径分量。每张以实际出站计六次，缓存复用，预算和组下标随程序状态持久化。
 
-- 共享每日上限在项边界检查（`BeforeModelItem`），达到上限时已开始的项可以完成，日额度最多额外消耗「并发数减一」个在途项的用量。到期重审重新占用名额时复查日额度，额度用尽则保留原方案。第二档与联网档按每次请求的实际 usage 与工具调用次数记账。相同路线的 `try_later` 跨会话累计，来源故障时达到上限按 28.1 排定复查。来源可用时沿用本档的超额处理。
-- 自查和联网的 MusicBrainz 工具调用共用现有来源限速器。后台网页工具按开启者、工具组和整理会话计量，同一会话的各项与重审共用额度，并行会话各自计量。交互用户沿用每用户限额。
-- 联网实耗已经包含在每日总输入、输出中。0098 删除联网子项三列，保留原总量及自定义总上限；回退时按 NULL、0、0 重建联网设置和计数。
+### 26.2 采用与挑选
 
-### 26.2 外部编号的写入（D4）
+通过 23.2 才可建立对应。组内多张通过时保存 conflict、ambiguous_editions 和候选，停止查证。管理员读取 `GET /api/v1/admin/curation/conflicts`，按快照及外部编号提交 `POST /api/v1/admin/curation/releases/{id}/match-selection`，重新结构核对后应用。匹配结果带 candidates、snapshot_id、selection。文件或规则变化及到期重查先走程序。
 
-- `ModelMatcher.Plan` 生成完整结构核对：专辑按碟与位置一一配对，外部明细完整，总数与各碟曲数相等且多于 4 首，至少一对可比，所有可比时长都在容差内；散放单曲要求时长、标题、艺人规范化后都相等。
-- 发行编号通过完整结构核对后，本地版本标识命中或同组恰好一个版本通过时才写版本对应并补条码、目录号、厂牌；同组多版通过只写发行组级对应，不写录音对应，补曲名沿用第 23.2 节。
-- 通过的由后端直接写入，记录 `verification=album_structure|recording_duration_text`，不送审。没通过的送独立审查，记录 `verification=independent_review`；
-  审查批准后后端再复判，时长或真实文字的反证仍在、又没有独立正面证据时拒绝。核对与审查都在第一笔写入之前。
+### 26.3 名字与艺人
 
-### 26.3 佐证与写入
+等价、跨文字、版本或合作署名后缀、明显不同的名字直接保留。同一文字一两字差异发名字核对，typo 采用已核实对应的原文，keep 或 undetermined 结项。艺人身份 same 使用受治理对应或合并，different 记无序名字对，其他发行同对也跳过。操作可撤销，人工字段受保护。名字核对独立于发行完成状态。专辑详情的 musicbrainz_names 按来源操作展示，管理员可携当前修订和依据调用 adopt-name 写人工层。
 
-| 佐证 | 后端核实 | 级别（第 24 节） |
-| --- | --- | --- |
-| 外部 | 按准确对象编号读回外部发行、录音或艺人，比较具体字段、署名位置与别名 | 3；事实类字段（年份、厂牌、目录号、条码）只收外部对象实际给出的值 |
-| 库内 | 重读真实标签或人工确定的事实：两艺人各有规范化同名且曲目数相等的发行，或同一发行不同曲目的同一署名位置；名字纠正按独立记录的多数写法（过半，平票无结论） | 2，来源 `library_evidence` |
-| 带引用的网页 | 绑定本项实际的搜索结果，后端经安全取页读回正文并核对摘录确实在页中 | 2，来源 `web_search` |
-
-- 只有模型自己的判断（即使多次一致）不写入。没有佐证、网络搜索可用时先转联网求证；仍没有的记为未采用的建议。
-- 艺人合并新入口经 `operations.Run` 与 `CurationMergeExecutor`；两个名字曾在同一首曲目上并列署名即拒绝。发行合并只接受结构或外部强证据。
-- 纠正与补空分开：纠正要求身份已由结构确认、外部或库内给出不同的值、模型判断为错字且审查通过；规范化后相同、繁简、大小写、标点与外部源的特殊写法不改。
-
-### 26.4 未采用的建议
-
-- 复用 `curation_model_exceptions`：新增 `reason_code`（`review_rejected`、`review_uncertain`、`verification_declined`、`no_evidence`、`unverified_fact`）、`reasons`、`evidence`、`can_accept`；审查之前就结束的 `review` 为空。
-  判断为不同身份、写法或译名差异的以 `tool=observation, can_accept=false` 留档。
-- 写建议、结清原待定项与相关提案同一事务。迁移把旧的 `waiting_human` 待定项结清为 `resolved/suggestion_recorded`，例外保持 `open` 可手动采纳。
-- 手动采纳与不采纳沿用 `POST /exceptions/{id}/accept|decline`；不采纳才写“不再提出”。进度的 `waiting_human` 固定为 0，建议不计入待办。
-- `GET/PUT /settings` 返回 `max_request_tokens`、`daily_token_limit`、`model_concurrency`。进度的 `model` 返回 `configured`、`pause_kind`、`reason_detail`、`retry_at`、`can_retry`、`context_hint` 和共享的 `today`。`POST /model/retry` 使用相同管理员与同源校验，返回更新后的模型进度。
-- `GET /exceptions` 每项增上述四个字段，`review` 可空，`kind` 增三种 `verify_*`，`tool` 增 `submit_artist_media`、`submit_verification`、`observation`。
-
-## 27. 模型巡检与本地整理（整理链 D，2026-11-25）
-
-依据 ADR 0006 第 16.6 节。迁移 0092–0094。可行性测试见整理链父任务的 `research/patrol-feasibility-2026-11-25.md`。
-
-### 27.1 巡检
-
-- 只处理当前稳定、可见的库内名字里新出现或变化的：艺人名附最多三张专辑名，各艺人的专辑名列表另行分块；每块最多 32 项。名录内容按不可信数据传给模型。
-- 输出每个名字的规范身份 `原文名 | 拉丁写法` 与 confidence，以及问题清单（同一身份的不同名字、错字、同一专辑的不同写法）。提示词只判断身份与明确的错字，不翻译，不统一风格。
-- 结果持久化：原文、拉丁写法、confidence、问题、实际模型、`PatrolPromptVersion`、时间。更换模型、提示词版本升级都沿用已有结果；`POST /api/v1/admin/curation/repatrol`（管理员，无请求体，202）让稳定名录重新入队。
-- 归组：原文名或拉丁写法经 `textnorm` 规范化后任一相同即为同一组，confidence 为 low 的不参与，跨块也可关联。归组交 `verify_artist_merge`，明确错字与专辑异写交 `verify_name`；巡检本身不写曲库，写入按第 26.3 节的佐证规则。
-- 规范名经 `CanonicalNames` 供文字搜索优先使用，原写法作第二次尝试；`NamesPatrolled` 供第二档的启动条件。新规范名会唤醒受影响且尚未匹配的发行。
+## 27. 本地整理与显示名
 
 ### 27.2 显示名与搜索
 

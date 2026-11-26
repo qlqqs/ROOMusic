@@ -384,7 +384,7 @@ func metricsPendingStage(p metricsPending, system string) string {
 	if p.Route != "" {
 		return string(p.Route)
 	}
-	for _, route := range []model.TaskKind{model.LookupCandidate, model.WebFallback, model.VerifyEvidence, model.SelectCandidate} {
+	for _, route := range []model.TaskKind{model.TaskKind("lookup"), model.TaskKind("web"), model.VerifyEvidence, model.SelectCandidate} {
 		if strings.Contains(system, backgroundPrompt(route)) {
 			return string(route)
 		}
@@ -499,7 +499,7 @@ func (m *metricsModel) patrolTool(item metricsPending, evidence *upstreammock.Or
 	if err := json.Unmarshal(item.RawEvidence, &batch); err != nil {
 		return metricsToolCall{}, err
 	}
-	reply := curation.PatrolSubmission{ItemID: item.ID, Results: []curation.PatrolResult{}, Issues: []curation.PatrolIssue{}}
+	reply := legacyPatrolSubmission{ItemID: item.ID, Results: []legacyPatrolResult{}, Issues: []legacyPatrolIssue{}}
 	for _, n := range batch.Names {
 		if batch.Kind == "artist" {
 			canonical, confidence := m.canonical[n.Name], "high"
@@ -515,10 +515,10 @@ func (m *metricsModel) patrolTool(item metricsPending, evidence *upstreammock.Or
 			if m.lowNames[n.Name] || (m.manifestOracle && m.canonical[n.Name] == "") {
 				confidence = "low"
 			}
-			reply.Results = append(reply.Results, curation.PatrolResult{ID: n.ID, Canonical: canonical, Confidence: confidence})
+			reply.Results = append(reply.Results, legacyPatrolResult{ID: n.ID, Canonical: canonical, Confidence: confidence})
 		}
 		if batch.Kind == "album" && m.typos[n.Name] != "" && (evidence == nil || evidence.Seen(m.typos[n.Name])) {
-			reply.Issues = append(reply.Issues, curation.PatrolIssue{ID: n.ID, Kind: "typo", Suggested: m.typos[n.Name]})
+			reply.Issues = append(reply.Issues, legacyPatrolIssue{ID: n.ID, Kind: "typo", Suggested: m.typos[n.Name]})
 		}
 	}
 	return metricsToolCall{"submit_patrol", reply}, nil
@@ -854,7 +854,7 @@ func TestMetricsOracleModesUseCurrentItem(t *testing.T) {
 			var q metricsChatRequest
 			requireCurationOK(t, json.Unmarshal([]byte(`{"tools":[{"function":{"name":"search_music_metadata"}},{"function":{"name":"get_music_metadata"}}]}`), &q))
 			q.Messages = []upstreammock.OracleMessage{
-				{Role: "system", Content: backgroundPrompt(model.LookupCandidate)},
+				{Role: "system", Content: backgroundPrompt(model.TaskKind("lookup"))},
 				{Role: "user", Content: strings.Replace(current, "薄沙梯田", hiddenTitle, 1)},
 				{Role: "tool", Content: `<roomusic-source kind="tool" name="search_music_metadata">{"results":[{"mbid":"` + externalID + `"}]}</roomusic-source>`},
 				{Role: "user", Content: current},
@@ -881,7 +881,7 @@ func TestMetricsOraclePatrolAndLocalValues(t *testing.T) {
 	requireCurationOK(t, err)
 	open, err := m.patrolTool(item, nil)
 	requireCurationOK(t, err)
-	if len(closed.args.(curation.PatrolSubmission).Issues) != 0 || len(open.args.(curation.PatrolSubmission).Issues) != 1 {
+	if len(closed.args.(legacyPatrolSubmission).Issues) != 0 || len(open.args.(legacyPatrolSubmission).Issues) != 1 {
 		t.Fatalf("巡检建议的可见性异常 %+v / %+v", closed, open)
 	}
 	requireCurationOK(t, json.Unmarshal([]byte(`{"item_id":"本项","kind":"local_cleanup","evidence":{"directories":[{"path":"03 - 桦窗册"}]}}`), &item))
@@ -891,4 +891,20 @@ func TestMetricsOraclePatrolAndLocalValues(t *testing.T) {
 	if input.Title != "桦窗册" || input.Artist != "" {
 		t.Fatalf("本地整理越过可见片段 %+v", input)
 	}
+}
+
+type legacyPatrolResult struct {
+	ID         string `json:"id"`
+	Canonical  string `json:"canonical"`
+	Confidence string `json:"confidence"`
+}
+type legacyPatrolIssue struct {
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	Suggested string `json:"suggested"`
+}
+type legacyPatrolSubmission struct {
+	ItemID  string               `json:"item_id"`
+	Results []legacyPatrolResult `json:"results"`
+	Issues  []legacyPatrolIssue  `json:"issues"`
 }

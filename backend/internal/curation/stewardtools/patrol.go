@@ -8,32 +8,18 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
-const patrolTextSchema = `{"type":"string","minLength":1,"maxLength":4096}`
-
-func (a adapter) patrolTool(allowed availability) tool.Definition {
-	return tool.Definition{
-		Name: "submit_patrol", Description: "提交本块艺人规范身份和名录问题。专辑批的 results 为空；没有问题时 issues 为空。",
-		Scope: tool.ScopeShared, MinRole: tool.RoleAdmin, Available: allowed,
-		Input: json.RawMessage(`{"type":"object","additionalProperties":false,"required":["item_id","results","issues"],"properties":{
-			"item_id":` + idSchema + `,
-			"results":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["id","canonical","confidence"],"properties":{
-				"id":{"type":"string"},"canonical":` + patrolTextSchema + `,"confidence":{"type":"string","enum":["high","low"]}}}},
-			"issues":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["id","kind","suggested"],"properties":{
-				"id":{"type":"string"},"kind":{"type":"string","enum":["typo","album_variant","artist_alias"]},"suggested":` + patrolTextSchema + `}}}}}`),
-		Output: json.RawMessage(`{"type":"object"}`), Preview: a.submissionPreview("name_patrol", "提交名录巡检结果"), Handler: a.submitPatrol,
-	}
-}
+const localTextSchema = `{"type":"string","minLength":1,"maxLength":4096}`
 
 func (a adapter) localCleanupTool(allowed availability) tool.Definition {
 	return tool.Definition{
 		Name: "submit_local_cleanup", Description: "提交从本目录文字或字段的候选解码中提取的专辑标题、艺人或曲名，仅填写当前待整理字段。",
 		Scope: tool.ScopeShared, Revertible: true, MinRole: tool.RoleAdmin, Available: allowed,
 		Input: json.RawMessage(`{"type":"object","additionalProperties":false,"required":["item_id"],"properties":{
-			"item_id":` + idSchema + `,"title":` + patrolTextSchema + `,"artist":` + patrolTextSchema + `,
+			"item_id":` + idSchema + `,"title":` + localTextSchema + `,"artist":` + localTextSchema + `,
 			"tracks":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["track_id","title"],"properties":{
-				"track_id":` + idSchema + `,"title":` + patrolTextSchema + `}}},
+				"track_id":` + idSchema + `,"title":` + localTextSchema + `}}},
 			"track_artists":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["track_id","artist"],"properties":{
-				"track_id":` + idSchema + `,"artist":` + patrolTextSchema + `}}}}}`),
+				"track_id":` + idSchema + `,"artist":` + localTextSchema + `}}}}}`),
 		Output:  json.RawMessage(`{"type":"object"}`),
 		Preview: a.submissionPreview("local_cleanup", "按本地文字整理"),
 		Handler: a.submitLocalCleanup,
@@ -49,7 +35,7 @@ func (a adapter) submissionPreview(kind, summary string) func(context.Context, t
 		if json.Unmarshal(raw, &in) != nil {
 			return tool.Preview{}, invalid()
 		}
-		_, item, err := a.patrolItem(ctx, c, in.ItemID, kind)
+		_, item, err := a.localItem(ctx, c, in.ItemID, kind)
 		if err != nil {
 			return tool.Preview{}, err
 		}
@@ -57,7 +43,7 @@ func (a adapter) submissionPreview(kind, summary string) func(context.Context, t
 	}
 }
 
-func (a adapter) patrolItem(ctx context.Context, c tool.Caller, id, kind string) (*curation.ModelRun, curation.PendingItem, error) {
+func (a adapter) localItem(ctx context.Context, c tool.Caller, id, kind string) (*curation.ModelRun, curation.PendingItem, error) {
 	run, items, err := a.claimed(ctx, c)
 	if err != nil {
 		return nil, curation.PendingItem{}, err
@@ -66,26 +52,10 @@ func (a adapter) patrolItem(ctx context.Context, c tool.Caller, id, kind string)
 	if err != nil {
 		return nil, item, err
 	}
-	if run.TaskKind != "patrol_local" || item.Kind != kind {
+	if run.TaskKind != "local" || item.Kind != kind {
 		return nil, item, outOfBatch()
 	}
 	return run, item, nil
-}
-
-func (a adapter) submitPatrol(ctx context.Context, c tool.Caller, raw json.RawMessage) (json.RawMessage, error) {
-	var in curation.PatrolSubmission
-	if json.Unmarshal(raw, &in) != nil {
-		return nil, invalid()
-	}
-	run, item, err := a.patrolItem(ctx, c, in.ItemID, "name_patrol")
-	if err != nil {
-		return nil, err
-	}
-	err = a.writer.SubmitPatrol(bindItem(ctx, run, c, item), item, in)
-	if err != nil {
-		return nil, toolError(err)
-	}
-	return json.RawMessage(`{"status":"handled"}`), nil
 }
 
 func (a adapter) submitLocalCleanup(ctx context.Context, c tool.Caller, raw json.RawMessage) (json.RawMessage, error) {
@@ -93,7 +63,7 @@ func (a adapter) submitLocalCleanup(ctx context.Context, c tool.Caller, raw json
 	if json.Unmarshal(raw, &in) != nil {
 		return nil, invalid()
 	}
-	run, item, err := a.patrolItem(ctx, c, in.ItemID, "local_cleanup")
+	run, item, err := a.localItem(ctx, c, in.ItemID, "local_cleanup")
 	if err != nil {
 		return nil, err
 	}

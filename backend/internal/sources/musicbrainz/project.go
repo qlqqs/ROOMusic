@@ -13,7 +13,7 @@ func credits(cs []ArtistCredit) []sources.Credit {
 func release(e Entity, complete bool) sources.Release {
 	r := sources.Release{ID: e.ID, Title: e.Title, Disambiguation: e.Disambiguation, Artists: credits(e.ArtistCredit), Date: e.Date, Country: e.Country, Barcode: e.Barcode, Status: e.Status, Complete: complete}
 	if g := e.ReleaseGroup; g != nil {
-		r.Group = sources.Group{ID: g.ID, Title: g.Title, PrimaryType: g.PrimaryType, FirstReleaseDate: g.FirstReleaseDate}
+		r.Group = sources.Group{ID: g.ID, Title: g.Title, PrimaryType: g.PrimaryType, SecondaryTypes: g.SecondaryTypes, FirstReleaseDate: g.FirstReleaseDate}
 	}
 	for _, l := range e.LabelInfo {
 		r.Labels = append(r.Labels, sources.Label{Name: l.Label.Name, CatalogNumber: l.CatalogNumber})

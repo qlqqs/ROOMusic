@@ -19,6 +19,7 @@ type MatchOptions struct {
 	retry   *matchRetry
 }
 type SearchPage struct {
+	Query any `json:"query,omitempty"`
 	curation.PageInfo
 	Kind          string         `json:"kind"`
 	ReleaseCounts map[string]int `json:"release_counts,omitempty"`
@@ -116,6 +117,7 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 					if err != nil {
 						return MatchResult{}, err
 					}
+					prior = append(prior, SearchPage{Kind: "tag_id", Query: ids[0], IDs: nonemptyID(r.ID)})
 					if r.ID != "" {
 						if r.ID != ids[0] {
 							return MatchResult{}, sources.ErrInvalidResponse
@@ -173,6 +175,7 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 					}
 					ev := albumPageResult(page, false).Snapshot.Pages[0]
 					ev.Kind = method
+					ev.Query = q
 					prior = append(prior, ev)
 					if len(page.Items) == 0 {
 						continue
@@ -234,6 +237,7 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 	}
 	m, err := textSearch(ctx, searchInput, mode, names, f, rf, opts.Artists)
 
+	m.Snapshot.Pages = append(prior, m.Snapshot.Pages...)
 	m.Fingerprint = fingerprint
 	return m, err
 }
@@ -347,7 +351,9 @@ func queryText(ctx context.Context, mode string, e catalog.CurationEvidence, n S
 		}
 		if pf, ok := f.(curation.ReleasePageFinder); ok {
 			p, err := queryResult(pf.SearchReleasePage(ctx, q))
-			return albumPageResult(p, relaxed), err
+			m := albumPageResult(p, relaxed)
+			m.Snapshot.Pages[0].Query = q
+			return m, err
 		}
 		rows, err := queryResult(f.SearchReleases(ctx, sources.ReleaseQuery{Title: q.Title, Artist: q.Artist, TrackCount: q.TrackCount}))
 		return albumPageResult(curation.ReleasePage{Items: rows}, relaxed), err
@@ -362,7 +368,9 @@ func queryText(ctx context.Context, mode string, e catalog.CurationEvidence, n S
 	}
 	if pf, ok := rf.(curation.RecordingPageFinder); ok {
 		p, err := queryResult(pf.SearchRecordingPage(ctx, q))
-		return recordingPageResult(p, relaxed), err
+		m := recordingPageResult(p, relaxed)
+		m.Snapshot.Pages[0].Query = q
+		return m, err
 	}
 	rows, err := queryResult(rf.SearchRecordings(ctx, sources.RecordingQuery{Title: q.Title, Artist: q.Artist, LengthMS: q.LengthMS}))
 	return recordingPageResult(curation.RecordingPage{Items: rows}, relaxed), err
@@ -452,6 +460,7 @@ func textSearch(ctx context.Context, e catalog.CurationEvidence, mode string, na
 		}
 		pages = append(pages, page)
 		m.Snapshot.Pages = pages
+		m.Snapshot.Artists = artists
 		if len(artists) == 1 && !unknown {
 			for id := range artists {
 				e.ArtistMBID = id
@@ -469,7 +478,7 @@ func textSearch(ctx context.Context, e catalog.CurationEvidence, mode string, na
 func lookupArtist(ctx context.Context, f sources.ArtistFinder, name string) (map[string]sources.Artist, SearchPage, bool, error) {
 	var rows []sources.Artist
 	var err error
-	p := SearchPage{Kind: "artist"}
+	p := SearchPage{Kind: "artist", Query: name}
 	if pf, ok := f.(curation.ArtistPageFinder); ok {
 		page, ferr := queryResult(pf.SearchArtistPage(ctx, name))
 		rows, err, p.PageInfo = page.Items, ferr, page.PageInfo
@@ -526,4 +535,11 @@ func checkArtistNames(ctx context.Context, e catalog.CurationEvidence, rows []so
 		}
 	}
 	return e, known, nil
+}
+
+func nonemptyID(id string) []string {
+	if id == "" {
+		return nil
+	}
+	return []string{id}
 }

@@ -145,3 +145,5 @@ safe errors/logs, and tests.
 See [Engineering Principles](../guides/engineering-principles.md),
 [Modular Design](../guides/modular-design.md), and the
 Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）.
+
+固定样本 one-char 和 romanized 的脚本回复使用 B2 名字线索，分别检验错字与罗马字标题。以实际 MusicBrainz 请求和外部版、录音对应评分。

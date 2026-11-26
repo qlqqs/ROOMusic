@@ -267,7 +267,6 @@ func metricDrain(t *testing.T, app *integrationTestApplication, admin *integrati
 func metricDrainResult(t *testing.T, app *integrationTestApplication, admin *integrationTestUser, clock *programClock, endpoint *metricsModel, entry metricEntry, allowRetry bool) string {
 	t.Helper()
 	sample := entry.sample.ID
-	writer := curation.NewWriter(app.database, app.dataDirectory, nil)
 	var p metricProgress
 	for round := 1; round <= 12; round++ {
 		before := metricCheckpoint(t, app)
@@ -313,9 +312,7 @@ func metricDrainResult(t *testing.T, app *integrationTestApplication, admin *int
 				recognitionSettled = true
 			}
 		}
-		patrolled, err := writer.NamesPatrolled(t.Context(), entry.release)
-		requireCurationOK(t, err)
-		if patrolled && programDrained && p.LastPassFinishedAt != nil && p.LastPassFinishedAt.Equal(tick) &&
+		if programDrained && p.LastPassFinishedAt != nil && p.LastPassFinishedAt.Equal(tick) &&
 			recognitionSettled && metricCheckpoint(t, app) == before {
 			if p.Model.Items.WaitingModel == 0 || allowRetry && p.Model.Items.WaitingModel == int64(len(metricSourceRetries(t, app, tick))) {
 				return ""

@@ -85,9 +85,9 @@ func (q schedulerRequest) selectCandidate(t *testing.T, itemID, externalID strin
 	if len(q.Tools) != 0 {
 		t.Fatalf("第一档附带了工具：%+v", q.Tools)
 	}
-	decision := map[string]string{"item_id": itemID, "decision": "upgrade"}
+	decision := map[string]string{"item_id": itemID, "decision": "undetermined", "reason": "没有可核实的候选"}
 	if externalID != "" {
-		decision["decision"], decision["external_id"] = "select", externalID
+		decision["decision"], decision["selected_id"] = "judge", externalID
 	}
 	raw, err := json.Marshal(map[string]any{"items": []any{decision}})
 	requireCurationOK(t, err)
@@ -425,7 +425,7 @@ func TestPostgreSQLCurationModelConcurrency(t *testing.T) {
 	}
 	verify := func(release string) string {
 		return queueModelVerification(t, f, "verify_name", curation.VerificationCandidate{
-			ReleaseID: release, Field: "title", Before: "原题", After: "候选标题",
+			ReleaseID: release, Field: "title", Before: "原题", After: "原提", Structure: true,
 		})
 	}
 	next := func() (metricsPending, schedulerRequest) {
@@ -448,16 +448,10 @@ func TestPostgreSQLCurationModelConcurrency(t *testing.T) {
 		}
 	}
 
-	// 只投影这张发行的巡检输入，让它实际领取后再准备冲突项。
-	ctx := t.Context()
-	tx, err := f.application.database.BeginTx(ctx, nil)
-	requireCurationOK(t, err)
-	defer tx.Rollback()
-	requireCurationOK(t, curation.ProjectPatrolInputs(ctx, tx, []string{f.a}))
-	requireCurationOK(t, tx.Commit())
+	f.pending(t, f.a)
 	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 1})
 	patrol, patrolRequest := next()
-	if patrol.Kind != "name_patrol" || patrol.ReleaseID != f.a {
+	if patrol.Kind != "release_match" || patrol.ReleaseID != f.a {
 		t.Fatalf("期望先领取发行巡检，收到 %+v", patrol)
 	}
 	checkProgress(1, 1)
@@ -839,7 +833,7 @@ func TestPostgreSQLCurationModelRulesDirectoryAndPriority(t *testing.T) {
 	f.update(t, "PUT", curationBase+"/settings", map[string]string{"model": "curation-override"})
 	match := f.pending(t, f.a)
 	verify := queueModelVerification(t, f, "verify_name", curation.VerificationCandidate{
-		ReleaseID: f.b, Field: "title", Before: "原题", After: "合成核对标题",
+		ReleaseID: f.b, Field: "title", Before: "原题", After: "原提", Structure: true,
 	})
 	var directory []string
 	for i := range 6 {
@@ -868,7 +862,7 @@ func TestPostgreSQLCurationModelRulesTargetMutualExclusion(t *testing.T) {
 	f.configure(t, &f.admin)
 	first := f.pending(t, f.a)
 	conflicting := queueModelVerification(t, f, "verify_name", curation.VerificationCandidate{
-		ReleaseID: f.a, Field: "title", Before: "原题", After: "合成同发行核对标题",
+		ReleaseID: f.a, Field: "title", Before: "原题", After: "原提", Structure: true,
 	})
 	peer := f.pending(t, f.b)
 	waiting := curationRulePending(t, f, "并发上限后的发行")

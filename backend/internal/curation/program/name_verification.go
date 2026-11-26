@@ -17,10 +17,16 @@ import (
 
 // 同一套比较从实际曲目和发行资料得出可纠正的字段。提案不能提供身份、结构或外部值。
 func structuralNameValues(e catalog.CurationEvidence, m MatchResult) []curation.VerificationCandidate {
+	return matchNameValues(e, m, false)
+}
+func matchNameValues(e catalog.CurationEvidence, m MatchResult, all bool) []curation.VerificationCandidate {
 	if m.Status != "matched" || m.Level == "artist" {
 		return nil
 	}
 	if m.Level == "release_group" {
+		if all && m.GroupID != "" && e.ReleaseGroupMatchID == m.GroupID && m.GroupTitle != "" {
+			return []curation.VerificationCandidate{{ReleaseID: e.ID, Field: "title", Before: e.Title, After: m.GroupTitle, ExternalID: m.GroupID, ExternalType: "release_group"}}
+		}
 		if v := groupTitleCandidate(e, m.GroupID, m.GroupTitle); v != nil {
 			return []curation.VerificationCandidate{*v}
 		}
@@ -28,7 +34,7 @@ func structuralNameValues(e catalog.CurationEvidence, m MatchResult) []curation.
 	}
 	var values []curation.VerificationCandidate
 	add := func(track, field, old, value, external string, auth metadata.Authenticity, protected bool) {
-		if !protected && auth == metadata.Real && old != "" {
+		if value != "" && (all || !protected && auth == metadata.Real && old != "") {
 			values = append(values, curation.VerificationCandidate{ReleaseID: e.ID, TrackID: track, Field: field, Before: old, After: value, Structure: true, ExternalID: external, ExternalValue: value})
 		}
 	}
@@ -97,6 +103,9 @@ func nameSourceOperation(ctx context.Context, q operations.Queryer, v curation.V
 }
 
 func saveNameDifferences(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidence, m MatchResult) error {
+	if err := saveMatchNames(ctx, tx, e, m); err != nil {
+		return err
+	}
 	for _, v := range structuralNameValues(e, m) {
 		if v.After == "" || sameText(v.Before, v.After) {
 			continue
@@ -265,4 +274,79 @@ func (m *ModelMatcher) RetryStaleVerification(ctx context.Context, item curation
 		}
 	}
 	return m.writer.HandleStaleVerification(ctx, item, IdentityDigest(e), candidate)
+}
+
+func saveMatchNames(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidence, m MatchResult) error {
+	values := matchNameValues(e, m, true)
+	if len(values) == 0 {
+		return nil
+	}
+	type name struct {
+		Target     string `json:"target"`
+		ID         string `json:"id"`
+		SourceType string `json:"source_type"`
+		External   string `json:"external"`
+		Field      string `json:"field"`
+		Value      string `json:"value"`
+	}
+	rows := make([]name, 0, len(values))
+	for _, v := range values {
+		sourceType, id := v.NameLinkTarget()
+		target := "release"
+		if v.TrackID != "" {
+			target = "track"
+		}
+		rows = append(rows, name{target, id, sourceType, v.ExternalID, v.Field, v.After})
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO curation_match_names(release_id,target_type,target_id,field,mb_value,external_id,basis_link_id,basis_operation_id)
+ SELECT $1,n.target,n.id,n.field,n.value,l.external_id,l.id,l.operation_id
+ FROM jsonb_to_recordset($2::jsonb) n(target text,id uuid,source_type text,external text,field text,value text)
+ JOIN external_links l ON l.source='musicbrainz' AND l.object_type=n.source_type AND l.object_id=n.id AND l.external_id=n.external AND l.operation_id IS NOT NULL
+ ON CONFLICT(release_id,target_type,target_id,field,basis_link_id) DO UPDATE SET mb_value=excluded.mb_value,basis_operation_id=excluded.basis_operation_id
+ WHERE (curation_match_names.mb_value,curation_match_names.basis_operation_id) IS DISTINCT FROM (excluded.mb_value,excluded.basis_operation_id)`, e.ID, jsonValue(rows))
+	return err
+}
+
+// 旧库按已经对应的编号补读详情，不进入识别队列。
+func (m *ModelMatcher) RefreshMatchNames(ctx context.Context, id string) error {
+	var needed bool
+	err := m.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM external_links l WHERE l.source='musicbrainz' AND l.object_type IN ('release','release_group_match','track') AND (l.object_id=$1 OR l.object_id IN (SELECT t.id FROM tracks t JOIN media d ON t.medium_id=d.id WHERE d.release_id=$1)) AND NOT EXISTS(SELECT FROM curation_match_names n WHERE n.basis_link_id=l.id))`, id).Scan(&needed)
+	if err != nil || !needed {
+		return err
+	}
+	e, err := m.evidence(ctx, m.db, id)
+	if err != nil {
+		return err
+	}
+	var match MatchResult
+	if e.ExternalID != "" {
+		match, err = m.readMatch(ctx, "release_match", e, e.ExternalID)
+	} else if len(e.Tracks) == 1 && e.Tracks[0].ExternalID != "" {
+		match, err = m.readMatch(ctx, "recording_match", e, e.Tracks[0].ExternalID)
+	} else if e.ReleaseGroupMatchID != "" {
+		g, readErr := m.sources.ReleaseGroupDetails(ctx, "musicbrainz", e.ReleaseGroupMatchID)
+		err = readErr
+		match = MatchResult{Status: "matched", Level: "release_group", GroupID: g.ID, GroupTitle: g.Title}
+	} else {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	fresh, err := m.evidence(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	if fresh.FileDigest != e.FileDigest {
+		return staleItem()
+	}
+	if err = saveMatchNames(ctx, tx, fresh, match); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

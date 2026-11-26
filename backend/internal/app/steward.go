@@ -158,9 +158,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	}
 	for _, d := range definitions {
 		register(registry, d)
-		if configuration.writer != nil && d.Name != "merge_releases" && backgroundToolAllowed(d.Name) {
-			register(backgroundRegistry, d)
-		}
+
 	}
 	if configuration.writer != nil {
 		for _, d := range curationtools.StewardTools(configuration.writer, configuration.matcher, configuration.mockHost) {
@@ -217,7 +215,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		return runtime.ReviewEvidenceFacts{Targets: raw, External: external, ReleaseMerge: merge, ArtistIdentity: identity.Facts, RecentOperationCount: len(page.Items)}, err
 	}
 	runner := runtime.NewRunner(store, registry, logger).WithMemories(memories).WithReviewEvidence(evidence)
-	background := runtime.NewRunner(store, backgroundRegistry, logger).WithReviewEvidence(evidence)
+	background := runtime.NewRunner(store, backgroundRegistry, logger)
 	supervisor = runtime.NewSupervisor(lifecycle, curationRunners{runner, background}, logger)
 	tokens := token.NewStore(database, guard)
 	mux.Handle("/api/v1/mcp", stewardmcp.New(guard, tokens, store, registry, logger))

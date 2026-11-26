@@ -221,7 +221,7 @@ func (w *Worker) identifyArtists(ctx context.Context, local catalog.CurationArti
 			}
 			proposals = append(proposals, curation.ArtistCreditProposal{
 				Local:    curation.ProposalLocalCredit{ArtistID: p.local.ArtistID, Position: p.local.Position, Name: p.local.Name, Role: g.role, TrackID: g.trackID},
-				External: curation.ProposalExternalCredit{Provider: "musicbrainz", ArtistID: p.external.ArtistID, CreditName: p.external.Name, PrimaryName: a.Name, Aliases: aliases},
+				External: curation.ProposalExternalCredit{Provider: "musicbrainz", ArtistID: p.external.ArtistID, CreditName: p.external.Name, PrimaryName: a.Name, Country: a.Country, Disambiguation: a.Disambiguation, Aliases: aliases},
 				Basis:    curation.ProposalCreditBasis{Level: level, Rule: m.Rule, ExternalID: id, Roles: roles},
 			})
 		}

@@ -3,6 +3,7 @@
 package httpapi
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 
 // Handlers 汇集目录相关的 HTTP handler：读取与发行信息的受治理写入。
 type Handlers struct {
+	refreshNames    func(context.Context, string) error
 	database        *sql.DB
 	guard           *identity.Guard
 	store           *catalog.Store
@@ -32,6 +34,10 @@ type Handlers struct {
 
 // Option 配置目录 handler 的非默认能力。
 type Option func(*Handlers)
+
+func WithMatchNames(refresh func(context.Context, string) error) Option {
+	return func(h *Handlers) { h.refreshNames = refresh }
+}
 
 // WithAnalysisVersion 注入当前后台分析器版本，用于读取与版本匹配的分析快照。
 func WithAnalysisVersion(version int16) Option {
@@ -201,7 +207,18 @@ func (handlers *Handlers) releaseDetail(responseWriter http.ResponseWriter, requ
 		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_error", "无法读取整理证据")
 		return
 	}
-	detail := catalog.ReleaseDetail{
+	if handlers.refreshNames != nil {
+		_ = handlers.refreshNames(request.Context(), releaseID)
+	}
+	names, err := store.MatchNames(request.Context(), releaseID)
+	if err != nil {
+		handlers.writeReleaseLoadError(responseWriter, request, err)
+		return
+	}
+	for i := range names {
+		names[i].CanAdopt = names[i].CanAdopt && user.Role == "admin"
+	}
+	detail := catalog.ReleaseDetail{MusicBrainzNames: names,
 		ReleaseSummary:  summary,
 		CandidateKind:   header.CandidateKind,
 		Genres:          header.Genres,

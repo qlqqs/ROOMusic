@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -130,17 +129,16 @@ func TestPostgreSQLLiveGapsGroupTitle(t *testing.T) {
 
 func TestPostgreSQLLiveGapsReviewedEditions(t *testing.T) {
 	t.Run("提交说明", func(t *testing.T) {
-		explanations := map[string]string{"第二档": backgroundPrompt(model.LookupCandidate), "联网": backgroundPrompt(model.WebFallback)}
-		for _, tool := range stewardtools.StewardTools(nil, nil) {
-			if tool.Name == "resolve_release_match" {
-				explanations[tool.Name] = tool.Description
+		prompt := backgroundPrompt(model.SelectCandidate)
+		if !strings.Contains(prompt, "selected_id") || !strings.Contains(prompt, "groups") {
+			t.Fatal(prompt)
+		}
+		for _, tdef := range stewardtools.StewardTools(nil, nil) {
+			if tdef.Name == "resolve_release_match" {
+				t.Fatal("后台仍开放旧版匹配工具")
 			}
 		}
-		for which, msg := range explanations {
-			if !strings.Contains(msg, "发行组") || !(strings.Contains(msg, "任一") || strings.Contains(msg, "任意") || strings.Contains(msg, "一个吻合")) {
-				t.Errorf("%s 未说明可提交任一吻合版本并只落发行组：%s", which, msg)
-			}
-		}
+
 	})
 	t.Run("三首曲目经审查也只能建立组级对应", func(t *testing.T) {
 		s := liveGapsEditions(3)
@@ -214,90 +212,19 @@ func TestPostgreSQLLiveGapsModelEvidence(t *testing.T) {
 	gate.ready.Store(true)
 	f := newSchedulerFixtureWithSources(t, gate, liveGapsSource(t, s))
 	target, _ := liveGapsLocal(t, f, s, s.Local.Album)
-	const canonical = "雾港刻钟三重奏"
-	publishSearch(t, f.application)
-	tx, err := f.application.database.BeginTx(t.Context(), nil)
-	requireCurationOK(t, err)
-	defer tx.Rollback()
-	requireCurationOK(t, curation.ProjectPatrolInputs(t.Context(), tx, []string{target}))
-	requireCurationOK(t, tx.Commit())
-	mustExec(t, f.application, `UPDATE curation_patrol_names SET needs_patrol=false,confidence='high',patrolled_at=now(),model='合成巡检模型',prompt_version=1,original_name=CASE WHEN kind='artist' THEN $1 ELSE name END`, canonical)
-	_, known, err := f.writer.CanonicalPatrolNames(t.Context(), target, "")
-	requireCurationOK(t, err)
-	if known != canonical {
-		t.Fatalf("后端应有巡检规范名 %s，实际 %q", canonical, known)
-	}
-	p := modelRouteFixture(t, f, f.pending(t, target), "lookup")
+	item := f.pending(t, target)
 	f.configure(t, &f.admin)
-	configureModelWeb(t, f)
 	f.enable(t)
-	first := f.next(t, false)
-	var local string
-	requireCurationOK(t, json.Unmarshal(first.Messages[len(first.Messages)-1].Content, &local))
-	for _, need := range []string{"fact", "组级", "时长"} {
-		if !strings.Contains(local, need) {
-			t.Errorf("首条消息缺少写入要求 %q", need)
+	request := f.next(t, false)
+	prompt := curationRulePrompt(t, request)
+	for _, need := range []string{"authenticity", "duration_seconds", "disc", s.Local.Tracks[2].Title} {
+		if !strings.Contains(prompt, need) {
+			t.Errorf("首条消息缺少本地依据 %q", need)
 		}
 	}
-	first.tool(t, "read_pending_items", map[string]any{"item_ids": []string{p.ID}})
-	read := f.next(t, false)
-	result := read.lastToolResult(t)
-	// 只将成功的本项读回与首条消息合并。权限失败时首条消息仍可独立提供完整依据。
-	if strings.Contains(result, p.ID) && strings.Contains(result, `"evidence"`) {
-		local += "\n" + result
-	} else {
-		t.Logf("read_pending_items 未返回本项证据：%s", result)
+	if len(request.Tools) != 0 {
+		t.Fatal("识别请求带有工具")
 	}
-	for _, need := range []string{"authenticity", "duration_seconds", "disc", s.Local.Tracks[2].Title, canonical} {
-		if !strings.Contains(local, need) {
-			t.Errorf("首条消息与本项工具结果合计缺少本地依据 %q", need)
-		}
-	}
-	r := s.External.Releases[0]
-	read.tool(t, "get_music_metadata", map[string]any{"entity": "release_group", "mbid": r.Group, "include": []string{"releases"}})
-	group := f.next(t, false)
-	got := group.lastToolResult(t)
-	for _, value := range []string{r.GroupTitle, r.ID, s.External.Releases[1].ID, `"track_count":3`} {
-		if !strings.Contains(got, value) {
-			t.Errorf("组详情没有 %q：%s", value, got)
-		}
-	}
-	group.tool(t, "get_music_metadata", map[string]any{"entity": "release", "mbid": r.ID, "include": []string{"recordings", "artist-credits"}})
-	detail := f.next(t, false)
-	got = detail.lastToolResult(t)
-	for _, v := range []string{s.Local.Tracks[2].Title, fmt.Sprint(r.Tracks[2].Length), s.External.Artists[0].ID} {
-		if !strings.Contains(got, v) {
-			t.Errorf("版本明细没有 %q：%s", v, got)
-		}
-	}
-	detail.tool(t, "get_music_metadata", map[string]any{"entity": "artist", "mbid": s.External.Artists[0].ID, "include": []string{"aliases"}})
-	artist := f.next(t, false)
-	if got = artist.lastToolResult(t); !strings.Contains(got, s.External.Artists[0].Aliases[0]) {
-		t.Errorf("艺人详情没有登记别名：%s", got)
-	}
-	const reason = "两版同名，首版封底刊号模糊，请核对内页"
-	// 缺失对象的 404 应有独立错误码。这次失败之后仍可按正常路线升级。
-	artist.tool(t, "get_music_metadata", map[string]string{"entity": "release", "mbid": uuid.New()})
-	absent := f.next(t, false)
-	if got := absent.lastToolResult(t); !strings.Contains(got, "not_found") || strings.Contains(got, "source_unavailable") {
-		t.Errorf("缺失的发行详情没有明确报告查无结果：%s", got)
-	}
-	// 另一个确实存在的编号只有一首歌。后档还应知道后端拒绝过它的具体原因。
-	absent.tool(t, "resolve_release_match", map[string]any{"item_id": p.ID, "external_id": wrong.ID, "basis": map[string]string{"note": "比较另一张单曲的结构"}})
-	rejected := f.next(t, false)
-	if got := rejected.lastToolResult(t); !strings.Contains(got, "track_count") {
-		t.Fatalf("未实际触发曲数反证：%s", got)
-	}
-	rejected.tool(t, "shelve_pending_item", map[string]string{"item_id": p.ID, "reason": reason})
-	web := f.next(t, false)
-	var msg string
-	requireCurationOK(t, json.Unmarshal(web.Messages[len(web.Messages)-1].Content, &msg))
-	if !strings.Contains(msg, reason) {
-		t.Error("联网首条消息缺少上一档放弃的实际原因")
-	}
-	if !strings.Contains(msg, "track_count") && !strings.Contains(msg, "曲数") && !strings.Contains(msg, "曲目数") {
-		t.Error("联网首条消息缺少前档曲数不符的拒绝原因")
-	}
-	f.pause(t)
-	web.complete(t)
+	request.undetermined(t, item.ID, "没有可核实的候选")
+	modelWaitResolution(t, f, item.ID, "undetermined")
 }

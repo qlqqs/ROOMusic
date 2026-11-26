@@ -48,10 +48,6 @@ func (e artistEvidence) shouldClose() bool {
 	return !e.waitingForRecognition && e.pendingStatus != "" && reason != "" && !(reason == "filled" && e.pendingStatus == "in_progress")
 }
 
-func (e artistEvidence) missingWebItem(providers artistProviders) bool {
-	return e.NoLink && providers.active["web_search"] && e.resolution() == "" && e.pendingStatus == "" && !e.finishedForInput
-}
-
 const artistMediaCandidatesSQL = `SELECT a.id FROM artists a
 WHERE a.id>COALESCE(NULLIF($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
   AND NOT EXISTS (SELECT FROM artist_overrides o WHERE o.artist_id=a.id AND o.redirect_artist_id IS NOT NULL)
@@ -239,22 +235,13 @@ func (w *Worker) artistProviders(ctx context.Context) (artistProviders, error) {
 	var namedPlugin bool
 	for _, s := range settings {
 		switch s.ID {
-		case "musicbrainz", "wikidata", "commons", "wikipedia", "fanarttv", "theaudiodb", "web_search":
+		case "musicbrainz", "wikidata", "commons", "wikipedia", "fanarttv", "theaudiodb":
 		default:
 			if !strings.HasPrefix(s.ID, "plugin:") || !slices.Contains(s.Capabilities, sources.ArtistImageLookup) && !slices.Contains(s.Capabilities, sources.ArtistBioLookup) {
 				continue
 			}
 		}
 		active[s.ID] = s.Active
-		if s.ID == "web_search" {
-			for _, requirement := range s.Requirements {
-				if requirement.Ready {
-					state = append(state, s.ID+"/"+requirement.Kind)
-				} else {
-					active[s.ID] = false
-				}
-			}
-		}
 		if strings.HasPrefix(s.ID, "plugin:") && s.Active {
 			namedPlugin = true
 		}
@@ -316,8 +303,7 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 	}
 	if e.NoLink {
 		canUpgrade := providers.namedPlugin && min(e.ImageRank, e.BioRank) < catalog.ArtistMediaPluginRank
-		canQueue := providers.active["web_search"] && e.resolution() == ""
-		if !e.hasCredits || !canUpgrade && !canQueue {
+		if !e.hasCredits || !canUpgrade {
 			return nil
 		}
 	} else if !e.needsPrimaryName(providers) && e.ImageRank >= catalog.ArtistMediaLicensedRank && e.BioRank >= catalog.ArtistMediaLicensedRank {
@@ -325,7 +311,7 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 	}
 	input := digest([]any{e, providers.digest})
 	// 模型写入一项资料后结束原项，程序用当前缺口和摘要建立下一项。
-	if !e.missingWebItem(providers) && !needsWork(subject, state, input, w.opts.Now(), false) {
+	if !needsWork(subject, state, input, w.opts.Now(), false) {
 		return nil
 	}
 	if err := w.ready(ctx); err != nil {
@@ -351,7 +337,7 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 	if e.ImageRank == 0 && e.BioRank == 0 {
 		state.Status = "no_match"
 	}
-	if e.NoLink && (e.pendingStatus != "" || providers.active["web_search"]) {
+	if e.NoLink && e.pendingStatus != "" {
 		return w.finishArtistState(ctx, e, providers, &state)
 	}
 	return curation.SaveWorkState(ctx, w.db, state)
@@ -359,11 +345,6 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 
 // 建项或收尾时在目录写锁内重读。资料写入、认领和当前批次外的人工改动可能发生在插件查询期间。
 func (w *Worker) finishArtistState(ctx context.Context, observed artistEvidence, p artistProviders, state *curation.WorkState) error {
-	if state != nil && p.active["web_search"] && observed.resolution() == "" {
-		if err := w.sources.Check(ctx, "web_search"); err != nil {
-			return err
-		}
-	}
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -388,13 +369,6 @@ func (w *Worker) finishArtistState(ctx context.Context, observed artistEvidence,
 			if err := curation.ResolvePendingItems(ctx, tx, e.ID, "artist_identity", reason); err != nil {
 				return err
 			}
-		}
-	} else if state != nil && p.active["web_search"] {
-		input := digest([]any{e, p.digest})
-		evidence := map[string]any{"authenticity": e.sampleAuthenticity(), "names": e.Names, "albums": e.Albums, "tracks": e.Tracks, "gaps": map[string]bool{"image": e.ImageRank == 0, "bio": e.BioRank == 0}}
-		item := curation.PendingItem{TargetType: "artist", ArtistID: e.ID, Kind: "artist_identity", RuleVersion: resourceRuleVersion, InputDigest: input, Evidence: jsonValue(evidence)}
-		if err := curation.UpsertPendingItem(ctx, tx, item); err != nil {
-			return err
 		}
 	}
 	if state != nil {

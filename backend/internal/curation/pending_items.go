@@ -49,7 +49,8 @@ func CheckMatchItem(ctx context.Context, tx *sql.Tx, item PendingItem, conversat
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM curation_pending_items
  WHERE id=$1 AND (target_id=NULLIF($2,'')::uuid OR (artist_id=NULLIF($7,'')::uuid
  AND NOT EXISTS(SELECT FROM artist_overrides o WHERE o.artist_id=curation_pending_items.artist_id AND o.redirect_artist_id IS NOT NULL)))
- AND kind=$3 AND input_digest=$4
+ AND kind=$3 AND input_digest=$4 AND (target_id IS NULL OR EXISTS (SELECT FROM curation_eligible_releases WHERE id=target_id))
+ AND (kind<>'release_merge' OR EXISTS(SELECT FROM curation_eligible_releases e WHERE e.id::text=curation_pending_items.candidates->0->>'release_id'))
  AND ((NOT $6 AND conversation_id=NULLIF($5,'')::uuid AND status='in_progress') OR ($6 AND status='resolved' AND EXISTS (
  SELECT FROM curation_model_exceptions x WHERE x.id=NULLIF($8,'')::uuid AND x.pending_item_id=curation_pending_items.id AND (resolution='suggestion_recorded' OR x.reason_code='unverified_fact') AND
  (($10 AND x.status='open') OR (NOT $10 AND x.status='accepting' AND x.decided_by=NULLIF($9,'')::uuid)) FOR SHARE OF x))) FOR SHARE)`,
@@ -64,8 +65,12 @@ func CheckMatchItem(ctx context.Context, tx *sql.Tx, item PendingItem, conversat
 }
 
 // PendingTargetVisibleSQL 与 visible 发行 CTE 共用，只调度未并入其他身份的艺人。
-const PendingTargetVisibleSQL = `(EXISTS(SELECT FROM visible v WHERE v.id=p.target_id)
- OR (p.artist_id IS NOT NULL AND NOT EXISTS(SELECT FROM artist_overrides o WHERE o.artist_id=p.artist_id AND o.redirect_artist_id IS NOT NULL)))`
+const PendingTargetVisibleSQL = `(p.kind IN ('local_cleanup','release_match','recording_match','verify_name','verify_artist_credit','verify_artist_merge','release_merge')
+ AND EXISTS(SELECT FROM visible v JOIN curation_eligible_releases e ON e.id=v.id WHERE v.id=p.target_id)
+ AND NOT EXISTS(SELECT FROM curation_artist_negative_pairs neg WHERE neg.name_low=p.evidence->>'pair_low' AND neg.name_high=p.evidence->>'pair_high')
+ AND (p.kind<>'release_merge' OR EXISTS(SELECT FROM curation_eligible_releases e WHERE e.id::text=p.candidates->0->>'release_id'))
+ AND NOT EXISTS(SELECT FROM jsonb_array_elements_text(p.evidence->'release_ids') m(id)
+ WHERE p.kind='local_cleanup' AND NOT EXISTS (SELECT FROM curation_eligible_releases e WHERE e.id::text=m.id)))`
 
 func (w *Writer) ClaimPendingItems(ctx context.Context, conversation string, now time.Time, n int, targetTypes ...string) ([]PendingItem, error) {
 	if len(targetTypes) == 0 {
@@ -74,7 +79,7 @@ func (w *Writer) ClaimPendingItems(ctx context.Context, conversation string, now
 	return w.ClaimModelKind(ctx, conversation, now, n, targetTypes, "", "")
 }
 
-// ClaimModelKind 在同一语句内复核类别、释放时间及可见性并领取；第二档还限定已巡检的发行。
+// ClaimModelKind 在同一语句内复核类别、释放时间及可见性并领取。
 func (w *Writer) ClaimModelKind(ctx context.Context, conversation string, now time.Time, n int, targets []string, kind, releaseID string, excluded ...string) ([]PendingItem, error) {
 	return w.modelKindItems(ctx, conversation, now, n, targets, kind, releaseID, nil, excluded)
 }
@@ -118,7 +123,7 @@ func (w *Writer) modelKindItems(ctx context.Context, conversation string, now ti
 	// 按同一发行或艺人分组。只有自查和联网需要艺人投影。
 	prefix := "WITH visible AS (" + catalog.VisibleReleaseIDsSQL + ")"
 	group, albums := "p.kind", "0"
-	if kind == "patrol_local" || kind == "local" {
+	if kind == "local" {
 		// 同目录的本地整理共享一次会话。名录块已经由巡检按艺人或专辑分好。
 		group = "CASE WHEN p.kind='local_cleanup' THEN COALESCE(p.evidence->>'directory_key',p.id::text) ELSE p.id::text END"
 	}
@@ -135,7 +140,7 @@ func (w *Writer) modelKindItems(ctx context.Context, conversation string, now ti
 	}
 	group = "CASE WHEN p.single_request THEN p.id::text ELSE " + group + " END"
 	query := prefix + `, eligible AS (
- SELECT p.id,p.target_id,p.created_at,` + group + ` AS pack,` + albums + ` AS albums,
+ SELECT p.id,p.target_id,p.created_at,p.kind,p.evidence->>'pair_low' pair_low,p.evidence->>'pair_high' pair_high,` + group + ` AS pack,` + albums + ` AS albums,
  CASE WHEN $4='' THEN 0 ELSE ` + QueueRankSQL + ` END AS priority` + modelQueueFromSQL + `
  AND p.target_type=ANY($3::text[]) AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1)
  AND ($4='' OR ` + modelKindSQL + `=$4 OR ($4='unavailable_web' AND p.route='web'))
@@ -158,11 +163,11 @@ func (w *Writer) modelKindItems(ctx context.Context, conversation string, now ti
 		args = append(args, ids, versions)
 	}
 	query += `), seed AS (
- SELECT pack,priority FROM eligible WHERE $5='' OR target_id=NULLIF($5,'')::uuid
+ SELECT pack,priority,kind FROM eligible WHERE $5='' OR target_id=NULLIF($5,'')::uuid
  ORDER BY albums DESC,priority,created_at,id LIMIT 1
  ), picked AS (
  SELECT p.id,e.priority,e.albums FROM eligible e JOIN curation_pending_items p ON p.id=e.id
- WHERE ($4='' OR e.pack=(SELECT pack FROM seed)) AND ($4 NOT IN ('select','verify') OR e.priority=(SELECT priority FROM seed)) AND p.status IN ('waiting_model','waiting_route')`
+ WHERE ($4='' OR e.pack=(SELECT pack FROM seed)) AND ($4 NOT IN ('select','verify') OR e.priority=(SELECT priority FROM seed)) AND ($4<>'verify' OR e.kind=(SELECT kind FROM seed)) AND (e.pair_low IS NULL OR NOT EXISTS(SELECT FROM eligible same_pair WHERE same_pair.pair_low=e.pair_low AND same_pair.pair_high=e.pair_high AND (same_pair.created_at,same_pair.id)<(e.created_at,e.id))) AND p.status IN ('waiting_model','waiting_route')`
 	query += ` ORDER BY (e.target_id=NULLIF($5,'')::uuid) DESC NULLS LAST,e.albums DESC,e.priority,e.created_at,e.id LIMIT CASE WHEN $4='local' THEN NULL ELSE $2::int END`
 	rows := "curation_pending_items"
 	if conversation != "" {

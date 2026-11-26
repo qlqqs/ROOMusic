@@ -60,6 +60,7 @@ type CurationObservation struct {
 }
 
 type CurationTrack struct {
+	Comments                                                         []metadata.ScanComment           `json:"-"`
 	FirstArtistCredit                                                string                           `json:"-"`
 	Legacy                                                           LegacyCandidates                 `json:"-"`
 	RelativePath                                                     string                           `json:"-"`
@@ -369,7 +370,7 @@ const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_
  COALESCE((SELECT jsonb_object_agg(tags.kind,tags.ids) FROM (
      SELECT kind,jsonb_agg(value ORDER BY ordinal,value) AS ids FROM track_identifiers
      WHERE track_id=t.id AND kind IN ('mb_release','mb_release_group','mb_recording','mb_track','mb_artist','mb_album_artist','mb_disc','isrc')
-     GROUP BY kind) tags),'{}'::jsonb)
+     GROUP BY kind) tags),'{}'::jsonb),coalesce(t.scan_tags->'comments','[]'::jsonb)
  FROM media m JOIN tracks t ON t.medium_id=m.id AND t.source_status='present'
  LEFT JOIN track_corrections ct ON ct.track_id=t.id AND ct.field='title'
  LEFT JOIN track_corrections ca ON ca.track_id=t.id AND ca.field='artist'
@@ -394,11 +395,14 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 		var t CurationTrack
 		var releaseID string
 		var lyrics, staleTitle, staleArtist sql.NullString
-		var identifiers, observations []byte
+		var identifiers, observations, comments []byte
 		if err := rows.Scan(&releaseID, &t.ID, &t.Title, &t.Artist, &t.FirstArtistCredit, &t.EffectiveTitle, &t.EffectiveArtist,
 			&observations, &t.TitleCorrected, &t.ArtistCorrected, &t.TitleAutomatic, &t.ArtistAutomatic, &staleTitle, &staleArtist, &t.Disc, &t.DiscNumber, &t.Position, &t.WorkTitle,
 			&t.OtherIdentifier, &t.DurationSeconds, &t.RelativePath, &t.LocalTitle, &t.LocalArtist, &t.SourceKind, &t.SourceRootID, &t.CueSheetPath, &t.ParentFile, &t.CueISRC,
-			&t.CueIndexFrames, &t.CueEndFrames, &lyrics, &t.ExternalLyrics, &t.ExternalID, &identifiers); err != nil {
+			&t.CueIndexFrames, &t.CueEndFrames, &lyrics, &t.ExternalLyrics, &t.ExternalID, &identifiers, &comments); err != nil {
+			return err
+		}
+		if err := json.Unmarshal(comments, &t.Comments); err != nil {
 			return err
 		}
 		var observed map[string]struct {

@@ -15,11 +15,12 @@ import (
 
 // 重查期间仍保留首次未收录的时间，来源退避后从同一模式接上。
 type releaseReviewState struct {
-	Retry         *matchRetry `json:"retry,omitempty"`
-	Manual        bool        `json:"manual_recheck,omitempty"`
-	UnlistedSince *time.Time  `json:"unlisted_since,omitempty"`
-	RecheckedAt   *time.Time  `json:"rechecked_at,omitempty"`
-	Reason        string      `json:"reason,omitempty"`
+	Judge         *curation.JudgeCursor `json:"judge,omitempty"`
+	Retry         *matchRetry           `json:"retry,omitempty"`
+	Manual        bool                  `json:"manual_recheck,omitempty"`
+	UnlistedSince *time.Time            `json:"unlisted_since,omitempty"`
+	RecheckedAt   *time.Time            `json:"rechecked_at,omitempty"`
+	Reason        string                `json:"reason,omitempty"`
 }
 
 func previousReview(s curation.WorkState) (releaseReviewState, error) {
@@ -40,6 +41,12 @@ func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationE
 	review, err := previousReview(u.releaseState)
 	if err != nil {
 		return MatchResult{}, err
+	}
+	if c := review.Judge; c != nil && c.Files == e.FileDigest && c.Version == MatchRuleVersion && c.Generation == u.releaseState.Generation && u.releaseState.IdentityDigest == u.identityDigest {
+		cursor.Step = "model_hints"
+		u.programOnly = true
+		u.judge = c
+		return w.runJudge(ctx, e, c)
 	}
 	if previous := review.Retry; previous != nil && u.releaseState.MatchRuleVersion == MatchRuleVersion && previous.Files == e.FileDigest && u.releaseState.IdentityDigest == u.identityDigest {
 		*cursor = *previous
@@ -93,7 +100,7 @@ func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationE
 func (w *Worker) concludeMatch(ctx context.Context, u *unit, e catalog.CurationEvidence, m MatchResult) (out outcome, err error) {
 	out.match = m
 	if m.Status == "matched" {
-		if m.Level == "release_group" && m.GroupFirstReleaseDate == "" && e.Year == 0 && !e.Corrected["year"] && !e.Automatic["year"] && !u.offline {
+		if m.Level == "release_group" && m.GroupFirstReleaseDate == "" && e.Year == 0 && !e.Corrected["year"] && !e.Automatic["year"] && !u.offline && u.judge == nil {
 			m.GroupFirstReleaseDate, err = w.sources.GroupFirstReleaseDate(ctx, "musicbrainz", m.GroupID)
 			if err != nil {
 				return out, err
@@ -136,16 +143,19 @@ func (w *Worker) concludeMatch(ctx context.Context, u *unit, e catalog.CurationE
 			out.status = "done"
 		}
 	}
+	if slices.Contains(out.match.Conflicts, "request_limit") {
+		out.matchReason = "request_limit"
+	}
+	if slices.Contains(out.match.Conflicts, "ambiguous_editions") {
+		out.matchReason = "ambiguous_editions"
+	}
 	if out.status == "conflict" || out.status == "unmatched" && out.matchReason == "" {
 		model, err := curation.MatchModelConfigured(ctx, w.db)
 		if err != nil {
 			return out, err
 		}
 		if model && !u.programOnly {
-			out.match.Route = "lookup"
-			if len(out.match.modelCandidates()) > 0 {
-				out.match.Route = "select"
-			}
+			out.match.Route = "select"
 		} else {
 			out.match.Route = ""
 		}

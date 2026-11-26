@@ -93,7 +93,7 @@ func (r LinkRequest) normalizedLinks() ([]LinkIntent, error) {
 				}
 			case "release_group_match":
 				reviewed := r.Method == "independent_review" && (uuid.Valid(r.ApprovedReviewID) || r.ConfirmedBy != "")
-				if r.Source.Kind != "model" || r.ExternalSource != "musicbrainz" || r.Method != "album_structure" && !reviewed || r.CheckEvidence == nil {
+				if r.Source.Kind != "model" || r.ExternalSource != "musicbrainz" || r.Method != "album_structure" && r.Method != "model" && !reviewed || r.CheckEvidence == nil {
 					return nil, operations.Invalid("invalid_input", "发行组级对应缺少 MusicBrainz 结构核对")
 				}
 			}

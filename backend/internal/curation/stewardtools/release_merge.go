@@ -38,7 +38,7 @@ func (a adapter) previewMerge(ctx context.Context, c tool.Caller, raw json.RawMe
 	if err != nil {
 		return tool.Preview{}, toolError(err)
 	}
-	p := tool.Preview{Target: plan.Target.Title, Summary: "整张并入来源发行"}
+	p := tool.Preview{BackgroundDirect: true, Target: plan.Target.Title, Summary: "整张并入来源发行"}
 	for _, change := range program.ReleaseMergeChanges(plan.Source, plan.Target, plan.Token, plan.Hidden, plan.FavoritesMoved) {
 		p.Changes = append(p.Changes, tool.Change{Field: change.Field, Before: change.Before, After: change.After})
 	}
