@@ -135,7 +135,7 @@ func TestPostgreSQLCurationReleaseMergeProposed(t *testing.T) {
 				matcher := program.NewModelMatcher(f.application.database, f.writer, f.gate)
 				plan, err := matcher.Plan(t.Context(), item, remote.ID)
 				requireCurationOK(t, err)
-				_, err = matcher.Apply(t.Context(), plan, program.ApplyOptions{Key: uuid.New(), Batch: f.batch(t, "model"), PendingItemID: item.ID,
+				_, err = matcher.Apply(t.Context(), plan, program.ApplyOptions{Key: uuid.New(), Batch: f.batch(t, "model"), PendingItemID: item.ID, ApprovedReviewID: uuid.New(),
 					Source: curation.Source{Kind: "model", Provider: "test-model", Basis: "合成匹配依据"}})
 				requireCurationOK(t, err)
 				f.assertRelease(t, f.a, "matched", "model")

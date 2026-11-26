@@ -59,6 +59,17 @@ type Worker struct {
 }
 
 func NewWorker(db *sql.DB, writer *curation.Writer, sourceGate *curation.Sources, scanRunning func(context.Context) (bool, error), logger *slog.Logger, opts Options) *Worker {
+	if writer != nil {
+		if opts.NamesPatrolled == nil {
+			opts.NamesPatrolled = writer.NamesPatrolled
+		}
+		if opts.CanonicalNames == nil {
+			opts.CanonicalNames = func(ctx context.Context, releaseID, trackID string) (SearchNames, error) {
+				title, artist, err := writer.CanonicalPatrolNames(ctx, releaseID, trackID)
+				return SearchNames{Title: title, Artist: artist}, err
+			}
+		}
+	}
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}

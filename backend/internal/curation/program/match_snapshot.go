@@ -7,6 +7,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
+	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
@@ -374,6 +375,7 @@ func replayMatch(e catalog.CurationEvidence, candidates []Candidate, conflicts [
 	base.Conflicts = nil
 	base.Candidates = slices.Clone(pending.Candidates)
 	if method == "search" {
+		e = curation.LocalSearchEvidence(e)
 		if mode == "single" {
 			for _, c := range candidates {
 				if c.Recording == nil {

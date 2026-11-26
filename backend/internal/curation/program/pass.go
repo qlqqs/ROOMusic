@@ -378,11 +378,12 @@ func (w *Worker) saveConclusionOnce(ctx context.Context, e *catalog.CurationEvid
 	if state.Subject == "release" {
 		// 与模型结项沿用相同锁序，在待定项之后锁定工作状态并复核取证时的结论。
 		var generation int
+		var patrolRevision int64
 		var status string
 		previous := states.releases[e.ID]
-		err := tx.QueryRowContext(ctx, `SELECT generation,status FROM curation_work_states
- WHERE subject='release' AND target_id=$1 FOR UPDATE`, e.ID).Scan(&generation, &status)
-		if errors.Is(err, sql.ErrNoRows) || err == nil && (generation != previous.Generation || status != previous.Status) {
+		err := tx.QueryRowContext(ctx, `SELECT generation,status,patrol_revision FROM curation_work_states
+ WHERE subject='release' AND target_id=$1 FOR UPDATE`, e.ID).Scan(&generation, &status, &patrolRevision)
+		if errors.Is(err, sql.ErrNoRows) || err == nil && (generation != previous.Generation || status != previous.Status || (out.status != "matched" && patrolRevision != previous.PatrolRevision)) {
 			return errReleaseChanged
 		}
 		if err != nil {

@@ -33,6 +33,7 @@ func StewardTools(w *curation.Writer, m *program.ModelMatcher, mockHost ...sourc
 	}
 	available := func(ctx context.Context, c tool.Caller) bool { return c.Source == tool.SourceCuration }
 	return []tool.Definition{
+		a.patrolTool(available), a.localCleanupTool(available),
 		a.backgroundMergeReleases(),
 		a.verificationTool(available), a.identityTool(available), a.mediaTool(available),
 		{Name: "read_pending_items", Description: "读取本次自动整理领取的待定项、冲突与候选资料", Scope: tool.ScopeRead, Untrusted: true, MinRole: tool.RoleAdmin, Available: available,

@@ -52,6 +52,7 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 	record("curation/batch", "GET", curationBase+"/batches/"+batch, nil)
 	record("curation/settings-paused", "PUT", curationBase+"/settings", map[string]any{"paused": true, "web_daily_token_limit": 240000})
 	record("curation/progress", "GET", curationBase+"/progress", nil)
+	samples.recordEmpty("curation/repatrol", f.application.request(t, http.MethodPost, curationBase+"/repatrol", nil, &f.admin, nil), http.StatusAccepted)
 
 	record("curation/settings-model", "PUT", curationBase+"/settings", map[string]any{"model": "sample-model", "daily_token_limit": nil})
 	ctx := t.Context()

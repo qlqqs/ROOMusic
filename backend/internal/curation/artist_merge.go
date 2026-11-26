@@ -71,6 +71,24 @@ func (w *Writer) MergeArtists(ctx context.Context, r ArtistAutoMerge) (ArtistMer
 	return out, err
 }
 
+// SupersedeMergedArtistSuggestions 在合并事务中按旧身份收尾建议，包含待定项已结清的建议。
+func SupersedeMergedArtistSuggestions(ctx context.Context, tx *sql.Tx, mapping map[string]string) error {
+	artistIDs := make([]string, 0, len(mapping))
+	for original, resolved := range mapping {
+		if original != resolved {
+			artistIDs = append(artistIDs, original)
+		}
+	}
+	if len(artistIDs) == 0 {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE curation_model_exceptions x
+ SET status='superseded',decided_at=now(),decided_by=NULL
+ FROM curation_pending_items p
+ WHERE x.status='open' AND x.pending_item_id=p.id AND p.target_type='artist' AND p.artist_id=ANY($1::uuid[])`, artistIDs)
+	return err
+}
+
 const artistClosuresSQL = `WITH roots(id) AS (VALUES ($1::uuid),($2::uuid)), members(id,root) AS (
  SELECT id,id FROM roots
  UNION ALL SELECT o.artist_id,o.redirect_artist_id FROM artist_overrides o JOIN roots r ON o.redirect_artist_id=r.id)`

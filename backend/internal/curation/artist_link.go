@@ -28,15 +28,16 @@ type ArtistLinkApplied struct {
 }
 
 type artistLinkRow struct {
-	ID          string    `json:"id"`
-	Source      string    `json:"source"`
-	ObjectType  string    `json:"object_type"`
-	ObjectID    string    `json:"object_id"`
-	ExternalID  string    `json:"external_id"`
-	Method      string    `json:"method"`
-	Confidence  string    `json:"confidence"`
-	OperationID *string   `json:"operation_id"`
-	CreatedAt   time.Time `json:"created_at"`
+	ArtistPrimaryName *string   `json:"artist_primary_name,omitempty"`
+	ID                string    `json:"id"`
+	Source            string    `json:"source"`
+	ObjectType        string    `json:"object_type"`
+	ObjectID          string    `json:"object_id"`
+	ExternalID        string    `json:"external_id"`
+	Method            string    `json:"method"`
+	Confidence        string    `json:"confidence"`
+	OperationID       *string   `json:"operation_id"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 type artistLinkState struct {
@@ -198,7 +199,11 @@ func writeArtistLinks(ctx context.Context, tx *sql.Tx, id, op string, p ArtistLi
 		if current == identity.ExternalID || item.source == "musicbrainz" && strings.EqualFold(current, identity.ExternalID) {
 			continue
 		}
-		_, err = PutLink(ctx, tx, Link{Source: item.source, ObjectType: "artist", ObjectID: id, ExternalID: identity.ExternalID, Method: method, Confidence: "confirmed", OperationID: op})
+		var primary string
+		if p.Source == item.source && p.Name != p.ExternalID {
+			primary = p.Name
+		}
+		_, err = PutLink(ctx, tx, Link{ArtistPrimaryName: primary, Source: item.source, ObjectType: "artist", ObjectID: id, ExternalID: identity.ExternalID, Method: method, Confidence: "confirmed", OperationID: op})
 		if err != nil {
 			return before, after, err
 		}
@@ -206,6 +211,9 @@ func writeArtistLinks(ctx context.Context, tx *sql.Tx, id, op string, p ArtistLi
 	}
 	if !changed {
 		return before, after, operations.Conflict("nothing_to_apply", "艺人已有相同的对应")
+	}
+	if err = catalog.RefreshMergedArtistProfiles(ctx, tx, []string{id}); err != nil {
+		return before, after, err
 	}
 	after.Links, err = readArtistLinkRows(ctx, tx, id)
 	if err != nil {

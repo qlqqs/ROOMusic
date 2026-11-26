@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
@@ -46,6 +47,7 @@ func (externalLinkKind) Revert(ctx context.Context, tx *sql.Tx, operationID stri
 		return operations.Outcome{}, err
 	}
 	skipped := 0
+	var unlinkedArtists []string
 	for _, l := range s.Links {
 		owner, err := previousLink(tx.QueryRowContext(ctx, `SELECT `+linkColumns+` FROM external_links WHERE source=$1 AND object_type=$2 AND object_id=$3 FOR UPDATE`, s.Source, l.ObjectType, l.ObjectID))
 		if err != nil {
@@ -75,11 +77,17 @@ func (externalLinkKind) Revert(ctx context.Context, tx *sql.Tx, operationID stri
 		if _, err := RemoveLink(ctx, tx, s.Source, l.ObjectType, l.ObjectID); err != nil {
 			return operations.Outcome{}, err
 		}
+		if l.ObjectType == "artist" {
+			unlinkedArtists = append(unlinkedArtists, l.ObjectID)
+		}
 		if err := SuppressExternalLink(ctx, tx, l.ObjectType, l.ObjectID, s.Source, l.ExternalID, operationID, operations.ActorID(ctx)); err != nil {
 			return operations.Outcome{}, err
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE curation_artist_credit_proposals SET status='stale' WHERE operation_id=$1 AND status='open'`, original.ID); err != nil {
+		return operations.Outcome{}, err
+	}
+	if err := catalog.RefreshMergedArtistProfiles(ctx, tx, unlinkedArtists); err != nil {
 		return operations.Outcome{}, err
 	}
 	out, err := externalOutcome(ctx, release, original.After, map[string]any{})

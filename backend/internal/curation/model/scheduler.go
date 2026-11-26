@@ -146,6 +146,9 @@ func (s *Scheduler) poll(ctx context.Context) error {
 		if err != nil || checkpoint.Reason != "" {
 			return err
 		}
+		if err = s.writer.MaterializePatrol(ctx, program.PatrolPromptVersion); err != nil {
+			return err
+		}
 		if err = s.writer.MaterializeVerificationItems(ctx); err != nil {
 			return err
 		}

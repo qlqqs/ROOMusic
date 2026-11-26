@@ -13,7 +13,8 @@ const QueueRankSQL = `CASE WHEN s.manual_requested_at IS NOT NULL THEN 0
  WHEN r.queue_has_id THEN 2 WHEN r.queue_class IN ('has_gaps','insufficient') THEN 3 ELSE 4 END`
 
 // SQL 分类与调度器的模型任务一一对应。
-const modelKindSQL = `CASE WHEN p.route='lookup' THEN 'lookup'
+const modelKindSQL = `CASE WHEN p.kind IN ('name_patrol','local_cleanup') THEN 'patrol_local'
+ WHEN p.route='lookup' THEN 'lookup'
  WHEN p.route='web' OR p.kind='artist_identity' THEN 'web'
  WHEN p.kind IN ('release_merge','verify_artist_credit','verify_artist_merge','verify_name') THEN 'verify'
  WHEN p.kind IN ('release_match','recording_match') THEN 'select' END`

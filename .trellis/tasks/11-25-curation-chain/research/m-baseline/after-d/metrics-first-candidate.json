@@ -1,0 +1,5691 @@
+{
+  "acoustid_enabled": false,
+  "by_shape": [
+    {
+      "shape": "artist_alias",
+      "samples": 2,
+      "requests": {
+        "count": 22,
+        "mean": 11,
+        "max": 12
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "lrclib/api/search": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "musicbrainz/lookup": {
+          "count": 3,
+          "mean": 1.5,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 1,
+          "mean": 0.5,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 5,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 4,
+          "input_tokens": 3731,
+          "output_tokens": 430
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "verify": {
+          "calls": 4,
+          "input_tokens": 3464,
+          "output_tokens": 416
+        }
+      },
+      "completed_samples": 2,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 4,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "barcode_catalog",
+      "samples": 6,
+      "requests": {
+        "count": 84,
+        "mean": 14,
+        "max": 14
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 12,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 24,
+          "mean": 4,
+          "max": 4
+        },
+        "lrclib/api/search": {
+          "count": 24,
+          "mean": 4,
+          "max": 4
+        },
+        "musicbrainz/lookup": {
+          "count": 12,
+          "mean": 2,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 6,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 6,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 18,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 12,
+          "input_tokens": 11172,
+          "output_tokens": 1292
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 6,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "chinese",
+      "samples": 10,
+      "requests": {
+        "count": 128,
+        "mean": 12.8,
+        "max": 14
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 20,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 35,
+          "mean": 3.5,
+          "max": 4
+        },
+        "lrclib/api/search": {
+          "count": 35,
+          "mean": 3.5,
+          "max": 4
+        },
+        "musicbrainz/lookup": {
+          "count": 19,
+          "mean": 1.9,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 10,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 9,
+          "mean": 0.9,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 29,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 19,
+          "input_tokens": 17599,
+          "output_tokens": 2011
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 10,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "compilation_classical",
+      "samples": 6,
+      "requests": {
+        "count": 90,
+        "mean": 15,
+        "max": 16
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 12,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 30,
+          "mean": 5,
+          "max": 5
+        },
+        "lrclib/api/search": {
+          "count": 30,
+          "mean": 5,
+          "max": 5
+        },
+        "musicbrainz/lookup": {
+          "count": 9,
+          "mean": 1.5,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 6,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 3,
+          "mean": 0.5,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 15,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 21,
+          "input_tokens": 19776,
+          "output_tokens": 1997
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 6,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "cue_cd",
+      "samples": 4,
+      "requests": {
+        "count": 52,
+        "mean": 13,
+        "max": 14
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 8,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 14,
+          "mean": 3.5,
+          "max": 4
+        },
+        "lrclib/api/search": {
+          "count": 14,
+          "mean": 3.5,
+          "max": 4
+        },
+        "musicbrainz/discid": {
+          "count": 4,
+          "mean": 1,
+          "max": 1
+        },
+        "musicbrainz/lookup": {
+          "count": 4,
+          "mean": 1,
+          "max": 1
+        },
+        "musicbrainz/search": {
+          "count": 4,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 4,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 12,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 8,
+          "input_tokens": 7440,
+          "output_tokens": 860
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 4,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "multi_edition",
+      "samples": 6,
+      "requests": {
+        "count": 48,
+        "mean": 8,
+        "max": 11
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 9,
+          "mean": 1.5,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 15,
+          "mean": 2.5,
+          "max": 3
+        },
+        "lrclib/api/search": {
+          "count": 12,
+          "mean": 2,
+          "max": 3
+        },
+        "musicbrainz/lookup": {
+          "count": 9,
+          "mean": 1.5,
+          "max": 2
+        },
+        "wikidata/w/api.php": {
+          "count": 3,
+          "mean": 0.5,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 9,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 6,
+          "input_tokens": 5575,
+          "output_tokens": 642
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 6,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "negative_artist_merge",
+      "samples": 2,
+      "requests": {
+        "count": 22,
+        "mean": 11,
+        "max": 11
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "lrclib/api/search": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "musicbrainz/lookup": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "wikidata/w/api.php": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 4,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 4,
+          "input_tokens": 3718,
+          "output_tokens": 429
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 2,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "negative_compilation",
+      "samples": 2,
+      "requests": {
+        "count": 30,
+        "mean": 15,
+        "max": 15
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 10,
+          "mean": 5,
+          "max": 5
+        },
+        "lrclib/api/search": {
+          "count": 10,
+          "mean": 5,
+          "max": 5
+        },
+        "musicbrainz/lookup": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 6,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 10,
+          "input_tokens": 9555,
+          "output_tokens": 900
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 2,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "negative_homonym",
+      "samples": 2,
+      "requests": {
+        "count": 30,
+        "mean": 15,
+        "max": 15
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 8,
+          "mean": 4,
+          "max": 4
+        },
+        "lrclib/api/search": {
+          "count": 8,
+          "mean": 4,
+          "max": 4
+        },
+        "musicbrainz/lookup": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "musicbrainz/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 8,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 4,
+          "input_tokens": 3712,
+          "output_tokens": 428
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 2,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "negative_near_candidate",
+      "samples": 2,
+      "requests": {
+        "count": 18,
+        "mean": 9,
+        "max": 9
+      },
+      "endpoints": {
+        "lrclib/api/get": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "lrclib/api/search": {
+          "count": 6,
+          "mean": 3,
+          "max": 3
+        },
+        "musicbrainz/lookup": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        },
+        "musicbrainz/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        },
+        "searxng/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 4,
+      "entered_model_items": 2,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 4,
+          "input_tokens": 3711,
+          "output_tokens": 428
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 2,
+          "input_tokens": 2565,
+          "output_tokens": 220
+        },
+        "select": {
+          "calls": 2,
+          "input_tokens": 2976,
+          "output_tokens": 148
+        },
+        "web": {
+          "calls": 4,
+          "input_tokens": 5189,
+          "output_tokens": 343
+        }
+      },
+      "completed_samples": 2,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 2,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "negative_truncated",
+      "samples": 2,
+      "requests": {
+        "count": 80,
+        "mean": 40,
+        "max": 40
+      },
+      "endpoints": {
+        "lrclib/api/get": {
+          "count": 10,
+          "mean": 5,
+          "max": 5
+        },
+        "lrclib/api/search": {
+          "count": 10,
+          "mean": 5,
+          "max": 5
+        },
+        "musicbrainz/lookup": {
+          "count": 56,
+          "mean": 28,
+          "max": 28
+        },
+        "musicbrainz/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        },
+        "searxng/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 58,
+      "entered_model_items": 2,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 4,
+          "input_tokens": 3720,
+          "output_tokens": 429
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 2,
+          "input_tokens": 5531,
+          "output_tokens": 220
+        },
+        "select": {
+          "calls": 2,
+          "input_tokens": 45290,
+          "output_tokens": 148
+        },
+        "web": {
+          "calls": 4,
+          "input_tokens": 5297,
+          "output_tokens": 344
+        }
+      },
+      "completed_samples": 0,
+      "completion_rate": 0,
+      "open_pending_items": 0,
+      "open_exceptions": 2,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "negative_wrong_id",
+      "samples": 2,
+      "requests": {
+        "count": 22,
+        "mean": 11,
+        "max": 11
+      },
+      "endpoints": {
+        "lrclib/api/get": {
+          "count": 8,
+          "mean": 4,
+          "max": 4
+        },
+        "lrclib/api/search": {
+          "count": 8,
+          "mean": 4,
+          "max": 4
+        },
+        "musicbrainz/lookup": {
+          "count": 4,
+          "mean": 2,
+          "max": 2
+        },
+        "searxng/search": {
+          "count": 2,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 4,
+      "entered_model_items": 2,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 4,
+          "input_tokens": 3717,
+          "output_tokens": 428
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 2,
+          "input_tokens": 2481,
+          "output_tokens": 220
+        },
+        "select": {
+          "calls": 2,
+          "input_tokens": 3608,
+          "output_tokens": 148
+        },
+        "web": {
+          "calls": 4,
+          "input_tokens": 5250,
+          "output_tokens": 343
+        }
+      },
+      "completed_samples": 2,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 2,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "picard",
+      "samples": 6,
+      "requests": {
+        "count": 78,
+        "mean": 13,
+        "max": 15
+      },
+      "endpoints": {
+        "coverartarchive/image": {
+          "count": 1,
+          "mean": 0.16666666666666666,
+          "max": 1
+        },
+        "coverartarchive/manifest": {
+          "count": 11,
+          "mean": 1.8333333333333333,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 24,
+          "mean": 4,
+          "max": 5
+        },
+        "lrclib/api/search": {
+          "count": 24,
+          "mean": 4,
+          "max": 5
+        },
+        "musicbrainz/lookup": {
+          "count": 12,
+          "mean": 2,
+          "max": 2
+        },
+        "wikidata/w/api.php": {
+          "count": 6,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 12,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 12,
+          "input_tokens": 11142,
+          "output_tokens": 1286
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 6,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "poor_tags",
+      "samples": 8,
+      "requests": {
+        "count": 72,
+        "mean": 9,
+        "max": 12
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 12,
+          "mean": 1.5,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 18,
+          "mean": 2.25,
+          "max": 3
+        },
+        "lrclib/api/search": {
+          "count": 18,
+          "mean": 2.25,
+          "max": 3
+        },
+        "musicbrainz/lookup": {
+          "count": 10,
+          "mean": 1.25,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 6,
+          "mean": 0.75,
+          "max": 1
+        },
+        "searxng/search": {
+          "count": 4,
+          "mean": 0.5,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 4,
+          "mean": 0.5,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 16,
+      "entered_model_items": 2,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 4,
+          "input_tokens": 3398,
+          "output_tokens": 340
+        },
+        "lookup": {
+          "calls": 4,
+          "input_tokens": 6268,
+          "output_tokens": 374
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 14,
+          "input_tokens": 12960,
+          "output_tokens": 1466
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "web": {
+          "calls": 8,
+          "input_tokens": 10978,
+          "output_tokens": 695
+        }
+      },
+      "completed_samples": 6,
+      "completion_rate": 0.75,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "stream_album",
+      "samples": 15,
+      "requests": {
+        "count": 188,
+        "mean": 12.533333333333333,
+        "max": 16
+      },
+      "endpoints": {
+        "coverartarchive/image": {
+          "count": 1,
+          "mean": 0.06666666666666667,
+          "max": 1
+        },
+        "coverartarchive/manifest": {
+          "count": 22,
+          "mean": 1.4666666666666666,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 66,
+          "mean": 4.4,
+          "max": 6
+        },
+        "lrclib/api/search": {
+          "count": 66,
+          "mean": 4.4,
+          "max": 6
+        },
+        "musicbrainz/lookup": {
+          "count": 13,
+          "mean": 0.8666666666666667,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 15,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 5,
+          "mean": 0.3333333333333333,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 28,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 20,
+          "input_tokens": 18627,
+          "output_tokens": 1969
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 15,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "stream_single",
+      "samples": 8,
+      "requests": {
+        "count": 40,
+        "mean": 5,
+        "max": 5
+      },
+      "endpoints": {
+        "lrclib/api/get": {
+          "count": 8,
+          "mean": 1,
+          "max": 1
+        },
+        "lrclib/api/search": {
+          "count": 8,
+          "mean": 1,
+          "max": 1
+        },
+        "musicbrainz/lookup": {
+          "count": 8,
+          "mean": 1,
+          "max": 1
+        },
+        "musicbrainz/search": {
+          "count": 8,
+          "mean": 1,
+          "max": 1
+        },
+        "wikidata/w/api.php": {
+          "count": 8,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 16,
+      "entered_model_items": 0,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 8,
+          "input_tokens": 5993,
+          "output_tokens": 680
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 16,
+          "input_tokens": 14890,
+          "output_tokens": 1722
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "completed_samples": 8,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "title_typo",
+      "samples": 3,
+      "requests": {
+        "count": 60,
+        "mean": 20,
+        "max": 20
+      },
+      "endpoints": {
+        "coverartarchive/manifest": {
+          "count": 6,
+          "mean": 2,
+          "max": 2
+        },
+        "lrclib/api/get": {
+          "count": 12,
+          "mean": 4,
+          "max": 4
+        },
+        "lrclib/api/search": {
+          "count": 12,
+          "mean": 4,
+          "max": 4
+        },
+        "musicbrainz/lookup": {
+          "count": 6,
+          "mean": 2,
+          "max": 2
+        },
+        "musicbrainz/search": {
+          "count": 15,
+          "mean": 5,
+          "max": 5
+        },
+        "searxng/search": {
+          "count": 6,
+          "mean": 2,
+          "max": 2
+        },
+        "wikidata/w/api.php": {
+          "count": 3,
+          "mean": 1,
+          "max": 1
+        }
+      },
+      "estimated_musicbrainz_seconds": 21,
+      "entered_model_items": 3,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 6,
+          "input_tokens": 5570,
+          "output_tokens": 737
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 6,
+          "input_tokens": 7878,
+          "output_tokens": 660
+        },
+        "select": {
+          "calls": 3,
+          "input_tokens": 5830,
+          "output_tokens": 222
+        },
+        "verify": {
+          "calls": 6,
+          "input_tokens": 4685,
+          "output_tokens": 618
+        },
+        "web": {
+          "calls": 12,
+          "input_tokens": 13941,
+          "output_tokens": 1039
+        }
+      },
+      "completed_samples": 3,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 3,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    },
+    {
+      "shape": "unlisted",
+      "samples": 6,
+      "requests": {
+        "count": 66,
+        "mean": 11,
+        "max": 11
+      },
+      "endpoints": {
+        "lrclib/api/get": {
+          "count": 18,
+          "mean": 3,
+          "max": 3
+        },
+        "lrclib/api/search": {
+          "count": 18,
+          "mean": 3,
+          "max": 3
+        },
+        "musicbrainz/search": {
+          "count": 18,
+          "mean": 3,
+          "max": 3
+        },
+        "searxng/search": {
+          "count": 12,
+          "mean": 2,
+          "max": 2
+        }
+      },
+      "estimated_musicbrainz_seconds": 18,
+      "entered_model_items": 6,
+      "program_decidable_entered_samples": 0,
+      "model_usage": {
+        "artist_identity": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "local_cleanup": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "other": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "patrol": {
+          "calls": 12,
+          "input_tokens": 11159,
+          "output_tokens": 1290
+        },
+        "pending_step": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "review": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "web": {
+          "calls": 24,
+          "input_tokens": 34762,
+          "output_tokens": 2090
+        }
+      },
+      "completed_samples": 6,
+      "completion_rate": 1,
+      "open_pending_items": 0,
+      "open_exceptions": 0,
+      "wrong_links": 0,
+      "wrong_merges": 0,
+      "wrong_fields": 0
+    }
+  ],
+  "item_usage_peaks": {
+    "lookup": {
+      "items": 2,
+      "max_tool_calls": 2,
+      "max_tokens": 3321
+    },
+    "web": {
+      "items": 28,
+      "max_tool_calls": 2,
+      "max_tokens": 3377
+    }
+  },
+  "model": "first_candidate",
+  "samples": [
+    {
+      "id": "cue-01",
+      "shape": "cue_cd",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "disc_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/discid": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "cue-02",
+      "shape": "cue_cd",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "disc_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/discid": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "cue-03",
+      "shape": "cue_cd",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "disc_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/discid": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "cue-04",
+      "shape": "cue_cd",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "disc_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/discid": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "picard-01",
+      "shape": "picard",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/image": 1,
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "picard-02",
+      "shape": "picard",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "picard-03",
+      "shape": "picard",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "picard-04",
+      "shape": "picard",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "picard-05",
+      "shape": "picard",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "picard-06",
+      "shape": "picard",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-01",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/image": 1,
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-02",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-03",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-04",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 6,
+        "lrclib/api/search": 6,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-05",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-06",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-07",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-08",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 6,
+        "lrclib/api/search": 6,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-09",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-10",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-11",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-12",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 6,
+        "lrclib/api/search": 6,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-13",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-14",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "stream-15",
+      "shape": "stream_album",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release_group",
+        "rule": "unique_group"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "loose-01",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "recording",
+        "rule": "recording_text"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "local_cleanup",
+          "route": [
+            "local_cleanup"
+          ],
+          "status": "resolved",
+          "resolution": "local_cleanup"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "loose-02",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "recording",
+        "rule": "recording_text"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "local_cleanup",
+          "route": [
+            "local_cleanup"
+          ],
+          "status": "resolved",
+          "resolution": "local_cleanup"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "loose-03",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "recording",
+        "rule": "recording_text"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "local_cleanup",
+          "route": [
+            "local_cleanup"
+          ],
+          "status": "resolved",
+          "resolution": "local_cleanup"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "loose-04",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "recording",
+        "rule": "recording_text"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "local_cleanup",
+          "route": [
+            "local_cleanup"
+          ],
+          "status": "resolved",
+          "resolution": "local_cleanup"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "loose-05",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "recording",
+        "rule": "recording_text"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "local_cleanup",
+          "route": [
+            "local_cleanup"
+          ],
+          "status": "resolved",
+          "resolution": "local_cleanup"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "loose-06",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "recording",
+        "rule": "recording_text"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "local_cleanup",
+          "route": [
+            "local_cleanup"
+          ],
+          "status": "resolved",
+          "resolution": "local_cleanup"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "loose-07",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "artist",
+        "rule": "common_credit"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "local_cleanup",
+          "route": [
+            "local_cleanup"
+          ],
+          "status": "resolved",
+          "resolution": "local_cleanup"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "loose-08",
+      "shape": "stream_single",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "artist",
+        "rule": "common_credit"
+      },
+      "requests": {
+        "lrclib/api/get": 1,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "local_cleanup",
+          "route": [
+            "local_cleanup"
+          ],
+          "status": "resolved",
+          "resolution": "local_cleanup"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "identifier-01",
+      "shape": "barcode_catalog",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "identifier-02",
+      "shape": "barcode_catalog",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "identifier-03",
+      "shape": "barcode_catalog",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "identifier-04",
+      "shape": "barcode_catalog",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "catalog_number",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "identifier-05",
+      "shape": "barcode_catalog",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "catalog_number",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "identifier-06",
+      "shape": "barcode_catalog",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "catalog_number",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "poor-01",
+      "shape": "poor_tags",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "poor-02",
+      "shape": "poor_tags",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "poor-03",
+      "shape": "poor_tags",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "poor-04",
+      "shape": "poor_tags",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "poor-05",
+      "shape": "poor_tags",
+      "complete": false,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 1,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "missing_link",
+          "target": "poor-05/artist 雾谷二重奏",
+          "field": "artist",
+          "expected": "1901d5db-e50b-58cd-9757-1dc79b44e702",
+          "actual": "未建立"
+        }
+      ],
+      "model_items": [
+        {
+          "kind": "local_cleanup",
+          "route": [
+            "local_cleanup"
+          ],
+          "status": "resolved",
+          "resolution": "inputs_changed"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "poor-06",
+      "shape": "poor_tags",
+      "complete": false,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 1,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "missing_link",
+          "target": "poor-06/artist 雪杉组合",
+          "field": "artist",
+          "expected": "17f734e1-699b-55c4-9206-2187799a8244",
+          "actual": "未建立"
+        }
+      ],
+      "model_items": [
+        {
+          "kind": "local_cleanup",
+          "route": [
+            "local_cleanup"
+          ],
+          "status": "resolved",
+          "resolution": "inputs_changed"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "poor-07",
+      "shape": "poor_tags",
+      "complete": true,
+      "match": {
+        "status": "unlisted",
+        "method": "",
+        "pending_status": "resolved",
+        "resolution": "unlisted"
+      },
+      "requests": {
+        "musicbrainz/search": 1,
+        "searxng/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "local_cleanup",
+          "route": [
+            "local_cleanup"
+          ],
+          "status": "resolved",
+          "resolution": "local_cleanup"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "lookup",
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "unlisted"
+        }
+      ]
+    },
+    {
+      "id": "poor-08",
+      "shape": "poor_tags",
+      "complete": true,
+      "match": {
+        "status": "unlisted",
+        "method": "",
+        "pending_status": "resolved",
+        "resolution": "unlisted"
+      },
+      "requests": {
+        "musicbrainz/search": 1,
+        "searxng/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "local_cleanup",
+          "route": [
+            "local_cleanup"
+          ],
+          "status": "resolved",
+          "resolution": "local_cleanup"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "lookup",
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "unlisted"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "chinese-01",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "chinese-02",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "chinese-03",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "chinese-04",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "chinese-05",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "chinese-06",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "chinese-07",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "chinese-08",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "chinese-09",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "chinese-10",
+      "shape": "chinese",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "collection-01",
+      "shape": "compilation_classical",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "collection-02",
+      "shape": "compilation_classical",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "collection-03",
+      "shape": "compilation_classical",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "collection-04",
+      "shape": "compilation_classical",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "collection-05",
+      "shape": "compilation_classical",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "collection-06",
+      "shape": "compilation_classical",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "alias-01",
+      "shape": "artist_alias",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "verify_name",
+          "route": [
+            "verify"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "verify_name",
+          "route": [
+            "verify"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "verify_name",
+          "route": [
+            "verify"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "verify_name",
+          "route": [
+            "verify"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "alias-02",
+      "shape": "artist_alias",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "barcode",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "typo-01",
+      "shape": "title_typo",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "model",
+        "level": "release",
+        "rule": "independent_review",
+        "candidate_count": 1,
+        "pending_status": "resolved",
+        "resolution": "model_matched"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 5,
+        "searxng/search": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "verify_name",
+          "route": [
+            "verify",
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "select"
+          ],
+          "status": "resolved",
+          "resolution": "model_matched",
+          "verification": "independent_review"
+        },
+        {
+          "kind": "verify_name",
+          "route": [
+            "verify"
+          ],
+          "status": "resolved",
+          "resolution": "model_verified"
+        }
+      ]
+    },
+    {
+      "id": "typo-02",
+      "shape": "title_typo",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "model",
+        "level": "release",
+        "rule": "independent_review",
+        "candidate_count": 1,
+        "pending_status": "resolved",
+        "resolution": "model_matched"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 5,
+        "searxng/search": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "verify_name",
+          "route": [
+            "verify",
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "select"
+          ],
+          "status": "resolved",
+          "resolution": "model_matched",
+          "verification": "independent_review"
+        },
+        {
+          "kind": "verify_name",
+          "route": [
+            "verify"
+          ],
+          "status": "resolved",
+          "resolution": "model_verified"
+        }
+      ]
+    },
+    {
+      "id": "typo-03",
+      "shape": "title_typo",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "model",
+        "level": "release",
+        "rule": "independent_review",
+        "candidate_count": 1,
+        "pending_status": "resolved",
+        "resolution": "model_matched"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 5,
+        "searxng/search": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "verify_name",
+          "route": [
+            "verify",
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "select"
+          ],
+          "status": "resolved",
+          "resolution": "model_matched",
+          "verification": "independent_review"
+        },
+        {
+          "kind": "verify_name",
+          "route": [
+            "verify"
+          ],
+          "status": "resolved",
+          "resolution": "model_verified"
+        }
+      ]
+    },
+    {
+      "id": "edition-01-1",
+      "shape": "multi_edition",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "edition-01-2",
+      "shape": "multi_edition",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 2,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "edition-02-1",
+      "shape": "multi_edition",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "edition-02-2",
+      "shape": "multi_edition",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 2,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "edition-03-1",
+      "shape": "multi_edition",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "edition-03-2",
+      "shape": "multi_edition",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 1,
+        "lrclib/api/get": 2,
+        "lrclib/api/search": 1,
+        "musicbrainz/lookup": 1
+      },
+      "reasons": []
+    },
+    {
+      "id": "unlisted-01",
+      "shape": "unlisted",
+      "complete": true,
+      "match": {
+        "status": "unlisted",
+        "method": "search",
+        "pending_status": "resolved",
+        "resolution": "unlisted"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/search": 3,
+        "searxng/search": 2
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "unlisted"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "unlisted-02",
+      "shape": "unlisted",
+      "complete": true,
+      "match": {
+        "status": "unlisted",
+        "method": "search",
+        "pending_status": "resolved",
+        "resolution": "unlisted"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/search": 3,
+        "searxng/search": 2
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "unlisted"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "unlisted-03",
+      "shape": "unlisted",
+      "complete": true,
+      "match": {
+        "status": "unlisted",
+        "method": "search",
+        "pending_status": "resolved",
+        "resolution": "unlisted"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/search": 3,
+        "searxng/search": 2
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "unlisted"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "unlisted-04",
+      "shape": "unlisted",
+      "complete": true,
+      "match": {
+        "status": "unlisted",
+        "method": "search",
+        "pending_status": "resolved",
+        "resolution": "unlisted"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/search": 3,
+        "searxng/search": 2
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "unlisted"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "unlisted-05",
+      "shape": "unlisted",
+      "complete": true,
+      "match": {
+        "status": "unlisted",
+        "method": "search",
+        "pending_status": "resolved",
+        "resolution": "unlisted"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/search": 3,
+        "searxng/search": 2
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "unlisted"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "unlisted-06",
+      "shape": "unlisted",
+      "complete": true,
+      "match": {
+        "status": "unlisted",
+        "method": "search",
+        "pending_status": "resolved",
+        "resolution": "unlisted"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/search": 3,
+        "searxng/search": 2
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "unlisted"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "homonym-01",
+      "shape": "negative_homonym",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 3,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "homonym-02",
+      "shape": "negative_homonym",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 3,
+        "musicbrainz/search": 1,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "near-01",
+      "shape": "negative_near_candidate",
+      "complete": true,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "candidate_count": 1,
+        "conflicts": [
+          "duration_mismatch"
+        ],
+        "pending_status": "resolved",
+        "resolution": "suggestion_recorded"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "searxng/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "select"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "near-02",
+      "shape": "negative_near_candidate",
+      "complete": true,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "candidate_count": 1,
+        "conflicts": [
+          "duration_mismatch"
+        ],
+        "pending_status": "resolved",
+        "resolution": "suggestion_recorded"
+      },
+      "requests": {
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 1,
+        "musicbrainz/search": 1,
+        "searxng/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "select"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "compilation-01",
+      "shape": "negative_compilation",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "compilation-02",
+      "shape": "negative_compilation",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "search",
+        "level": "release",
+        "rule": "structure"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 2,
+        "musicbrainz/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "wrong-id-01",
+      "shape": "negative_wrong_id",
+      "complete": true,
+      "match": {
+        "status": "uncertain",
+        "method": "tag_id",
+        "candidate_count": 1,
+        "conflicts": [
+          "tag_text_mismatch"
+        ],
+        "pending_status": "resolved",
+        "resolution": "suggestion_recorded"
+      },
+      "requests": {
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "searxng/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "select"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "wrong-id-02",
+      "shape": "negative_wrong_id",
+      "complete": true,
+      "match": {
+        "status": "uncertain",
+        "method": "tag_id",
+        "candidate_count": 1,
+        "conflicts": [
+          "tag_text_mismatch"
+        ],
+        "pending_status": "resolved",
+        "resolution": "suggestion_recorded"
+      },
+      "requests": {
+        "lrclib/api/get": 4,
+        "lrclib/api/search": 4,
+        "musicbrainz/lookup": 2,
+        "searxng/search": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "select"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "distinct-artist-01",
+      "shape": "negative_artist_merge",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "distinct-artist-02",
+      "shape": "negative_artist_merge",
+      "complete": true,
+      "match": {
+        "status": "matched",
+        "method": "tag_id",
+        "level": "release",
+        "rule": "identifier"
+      },
+      "requests": {
+        "coverartarchive/manifest": 2,
+        "lrclib/api/get": 3,
+        "lrclib/api/search": 3,
+        "musicbrainz/lookup": 2,
+        "wikidata/w/api.php": 1
+      },
+      "reasons": [],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "truncated-01",
+      "shape": "negative_truncated",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "candidate_count": 28,
+        "conflicts": [
+          "too_many"
+        ],
+        "pending_status": "resolved",
+        "resolution": "suggestion_recorded"
+      },
+      "requests": {
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 28,
+        "musicbrainz/search": 1,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "missing_field",
+          "target": "truncated-01",
+          "field": "label",
+          "expected": "Fir Quay Records",
+          "actual": ""
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-01",
+          "field": "release",
+          "expected": "298c4d44-3e94-5c69-a192-833f73d14753",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-01",
+          "field": "release_group",
+          "expected": "ed333afa-04ab-53da-a019-6d286f80c38c",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-01/artist Elm Breakwater",
+          "field": "artist",
+          "expected": "1ec63510-101c-563a-9ff8-b2c93460df7d",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-01/track-01 Greatest Hits · Threshold",
+          "field": "track",
+          "expected": "464002f0-034a-5010-920d-d57999ee80a6",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-01/track-02 Greatest Hits · Footbridge",
+          "field": "track",
+          "expected": "b41c5631-9374-5709-b7c6-76da4ba76692",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-01/track-03 Greatest Hits · Lighthouse",
+          "field": "track",
+          "expected": "90039440-24db-52b2-b95b-e7e1e9f4b1db",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-01/track-04 Greatest Hits · Rain Garden",
+          "field": "track",
+          "expected": "221e87f6-bd5d-54b4-bdcf-1d453faf960c",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-01/track-05 Greatest Hits · Sundial",
+          "field": "track",
+          "expected": "f5b5151b-686a-5676-afd5-9f850df8338a",
+          "actual": "未建立"
+        }
+      ],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "select"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    },
+    {
+      "id": "truncated-02",
+      "shape": "negative_truncated",
+      "complete": false,
+      "match": {
+        "status": "uncertain",
+        "method": "search",
+        "candidate_count": 28,
+        "conflicts": [
+          "too_many"
+        ],
+        "pending_status": "resolved",
+        "resolution": "suggestion_recorded"
+      },
+      "requests": {
+        "lrclib/api/get": 5,
+        "lrclib/api/search": 5,
+        "musicbrainz/lookup": 28,
+        "musicbrainz/search": 1,
+        "searxng/search": 1
+      },
+      "reasons": [
+        {
+          "kind": "missing_field",
+          "target": "truncated-02",
+          "field": "label",
+          "expected": "Fir Quay Records",
+          "actual": ""
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-02",
+          "field": "release",
+          "expected": "6331cd3d-c4e2-5be7-80bc-9efd7e592bbc",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-02",
+          "field": "release_group",
+          "expected": "70e19203-7db2-5291-9f64-5e2814c26402",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-02/artist Granite Lamps",
+          "field": "artist",
+          "expected": "c7cfd8ec-e3b4-5cbd-8044-c6017c7227e0",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-02/track-01 Live in Concert · Threshold",
+          "field": "track",
+          "expected": "0ae4eed0-98ac-53b7-a0bc-33d594b4b3b8",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-02/track-02 Live in Concert · Footbridge",
+          "field": "track",
+          "expected": "9b3339a8-a4cf-5a1f-80a4-407ec05cc3d8",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-02/track-03 Live in Concert · Lighthouse",
+          "field": "track",
+          "expected": "d3896797-305e-5dc4-a15a-3b185cc71b2a",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-02/track-04 Live in Concert · Rain Garden",
+          "field": "track",
+          "expected": "5fa1a0c9-8eab-59f0-9a36-2749ecfaf1e0",
+          "actual": "未建立"
+        },
+        {
+          "kind": "missing_link",
+          "target": "truncated-02/track-05 Live in Concert · Sundial",
+          "field": "track",
+          "expected": "08dd6966-2ae0-5f64-a6db-48d2461805c8",
+          "actual": "未建立"
+        }
+      ],
+      "model_items": [
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        },
+        {
+          "kind": "release_match",
+          "route": [
+            "select"
+          ],
+          "status": "resolved",
+          "resolution": "suggestion_recorded"
+        },
+        {
+          "kind": "artist_identity",
+          "route": [
+            "web"
+          ],
+          "status": "resolved",
+          "resolution": "no_result"
+        },
+        {
+          "kind": "name_patrol",
+          "route": [
+            "patrol"
+          ],
+          "status": "resolved",
+          "resolution": "patrolled"
+        }
+      ]
+    }
+  ],
+  "token_estimate": "请求与 SSE 响应分别按字节数除以 4 向下取整",
+  "total": {
+    "shape": "合计",
+    "samples": 92,
+    "requests": {
+      "count": 1130,
+      "mean": 12.282608695652174,
+      "max": 40
+    },
+    "endpoints": {
+      "coverartarchive/image": {
+        "count": 2,
+        "mean": 0.021739130434782608,
+        "max": 1
+      },
+      "coverartarchive/manifest": {
+        "count": 128,
+        "mean": 1.391304347826087,
+        "max": 2
+      },
+      "lrclib/api/get": {
+        "count": 318,
+        "mean": 3.4565217391304346,
+        "max": 6
+      },
+      "lrclib/api/search": {
+        "count": 315,
+        "mean": 3.4239130434782608,
+        "max": 6
+      },
+      "musicbrainz/discid": {
+        "count": 4,
+        "mean": 0.043478260869565216,
+        "max": 1
+      },
+      "musicbrainz/lookup": {
+        "count": 181,
+        "mean": 1.9673913043478262,
+        "max": 28
+      },
+      "musicbrainz/search": {
+        "count": 98,
+        "mean": 1.065217391304348,
+        "max": 5
+      },
+      "searxng/search": {
+        "count": 28,
+        "mean": 0.30434782608695654,
+        "max": 2
+      },
+      "wikidata/w/api.php": {
+        "count": 56,
+        "mean": 0.6086956521739131,
+        "max": 1
+      }
+    },
+    "estimated_musicbrainz_seconds": 283,
+    "entered_model_items": 17,
+    "program_decidable_entered_samples": 0,
+    "model_usage": {
+      "artist_identity": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "local_cleanup": {
+        "calls": 12,
+        "input_tokens": 9391,
+        "output_tokens": 1020
+      },
+      "lookup": {
+        "calls": 4,
+        "input_tokens": 6268,
+        "output_tokens": 374
+      },
+      "other": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "patrol": {
+        "calls": 180,
+        "input_tokens": 167774,
+        "output_tokens": 18744
+      },
+      "pending_step": {
+        "calls": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "review": {
+        "calls": 12,
+        "input_tokens": 18455,
+        "output_tokens": 1320
+      },
+      "select": {
+        "calls": 9,
+        "input_tokens": 57704,
+        "output_tokens": 666
+      },
+      "verify": {
+        "calls": 10,
+        "input_tokens": 8149,
+        "output_tokens": 1034
+      },
+      "web": {
+        "calls": 56,
+        "input_tokens": 75417,
+        "output_tokens": 4854
+      }
+    },
+    "completed_samples": 88,
+    "completion_rate": 0.9565217391304348,
+    "open_pending_items": 0,
+    "open_exceptions": 13,
+    "wrong_links": 0,
+    "wrong_merges": 0,
+    "wrong_fields": 0
+  }
+}

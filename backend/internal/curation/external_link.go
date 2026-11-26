@@ -18,10 +18,11 @@ import (
 )
 
 type LinkIntent struct {
-	ObjectType      string `json:"object_type"`
-	ObjectID        string `json:"object_id"`
-	ExternalID      string `json:"external_id"`
-	ExternalGroupID string `json:"external_group_id,omitempty"`
+	ArtistPrimaryName string `json:"-"`
+	ObjectType        string `json:"object_type"`
+	ObjectID          string `json:"object_id"`
+	ExternalID        string `json:"external_id"`
+	ExternalGroupID   string `json:"external_group_id,omitempty"`
 }
 
 func (l LinkIntent) key() string { return l.ObjectType + ":" + l.ObjectID }
@@ -210,8 +211,9 @@ func (w *Writer) ApplyLinks(ctx context.Context, request LinkRequest) (LinkAppli
 		if err := checkReleaseGroupCompatibility(ctx, tx, id, links); err != nil {
 			return operations.Outcome{}, err
 		}
+		var linkedArtists []string
 		for _, intent := range links {
-			l := Link{Source: external, ObjectType: intent.ObjectType, ObjectID: intent.ObjectID, ExternalID: intent.ExternalID, Method: request.Method, Confidence: request.Confidence, OperationID: operationID}
+			l := Link{ArtistPrimaryName: intent.ArtistPrimaryName, Source: external, ObjectType: intent.ObjectType, ObjectID: intent.ObjectID, ExternalID: intent.ExternalID, Method: request.Method, Confidence: request.Confidence, OperationID: operationID}
 			skip, err := addUnoccupiedLink(ctx, tx, l)
 			if err != nil {
 				return operations.Outcome{}, err
@@ -223,10 +225,16 @@ func (w *Writer) ApplyLinks(ctx context.Context, request LinkRequest) (LinkAppli
 				applied.Skipped[intent.key()] = skip
 				continue
 			}
+			if intent.ObjectType == "artist" {
+				linkedArtists = append(linkedArtists, intent.ObjectID)
+			}
 			applied.Written = append(applied.Written, intent)
 		}
 		if len(applied.Written) == 0 {
 			return operations.Outcome{}, operations.Conflict("nothing_to_apply", "没有需要建立的对应")
+		}
+		if err := catalog.RefreshMergedArtistProfiles(ctx, tx, linkedArtists); err != nil {
+			return operations.Outcome{}, err
 		}
 		after := linkState{Source: external, Method: request.Method, Confidence: request.Confidence, External: request.External, Links: applied.Written}
 		if request.ExternalSource != "" {

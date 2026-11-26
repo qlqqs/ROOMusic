@@ -1231,13 +1231,7 @@ func (recorder *apiSampleRecorder) record(name string, response *httptest.Respon
 		t.Fatalf("sample %s: expected HTTP %d, got %d: %s", name, wantStatus, response.Code, response.Body.String())
 	}
 	if response.Code == http.StatusNoContent {
-		if response.Body.Len() != 0 {
-			t.Fatalf("sample %s: 204 response must be empty", name)
-		}
-		if _, exists := recorder.samples[name]; exists {
-			t.Fatalf("sample %s was recorded twice", name)
-		}
-		recorder.samples[name] = encodeAPISample(t, name, response.Code, []byte("null"))
+		recorder.recordEmpty(name, response, wantStatus)
 		return
 	}
 	if contentType := response.Header().Get("Content-Type"); contentType != "application/json" {
@@ -1253,6 +1247,18 @@ func (recorder *apiSampleRecorder) record(name string, response *httptest.Respon
 		}
 	}
 	recorder.samples[name] = encodeAPISample(t, name, response.Code, response.Body.Bytes())
+}
+
+func (recorder *apiSampleRecorder) recordEmpty(name string, response *httptest.ResponseRecorder, wantStatus int) {
+	t := recorder.t
+	t.Helper()
+	if response.Code != wantStatus || response.Body.Len() != 0 {
+		t.Fatalf("样本 %s 应为 HTTP %d 空响应，得到 %d：%s", name, wantStatus, response.Code, response.Body)
+	}
+	if _, exists := recorder.samples[name]; exists {
+		t.Fatalf("样本 %s 重复录制", name)
+	}
+	recorder.samples[name] = encodeAPISample(t, name, response.Code, []byte("null"))
 }
 
 // apiSampleContainsSecret 仅豁免新增接口公开的四个合同标识；密码字段、哈希与凭据仍禁止录入。

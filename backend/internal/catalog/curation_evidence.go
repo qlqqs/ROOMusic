@@ -59,6 +59,10 @@ type CurationObservation struct {
 }
 
 type CurationTrack struct {
+	RelativePath                                                     string                           `json:"-"`
+	LocalTags                                                        map[string]string                `json:"-"`
+	LocalTitle                                                       string                           `json:"local_title,omitempty"`
+	LocalArtist                                                      string                           `json:"local_artist,omitempty"`
 	WorkTitle                                                        string                           `json:"-"`
 	Authenticity                                                     map[string]metadata.Authenticity `json:"-"`
 	EffectiveTitleAuth, EffectiveArtistAuth                          metadata.Authenticity            `json:"-"`
@@ -84,6 +88,8 @@ type CurationTrack struct {
 }
 
 type CurationEvidence struct {
+	LocalTitle  string `json:"local_title,omitempty"`
+	LocalArtist string `json:"local_artist,omitempty"`
 	// 补空计划采用的字段输入，人工字段会由写入事务跳过。
 	FieldInputs map[string]json.RawMessage `json:"-"`
 	// 由整理写入方在受治理事务中复核。
@@ -173,7 +179,7 @@ const curationHeaderSQL = `SELECT releases.id::text,releases.group_id::text,COAL
  releases.artist,COALESCE(releases.media_type,''),
  ` + releasesql.ScanFieldsJSON + ` || COALESCE(c.values,'{}'::jsonb),
  COALESCE(c.present,'{}'::jsonb),
- COALESCE(a.values,'{}'::jsonb),a.stale,
+ COALESCE(a.values,'{}'::jsonb),a.stale,COALESCE(a.local->>'title',''),COALESCE(a.local->>'album_artist',''),
  COALESCE((SELECT jsonb_object_agg(field_key,selected_source) FROM release_field_decisions
      WHERE release_id=releases.id),'{}'::jsonb),
  COALESCE((SELECT jsonb_agg(position ORDER BY position,id) FROM media WHERE release_id=releases.id),'[]'::jsonb),
@@ -190,8 +196,9 @@ const curationHeaderSQL = `SELECT releases.id::text,releases.group_id::text,COAL
  ) c ON true
  LEFT JOIN LATERAL (
     SELECT jsonb_object_agg(field,COALESCE(to_jsonb(text_value),to_jsonb(year_value),to_jsonb(list_value))) FILTER (WHERE valid) AS values,
-           jsonb_object_agg(field,operation_id) FILTER (WHERE NOT valid) AS stale
-    FROM release_auto_values
+           jsonb_object_agg(field,operation_id) FILTER (WHERE NOT valid) AS stale,
+           jsonb_object_agg(field,text_value) FILTER (WHERE valid AND writer_level=1 AND o.origin->>'mode'='local_cleanup') AS local
+    FROM release_auto_values LEFT JOIN operations o ON o.id=operation_id AND writer_level=1
     CROSS JOIN LATERAL (SELECT scan_basis IS NULL OR scan_basis=(` + releasesql.ScanFieldsJSON + `)->field AS valid) validity
     WHERE release_id=releases.id
  ) a ON true
@@ -212,7 +219,7 @@ func curationHeaders(ctx context.Context, q Queryer, ids []string, artworkExists
 		var values, corrected, automatic, stale, decisions, media []byte
 		var artworkKey sql.NullString
 		if err := rows.Scan(&e.ID, &e.GroupID, &e.CandidateKind, &e.Artist, &e.MediaType, &values, &corrected,
-			&automatic, &stale, &decisions, &media, &e.LocalArtwork, &artworkKey, &e.ExternalID, &e.ExternalGroupID, &e.ReleaseGroupMatchID,
+			&automatic, &stale, &e.LocalTitle, &e.LocalArtist, &decisions, &media, &e.LocalArtwork, &artworkKey, &e.ExternalID, &e.ExternalGroupID, &e.ReleaseGroupMatchID,
 			&e.GroupExternalID, &e.GroupChangeSource); err != nil {
 			return nil, err
 		}
@@ -241,6 +248,12 @@ func curationHeaders(ctx context.Context, q Queryer, ids []string, artworkExists
 			}
 		}
 		e.Title, e.AlbumArtist, e.Year, e.Genres = fields.Title, fields.AlbumArtist, fields.Year, fields.Genre
+		if e.Corrected["title"] {
+			e.LocalTitle = ""
+		}
+		if e.Corrected["album_artist"] {
+			e.LocalArtist = ""
+		}
 		e.Classical = metadata.HasClassicalGenre(e.Genres)
 		e.Barcode, e.CatalogNumber, e.Label, e.Edition = fields.Barcode, fields.CatalogNumber, fields.Label, fields.Edition
 		e.FieldSources, e.RawCatalogNumber = sources, fields.CatalogNumber
@@ -341,6 +354,9 @@ const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_
  EXISTS(SELECT FROM track_identifiers WHERE track_id=t.id AND kind IN ('mb_work','acoustid') AND value<>''),
  COALESCE(round((CASE WHEN dd.duration_seconds>0 AND dd.duration_seconds<'Infinity'::float8
      THEN dd.duration_seconds END)::numeric),0)::bigint,
+ COALESCE(t.cue_parent_relative_path,t.relative_path,''),
+ COALESCE(CASE WHEN valid.title AND ct.track_id IS NULL AND ot.origin->>'mode'='local_cleanup' THEN atitle.text_value END,''),
+ COALESCE(CASE WHEN valid.artist AND ca.track_id IS NULL AND oa.origin->>'mode'='local_cleanup' THEN aa.text_value END,''),
  t.source_kind,t.source_root_id::text,COALESCE(t.cue_sheet_path,''),COALESCE(t.cue_parent_relative_path,''),COALESCE(t.cue_isrc,''),
  t.cue_index_frames,t.cue_end_frames,CASE WHEN $2 THEN t.lyrics END,el.track_id IS NOT NULL,COALESCE(tl.external_id,''),
  COALESCE((SELECT jsonb_object_agg(tags.kind,tags.ids) FROM (
@@ -352,6 +368,8 @@ const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_
  LEFT JOIN track_corrections ca ON ca.track_id=t.id AND ca.field='artist'
  LEFT JOIN track_auto_values atitle ON atitle.track_id=t.id AND atitle.field='title'
  LEFT JOIN track_auto_values aa ON aa.track_id=t.id AND aa.field='artist'
+ LEFT JOIN operations ot ON ot.id=atitle.operation_id AND atitle.writer_level=1
+ LEFT JOIN operations oa ON oa.id=aa.operation_id AND aa.writer_level=1
  CROSS JOIN LATERAL (SELECT atitle.scan_basis IS NULL OR atitle.scan_basis=to_jsonb(t.title) AS title,
      aa.scan_basis IS NULL OR aa.scan_basis=to_jsonb(t.artist) AS artist) valid
  LEFT JOIN track_display_durations dd ON dd.track_id=t.id
@@ -372,7 +390,7 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 		var identifiers, observations []byte
 		if err := rows.Scan(&releaseID, &t.ID, &t.Title, &t.Artist, &t.EffectiveTitle, &t.EffectiveArtist,
 			&observations, &t.TitleCorrected, &t.ArtistCorrected, &t.TitleAutomatic, &t.ArtistAutomatic, &staleTitle, &staleArtist, &t.Disc, &t.DiscNumber, &t.Position, &t.WorkTitle,
-			&t.OtherIdentifier, &t.DurationSeconds, &t.SourceKind, &t.SourceRootID, &t.CueSheetPath, &t.ParentFile, &t.CueISRC,
+			&t.OtherIdentifier, &t.DurationSeconds, &t.RelativePath, &t.LocalTitle, &t.LocalArtist, &t.SourceKind, &t.SourceRootID, &t.CueSheetPath, &t.ParentFile, &t.CueISRC,
 			&t.CueIndexFrames, &t.CueEndFrames, &lyrics, &t.ExternalLyrics, &t.ExternalID, &identifiers); err != nil {
 			return err
 		}
@@ -393,9 +411,26 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 		t.Authenticity = make(map[string]metadata.Authenticity, len(observed)+3)
 		for name, o := range observed {
 			t.Authenticity[name] = auth(name, o.Value, false)
+			if withDetails && t.Authenticity[name] == metadata.Real && o.Value != "" {
+				if t.LocalTags == nil {
+					t.LocalTags = make(map[string]string)
+				}
+				t.LocalTags[name] = o.Value
+			}
 		}
 		t.Authenticity["title"] = auth("title", t.Title, t.TitleCorrected)
 		t.Authenticity["artist"] = auth("artist", t.Artist, t.ArtistCorrected)
+		// 旧扫描没有逐字段观察时，仍可用原始的真标签作为本地文字依据。
+		if withDetails {
+			for name, value := range map[string]string{"title": t.Title, "artist": t.Artist} {
+				if t.Authenticity[name] == metadata.Real && !(name == "title" && t.TitleCorrected || name == "artist" && t.ArtistCorrected) {
+					if t.LocalTags == nil {
+						t.LocalTags = map[string]string{}
+					}
+					t.LocalTags[name] = value
+				}
+			}
+		}
 		t.Authenticity["position"] = auth("track_number", positiveNumber(t.Position), false)
 		t.Authenticity["disc"] = auth("disc_number", positiveNumber(t.DiscNumber), false)
 		t.Authenticity["duration_seconds"] = metadata.FieldAuthenticity("duration", positiveNumber(t.DurationSeconds), "", false, false)

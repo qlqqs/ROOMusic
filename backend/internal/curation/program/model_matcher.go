@@ -268,6 +268,9 @@ func (m *ModelMatcher) readMatch(ctx context.Context, kind string, e catalog.Cur
 		if rec.ID != id {
 			return r, matchConflict("external_id_mismatch")
 		}
+		if _, within := compareLength(e.Tracks[0].DurationSeconds, rec.LengthMS); within {
+			e = curation.LocalSearchEvidence(e)
+		}
 		r.Verification = verifyRecording(e, rec)
 		r.Rule, r.Level = r.Verification.Method, "recording"
 		r.Status, r.Recording, r.Pairs = "matched", &rec, []TrackPair{{e.Tracks[0].ID, rec.ID}}

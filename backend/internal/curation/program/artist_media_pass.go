@@ -14,6 +14,7 @@ import (
 )
 
 type artistEvidence struct {
+	MissingPrimaryName                 *primaryNameLookup `json:",omitempty"`
 	ID, Name                           string
 	MBIDs, WikidataIDs, Names, Markers []string
 	ImageRank, BioRank                 int
@@ -23,6 +24,10 @@ type artistEvidence struct {
 	pendingStatus                      string
 	finishedForInput                   bool
 	albumAuth, trackAuth               []metadata.Authenticity
+}
+
+func (e artistEvidence) needsPrimaryName(p artistProviders) bool {
+	return e.MissingPrimaryName != nil && p.active[e.MissingPrimaryName.Source]
 }
 
 func (e artistEvidence) resolution() string {
@@ -126,8 +131,10 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 		EXISTS(SELECT FROM curation_pending_items pi JOIN curation_work_states w
 			ON w.subject='artist_media' AND w.target_id=pi.artist_id AND w.input_digest=pi.input_digest
 			WHERE pi.artist_id=p.canonical_id AND pi.kind='artist_identity' AND pi.status='resolved'
-			AND pi.resolution IN ('no_result','suggestion_recorded') AND pi.candidates='[]' AND pi.conflicts='[]')
-	FROM page p JOIN artists a ON a.id=p.canonical_id LEFT JOIN artist_profiles profile ON profile.artist_id=p.canonical_id
+			AND pi.resolution IN ('no_result','suggestion_recorded') AND pi.candidates='[]' AND pi.conflicts='[]'),
+        (SELECT jsonb_build_object('link_id',l.link_id,'source',l.source,'external_id',l.external_id)
+         FROM artist_merged_primary_links l WHERE l.artist_id=p.canonical_id AND l.artist_primary_name IS NULL)
+    FROM page p JOIN artists a ON a.id=p.canonical_id LEFT JOIN artist_profiles profile ON profile.artist_id=p.canonical_id
 	ORDER BY p.canonical_id`, args...)
 	if err != nil {
 		return nil, err
@@ -136,9 +143,14 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 	var page []artistEvidence
 	for rows.Next() {
 		var e artistEvidence
-		var ids, qids, markers, names []byte
-		if err := rows.Scan(&e.ID, &e.Name, &ids, &qids, &e.ImageRank, &e.BioRank, &markers, &names, &e.Albums, &e.Tracks, &e.hasCredits, &e.waitingForRecognition, &e.pendingStatus, &e.finishedForInput); err != nil {
+		var ids, qids, markers, names, lookup []byte
+		if err := rows.Scan(&e.ID, &e.Name, &ids, &qids, &e.ImageRank, &e.BioRank, &markers, &names, &e.Albums, &e.Tracks, &e.hasCredits, &e.waitingForRecognition, &e.pendingStatus, &e.finishedForInput, &lookup); err != nil {
 			return nil, err
+		}
+		if len(lookup) > 0 {
+			if err := json.Unmarshal(lookup, &e.MissingPrimaryName); err != nil {
+				return nil, err
+			}
 		}
 		if err := json.Unmarshal(ids, &e.MBIDs); err != nil {
 			return nil, err
@@ -308,7 +320,7 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 		if !e.hasCredits || !canUpgrade && !canQueue {
 			return nil
 		}
-	} else if e.ImageRank >= catalog.ArtistMediaLicensedRank && e.BioRank >= catalog.ArtistMediaLicensedRank {
+	} else if !e.needsPrimaryName(providers) && e.ImageRank >= catalog.ArtistMediaLicensedRank && e.BioRank >= catalog.ArtistMediaLicensedRank {
 		return nil
 	}
 	input := digest([]any{e, providers.digest})
@@ -320,6 +332,11 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 		return err
 	}
 	u := unit{w: w, ruleVersion: resourceRuleVersion, subject: subject, id: e.ID, generation: state.Generation + 1}
+	if e.needsPrimaryName(providers) {
+		if err := w.fillArtistPrimaryName(ctx, e.ID, *e.MissingPrimaryName); err != nil {
+			return err
+		}
+	}
 	if err := w.enrichArtist(ctx, &u, &e, providers); err != nil {
 		return err
 	}

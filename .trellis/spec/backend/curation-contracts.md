@@ -18,13 +18,9 @@ M7 子任务 A（2026-11）给后台自动整理准备好写入、记录与撤�
 
 决策依据：[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 4、5、8、10 节。
 
-### 待修订的条款（整理链重构，2026-11-25 批准，尚未实现）
+### 整理链重构（2026-11-25）
 
-依据 ADR 0006 第 16 节。下表各条在对应子任务完成之前仍按正文执行；子任务完成时改正文并删去这一行。
-
-| 条款 | 将改为 | 子任务 |
-| --- | --- | --- |
-| 第 21 节与“网络搜索与身份待定项” | 模型巡检给出规范身份（联网兜底与子额度已由第 26 节落地） | D |
+ADR 0006 第 16 节的规则已落地，见第 22–27 节；与前面各节不一致处以第 22–27 节为准，各节开头另有标注。
 
 ## 2. 数据模型（迁移 0058）
 
@@ -1169,3 +1165,30 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 - 手动采纳与不采纳沿用 `POST /exceptions/{id}/accept|decline`；不采纳才写“不再提出”。进度的 `waiting_human` 固定为 0，建议不计入待办。
 - 接口：`GET/PUT /settings` 增 `web_daily_token_limit`（null 不限，PUT 缺省保留）；`GET /progress` 的 `model` 增 `web_daily_token_limit`、`web_today`、`web_limit_reached`、`web_retry_at`；
   `GET /exceptions` 每项增上述四个字段，`review` 可空，`kind` 增三种 `verify_*`，`tool` 增 `submit_artist_media`、`submit_verification`、`observation`。
+
+## 27. 模型巡检与本地整理（整理链 D，2026-11-25）
+
+依据 ADR 0006 第 16.6 节。迁移 0092–0094。可行性测试见整理链父任务的 `research/` 下子任务 D 的记录。
+
+### 27.1 巡检
+
+- 只处理当前稳定、可见的库内名字里新出现或变化的：艺人名附最多三张专辑名，各艺人的专辑名列表另行分块；每块最多 32 项。名录内容按不可信数据传给模型。
+- 输出每个名字的规范身份 `原文名 | 拉丁写法` 与 confidence，以及问题清单（同一身份的不同名字、错字、同一专辑的不同写法）。提示词只判断身份与明确的错字，不翻译，不统一风格。
+- 结果持久化：原文、拉丁写法、confidence、问题、实际模型、`PatrolPromptVersion`、时间。更换模型、提示词版本升级都沿用已有结果；`POST /api/v1/admin/curation/repatrol`（管理员，无请求体，202）让稳定名录重新入队。
+- 归组：原文名或拉丁写法经 `textnorm` 规范化后任一相同即为同一组，confidence 为 low 的不参与，跨块也可关联。归组交 `verify_artist_merge`，明确错字与专辑异写交 `verify_name`；巡检本身不写曲库，写入按第 26.3 节的佐证规则。
+- 规范名经 `CanonicalNames` 供文字搜索优先使用，原写法作第二次尝试；`NamesPatrolled` 供第二档的启动条件。新规范名会唤醒受影响且尚未匹配的发行。
+
+### 27.2 显示名与搜索
+
+合并后的艺人显示库内可见发行与曲目里出现次数最多的写法；并列时取合并身份的外部主名称；有人工改名的优先，自动合并优先以有人工名的一方为目标。搜索投影包含合并双方的全部原写法、人工名与显示名。
+
+### 27.3 本地整理
+
+- 只处理扫描解析后标题、艺人或曲目标题仍是占位值，或推断值里带明显杂质（年份、格式、编号、方括号内容）的专辑；扫描已能解析的“01 - 艺人 - 曲名”不进模型。
+- 按目录提供文件名、目录名与现有标签，只给 `submit_local_cleanup`（`item_id`，可选 `title`、`artist`、`tracks:[{track_id,title}]`）。
+- 后端在写入事务中复核：每个值规范化后必须出现在某个本地片段里，否则丢弃。通过的按模型来源、`writer_level=1`、`origin.mode=local_cleanup` 写自动层，标为模型推断。曲序与碟号不改。
+- 整理出的值可以作搜索输入，认定仍须时长核对（第 23.2 节）。
+
+### 27.4 已知局限
+
+艺人入库按 `textnorm.Text` 规范化后的名字归一（`catalog/internal/artistgraph/names.go`），没有人工区分时，同名的不同人共用一个本地艺人。本任务不拆开。

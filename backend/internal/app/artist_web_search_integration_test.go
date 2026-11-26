@@ -148,10 +148,7 @@ func (f *artistWebSearchFixture) pendingArtist(t *testing.T, artist, name string
 	t.Helper()
 	if f.requests != nil {
 		// 受控模型测试不启动程序，用已完成的发行识别夹具满足艺人领项门槛。
-		mustExec(t, f.application, curation.ArtistReleaseCreditsSQL+`
-			INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status)
-			SELECT DISTINCT 'release',release_id,1,'合成识别结论','no_match' FROM credits WHERE artist_id=$1
-			ON CONFLICT(subject,target_id) DO NOTHING`, artist)
+		f.markArtistReleasesRecognized(t, artist)
 	}
 	evidence, err := json.Marshal(map[string]any{
 		"names": []string{name}, "albums": []any{}, "tracks": []string{}, "gaps": map[string]bool{"image": true, "bio": true},
@@ -161,6 +158,14 @@ func (f *artistWebSearchFixture) pendingArtist(t *testing.T, artist, name string
 		ArtistID: artist, TargetType: "artist", Kind: "artist_identity", RuleVersion: program.StoredRuleVersion, InputDigest: "合成艺人证据", Evidence: evidence,
 	}))
 	return f.artistItem(t, artist)
+}
+
+func (f *artistWebSearchFixture) markArtistReleasesRecognized(t *testing.T, artist string) {
+	t.Helper()
+	mustExec(t, f.application, curation.ArtistReleaseCreditsSQL+`
+		INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status)
+		SELECT DISTINCT 'release',release_id,1,'合成识别结论','no_match' FROM credits WHERE artist_id=$1
+		ON CONFLICT(subject,target_id) DO NOTHING`, artist)
 }
 
 func (f *artistWebSearchFixture) artistItem(t *testing.T, artist string) curation.PendingItem {

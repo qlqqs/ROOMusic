@@ -295,6 +295,7 @@ func TestPostgreSQLArtistWebSearchMediaPrecedence(t *testing.T) {
 				imageReq.Image.ID, bioReq.Bio.ID = entry, entry
 				switch source {
 				case "web_search":
+					f.markArtistReleasesRecognized(t, artist)
 					c := modelConversation(t, f.curationFixture)
 					item := modelClaim(t, f.curationFixture, c, f.pendingArtist(t, artist, name))
 					ctx = curation.WithModelRun(ctx, &curation.ModelRun{ActorID: f.admin.id, Model: "合成模型", ConversationID: c, PendingItemID: item.ID})

@@ -176,7 +176,7 @@ func TestPostgreSQLCurationAutoMergeReplay(t *testing.T) {
 	f.stop()
 	<-f.done
 	f.assertCount(t, 1, `SELECT count(*) FROM operations WHERE operation_type='artist_merge'`)
-	f.assertCount(t, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND NOT (result ? 'artist_links')`, f.a)
+	f.assertCount(t, 1, `SELECT count(*) FROM curation_work_states WHERE subject='release' AND target_id=$1 AND NOT (result ? 'artist_links')`, f.a)
 	mustExec(t, f.application, `DROP TRIGGER interrupt_artist_backfill ON curation_work_states`)
 	f.run(t)
 	f.assertCount(t, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND result->>'artist_links'='done'

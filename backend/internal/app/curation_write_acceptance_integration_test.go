@@ -38,7 +38,7 @@ func TestPostgreSQLCurationTrackAutoSurvivesRescan(t *testing.T) {
 func TestPostgreSQLCurationUnavailableReviewPreservesWrites(t *testing.T) {
 	f := newSchedulerFixture(t)
 	f.configure(t, &f.admin)
-	item := f.pending(t, f.a)
+	_, _, item := f.matchFixture(t)
 	check := func() {
 		t.Helper()
 		for _, table := range []string{"operations", "release_auto_values", "track_auto_values", "external_links"} {
@@ -47,7 +47,7 @@ func TestPostgreSQLCurationUnavailableReviewPreservesWrites(t *testing.T) {
 	}
 	check()
 	f.enable(t)
-	f.next(t, false).tool(t, "correct_release", schedulerCorrection(f.a, 1, "edition", setChange("合成版本")))
+	f.next(t, false).selectCandidate(t, item.ID, f.remote.ID)
 	f.next(t, true).complete(t)
 	want := f.clock.options().Now().Add(5 * time.Minute)
 	schedulerWait(t, "不可用审查进入退避", func() bool {

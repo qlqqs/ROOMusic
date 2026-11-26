@@ -62,7 +62,7 @@ func TestPostgreSQLCurationLocalRuleUpgradeQuiet(t *testing.T) {
 	b3Root(t, app)
 	publishSearch(t, app)
 	writeMetricSample(t, app.allowedRoot, sample)
-	runScan(t, app, &admin)
+	scanAndConfirmCuration(t, app, &admin)
 	entry := metricScannedEntry(t, app, sample)
 	targets := map[string]metricsModelTarget{entry.release: {
 		SampleID: sample.ID, ReleaseID: sample.Expect.Release, GroupID: sample.Expect.Group, Fields: sample.Expect.Fields,
@@ -141,7 +141,7 @@ func TestPostgreSQLCurationAuthenticityFromScan(t *testing.T) {
 	for _, sample := range []metricSample{real, inferred, fallback, loose, compilation} {
 		writeMetricSample(t, app.allowedRoot, sample)
 	}
-	runScan(t, app, &admin)
+	scanAndConfirmCuration(t, app, &admin)
 
 	read := func(t *testing.T, path string) catalog.CurationEvidence {
 		t.Helper()

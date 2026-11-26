@@ -202,6 +202,9 @@ func (artistLinkKind) Revert(ctx context.Context, tx *sql.Tx, op string, r opera
 	if err = restoreArtistMedia(ctx, tx, id, "artist_external_bios", before.Bios); err != nil {
 		return operations.Outcome{}, err
 	}
+	if err = catalog.RefreshMergedArtistProfiles(ctx, tx, []string{id}); err != nil {
+		return operations.Outcome{}, err
+	}
 	before.Links, err = readArtistLinkRows(ctx, tx, r.TargetID)
 	if err != nil {
 		return operations.Outcome{}, err

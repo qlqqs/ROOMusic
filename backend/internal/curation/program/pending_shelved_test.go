@@ -210,7 +210,7 @@ func RunShelvedPendingCases(t *testing.T, decline func(context.Context, *sql.DB,
 			t.Fatalf("人工不采纳后的例外状态为 %s", decided.Status)
 		}
 		resolved := f.load(t, item.ID)
-		if resolved.Status != "resolved" || resolved.Resolution == nil || *resolved.Resolution != "human_declined" {
+		if resolved.Status != "resolved" || resolved.Resolution == nil || *resolved.Resolution != "suggestion_recorded" {
 			t.Fatalf("人工不采纳后的待定项为 %+v", resolved)
 		}
 

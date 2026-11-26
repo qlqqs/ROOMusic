@@ -223,7 +223,7 @@ func TestPostgreSQLB3AcoustIDProgram(t *testing.T) {
 				}
 			case tc.ambiguous:
 				b3RequireReleaseResult(t, app, release, "uncertain", "acoustid", "used", "ambiguous")
-				raw := programString(t, app, `SELECT candidates FROM curation_pending_items WHERE target_id=$1 AND status='waiting_model'`, release)
+				raw := programString(t, app, `SELECT candidates FROM curation_pending_items WHERE target_id=$1 AND kind='release_match' AND status='waiting_model'`, release)
 				var candidates []program.Candidate
 				if err := json.Unmarshal([]byte(raw), &candidates); err != nil || len(candidates) != 2 {
 					t.Fatalf("待定项候选=%s，错误=%v", raw, err)
@@ -247,7 +247,7 @@ func TestPostgreSQLB3AcoustIDProgram(t *testing.T) {
 				for i, track := range tracks {
 					b3RequireCount(t, app, 1, `SELECT count(*) FROM external_links WHERE object_type='track' AND object_id=$1 AND source='musicbrainz' AND method='acoustid' AND external_id=$2`, track, remote.Recordings[i])
 				}
-				b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, release)
+				b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, release)
 				var detail struct {
 					Title       string
 					AlbumArtist string `json:"album_artist"`
@@ -362,6 +362,8 @@ func TestPostgreSQLB3LegacyWorkReopenedOnce(t *testing.T) {
 			io.WriteString(w, b3EmptyLookup)
 		case "/mb/release":
 			io.WriteString(w, `{"count":0,"releases":[]}`)
+		case "/mb/artist":
+			io.WriteString(w, `{"count":0,"offset":0,"artists":[]}`)
 		default:
 			t.Errorf("意外出站 %s", r.URL.Path)
 			http.NotFound(w, r)
@@ -378,7 +380,7 @@ func TestPostgreSQLB3LegacyWorkReopenedOnce(t *testing.T) {
 		redo  bool
 	}
 	var old []seededState
-	seed := func(subject, target, digest, status, method, conflict string, redo bool) {
+	seed := func(subject, target, digest, status, method, conflict string, redo bool, evidence catalog.CurationEvidence) {
 		t.Helper()
 		shape := map[string]any{}
 		if subject == "release" {
@@ -395,6 +397,11 @@ func TestPostgreSQLB3LegacyWorkReopenedOnce(t *testing.T) {
 		}
 		state := curation.WorkState{Subject: subject, TargetID: target, RuleVersion: program.StoredRuleVersion,
 			InputDigest: digest, Status: status, Result: data, Attempts: 6, Generation: 7}
+		if subject == "release" {
+			// 保留旧的无指纹结果，隔离当前规则版本，不让版本迁移先触发全量补查。
+			state.RuleVersion, state.MatchRuleVersion = program.MatchRuleVersion, program.MatchRuleVersion
+			state.LocalRuleVersion, state.IdentityDigest, state.GapDigest = program.LocalRuleVersion, program.IdentityDigest(evidence), program.GapDigest(evidence)
+		}
 		if err := curation.SaveWorkState(t.Context(), app.database, state); err != nil {
 			t.Fatal(err)
 		}
@@ -430,9 +437,9 @@ func TestPostgreSQLB3LegacyWorkReopenedOnce(t *testing.T) {
 		if err != nil || !found {
 			t.Fatalf("读取旧版证据 found=%t 错误=%v", found, err)
 		}
-		seed("release", release, program.ReleaseDigest(evidence), tc.status, tc.method, tc.conflict, tc.redo)
-		seed("artwork", release, program.ArtworkDigest(evidence), "done", "", "", false)
-		seed("lyrics", tracks[0], program.LyricsDigest(evidence, evidence.Tracks[0]), "done", "", "", false)
+		seed("release", release, program.ReleaseDigest(evidence), tc.status, tc.method, tc.conflict, tc.redo, evidence)
+		seed("artwork", release, program.ArtworkDigest(evidence), "done", "", "", false, evidence)
+		seed("lyrics", tracks[0], program.LyricsDigest(evidence, evidence.Tracks[0]), "done", "", "", false, evidence)
 	}
 	check := func(available bool) {
 		t.Helper()
@@ -445,12 +452,12 @@ func TestPostgreSQLB3LegacyWorkReopenedOnce(t *testing.T) {
 				if err := json.Unmarshal(before.Result, &oldResult); err != nil {
 					t.Fatal(err)
 				}
-				method := "search"
+				status, method := "unlisted", "search"
 				if slices.Contains(oldResult.Conflicts, "insufficient_evidence") {
-					method, conflict = "", "insufficient_evidence"
-					b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, before.TargetID)
+					status, method, conflict = "no_match", "", "insufficient_evidence"
+					b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, before.TargetID)
 				}
-				b3RequireReleaseResult(t, app, before.TargetID, "no_match", method, "used", conflict)
+				b3RequireReleaseResult(t, app, before.TargetID, status, method, "used", conflict)
 				if after.Generation != before.Generation+1 || after.Attempts != before.Attempts+1 {
 					t.Errorf("%s 代次/尝试=%d/%d，期望 %d/%d", after.TargetID, after.Generation, after.Attempts, before.Generation+1, before.Attempts+1)
 				}
@@ -478,8 +485,8 @@ func TestPostgreSQLB3LegacyWorkReopenedOnce(t *testing.T) {
 	check(true)
 	mu.Lock()
 	defer mu.Unlock()
-	if !reflect.DeepEqual(hits, map[string]int{"/v2/lookup": 1, "/mb/release": 1}) {
-		t.Errorf("重开后外部请求计数=%v，期望一次指纹查询（相同样本共用缓存）与一次文本搜索", hits)
+	if !reflect.DeepEqual(hits, map[string]int{"/v2/lookup": 1, "/mb/release": 2, "/mb/artist": 1}) {
+		t.Errorf("重开后外部请求计数=%v，期望一次指纹查询、两次发行搜索和一次艺人搜索", hits)
 	}
 }
 

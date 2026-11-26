@@ -77,6 +77,7 @@ func ReleaseIdentityDigest101(e catalog.CurationEvidence) string {
 
 // ReleaseIdentityDigest 覆盖文字、作品和当前外部对应等实际识别依据。
 func ReleaseIdentityDigest(e catalog.CurationEvidence) string {
+	e = LocalSearchEvidence(e)
 	type trackText struct {
 		Title, Artist identityField
 		Work          string

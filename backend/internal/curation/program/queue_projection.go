@@ -121,6 +121,12 @@ func (w *Worker) projectReleasePage(ctx context.Context, page []catalog.Curation
 	if err != nil {
 		return err
 	}
+	if err = curation.ProjectPatrolInputs(ctx, tx, ids); err != nil {
+		return err
+	}
+	if err = curation.ProjectLocalItems(ctx, tx, ids, entries); err != nil {
+		return err
+	}
 	missing, err := catalog.CurationMissingArtistLinks(ctx, tx, ids)
 	if err != nil {
 		return err

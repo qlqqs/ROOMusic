@@ -49,7 +49,8 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 			return uncertain(newMatch(mode, ""), "track_count"), nil
 		}
 	}
-	base := localNames(e, mode)
+	searchInput := curation.LocalSearchEvidence(e)
+	base := localNames(searchInput, mode)
 	if opts.Names.ArtistID == "" {
 		opts.Names.ArtistID = base.ArtistID
 	}
@@ -70,7 +71,7 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 
 	var text MatchResult
 	var prior []SearchPage
-	insufficient := insufficientEvidence(e)
+	insufficient := insufficientEvidence(searchInput)
 	pf, paged := f.(curation.ReleasePageFinder)
 	if !insufficient {
 		if mode == "single" {
@@ -169,7 +170,7 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 		m.Conflicts = []string{"insufficient_evidence"}
 		return m, nil
 	}
-	m, err := textSearch(ctx, e, mode, base, names, f, rf, opts, text, prior)
+	m, err := textSearch(ctx, searchInput, mode, base, names, f, rf, opts, text, prior)
 	m.Fingerprint = fingerprint
 	return m, err
 }
