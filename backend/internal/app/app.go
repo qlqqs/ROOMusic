@@ -37,6 +37,8 @@ import (
 	libraryapi "github.com/qlqq/roomusic/backend/internal/library/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/listening"
 	listeningapi "github.com/qlqq/roomusic/backend/internal/listening/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/networkproxy"
+	networkproxyapi "github.com/qlqq/roomusic/backend/internal/networkproxy/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	operationsapi "github.com/qlqq/roomusic/backend/internal/operations/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/personal"
@@ -45,6 +47,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/diagnostics"
 	diagnosticsapi "github.com/qlqq/roomusic/backend/internal/platform/diagnostics/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/playback"
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
@@ -148,6 +151,29 @@ func WithBackups(service *backup.Service) Option { return func(o *options) { o.b
 // 调用方先完成 InitializeCatalog；正常服务不等待后台投影完成。
 // frontend 是前端产物子树。database 为 nil 时路由表照常建立但 /readyz 报告未就绪，供不连接数据库的路由测试使用。
 func New(lifecycle context.Context, settings config.Server, database *sql.DB, frontend fs.FS, logger *slog.Logger, applied ...Option) *App {
+	application, err := Open(lifecycle, settings, database, frontend, logger, applied...)
+	if err != nil {
+		panic(err)
+	}
+	return application
+}
+
+// Open 在装配各服务前载入出站设置，加载失败时由入口处理。
+func Open(lifecycle context.Context, settings config.Server, database *sql.DB, frontend fs.FS, logger *slog.Logger, applied ...Option) (*App, error) {
+	instanceSecrets := newInstanceSecrets(settings.DataDirectory)
+	mockHost := sources.NewMockHost(settings.UpstreamMockURL)
+	networkProxy := networkproxy.New(database, instanceSecrets, func(cfg *egress.ProxyConfig) {
+		if cfg != nil {
+			cfg.Bypass = mockHost.Matches
+		}
+		egress.SetProxy(cfg)
+	})
+	if database != nil {
+		if err := networkProxy.Load(lifecycle); err != nil {
+			return nil, err
+		}
+	}
+
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
@@ -184,7 +210,6 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		zoneOptions.NewMemberStreamFilter = render.NewMemberStreamFilter(assembly.renderer)
 	}
 	zonesService := zones.NewService(database, zoneOptions)
-	instanceSecrets := newInstanceSecrets(settings.DataDirectory)
 	if assembly.loginThrottle == nil {
 		assembly.loginThrottle = identity.NewLoginThrottle(nil)
 	}
@@ -222,10 +247,9 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
-	var mockHost sources.MockHost
+	networkproxyapi.Register(mux, guard, networkProxy)
 	var tavilyEndpoint string
 	if base := settings.UpstreamMockURL; base != "" {
-		mockHost = sources.NewMockHost(base)
 		assembly.music.BaseURL, assembly.music.MockHost = base+"/musicbrainz/ws/2", mockHost
 		assembly.covers.BaseURL, assembly.covers.MockHost = base+"/coverartarchive", mockHost
 		assembly.lyrics.BaseURL, assembly.lyrics.MockHost = base+"/lrclib", mockHost
@@ -453,7 +477,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 			supervisor.CancelUser(userID)
 		}
 	}).Register(mux)
-	return &App{steward: supervisor, mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, programDone: programDone, modelDone: modelDone, scanSchedulerDone: scanSchedulerDone, zonesDone: zonesDone}
+	return &App{steward: supervisor, mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, programDone: programDone, modelDone: modelDone, scanSchedulerDone: scanSchedulerDone, zonesDone: zonesDone}, nil
 }
 
 // InitializeCatalog 在允许扫描与治理写入前短事务登记目标版本，不发现对象或等待回填。

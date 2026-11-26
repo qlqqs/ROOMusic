@@ -92,6 +92,7 @@ type Declaration struct {
   命中缓存不占限速许可。启动时与之后每 24 小时清理过期文件。读写失败只记日志，按未命中处理。
   这些文件可以随时删除，不进备份；有结果的缓存有效期内，对话读不到外部更新的编辑。
 - **请求**：默认用 `platform/egress` 的 `PublicOnly`；`Accept: application/json`（`GetBytes` 由调用方给）；
+  实例代理不可用或认证失败时，按暂时网络错误进入既有退避。路由、密码和诊断约定见[全局出站代理合同](./outbound-proxy-contracts.md)。
   User-Agent 为 `ROOMusic/<构建版本或 dev> ( <buildinfo.ProjectURL> )`，不含实例信息。
   客户端工厂的形状是 `func(egress.Options) (*http.Client, error)`，每次出站调用一次并在用完后关闭空闲连接。
 - **重定向**：默认不跟随。`Options.MaxRedirects > 0` 时跟随，`Options.AllowRedirect(目标地址)` 决定每一跳是否放行。每一跳之前依次检查：

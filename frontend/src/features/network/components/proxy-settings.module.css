@@ -1,0 +1,103 @@
+/* 地址一行里主机加端口：主机占满剩余宽度，端口定宽；窄卡片里整体不超过卡片宽度。 */
+.address {
+  display: flex;
+  gap: var(--space-2);
+  width: 360px;
+  max-width: 100%;
+}
+
+.address > .input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* 行里的输入框与按钮：输入框占满剩余宽度，按钮不换行（与 Agent 设置的同名样式一致）。 */
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  max-width: 100%;
+}
+
+.inline:has(> input) {
+  flex-wrap: nowrap;
+  width: 360px;
+}
+
+.inline > input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.input,
+.port {
+  min-height: var(--control-height);
+  padding: 6px 10px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  caret-color: var(--color-accent-700);
+  font-size: var(--fs-13);
+}
+
+.input {
+  width: 360px;
+  max-width: 100%;
+}
+
+.port {
+  flex: 0 0 auto;
+  width: 84px;
+  font-variant-numeric: tabular-nums;
+}
+
+.input:hover,
+.port:hover {
+  border-color: var(--color-neutral-800);
+}
+
+.input:focus-visible,
+.port:focus-visible {
+  border-color: var(--color-accent-700);
+  outline-offset: 0;
+}
+
+.port[aria-invalid="true"] {
+  border-color: var(--color-neutral-900);
+  box-shadow: inset 0 0 0 1px var(--color-neutral-900);
+}
+
+.value {
+  font-size: var(--fs-13);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.muted {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+/* 测试结果：图标加一句话，紧跟在按钮后面；失败不只靠颜色区分。 */
+.result,
+.failure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--fs-12);
+}
+
+.result {
+  color: var(--text-secondary);
+}
+
+.failure {
+  color: var(--color-warning);
+}
