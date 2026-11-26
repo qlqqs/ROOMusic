@@ -11,6 +11,20 @@
 | W3 测试 | R17–R19 的样本与度量、W1/W2 的定向集成用例 | `internal/app/*_test.go`、`internal/app/testdata/curation_regression/samples.json`，必要的 `internal/upstreammock/**` |
 | W4 真实试用 | R20 的曲库扩充、长网页回环、三轮试跑与报告 | `cmd/roomusic-curation-bench/**`、`internal/app/curation_live*_test.go`、任务的 `research/` |
 
+补充分工：
+
+- R21（首条消息内容与新增工具）归 W1。
+- R22 的限信息 oracle 归 W3：在 `internal/upstreammock/**` 中实现，oracle 只从本次请求历史与工具结果中挑选值。
+- R23 的失败归因归 W3/W4：读取 `steward_messages` 与工具结果，对照标注。
+
+### R21 信息完整
+
+- 列出后端判定与核实所需的每一类信息，与首条消息字段、工具能力逐项对照，并把这张对照表写进合同第 26 节。目前已知的缺口：
+  - 发行组标题与版本列表：给 `get_music_metadata` 增加 `release_group` 类型，返回标题和带结构摘要的版本列表；
+  - 艺人别名：给 `get_music_metadata` 的艺人类型增加别名；
+  - 首条消息补上此前各档的原因和后端接受写入的佐证要求。
+- 来源不可用的工具错误要写清楚，模型不应因此放弃（与 R1 配合）。
+
 W1 与 W2 互不修改对方的文件；共同约定见下节。W3 可以从基线并行起步，先写样本与度量（这时预期会失败），待 W1、W2 合入后跑通。
 
 ## 共同约定
