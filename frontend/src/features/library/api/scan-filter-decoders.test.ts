@@ -20,6 +20,8 @@ const root = {
   updated_at: "2026-11-08T00:00:00Z",
   excluded_paths: ["Artist/Bootlegs", "附录"],
 };
+// 目录列表另有监听方式与定时间隔（只补这两项，排除项的有无仍由用例决定）。
+const listOnly = { scan_watch_mode: "realtime", poll_interval_minutes: 60 };
 
 const scan = {
   id: "00000000-0000-4000-8000-000000000002",
@@ -35,7 +37,7 @@ const scan = {
 };
 
 const exclusionDecoders = [
-  ["目录列表", (input: unknown) => decodeRootList({ items: [input] }).items[0]],
+  ["目录列表", (input: unknown) => decodeRootList({ items: [{ ...(input as object), ...listOnly }] }).items[0]],
   ["排除项命令结果", decodeRootExclusions],
 ] as const;
 

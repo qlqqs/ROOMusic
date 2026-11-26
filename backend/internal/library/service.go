@@ -21,6 +21,7 @@ type Service struct {
 	scanScheduleWake  chan struct{}
 	scanScheduleClock ScanSchedulerClock
 	scanScheduleMutex sync.Mutex
+	watch             directoryWatcher
 	scanMutex         sync.Mutex
 	runningScan       string
 	// albumFavoriteMover 由 app 在扫描启动前注入。
@@ -34,7 +35,7 @@ func NewService(scanContext context.Context, database *sql.DB, dataDirectory str
 	if scanContext == nil {
 		scanContext = context.Background()
 	}
-	return &Service{database: database, dataDirectory: dataDirectory, logger: logger, scanContext: scanContext, scanConcurrency: 4, scanScheduleWake: make(chan struct{}, 1)}
+	return &Service{watch: newDirectoryWatcher(), database: database, dataDirectory: dataDirectory, logger: logger, scanContext: scanContext, scanConcurrency: 4, scanScheduleWake: make(chan struct{}, 1)}
 }
 
 // WithScanConcurrency 在扫描启动前配置读盘并发度，由组合根传入已校验的配置。

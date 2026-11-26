@@ -32,7 +32,7 @@ SELECT t.id, t.medium_id, t.position,
        t.cue_sheet_path, t.cue_parent_relative_path, t.cue_referenced_file, t.cue_index_frames,
        t.cue_end_frames, t.cue_isrc, t.bit_depth, t.content_fingerprint, t.source_size, t.source_modified_at,
        t.lyrics, t.lyrics_source, t.work_title, t.work_catalog, t.work_index,
-       t.movement_number, t.movement_title, t.work_source, t.edit_revision, t.sort_position
+       t.movement_number, t.movement_title, t.work_source, t.edit_revision, t.scan_tags, t.sort_position
 FROM tracks t
 LEFT JOIN track_corrections ct ON ct.track_id=t.id AND ct.field='title'
 LEFT JOIN track_corrections ca ON ca.track_id=t.id AND ca.field='artist'

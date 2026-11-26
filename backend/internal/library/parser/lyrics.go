@@ -3,6 +3,7 @@ package parser
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -96,7 +97,11 @@ func setAudioLyrics(observation *AudioObservation, key, value string) bool {
 
 // setM4ALyrics 处理 MP4 的 `©lyr`：只接受类型为 1（UTF-8）的 data，取第一个有效值。
 func setM4ALyrics(observation *AudioObservation, value, typeCode []byte) {
-	if observation.Lyrics != "" || len(typeCode) < 4 || binary.BigEndian.Uint32(typeCode) != 1 {
+	if len(typeCode) < 4 || binary.BigEndian.Uint32(typeCode) != 1 {
+		return
+	}
+	observation.collectSynced(4, string(value))
+	if observation.Lyrics != "" {
 		return
 	}
 	if lyrics, ok := metadata.NormalizeLyrics(string(value)); ok {
@@ -111,31 +116,8 @@ func parseID3USLT(frame []byte) (emptyDescriptor bool, lyrics string, ok bool) {
 		return false, "", false
 	}
 	encoding, body := frame[0], frame[4:]
-	var descriptor, text []byte
-	switch encoding {
-	case 0, 3:
-		end := bytes.IndexByte(body, 0)
-		if end < 0 {
-			return false, "", false
-		}
-		descriptor, text = body[:end], body[end+1:]
-	case 1, 2:
-		// UTF-16 的终止符是按两字节对齐的 0x0000。
-		end := -1
-		for offset := 0; offset+1 < len(body); offset += 2 {
-			if body[offset] == 0 && body[offset+1] == 0 {
-				end = offset
-				break
-			}
-		}
-		if end < 0 {
-			return false, "", false
-		}
-		descriptor, text = body[:end], body[end+2:]
-	default:
-		return false, "", false
-	}
-	if len(text) > maxLyricsFrameTextBytes {
+	descriptor, text, split := splitID3Terminated(encoding, body)
+	if !split || len(text) > maxLyricsFrameTextBytes {
 		return false, "", false
 	}
 	decoded, decodedOK := decodeID3Lyrics(encoding, text)
@@ -187,4 +169,60 @@ func decodeID3Lyrics(encoding byte, text []byte) (string, bool) {
 		return "", false
 	}
 	return string(utf16.Decode(units)), true
+}
+
+// splitID3Terminated 按编码的码元边界切开描述或一个歌词事件。
+func splitID3Terminated(enc byte, b []byte) (text, rest []byte, ok bool) {
+	if enc == 0 || enc == 3 {
+		return bytes.Cut(b, []byte{0})
+	}
+	if enc == 1 || enc == 2 {
+		for i := 0; i+1 < len(b); i += 2 {
+			if b[i] == 0 && b[i+1] == 0 {
+				return b[:i], b[i+2:], true
+			}
+		}
+	}
+	return nil, nil, false
+}
+
+func (o *AudioObservation) collectSYLT(frame []byte) {
+	if len(frame) < 7 || len(frame) > maxLyricsFrameTextBytes || frame[5] != 1 {
+		return
+	}
+	enc, unit := frame[0], frame[4]
+	if unit != 2 && (unit != 1 || o.Codec != "mp3" || o.SampleRate <= 0) {
+		return
+	}
+	_, rest, ok := splitID3Terminated(enc, frame[6:])
+	if !ok {
+		return
+	}
+	var lyrics strings.Builder
+	for len(rest) > 0 {
+		text, next, ok := splitID3Terminated(enc, rest)
+		if !ok || len(next) < 4 {
+			return
+		}
+		decoded, ok := decodeID3Lyrics(enc, text)
+		if !ok {
+			return
+		}
+		stamp := int64(binary.BigEndian.Uint32(next))
+		rest = next[4:]
+		if unit == 1 {
+			samples := int64(576)
+			if o.SampleRate >= 32000 {
+				samples = 1152
+			}
+			stamp = stamp * samples * 1000 / int64(o.SampleRate)
+		}
+		if line := strings.TrimSpace(decoded); line != "" {
+			fmt.Fprintf(&lyrics, "[%02d:%02d.%03d]%s\n", stamp/60000, (stamp/1000)%60, stamp%1000, line)
+		}
+		if lyrics.Len() > metadata.MaxLyricsBytes {
+			return
+		}
+	}
+	o.collectSynced(1, lyrics.String())
 }

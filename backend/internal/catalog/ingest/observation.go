@@ -17,6 +17,8 @@ import (
 type SourceObservation struct {
 	// 归组副本中的结构碟号，保留原始标签碟号供证据读取。
 	structureDisc         int
+	Format                string                       `json:"format,omitempty"`
+	ScanTags              *metadata.ScanTags           `json:"scan_tags,omitempty"`
 	Album                 string                       `json:"album,omitempty"`
 	AlbumArtist           string                       `json:"album_artist,omitempty"`
 	Artist                string                       `json:"artist,omitempty"`
@@ -109,7 +111,7 @@ func (o SourceObservation) fieldObservations() []fieldObservation {
 		}
 	}
 	for _, name := range []string{"title", "artist", "album", "album_artist"} {
-		if raw := o.LegacyText[name]; len(raw) > 0 && o.FieldSources[name] == "garbled" {
+		if raw := o.LegacyText[name]; len(raw) > 0 && (o.FieldSources[name] == "garbled" || o.FieldSources[name] == "legacy_encoding") {
 			fields = append(fields, fieldObservation{Name: "legacy_bytes_" + name, Value: base64.StdEncoding.EncodeToString(raw), SourceKind: "garbled"})
 		}
 	}

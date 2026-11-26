@@ -142,8 +142,8 @@ func TestFilenameTitleAndArtistCleaningTable(t *testing.T) {
 	}{
 		{"12. Zoltraak.flac", "Zoltraak", "未知艺术家", 12, 0, "", false},
 		{"1.01 - 酸欠少女.flac", "酸欠少女", "未知艺术家", 1, 1, "1.02 - 其他.flac", false},
-		{"01 - 周杰伦 - 晴天.flac", "晴天", "周杰伦", 1, 0, "", false},
-		{"成龙,金喜善 - 无尽的爱.flac", "无尽的爱", "成龙,金喜善", 0, 0, "", false},
+		{"01 - 周杰伦 - 晴天.flac", "周杰伦 - 晴天", "未知艺术家", 1, 0, "", false},
+		{"成龙,金喜善 - 无尽的爱.flac", "成龙,金喜善 - 无尽的爱", "未知艺术家", 0, 0, "", false},
 		{"Track 07 - Title.mp3", "Title", "未知艺术家", 7, 0, "", false},
 		{"07.flac", "07", "未知艺术家", 7, 0, "", false},
 		{"1999 - Title.flac", "1999 - Title", "未知艺术家", 0, 0, "", false},

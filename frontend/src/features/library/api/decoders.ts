@@ -24,8 +24,19 @@ export const MAX_ROOT_EXCLUSIONS = 100;
 // 不扫描的子文件夹：相对该目录的路径（`/` 分隔），按字节升序，没有时为空数组。
 const excludedPathsDecoder = d.array(d.string({ min: 1 }), { max: MAX_ROOT_EXCLUSIONS });
 
+/**
+ * 目录的监听方式：realtime 是实时监听，文件改动后几秒内只重扫那个文件夹；scheduled 是按间隔定时扫描，
+ * 用于网络共享或挂不上监听的目录（非 Linux 系统上全部如此）。首次完整扫描之前还没定，接口给 null。
+ */
+export const scanWatchModes = ["realtime", "scheduled"] as const;
+export type ScanWatchMode = (typeof scanWatchModes)[number];
+
+/** 定时扫描可选的间隔（分钟）：15 分钟、1 小时、4 小时、12 小时、每天；新目录默认 1 小时。 */
+export const pollIntervalMinutes = [15, 60, 240, 720, 1440] as const;
+const pollIntervalDecoder = d.integer({ min: 1, max: 1440 });
+
 // 目录只返回目录名（路径的最后一段），不返回服务器上的绝对路径。
-const rootDecoder = d.object({
+const rootShape = {
   id: d.uuid(),
   path: d.string({ min: 1 }),
   name: d.string({ min: 1 }),
@@ -34,13 +45,26 @@ const rootDecoder = d.object({
   created_at: d.timestamp(),
   updated_at: d.timestamp(),
   excluded_paths: excludedPathsDecoder,
+};
+// 监听方式与定时间隔只出现在目录列表里；目录命令的结果仍是上面的字段。
+const rootListItemDecoder = d.object({
+  ...rootShape,
+  scan_watch_mode: d.nullable(d.oneOf(scanWatchModes)),
+  poll_interval_minutes: pollIntervalDecoder,
 });
 
 // 后端不给目录列表设上限（后端缺口），所以不限条数，只限字段长度。
-const rootListDecoder = d.object({ items: d.array(rootDecoder, { max: d.unbounded }) });
+const rootListDecoder = d.object({ items: d.array(rootListItemDecoder, { max: d.unbounded }) });
 
 export const decodeRootList = d.defineDecoder(rootListDecoder);
-export type RootDTO = d.Infer<typeof rootDecoder>;
+export type RootListItemDTO = d.Infer<typeof rootListItemDecoder>;
+/** 目录本身的字段（目录命令的结果也是这些），不含只在列表里出现的监听方式与间隔。 */
+export type RootDTO = Omit<RootListItemDTO, "scan_watch_mode" | "poll_interval_minutes">;
+
+/** PUT /library-roots/{id}/scan-interval：返回保存后的定时扫描间隔。 */
+const rootScanIntervalDecoder = d.object({ poll_interval_minutes: pollIntervalDecoder });
+export const decodeRootScanInterval = d.defineDecoder(rootScanIntervalDecoder);
+export type RootScanIntervalDTO = d.Infer<typeof rootScanIntervalDecoder>;
 
 /** POST /library-roots（201）：路径已登记时返回已有目录，停用的保持停用。 */
 const rootCreatedDecoder = d.object({

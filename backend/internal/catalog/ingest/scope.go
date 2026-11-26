@@ -34,3 +34,12 @@ func artworkScope(observation SourceObservation) string {
 	encoded, _ := json.Marshal(key)
 	return string(encoded)
 }
+
+// IsDiscDirectory 供局部扫描和归组共用碟目录名规则。
+func IsDiscDirectory(name string) bool {
+	_, ok := parseDiscMarker(name)
+	return ok || standaloneBonusDir(name)
+}
+
+// 虚拟轨由 sheet 负责枚举，单轨 CUE 的物理轨仍由其音频目录负责。
+const trackDirectorySQL = `regexp_replace(CASE WHEN t.source_kind='cue_virtual' THEN t.cue_sheet_path ELSE t.relative_path END, '(^|/)[^/]*$', '')`

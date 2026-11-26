@@ -10,6 +10,15 @@ import (
 // MarkMissingSourcesWithFeedback 保持全根一个终态事务；核心更新和变更记账各按 256 行处理。
 // 所有既有发行锁均先于组锁；报告锁失败会释放该尝试的锁并降级到原有核心路径。
 func MarkMissingSourcesWithFeedback(ctx context.Context, tx *sql.Tx, scanID string, rootIDs []string, feedback *ScanFeedback) error {
+	return MarkMissingInDirectories(ctx, tx, scanID, rootIDs, nil, feedback)
+}
+
+// MarkMissingInDirectories 在同一终态事务内更新本轮覆盖的来源和反馈。
+// directories 为根 ID 到直属目录数组的 JSON；nil 表示 rootIDs 各根均已遍历全树。
+func MarkMissingInDirectories(ctx context.Context, tx *sql.Tx, scanID string, rootIDs []string, directories []byte, feedback *ScanFeedback) error {
+	const missing = `FROM tracks t WHERE source_status='present' AND source_root_id=ANY($1::uuid[])
+	AND ($3::jsonb IS NULL OR ($3::jsonb->source_root_id::text) ? (` + trackDirectorySQL + `))
+	AND observed_at<(SELECT started_at FROM scan_runs WHERE id=$2::uuid)`
 	if err := LockProjectionWrites(ctx, tx); err != nil {
 		return err
 	}
@@ -17,9 +26,7 @@ func MarkMissingSourcesWithFeedback(ctx context.Context, tx *sql.Tx, scanID stri
 		if err := createFeedbackTables(ctx, tx); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO scan_feedback_tracks(id) SELECT id FROM tracks
-   WHERE source_status='present' AND source_root_id=ANY($1::uuid[])
-   AND observed_at<(SELECT started_at FROM scan_runs WHERE id=$2::uuid)`, rootIDs, scanID); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO scan_feedback_tracks(id) SELECT id `+missing, rootIDs, scanID, directories); err != nil {
 			return err
 		}
 		if err := collectFeedbackReleases(ctx, tx, ""); err != nil {
@@ -36,12 +43,10 @@ func MarkMissingSourcesWithFeedback(ctx context.Context, tx *sql.Tx, scanID stri
 	for {
 		// 键集推进避免从头跳过已处理曲目；每批至多保留 256 个 ID 以刷新搜索可见性。
 		rows, err := tx.QueryContext(ctx, `WITH batch AS (
-   SELECT id FROM tracks WHERE source_status='present' AND source_root_id=ANY($1::uuid[])
-   AND observed_at<(SELECT started_at FROM scan_runs WHERE id=$2::uuid)
-   AND ($3::uuid IS NULL OR id>$3::uuid) ORDER BY id LIMIT 256
+   SELECT id `+missing+` AND ($4::uuid IS NULL OR id>$4::uuid) ORDER BY id LIMIT 256
   ), changed AS (
    UPDATE tracks SET source_status='missing' WHERE id IN (SELECT id FROM batch) RETURNING id
-  ) SELECT id::text FROM changed ORDER BY id`, rootIDs, scanID, nullableString(after))
+  ) SELECT id::text FROM changed ORDER BY id`, rootIDs, scanID, directories, nullableString(after))
 		if err != nil {
 			return err
 		}

@@ -5,12 +5,7 @@
 ### 标签多值、署名与合辑（⑥⑦）
 
 - 曲目艺人、专辑艺人及六类曲目署名共用 `metadata.CanonicalArtistNames`：
-  先按 `\r\n`、`\n`、`\r`、NUL 切段，各段完整重走规则，再删其余控制字符与首尾空白。明确分隔符
-  `; `、`；`、` / `、` feat. `、` ft. `、` with `、`、` 区分大小写；` & ` 两侧各含空格时先拆。
-  随后保护固定组合 `Simon & Garfunkel`、`Earth, Wind & Fire`、`AC/DC` 与拉丁“姓, 名”，最后依次拆紧凑 `/`、`,`、`&`；嵌套段也遵守姓名保护。
-  “姓, 名”须恰有一个逗号，两侧各有拉丁字母，仅含拉丁字母、组合附加符、空格及 `. - ' ’`，左侧至多3词、右侧至多4词；
-  各词小写后不得以前缀 `orchest/philharm/symphon/sinfon/ensemble/quartet/quatuor/trio/choir/chorus/chor/consort/singers/players/band` 开头。
-  其余逗号照拆，`Tom & Jerry` 照拆；`Queen, David Bowie` 整体保留是已接受局限。
+  按换行、NUL、分号（半角或全角）、` / `、` feat. `、` ft. `、` with ` 和顿号分段。半角分号两侧无需空格。其余斜杠、半角逗号和 & 保留在姓名内。
   按原写法精确去重，曲目展示排序后以 ` / ` 连接；不按别名改写事实、不猜人。
   解析署名先拆原文、再逐名 `BoundedText`，不得先删除换行。原始证据与人工意图见[艺人合同](./artist-contracts.md)。
 - `metadata.JoinArtistValues(values ...string) string` 只展开换行/NUL，逐值 `BoundedText`、丢空、原写法去重并保留首次顺序，以 ` / ` 拼接。
@@ -56,10 +51,10 @@
 
 - MP3 没有 ID3v2 或 APE 标签时从末尾 128 字节读取 ID3v1 的曲名、艺人、专辑、年份、标准流派以及 v1.1 的曲号。标签来源记为 `mp3_id3v1`，播放使用原有 MP3 物理格式键。
 - ID3v1 和 ID3v2 编码字节 0 的标题、艺人、专辑与专辑艺人按 Latin-1 读取。遇到连续高位字节或 C1 字节时，先检查西文读法。只要有 ASCII 字母，每段连续高位字节至多两个，且这些字节在 Windows-1252 中均为拉丁字母或标点，就保留扫描值。其余疑似旧编码的值依次尝试 GBK、Big5、Shift_JIS，只保留含汉字或假名、无替换字符或控制字符且能还原原字节的不同结果。
-- 有候选的扫描字段来源是 `garbled`，按占位跳过外部查询。扫描观察保留原文及用于复核的原字节，解码值只在本地层生效。单一读法由程序写入，来源 `legacy_encoding`、级别 1。歧义读法列入对应字段的本地整理片段，提交时复核。人工修正、扫描依据校验及撤销沿用自动层合同。
+- 扫描按同一发行候选内疑似字段的原字节求可无损往返的编码交集。唯一编码时按该编码重建标签值及署名，来源为 `legacy_encoding`。交集为空或含多个编码时标 `garbled`，保留原文、原字节和候选编码名，整理搜索跳过该字段。CUE 显式覆盖的字段使用 CUE 自己的来源。
 - 艺人、专辑和曲名按整串识别 Unknown Artist、Unknown Album、Unknown、`<unknown>`、未知、未知歌手／艺人／艺术家／专辑、带编号的 Track、Audio Track 和音轨，接受大小写、全半角、空格和常用分隔符。占位可进入本地整理，Untitled 是普通标题。
 - 全部曲目缺少明确 ALBUMARTIST 时，至少 4 首、至少 3 位不同的主艺人、无人担任超过半数曲目的主艺人，发行艺人与专辑艺人均取 `Various Artists`，来源 `artist_distribution`、真实性为推断。每首只计真实曲目署名拆出的第一位。扫描与整理均优先读取曲目艺人原始标签，按出现序号、标签键取首项，以保留排序展示前的署名顺序。占位与推断艺人跳过，分母仍为整张曲数。
-- 沿用 `CommonVersion=5`、`LocalRuleVersion=3`。完整扫描会重新解析旧编码标签。
+- 扫描按 `CommonVersion=6` 重读旧编码标签，与整理开关独立。
 
 ### 古典作品与乐章（⑧，迁移 0039）
 
@@ -74,7 +69,7 @@
 
 - TXXX 与 `com.apple.iTunes` freeform 复用通用键入口；原生键优先。TIT1 只有同文件存在非空 MVNM/MVIN，或能解析出作品编号时才作作品，否则用 WORK 回退。MOVEMENTTOTAL、©mvc、分母不保存；非正数或超出 INTEGER 的乐章号不保存。
 - `AssignWorks(OrganizedCandidate) map[string]WorkAssignment` 在 `PersistCandidateWithFeedback` 开头计算一次，按碟号、轨位排序；键为规范化相对路径。`WorkAssignment{Title,Catalog,Index,MovementNumber,MovementTitle,Source}` 交给 `persistTrack`，规划阶段不计算，不改变发行/曲目身份或 organizer。
-- 有 WORK 总按标签写 `Source="tag"`，不受流派限制；乐章名缺失时只剥曲目标题开头的“作品名 + `: `、`：`、` - `、`, `、`，`”。其余连续无 WORK 段，仅扫描候选流派经 `GenreKey` 等于 `classical/classic/classique/klassik/clásica/clasica/classica/クラシック/클래식` 或包含“古典”时调用 `SplitWorks`，来源为 `title`；人工修正流派不触发重算，Classical Crossover、Neo-Classical 不在名单。
+- 有 WORK 总按标签写 `Source="tag"`，不受流派限制；乐章名缺失时只剥曲目标题开头的“作品名 + `: `、`：`、` - `、`, `、`，`”。其余连续无 WORK 段，仅扫描候选流派经 `GenreKey` 等于 `classical/classic/classique/klassik/clásica/clasica/classica/クラシック/클래식` 或精确等于“古典”“古典音乐”“古典乐”时调用 `SplitWorks`，来源为 `title`；人工修正流派不触发重算，Classical Crossover、Neo-Classical 不在名单。
 - `SplitWorks` 返回 `WorkSplit{Work,Movement,Group}`。括号归一化只用于判定，切分取原文；保留空格闸门、调性/缩写/时间戳例外，补全角分隔符闸门及罗马、阿拉伯、“第N乐章”的反向定位。`Concerto: 1. Allegro / 2. Adagio` 由已确认的原文前导定位作品，不放宽公开 `Segments` 的闸门。单曲推断组不产出任何字段。
 - 相邻作品名去首尾空白、小写相同且来源相同才可成组；标签乐章号都有值时须递增，相邻非空乐章名重复则断组，`promenade` 除外；无名不算同名。标题来源以 `SplitWorks.Group` 为准。只给至少两轨的组分配发行内从 1 递增的 Index；单轨标签仍保存作品供搜索。CUE 虚拟轨按 CUE TITLE 参与。重复规则按相邻语义，不采用参考伪码仅首曲更新 lastPart 的错误。
 - Catalog 取 `ParseCatalogs(Title)` 第一项的原文片段并裁首尾空白。六列 `work_title/work_catalog/work_index/movement_number/movement_title/work_source` 重扫整体替换，无作品全部 NULL；两个标题非空且≤4096字节，编号非空且≤256字节，序号正数，来源 `tag|title`。作品名与来源同空同有，无作品名不得有其他作品列；违反 CHECK 走既有候选写入失败路径。
@@ -121,3 +116,17 @@
 - 扫描反馈里“曲目有变化”的摘要不纳入标识。
 - 这次改动把 `parser.CommonVersion` 升到 4：升级后的第一次扫描重新解析全部文件的标签并重写全部候选，曲目与发行的 ID 不变
   （见[增量扫描合同](./library-scan-incremental.md)）。
+
+### 文件标签快照
+
+`tracks.scan_tags` 随候选事务整体替换。物理轨保存文件事实，CUE 虚拟轨携带父文件快照。展示歌词、年份、播放参数沿用各自现有字段。文件名回退只清理开头编号和格式字，“01 甲 - 乙 [FLAC]”的标题为“甲 - 乙”，缺少艺人标签时使用未知艺人。
+
+| 快照字段 | 读取规则 |
+| --- | --- |
+| track_total、disc_total | 读取编号分母和总数键，非零总碟数至少为最终碟号。 |
+| release_date、original_release_date、recording_date、recording_start_date、recording_end_date | 保留文件提供的年、月、日精度。 |
+| single、live、bootleg、ep、soundtrack、primary_version | 缺键与显式假分别保存。 |
+| track_gain、album_gain、track_peak、album_peak | 保留有效有限浮点数，包括零。 |
+| synced_lyrics | 时间戳开头的非空行严格超过四分之三时保存。原生 SYLT 按编码和时间单位转换。 |
+| comments | 按出现顺序保留键、正文及同名多值。 |
+| podcast、audiobook | 按存在性标记或原始首个 TCON 的 Podcast、Literature 识别。整理分页与程序队列的取项和计数通过 `curation_eligible_releases` 排除含已标记现存曲目的发行。 |

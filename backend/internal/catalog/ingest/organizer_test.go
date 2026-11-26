@@ -817,7 +817,7 @@ func TestOrganizeDirectoryLooseSingles(t *testing.T) {
 		{"部分曲序缺失", []SourceObservation{a, tagged("Singles/b.flac", "艺人乙", 1)}, CandidateOrdinary},
 		{"曲序标签与文件名冲突", []SourceObservation{tagged("Singles/02 a.flac", "艺人甲", 1), tagged("Singles/b.flac", "艺人乙", 1)}, CandidateOrdinary},
 		{"目录名识别为专辑", []SourceObservation{tagged("2001 - 范特西/a.flac", "艺人甲", 0), tagged("2001 - 范特西/b.flac", "艺人乙", 0)}, CandidateOrdinary},
-		{"一首带真实专辑标签", []SourceObservation{a, withAlbum}, CandidateOrdinary},
+		{"一首带真实专辑标签", []SourceObservation{a, withAlbum}, CandidateSameDirSplit},
 		{"一首的标题为推断值", []SourceObservation{a, inferredTitle}, CandidateOrdinary},
 		{"一首的艺人为推断值", []SourceObservation{a, inferredArtist}, CandidateOrdinary},
 		{"多碟目录", []SourceObservation{tagged("Album/CD1/a.flac", "艺人甲", 0), tagged("Album/CD2/b.flac", "艺人乙", 0)}, CandidateMultiDisc},
@@ -826,7 +826,7 @@ func TestOrganizeDirectoryLooseSingles(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := OrganizeObservations(tc.items)
 			wantCount := 1
-			if tc.kind == CandidateLooseUnknown {
+			if tc.kind == CandidateLooseUnknown || tc.kind == CandidateSameDirSplit {
 				wantCount = len(tc.items)
 			}
 			if len(got) != wantCount {
@@ -1010,6 +1010,12 @@ func TestOrganizeFilenamePositionConflictsDiscardAllFilenameNumbers(t *testing.T
 		}, map[string]int{"tagged.flac": 1, "01 Song.flac": 2, "08 Other.flac": 3}, "tagged.flac"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// 同一张已知专辑内比较曲号，避免缺专辑名先触发混放归组。
+			for i := range tc.items {
+				tc.items[i].Album = "Album"
+				delete(tc.items[i].InferredFields, "album")
+				delete(tc.items[i].FieldSources, "album")
+			}
 			candidate := organizeSingleCandidate(t, tc.items...)
 			for _, track := range candidate.Mediums[1] {
 				o := track.Observation
@@ -1172,13 +1178,17 @@ func TestOrganizeFilenameDiscNumberEvidencePriority(t *testing.T) {
 				items = append(items, o)
 			}
 			candidate := organizeSingleCandidate(t, items...)
-			if len(candidate.Mediums) != 1 || len(candidate.Mediums[tc.want]) != 2 {
-				t.Fatalf("介质位置应为 %d：%#v", tc.want, candidate.Mediums)
+			medium := tc.want
+			if tc.directory == "A/CD2" {
+				medium = 2
 			}
-			for _, track := range candidate.Mediums[tc.want] {
+			if len(candidate.Mediums) != 1 || len(candidate.Mediums[medium]) != 2 {
+				t.Fatalf("介质位置应为 %d：%#v", medium, candidate.Mediums)
+			}
+			for _, track := range candidate.Mediums[medium] {
 				o := track.Observation
 				wantInferred := tc.source != "tag" && tc.source != "cue_sheet"
-				if track.Disc != tc.want || o.DiscNumber != tc.want || o.FieldSources["disc_number"] != tc.source || o.InferredFields["disc_number"] != wantInferred {
+				if track.Disc != medium || o.DiscNumber != tc.want || o.FieldSources["disc_number"] != tc.source || o.InferredFields["disc_number"] != wantInferred {
 					t.Errorf("碟号/来源/inferred 错误：%#v，期望 %d/%s/%t", track, tc.want, tc.source, wantInferred)
 				}
 			}

@@ -62,3 +62,9 @@
 
 错误：在 handler 里直接 os.ReadDir 请求参数，或先返回允许根再检查角色。
 正确：先 RequireAdmin，再调用 ListFolders 严格验证和列举，最后用一条参数化查询补登记标记。已有目录新增接口仍独立校验，不把浏览结果当作后续添加操作的授权证明。
+
+## 曲库目录的扫描方式
+
+设置页从管理员目录列表 GET /api/v1/library-roots 获取 scan_watch_mode 与 poll_interval_minutes。realtime 表示实时监听，scheduled 表示定时扫描；待基线、注册中、已停用时模式为 null，停用由目录 status 表示。浏览文件夹仍使用 library-folders。
+
+管理员同源 PUT /api/v1/library-roots/{id}/scan-interval 严格接收单字段对象，如 `{"poll_interval_minutes":240}`。合法值为 15、60、240、720、1440；成功以 200 返回该对象。间隔实际改变后重新计算到期时间，重复保存不会推迟执行。非法 ID 或间隔返回 400，未知根 404；鉴权、同源与服务错误沿用目录接口。

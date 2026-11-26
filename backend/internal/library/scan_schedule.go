@@ -96,7 +96,7 @@ func (service *Service) loadScanScheduleState(ctx context.Context) (ScanSchedule
 	var settings ScanSchedule
 	var lastStarted sql.NullTime
 	err := service.database.QueryRowContext(ctx, `SELECT enabled,hour,updated_at,
-		(SELECT MAX(started_at) FROM scan_runs) FROM scan_schedule WHERE id=1`).
+		(SELECT MAX(started_at) FROM scan_runs WHERE whole_library) FROM scan_schedule WHERE id=1`).
 		Scan(&settings.Enabled, &settings.Hour, &settings.UpdatedAt, &lastStarted)
 	if err != nil {
 		return ScanSchedule{}, time.Time{}, fmt.Errorf("load scan schedule state: %w", err)
