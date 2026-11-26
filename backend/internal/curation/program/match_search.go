@@ -28,6 +28,7 @@ type SearchPage struct {
 	Relaxed       bool           `json:"relaxed,omitempty"`
 }
 type MatchSnapshot struct {
+	CountRelaxed         bool                       `json:"count_relaxed,omitempty"`
 	NameOnlyArtist       bool                       `json:"name_only_artist,omitempty"`
 	FormatRelaxed        bool                       `json:"format_relaxed,omitempty"`
 	TagArtist            string                     `json:"tag_artist,omitempty"`
@@ -392,6 +393,7 @@ func textSearch(ctx context.Context, e catalog.CurationEvidence, mode string, or
 	}
 	// 每一步先按已有证据判定，只有待定或零候选才继续扩查。
 	var decision MatchResult
+	details := searchDetails{finder: f, attempted: map[string]bool{}}
 	decide := func() error {
 		result.Snapshot.ArtistID = e.ArtistMBID
 		if len(result.Candidates) == 0 {
@@ -403,7 +405,7 @@ func textSearch(ctx context.Context, e catalog.CurationEvidence, mode string, or
 		if mode == "single" {
 			decision = decideSearchSingle(checked, result)
 		} else {
-			decision, err = decideSearchAlbum(ctx, checked, result, f, false)
+			decision, err = decideSearchAlbum(ctx, checked, result, &details)
 		}
 		// 下次查询并入新候选时，复用已经读取的发行详情。
 		result.Candidates = decision.Candidates
@@ -436,28 +438,35 @@ func textSearch(ctx context.Context, e catalog.CurationEvidence, mode string, or
 		original.ArtistID = ""
 		triedName = true
 	}
-	if finished() {
+	realAlbum := count > 0 && original.Title != "" && original.Artist != "" &&
+		e.Authenticity["title"] == metadata.Real && e.SelectedArtistAuth() == metadata.Real
+	mayRelaxCount := func() bool {
+		return realAlbum && decision.Status != "matched" && !decision.partialStructure && !slices.Contains(decision.Conflicts, "ambiguous")
+	}
+	if finished() && !mayRelaxCount() {
 		return decision, nil
 	}
-	if !triedName && canonicalQuery(original, names) && !hasExactText(e, mode, result.Candidates) {
-		if err := try(original, count, false); err != nil || finished() {
+	if !finished() && !triedName && canonicalQuery(original, names) && !hasExactText(e, mode, result.Candidates) {
+		if err := try(original, count, false); err != nil || finished() && !mayRelaxCount() {
 			return decision, err
 		}
 	}
+	relaxed := original
 	if len(result.Candidates) == 0 && original.Title != "" {
-		relaxed := original
 		relaxed.Title = relaxedTitle(original.Title)
 		relaxed.Artist = cleanSearchFormat(original.Artist)
 		result.Snapshot.FormatRelaxed = cleanSearchFormat(original.Title) != original.Title || relaxed.Artist != original.Artist
 		if relaxed.Title != "" && relaxed != original {
-			if err := try(relaxed, count, true); err != nil || finished() {
+			if err := try(relaxed, count, true); err != nil || finished() && !mayRelaxCount() {
 				return decision, err
 			}
 		}
-		if len(result.Candidates) == 0 && count > 0 {
-			if err := try(relaxed, 0, true); err != nil || finished() {
-				return decision, err
-			}
+	}
+	// 首搜可能只返回同曲数的其他版本。去曲数与零候选放宽共用这一次查询。
+	if count > 0 && relaxed.Title != "" && (len(result.Candidates) == 0 || mayRelaxCount()) {
+		result.Snapshot.CountRelaxed = len(result.Candidates) > 0
+		if err := try(relaxed, 0, true); err != nil || finished() {
+			return decision, err
 		}
 	}
 	exists := e.ArtistMBID != ""

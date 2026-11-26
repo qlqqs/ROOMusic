@@ -156,6 +156,7 @@ func partialAlbumMatch(e catalog.CurationEvidence, result MatchResult) MatchResu
 			}
 		}
 		if matched, _ := partialAlbumRule(e, *r, result.Snapshot.RecordingIDs); matched != "" {
+			result.partialStructure = true
 			rows = append(rows, *r)
 			if rule == "" {
 				rule = matched

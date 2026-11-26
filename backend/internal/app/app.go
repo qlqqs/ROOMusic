@@ -373,6 +373,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	var programStatus curation.ProgramStatus
 	programDone := make(chan struct{})
 	if database != nil && !assembly.disableProgram {
+		assembly.program.CachedReleaseCredits = cachedReleaseCredits(settings.DataDirectory, music.BaseURL(), assembly.music.Now)
 		assembly.program.ConfirmScan = libraryService.StartCurationConfirmation
 		worker := program.NewWorker(database, curationWriter, sourceGate, scanRunning, logger, assembly.program)
 		programStatus = worker

@@ -21,6 +21,7 @@ type TrackPair struct {
 }
 
 type MatchResult struct {
+	partialStructure                              bool
 	Verification                                  *MatchVerification `json:"verification,omitempty"`
 	GroupTitle                                    string
 	Level, Rule, GroupID, Route, RepresentativeID string

@@ -66,7 +66,7 @@ func Test发行组唯一的条件与结构判定(t *testing.T) {
 			if tc.change != nil {
 				tc.change(&e, &p, f)
 			}
-			got, err := decideSearchAlbum(t.Context(), e, albumPageResult(p, false), f, false)
+			got, err := decideSearchAlbum(t.Context(), e, albumPageResult(p, false), &searchDetails{finder: f, attempted: map[string]bool{}})
 			if err != nil || got.Status != tc.status || got.Level != tc.level || got.Rule != tc.rule || len(f.releaseReads) != tc.reads ||
 				tc.conflict != "" && !slices.Contains(got.Conflicts, tc.conflict) {
 				t.Fatalf("判定 %+v，详情读取 %v，错误 %v", got, f.releaseReads, err)
