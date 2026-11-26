@@ -245,6 +245,7 @@ func afterGroupMatch(before, after catalog.CurationEvidence, out outcome) catalo
 }
 
 type matchWritePlan struct {
+	albumCredit      *curation.ReleaseArtistCredit
 	trackTitleSource string
 	artists          []curation.LinkIntent
 	tracks           []curation.TrackRequest
@@ -302,6 +303,9 @@ func planMatch(ctx context.Context, db operations.Queryer, e catalog.CurationEvi
 		}
 	}
 	p := matchWritePlan{evidence: e, group: plan, links: request, fields: fields}
+	if m.Release != nil && fields["album_artist"].Mode != "" {
+		p.albumCredit = &curation.ReleaseArtistCredit{ReleaseID: m.Release.ID, Artists: m.Release.Artists}
+	}
 	if m.Method != "model" || m.RepresentativeID != "" {
 		p.tracks = planTrackFields(e, m)
 		p.trackTitleSource = m.RepresentativeID
@@ -346,7 +350,7 @@ func writeMatch(ctx context.Context, db operations.Queryer, writer *curation.Wri
 	}
 	if len(fields) > 0 {
 		err := write(ctx, "fields", func(batch, key string) error {
-			result, err := writer.Apply(ctx, curation.Request{OnlyEmpty: true, ExpectedScan: e.FieldInputs, ConfirmedBy: request.ConfirmedBy, ConversationID: request.ConversationID, ReleaseID: e.ID, Fields: fields, Source: request.Source, BatchID: batch, Key: key})
+			result, err := writer.Apply(ctx, curation.Request{ArtistCredit: p.albumCredit, OnlyEmpty: true, ExpectedScan: e.FieldInputs, ConfirmedBy: request.ConfirmedBy, ConversationID: request.ConversationID, ReleaseID: e.ID, Fields: fields, Source: request.Source, BatchID: batch, Key: key})
 			record(result.OperationID)
 			return err
 		})

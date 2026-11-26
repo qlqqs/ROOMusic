@@ -177,6 +177,12 @@ func (m *ModelMatcher) currentNameCandidate(ctx context.Context, e catalog.Curat
 			}}
 			if r := match.Release; r != nil {
 				proof.Match.ReleaseID, proof.Match.ReleaseTitle = r.ID, r.Title
+				switch v.Field {
+				case "album_artist":
+					proof.ArtistCredit = &curation.ReleaseArtistCredit{ReleaseID: r.ID, Artists: r.Artists}
+				case "artist":
+					proof.ArtistCredit = releaseTrackCredits(r)[v.ExternalID]
+				}
 			}
 			return &proof, nil
 		}
