@@ -1,0 +1,1375 @@
+{
+  "captured_at": "2026-11-26T08:38:48.821639+00:00",
+  "enabled_at": "2026-11-26T08:18:11.007464+00:00",
+  "elapsed_seconds": 1237.814175,
+  "model_concurrency": 4,
+  "model_daily_token_limit": 3000000,
+  "web_daily_token_limit": null,
+  "daily_usage": [
+    {
+      "day": "2026-11-26",
+      "input_tokens": 3220891,
+      "output_tokens": 43463,
+      "tokens": 3264354,
+      "web_input_tokens": 2824474,
+      "web_output_tokens": 28860,
+      "web_tokens": 2853334
+    }
+  ],
+  "main_messages": {
+    "calls_with_usage": 319,
+    "input_tokens": 3208077,
+    "output_tokens": 41519
+  },
+  "review_records": {
+    "records": 11,
+    "records_with_usage": 11,
+    "input_tokens": 12814,
+    "output_tokens": 1944
+  },
+  "stage_item_counts": [
+    {
+      "stage": "local_cleanup",
+      "kind": "local_cleanup",
+      "status": "resolved",
+      "items": 3
+    },
+    {
+      "stage": "lookup",
+      "kind": "release_match",
+      "status": "resolved",
+      "items": 1
+    },
+    {
+      "stage": "lookup",
+      "kind": "release_match",
+      "status": "waiting_route",
+      "items": 3
+    },
+    {
+      "stage": "patrol",
+      "kind": "name_patrol",
+      "status": "resolved",
+      "items": 88
+    },
+    {
+      "stage": "patrol",
+      "kind": "name_patrol",
+      "status": "waiting_model",
+      "items": 1
+    },
+    {
+      "stage": "select",
+      "kind": "release_match",
+      "status": "resolved",
+      "items": 3
+    },
+    {
+      "stage": "select",
+      "kind": "release_match",
+      "status": "waiting_model",
+      "items": 5
+    },
+    {
+      "stage": "verify",
+      "kind": "verify_name",
+      "status": "resolved",
+      "items": 6
+    },
+    {
+      "stage": "web",
+      "kind": "artist_identity",
+      "status": "resolved",
+      "items": 11
+    },
+    {
+      "stage": "web",
+      "kind": "artist_identity",
+      "status": "waiting_model",
+      "items": 4
+    },
+    {
+      "stage": "web",
+      "kind": "artist_identity",
+      "status": "waiting_route",
+      "items": 17
+    },
+    {
+      "stage": "web",
+      "kind": "verify_name",
+      "status": "resolved",
+      "items": 1
+    },
+    {
+      "stage": "web",
+      "kind": "verify_name",
+      "status": "waiting_route",
+      "items": 4
+    }
+  ],
+  "item_usage_peaks": [
+    {
+      "stage": "lookup",
+      "items": 1,
+      "max_tool_calls": 2,
+      "max_tokens": 6414,
+      "max_tokens_item": "0276ef6b-0e98-4c23-8824-1046eec47e9f",
+      "max_tools_item": "0276ef6b-0e98-4c23-8824-1046eec47e9f"
+    },
+    {
+      "stage": "web",
+      "items": 32,
+      "max_tool_calls": 18,
+      "max_tokens": 300701,
+      "max_tokens_item": "4e2ad80a-6451-42f7-a327-7b06bdae173b",
+      "max_tools_item": "464d433e-e4ce-4cc6-969d-03c83aba866d"
+    }
+  ],
+  "conversations": {
+    "total": 137,
+    "empty": 0
+  },
+  "message_interval_concurrency": {
+    "basis": "从同一会话第一条至最后一条 steward_messages.created_at，按启用整理后的秒数统计各并发档位持续时间。包括工具和审查等待。",
+    "unit": "seconds",
+    "all": {
+      "0": 549.1824,
+      "1": 145.0707,
+      "2": 18.215,
+      "3": 302.2299,
+      "4": 223.1162
+    },
+    "first_550s": {
+      "0": 0.8944,
+      "1": 5.5445,
+      "2": 18.215,
+      "3": 302.2299,
+      "4": 223.1162
+    },
+    "500_to_550s": {
+      "0": 0.0,
+      "1": 5.2284,
+      "2": 11.8299,
+      "3": 30.645,
+      "4": 2.2967
+    },
+    "series_60s": [
+      {
+        "from": 0,
+        "to": 60,
+        "seconds_by_concurrency": {
+          "0": 0.8944,
+          "1": 0.0537,
+          "2": 0.4748,
+          "3": 14.4857,
+          "4": 44.0914
+        }
+      },
+      {
+        "from": 60,
+        "to": 120,
+        "seconds_by_concurrency": {
+          "0": 0.0,
+          "1": 0.0,
+          "2": 1.3312,
+          "3": 38.9699,
+          "4": 19.6989
+        }
+      },
+      {
+        "from": 120,
+        "to": 180,
+        "seconds_by_concurrency": {
+          "0": 0.0,
+          "1": 0.0,
+          "2": 1.2614,
+          "3": 41.2746,
+          "4": 17.464
+        }
+      },
+      {
+        "from": 180,
+        "to": 240,
+        "seconds_by_concurrency": {
+          "0": 0.0,
+          "1": 0.192,
+          "2": 0.8051,
+          "3": 21.4561,
+          "4": 37.5468
+        }
+      },
+      {
+        "from": 240,
+        "to": 300,
+        "seconds_by_concurrency": {
+          "0": 0.0,
+          "1": 0.0,
+          "2": 0.9548,
+          "3": 56.0624,
+          "4": 2.9828
+        }
+      },
+      {
+        "from": 300,
+        "to": 360,
+        "seconds_by_concurrency": {
+          "0": 0.0,
+          "1": 0.0,
+          "2": 0.1849,
+          "3": 39.3893,
+          "4": 20.4258
+        }
+      },
+      {
+        "from": 360,
+        "to": 420,
+        "seconds_by_concurrency": {
+          "0": 0.0,
+          "1": 0.0704,
+          "2": 1.0715,
+          "3": 49.7953,
+          "4": 9.0628
+        }
+      },
+      {
+        "from": 420,
+        "to": 480,
+        "seconds_by_concurrency": {
+          "0": 0.0,
+          "1": 0.0,
+          "2": 0.3014,
+          "3": 9.7639,
+          "4": 49.9347
+        }
+      },
+      {
+        "from": 480,
+        "to": 540,
+        "seconds_by_concurrency": {
+          "0": 0.0,
+          "1": 0.0,
+          "2": 7.0583,
+          "3": 31.0328,
+          "4": 21.9089
+        }
+      },
+      {
+        "from": 540,
+        "to": 600,
+        "seconds_by_concurrency": {
+          "0": 0.0,
+          "1": 55.2284,
+          "2": 4.7716
+        }
+      },
+      {
+        "from": 600,
+        "to": 660,
+        "seconds_by_concurrency": {
+          "0": 0.0,
+          "1": 60.0
+        }
+      },
+      {
+        "from": 660,
+        "to": 720,
+        "seconds_by_concurrency": {
+          "0": 30.4738,
+          "1": 29.5262
+        }
+      },
+      {
+        "from": 720,
+        "to": 780,
+        "seconds_by_concurrency": {
+          "0": 60.0
+        }
+      },
+      {
+        "from": 780,
+        "to": 840,
+        "seconds_by_concurrency": {
+          "0": 60.0
+        }
+      },
+      {
+        "from": 840,
+        "to": 900,
+        "seconds_by_concurrency": {
+          "0": 60.0
+        }
+      },
+      {
+        "from": 900,
+        "to": 960,
+        "seconds_by_concurrency": {
+          "0": 60.0
+        }
+      },
+      {
+        "from": 960,
+        "to": 1020,
+        "seconds_by_concurrency": {
+          "0": 60.0
+        }
+      },
+      {
+        "from": 1020,
+        "to": 1080,
+        "seconds_by_concurrency": {
+          "0": 60.0
+        }
+      },
+      {
+        "from": 1080,
+        "to": 1140,
+        "seconds_by_concurrency": {
+          "0": 60.0
+        }
+      },
+      {
+        "from": 1140,
+        "to": 1200,
+        "seconds_by_concurrency": {
+          "0": 60.0
+        }
+      },
+      {
+        "from": 1200,
+        "to": 1237.814175,
+        "seconds_by_concurrency": {
+          "0": 37.8142
+        }
+      }
+    ],
+    "conversation_intervals": [
+      {
+        "id": "38d0fe18-6914-4821-9a70-383531af991d",
+        "lo": 0.894399,
+        "hi": 4.842915
+      },
+      {
+        "id": "0120eaed-70f0-4805-8a16-5ffeaf68d394",
+        "lo": 0.94805,
+        "hi": 3.8647
+      },
+      {
+        "id": "a04524c7-fc7b-4466-bbbe-7b40474b1519",
+        "lo": 1.001203,
+        "hi": 3.930807
+      },
+      {
+        "id": "84cc5937-3ae5-4b86-9548-b5004ff97bce",
+        "lo": 1.053777,
+        "hi": 3.779148
+      },
+      {
+        "id": "e51cd203-a9de-4a04-87a3-753a4c3ff1e0",
+        "lo": 3.918201,
+        "hi": 6.015422
+      },
+      {
+        "id": "1b8bc0d0-7966-4e3b-b597-f08451dd7d8f",
+        "lo": 4.048462,
+        "hi": 20.245115
+      },
+      {
+        "id": "d5f48d3c-53ca-451f-bad8-8620619fa7b2",
+        "lo": 4.673147,
+        "hi": 6.921964
+      },
+      {
+        "id": "1329b616-376c-4a78-b0ed-60b51a88550b",
+        "lo": 4.957921,
+        "hi": 7.129996
+      },
+      {
+        "id": "0179eac1-6e52-4780-8c9b-8b59dbb36dde",
+        "lo": 6.116971,
+        "hi": 61.258555
+      },
+      {
+        "id": "49970223-b935-4cc0-aa4b-7a4d77b3961b",
+        "lo": 7.049163,
+        "hi": 9.333035
+      },
+      {
+        "id": "81223587-5ee0-4e74-9180-5be54ef1d440",
+        "lo": 7.359941,
+        "hi": 9.58017
+      },
+      {
+        "id": "bf49b9c2-2df0-4e33-bded-8f2f8cccd106",
+        "lo": 9.695829,
+        "hi": 12.058077
+      },
+      {
+        "id": "bdee054f-0771-4204-9e06-b9d58e9075a7",
+        "lo": 10.614425,
+        "hi": 12.697341
+      },
+      {
+        "id": "4b03b459-1891-41c4-97ab-3a3c566c2ceb",
+        "lo": 12.147466,
+        "hi": 14.419978
+      },
+      {
+        "id": "3230cb66-456d-4c2e-ba3b-3abe81c422a5",
+        "lo": 12.811497,
+        "hi": 15.190886
+      },
+      {
+        "id": "661a12b0-d5f8-4d0f-83a4-091e8cb09e82",
+        "lo": 14.521169,
+        "hi": 17.20296
+      },
+      {
+        "id": "61e30b62-cedc-4083-8bc6-a97b935b4c5b",
+        "lo": 15.291767,
+        "hi": 18.462433
+      },
+      {
+        "id": "baf613d8-246c-4f80-bd4c-ed7b17a7d89b",
+        "lo": 17.318042,
+        "hi": 20.490881
+      },
+      {
+        "id": "63279856-6826-41fd-8469-4bf95d5c6e2c",
+        "lo": 18.592646,
+        "hi": 20.663861
+      },
+      {
+        "id": "20987b41-0b4d-40a3-b967-2ce6f476647e",
+        "lo": 20.348798,
+        "hi": 22.369746
+      },
+      {
+        "id": "05a80456-b88d-4a64-b98e-452d10430a48",
+        "lo": 20.604899,
+        "hi": 35.935088
+      },
+      {
+        "id": "a900ae36-6c33-47cb-af36-8c6c178ddc09",
+        "lo": 20.776737,
+        "hi": 22.705796
+      },
+      {
+        "id": "59b2a5a3-fbfc-4a6f-a965-8c78c53bf6e1",
+        "lo": 22.468397,
+        "hi": 25.371146
+      },
+      {
+        "id": "288ac23c-3eff-44a5-b700-9cf5b1509eee",
+        "lo": 22.863367,
+        "hi": 103.522886
+      },
+      {
+        "id": "9f126790-0b80-41e8-8b5b-7875b0537619",
+        "lo": 25.763977,
+        "hi": 27.880022
+      },
+      {
+        "id": "09398f3a-adc8-4380-ba87-ff62a47640b1",
+        "lo": 27.971915,
+        "hi": 31.85299
+      },
+      {
+        "id": "fd4eb71d-8378-4078-88ac-090a371e5170",
+        "lo": 31.95339,
+        "hi": 33.715263
+      },
+      {
+        "id": "7d78be9c-394f-4258-b1db-628bb5086fe5",
+        "lo": 33.832354,
+        "hi": 35.78211
+      },
+      {
+        "id": "39586e81-c68b-4024-99f9-5c35eb458d0d",
+        "lo": 35.881618,
+        "hi": 38.363644
+      },
+      {
+        "id": "50d5d1ea-6bc2-42b5-b58f-12e39736823e",
+        "lo": 36.039691,
+        "hi": 50.97777
+      },
+      {
+        "id": "b1026d07-d1c9-42a9-bb96-058e443946ab",
+        "lo": 38.460541,
+        "hi": 40.773434
+      },
+      {
+        "id": "f5573472-2d57-4d24-a655-bcc4d8e85640",
+        "lo": 40.927757,
+        "hi": 44.443943
+      },
+      {
+        "id": "be0578a0-4e9b-4c8b-9872-3a681e5457f7",
+        "lo": 44.557824,
+        "hi": 46.732527
+      },
+      {
+        "id": "3b720067-a3d0-48da-92e1-86c681751130",
+        "lo": 46.839796,
+        "hi": 50.510644
+      },
+      {
+        "id": "02800a24-b4f2-4cf0-80b5-b560ab086f6f",
+        "lo": 51.112637,
+        "hi": 175.812648
+      },
+      {
+        "id": "629c9167-bad7-42a2-8276-f98f4018c3c1",
+        "lo": 61.389855,
+        "hi": 63.366873
+      },
+      {
+        "id": "59275c5d-ef65-491f-8c12-99301a5e5d64",
+        "lo": 63.475239,
+        "hi": 65.712218
+      },
+      {
+        "id": "e6162f1d-4740-4f4d-933e-e246826cd10e",
+        "lo": 65.8187,
+        "hi": 78.951273
+      },
+      {
+        "id": "aa7e1f22-0c47-427b-9ef7-12a56675de60",
+        "lo": 79.052306,
+        "hi": 81.505289
+      },
+      {
+        "id": "246f3332-b445-4673-aeda-3d6ce24c3c66",
+        "lo": 81.59856,
+        "hi": 84.465877
+      },
+      {
+        "id": "ee408456-2e53-4884-8dcf-66040016edda",
+        "lo": 84.571232,
+        "hi": 86.590651
+      },
+      {
+        "id": "2689ed66-6683-4544-88f4-461fdca0f95f",
+        "lo": 86.686749,
+        "hi": 88.652724
+      },
+      {
+        "id": "ec628d95-08d2-428e-bd4d-62d3df88b5a8",
+        "lo": 88.771504,
+        "hi": 91.34269
+      },
+      {
+        "id": "6eaea305-a240-4800-b802-4cd92cab4b70",
+        "lo": 91.461511,
+        "hi": 94.914111
+      },
+      {
+        "id": "4a34903e-db93-4108-a1ca-a534b49457ac",
+        "lo": 95.024715,
+        "hi": 97.349479
+      },
+      {
+        "id": "6791ff91-915b-4781-94e9-a74bacd931b4",
+        "lo": 97.465552,
+        "hi": 99.567463
+      },
+      {
+        "id": "a696aca1-524f-4a9f-ac85-681c827092e0",
+        "lo": 98.095164,
+        "hi": 100.339435
+      },
+      {
+        "id": "ff2996bd-04e4-4512-9dd5-fc9139862586",
+        "lo": 99.671384,
+        "hi": 102.046926
+      },
+      {
+        "id": "bc949d92-93e9-42ba-bb80-bcc0b11c8b82",
+        "lo": 100.442011,
+        "hi": 102.399277
+      },
+      {
+        "id": "a73b3f46-18b8-4827-91af-7c0b10d4e9d0",
+        "lo": 102.142555,
+        "hi": 104.465643
+      },
+      {
+        "id": "2ab8470c-cfc5-4a14-830e-79de8798d37a",
+        "lo": 102.508632,
+        "hi": 104.142275
+      },
+      {
+        "id": "64244aa3-1048-44a0-b8a4-2ff6e6c57372",
+        "lo": 103.615564,
+        "hi": 106.290318
+      },
+      {
+        "id": "7128085c-c937-4a94-a726-8ee407c49c7d",
+        "lo": 104.240177,
+        "hi": 106.666323
+      },
+      {
+        "id": "aca204d4-0fc9-4d32-a06e-af94aed77601",
+        "lo": 104.566033,
+        "hi": 107.643136
+      },
+      {
+        "id": "64858dd8-17a5-4ce6-a3c7-d212a45a21ee",
+        "lo": 106.385945,
+        "hi": 109.248123
+      },
+      {
+        "id": "32b3d4ff-8353-4c0e-9661-5988db585010",
+        "lo": 106.777539,
+        "hi": 112.945144
+      },
+      {
+        "id": "f4240894-536e-4ce7-b1a1-013ce9b345f8",
+        "lo": 107.725351,
+        "hi": 110.374594
+      },
+      {
+        "id": "17ebfc56-6a65-49ea-b91a-44c40f83c07f",
+        "lo": 109.349123,
+        "hi": 112.292102
+      },
+      {
+        "id": "a9643dd4-96d6-4895-a063-caa1fe27dbe6",
+        "lo": 110.49163,
+        "hi": 112.557129
+      },
+      {
+        "id": "abdfc2ff-a832-4703-8184-f42c2c79130d",
+        "lo": 112.397356,
+        "hi": 114.299648
+      },
+      {
+        "id": "c45bee55-9532-4959-bad4-ca1c8ac1433a",
+        "lo": 112.658298,
+        "hi": 115.258294
+      },
+      {
+        "id": "013e5e1f-70d6-480c-a698-285f4fd0b202",
+        "lo": 113.063641,
+        "hi": 115.280132
+      },
+      {
+        "id": "5886cb12-eebd-4247-8591-75cf70e09b4f",
+        "lo": 114.397485,
+        "hi": 116.702906
+      },
+      {
+        "id": "83eaa9e2-ead8-47bd-9ef8-77c747984d3d",
+        "lo": 115.405113,
+        "hi": 117.53645
+      },
+      {
+        "id": "f179625a-5d47-4003-ab00-5a455cb851b3",
+        "lo": 115.464452,
+        "hi": 118.049737
+      },
+      {
+        "id": "0ee34be2-6f5a-463d-9999-f3cf42cc81e3",
+        "lo": 116.812706,
+        "hi": 119.971652
+      },
+      {
+        "id": "3498f1b4-4b76-43b3-9a45-d22d2f6ba910",
+        "lo": 117.643675,
+        "hi": 120.126804
+      },
+      {
+        "id": "f4e6947a-341a-459d-b11d-d74ba9e0c40e",
+        "lo": 118.171841,
+        "hi": 120.468518
+      },
+      {
+        "id": "3ad10e3a-bc6b-4592-b1b8-eb011c95d3f2",
+        "lo": 120.102734,
+        "hi": 125.725947
+      },
+      {
+        "id": "fa7e849c-a8f0-4b8e-94c6-8a9f756a14f3",
+        "lo": 120.229921,
+        "hi": 143.477015
+      },
+      {
+        "id": "b84f7261-b69b-4a04-971f-c15e293b26bc",
+        "lo": 125.882375,
+        "hi": 183.672399
+      },
+      {
+        "id": "9cab5b23-5148-4229-aaec-1e95cb3b9de4",
+        "lo": 143.578364,
+        "hi": 146.238119
+      },
+      {
+        "id": "d2eed998-f950-4951-a6c3-1722a03b4ec0",
+        "lo": 146.366379,
+        "hi": 149.159997
+      },
+      {
+        "id": "4fce854c-f408-48fb-8492-1baa39fddb22",
+        "lo": 149.295659,
+        "hi": 151.236348
+      },
+      {
+        "id": "a876a507-57f5-472e-ad4a-1c58031bbf2a",
+        "lo": 151.408112,
+        "hi": 153.514877
+      },
+      {
+        "id": "168d8a45-7589-41cf-b836-c6083bc7995d",
+        "lo": 153.623737,
+        "hi": 156.463339
+      },
+      {
+        "id": "0fd9771c-ee73-4b1e-a472-a275ec3f366d",
+        "lo": 156.553845,
+        "hi": 159.952205
+      },
+      {
+        "id": "06aa140a-0c50-423a-851c-5d716f3d2c63",
+        "lo": 159.969512,
+        "hi": 161.92785
+      },
+      {
+        "id": "aa40a822-917f-48aa-82a3-6dbf643f344f",
+        "lo": 160.074535,
+        "hi": 162.09862
+      },
+      {
+        "id": "670d4a62-f9f2-4357-8b29-434acfee6a16",
+        "lo": 162.024314,
+        "hi": 163.948773
+      },
+      {
+        "id": "374b69dc-94d0-4b40-9a4b-f9568679d950",
+        "lo": 162.202922,
+        "hi": 164.438071
+      },
+      {
+        "id": "0e38cce0-6ee9-4582-8314-95e41412e789",
+        "lo": 164.046484,
+        "hi": 166.092184
+      },
+      {
+        "id": "c1e5dc5c-05b7-434e-b925-55e39459c9be",
+        "lo": 164.536521,
+        "hi": 168.671772
+      },
+      {
+        "id": "5db5c141-f8e0-40ac-8d1a-b0853f611be6",
+        "lo": 166.185585,
+        "hi": 168.07938
+      },
+      {
+        "id": "3ba421ea-683d-47af-890e-f3d2e8d5f1f4",
+        "lo": 168.175297,
+        "hi": 171.591377
+      },
+      {
+        "id": "63d8ee76-0eb9-4e2d-95f0-d99043854c41",
+        "lo": 168.783955,
+        "hi": 170.758224
+      },
+      {
+        "id": "91b43d05-309a-47a3-9eca-61c8c34daea0",
+        "lo": 171.266752,
+        "hi": 176.012645
+      },
+      {
+        "id": "f026ad8e-f4d2-43ba-bc6c-a1ad4f638e99",
+        "lo": 171.904626,
+        "hi": 174.300222
+      },
+      {
+        "id": "56f40a9f-8be1-4426-b0b0-8febe3eee77e",
+        "lo": 174.595223,
+        "hi": 183.414475
+      },
+      {
+        "id": "7d933469-c148-4e2b-9f4b-9a584f37f0d2",
+        "lo": 176.216627,
+        "hi": 178.654413
+      },
+      {
+        "id": "410416f3-f6ab-4cbc-8984-3f87d1238ae1",
+        "lo": 176.448972,
+        "hi": 178.706458
+      },
+      {
+        "id": "b00d7856-f12b-446d-8cc7-a342629fb454",
+        "lo": 178.853727,
+        "hi": 183.659024
+      },
+      {
+        "id": "aa66672b-7de4-4476-8abb-a367847b671c",
+        "lo": 178.926974,
+        "hi": 180.583236
+      },
+      {
+        "id": "e212e0ea-fec6-4c21-aa55-e2e92ccaa4d9",
+        "lo": 180.755521,
+        "hi": 187.24662
+      },
+      {
+        "id": "d930b438-201a-4c3b-861e-523a0d53d48c",
+        "lo": 183.864439,
+        "hi": 218.606737
+      },
+      {
+        "id": "e598f6df-ab97-46bb-9bcd-660deb2ab28b",
+        "lo": 184.039108,
+        "hi": 219.238442
+      },
+      {
+        "id": "c8c0e8fe-e853-4c2a-b174-76ac4bbcb3e9",
+        "lo": 184.112462,
+        "hi": 283.056267
+      },
+      {
+        "id": "1058b0a4-06da-47e7-a4a2-48f50c68a064",
+        "lo": 187.43629,
+        "hi": 247.411816
+      },
+      {
+        "id": "ea7f4531-26f7-4767-9103-8b3e88166816",
+        "lo": 219.553537,
+        "hi": 228.834019
+      },
+      {
+        "id": "395dd79e-c253-4d96-b549-91862c3cdf99",
+        "lo": 228.993854,
+        "hi": 237.310578
+      },
+      {
+        "id": "24a54446-efbc-4eab-b5b0-5a1043816d45",
+        "lo": 237.452703,
+        "hi": 256.450344
+      },
+      {
+        "id": "fb00fb5d-0467-4bed-86b2-566f21738869",
+        "lo": 247.543032,
+        "hi": 267.360191
+      },
+      {
+        "id": "98ea11c6-5d25-497b-bf9b-9d5466d4ee90",
+        "lo": 256.599155,
+        "hi": 269.101489
+      },
+      {
+        "id": "389a442f-64da-4505-914b-25a7e4e122fe",
+        "lo": 267.513675,
+        "hi": 282.790387
+      },
+      {
+        "id": "bb1e879a-f3e5-4665-907c-321e8375462e",
+        "lo": 269.230052,
+        "hi": 275.677622
+      },
+      {
+        "id": "1e499d02-0671-44b3-8e11-2815126096f4",
+        "lo": 275.825477,
+        "hi": 300.113805
+      },
+      {
+        "id": "06cfe909-cb6e-4956-bad2-70e66d37eb1d",
+        "lo": 282.916077,
+        "hi": 309.598131
+      },
+      {
+        "id": "1aa6c4f7-1087-4844-8f0f-371ede9cfe00",
+        "lo": 283.175462,
+        "hi": 342.941508
+      },
+      {
+        "id": "09dc58fd-1f32-4d4d-b13d-c9491acb3eb2",
+        "lo": 297.017175,
+        "hi": 340.695878
+      },
+      {
+        "id": "e5a30db3-ba72-40c4-8520-65899edd79d7",
+        "lo": 300.238318,
+        "hi": 345.013354
+      },
+      {
+        "id": "ca00211e-f4f1-431b-82ef-baa1acb36754",
+        "lo": 333.291116,
+        "hi": 354.999469
+      },
+      {
+        "id": "c3caf215-4d3f-455e-8140-29c1d83d419f",
+        "lo": 341.346261,
+        "hi": 404.286072
+      },
+      {
+        "id": "ede40935-109e-4806-9e15-dc34f76ff6cf",
+        "lo": 343.061171,
+        "hi": 387.197336
+      },
+      {
+        "id": "35eec43e-8fb7-4f34-9087-121ad9bc5b2e",
+        "lo": 355.184385,
+        "hi": 367.852075
+      },
+      {
+        "id": "5315b558-3a07-4953-8738-a56046f2dd1a",
+        "lo": 368.596806,
+        "hi": 384.198194
+      },
+      {
+        "id": "a8311229-c48d-45ba-9cac-532328cc6464",
+        "lo": 383.613607,
+        "hi": 387.286147
+      },
+      {
+        "id": "c8b5e377-9c03-456f-b2d4-c08e737f6e9c",
+        "lo": 387.356528,
+        "hi": 393.652356
+      },
+      {
+        "id": "7cee57d3-e777-4b09-9f32-d6f875dcb282",
+        "lo": 387.483495,
+        "hi": 397.874346
+      },
+      {
+        "id": "72d2451f-9674-4472-ad23-c85860dccf71",
+        "lo": 388.93618,
+        "hi": 424.566968
+      },
+      {
+        "id": "e0d5ef0d-fe5d-4cac-83eb-4f129d5ee340",
+        "lo": 394.112266,
+        "hi": 435.796209
+      },
+      {
+        "id": "63dfd4f6-59ac-49dc-8efc-3952eaf68b18",
+        "lo": 404.397043,
+        "hi": 425.941307
+      },
+      {
+        "id": "4de7fc83-1dcf-4e72-a1b8-74f3c5974feb",
+        "lo": 421.275561,
+        "hi": 424.496814
+      },
+      {
+        "id": "1ee95c94-7643-44fd-a004-87412730f92b",
+        "lo": 424.720803,
+        "hi": 436.217279
+      },
+      {
+        "id": "687f0b08-26cd-405d-9b1f-102172bceca8",
+        "lo": 425.137202,
+        "hi": 459.030582
+      },
+      {
+        "id": "8f505c26-73ce-4a94-b197-cdcf145264e1",
+        "lo": 426.094974,
+        "hi": 454.183614
+      },
+      {
+        "id": "665176be-02b9-43de-bb5f-fc70ea7397d3",
+        "lo": 436.364828,
+        "hi": 446.313033
+      },
+      {
+        "id": "784b4a4a-8d50-48a4-8033-d8447beba268",
+        "lo": 437.480095,
+        "hi": 461.587336
+      },
+      {
+        "id": "0681df3b-bfdd-42f3-aef8-8a63ae0ddc8a",
+        "lo": 451.349463,
+        "hi": 511.646912
+      },
+      {
+        "id": "acf3eb35-1c15-4511-bba2-fb73f52dd569",
+        "lo": 454.33609,
+        "hi": 479.524134
+      },
+      {
+        "id": "2a213f20-a648-4de8-9dc8-0a4af3faf36f",
+        "lo": 459.559589,
+        "hi": 480.195383
+      },
+      {
+        "id": "cda23205-0245-4dde-89e7-adba57edf586",
+        "lo": 461.705359,
+        "hi": 481.189478
+      },
+      {
+        "id": "8f901000-a4a0-47b4-9f2f-b1bfba85a350",
+        "lo": 480.096773,
+        "hi": 689.526161
+      },
+      {
+        "id": "6cf8a944-eb00-400b-8d29-824d68cbad70",
+        "lo": 480.348664,
+        "hi": 501.028777
+      },
+      {
+        "id": "9300e41d-b50d-4e0f-b215-86d408946b89",
+        "lo": 481.327206,
+        "hi": 512.117341
+      },
+      {
+        "id": "28e55917-15d7-4940-b19d-c59b47f1b8e0",
+        "lo": 510.522581,
+        "hi": 513.422875
+      },
+      {
+        "id": "8dc6d4ba-8b31-4c73-a133-bc2d0626cd14",
+        "lo": 512.262691,
+        "hi": 533.087018
+      },
+      {
+        "id": "52df6fe0-e48f-4a9d-82eb-46fcd460c264",
+        "lo": 513.279302,
+        "hi": 544.771579
+      }
+    ]
+  },
+  "mode": "real_concurrent_partial",
+  "completed": false,
+  "exit_reason": "按指令在日额耗尽后停止",
+  "commit": "cda28f2e",
+  "model": "gpt-6.2-sol",
+  "review_model": "gpt-6.2-sol",
+  "processed_releases": 28,
+  "library_size": 28,
+  "latest_progress_elapsed_seconds": 1220,
+  "musicbrainz_requests": 218,
+  "musicbrainz_http_statuses": {
+    "200": 171,
+    "404": 4,
+    "503": 43
+  },
+  "musicbrainz_503": 43,
+  "completed_items": 113,
+  "pending_items": 34,
+  "bottleneck_550s": {
+    "time": "2026-11-26T08:27:21.007464+00:00",
+    "observed": "2026-11-26T08:28:08.40493+00:00",
+    "waiting": [
+      {
+        "item": "535f47c9-ea24-42fc-889a-45a323251087",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Prodigy",
+        "next_attempt_at": "2026-11-26T08:35:45.213738+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "ed7e426d-d9fe-4553-bf2c-a2bf2a71e4d0",
+        "kind": "name_patrol",
+        "route": null,
+        "title": "23 - Various Artists - The Matrix",
+        "next_attempt_at": null,
+        "future_retry": false,
+        "overlap": [
+          "artist/a23ca69f-0572-4785-be84-dadc8be2327d"
+        ]
+      },
+      {
+        "item": "f900beb3-e12d-46c6-93d6-f67820121056",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Busta Rhymes",
+        "next_attempt_at": "2026-11-26T08:33:56.048937+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "3e22c980-3187-411a-9fbd-36a6d89ac584",
+        "kind": "release_match",
+        "route": "lookup",
+        "title": "06 - Tori Amos - Boys for Pele",
+        "next_attempt_at": null,
+        "future_retry": false,
+        "overlap": []
+      },
+      {
+        "item": "4bd2e8c4-4cfb-469e-a325-eac5709b8ccc",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Gabrielle",
+        "next_attempt_at": "2026-11-26T08:34:06.028569+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "0276ef6b-0e98-4c23-8824-1046eec47e9f",
+        "kind": "release_match",
+        "route": "lookup",
+        "title": "25 - Ryūichi Sakamoto - Sen no Naifu",
+        "next_attempt_at": "2026-11-26T08:34:44.683248+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "9e4e40bb-8dda-4742-933a-e47bdd13663b",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Propellerheads",
+        "next_attempt_at": "2026-11-26T08:36:10.559226+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "68ec8613-4ae6-4aa2-979c-d1a0e1614d7e",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Jason",
+        "next_attempt_at": "2026-11-26T08:29:02.00778+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "a790ad28-cecc-42d3-a6fd-dd1ad5b6f400",
+        "kind": "artist_identity",
+        "route": null,
+        "title": "Rammstein",
+        "next_attempt_at": null,
+        "future_retry": false,
+        "overlap": []
+      },
+      {
+        "item": "b9355f8e-8728-47eb-801a-ca389780553f",
+        "kind": "artist_identity",
+        "route": null,
+        "title": "Massive Attack",
+        "next_attempt_at": null,
+        "future_retry": false,
+        "overlap": []
+      },
+      {
+        "item": "d12f6996-95d2-47dd-9577-788d9daf7400",
+        "kind": "release_match",
+        "route": "select",
+        "title": "22 - Boards of Canada - Music Has the Right to Children",
+        "next_attempt_at": "2026-11-26T08:26:45.920504+00:00",
+        "future_retry": false,
+        "overlap": []
+      },
+      {
+        "item": "978faefe-24fc-44cd-b02e-6d048a6a92a5",
+        "kind": "artist_identity",
+        "route": null,
+        "title": "Boards of Canada",
+        "next_attempt_at": null,
+        "future_retry": false,
+        "overlap": []
+      },
+      {
+        "item": "a99a61fd-7528-4a80-a461-5fdc8feb91b1",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Lunatic Calm",
+        "next_attempt_at": "2026-11-26T08:36:32.066867+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "037112db-fb0b-5ec3-a417-2a61c14bcf28",
+        "kind": "verify_name",
+        "route": "web",
+        "title": "02 - 王菲 - 菲主打",
+        "next_attempt_at": "2026-11-26T08:34:48.915902+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "b77a9e40-393f-462b-9eb5-4ef32e524dfb",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Deftones",
+        "next_attempt_at": "2026-11-26T08:35:50.063053+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "c8732326-ed05-4b31-b7c4-2ba2b11f5e47",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Marilyn Manson",
+        "next_attempt_at": "2026-11-26T08:35:16.972051+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "f0ba6b6f-702a-4cd0-afad-b447331271e2",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Meat Beat Manifesto",
+        "next_attempt_at": "2026-11-26T08:36:11.225359+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "4de84026-23d1-48dd-a7b4-940fc510657e",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Rob D",
+        "next_attempt_at": "2026-11-26T08:36:12.218369+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "5538a436-8c6d-4a35-849f-1eac51331074",
+        "kind": "release_match",
+        "route": "select",
+        "title": "13 - Aphex Twin - …I Care Because You Do",
+        "next_attempt_at": "2026-11-26T08:26:45.920504+00:00",
+        "future_retry": false,
+        "overlap": []
+      },
+      {
+        "item": "eee312a8-77c3-4f1a-86f5-d57895e52718",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "W.G. Snuffy Walden and Stewart Levin",
+        "next_attempt_at": "2026-11-26T08:33:11.1445+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "5e096e1d-aef4-47e3-afd0-e57eb3b88208",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Beauty Queen",
+        "next_attempt_at": "2026-11-26T08:32:18.408084+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "f85c1829-39c3-52d3-97bc-9b055bb7b4bf",
+        "kind": "verify_name",
+        "route": "web",
+        "title": "11 - Moby - Ambient",
+        "next_attempt_at": "2026-11-26T08:31:14.705309+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "1d882564-bf80-4e65-a9dc-fd9b229cfa4c",
+        "kind": "artist_identity",
+        "route": null,
+        "title": "Ryūichi Sakamoto",
+        "next_attempt_at": null,
+        "future_retry": false,
+        "overlap": []
+      },
+      {
+        "item": "04eecf50-0b42-4170-9e18-9678e6d3252e",
+        "kind": "release_match",
+        "route": "lookup",
+        "title": "27 - Portishead - Dummy",
+        "next_attempt_at": null,
+        "future_retry": false,
+        "overlap": []
+      },
+      {
+        "item": "0196f13e-61b0-4e38-bb35-2744d53b3de0",
+        "kind": "release_match",
+        "route": "select",
+        "title": "26 - Massive Attack - Mezzanine",
+        "next_attempt_at": "2026-11-26T08:26:45.920504+00:00",
+        "future_retry": false,
+        "overlap": []
+      },
+      {
+        "item": "229e757e-e433-5270-9f09-71c2c4acc471",
+        "kind": "verify_name",
+        "route": "web",
+        "title": "02 - 王菲 - 菲主打",
+        "next_attempt_at": "2026-11-26T08:32:53.789691+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "abc3f485-f457-4b59-867b-5c18e39c8ee3",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Tsutchie Feat. Mayu Kitaki",
+        "next_attempt_at": "2026-11-26T08:32:40.12885+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "d36137ad-2d46-43ec-9023-b7f2556f6381",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Stardust",
+        "next_attempt_at": "2026-11-26T08:33:53.96935+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "b1d7f233-ece7-4750-87c5-9cdf1740f36c",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "W.G. Snuffy Walden and Jay Gruska",
+        "next_attempt_at": "2026-11-26T08:32:46.708756+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "97efdded-73a9-4e6b-a199-e8c43aaa08d3",
+        "kind": "release_match",
+        "route": "select",
+        "title": "23 - Various Artists - The Matrix",
+        "next_attempt_at": "2026-11-26T08:24:54.76077+00:00",
+        "future_retry": false,
+        "overlap": [
+          "artist/a23ca69f-0572-4785-be84-dadc8be2327d"
+        ]
+      },
+      {
+        "item": "662035dc-3ce9-516d-a3c0-580dc5b4f807",
+        "kind": "verify_name",
+        "route": "web",
+        "title": "28 - 王菲 - 浮躁",
+        "next_attempt_at": "2026-11-26T08:33:20.627478+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "d05589d9-dde4-4ca9-a95f-893e83b0e324",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "Ben",
+        "next_attempt_at": "2026-11-26T08:31:06.879763+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "4e2ad80a-6451-42f7-a327-7b06bdae173b",
+        "kind": "artist_identity",
+        "route": "web",
+        "title": "T. Bangalter",
+        "next_attempt_at": "2026-11-26T08:34:55.298368+00:00",
+        "future_retry": true,
+        "overlap": []
+      },
+      {
+        "item": "4b87781a-e43d-43ab-8569-64a14e033a0b",
+        "kind": "release_match",
+        "route": "select",
+        "title": "28 - 王菲 - 浮躁",
+        "next_attempt_at": "2026-11-26T08:26:45.920504+00:00",
+        "future_retry": false,
+        "overlap": []
+      }
+    ],
+    "active": "464d433e-e4ce-4cc6-969d-03c83aba866d",
+    "limit": 3000000,
+    "active_name": "Monster Magnet"
+  },
+  "notes": [
+    "MusicBrainz 请求数与状态取停止前最后一次进度日志。",
+    "会话首尾消息与运行状态结束的定义略有差异；第 550 秒的另外一种区间分布和当时的日额证据见 real-concurrency-evidence.json。",
+    "主代理在 08:29:40 观测到当日约 326 万 token；daily_usage 取停止前同一只读事务的精确值。"
+  ]
+}
