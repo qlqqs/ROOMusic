@@ -63,11 +63,15 @@ func planTrackFields(e catalog.CurationEvidence, m MatchResult) []curation.Track
 	return requests
 }
 
-func writeTrackFields(ctx context.Context, writer *curation.Writer, requests []curation.TrackRequest, source curation.Source, write matchStep) error {
+func writeTrackFields(ctx context.Context, writer *curation.Writer, requests []curation.TrackRequest, origin curation.LinkRequest, write matchStep, record func(string)) error {
 	for _, r := range requests {
 		err := write(ctx, "track_fields/"+r.TrackID, func(batch, key string) error {
-			r.BatchID, r.Key, r.Source = batch, key, source
-			_, err := writer.ApplyTrack(ctx, r)
+			r.BatchID, r.Key, r.Source = batch, key, origin.Source
+			r.ConfirmedBy, r.ConversationID = origin.ConfirmedBy, origin.ConversationID
+			applied, err := writer.ApplyTrack(ctx, r)
+			if err == nil && record != nil {
+				record(applied.OperationID)
+			}
 			return err
 		})
 		if err != nil {
@@ -222,7 +226,7 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		if tracks {
 			requests := planTrackFields(*e, match)
 			source.Basis = "按已有 MusicBrainz 对应补全曲目字段"
-			if err := writeTrackFields(ctx, w.writer, requests, source, u.write); err != nil {
+			if err := writeTrackFields(ctx, w.writer, requests, curation.LinkRequest{Source: source}, u.write, nil); err != nil {
 				return err
 			}
 			markers["track_fields"] = "none"

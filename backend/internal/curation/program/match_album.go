@@ -307,11 +307,7 @@ func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.R
 		}
 		return uncertain(result, "too_many")
 	}
-	type verified struct {
-		release    *sources.Release
-		comparison comparison
-	}
-	var passed []verified
+	var passed []verifiedEdition
 	freq := map[string]int{}
 	blocked := 0
 	for i := range result.Candidates {
@@ -359,7 +355,7 @@ func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.R
 			c.conflict("duration_missing")
 		}
 		if c.passes(method) {
-			passed = append(passed, verified{r, c})
+			passed = append(passed, verifiedEdition{r, c})
 		}
 		candidate.Conflicts = c.conflicts
 		if blockedCodes(c.conflicts) {
@@ -383,25 +379,37 @@ func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.R
 		}
 		result.Release, result.Pairs = passed[0].release, passed[0].comparison.pairs
 	default:
-		rows := make([]sources.Release, 0, len(passed))
-		representative := passed[0]
 		for _, v := range passed {
 			if !v.comparison.countEqual || !v.comparison.durationsOK || len(e.Tracks) <= 4 && (!v.comparison.titleMatch || !v.comparison.artistMatch) {
 				return uncertain(result, "ambiguous")
 			}
-			rows = append(rows, *v.release)
-			if earlierEdition(*v.release, *representative.release) {
-				representative = v
-			}
 		}
-		if group := sharedGroup(rows); group != "" {
-			result = groupMatch(result, rows, "structure")
-			result.TrackTitles = representative.comparison.pairedTitles
-			result.RepresentativeID = representative.release.ID
-		} else {
-			return uncertain(result, "ambiguous")
+		result = matchedEditions(result, passed)
+	}
+	return result
+}
+
+type verifiedEdition struct {
+	release    *sources.Release
+	comparison comparison
+}
+
+func matchedEditions(result MatchResult, passed []verifiedEdition) MatchResult {
+	rows := make([]sources.Release, 0, len(passed))
+	representative := passed[0]
+	for _, v := range passed {
+		rows = append(rows, *v.release)
+		if earlierEdition(*v.release, *representative.release) {
+			representative = v
 		}
 	}
+	if sharedGroup(rows) == "" {
+		return uncertain(result, "ambiguous")
+	}
+	result = groupMatch(result, rows, "structure")
+	result.Release, result.Pairs = nil, nil
+	result.TrackTitles = representative.comparison.pairedTitles
+	result.RepresentativeID = representative.release.ID
 	return result
 }
 

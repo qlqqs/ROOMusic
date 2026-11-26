@@ -45,8 +45,22 @@ type localAlbum struct {
 var localNoise = regexp.MustCompile(`(?i)\[[^\]]+\]|【[^】]+】|(^|[^\pL\pN])((19|20)[0-9]{2}|flac|wav|mp3|ape|alac|dsd[0-9]*|[0-9]+[ -]?(bit|khz)|cd[ ._-]*[0-9]+|disc[ ._-]*[0-9]+|[a-z]{2,6}-[0-9]{2,}|(?-i:[A-Z]{2,6})[0-9]{3,8})([^\pL\pN]|$)|(^|[^0-9])(19|20)[0-9]{2}年|^[0-9]{1,3}[ ._-]+\S`)
 var localGeneric = regexp.MustCompile(`(?i)^(?:cd|disc|track|disk|音轨|碟)?[ ._0-9-]*$`)
 
+func numericLocalValue(value string) bool {
+	digit := false
+	for _, r := range value {
+		switch {
+		case unicode.IsDigit(r):
+			digit = true
+		case unicode.IsSpace(r), unicode.IsPunct(r):
+		default:
+			return false
+		}
+	}
+	return digit
+}
+
 func cleanupField(value string, auth metadata.Authenticity, protected bool) localField {
-	return localField{value, auth, !protected && (auth == metadata.Placeholder || auth == metadata.Inferred && localNoise.MatchString(value))}
+	return localField{value, auth, !protected && (auth == metadata.Placeholder || auth == metadata.Inferred && (localNoise.MatchString(value) || numericLocalValue(value)))}
 }
 
 func localAlbumInput(e catalog.CurationEvidence) (localAlbum, bool) {
@@ -54,9 +68,14 @@ func localAlbumInput(e catalog.CurationEvidence) (localAlbum, bool) {
 	if artist == "" {
 		artist = e.Artist
 	}
+	titleProtected := e.Corrected["title"] || e.Automatic["title"] && e.LocalTitle == ""
 	a := localAlbum{
-		Title:  cleanupField(e.Title, e.Authenticity["title"], e.Corrected["title"] || e.Automatic["title"] && e.LocalTitle == ""),
+		Title:  cleanupField(e.Title, e.Authenticity["title"], titleProtected),
 		Artist: cleanupField(artist, e.SelectedArtistAuth(), e.Corrected["album_artist"] || e.Automatic["album_artist"] && e.LocalArtist == "" || e.Compilation),
+	}
+	compoundTitle := a.Title.Authenticity == metadata.Inferred && a.Artist.Authenticity == metadata.Inferred && strings.Contains(e.Title, " - ")
+	if compoundTitle && !titleProtected {
+		a.Title.Requested = true
 	}
 	a.Tags = map[string]string{}
 	if a.Title.Authenticity == metadata.Real && !e.Corrected["title"] {
@@ -67,7 +86,9 @@ func localAlbumInput(e catalog.CurationEvidence) (localAlbum, bool) {
 	}
 	single := e.CandidateKind == "loose_unknown" && len(e.Tracks) == 1
 	needed := a.Title.Requested || a.Artist.Requested
-	parsed := len(e.Tracks) > 0
+	// 即使曲目文件名已解析，目录留下的数字字段和复合专辑名仍需整理。
+	albumNoise := a.Title.Requested && (compoundTitle || numericLocalValue(e.Title)) || a.Artist.Requested && numericLocalValue(artist)
+	parsed := len(e.Tracks) > 0 && !albumNoise
 	type directory struct{ root, name string }
 	index := make(map[directory]int)
 	for _, t := range e.Tracks {
@@ -77,7 +98,7 @@ func localAlbumInput(e catalog.CurationEvidence) (localAlbum, bool) {
 			Artist: cleanupField(t.Artist, t.Authenticity["artist"], !single || t.ArtistCorrected || t.ArtistAutomatic && t.LocalArtist == ""),
 		}
 		needed = needed || track.Title.Requested || track.Artist.Requested
-		parsed = parsed && t.TitleObservation.Source == "filename_fallback" && t.ArtistObservation.Source == "filename_fallback" && !track.Title.Requested && !localNoise.MatchString(t.Artist)
+		parsed = parsed && t.TitleObservation.Source == "filename_fallback" && t.ArtistObservation.Source == "filename_fallback" && !track.Title.Requested && !localNoise.MatchString(t.Artist) && !(track.Artist.Requested && numericLocalValue(t.Artist))
 		dir := directory{t.SourceRootID, path.Dir(t.RelativePath)}
 		i, found := index[dir]
 		if !found {

@@ -79,10 +79,28 @@ type LibrarySupport struct {
 	Total   int      `json:"total"`
 	Items   []string `json:"items"`
 }
-type VerificationPlan struct {
-	Support *LibrarySupport `json:"library_support,omitempty"`
 
-	nameProof    *VerificationCandidate
+// VerifiedName 只在按生效对应读回外部对象并核实结构后生成。
+type VerifiedName struct {
+	VerificationCandidate
+	Match NameMatchEvidence
+}
+
+type NameMatchEvidence struct {
+	ReleaseID      string `json:"release_id,omitempty"`
+	ReleaseTitle   string `json:"release_title,omitempty"`
+	LinkMethod     string `json:"link_method"`
+	LocalTracks    int    `json:"local_tracks"`
+	ExternalTracks int    `json:"external_tracks"`
+	Comparable     int    `json:"comparable"`
+	Within         int    `json:"within"`
+}
+
+type VerificationPlan struct {
+	NameMatch *NameMatchEvidence `json:"name_match,omitempty"`
+	Support   *LibrarySupport    `json:"library_support,omitempty"`
+
+	nameProof    *VerifiedName
 	citationPage string
 	Candidate    VerificationCandidate `json:"candidate"`
 	Method       string                `json:"method"`
@@ -138,7 +156,8 @@ func creditCandidate(ctx context.Context, q operations.Queryer, item PendingItem
 	var v VerificationCandidate
 	var raw []byte
 	err := q.QueryRowContext(ctx, `SELECT p.evidence FROM curation_artist_credit_proposals p JOIN curation_work_states s ON s.subject='release' AND s.target_id=p.release_id AND s.identity_digest=p.identity_digest
- WHERE p.id=$1 AND (p.status='open' OR ($3 AND p.status='declined')) AND p.identity_digest=$2 AND `+proposalSourceExists, item.ID, item.IdentityDigest, manual).Scan(&raw)
+ WHERE p.id=$1 AND (p.status='open' OR ($3 AND p.status='declined')) AND p.identity_digest=$2
+ AND ($3 OR p.evidence=$4::jsonb) AND `+proposalSourceExists, item.ID, item.IdentityDigest, manual, item.Evidence).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, staleVerification()
 	}
@@ -167,7 +186,7 @@ func creditCandidate(ctx context.Context, q operations.Queryer, item PendingItem
 	return VerificationCandidate{ReleaseID: p.ReleaseID, TrackID: p.Local.TrackID, Field: "artist_link", Before: p.Local.Name, After: p.External.CreditName, ExternalValue: p.External.PrimaryName, ArtistA: p.Local.ArtistID, ExternalID: p.External.ArtistID, OperationID: p.Basis.OperationID}, nil
 }
 
-func (w *Writer) VerificationPlan(ctx context.Context, item PendingItem, in VerificationInput, nameProof *VerificationCandidate) (VerificationPlan, error) {
+func (w *Writer) VerificationPlan(ctx context.Context, item PendingItem, in VerificationInput, nameProof *VerifiedName) (VerificationPlan, error) {
 	var citationPage string
 	if in.Citation != nil {
 		run, ok := ModelRunFrom(ctx)
@@ -186,7 +205,7 @@ func (w *Writer) VerificationPlan(ctx context.Context, item PendingItem, in Veri
 	return verificationPlan(ctx, w.db, item, in.Citation, citationPage, false, nameProof)
 }
 
-func verificationPlan(ctx context.Context, q operations.Queryer, item PendingItem, cite *VerificationCitation, citationPage string, manual bool, nameProof *VerificationCandidate) (VerificationPlan, error) {
+func verificationPlan(ctx context.Context, q operations.Queryer, item PendingItem, cite *VerificationCitation, citationPage string, manual bool, nameProof *VerifiedName) (VerificationPlan, error) {
 	var p VerificationPlan
 	if item.Kind == "verify_artist_credit" {
 		v, err := creditCandidate(ctx, q, item, manual)
@@ -206,7 +225,7 @@ func verificationPlan(ctx context.Context, q operations.Queryer, item PendingIte
 		if nameProof == nil {
 			return p, noEvidence()
 		}
-		*v = *nameProof
+		*v = nameProof.VerificationCandidate
 		p.nameProof = nameProof
 		if !v.Structure || normalizedName(v.Before) == normalizedName(v.After) {
 			return p, noEvidence()
@@ -230,14 +249,15 @@ func verificationPlan(ctx context.Context, q operations.Queryer, item PendingIte
 		if v.TrackID != "" {
 			subject, id = "track", v.TrackID
 		}
-		var live bool
-		err = q.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM external_links l JOIN operations o ON o.id=l.operation_id WHERE l.source='musicbrainz' AND l.object_type=$1 AND l.object_id=$2 AND l.external_id=$3 AND l.operation_id=NULLIF($4,'')::uuid AND NOT EXISTS(SELECT FROM operations u WHERE u.reverts_operation_id=o.id))`, subject, id, v.ExternalID, v.OperationID).Scan(&live)
+		match := nameProof.Match
+		err = q.QueryRowContext(ctx, `SELECT l.method FROM external_links l JOIN operations o ON o.id=l.operation_id WHERE l.source='musicbrainz' AND l.object_type=$1 AND l.object_id=$2 AND l.external_id=$3 AND l.operation_id=NULLIF($4,'')::uuid AND NOT EXISTS(SELECT FROM operations u WHERE u.reverts_operation_id=o.id)`, subject, id, v.ExternalID, v.OperationID).Scan(&match.LinkMethod)
+		if errors.Is(err, sql.ErrNoRows) {
+			return p, staleVerification()
+		}
 		if err != nil {
 			return p, err
 		}
-		if !live {
-			return p, staleVerification()
-		}
+		p.NameMatch = &match
 		if v.ExternalValue != "" && normalizedName(v.ExternalValue) == normalizedName(v.After) {
 			p.Method = "external_value"
 			return p, nil
@@ -554,24 +574,72 @@ func (w *Writer) AcceptVerification(ctx context.Context, e ModelException, actor
 	return err
 }
 
-func (w *Writer) FinishStaleVerification(ctx context.Context, item PendingItem) error {
+// HandleStaleVerification 用当前输入重新排队一次。提案编号保持稳定，署名的采纳仍关联原提案。
+func (w *Writer) HandleStaleVerification(ctx context.Context, item PendingItem, identity string, name *VerificationCandidate) (bool, error) {
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer tx.Rollback()
-	if err = CheckMatchItem(ctx, tx, item, item.ConversationID, false); err != nil {
-		return err
+	if err := CheckMatchItem(ctx, tx, item, item.ConversationID, false); err != nil {
+		return false, err
 	}
-	if err = ResolvePendingItem(ctx, tx, item.ID, item.ConversationID, "stale"); err != nil {
-		return err
+	var evidence json.RawMessage
+	switch item.Kind {
+	case "verify_name":
+		evidence, err = json.Marshal(name)
+	case "verify_artist_credit":
+		// 署名依据是识别结论发布的提案。新摘要生成的新提案由 MaterializeVerificationItems 领取。
+		err = tx.QueryRowContext(ctx, `SELECT identity_digest,evidence FROM curation_artist_credit_proposals WHERE id=$1 FOR UPDATE`, item.ID).Scan(&identity, &evidence)
+	case "verify_artist_merge":
+		evidence, err = refreshedArtistPair(ctx, tx, item)
+	default:
+		return false, operations.Invalid("invalid_input", "未知核对项目")
 	}
-	if item.Kind == "verify_artist_credit" {
-		if _, err = tx.ExecContext(ctx, `UPDATE curation_artist_credit_proposals SET status='stale' WHERE id=$1 AND status='open'`, item.ID); err != nil {
-			return err
+	if err != nil {
+		return false, err
+	}
+	if identity != "" {
+		// 首次排队的 input_digest 是发行摘要；刷新后用同一提案的完整输入区分重试。
+		digest := operations.Fingerprint([]any{item.ID, identity, evidence})
+		if item.InputDigest != digest {
+			result, err := tx.ExecContext(ctx, `UPDATE curation_pending_items SET status='waiting_model',
+ input_digest=$4,identity_digest=$5,evidence=$6,route=NULL,conversation_id=NULL,claimed_at=NULL,next_attempt_at=NULL,
+ attempts=0,review_retries=0,item_tool_calls=0,item_tokens=0,updated_at=now()
+ WHERE id=$1 AND input_digest=$2 AND conversation_id=$3 AND status='in_progress'`,
+				item.ID, item.InputDigest, item.ConversationID, digest, identity, evidence)
+			if err := requireChanged(result, err, "item_stale", "待定项状态已变更"); err != nil {
+				return false, err
+			}
+			return true, tx.Commit()
 		}
 	}
-	return tx.Commit()
+	if err := ResolvePendingItem(ctx, tx, item.ID, item.ConversationID, "stale"); err != nil {
+		return false, err
+	}
+	if item.Kind == "verify_artist_credit" {
+		if _, err := tx.ExecContext(ctx, `UPDATE curation_artist_credit_proposals SET status='stale' WHERE id=$1 AND status='open'`, item.ID); err != nil {
+			return false, err
+		}
+	}
+	return false, tx.Commit()
+}
+
+func refreshedArtistPair(ctx context.Context, tx *sql.Tx, item PendingItem) (json.RawMessage, error) {
+	var v VerificationCandidate
+	if err := json.Unmarshal(item.Evidence, &v); err != nil {
+		return nil, err
+	}
+	// 保持待核对的两端身份，用现行显示名和外部对应重新提问。
+	err := tx.QueryRowContext(ctx, `SELECT coalesce(pa.effective_display_name,a.initial_name),coalesce(pb.effective_display_name,b.initial_name),
+ (SELECT CASE WHEN count(DISTINCT external_id)=1 THEN min(external_id) ELSE '' END FROM external_links
+ WHERE source='musicbrainz' AND object_type='artist' AND object_id IN (a.id,b.id))
+ FROM artists a LEFT JOIN artist_profiles pa ON pa.artist_id=a.id
+ CROSS JOIN artists b LEFT JOIN artist_profiles pb ON pb.artist_id=b.id WHERE a.id=$1 AND b.id=$2`, v.ArtistA, v.ArtistB).Scan(&v.Before, &v.After, &v.ExternalID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	return json.Marshal(v)
 }
 
 // 根据身份当前实际使用或登记的名字核对两端，防止过时的名字对套用到其他身份。

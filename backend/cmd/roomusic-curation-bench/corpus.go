@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,11 +15,12 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 )
 
-func generateCorpus(ctx context.Context, corpus []corpusEntry, out, ffmpeg string) error {
+func generateCorpus(ctx context.Context, corpus []corpusEntry, out, ffmpeg, reference string) error {
 	if ffmpeg == "" {
 		ffmpeg = "ffmpeg"
 	}
@@ -32,7 +36,22 @@ func generateCorpus(ctx context.Context, corpus []corpusEntry, out, ffmpeg strin
 		return err
 	}
 	defer os.RemoveAll(stage)
-	client := musicbrainz.New(musicbrainz.Options{})
+	opts := musicbrainz.Options{}
+	mbURL := &url.URL{Scheme: "https", Host: "musicbrainz.org"}
+	proxy, err := http.ProxyFromEnvironment(&http.Request{URL: mbURL})
+	if err != nil {
+		return err
+	}
+	if proxy != nil {
+		// bench 只读取清单中固定 MusicBrainz 主机的公开发行，不跟随重定向。
+		opts.NewClient = func(o egress.Options) (*http.Client, error) {
+			return &http.Client{Timeout: o.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			}}, nil
+		}
+	}
+	client := musicbrainz.New(opts)
+	var releases []sources.Release
 	var names []string
 	totalTracks := 0
 	for i, entry := range corpus {
@@ -58,6 +77,18 @@ func generateCorpus(ctx context.Context, corpus []corpusEntry, out, ffmpeg strin
 		}
 		totalTracks += count
 		names = append(names, name)
+		if reference != "" {
+			releases = append(releases, release)
+		}
+	}
+	if reference != "" {
+		data, err := json.MarshalIndent(releases, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(reference, append(data, '\n'), 0644); err != nil {
+			return err
+		}
 	}
 	// 全部音频编码成功才将专辑移到曲库中，失败的编码和远端读取可直接重试。
 	for _, name := range names {

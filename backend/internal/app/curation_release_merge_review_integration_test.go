@@ -118,7 +118,7 @@ func requireReleaseMergeReviewLayout(t *testing.T, f *curationFixture, merge rel
 	}
 }
 
-func TestPostgreSQL整理审查策略五版发行并入证据(t *testing.T) {
+func TestPostgreSQL整理审查发行并入证据(t *testing.T) {
 	t.Run("证据取自对应操作后态", func(t *testing.T) {
 		f := newSchedulerFixture(t)
 		f.enable(t)
@@ -169,7 +169,7 @@ func TestPostgreSQL整理审查策略五版发行并入证据(t *testing.T) {
 		requireReleaseMergeReviewLayout(t, f.curationFixture, merge, source, 2)
 		detail, err := runtime.NewStore(f.application.database).GetConversation(t.Context(), f.admin.id, conversation)
 		requireCurationOK(t, err)
-		if runtime.ReviewPolicyVersion != 5 || len(detail.Plans) != 1 || detail.Plans[0].Review == nil || detail.Plans[0].Review.PolicyVersion != 5 {
+		if len(detail.Plans) != 1 || detail.Plans[0].Review == nil || detail.Plans[0].Review.PolicyVersion != runtime.ReviewPolicyVersion {
 			t.Fatalf("审查策略版本 %d，方案 %+v", runtime.ReviewPolicyVersion, detail.Plans)
 		}
 	})

@@ -188,7 +188,6 @@ func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvid
 	if err != nil {
 		return "", "", nil, err
 	}
-	p.tracks = planTrackFields(e, m)
 	p.links.RequireAll = m.Level == "artist"
 	local, err := catalog.LoadCurationArtistCredits(ctx, w.db, e.ID)
 	switch {
@@ -208,9 +207,6 @@ func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvid
 		return "", "", nil, err
 	case m.Level == "artist":
 		return "", "", nil, errArtistCreditUnconfirmed
-	}
-	if m.RepresentativeID != "" {
-		p.trackTitleSource = m.RepresentativeID
 	}
 	group, err = writeMatch(ctx, w.db, w.writer, p, u.write, nil)
 	if m.Level == "artist" && (failureCode(err) == "occupied" || failureCode(err) == "suppressed") {
@@ -305,7 +301,12 @@ func planMatch(ctx context.Context, db operations.Queryer, e catalog.CurationEvi
 			request.Links = append(request.Links, curation.LinkIntent{ObjectType: "track", ObjectID: pair.TrackID, ExternalID: pair.RecordingID})
 		}
 	}
-	return matchWritePlan{evidence: e, group: plan, links: request, fields: fields}, nil
+	p := matchWritePlan{evidence: e, group: plan, links: request, fields: fields}
+	if m.Method != "model" || m.RepresentativeID != "" {
+		p.tracks = planTrackFields(e, m)
+		p.trackTitleSource = m.RepresentativeID
+	}
+	return p, nil
 }
 
 type matchStep func(context.Context, string, func(batch, key string) error) error
@@ -353,11 +354,11 @@ func writeMatch(ctx context.Context, db operations.Queryer, writer *curation.Wri
 			return "", err
 		}
 	}
-	trackSource := request.Source
+	trackOrigin := request
 	if p.trackTitleSource != "" {
-		trackSource.Basis += "，曲名取自发行 " + p.trackTitleSource
+		trackOrigin.Source.Basis += "，曲名取自发行 " + p.trackTitleSource
 	}
-	if err := writeTrackFields(ctx, writer, p.tracks, trackSource, write); err != nil {
+	if err := writeTrackFields(ctx, writer, p.tracks, trackOrigin, write, record); err != nil {
 		return "", err
 	}
 	group, err := writeMatchGroup(ctx, writer, e, plan, request, write, record)

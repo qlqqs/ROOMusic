@@ -115,31 +115,88 @@ func (m *ModelMatcher) VerificationPlan(ctx context.Context, item curation.Pendi
 	if IdentityDigest(e) != item.IdentityDigest {
 		return curation.VerificationPlan{}, staleItem()
 	}
+	actual, err := m.currentNameCandidate(ctx, e, want)
+	if err != nil {
+		return curation.VerificationPlan{}, err
+	}
+	if actual != nil {
+		if actual.Before != want.Before || (want.Structure && actual.VerificationCandidate != want) {
+			return curation.VerificationPlan{}, staleItem()
+		}
+		actual.After = want.After
+	}
+	return m.writer.VerificationPlan(ctx, item, in, actual)
+}
+
+func (m *ModelMatcher) currentNameCandidate(ctx context.Context, e catalog.CurationEvidence, want curation.VerificationCandidate) (*curation.VerifiedName, error) {
 	kind, id := "release_match", e.ExternalID
 	if id == "" && len(e.Tracks) == 1 && e.Tracks[0].ID == want.TrackID {
 		kind, id = "recording_match", e.Tracks[0].ExternalID
 	}
-	var actual *curation.VerificationCandidate
 	if id != "" {
 		match, err := m.readMatch(ctx, kind, e, id)
 		if err != nil {
 			if slices.Contains([]string{"track_count", "position_conflict", "media_count_mismatch"}, failureCode(err)) || errors.Is(err, sources.ErrNotFound) {
-				return m.writer.VerificationPlan(ctx, item, in, nil)
+				return nil, nil
 			}
-			return curation.VerificationPlan{}, err
+			return nil, err
 		}
 		for _, v := range structuralNameValues(e, match) {
-			if v.Field != want.Field || v.TrackID != want.TrackID || v.Before != want.Before {
+			if v.Field != want.Field || v.TrackID != want.TrackID {
 				continue
 			}
-			v.After = want.After
 			v.OperationID, err = nameSourceOperation(ctx, m.db, v)
-			if err != nil {
-				return curation.VerificationPlan{}, err
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, nil
 			}
-			actual = &v
-			break
+			if err != nil {
+				return nil, err
+			}
+			check := match.Verification
+			proof := curation.VerifiedName{VerificationCandidate: v, Match: curation.NameMatchEvidence{
+				LocalTracks: check.LocalTracks, ExternalTracks: check.ExternalTracks, Comparable: check.Comparable, Within: check.Within,
+			}}
+			if r := match.Release; r != nil {
+				proof.Match.ReleaseID, proof.Match.ReleaseTitle = r.ID, r.Title
+			}
+			return &proof, nil
 		}
 	}
-	return m.writer.VerificationPlan(ctx, item, in, actual)
+	return nil, nil
+}
+
+// 在领取事务外读回当前外部资料，下一轮模型及独立审查都使用刷新后的输入。
+func (m *ModelMatcher) RetryStaleVerification(ctx context.Context, item curation.PendingItem) (bool, error) {
+	if item.Kind == "verify_artist_credit" {
+		return m.writer.HandleStaleVerification(ctx, item, "", nil)
+	}
+	entries, err := m.writer.LoadCurationEvidence(ctx, []string{item.TargetID})
+	if err != nil {
+		return false, err
+	}
+	e, ok := entries[item.TargetID]
+	if !ok {
+		return m.writer.HandleStaleVerification(ctx, item, "", nil)
+	}
+	var candidate *curation.VerificationCandidate
+	if item.Kind == "verify_name" {
+		var want curation.VerificationCandidate
+		if err := json.Unmarshal(item.Evidence, &want); err != nil {
+			return false, err
+		}
+		candidate = &want
+		// 巡检建议保留原文和建议值；结构差异重新从当前发行或录音取两端的值。
+		if want.Structure {
+			actual, err := m.currentNameCandidate(ctx, e, want)
+			if err != nil {
+				return false, err
+			}
+			if actual != nil {
+				candidate = &actual.VerificationCandidate
+			} else {
+				candidate = &curation.VerificationCandidate{ReleaseID: item.TargetID, TrackID: want.TrackID, Field: want.Field, Before: want.Before, After: want.After}
+			}
+		}
+	}
+	return m.writer.HandleStaleVerification(ctx, item, IdentityDigest(e), candidate)
 }

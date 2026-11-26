@@ -1,0 +1,1331 @@
+{
+  "conversations": 94,
+  "drained": true,
+  "elapsed_seconds": 865.946479789,
+  "empty_conversations": 0,
+  "endpoints": {
+    "musicbrainz/artist/lookup": 4,
+    "musicbrainz/artist/search": 4,
+    "musicbrainz/release/lookup": 64,
+    "musicbrainz/release/search": 20
+  },
+  "finished_at": "2026-11-26T02:00:59.637913297Z",
+  "http_503": 10,
+  "http_count": 92,
+  "http_statuses": {
+    "200": 82,
+    "503": 10
+  },
+  "item_usage": {
+    "lookup": {
+      "2201936d-99cb-48d0-bf63-1a33761abdd8": {
+        "tool_calls": 13,
+        "tokens": 39388
+      },
+      "e4f1a47c-6ad4-413e-89df-d9d2310b930f": {
+        "tool_calls": 5,
+        "tokens": 19776
+      }
+    },
+    "web": {
+      "2201936d-99cb-48d0-bf63-1a33761abdd8": {
+        "tool_calls": 9,
+        "tokens": 42403
+      },
+      "221e5bc6-05eb-45d0-b9ae-3e3a1fbe095a": {
+        "tool_calls": 15,
+        "tokens": 24557
+      },
+      "37a9a428-2d33-4d4c-9093-29f75b986762": {
+        "tool_calls": 18,
+        "tokens": 122969
+      },
+      "60cf3146-24dc-4f7b-81ee-371936d7de13": {
+        "tool_calls": 18,
+        "tokens": 77826
+      },
+      "74c0b364-98d9-4056-a573-0765880ff2c0": {
+        "tool_calls": 15,
+        "tokens": 96708
+      },
+      "88e7dea3-0d64-4819-9b81-917e44a58600": {
+        "tool_calls": 15,
+        "tokens": 123589
+      },
+      "a5d71467-2fa6-4d40-8587-d6d81aad4574": {
+        "tool_calls": 19,
+        "tokens": 36559
+      },
+      "c554ba3e-8b89-485b-a2e6-663e8d990c39": {
+        "tool_calls": 9,
+        "tokens": 28348
+      },
+      "d2b12e24-ac1d-4c58-be8a-f1aa86e529e2": {
+        "tool_calls": 21,
+        "tokens": 76315
+      },
+      "ea369588-ca70-4889-bb54-4a1bfd9a3b76": {
+        "tool_calls": 16,
+        "tokens": 19721
+      }
+    }
+  },
+  "loopback_search_requests": 62,
+  "mode": "real",
+  "model_by_stage": {
+    "local_cleanup": {
+      "calls": 2,
+      "input_tokens": 3658,
+      "output_tokens": 113
+    },
+    "lookup": {
+      "calls": 6,
+      "input_tokens": 57779,
+      "output_tokens": 1385
+    },
+    "patrol": {
+      "calls": 65,
+      "input_tokens": 63516,
+      "output_tokens": 8556
+    },
+    "review": {
+      "calls": 7,
+      "input_tokens": 9722,
+      "output_tokens": 1188
+    },
+    "select": {
+      "calls": 3,
+      "input_tokens": 94101,
+      "output_tokens": 180
+    },
+    "verify": {
+      "calls": 16,
+      "input_tokens": 13738,
+      "output_tokens": 2030
+    },
+    "web": {
+      "calls": 68,
+      "input_tokens": 636619,
+      "output_tokens": 9036
+    }
+  },
+  "model_routes": {
+    "02200e84-1cf9-4383-abec-f78bd5fd9389": [
+      "patrol"
+    ],
+    "08415105-2aa3-4461-ad62-8622e5731650": [
+      "patrol"
+    ],
+    "08caa0ac-4e75-4853-ae24-0692c77cc994": [
+      "patrol"
+    ],
+    "0a8bf207-3bf0-4470-a3b4-08e64a673ba6": [
+      "patrol"
+    ],
+    "104a9790-83a9-46ff-bb09-edd0104b9ec8": [
+      "patrol"
+    ],
+    "1656f321-aeba-4769-87f3-5998bb6efed7": [
+      "patrol"
+    ],
+    "16b60c49-e8bb-4975-bc9e-582fd29e48b9": [
+      "patrol"
+    ],
+    "1a53e6dc-a0f8-4445-a326-585d7ee20072": [
+      "patrol"
+    ],
+    "1f6e675b-b1e9-47d5-93c0-eafedbe9abe2": [
+      "patrol"
+    ],
+    "1ff43d2b-4ba7-4ac3-9bd7-3a6eb8176698": [
+      "patrol"
+    ],
+    "20d3c9cd-456d-5687-a9c1-60452579c0f8": [
+      "verify"
+    ],
+    "21e65c49-c94d-5174-b71e-8940c5f2ee3e": [
+      "verify"
+    ],
+    "2201936d-99cb-48d0-bf63-1a33761abdd8": [
+      "select",
+      "lookup",
+      "web"
+    ],
+    "221e5bc6-05eb-45d0-b9ae-3e3a1fbe095a": [
+      "web"
+    ],
+    "2567481c-6937-46e9-8808-8e40dc34f697": [
+      "patrol"
+    ],
+    "2b72cc3b-9b24-49a7-bf36-dbe84bb2d47b": [
+      "patrol"
+    ],
+    "37a9a428-2d33-4d4c-9093-29f75b986762": [
+      "web"
+    ],
+    "3c185eba-311f-59b3-ab34-4390eaac6346": [
+      "verify"
+    ],
+    "3c5cd24e-ca07-5bf4-a1f6-5d757bd38e3f": [
+      "local_cleanup"
+    ],
+    "3ef81dc1-c40e-4558-9154-0e3cf4b8d208": [
+      "patrol"
+    ],
+    "477fb17b-c78f-44f5-9ddd-cd214043dcd8": [
+      "patrol"
+    ],
+    "4d59e6ed-061d-486b-92b5-e06da2776dd8": [
+      "patrol"
+    ],
+    "4eb8d3a9-2de2-4157-85ae-d7f95ed08d61": [
+      "patrol"
+    ],
+    "541785ac-9845-4047-b367-839f4c3889bb": [
+      "patrol"
+    ],
+    "60cf3146-24dc-4f7b-81ee-371936d7de13": [
+      "web"
+    ],
+    "61e0267e-a0a7-4606-a9a7-72a04265aeeb": [
+      "patrol"
+    ],
+    "62b7447c-c9c5-4ed9-89cc-b8fd723596b2": [
+      "patrol"
+    ],
+    "65da4b0f-c8a1-43e9-ae71-c81a007198f8": [
+      "patrol"
+    ],
+    "6afffb5f-9c88-438f-abca-e5a96fdd4fb5": [
+      "patrol"
+    ],
+    "6ce68f2c-af30-42f4-9521-c5a8e47a5293": [
+      "patrol"
+    ],
+    "6d571127-a5b0-4874-9e9d-c96a55d61f2e": [
+      "patrol"
+    ],
+    "6eb7cb34-c654-5592-bcea-71ff10579e3f": [
+      "verify"
+    ],
+    "710f9326-2d92-58c2-b3e3-ae4607f8f3f7": [
+      "verify"
+    ],
+    "72561cd6-1547-4255-96ef-1df4231aabc0": [
+      "patrol"
+    ],
+    "741c413c-47a0-4722-851c-90212d6f7c9d": [
+      "patrol"
+    ],
+    "7459645a-bb36-4591-a123-4ca47467e55b": [
+      "patrol"
+    ],
+    "74c0b364-98d9-4056-a573-0765880ff2c0": [
+      "web"
+    ],
+    "7683a9c0-5a54-5e5b-a84e-369334b4f070": [
+      "verify"
+    ],
+    "7c94a20a-dade-425d-9740-7786793a3a93": [
+      "patrol"
+    ],
+    "7d6172f4-2d32-4b8d-b10f-916e241c414a": [
+      "patrol"
+    ],
+    "7eab93e8-7ec0-576c-ad87-8dc4681f7bef": [
+      "verify"
+    ],
+    "7f9088e6-4aab-41c4-a095-176416e4c1b4": [
+      "patrol"
+    ],
+    "88e7dea3-0d64-4819-9b81-917e44a58600": [
+      "web"
+    ],
+    "8acd3f35-b1c6-4fb1-a813-75ddb77d8914": [
+      "patrol"
+    ],
+    "8d7a5df9-9864-46e4-b0b8-aaa0125321ee": [
+      "patrol"
+    ],
+    "8d7ac928-c18f-4b24-bc56-c74ccc3d7637": [
+      "patrol"
+    ],
+    "8e550e52-3f17-4a8e-aa82-775ca7224856": [
+      "patrol"
+    ],
+    "969fb941-8617-407e-b42a-34e4146a1cf8": [
+      "patrol"
+    ],
+    "9a6645e5-2a5e-4def-be6f-11bddf8796b8": [
+      "patrol"
+    ],
+    "9d60e01a-5015-509e-80ff-a6ca14abdc36": [
+      "verify"
+    ],
+    "9fb3220e-f7c5-47f8-8df0-17a768d92622": [
+      "patrol"
+    ],
+    "a0e001a4-7f64-4afc-aa20-7181b0cdff23": [
+      "patrol"
+    ],
+    "a1b537f7-0ea3-4242-bfdf-d62126c484d3": [
+      "patrol"
+    ],
+    "a3340651-3947-4177-979b-671e920b475d": [
+      "patrol"
+    ],
+    "a5d71467-2fa6-4d40-8587-d6d81aad4574": [
+      "web"
+    ],
+    "a6b90def-8297-5825-8404-a8f3c214c861": [
+      "local_cleanup"
+    ],
+    "a6bf2891-0237-5372-ae97-40b23250810e": [
+      "verify"
+    ],
+    "a884a37d-3622-5587-a6ba-9399fcee1c5c": [
+      "verify"
+    ],
+    "b0b71c58-03da-47f9-bc76-19aedc5e2bef": [
+      "patrol"
+    ],
+    "b651664d-2ae0-4aff-945b-1b1901fd101e": [
+      "patrol"
+    ],
+    "b77b8384-04bf-4fe6-a254-2f02c9ca7fab": [
+      "patrol"
+    ],
+    "b7d38578-6b74-4111-841c-838a42f3496c": [
+      "patrol"
+    ],
+    "b8f31dc2-e051-4ddc-836a-6da2684701d1": [
+      "patrol"
+    ],
+    "b9a6277e-5457-4f68-b384-cf7e9de9807f": [
+      "patrol"
+    ],
+    "bec974b8-932c-4335-a74c-c6b6a6f6e9a7": [
+      "patrol"
+    ],
+    "bfb35d86-fb10-409e-97c2-bd737caf2464": [
+      "patrol"
+    ],
+    "bfd270b7-4664-4540-9f99-9a8697a2e9e7": [
+      "patrol"
+    ],
+    "bfe01295-1c80-4930-8380-1c75a85f163d": [
+      "patrol"
+    ],
+    "c142fcf9-02bb-44c4-8335-ad11f8dff4d5": [
+      "patrol"
+    ],
+    "c3e2ad2f-8dd3-55fe-9b3b-d05bf63fcf92": [
+      "verify"
+    ],
+    "c41c8c32-b589-4859-ab9d-deff96b8d76c": [
+      "patrol"
+    ],
+    "c49ef5a9-f81d-4dc9-8c07-2079180a340f": [
+      "patrol"
+    ],
+    "c554ba3e-8b89-485b-a2e6-663e8d990c39": [
+      "web"
+    ],
+    "cac9080d-f49c-474b-8194-8e4740a37ba2": [
+      "patrol"
+    ],
+    "cf9e2271-bb23-4750-b6bd-c446964c8735": [
+      "patrol"
+    ],
+    "d2b12e24-ac1d-4c58-be8a-f1aa86e529e2": [
+      "web"
+    ],
+    "d6ffeb87-f558-4e2f-ac25-56b25c9d1070": [
+      "patrol"
+    ],
+    "db9d9034-d5b1-4c0d-bce2-99e703b4d732": [
+      "patrol"
+    ],
+    "dc2989fc-1b81-470b-b507-631b7c1a533a": [
+      "patrol"
+    ],
+    "dd134b83-6714-4487-880e-4da12c286e40": [
+      "patrol"
+    ],
+    "e2a4b379-707b-46bf-ab6d-6ef11162a0a9": [
+      "patrol"
+    ],
+    "e35ed991-c498-4687-bc30-3e4705e55753": [
+      "patrol"
+    ],
+    "e4e69f1c-8fa3-43c9-bf5f-e75e8dfe546a": [
+      "patrol"
+    ],
+    "e4f1a47c-6ad4-413e-89df-d9d2310b930f": [
+      "select",
+      "lookup"
+    ],
+    "ea369588-ca70-4889-bb54-4a1bfd9a3b76": [
+      "web"
+    ],
+    "eceec9e7-3620-5445-aabb-bf254795c08f": [
+      "verify"
+    ],
+    "ed2d6d88-1158-46da-b650-4128828fec10": [
+      "patrol"
+    ],
+    "f712f098-5ec9-4b41-94e4-6bd059e8a9fa": [
+      "select"
+    ]
+  },
+  "progress": {
+    "queues": [
+      {
+        "id": "release",
+        "state": "idle",
+        "remaining": 0,
+        "ready": 0,
+        "successful_requests_per_second": null,
+        "completed_items_per_second": null,
+        "eta_seconds": 0,
+        "pause_reason": null,
+        "source": null,
+        "retry_at": null
+      },
+      {
+        "id": "artwork",
+        "state": "paused",
+        "remaining": 19,
+        "ready": 0,
+        "successful_requests_per_second": null,
+        "completed_items_per_second": null,
+        "eta_seconds": null,
+        "pause_reason": "source_disabled",
+        "source": null,
+        "retry_at": null
+      },
+      {
+        "id": "lyrics",
+        "state": "paused",
+        "remaining": 276,
+        "ready": 0,
+        "successful_requests_per_second": null,
+        "completed_items_per_second": null,
+        "eta_seconds": null,
+        "pause_reason": "source_disabled",
+        "source": null,
+        "retry_at": null
+      },
+      {
+        "id": "artist_media",
+        "state": "idle",
+        "remaining": 0,
+        "ready": 0,
+        "successful_requests_per_second": null,
+        "completed_items_per_second": null,
+        "eta_seconds": 0,
+        "pause_reason": null,
+        "source": null,
+        "retry_at": null
+      },
+      {
+        "id": "fingerprint",
+        "state": "idle",
+        "remaining": 0,
+        "ready": 0,
+        "successful_requests_per_second": null,
+        "completed_items_per_second": null,
+        "eta_seconds": 0,
+        "pause_reason": null,
+        "source": null,
+        "retry_at": null
+      }
+    ],
+    "state": "idle",
+    "rule_version": 102,
+    "releases": {
+      "total": 20,
+      "processed": 20,
+      "matched": 19,
+      "uncertain": 0,
+      "no_match": 0,
+      "unlisted": 1,
+      "no_usable_candidates": 0,
+      "try_later": 0
+    },
+    "pending": {
+      "waiting_model": 0
+    },
+    "batch": null,
+    "last_pass_finished_at": "2026-11-26T02:00:32.546784783Z",
+    "model": {
+      "web_daily_token_limit": null,
+      "web_today": {
+        "date": "2026-11-26",
+        "input_tokens": 639457,
+        "output_tokens": 9538
+      },
+      "web_limit_reached": false,
+      "web_retry_at": null,
+      "state": "idle",
+      "unavailable_reason": null,
+      "model": "gpt-6.2-sol",
+      "today": {
+        "date": "2026-11-26",
+        "input_tokens": 879133,
+        "output_tokens": 22488
+      },
+      "daily_token_limit": 3000000,
+      "items": {
+        "waiting_model": 0,
+        "in_progress": 0,
+        "waiting_human": 0,
+        "shelved": 0
+      }
+    }
+  },
+  "public_sources": [
+    "musicbrainz"
+  ],
+  "queue_backoffs": {
+    "release/2026-11-26T01:46:54.251471762Z": {
+      "FirstObserved": "2026-11-26T01:46:52.678440373Z",
+      "Queue": "release",
+      "Source": "musicbrainz",
+      "Reason": "rate_limited",
+      "RetryAt": "2026-11-26T01:46:54.251471762Z"
+    },
+    "release/2026-11-26T01:46:57.462089867Z": {
+      "FirstObserved": "2026-11-26T01:46:55.8227222Z",
+      "Queue": "release",
+      "Source": "musicbrainz",
+      "Reason": "rate_limited",
+      "RetryAt": "2026-11-26T01:46:57.462089867Z"
+    },
+    "release/2026-11-26T01:47:19.452413241Z": {
+      "FirstObserved": "2026-11-26T01:47:17.574850163Z",
+      "Queue": "release",
+      "Source": "musicbrainz",
+      "Reason": "rate_limited",
+      "RetryAt": "2026-11-26T01:47:19.452413241Z"
+    },
+    "release/2026-11-26T01:50:52.378408526Z": {
+      "FirstObserved": "2026-11-26T01:50:50.739982308Z",
+      "Queue": "release",
+      "Source": "musicbrainz",
+      "Reason": "rate_limited",
+      "RetryAt": "2026-11-26T01:50:52.378408526Z"
+    }
+  },
+  "real_model": {
+    "application_usage": {
+      "input_tokens": 879133,
+      "output_tokens": 22488
+    },
+    "calls_without_complete_usage": {},
+    "direct_model_operations": 6,
+    "http_statuses": {
+      "200": 167
+    },
+    "item_usage_peaks": {
+      "lookup": {
+        "items": 2,
+        "max_tool_calls": 13,
+        "max_tokens": 39388
+      },
+      "web": {
+        "items": 10,
+        "max_tool_calls": 21,
+        "max_tokens": 123589
+      }
+    },
+    "model_operations_by_type": {
+      "direct/external_link": 2,
+      "direct/release_auto_correction": 4
+    },
+    "model_usage": {
+      "calls": 167,
+      "input_tokens": 879133,
+      "output_tokens": 22488
+    },
+    "review_item_decisions": {
+      "needs_human_confirmation": 7
+    },
+    "review_records": {
+      "completed": 7
+    },
+    "reviewed_model_operations": 0
+  },
+  "requests": [
+    {
+      "started_at": "2026-11-26T01:46:35.090930581Z",
+      "finished_at": "2026-11-26T01:46:35.565601141Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:36.103400346Z",
+      "finished_at": "2026-11-26T01:46:36.260553729Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:37.106681684Z",
+      "finished_at": "2026-11-26T01:46:37.263539709Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:38.119142236Z",
+      "finished_at": "2026-11-26T01:46:38.277117601Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:39.257585486Z",
+      "finished_at": "2026-11-26T01:46:39.414082404Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:40.263799128Z",
+      "finished_at": "2026-11-26T01:46:40.421001131Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:41.492315955Z",
+      "finished_at": "2026-11-26T01:46:41.649131612Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:42.498854553Z",
+      "finished_at": "2026-11-26T01:46:42.668302154Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:43.502502138Z",
+      "finished_at": "2026-11-26T01:46:43.658773819Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:44.507289694Z",
+      "finished_at": "2026-11-26T01:46:44.663834624Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:45.510435311Z",
+      "finished_at": "2026-11-26T01:46:46.093410836Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:46.514299413Z",
+      "finished_at": "2026-11-26T01:46:46.735693625Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:47.51694804Z",
+      "finished_at": "2026-11-26T01:46:47.71115962Z",
+      "endpoint": "musicbrainz/artist/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:48.520326687Z",
+      "finished_at": "2026-11-26T01:46:48.870953397Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:49.532568383Z",
+      "finished_at": "2026-11-26T01:46:52.076888884Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:52.094920446Z",
+      "finished_at": "2026-11-26T01:46:52.251455933Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T01:46:54.302720561Z",
+      "finished_at": "2026-11-26T01:46:54.479871274Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:55.30556291Z",
+      "finished_at": "2026-11-26T01:46:55.462075118Z",
+      "endpoint": "musicbrainz/artist/search",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T01:46:57.516673768Z",
+      "finished_at": "2026-11-26T01:46:57.731244775Z",
+      "endpoint": "musicbrainz/artist/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:58.520259394Z",
+      "finished_at": "2026-11-26T01:46:58.700919762Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:46:59.523696066Z",
+      "finished_at": "2026-11-26T01:46:59.680084048Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:00.527213198Z",
+      "finished_at": "2026-11-26T01:47:00.712306893Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:01.530270815Z",
+      "finished_at": "2026-11-26T01:47:01.711740567Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:02.536460314Z",
+      "finished_at": "2026-11-26T01:47:02.693400578Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:03.539785491Z",
+      "finished_at": "2026-11-26T01:47:03.696021887Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:04.550912405Z",
+      "finished_at": "2026-11-26T01:47:04.707270156Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:05.55404835Z",
+      "finished_at": "2026-11-26T01:47:12.074110962Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:12.081780347Z",
+      "finished_at": "2026-11-26T01:47:16.276190502Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:16.28359189Z",
+      "finished_at": "2026-11-26T01:47:16.498646233Z",
+      "endpoint": "musicbrainz/artist/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:17.29516452Z",
+      "finished_at": "2026-11-26T01:47:17.452398741Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T01:47:19.519657865Z",
+      "finished_at": "2026-11-26T01:47:19.706651171Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:20.531259935Z",
+      "finished_at": "2026-11-26T01:47:20.711867274Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:21.53408997Z",
+      "finished_at": "2026-11-26T01:47:26.654109747Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:26.792725426Z",
+      "finished_at": "2026-11-26T01:47:26.974723565Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:27.796436569Z",
+      "finished_at": "2026-11-26T01:47:28.001971974Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:47:28.800419882Z",
+      "finished_at": "2026-11-26T01:47:31.279905345Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:50:48.21895327Z",
+      "finished_at": "2026-11-26T01:50:48.711505362Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:50:49.222344839Z",
+      "finished_at": "2026-11-26T01:50:49.376300626Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:50:50.22499084Z",
+      "finished_at": "2026-11-26T01:50:50.378393619Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T01:50:52.773449988Z",
+      "finished_at": "2026-11-26T01:50:52.926638835Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:08.699344237Z",
+      "finished_at": "2026-11-26T01:53:09.258622663Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:09.70367581Z",
+      "finished_at": "2026-11-26T01:53:10.11280575Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:10.706198818Z",
+      "finished_at": "2026-11-26T01:53:10.926888615Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:11.718296699Z",
+      "finished_at": "2026-11-26T01:53:12.054703798Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:12.72248602Z",
+      "finished_at": "2026-11-26T01:53:13.027246226Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:13.728910101Z",
+      "finished_at": "2026-11-26T01:53:19.516527106Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:19.524354768Z",
+      "finished_at": "2026-11-26T01:53:20.124389729Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:20.536268959Z",
+      "finished_at": "2026-11-26T01:53:20.833248435Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:21.539556195Z",
+      "finished_at": "2026-11-26T01:53:22.127326959Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:22.543162101Z",
+      "finished_at": "2026-11-26T01:53:22.819156112Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:23.556107219Z",
+      "finished_at": "2026-11-26T01:53:23.906549774Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:24.559454317Z",
+      "finished_at": "2026-11-26T01:53:24.863673771Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:25.571018342Z",
+      "finished_at": "2026-11-26T01:53:26.14538811Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:26.582953145Z",
+      "finished_at": "2026-11-26T01:53:26.891641597Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:27.594855431Z",
+      "finished_at": "2026-11-26T01:53:27.815915037Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:28.59812423Z",
+      "finished_at": "2026-11-26T01:53:28.894587048Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:32.513505954Z",
+      "finished_at": "2026-11-26T01:53:34.441479165Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:34.449061773Z",
+      "finished_at": "2026-11-26T01:53:34.607194086Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T01:53:38.433341685Z",
+      "finished_at": "2026-11-26T01:53:38.590493344Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T01:53:42.624741664Z",
+      "finished_at": "2026-11-26T01:53:42.856554617Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:44.627185963Z",
+      "finished_at": "2026-11-26T01:53:44.939854036Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:45.638599082Z",
+      "finished_at": "2026-11-26T01:53:45.949851887Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:46.641507209Z",
+      "finished_at": "2026-11-26T01:53:46.974775207Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:47.644986627Z",
+      "finished_at": "2026-11-26T01:53:48.155925152Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:48.648002614Z",
+      "finished_at": "2026-11-26T01:53:48.948392199Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:49.659647258Z",
+      "finished_at": "2026-11-26T01:53:50.07760458Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:50.663316094Z",
+      "finished_at": "2026-11-26T01:53:51.023434932Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:51.67438123Z",
+      "finished_at": "2026-11-26T01:53:51.915394341Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:54.422974614Z",
+      "finished_at": "2026-11-26T01:53:54.580815505Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T01:53:57.901173803Z",
+      "finished_at": "2026-11-26T01:53:58.146720971Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:58.912412979Z",
+      "finished_at": "2026-11-26T01:53:59.423318515Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:53:59.915849816Z",
+      "finished_at": "2026-11-26T01:54:00.30753503Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:54:00.919423399Z",
+      "finished_at": "2026-11-26T01:54:01.317144605Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:54:01.923404776Z",
+      "finished_at": "2026-11-26T01:54:02.265094922Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:54:02.934968054Z",
+      "finished_at": "2026-11-26T01:54:03.266005968Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:54:03.938549939Z",
+      "finished_at": "2026-11-26T01:54:04.600161877Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:54:04.942042708Z",
+      "finished_at": "2026-11-26T01:54:05.256912153Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:54:05.953401686Z",
+      "finished_at": "2026-11-26T01:54:06.788664424Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:54:06.964558012Z",
+      "finished_at": "2026-11-26T01:54:07.329238419Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:54:07.967461185Z",
+      "finished_at": "2026-11-26T01:54:08.560544199Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:55:11.23281169Z",
+      "finished_at": "2026-11-26T01:55:12.032113305Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:55:12.236544271Z",
+      "finished_at": "2026-11-26T01:55:12.389438761Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T01:55:19.408966898Z",
+      "finished_at": "2026-11-26T01:55:20.075565168Z",
+      "endpoint": "musicbrainz/artist/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:56:05.45354638Z",
+      "finished_at": "2026-11-26T01:56:06.386117917Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:56:06.457242679Z",
+      "finished_at": "2026-11-26T01:56:06.613743562Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T01:56:11.769475795Z",
+      "finished_at": "2026-11-26T01:56:11.971988457Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:56:12.772413741Z",
+      "finished_at": "2026-11-26T01:56:13.056453068Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:56:13.775517665Z",
+      "finished_at": "2026-11-26T01:56:14.052588239Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:56:20.48580078Z",
+      "finished_at": "2026-11-26T01:56:20.642992738Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T01:56:44.064852707Z",
+      "finished_at": "2026-11-26T01:56:44.289533951Z",
+      "endpoint": "musicbrainz/artist/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T01:59:59.109801589Z",
+      "finished_at": "2026-11-26T01:59:59.795703353Z",
+      "endpoint": "musicbrainz/artist/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T02:00:50.202238274Z",
+      "finished_at": "2026-11-26T02:00:51.197017022Z",
+      "endpoint": "musicbrainz/artist/lookup",
+      "status": 200
+    }
+  ],
+  "score": {
+    "samples": [
+      {
+        "title": "唱遊大世界王菲香港演唱會98–99",
+        "expected_release_id": "09b6136c-80ee-4576-b157-e08c422dce1f",
+        "complete": true,
+        "exact_release": false,
+        "group_only": true,
+        "scanned_tracks": 29
+      },
+      {
+        "title": "菲主打",
+        "expected_release_id": "732119e7-64bf-4110-932f-edc24f3f3adf",
+        "complete": false,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 14,
+        "issues": [
+          "专辑显示名 \"菲主答\"，期望 \"菲主打\""
+        ]
+      },
+      {
+        "title": "菲賣品",
+        "expected_release_id": "e5c9d96f-2435-45c2-860b-33ad4e299a72",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 18
+      },
+      {
+        "title": "Il canto delle pellicole",
+        "expected_release_id": "a5240127-b644-412d-a0a7-12b4f0fce68d",
+        "complete": true,
+        "exact_release": false,
+        "group_only": true,
+        "scanned_tracks": 10
+      },
+      {
+        "title": "Goodbye",
+        "expected_release_id": "7d3b742e-b799-4f1b-9246-11689fe1524b",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 9
+      },
+      {
+        "title": "Boys for Pele",
+        "expected_release_id": "4c31aef1-177e-4bba-9a56-180e21a0d043",
+        "complete": false,
+        "exact_release": false,
+        "group_only": false,
+        "scanned_tracks": 18,
+        "issues": [
+          "缺少清单中的发行或发行组对应",
+          "错改 Boys for Pele.barcode：\"075678069628\"，期望 [\"\"]",
+          "错改 Boys for Pele.catalog_number：\"7567-80696-2\"，期望 [\"7567 80696\"]",
+          "错改 Boys for Pele.label：\"EastWest\"，期望 [\"Atlantic\"]",
+          "错连 Boys for Pele/release：4cd43e6e-df96-3546-8343-870035e5eaf6，期望 [4c31aef1-177e-4bba-9a56-180e21a0d043]"
+        ]
+      },
+      {
+        "title": "The Division Bell",
+        "expected_release_id": "65ee4ee0-2eb7-33f9-b1b3-aeb8b192a66c",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 11
+      },
+      {
+        "title": "Gilgamesh",
+        "expected_release_id": "c8664454-4cda-483c-9e10-90e5393a1cd6",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 24
+      },
+      {
+        "title": "The Belly of an Architect",
+        "expected_release_id": "89803205-72dc-42dd-8897-f294ff33d1b9",
+        "complete": true,
+        "exact_release": false,
+        "group_only": true,
+        "scanned_tracks": 11
+      },
+      {
+        "title": "Amadeus: Special Edition: The Director’s Cut",
+        "expected_release_id": "3ef22e9f-d89f-4aa3-aea5-1ad7ec297120",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 30
+      },
+      {
+        "title": "Ambient",
+        "expected_release_id": "dd9e8a79-e72f-3b7c-8841-6e31fddca7ef",
+        "complete": false,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 12,
+        "issues": [
+          "专辑显示名 \"Ambinet\"，期望 \"Ambient\""
+        ]
+      },
+      {
+        "title": "M.elle le \"Gladiator\"",
+        "expected_release_id": "4b305f41-b57e-452a-9ba5-aa8fd8d41c4c",
+        "complete": true,
+        "exact_release": false,
+        "group_only": true,
+        "scanned_tracks": 3
+      },
+      {
+        "title": "…I Care Because You Do",
+        "expected_release_id": "8ee20d5c-df4a-31c9-8ad2-0b01fef2c640",
+        "complete": false,
+        "exact_release": false,
+        "group_only": false,
+        "scanned_tracks": 12,
+        "issues": [
+          "缺少清单中的发行或发行组对应"
+        ]
+      },
+      {
+        "title": "soundtrack from thirtysomething",
+        "expected_release_id": "8add377d-8c16-4fc9-99ef-c3a7f5462ae0",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 18
+      },
+      {
+        "title": "Arise",
+        "expected_release_id": "49f662c8-2ddf-44c4-9d19-986bcda68416",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 9
+      },
+      {
+        "title": "Dive Into Disney",
+        "expected_release_id": "4cea9c99-b4fb-4eb4-8c77-f9048aa49e6a",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 14
+      },
+      {
+        "title": "The Bower of Despair",
+        "expected_release_id": "51979eeb-3ef4-413b-95ea-94054b1520ab",
+        "complete": true,
+        "exact_release": false,
+        "group_only": true,
+        "scanned_tracks": 11
+      },
+      {
+        "title": "Powerslave",
+        "expected_release_id": "4766bf83-3b58-4584-b75a-43917627b790",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 8
+      },
+      {
+        "title": "Gettin’ In Over My Head",
+        "expected_release_id": "88c69ac5-5163-48cc-a620-72f9004fac28",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 13
+      },
+      {
+        "title": "Elysian Fields",
+        "expected_release_id": "1fe4b6e8-3d91-4478-bb96-c37f012ab53c",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 14
+      }
+    ],
+    "completed_samples": 16,
+    "wrong_links": 1,
+    "wrong_merges": 0,
+    "wrong_fields": 3,
+    "open_items": 0,
+    "correct_release_matches_by_stage": {
+      "lookup": 0,
+      "program": 17,
+      "select": 1,
+      "web": 0
+    },
+    "model_item_outcomes": {
+      "local_cleanup/local_cleanup/resolved/local_cleanup": 2,
+      "lookup/release_match/resolved/model_matched": 1,
+      "patrol/name_patrol/resolved/patrolled": 62,
+      "select/release_match/resolved/model_matched": 1,
+      "unclaimed/artist_identity/resolved/artist_out_of_scope": 1,
+      "unclaimed/artist_identity/resolved/program_matched": 1,
+      "unclaimed/name_patrol/resolved/stale": 1,
+      "unclaimed/release_match/resolved/patrol_requery": 2,
+      "verify/verify_artist_credit/resolved/suggestion_recorded": 3,
+      "verify/verify_name/resolved/suggestion_recorded": 9,
+      "web/artist_identity/resolved/no_result": 6,
+      "web/artist_identity/resolved/suggestion_recorded": 3,
+      "web/release_match/resolved/unlisted": 1
+    }
+  },
+  "started_at": "2026-11-26T01:46:33.691433508Z",
+  "user_agent": "ROOMusic/dev ( https://github.com/qlqqs/ROOMusic )"
+}
