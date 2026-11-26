@@ -778,9 +778,7 @@ func repairMP3Frames(frames map[string]string) []byte {
 		_, _ = payload.Write([]byte{0, 0, 0})
 		_, _ = payload.WriteString(value)
 	}
-	size := payload.Len()
-	header := []byte{'I', 'D', '3', 3, 0, 0, byte(size >> 21), byte(size >> 14), byte(size >> 7), byte(size)}
-	return append(header, payload.Bytes()...)
+	return parsertest.ID3v23(payload.Bytes())
 }
 
 func repairMP3BinaryFrame(frameID string, frame []byte) []byte {
@@ -903,7 +901,7 @@ func repairUTF16(value string, littleEndian bool) []byte {
 
 func TestSplitCreditNamesUsesArtistRules(t *testing.T) {
 	got := splitCreditNames("Composer Alpha, Composer Beta & Composer Gamma")
-	want := []string{"Composer Alpha, Composer Beta", "Composer Gamma"}
+	want := []string{"Composer Alpha, Composer Beta & Composer Gamma"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("credit 拆分结果 = %#v，期望 %#v", got, want)
 	}

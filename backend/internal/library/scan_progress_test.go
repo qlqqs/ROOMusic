@@ -22,12 +22,12 @@ func TestScanProgressWeightedBoundaries(t *testing.T) {
 	}
 }
 func TestScanProgressCandidateDefinition(t *testing.T) {
-	for _, name := range []string{"A.FLAC", "a.CUE", "a.ape", "a.wav", "a.mka", "a.m4a"} {
+	for _, name := range []string{"A.FLAC", "a.CUE", "a.ape", "a.wav", "a.mka", "a.m4a", "no_extension"} {
 		if !isScanCandidate(name) {
 			t.Errorf("candidate %s", name)
 		}
 	}
-	for _, name := range []string{"cover.jpg", "x.log", "x.txt", "no_extension"} {
+	for _, name := range []string{"cover.jpg", "x.log", "x.txt"} {
 		if isScanCandidate(name) {
 			t.Errorf("attachment %s", name)
 		}

@@ -313,6 +313,7 @@ func TestB3MatchWithoutFingerprint(t *testing.T) {
 			case "搜索无结果":
 				want = albumPageResult(curation.ReleasePage{}, false)
 				want.Snapshot.Pages = append(want.Snapshot.Pages, SearchPage{Kind: "release", Relaxed: true})
+				want.Snapshot.FormatRelaxed = true
 				want.Route, want.Fingerprint = "lookup", "unavailable"
 			case "信息不足":
 				e.TitlePlaceholder, e.ArtistPlaceholder = true, true

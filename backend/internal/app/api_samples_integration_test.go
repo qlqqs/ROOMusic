@@ -403,12 +403,49 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordDSDFormatSamples(t, application, samples, call, admin)
 	recordTrackCorrectionSamples(t, application, samples, call, admin)
 	recordReleaseMergeSamples(t, application, samples, call, admin)
+	recordLocalGroupingSample(t, application, samples, call, admin)
 
 	recordCurationSamples(t, samples)
 	recordExternalCurationSamples(t, samples)
 	recordCurationCLinkSamples(t, samples)
 	recordReleaseMatchResultSamples(t, samples)
 	samples.finish()
+}
+
+func recordLocalGroupingSample(t *testing.T, app *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	root := uuid.New()
+	mustExec(t, app, `INSERT INTO library_roots(id,path,status,revision) VALUES($1,$2,'active',1)`, root, filepath.Join(app.allowedRoot, "local-grouping"))
+	release, _ := insertGroupedRelease(t, app, root, groupedRelease{title: "Sample Two Sides", artist: "Sample Ensemble", tracks: []string{"present", "present"}})
+	const kind = "local_model_grouping"
+	operation := uuid.New()
+	assignments := []map[string]any{
+		{"path": "Two Sides/First/01.flac", "file": "Two Sides/First/01.flac", "album": "sample-album", "disc": 1, "track": 1, "size": 256, "modified": int64(1767225600000000), "root_id": root},
+		{"path": "Two Sides/Second/01.flac", "file": "Two Sides/Second/01.flac", "album": "sample-album", "disc": 2, "track": 1, "size": 512, "modified": int64(1767225600000000), "root_id": root},
+	}
+	dirs := []string{"Two Sides/First", "Two Sides/Second"}
+	after := map[string]any{"root_id": root, "directory_key": "sample-directory", "source_digest": "sample-sources",
+		"operation_id": operation, "directories": dirs, "assignments": assignments, "other_paths": []string{}}
+	afterJSON, err := json.Marshal(after)
+	requireCurationOK(t, err)
+	assignmentsJSON, err := json.Marshal(assignments)
+	requireCurationOK(t, err)
+	mustExec(t, app, `INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id,origin)
+		SELECT $1,id,$2,'release',$3,$4,'sample-plan',1,2,'{}',$5,jsonb_build_object('operation_id',$1::uuid),$6,
+		'{"source":"curation","mode":"local_cleanup"}' FROM users WHERE username='curator'`, operation, kind, release, uuid.New(), afterJSON, sampleRequestID)
+	mustExec(t, app, `INSERT INTO local_model_groupings(root_id,directory_key,operation_id,source_digest,directories,assignments,other_paths)
+		VALUES($1,'sample-directory',$2,'sample-sources',$3,$4,'{}')`, root, operation, dirs, assignmentsJSON)
+	response := call(http.MethodGet, "/api/v1/operations?release_id="+release, nil, admin)
+	samples.record("operations/local-model-grouping", response, http.StatusOK)
+	items := decodeJSONMap(t, response)["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("模型归组操作列表应有一条记录，实际 %s", response.Body)
+	}
+	item := items[0].(map[string]any)
+	if item["id"] != operation || item["type"] != kind || item["revertible"] != true ||
+		item["changes"].(map[string]any)["kind"] != kind {
+		t.Fatalf("模型归组记录缺少操作详情：%v", item)
+	}
 }
 
 func recordReleaseMatchResultSamples(t *testing.T, samples *apiSampleRecorder) {

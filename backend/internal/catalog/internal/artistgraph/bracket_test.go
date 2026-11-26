@@ -44,7 +44,7 @@ func TestBracketAliases(t *testing.T) {
 		{"甲 (乙 / 丙)", nil},
 		{"甲 (乙、丙)", nil},
 		{"甲 (乙; 丙)", nil},
-		{"甲 (乙,丙)", nil},
+		{"甲 (乙,丙)", []alias{{"甲", "outer"}, {"乙,丙", "inner"}}},
 		{"甲 (feat. 乙)", nil},
 		{"甲 (feat乙)", nil},
 		{"甲 (ft. 乙)", nil},

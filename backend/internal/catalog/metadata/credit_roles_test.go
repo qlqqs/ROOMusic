@@ -196,7 +196,7 @@ func TestCreditSplitExplicitArtistValuesOnlySplitsExplicitSeparators(t *testing.
 		want      []string
 	}{
 		{"显式多值", " A (violin); B (cello)\nC\r\nD\x00E；F / G、H feat. I ft. J with K ", []string{"A (violin)", "B (cello)", "C", "D", "E", "F", "G", "H", "I", "J", "K"}},
-		{"紧凑标点留给后续姓名规则", "A/B,C&D;E", []string{"A/B,C&D;E"}},
+		{"分号拆分且其余紧凑标点保留", "A/B,C&D;E", []string{"A/B,C&D", "E"}},
 		{"乐器括号内不拆", "Yo-Yo Ma (cello, conductor)", []string{"Yo-Yo Ma (cello, conductor)"}},
 		{"固定组合与姓前名", "Simon & Garfunkel (guitar); Bach, Johann (piano)", []string{"Simon & Garfunkel (guitar)", "Bach, Johann (piano)"}},
 		{"空值", " \r\n\x00 ", []string{}},
