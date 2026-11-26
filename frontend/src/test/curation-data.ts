@@ -85,7 +85,7 @@ export function curationDataOf(governance: GovernanceData | null = null): Curati
     ],
     state: null,
     // 默认曲库里没有可整理的发行：现有的管理员概览测试不出现“打开自动整理”的提示。
-    releases: { total: 0, processed: 0, matched: 0, unmatched: 0, conflict: 0, try_later: 0 },
+    releases: { total: 0, processed: 0, matched: 0, unmatched: 0, conflict: 0, try_later: 0, query_error: 0 },
     batches: [],
     suppressions: [],
     classifications: null,

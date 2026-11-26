@@ -133,7 +133,7 @@ func TestPostgreSQLFingerprintProjectionRejectsLateGeneration(t *testing.T) {
 	item := requireQueueItem(t, w, "release")
 	requirePendingRefreshOK(t, w.processQueueItem(ctx, item))
 	after := testQueueWorkState(t, w, "release", release)
-	if after.Status != "unlisted" || after.Attempts != 1 || after.RetryCount != 0 || after.RetrySource != "" || mb.searches == 0 || computes.Load() != 4 {
+	if after.Status != "unmatched" || after.Attempts != 1 || after.RetryCount != 0 || after.RetrySource != "" || mb.searches == 0 || computes.Load() != 4 {
 		t.Fatalf("仅应使用新代结果完成一次识别，状态 %+v，计算 %d，名字查询 %d", after, computes.Load(), mb.searches)
 	}
 }
@@ -201,7 +201,7 @@ func TestPostgreSQLFingerprintControlsDoNotCountAlbumFailure(t *testing.T) {
 				}
 				requirePendingRefreshOK(t, w.processQueueItem(ctx, requireQueueItem(t, w, "release")))
 				after := testQueueWorkState(t, w, "release", release)
-				if after.Status != "unlisted" || after.Attempts != 1 || after.RetryCount != 0 || after.RetrySource != "" || mb.searches == 0 {
+				if after.Status != "unmatched" || after.Attempts != 1 || after.RetryCount != 0 || after.RetrySource != "" || mb.searches == 0 {
 					t.Fatalf("停用后应释放依赖，执行名字查询，状态 %+v，名字查询 %d", after, mb.searches)
 				}
 			}

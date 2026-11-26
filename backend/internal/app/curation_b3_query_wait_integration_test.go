@@ -90,7 +90,7 @@ func TestPostgreSQLB3FingerprintSourceWaitAndSwitch(t *testing.T) {
 					t.Fatalf("禁用后应释放依赖并执行名字查询，状态 %s、失败计次 %d，请求 AcoustID=%d 名字=%d 详情=%d",
 						state.Status, state.RetryCount, acoust.Load(), names.Load(), details.Load())
 				}
-				b3RequireReleaseResult(t, app, release, "unlisted", "search", "unavailable", "")
+				b3RequireReleaseResult(t, app, release, "unmatched", "search", "unavailable", "")
 			}
 			if tc.disableBefore {
 				disable()

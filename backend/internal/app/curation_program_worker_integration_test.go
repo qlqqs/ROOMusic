@@ -151,6 +151,36 @@ func TestPostgreSQLCurationProgramRetry(t *testing.T) {
 	}
 }
 
+func TestPostgreSQLCurationProgramAlbumQueryErrorStopsAfterThree(t *testing.T) {
+	f := newProgramFixture(t)
+	f.enable(t)
+	f.tagged(t)
+	f.source.hook = func(method string) error {
+		if method == "ReleaseByID" {
+			return sources.ErrInvalidResponse
+		}
+		return nil
+	}
+	f.run(t)
+	for i, delay := range []time.Duration{5 * time.Second, 10 * time.Second} {
+		state := f.stateFor(t, "release", f.a)
+		if state.Status != "try_later" || state.RetryCount != i+1 || state.Attempts != 0 || state.Generation != 0 ||
+			state.RetrySource != "musicbrainz" || state.NextAttemptAt == nil || !state.NextAttemptAt.Equal(f.clock.options().Now().Add(delay)) {
+			t.Fatalf("第 %d 次专辑响应错误应等待 %v，状态 %+v", i+1, delay, state)
+		}
+		f.clock.advance(t, delay)
+	}
+	state := f.stateFor(t, "release", f.a)
+	if state.Status != "query_error" || state.RetryCount != 3 || state.Attempts != 0 || state.Generation != 0 ||
+		state.NextAttemptAt != nil || f.source.callCount("ReleaseByID") != 3 {
+		t.Fatalf("第三次专辑错误应停止查询，状态 %+v，请求 %d", state, f.source.callCount("ReleaseByID"))
+	}
+	f.clock.advance(t, 90*24*time.Hour)
+	if got := f.source.callCount("ReleaseByID"); got != 3 {
+		t.Fatalf("query_error 在普通到期时间和后台轮询中不应再次出站，请求 %d", got)
+	}
+}
+
 func TestPostgreSQLCurationProgramRelink(t *testing.T) {
 	f := newProgramFixture(t)
 	f.enable(t)

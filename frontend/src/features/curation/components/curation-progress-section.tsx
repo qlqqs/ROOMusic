@@ -82,6 +82,7 @@ function ProgressRows({ progress, refresh }: { progress: CurationProgressDTO; re
         <span className={styles.value}>
           已匹配 {formatCount(releases.matched)} · 未匹配 {formatCount(releases.unmatched)} · 有冲突 {formatCount(releases.conflict)}
           {releases.try_later > 0 ? ` · 等待重试 ${formatCount(releases.try_later)}` : ""}
+          {releases.query_error > 0 ? ` · 查询出错 ${formatCount(releases.query_error)}` : ""}
         </span>
       </SettingRow>
       {progress.state === "unavailable"

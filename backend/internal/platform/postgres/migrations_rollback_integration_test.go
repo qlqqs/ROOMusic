@@ -586,6 +586,14 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if m.Version == 102 {
 				assertProgramMatchMigration(t, db)
 			}
+			if m.Version == 103 {
+				var status, result string
+				err := db.QueryRowContext(t.Context(), `SELECT status,result::text FROM curation_work_states
+					WHERE subject='release' AND target_id='e9800000-0000-4000-8000-000000000002'`).Scan(&status, &result)
+				if err != nil || status != "try_later" || strings.Contains(result, "\"retry\"") {
+					t.Fatalf("0103 下行应恢复旧 try_later 并清除断点，状态=%q 结果=%s 错误=%v", status, result, err)
+				}
+			}
 			if scanGrouping {
 				assertScanGroupingMigrationUp(t, db)
 				checkScanGroupingAttachmentConstraints(t, db)
