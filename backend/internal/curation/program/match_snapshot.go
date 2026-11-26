@@ -263,14 +263,37 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 		return result, nil
 	}
 	groupCertain := !relaxed && !unknownGroup && e.Authenticity["title"] == metadata.Real && e.SelectedArtistAuth() == metadata.Real && !e.Compilation && !e.Classical && len(e.Tracks) > 4 && sharedGroup(groupRows) != "" && !needsFullGroupCheck(e)
-	if groupCertain && !slices.ContainsFunc(e.Tracks, func(t catalog.CurationTrack) bool { return t.TitlePlaceholder || t.TitleInferred }) {
+	groupDurationsOK := func(rows []sources.Release) bool {
+		if !groupCertain {
+			return false
+		}
+		if !slices.ContainsFunc(e.Tracks, func(t catalog.CurationTrack) bool { return t.DurationSeconds > 0 }) {
+			return true
+		}
+		for _, summary := range groupRows {
+			i := slices.IndexFunc(rows, func(r sources.Release) bool { return r.ID == summary.ID })
+			if i < 0 || !rows[i].Complete {
+				return false
+			}
+			var c comparison
+			c.compareRelease(e, "search", rows[i])
+			c.compareTracks(e, "search", rows[i])
+			if !c.countEqual || !c.titleMatch || !c.artistMatch || rows[i].Group.ID != summary.Group.ID || len(c.conflicts) > 0 {
+				return false
+			}
+		}
+		return true
+	}
+	groupVerified := groupDurationsOK(groupRows)
+	fillTitles := slices.ContainsFunc(e.Tracks, func(t catalog.CurationTrack) bool { return t.TitlePlaceholder || t.TitleInferred })
+	if groupVerified && !fillTitles {
 		return groupMatch(result, groupRows, "unique_group"), nil
 	}
 	if len(details) == 0 {
-		return uncertain(result, candidateConflicts(result.Candidates)...), nil
+		return partialAlbumMatch(e, uncertain(result, candidateConflicts(result.Candidates)...)), nil
 	}
 	if len(details) > 3 {
-		if groupCertain {
+		if groupVerified {
 			return groupMatch(result, groupRows, "unique_group"), nil
 		}
 		return uncertain(result, "too_many"), nil
@@ -281,7 +304,7 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 		r := *c.Release
 		if !r.Complete {
 			if offline {
-				if groupCertain {
+				if groupVerified {
 					return groupMatch(result, groupRows, "unique_group"), nil
 				}
 				return uncertain(result, "insufficient_evidence"), nil
@@ -301,25 +324,30 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 		rows = append(rows, r)
 	}
 	if len(rows) == 0 {
-		if groupCertain {
+		if groupVerified {
 			return groupMatch(result, groupRows, "unique_group"), nil
 		}
 		return uncertain(result), nil
 	}
-	decided := decideAlbum(e, "search", rows, nil)
+	groupVerified = groupDurationsOK(rows)
+	decided := decideAlbum(e, "search", rows, MatchSnapshot{})
 	mergeCheckedCandidates(&decided, result.Candidates)
 	decided.Snapshot = result.Snapshot
 	decided.ArtistEvidence = result.ArtistEvidence
-	if decided.Status == "uncertain" && groupCertain && !slices.Contains(decided.Conflicts, "ambiguous") && !slices.ContainsFunc(decided.Candidates, func(c Candidate) bool {
+	if groupVerified && (!fillTitles || decided.Status == "uncertain") && !slices.Contains(decided.Conflicts, "ambiguous") && !slices.ContainsFunc(decided.Candidates, func(c Candidate) bool {
 		return blockedCodes(c.Conflicts) || slices.Contains(c.Conflicts, "group_tag_mismatch")
 	}) {
 		result.Candidates = decided.Candidates
 		return groupMatch(result, groupRows, "unique_group"), nil
 	}
+	if decided.Status == "uncertain" {
+		return partialAlbumMatch(e, decided), nil
+	}
 	return decided, nil
 }
 
 func replayMatch(e catalog.CurationEvidence, candidates []Candidate, conflicts []string, snapshot MatchSnapshot) MatchResult {
+	e.Compilation = curation.CompilationEvidence(e)
 	if len(snapshot.Blocked) > 0 {
 		candidates = append(slices.Clone(candidates), snapshot.Blocked...)
 		snapshot.Blocked = nil
@@ -375,7 +403,7 @@ func replayMatch(e catalog.CurationEvidence, candidates []Candidate, conflicts [
 	base.Conflicts = nil
 	base.Candidates = slices.Clone(pending.Candidates)
 	if method == "search" {
-		e = curation.LocalSearchEvidence(e)
+		e = textSearchEvidence(curation.LocalSearchEvidence(e), mode, snapshot)
 		if mode == "single" {
 			for _, c := range candidates {
 				if c.Recording == nil {
@@ -410,7 +438,10 @@ func replayMatch(e catalog.CurationEvidence, candidates []Candidate, conflicts [
 				}
 				rows = append(rows, *c.Release)
 			}
-			m = decideAlbum(e, method, rows, snapshot.RecordingIDs)
+			m = decideAlbum(e, method, rows, snapshot)
+			if m.Status == "uncertain" {
+				m = partialAlbumMatch(e, m)
+			}
 		}
 	}
 	if m.Status == "uncertain" && slices.Contains(m.Conflicts, "insufficient_evidence") {

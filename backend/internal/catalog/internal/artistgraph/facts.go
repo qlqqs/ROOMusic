@@ -36,6 +36,9 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 			return fmt.Errorf("artist subject exceeds name budget")
 		}
 		for i, name := range names {
+			if layer == "scan" && metadata.FieldAuthenticity("artist", name, "", false, false) == metadata.Placeholder {
+				continue
+			}
 			if trackID != "" {
 				key := [4]string{trackID, role, name, layer}
 				if seenTrackCredits[key] {
@@ -87,7 +90,6 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 				return nil, err
 			}
 		}
-		// 明确AlbumArtist恰好叫“未知艺术家”仍是真实名字。
 		if metadata.FieldAuthenticity("album_artist", r.album, r.albumSource, false, false) != metadata.Placeholder && !metadata.IsCompilationPlaceholder(r.album) {
 			if err = add(r.id, "", "album_artist", r.album, "scan"); err != nil {
 				return nil, err
@@ -155,7 +157,7 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 		} else if t.raw.Valid {
 			raw = t.raw.String
 		}
-		if len(rawNames) > 0 || metadata.FieldAuthenticity("artist", raw, t.source, t.inferred, false) != metadata.Placeholder {
+		if metadata.FieldAuthenticity("artist", raw, t.source, t.inferred, false) != metadata.Placeholder {
 			if err = add("", t.id, "track_artist", raw, "scan"); err != nil {
 				return nil, err
 			}

@@ -216,7 +216,12 @@ func scanException(row interface{ Scan(...any) error }) (ModelException, error) 
 
 func actionableSuggestion(e ModelException) bool {
 	switch e.Tool {
-	case "resolve_release_match", "resolve_artist_identity", "correct_release", "correct_track":
+	case "resolve_release_match":
+		var proof struct {
+			Contradicted bool `json:"contradicted"`
+		}
+		return json.Unmarshal(e.Evidence, &proof) == nil && !proof.Contradicted
+	case "resolve_artist_identity", "correct_release", "correct_track":
 		return true
 	case "submit_verification", "submit_artist_media", "merge_releases":
 		var preview struct {

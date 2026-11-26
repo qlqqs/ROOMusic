@@ -26,12 +26,14 @@ func (a adapter) patrolTool(allowed availability) tool.Definition {
 
 func (a adapter) localCleanupTool(allowed availability) tool.Definition {
 	return tool.Definition{
-		Name: "submit_local_cleanup", Description: "提交从本目录文字提取的专辑标题、艺人或曲名，仅填写当前待整理字段。",
+		Name: "submit_local_cleanup", Description: "提交从本目录文字或字段的候选解码中提取的专辑标题、艺人或曲名，仅填写当前待整理字段。",
 		Scope: tool.ScopeShared, Revertible: true, MinRole: tool.RoleAdmin, Available: allowed,
 		Input: json.RawMessage(`{"type":"object","additionalProperties":false,"required":["item_id"],"properties":{
 			"item_id":` + idSchema + `,"title":` + patrolTextSchema + `,"artist":` + patrolTextSchema + `,
 			"tracks":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["track_id","title"],"properties":{
-				"track_id":` + idSchema + `,"title":` + patrolTextSchema + `}}}}}`),
+				"track_id":` + idSchema + `,"title":` + patrolTextSchema + `}}},
+			"track_artists":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["track_id","artist"],"properties":{
+				"track_id":` + idSchema + `,"artist":` + patrolTextSchema + `}}}}}`),
 		Output:  json.RawMessage(`{"type":"object"}`),
 		Preview: a.submissionPreview("local_cleanup", "按本地文字整理"),
 		Handler: a.submitLocalCleanup,

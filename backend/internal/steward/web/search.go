@@ -121,6 +121,9 @@ func (s *Service) Search(ctx context.Context, user identity.User, query string, 
 			return nil, failure("search_quota_exceeded")
 		}
 	}
+	if response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500 {
+		return nil, webRetryAfter(response, failure("search_unreachable"))
+	}
 	if response.StatusCode != 200 {
 		return nil, failure("search_unreachable")
 	}

@@ -46,6 +46,14 @@ func IsSourceUnavailable(err error) bool {
 	return errors.Is(err, sources.ErrUnavailable) || errors.Is(err, sources.ErrTryLater) || errors.Is(err, sources.ErrRateLimited)
 }
 
+func SourceRecoveryTime(err error) time.Time {
+	var pause *sources.QueuePause
+	if errors.As(err, &pause) {
+		return pause.RetryAt
+	}
+	return time.Time{}
+}
+
 func IsMissingSourceMatch(err error) bool {
 	return errors.Is(err, sources.ErrNotFound) || errors.Is(err, sources.ErrInvalidQuery)
 }

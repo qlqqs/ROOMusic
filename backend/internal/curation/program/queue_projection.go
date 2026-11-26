@@ -182,7 +182,20 @@ func (w *Worker) projectReleasePage(ctx context.Context, page []catalog.Curation
 	if err := w.saveMediaProjection(ctx, tx, projected, completed, releaseMediaBindings); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for _, id := range ids {
+		for _, f := range curation.LegacyFields(entries[id]) {
+			u := unit{w: w, subject: "legacy_encoding", id: id, ruleVersion: LocalRuleVersion}
+			if err := u.writeInBatch(ctx, f.Key(), func(batch, key string) error {
+				return w.writer.ApplyLegacyField(ctx, id, f, batch, key)
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func releaseQueueNeeds(e catalog.CurationEvidence, state curation.WorkState, d releaseDigests, opts projectionOptions) bool {

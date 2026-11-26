@@ -17,7 +17,7 @@ func Test发行组唯一的条件与结构判定(t *testing.T) {
 		tracks, reads                       int
 		change                              func(*catalog.CurationEvidence, *curation.ReleasePage, *b3MatchFinder)
 	}{
-		{"真实完整同组", "matched", "release_group", "unique_group", "", 5, 0, nil},
+		{"真实完整同组", "matched", "release_group", "unique_group", "", 5, 1, nil},
 		{"推断标题只走结构", "matched", "release", "structure", "", 5, 1, func(e *catalog.CurationEvidence, _ *curation.ReleasePage, _ *b3MatchFinder) {
 			e.Authenticity["title"] = metadata.Inferred
 		}},

@@ -47,10 +47,19 @@
 - `AudioObservation.Compilation bool` 经 scanner 原样传给 `SourceObservation.Compilation`（JSON `compilation,omitempty`）。
   Vorbis 的 `COMPILATION/ITUNESCOMPILATION`、ID3 的 `TCMP/TXXX:COMPILATION`、M4A 的 `----:COMPILATION` 去空白、小写后任一为
   `1/yes/true/compilation` 即为真；M4A `cpil` 为单字节非零整数时为真，0为假。
-  organizer 保留真实专辑艺人；否则发行艺人是合辑占位词或非 `folder` 观察的标志严格过半时，决定 `artist="群星"`、清除专辑艺人决定，
+  组织器先检查下节的艺人分布条件。其余候选保留真实专辑艺人；否则发行艺人是合辑占位词或实际曲目的合辑标志严格过半时，决定 `artist="群星"`、清除专辑艺人决定，
   保留原 artist 候选，写 `source=compilation`、`rule_id=compilation_v1`、`confidence=high`、`action=auto_apply`。不改变 partition/分组。
 - 本版 `Year==0` 时才按 `ORIGINALDATE → ORIGINALYEAR → TDOR → TORY → TXXX:ORIGINALDATE → TXXX:ORIGINALYEAR → ----:ORIGINALDATE → ----:ORIGINALYEAR`
   取首个可解析年份；不另存原始年份字段。流派仍遵守[多流派合同](./genre-contracts.md)，不随艺人规则改变。
+
+### 旧编码、占位词和合辑推断
+
+- MP3 没有 ID3v2 或 APE 标签时从末尾 128 字节读取 ID3v1 的曲名、艺人、专辑、年份、标准流派以及 v1.1 的曲号。标签来源记为 `mp3_id3v1`，播放使用原有 MP3 物理格式键。
+- ID3v1 和 ID3v2 编码字节 0 的标题、艺人、专辑与专辑艺人按 Latin-1 读取。遇到连续高位字节或 C1 字节，分别尝试 GBK、Big5、Shift_JIS；保留含汉字或假名、无替换字符和控制字符且能还原原字节的不同结果。普通 ASCII 或单个西文重音不会仅凭高位字符改写。
+- 有候选的扫描字段来源是 `garbled`，按占位跳过外部查询。扫描观察保留原文及用于复核的原字节，解码值只在本地层生效。单一读法由程序写入，来源 `legacy_encoding`、级别 1。歧义读法列入对应字段的本地整理片段，提交时复核。人工修正、扫描依据校验及撤销沿用自动层合同。
+- 艺人、专辑和曲名按整串识别 Unknown Artist、Unknown Album、Unknown、`<unknown>`、未知、未知歌手／艺人／艺术家／专辑、带编号的 Track、Audio Track 和音轨，接受大小写、全半角、空格和常用分隔符。占位可进入本地整理，Untitled 是普通标题。
+- 全部曲目缺少明确 ALBUMARTIST 时，至少 4 首、至少 3 位有真实署名的曲目艺人、无人出现超过半数，发行艺人与专辑艺人均取 `Various Artists`，来源 `artist_distribution`、真实性为推断。同一艺人每首只计一次，目录的推断艺人不计。
+- 本次共用解析规则升到 `CommonVersion=5`，本地整理升到 `LocalRuleVersion=3`。
 
 ### 古典作品与乐章（⑧，迁移 0039）
 

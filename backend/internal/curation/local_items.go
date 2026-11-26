@@ -18,6 +18,7 @@ import (
 type localField struct {
 	Value        string                `json:"value"`
 	Authenticity metadata.Authenticity `json:"authenticity"`
+	Decodings    []string              `json:"decodings,omitempty"`
 	Requested    bool                  `json:"requested"`
 }
 
@@ -60,7 +61,15 @@ func numericLocalValue(value string) bool {
 }
 
 func cleanupField(value string, auth metadata.Authenticity, protected bool) localField {
-	return localField{value, auth, !protected && (auth == metadata.Placeholder || auth == metadata.Inferred && (localNoise.MatchString(value) || numericLocalValue(value)))}
+	return localField{Value: value, Authenticity: auth, Requested: !protected && (auth == metadata.Placeholder || auth == metadata.Inferred && (localNoise.MatchString(value) || numericLocalValue(value)))}
+}
+
+func (f *localField) legacy(values []string, protected bool) {
+	if len(values) == 0 {
+		return
+	}
+	f.Decodings = values
+	f.Requested = len(values) > 1 && !protected
 }
 
 func localAlbumInput(e catalog.CurationEvidence) (localAlbum, bool) {
@@ -69,10 +78,13 @@ func localAlbumInput(e catalog.CurationEvidence) (localAlbum, bool) {
 		artist = e.Artist
 	}
 	titleProtected := e.Corrected["title"] || e.Automatic["title"] && e.LocalTitle == ""
+	artistProtected := e.Corrected["album_artist"] || e.Automatic["album_artist"] && e.LocalArtist == "" || e.Compilation || CompilationEvidence(e)
 	a := localAlbum{
 		Title:  cleanupField(e.Title, e.Authenticity["title"], titleProtected),
-		Artist: cleanupField(artist, e.SelectedArtistAuth(), e.Corrected["album_artist"] || e.Automatic["album_artist"] && e.LocalArtist == "" || e.Compilation),
+		Artist: cleanupField(artist, e.SelectedArtistAuth(), artistProtected),
 	}
+	a.Title.legacy(e.Legacy["title"], titleProtected)
+	a.Artist.legacy(e.Legacy["album_artist"], artistProtected)
 	compoundTitle := a.Title.Authenticity == metadata.Inferred && a.Artist.Authenticity == metadata.Inferred && strings.Contains(e.Title, " - ")
 	if compoundTitle && !titleProtected {
 		a.Title.Requested = true
@@ -92,11 +104,15 @@ func localAlbumInput(e catalog.CurationEvidence) (localAlbum, bool) {
 	type directory struct{ root, name string }
 	index := make(map[directory]int)
 	for _, t := range e.Tracks {
+		titleProtected := t.TitleCorrected || t.TitleAutomatic && t.LocalTitle == ""
+		artistProtected := t.ArtistCorrected || t.ArtistAutomatic && t.LocalArtist == ""
 		track := localTrack{
 			ID: t.ID, File: path.Base(t.RelativePath), Tags: t.LocalTags,
-			Title:  cleanupField(t.Title, t.Authenticity["title"], t.TitleCorrected || t.TitleAutomatic && t.LocalTitle == ""),
-			Artist: cleanupField(t.Artist, t.Authenticity["artist"], !single || t.ArtistCorrected || t.ArtistAutomatic && t.LocalArtist == ""),
+			Title:  cleanupField(t.Title, t.Authenticity["title"], titleProtected),
+			Artist: cleanupField(t.Artist, t.Authenticity["artist"], !single || artistProtected),
 		}
+		track.Title.legacy(t.Legacy["title"], titleProtected)
+		track.Artist.legacy(t.Legacy["artist"], artistProtected)
 		needed = needed || track.Title.Requested || track.Artist.Requested
 		parsed = parsed && t.TitleObservation.Source == "filename_fallback" && t.ArtistObservation.Source == "filename_fallback" && !track.Title.Requested && !localNoise.MatchString(t.Artist) && !(track.Artist.Requested && numericLocalValue(t.Artist))
 		dir := directory{t.SourceRootID, path.Dir(t.RelativePath)}
@@ -111,6 +127,9 @@ func localAlbumInput(e catalog.CurationEvidence) (localAlbum, bool) {
 		}
 		a.Directories[i].Tracks = append(a.Directories[i].Tracks, track)
 	}
+	if needed && (len(a.Title.Decodings) > 1 || len(a.Artist.Decodings) > 1) {
+		return a, true
+	}
 	if !needed || parsed {
 		return a, false
 	}
@@ -121,6 +140,9 @@ func localAlbumInput(e catalog.CurationEvidence) (localAlbum, bool) {
 			}
 		}
 		for _, t := range dir.Tracks {
+			if len(t.Title.Decodings) > 1 || len(t.Artist.Decodings) > 1 {
+				return a, true
+			}
 			if informativeLocalText(strings.TrimSuffix(t.File, path.Ext(t.File))) {
 				return a, true
 			}
@@ -179,10 +201,14 @@ func ProjectLocalItems(ctx context.Context, tx *sql.Tx, ids []string, entries ma
 
 func (a localAlbum) fragments() []string {
 	var out []string
+	out = append(out, a.Title.Decodings...)
+	out = append(out, a.Artist.Decodings...)
 	for _, dir := range a.Directories {
 		out = append(out, strings.Split(dir.Path, "/")...)
 		for _, t := range dir.Tracks {
 			out = append(out, t.File)
+			out = append(out, t.Title.Decodings...)
+			out = append(out, t.Artist.Decodings...)
 			for _, v := range t.Tags {
 				out = append(out, v)
 			}

@@ -260,19 +260,15 @@ func TestPostgreSQLCurationExternalRuleUpgradePending(t *testing.T) {
 			old := MatchRuleVersion - 1
 			f.exec(t, "UPDATE curation_work_states SET match_rule_version=$2 WHERE subject='release' AND target_id=$1", f.releaseID, old)
 			f.exec(t, "UPDATE curation_pending_items SET match_rule_version=$2 WHERE id=$1", pending.ID, old)
-			if tc.withCandidates {
-				requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
-			} else {
-				// 完整工作队列可在同一次排空中领取登记的补查。直接观察离线维护这一事务的结果。
-				evidence, err := catalog.LoadCurationEvidence(ctx, f.db, []string{f.releaseID})
-				requirePendingRefreshOK(t, err)
-				e := evidence[f.releaseID]
-				state := read()
-				deferred, offlineMatch, err := f.worker.prepareRelease(ctx, e, releaseInputs(e), &state)
-				requirePendingRefreshOK(t, err)
-				if !deferred || offlineMatch != nil {
-					t.Fatalf("零候选应登记普通补查，得到 deferred=%t，离线结果 %+v", deferred, offlineMatch)
-				}
+			// 离线维护先登记补查，完整工作队列会在同一轮排空中消费。
+			evidence, err := catalog.LoadCurationEvidence(ctx, f.db, []string{f.releaseID})
+			requirePendingRefreshOK(t, err)
+			e := evidence[f.releaseID]
+			state := read()
+			deferred, offlineMatch, err := f.worker.prepareRelease(ctx, e, releaseInputs(e), &state)
+			requirePendingRefreshOK(t, err)
+			if !deferred || offlineMatch != nil {
+				t.Fatalf("尚未定版的项应登记普通补查，得到 deferred=%t，离线结果 %+v", deferred, offlineMatch)
 			}
 			upgrade := read()
 			if f.finder.searches != 1 || len(f.finder.releaseReads) != 0 || upgrade.MatchRuleVersion != MatchRuleVersion ||
@@ -285,12 +281,12 @@ func TestPostgreSQLCurationExternalRuleUpgradePending(t *testing.T) {
 				got.Status != pending.Status || !bytes.Equal(got.Candidates, pending.Candidates) {
 				t.Errorf("升级应更新原待定项版本并保留证据，之前 %+v，之后 %+v", pending, got)
 			}
-			expectedRequery, expectedSearches, newConclusions := int16(0), 1, 0
+			expectedSearches := 2
 			if !tc.withCandidates {
-				expectedRequery, expectedSearches, newConclusions = MatchRuleVersion, 3, 1
+				expectedSearches = 3
 			}
-			if upgrade.RequeryMatchVersion != expectedRequery {
-				t.Errorf("登记补查版本 %d，期望 %d", upgrade.RequeryMatchVersion, expectedRequery)
+			if upgrade.RequeryMatchVersion != MatchRuleVersion {
+				t.Errorf("登记补查版本 %d，期望 %d", upgrade.RequeryMatchVersion, MatchRuleVersion)
 			}
 			requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
 			after := read()
@@ -304,8 +300,8 @@ func TestPostgreSQLCurationExternalRuleUpgradePending(t *testing.T) {
 			if f.finder.searches != expectedSearches || len(f.finder.releaseReads) != 0 {
 				t.Errorf("后续轮累计搜索 %d 次，期望 %d 次，读取 %v", f.finder.searches, expectedSearches, f.finder.releaseReads)
 			}
-			if after.RequeryMatchVersion != 0 || after.Generation != before.Generation+newConclusions ||
-				after.Attempts != before.Attempts+newConclusions || !reflect.DeepEqual(read(), after) {
+			if after.RequeryMatchVersion != 0 || after.Generation != before.Generation+1 ||
+				after.Attempts != before.Attempts+1 || !reflect.DeepEqual(read(), after) {
 				t.Errorf("补查后的状态应稳定，补查版本 %d，代次 %d -> %d，尝试 %d -> %d",
 					after.RequeryMatchVersion, before.Generation, after.Generation, before.Attempts, after.Attempts)
 			}

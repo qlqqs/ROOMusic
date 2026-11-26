@@ -173,8 +173,8 @@ func TestPostgreSQLArtistGraphReviewRawEvidenceAndCandidates(t *testing.T) {
 	if n := f.count(`SELECT count(*) FROM artist_effective_credits WHERE track_id=$1::uuid AND role='track_artist'`, track); n != 3 {
 		t.Fatalf("原始多值署名丢失：%d", n)
 	}
-	if n := f.count(`SELECT count(*) FROM artist_name_keys WHERE normalized_key='未知艺术家'`); n != 1 {
-		t.Fatal("真实同名标签被当作占位")
+	if n := f.count(`SELECT count(*) FROM artist_name_keys WHERE normalized_key='未知艺术家'`); n != 0 {
+		t.Fatal("明确标签中的占位词被建成艺人")
 	}
 	if n := f.count(`SELECT count(*) FROM artist_candidate_signals`); n != 0 {
 		t.Fatalf("同曲同身份共同署名仍产生候选信号：%d", n)

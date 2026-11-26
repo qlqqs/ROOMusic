@@ -158,29 +158,50 @@ func TestPostgreSQL整理第二档查到候选外编号直接写入(t *testing.T
 }
 
 func TestPostgreSQL整理相同曲数的时长反证不能写入(t *testing.T) {
-	for _, decision := range []string{"rejected", "approved"} {
-		t.Run(map[string]string{"rejected": "审查拒绝", "approved": "批准仍有反证"}[decision], func(t *testing.T) {
-			f := newSchedulerFixture(t)
+	for _, tc := range []struct{ name, decision, evidence string }{
+		{"审查拒绝", "rejected", "difference_ms"},
+		{"批准仍有反证", "approved", "difference_ms"},
+		{"真实文字反证", "approved", "tag_text_mismatch"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			external := b3NewRemoteRelease()
+			source := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/mb/release/"+external.ID {
+					http.NotFound(w, r)
+					return
+				}
+				fmt.Fprintf(w, `{"id":%q,"title":"外部专辑","artist-credit":[{"name":"外部艺人"}],"media":[{"position":1,"track-count":2,"tracks":[{"position":1,"title":"异名甲","length":12000,"recording":{"id":%q}},{"position":2,"title":"异名乙","length":16000,"recording":{"id":%q}}]}]}`, external.ID, external.Recordings[0], external.Recordings[1])
+			})
+			f := newSchedulerFixtureWithSources(t, nil, source)
 			release, _, _ := f.matchFixture(t)
 			mustExec(t, f.application, `DELETE FROM track_identifiers WHERE track_id IN (SELECT t.id FROM tracks t JOIN media m ON m.id=t.medium_id WHERE m.release_id=$1)`, release)
-			mustExec(t, f.application, `UPDATE tracks SET duration_seconds=85 WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, release)
+			selected := external.ID
+			if tc.evidence == "difference_ms" {
+				selected = f.remote.ID
+				mustExec(t, f.application, `UPDATE tracks SET duration_seconds=85 WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, release)
+			}
 			item := f.pending(t, release)
+			if selected == external.ID {
+				mustExec(t, f.application, `UPDATE curation_pending_items SET candidates=jsonb_build_array(jsonb_build_object('external_id',$2::text)) WHERE id=$1`, item.ID, selected)
+			}
 			f.configure(t, &f.admin)
 			f.enable(t)
-			f.next(t, false).selectCandidate(t, item.ID, f.remote.ID)
+			f.next(t, false).selectCandidate(t, item.ID, selected)
 			review := f.next(t, true)
 			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_id=$1`, release)
-			if !strings.Contains(string(review.Messages[len(review.Messages)-1].Content), "difference_ms") {
-				t.Fatalf("审查收到的依据缺少时长反证：%s", review.Messages[len(review.Messages)-1].Content)
+			if !strings.Contains(string(review.Messages[len(review.Messages)-1].Content), tc.evidence) {
+				t.Fatalf("审查收到的依据缺少 %s：%s", tc.evidence, review.Messages[len(review.Messages)-1].Content)
 			}
-			review.review(t, decision)
+			review.review(t, tc.decision)
 			modelWaitResolution(t, f, item.ID, "suggestion_recorded")
 			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE target_id=$1`, release)
 			list, total, err := f.writer.ListExceptions(t.Context(), "open", 1, 10)
 			requireCurationOK(t, err)
-			if total != 1 || list[0].ReasonCode != "review_rejected" || (decision == "approved" && list[0].Review.Source != "policy") {
+			if total != 1 || list[0].CanAccept || list[0].ReasonCode != "review_rejected" || (tc.decision == "approved" && list[0].Review.Source != "policy") {
 				t.Fatalf("反证建议 %+v", list)
 			}
+			requireAPIError(t, f.decide(t, &f.admin, list[0].ID, "accept"), 409, "nothing_to_apply")
+			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_id=$1`, release)
 		})
 	}
 }

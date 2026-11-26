@@ -16,7 +16,7 @@ import (
 
 func TestMusicToolsProjectOnlyPublicFields(t *testing.T) {
 	const item = `{"id":"rel","aliases":[{"name":"别名"}],"media":[{"position":1,"discs":[{"id":"disc-id"}],"tracks":[{"id":"track","number":"1","title":"曲目","recording":{"id":"rec","isrcs":["USABC2300001"]}}]}]}`
-	const wantItem = `{"mbid":"rel","media":[{"position":1,"tracks":[{"mbid":"track","number":"1","title":"曲目","recording":{"mbid":"rec"}}]}]}`
+	const wantItem = `{"mbid":"rel","media":[{"position":1,"disc_ids":["disc-id"],"tracks":[{"mbid":"track","number":"1","title":"曲目","recording":{"isrcs":["USABC2300001"],"mbid":"rec"}}]}]}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/release") {
 			io.WriteString(w, `{"releases":[`+item+`]}`)

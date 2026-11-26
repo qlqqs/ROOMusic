@@ -37,6 +37,8 @@ var (
 	folderDICVariant2Pattern   = regexp.MustCompile(`^(.+?)\s+-\s+(.+?)\s+\((\d{4})\)\s+\[([^\]]+)\]\s+\{([^}]+)\}$`)
 	folderDICVariant3Pattern   = regexp.MustCompile(`^(.+?)\s+-\s+(.+?)\s+\((\d{4})\)\s+\{([^}]+)\}\s+\[([^\]]+)\]$`)
 	folderBracketSuffixPattern = regexp.MustCompile(`^(.+?)\s+-\s+(.+?)\s+\((\d{4})\)\s+((?:\[[^\]]+\]\s*)+)$`)
+	folderYearAlbumPattern     = regexp.MustCompile(`^(?:(.+?)\s+-\s+)?((?:19|20)\d{2})\s+-\s+(.+)$`)
+	folderBracketYearPattern   = regexp.MustCompile(`^\[((?:19|20)\d{2})\]\s*(.+)$`)
 	folderSimplePattern        = regexp.MustCompile(`^(.+?)\s+-\s+(.+?)(?:\s*\((\d{4})\))?$`)
 	folderBracketFieldPattern  = regexp.MustCompile(`\[([^\]]+)\]`)
 	folderCatalogPattern       = regexp.MustCompile(`(?i)^[A-Z]{2,}[A-Z0-9]*(?:-\d+)+$|^[A-Z]{2,}-?\d+$|^\d{10,}$`)
@@ -113,6 +115,14 @@ func parseFolderMetadata(name string) (folderMetadata, bool) {
 		}
 		return finishFolderMetadata(result), true
 	}
+	if match := folderYearAlbumPattern.FindStringSubmatch(name); match != nil {
+		year, _ := strconv.Atoi(match[2])
+		return finishFolderMetadata(folderMetadata{AlbumArtist: match[1], Year: year, Album: match[3]}), true
+	}
+	if match := folderBracketYearPattern.FindStringSubmatch(name); match != nil {
+		year, _ := strconv.Atoi(match[1])
+		return finishFolderMetadata(folderMetadata{Year: year, Album: match[2]}), true
+	}
 	if match := folderSimplePattern.FindStringSubmatch(name); match != nil {
 		year, _ := strconv.Atoi(match[3])
 		return finishFolderMetadata(folderMetadata{AlbumArtist: match[1], Album: match[2], Year: year, pattern: "Simple"}), true
@@ -121,8 +131,8 @@ func parseFolderMetadata(name string) (folderMetadata, bool) {
 }
 
 func finishFolderMetadata(result folderMetadata) folderMetadata {
-	result.AlbumArtist = metadata.NormalizeValue(result.AlbumArtist)
-	result.Album = metadata.NormalizeValue(result.Album)
+	result.AlbumArtist = metadata.StripFormatNoise(result.AlbumArtist)
+	result.Album = metadata.StripFormatNoise(result.Album)
 	result.MediaType = normalizeFolderToken(result.MediaType)
 	result.SourceType = folderSourceType(result.MediaType)
 	result.Edition = metadata.NormalizeValue(result.Edition)
@@ -164,7 +174,7 @@ func applyFolderDate(value string, result *folderMetadata) {
 	} else if len(value) >= 6 && value[:2] >= "50" && value[:2] <= "99" {
 		result.Year, _ = strconv.Atoi("19" + value[:2])
 	}
-	if len(value) >= 8 && value[:4] >= "1900" && value[:4] <= "2099" {
+	if (len(value) == 4 || len(value) >= 8) && value[:4] >= "1900" && value[:4] <= "2099" {
 		result.Year, _ = strconv.Atoi(value[:4])
 	}
 }

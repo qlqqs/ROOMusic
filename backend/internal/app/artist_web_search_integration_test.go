@@ -315,7 +315,7 @@ func TestPostgreSQLArtistWebSearchBackgroundSearchGate(t *testing.T) {
 				native := slices.ContainsFunc(tools, func(tool wireTool) bool {
 					return tool.Type == "web_search" || strings.HasPrefix(tool.Type, "web_search_")
 				})
-				if has("read_pending_items") || has("search_music_metadata") || has("web_search") != tc.searchTool || has("fetch_page") != tc.fetchTool || native != tc.native {
+				if has("read_pending_items") || !has("search_music_metadata") || !has("get_music_metadata") || has("web_search") != tc.searchTool || has("fetch_page") != tc.fetchTool || native != tc.native {
 					t.Fatalf("后台模型请求工具 %+v，期望 web_search=%t，fetch_page=%t，原生搜索=%t", tools, tc.searchTool, tc.fetchTool, tc.native)
 				}
 			case <-time.After(5 * time.Second):

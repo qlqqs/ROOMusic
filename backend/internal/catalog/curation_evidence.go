@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -59,6 +60,7 @@ type CurationObservation struct {
 }
 
 type CurationTrack struct {
+	Legacy                                                           LegacyCandidates                 `json:"-"`
 	RelativePath                                                     string                           `json:"-"`
 	LocalTags                                                        map[string]string                `json:"-"`
 	LocalTitle                                                       string                           `json:"local_title,omitempty"`
@@ -88,8 +90,9 @@ type CurationTrack struct {
 }
 
 type CurationEvidence struct {
-	LocalTitle  string `json:"local_title,omitempty"`
-	LocalArtist string `json:"local_artist,omitempty"`
+	Legacy      LegacyCandidates `json:"-"`
+	LocalTitle  string           `json:"local_title,omitempty"`
+	LocalArtist string           `json:"local_artist,omitempty"`
 	// 补空计划采用的字段输入，人工字段会由写入事务跳过。
 	FieldInputs map[string]json.RawMessage `json:"-"`
 	// 由整理写入方在受治理事务中复核。
@@ -437,7 +440,7 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 		t.TitlePlaceholder = t.Authenticity["title"] == metadata.Placeholder
 		t.ArtistPlaceholder = t.Authenticity["artist"] == metadata.Placeholder
 		t.TitleInferred = t.Authenticity["title"] == metadata.Inferred
-		t.PositionInferred = t.Authenticity["position"] != metadata.Real
+		t.PositionInferred = t.Authenticity["position"] != metadata.Real || t.Authenticity["disc"] == metadata.Inferred
 		t.EffectiveTitleAuth, t.EffectiveArtistAuth = t.Authenticity["title"], t.Authenticity["artist"]
 		if t.TitleAutomatic && !t.TitleCorrected {
 			t.EffectiveTitleAuth = metadata.Inferred
@@ -458,6 +461,16 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 			_, t.LocalLyrics = ParseLyrics(lyrics.String)
 		}
 		if e, visible := result[releaseID]; visible {
+			for name, o := range observed {
+				if o.Source != "garbled" || strings.HasPrefix(name, "legacy_bytes_") {
+					continue
+				}
+				raw, err := base64.StdEncoding.DecodeString(observed["legacy_bytes_"+name].Value)
+				if err != nil {
+					return err
+				}
+				e.collectLegacyField(&t, name, o.Value, metadata.LegacyDecodings(raw))
+			}
 			if staleTitle.Valid || staleArtist.Valid {
 				owners := map[string]string{}
 				if staleTitle.Valid {

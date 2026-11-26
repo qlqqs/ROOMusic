@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"maps"
 	"math"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode"
@@ -21,6 +22,7 @@ type TrackPair struct {
 
 type MatchResult struct {
 	Verification                                  *MatchVerification `json:"verification,omitempty"`
+	GroupTitle                                    string
 	Level, Rule, GroupID, Route, RepresentativeID string
 	Credits                                       []sources.Credit
 	TrackTitles                                   map[string]string
@@ -36,6 +38,7 @@ type MatchResult struct {
 }
 
 type Candidate struct {
+	Verification   *MatchVerification      `json:"verification,omitempty"`
 	Release        *sources.Release        `json:"release,omitempty"`
 	Recording      *sources.Recording      `json:"recording,omitempty"`
 	Counts         *curation.ReleaseCounts `json:"counts,omitempty"`
@@ -80,6 +83,26 @@ func credits(names []sources.Credit) string {
 
 func looseKey(s string) string  { return textnorm.Loose(textnorm.Text(s)) }
 func sameText(a, b string) bool { key := looseKey(a); return key != "" && key == looseKey(b) }
+
+var artistJoin = regexp.MustCompile(`[&、/;×]|\s+(?:feat\.?|ft\.?|featuring|with|x)\s+`)
+
+func artistNameKeys(name string) []string {
+	parts := artistJoin.Split(textnorm.Text(name), -1)
+	keys := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if key := textnorm.Loose(part); key != "" {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
+func artistKey(name string) string { return strings.Join(artistNameKeys(name), "\x00") }
+
+func sameArtist(a, b string) bool {
+	key := artistKey(a)
+	return key != "" && key == artistKey(b)
+}
 
 func albumArtist(e catalog.CurationEvidence) string {
 	if e.AlbumArtist != "" {
@@ -218,6 +241,7 @@ func pendingMatchEvidence(e catalog.CurationEvidence, method string) map[string]
 	return map[string]any{
 		"title": e.Title, "artist": albumArtist(e), "album_artist": e.AlbumArtist, "year": e.Year,
 		"barcodes": e.Barcodes, "catalog_number": e.CatalogNumber, "label": e.Label,
+		"release_group_match": e.ReleaseGroupMatchID, "release_mbid": e.ExternalID, "artist_mbid": e.ArtistMBID, "compilation": curation.CompilationEvidence(e), "classical": e.Classical, "disc_tocs": DiscTOCs(e),
 		"genre": e.Genres, "edition": e.Edition, "media_type": e.MediaType,
 		"disc_count": len(discCounts), "track_counts": discCounts, "tracks": rows,
 		"authenticity": auth, "barcode_authenticity": e.BarcodeAuthenticity, "uses_inferred": usesInferred,

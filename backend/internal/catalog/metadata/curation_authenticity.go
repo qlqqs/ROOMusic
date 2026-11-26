@@ -1,6 +1,11 @@
 package metadata
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+
+	"golang.org/x/text/unicode/norm"
+)
 
 type Authenticity string
 
@@ -10,7 +15,9 @@ const (
 	Placeholder Authenticity = "placeholder"
 )
 
-// FieldAuthenticity 按当前取值层和该字段的原始来源判断，保留有明确来源的同名艺人。
+var placeholderName = regexp.MustCompile(`(?i)^(?:unknown(?:[ _-]*(?:artist|album))?|<unknown>|未知(?:歌手|艺人|艺术家|专辑|藝人|藝術家|專輯)?|(?:audio[ _.\-]*)?track[ _.#\-]*[0-9]+|音[轨軌][ _.#\-]*[0-9]+)$`)
+
+// FieldAuthenticity 按字段用途、人工修正与扫描来源判断真实性。
 func FieldAuthenticity(field, value, source string, inferred, corrected bool) Authenticity {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -19,16 +26,17 @@ func FieldAuthenticity(field, value, source string, inferred, corrected bool) Au
 	if corrected {
 		return Real
 	}
-	switch source {
-	case "default_fallback", "display_fallback", "compilation":
-		return Placeholder
-	case "filename_fallback", "folder_fallback", "folder", "album_title", "folder_structure", "path_order_fallback", "automatic":
-		return Inferred
-	case "":
-		if ((field == "release_title" || field == "album") && value == "未知专辑") ||
-			((field == "artist" || field == "album_artist") && value == "未知艺术家") {
+	switch field {
+	case "title", "release_title", "album", "artist", "album_artist":
+		if placeholderName.MatchString(NormalizeValue(norm.NFKC.String(value))) {
 			return Placeholder
 		}
+	}
+	switch source {
+	case "garbled", "default_fallback", "display_fallback", "compilation":
+		return Placeholder
+	case "legacy_encoding", "artist_distribution", "vinyl_side", "track_sequence", "filename_fallback", "folder_fallback", "folder", "album_title", "folder_structure", "path_order_fallback", "automatic":
+		return Inferred
 	}
 	if inferred {
 		return Inferred

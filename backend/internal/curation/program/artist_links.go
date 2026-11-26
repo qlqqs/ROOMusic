@@ -41,7 +41,7 @@ func (p creditPosition) link() curation.LinkIntent {
 	return curation.LinkIntent{ObjectType: "artist", ObjectID: p.local.ArtistID, ExternalID: p.external.ArtistID}
 }
 
-func (p creditPosition) direct() bool { return p.tagged || sameText(p.local.Name, p.external.Name) }
+func (p creditPosition) direct() bool { return p.tagged || sameArtist(p.local.Name, p.external.Name) }
 
 func alignCredits(local []catalog.CurationArtistCredit, external []sources.Credit, tags []string) []curation.LinkIntent {
 	var links []curation.LinkIntent
@@ -157,7 +157,7 @@ func creditRoles(local catalog.CurationArtistCredits, g creditGroup, p creditPos
 			continue
 		}
 		mine := p.local.ArtistID == r.ArtistID
-		theirs := sameText(r.Name, p.external.Name) || artistNamed(a, r.Name)
+		theirs := sameArtist(r.Name, p.external.Name) || artistNamed(a, r.Name)
 		if !mine && !theirs {
 			continue
 		}
@@ -203,7 +203,7 @@ func (w *Worker) identifyArtists(ctx context.Context, local catalog.CurationArti
 				continue
 			}
 			roles, swapped := creditRoles(local, g, p, a)
-			if (e.Classical || e.Compilation) && swapped {
+			if (e.Classical || curation.CompilationEvidence(e)) && swapped {
 				continue
 			}
 			level, id := m.Level, m.GroupID

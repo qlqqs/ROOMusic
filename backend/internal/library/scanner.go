@@ -560,7 +560,12 @@ func cueTrackCanBeStaged(track parser.CueTrack) bool {
 }
 
 func buildPhysicalSourceObservation(observation parser.AudioObservation, relativePath string) ingest.SourceObservation {
-	return ingest.SourceObservation{RelativePath: relativePath, Directory: ingest.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genres: append([]string(nil), observation.Genres...), Identifiers: observation.Identifiers, CatalogNumber: observation.Catalog, Work: observation.Work, MovementName: observation.MovementName, MovementNumber: observation.MovementNumber, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, Compilation: observation.Compilation, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, ArtworkRelativePath: relativePath, ParserVersion: parser.CacheVersion(filepath.Ext(relativePath)), Credits: append([]metadata.Credit(nil), observation.Credits...), ArtistTagEvidence: append([]metadata.ArtistTagEvidence(nil), observation.ArtistTagEvidence...), Lyrics: observation.Lyrics, LyricsSource: observation.LyricsSource, ContentFingerprint: observation.ContentFingerprint}
+	// 播放按既有 MP3 物理格式键分派，标签版本记在逐字段观察。
+	sourceKind := observation.SourceKind
+	if sourceKind == "mp3_id3v1" {
+		sourceKind = "mp3_id3v2"
+	}
+	return ingest.SourceObservation{VinylSide: observation.VinylSide, LegacyText: observation.LegacyText, RelativePath: relativePath, Directory: ingest.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genres: append([]string(nil), observation.Genres...), Identifiers: observation.Identifiers, CatalogNumber: observation.Catalog, Work: observation.Work, MovementName: observation.MovementName, MovementNumber: observation.MovementNumber, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: sourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, Compilation: observation.Compilation, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, ArtworkRelativePath: relativePath, ParserVersion: parser.CacheVersion(filepath.Ext(relativePath)), Credits: append([]metadata.Credit(nil), observation.Credits...), ArtistTagEvidence: append([]metadata.ArtistTagEvidence(nil), observation.ArtistTagEvidence...), Lyrics: observation.Lyrics, LyricsSource: observation.LyricsSource, ContentFingerprint: observation.ContentFingerprint}
 }
 
 func buildCueVirtualObservation(parent parser.AudioObservation, document parser.CueDocument, cue parser.CueTrack, sheetRelativePath string) ingest.SourceObservation {
@@ -568,7 +573,7 @@ func buildCueVirtualObservation(parent parser.AudioObservation, document parser.
 	observation.InferredFields = cloneBoolMap(parent.InferredFields)
 	observation.SourceKind = "cue_virtual"
 	observation.TrackNumber = cue.Number
-	fieldSources := observationFieldSources(observation)
+	fieldSources := observationFieldSources(parent)
 	if sheetTitle := firstNonEmpty(cue.SheetTitle, document.Title); sheetTitle != "" {
 		observation.Album = sheetTitle
 		delete(observation.InferredFields, "album")
@@ -628,6 +633,7 @@ func buildCueVirtualObservation(parent parser.AudioObservation, document parser.
 		}
 	}
 	return ingest.SourceObservation{
+		LegacyText:            observation.LegacyText,
 		Identifiers:           identifiers,
 		RelativePath:          virtualPath,
 		Directory:             ingest.DirectoryOf(sheetRelativePath),
@@ -972,6 +978,11 @@ func firstNonEmpty(values ...string) string {
 
 func observationFieldSources(observation parser.AudioObservation) map[string]string {
 	sources := map[string]string{}
+	if observation.SourceKind == "mp3_id3v1" {
+		for _, field := range []string{"title", "artist", "album", "year", "track_number", "genre"} {
+			sources[field] = observation.SourceKind
+		}
+	}
 	for field, inferred := range observation.InferredFields {
 		if !inferred {
 			continue
@@ -985,6 +996,15 @@ func observationFieldSources(observation parser.AudioObservation) map[string]str
 			sources[field] = "display_fallback"
 		default:
 			sources[field] = "default_fallback"
+		}
+	}
+	for field := range observation.LegacyText {
+		sources[field] = "garbled"
+	}
+	if observation.VinylSide > 0 {
+		sources["track_number"] = "vinyl_side"
+		if observation.InferredFields["disc_number"] {
+			sources["disc_number"] = "vinyl_side"
 		}
 	}
 	return sources

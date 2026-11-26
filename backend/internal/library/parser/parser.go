@@ -15,6 +15,8 @@ type AudioObservation struct {
 	AlbumArtist             string
 	Compilation             bool
 	TrackNumber, DiscNumber int
+	VinylSide               int
+	LegacyText              map[string][]byte
 	SourceKind              string
 	Inferred                bool
 	InferredFields          map[string]bool
@@ -50,9 +52,10 @@ type AudioObservation struct {
 	Lyrics       string
 	LyricsSource string
 
-	originalYears [8]int
-	workTags      workTags
-	artworkFront  bool
+	latinArtistTags map[[2]string]bool
+	originalYears   [8]int
+	workTags        workTags
+	artworkFront    bool
 }
 
 const (

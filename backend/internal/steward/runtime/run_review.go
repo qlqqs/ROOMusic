@@ -217,14 +217,14 @@ func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Messag
 				break
 			}
 		}
-		if result.Decision == "approved" {
-			var bound []reviewEvidence
-			for _, snapshot := range evidence {
-				if snapshot.ItemID == item.ID {
-					bound = append(bound, snapshot)
-					break
-				}
+		var bound []reviewEvidence
+		for _, snapshot := range evidence {
+			if snapshot.ItemID == item.ID {
+				bound = append(bound, snapshot)
+				break
 			}
+		}
+		if result.Decision == "approved" {
 			if err = s.checkReviewSnapshot(ctx, plan, review, []PlanItem{item}, bound); err != nil {
 				if ctx.Err() != nil {
 					return nil, EndCancelled, nil
@@ -240,6 +240,10 @@ func (s *runState) reviewPlan(ctx context.Context, plan Plan) ([]provider.Messag
 			if s.params.Background {
 				if s.params.Escalate == nil {
 					return nil, "", ErrInvalidInput
+				}
+				// 建议保存审查时重新读取的匹配证据，供管理员决定时核对。
+				if item.Tool == "resolve_release_match" && len(bound) != 0 {
+					item.Preview.Verification = bound[0].Facts.Verification
 				}
 				item.ExceptionID, err = s.params.Escalate(ctx, item, review, result)
 				if err != nil {

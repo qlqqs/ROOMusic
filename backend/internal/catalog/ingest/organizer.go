@@ -718,6 +718,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 
 	type bucket struct {
 		originalKind CandidateKind
+		versionGroup string
 		kind         CandidateKind
 		scope        string
 		partition    string
@@ -733,7 +734,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		return buckets[key]
 	}
 
-	// 先建立目录与 Box 边界，再在边界内应用 album 多数决；严格多碟父目录是唯一允许的
+	// 先建立目录与 Box 边界，再在边界内按专辑标签分组；严格多碟父目录是唯一允许的
 	// 跨目录合并。
 	baseGroups := map[string][]SourceObservation{}
 	baseMeta := map[string]struct {
@@ -803,14 +804,16 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 			b := addBucket(kind, meta.scope, partition, observations...)
 			b.originalKind = meta.kind
 		}
-		if formats := splitContinuousFormats(group, filenameEvidence); len(formats) > 0 {
-			for format, observations := range formats {
-				addDirectoryBucket(CandidateFormatSplit, "format:"+format, observations)
+		// 明确不同的专辑不共享候选；原来的多数和连续性只决定缺少标签的曲目跟随哪一组。
+		albums := stableValues(group, albumEvidence)
+		if len(albums) <= 1 {
+			if formats := splitContinuousFormats(group, filenameEvidence); len(formats) > 0 {
+				for format, observations := range formats {
+					addDirectoryBucket(CandidateFormatSplit, "format:"+format, observations)
+				}
+				continue
 			}
-			continue
 		}
-		// 同目录 album 冲突仅在严格多数（>50%）时使用稳定多数决；平票或无明显多数时
-		// 按 album 事实拆分。
 		partCounts := map[string]int{}
 		knownArtists := knownAlbumArtists(group)
 		for _, o := range group {
@@ -825,11 +828,16 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 				winner, winnerCount = part, count
 			}
 		}
-		if len(partCounts) <= 1 || (winner != "" && winnerCount*2 > authoritativeCount) || continuousObservations(group, filenameEvidence) {
+		together := winnerCount*2 > authoritativeCount || continuousObservations(group, filenameEvidence)
+		if len(partCounts) <= 1 || len(albums) <= 1 && together {
 			addDirectoryBucket(meta.kind, "", group)
 			continue
 		}
 		parts := splitByPartition(group, knownArtists)
+		if together && len(parts["|"]) > 0 {
+			parts[winner] = append(parts[winner], parts["|"]...)
+			delete(parts, "|")
+		}
 		partKeys := make([]string, 0, len(parts))
 		for part := range parts {
 			partKeys = append(partKeys, part)
@@ -843,6 +851,15 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 						unknown.Album = ""
 					}
 					addBucket(CandidateSameDirSplit, meta.scope, "|@"+NormalizedPath(unknown.RelativePath), unknown)
+				}
+				continue
+			}
+			if formats := splitContinuousFormats(obs, filenameEvidence); len(formats) > 0 {
+				anchor := stableAnchorPartition(CandidateSameDirSplit, part, obs)
+				for format, tracks := range formats {
+					b := addBucket(CandidateFormatSplit, meta.scope, anchor+"/format:"+format, tracks...)
+					b.originalKind = meta.kind
+					b.versionGroup = "format:" + meta.scope + "/" + anchor
 				}
 				continue
 			}
@@ -864,6 +881,9 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		if b.kind == CandidateFormatSplit {
 			c.OriginalKind = b.originalKind
 			c.VersionGroup = "format:" + b.scope
+			if b.versionGroup != "" {
+				c.VersionGroup = b.versionGroup
+			}
 		}
 		if b.originalKind == CandidateBoxLeaf && len(obs) > 0 {
 			c.BoxParentArtwork = boxParentArtwork[locateObservation(obs[0]).parent]
@@ -891,13 +911,15 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 					rule = "disc_dir_prefix_fallback_v1"
 				}
 			}
+			fallback = metadata.StripFormatNoise(fallback)
 			if fallback != "" && fallback != "." {
 				albumDecision = FieldDecision{Field: "title", Value: fallback, Source: "folder_fallback", Confidence: "low", Action: "uncertain_apply", RuleID: rule, Reason: "inferred_value", Candidates: []string{fallback}}
 			}
 		}
 		artistDecision := chooseReleaseArtist(decisionObservations)
 		albumArtistDecision := chooseValue(decisionObservations, "album_artist", func(o SourceObservation) string { return o.AlbumArtist })
-		applyCompilation(decisionObservations, &artistDecision, &albumArtistDecision)
+		tracks := resolveCuePhysicalCoexistence(obs)
+		applyCompilation(tracks, &artistDecision, &albumArtistDecision)
 		yearDecision := chooseValue(decisionObservations, "year", func(o SourceObservation) string { return fieldValue(o, "year") })
 		sourceDecision := chooseValue(decisionObservations, "source_type", func(o SourceObservation) string { return o.SourceType })
 		mediaDecision := chooseValue(decisionObservations, "media_type", func(o SourceObservation) string { return o.MediaType })
@@ -931,7 +953,11 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 			c.Attention = append(c.Attention, "same_directory_conflict")
 		}
 		c.GroupingRefs = observationRefs(obs)
-		for _, o := range resolveCuePhysicalCoexistence(obs) {
+		if b.kind != CandidateMultiDisc {
+			inferSequenceDiscs(tracks)
+		}
+		applyVinylPositions(tracks)
+		for _, o := range tracks {
 			loc := locateObservation(o)
 			disc := observationDiscNumber(o)
 			folderDisc := 0
@@ -955,7 +981,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 				disc = 1
 			}
 			position := o.TrackNumber
-			if position < 1 || o.InferredFields["track_number"] && o.FieldSources["track_number"] != "filename_fallback" {
+			if position < 1 || o.InferredFields["track_number"] && o.FieldSources["track_number"] != "filename_fallback" && o.FieldSources["track_number"] != "vinyl_side" {
 				position = 0
 			}
 			c.Mediums[disc] = append(c.Mediums[disc], OrganizedTrack{Observation: o, Position: position, Disc: disc})

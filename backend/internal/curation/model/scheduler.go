@@ -13,7 +13,6 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/operations"
-	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
 var ErrStopped = errors.New("后台整理条件已变更")
@@ -32,6 +31,7 @@ type Launcher interface {
 	CreateConversation(ctx context.Context, actor, title, model string) (string, error)
 	DeleteConversation(ctx context.Context, actor, id string) error
 	PendingPlan(ctx context.Context, actor, conversation string) (string, error)
+	RejectedSubmissions(ctx context.Context, actor, conversation string, items []curation.PendingItem) ([]curation.RejectedSubmission, error)
 	ResolvePlans(ctx context.Context, conversation string) error
 	Start(context.Context, RunParams) (Run, error)
 }
@@ -192,7 +192,7 @@ func (s *Scheduler) poll(ctx context.Context) error {
 		ready := items[:0]
 		for _, p := range items {
 			if string(p.Candidates) == "[]" {
-				if err := s.writer.AdvanceModelItem(ctx, p, conversation, "lookup"); err != nil {
+				if err := s.writer.AdvanceModelItem(ctx, p, conversation, string(SelectCandidate), "lookup", "第一档没有可核对的候选明细"); err != nil {
 					return errors.Join(err, s.release(ctx, conversation, false, nil))
 				}
 			} else {
@@ -212,7 +212,7 @@ func (s *Scheduler) poll(ctx context.Context) error {
 				return errors.Join(err, s.release(ctx, conversation, false, nil))
 			}
 			if n == 0 {
-				if err := s.writer.AdvanceModelItem(ctx, items[0], conversation, "lookup"); err != nil {
+				if err := s.writer.AdvanceModelItem(ctx, items[0], conversation, string(SelectCandidate), "lookup", "完整曲目与候选超过第一档消息大小上限"); err != nil {
 					return errors.Join(err, s.release(ctx, conversation, false, nil))
 				}
 				items = items[1:]
@@ -245,6 +245,8 @@ func (s *Scheduler) poll(ctx context.Context) error {
 				items = rest
 				continue
 			}
+		}
+		if (kind == LookupCandidate || kind == WebFallback) && s.options.Lookup != nil {
 			runCtx = s.options.Lookup.LookupTierContext(ctx)
 		}
 		reason, err := s.runBatch(runCtx, actor, progress.Model, conversation, plan, active, retries)
@@ -275,9 +277,8 @@ func (s *Scheduler) prepareSelection(ctx context.Context, now time.Time) ([]cura
 			}
 			// 队列来源给出恢复时刻，普通后台读取失败会缓存十分钟。
 			next := s.options.Now().Add(10 * time.Minute)
-			var pause *sources.QueuePause
-			if errors.As(err, &pause) {
-				next = pause.RetryAt
+			if recovery := curation.SourceRecoveryTime(err); !recovery.IsZero() {
+				next = recovery
 			}
 			return nil, s.writer.DeferSelection(ctx, items[i], next)
 		}
@@ -320,11 +321,20 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		var err error
 		params.Text, err = s.taskMessage(ctx, items)
 		if err != nil {
+			if (kind == LookupCandidate || kind == WebFallback) && curation.IsSourceUnavailable(err) {
+				var failures sourceFailures
+				failures.record(curation.SourceRecoveryTime(err))
+				return "completed", s.writer.DeferModelItem(ctx, items[0], conversation, string(kind), failures.retryAt(s.options.Now()))
+			}
 			return "internal_error", errors.Join(err, s.release(ctx, conversation, false, nil))
 		}
 	}
 	if len(items) == 1 {
 		params.Run.PendingItemID = items[0].ID
+	}
+	var failures sourceFailures
+	if kind == LookupCandidate || kind == WebFallback {
+		params.Run.SourceUnavailable = failures.record
 	}
 	params.Run.Abandon = func(ctx context.Context, id, reason string) error {
 		for _, p := range items {
@@ -332,7 +342,7 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 				if err := s.checkRunConditions(ctx, actor, items); err != nil {
 					return err
 				}
-				return s.abandon(ctx, p, model, conversation, reason)
+				return s.abandon(ctx, p, model, conversation, reason, failures.retryAt(s.options.Now()))
 			}
 		}
 		return ErrStopped
@@ -429,7 +439,7 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		var finishErr error
 		if !itemsFinished {
-			finishErr = s.finish(cleanup, actor, model, conversation, reason, retries, now, items)
+			finishErr = s.finish(cleanup, actor, model, conversation, reason, retries, now, items, failures.retryAt(now))
 			itemsFinished = finishErr == nil
 		}
 		if itemsFinished && batch != "" {
@@ -467,9 +477,12 @@ func (s *Scheduler) recordEnd(reason string, now time.Time) {
 	s.mu.Unlock()
 }
 
-func (s *Scheduler) finish(ctx context.Context, actor, model, id, reason string, retries int, now time.Time, items []curation.PendingItem) error {
+func (s *Scheduler) finish(ctx context.Context, actor, model, id, reason string, retries int, now time.Time, items []curation.PendingItem, retryAt time.Time) error {
+	if !retryAt.IsZero() && (reason == "completed" || reason == "step_limit" || reason == "token_limit") {
+		reason = "try_later"
+	}
 	switch reason {
-	case "item_limit":
+	case "item_limit", "try_later":
 		if err := s.checkRunConditions(ctx, actor, items); err != nil {
 			if errors.Is(err, ErrStopped) {
 				return s.release(ctx, id, false, nil)
@@ -490,7 +503,7 @@ func (s *Scheduler) finish(ctx context.Context, actor, model, id, reason string,
 			return s.release(ctx, id, false, nil)
 		}
 		run := curation.ModelRun{ActorID: actor, ConversationID: id, PendingItemID: p.ID}
-		err = s.abandon(curation.WithModelRun(ctx, &run), p, model, id, "item_limit")
+		err = s.abandon(curation.WithModelRun(ctx, &run), p, model, id, reason, retryAt)
 		var failure *operations.Failure
 		if errors.As(err, &failure) && failure.Code == "item_stale" {
 			return s.release(ctx, id, false, nil)
@@ -515,7 +528,7 @@ func (s *Scheduler) finish(ctx context.Context, actor, model, id, reason string,
 	case "completed", "step_limit", "token_limit":
 		err := s.checkRunConditions(ctx, actor, items)
 		if err == nil {
-			return s.writer.ReleaseModelItems(ctx, id, itemIDs(items), true, nil)
+			return s.releaseUnhandled(ctx, actor, model, id, items)
 		}
 		if !errors.Is(err, ErrStopped) {
 			return err
@@ -525,4 +538,73 @@ func (s *Scheduler) finish(ctx context.Context, actor, model, id, reason string,
 		s.logger.ErrorContext(ctx, "后台模型运行异常结束", "event", "curation.model.run_failed", "conversation_id", id, "reason", reason)
 	}
 	return s.release(ctx, id, false, nil)
+}
+
+func (s *Scheduler) releaseUnhandled(ctx context.Context, actor, model, conversation string, items []curation.PendingItem) error {
+	claimed, err := s.writer.ClaimedItems(ctx, conversation)
+	if err != nil {
+		return err
+	}
+	current := make(map[string]string, len(claimed))
+	for _, item := range claimed {
+		current[item.ID] = item.ModelClaimDigest()
+	}
+	var pending []curation.PendingItem
+	for _, item := range items {
+		if current[item.ID] == item.ModelClaimDigest() {
+			pending = append(pending, item)
+		}
+	}
+	if len(pending) == 0 {
+		return s.writer.ReleaseModelItems(ctx, conversation, itemIDs(items), false, nil)
+	}
+	if err := s.saveRejections(ctx, actor, conversation, pending); err != nil {
+		return err
+	}
+	var reason string
+	switch taskKind(pending[0]) {
+	case SelectCandidate:
+		reason = "第一档连续三次未得到可执行的决定"
+	case LookupCandidate:
+		reason = "第二档连续三次未得到可执行的决定"
+	case WebFallback:
+		reason = "联网档连续三次未得到可执行的决定"
+	}
+	if reason != "" {
+		for _, item := range pending {
+			if item.Attempts < 2 {
+				continue
+			}
+			// 成功执行的决定已经释放领取，只有第三次未处理且证据仍相同的项才放弃本档。
+			err := s.abandon(ctx, item, model, conversation, reason, time.Time{})
+			var failure *operations.Failure
+			if errors.As(err, &failure) && failure.Code == "item_stale" {
+				err = s.writer.ReleaseModelItems(ctx, conversation, []string{item.ID}, false, nil)
+			}
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if err := s.writer.ReleaseModelItems(ctx, conversation, itemIDs(pending), true, nil); err != nil {
+		return err
+	}
+	return s.writer.ReleaseModelItems(ctx, conversation, itemIDs(items), false, nil)
+}
+
+func (s *Scheduler) saveRejections(ctx context.Context, actor, conversation string, items []curation.PendingItem) error {
+	rejected, err := s.launcher.RejectedSubmissions(ctx, actor, conversation, items)
+	if err != nil {
+		return err
+	}
+	for _, submission := range rejected {
+		for _, item := range items {
+			if item.ID == submission.ItemID {
+				if err := s.writer.RecordRejectedModelTool(ctx, item, conversation, string(taskKind(item)), submission); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }

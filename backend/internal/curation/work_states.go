@@ -89,6 +89,7 @@ func SaveWorkState(ctx context.Context, q Execer, s WorkState) error {
 }
 
 type PendingItem struct {
+	CanonicalTitle, CanonicalArtist                         string `json:"-"`
 	ConversationID                                          string
 	ClaimedAt, NextAttemptAt                                *time.Time
 	ItemToolCalls                                           int
@@ -126,8 +127,8 @@ func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
 	}
 	_, err := q.ExecContext(ctx, insert+` DO UPDATE SET rule_version=excluded.rule_version,input_digest=excluded.input_digest,
  match_rule_version=excluded.match_rule_version,identity_digest=excluded.identity_digest,
- evidence=CASE WHEN `+sameModelInputsSQL+` AND p.evidence ? 'unverified_facts'
- THEN excluded.evidence || jsonb_build_object('unverified_facts',p.evidence->'unverified_facts') ELSE excluded.evidence END,
+ evidence=CASE WHEN `+sameModelInputsSQL+` THEN excluded.evidence || jsonb_strip_nulls(jsonb_build_object(
+ 'unverified_facts',p.evidence->'unverified_facts','route_history',p.evidence->'route_history')) ELSE excluded.evidence END,
  candidates=excluded.candidates,conflicts=excluded.conflicts,updated_at=now(),
  route=CASE WHEN `+sameModelInputsSQL+` AND p.route IN ('lookup','web') THEN p.route ELSE excluded.route END,
  status=CASE WHEN p.status='in_progress' THEN p.status WHEN `+sameModelInputsSQL+` AND p.route IN ('lookup','web')
@@ -137,7 +138,7 @@ func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
  conversation_id=CASE WHEN p.status='in_progress' THEN p.conversation_id END,
  claimed_at=CASE WHEN p.status='in_progress' THEN p.claimed_at END,
  review_retries=CASE WHEN p.status='in_progress' THEN p.review_retries ELSE 0 END,
- next_attempt_at=CASE WHEN p.status IN ('waiting_model','in_progress') THEN p.next_attempt_at END
+ next_attempt_at=CASE WHEN p.status IN ('waiting_model','in_progress') OR (p.status='waiting_route' AND `+sameModelInputsSQL+`) THEN p.next_attempt_at END
  WHERE p.status IN ('waiting_model','waiting_route','in_progress')
  OR (p.status='shelved' AND (p.candidates IS DISTINCT FROM excluded.candidates OR
      CASE WHEN p.identity_digest IS NOT NULL AND excluded.identity_digest IS NOT NULL THEN p.identity_digest<>excluded.identity_digest
