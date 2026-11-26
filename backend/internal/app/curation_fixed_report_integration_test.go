@@ -97,7 +97,7 @@ func (r *fixedRow) score(t *testing.T, app *integrationTestApplication, s fixedS
 			value := effective[k]
 			switch {
 			case !value.Valid:
-				r.Wrong = append(r.Wrong, fmt.Sprintf("%s 错写 NULL，预期 %q", key, expected))
+				r.Missing = append(r.Missing, key)
 			case value.String != expected:
 				r.Wrong = append(r.Wrong, fmt.Sprintf("%s 错写 %q，预期 %q", key, value.String, expected))
 			default:

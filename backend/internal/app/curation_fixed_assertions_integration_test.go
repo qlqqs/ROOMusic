@@ -284,9 +284,9 @@ func TestPostgreSQLCurationFixedScoring(t *testing.T) {
 				return row
 			}
 
-			// 扫描已有专辑艺人与曲名，尚无厂牌。缺少有效值进入认错。
+			// 扫描已有专辑艺人与曲名，厂牌的有效值为空，记为缺写。
 			row := score()
-			if row.Correct || len(row.Writes)+len(row.Missing) != 0 || !slices.Equal(row.Wrong, []string{`专辑/label 错写 NULL，预期 "弦湾唱片"`}) ||
+			if row.Correct || len(row.Writes)+len(row.Wrong) != 0 || !slices.Equal(row.Missing, []string{"专辑/label"}) ||
 				!maps.Equal(row.LocalExisting, map[string]string{"专辑/album_artist": artist, file + "/title": sample.Local.Tracks[0].Title}) {
 				t.Errorf("扫描值、必需空值或报告分栏不符：%+v", row)
 			}
