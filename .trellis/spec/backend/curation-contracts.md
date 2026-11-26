@@ -1168,7 +1168,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ## 27. 模型巡检与本地整理（整理链 D，2026-11-25）
 
-依据 ADR 0006 第 16.6 节。迁移 0092–0094。可行性测试见整理链父任务的 `research/` 下子任务 D 的记录。
+依据 ADR 0006 第 16.6 节。迁移 0092–0094。可行性测试见整理链父任务的 `research/patrol-feasibility-2026-11-25.md`。
 
 ### 27.1 巡检
 
