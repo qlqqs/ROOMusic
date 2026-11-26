@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"encoding/base64"
 	"strconv"
 	"strings"
 	"time"
@@ -65,6 +66,8 @@ type SourceObservation struct {
 	SourceSize          int64                 `json:"-"`
 	SourceType          string                `json:"source_type,omitempty"`
 	Title               string                `json:"title,omitempty"`
+	VinylSide           int                   `json:"vinyl_side,omitempty"`
+	LegacyText          map[string][]byte     `json:"legacy_text,omitempty"`
 	TrackNumber         int                   `json:"track_number,omitempty"`
 	Work                string                `json:"work,omitempty"`
 	Year                int                   `json:"year,omitempty"`
@@ -99,6 +102,11 @@ func (o SourceObservation) fieldObservations() []fieldObservation {
 			} else {
 				fields[i].SourceKind = "default_fallback"
 			}
+		}
+	}
+	for _, name := range []string{"title", "artist", "album", "album_artist"} {
+		if raw := o.LegacyText[name]; len(raw) > 0 && o.FieldSources[name] == "garbled" {
+			fields = append(fields, fieldObservation{Name: "legacy_bytes_" + name, Value: base64.StdEncoding.EncodeToString(raw), SourceKind: "garbled"})
 		}
 	}
 	return fields

@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
 // filenameNumbers 保留独立的文件名证据；即使标签优先，也可用于连续性检验。
@@ -142,16 +144,19 @@ func prepareFilenameEvidence(items []SourceObservation) map[string]filenameNumbe
 	}
 	for index := range items {
 		observation := &items[index]
+		if observation.InferredFields["album"] {
+			observation.Album = metadata.StripFormatNoise(observation.Album)
+		}
 		if isCueObservation(*observation) {
 			continue
 		}
 		parsed := numbers[NormalizedPath(observation.RelativePath)]
 		observation.FieldSources = cloneStringMap(observation.FieldSources)
-		if observation.InferredFields["track_number"] && parsed.Track > 0 {
+		if observation.InferredFields["track_number"] && observation.VinylSide == 0 && parsed.Track > 0 {
 			observation.TrackNumber = parsed.Track
 			observation.FieldSources["track_number"] = "filename_fallback"
 		}
-		if observation.InferredFields["disc_number"] && observation.FieldSources["disc_number"] != "album_title" && parsed.Disc > 0 {
+		if observation.InferredFields["disc_number"] && observation.FieldSources["disc_number"] != "album_title" && observation.VinylSide == 0 && parsed.Disc > 0 {
 			observation.DiscNumber = parsed.Disc
 			observation.FieldSources["disc_number"] = "filename_fallback"
 		}
@@ -163,6 +168,7 @@ func prepareFilenameEvidence(items []SourceObservation) map[string]filenameNumbe
 		if title == "" {
 			title = stem
 		}
+		title = metadata.StripFormatNoise(title)
 		observation.Title = title
 		if !observation.InferredFields["artist"] || observation.FieldSources["artist"] != "display_fallback" || strings.Count(title, " - ") != 1 {
 			continue

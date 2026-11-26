@@ -15,11 +15,11 @@ func LocalSearchEvidence(e catalog.CurationEvidence) catalog.CurationEvidence {
 		e.FieldSources = maps.Clone(e.FieldSources)
 		if e.LocalTitle != "" {
 			e.Title, e.TitlePlaceholder = e.LocalTitle, false
-			e.Authenticity["title"], e.FieldSources["title"] = metadata.Inferred, "model_inferred"
+			e.Authenticity["title"], e.FieldSources["title"] = metadata.Inferred, e.Legacy.LocalValueSource("title", e.LocalTitle)
 		}
 		if e.LocalArtist != "" {
 			e.AlbumArtist, e.ArtistPlaceholder = e.LocalArtist, false
-			e.Authenticity["album_artist"], e.FieldSources["album_artist"] = metadata.Inferred, "model_inferred"
+			e.Authenticity["album_artist"], e.FieldSources["album_artist"] = metadata.Inferred, e.Legacy.LocalValueSource("album_artist", e.LocalArtist)
 		}
 	}
 	cloned := false
@@ -35,12 +35,12 @@ func LocalSearchEvidence(e catalog.CurationEvidence) catalog.CurationEvidence {
 		if track.LocalTitle != "" {
 			track.Title, track.TitlePlaceholder, track.TitleInferred = track.LocalTitle, false, true
 			track.Authenticity["title"] = metadata.Inferred
-			track.TitleObservation = catalog.CurationObservation{Source: "model_inferred", Inferred: true}
+			track.TitleObservation = catalog.CurationObservation{Source: track.Legacy.LocalValueSource("title", track.LocalTitle), Inferred: true}
 		}
 		if track.LocalArtist != "" {
 			track.Artist, track.ArtistPlaceholder = track.LocalArtist, false
 			track.Authenticity["artist"] = metadata.Inferred
-			track.ArtistObservation = catalog.CurationObservation{Source: "model_inferred", Inferred: true}
+			track.ArtistObservation = catalog.CurationObservation{Source: track.Legacy.LocalValueSource("artist", track.LocalArtist), Inferred: true}
 		}
 		e.Tracks[i] = track
 	}

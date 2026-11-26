@@ -23,6 +23,10 @@ type LocalInput struct {
 		TrackID string `json:"track_id"`
 		Title   string `json:"title"`
 	} `json:"tracks,omitempty"`
+	TrackArtists []struct {
+		TrackID string `json:"track_id"`
+		Artist  string `json:"artist"`
+	} `json:"track_artists,omitempty"`
 }
 
 type localTarget struct {
@@ -73,6 +77,9 @@ func checkedLocalValue(name, value string, field localField, fragments []string)
 	}
 	v := values[name]
 	key := textnorm.Text(v.Value.(string))
+	if len(field.Decodings) > 1 {
+		return v, slices.ContainsFunc(field.Decodings, func(s string) bool { return textnorm.Text(s) == key })
+	}
 	return v, key != "" && slices.ContainsFunc(fragments, func(f string) bool { return strings.Contains(f, key) })
 }
 
@@ -120,13 +127,22 @@ func (w *Writer) SubmitLocal(ctx context.Context, in LocalInput) error {
 		release.Fields["album_artist"] = v
 	}
 	targets := []localTarget{release}
-	titles := map[string]string{}
-	for _, t := range in.Tracks {
-		if first, seen := titles[t.TrackID]; seen && first != t.Title {
-			titles[t.TrackID] = ""
-		} else {
-			titles[t.TrackID] = t.Title
+	titles, artists := map[string]string{}, map[string]string{}
+	remember := func(fields map[string]string, id, value string) {
+		if value == "" {
+			return
 		}
+		if previous, seen := fields[id]; seen && previous != value {
+			fields[id] = ""
+			return
+		}
+		fields[id] = value
+	}
+	for _, t := range in.Tracks {
+		remember(titles, t.TrackID, t.Title)
+	}
+	for _, t := range in.TrackArtists {
+		remember(artists, t.TrackID, t.Artist)
 	}
 	for _, dir := range a.Directories {
 		for _, t := range dir.Tracks {
@@ -134,7 +150,11 @@ func (w *Writer) SubmitLocal(ctx context.Context, in LocalInput) error {
 			if v, valid := checkedLocalValue("title", titles[t.ID], t.Title, fragments); valid {
 				req.Fields["title"] = v
 			}
-			if v, valid := checkedLocalValue("album_artist", in.Artist, t.Artist, fragments); valid {
+			artist := in.Artist
+			if len(t.Artist.Decodings) > 1 && artists[t.ID] != "" {
+				artist = artists[t.ID]
+			}
+			if v, valid := checkedLocalValue("album_artist", artist, t.Artist, fragments); valid {
 				req.Fields["artist"] = v
 			}
 			if len(req.Fields) > 0 {

@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	LocalRuleVersion    int16 = 2
+	LocalRuleVersion    int16 = 3
 	MatchRuleVersion    int16 = 102
 	PatrolPromptVersion int16 = 1
 
