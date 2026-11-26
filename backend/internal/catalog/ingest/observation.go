@@ -15,6 +15,8 @@ import (
 // 来源大小、修改时间与内容指纹写入暂存专用列，不进入 JSON；CUE 使用父音频状态。
 // CUE 事实只保存安全的相对引用；虚拟轨没有歌词。ArtworkRelativePath 保留封面原音频来源。
 type SourceObservation struct {
+	Format                string                       `json:"format,omitempty"`
+	ScanTags              *metadata.ScanTags           `json:"scan_tags,omitempty"`
 	Album                 string                       `json:"album,omitempty"`
 	AlbumArtist           string                       `json:"album_artist,omitempty"`
 	Artist                string                       `json:"artist,omitempty"`
@@ -105,7 +107,7 @@ func (o SourceObservation) fieldObservations() []fieldObservation {
 		}
 	}
 	for _, name := range []string{"title", "artist", "album", "album_artist"} {
-		if raw := o.LegacyText[name]; len(raw) > 0 && o.FieldSources[name] == "garbled" {
+		if raw := o.LegacyText[name]; len(raw) > 0 && (o.FieldSources[name] == "garbled" || o.FieldSources[name] == "legacy_encoding") {
 			fields = append(fields, fieldObservation{Name: "legacy_bytes_" + name, Value: base64.StdEncoding.EncodeToString(raw), SourceKind: "garbled"})
 		}
 	}

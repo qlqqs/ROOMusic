@@ -887,6 +887,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		obs := b.obs
 		sort.Slice(obs, func(i, j int) bool { return observationSortKey(obs[i]) < observationSortKey(obs[j]) })
 		c := OrganizedCandidate{Anchor: CandidateAnchor{Kind: b.kind, Scope: b.scope, Partition: stableAnchorPartition(b.kind, b.partition, obs)}, ReleaseGroupKey: key, Mediums: map[int][]OrganizedTrack{}, MediumTitles: map[int]string{}}
+		obs = decodeCandidateLegacy(obs)
 		if b.kind == CandidateFormatSplit {
 			c.OriginalKind = b.originalKind
 			c.VersionGroup = "format:" + b.scope

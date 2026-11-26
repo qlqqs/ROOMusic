@@ -170,16 +170,6 @@ func prepareFilenameEvidence(items []SourceObservation) map[string]filenameNumbe
 		}
 		title = metadata.StripFormatNoise(title)
 		observation.Title = title
-		if !observation.InferredFields["artist"] || observation.FieldSources["artist"] != "display_fallback" || strings.Count(title, " - ") != 1 {
-			continue
-		}
-		artist, title, _ := strings.Cut(title, " - ")
-		artist, title = strings.TrimSpace(artist), strings.TrimSpace(title)
-		if artist == "" || title == "" || strings.TrimFunc(artist, unicode.IsDigit) == "" {
-			continue
-		}
-		observation.Artist, observation.Title = artist, title
-		observation.FieldSources["artist"] = "filename_fallback"
 	}
 	return numbers
 }

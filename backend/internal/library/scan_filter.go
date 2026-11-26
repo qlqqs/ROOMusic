@@ -55,3 +55,7 @@ func isAudioCandidateExtension(extension string) bool {
 		return false
 	}
 }
+
+func isScannableAudio(extension string) bool {
+	return extension == "" || isSupportedAudioExtension(extension) || isAudioCandidateExtension(extension)
+}

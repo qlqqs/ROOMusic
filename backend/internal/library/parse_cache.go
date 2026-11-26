@@ -5,8 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"io/fs"
-	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
@@ -17,6 +16,9 @@ const (
 	parseCacheDirectoryLimit = 2000
 	maxParseCacheBytes       = 1 << 20
 )
+
+// 未知格式的探测结果只随通用规则升版。
+var unknownFormatCacheVersion = "c" + strconv.Itoa(parser.CommonVersion) + ".unknown"
 
 type incrementalStats struct {
 	filesParsed, parseCacheHits, parseCacheWrites              int64
@@ -115,21 +117,29 @@ func (cache *parseCache) lookup(ctx context.Context, relative string) (parseCach
 }
 
 // lookupObservation 只查询缓存；命中计数与 seen 在槽位按序应用时推进。
-func (cache *parseCache) lookupObservation(ctx context.Context, path, relative string, info fs.FileInfo) (parser.AudioObservation, bool) {
-	relative = ingest.NormalizedPath(relative)
-	version := parser.CacheVersion(filepath.Ext(path))
-	modifiedAt := info.ModTime().UTC().Truncate(time.Microsecond)
-	if cache.mode != ScanModeFull && version != "" {
-		if entry, ok := cache.lookup(ctx, relative); ok && entry.size == info.Size() && entry.modifiedAt.Equal(modifiedAt) && entry.version == version {
-			var observation parser.AudioObservation
-			if len(entry.observation) <= maxParseCacheBytes && json.Unmarshal(entry.observation, &observation) == nil {
-				observation.Artwork = nil
-				return observation, true
-			}
-			cache.warn("decode")
-		}
+func (cache *parseCache) lookupObservation(ctx context.Context, audio *scanAudio) bool {
+	if cache.mode == ScanModeFull {
+		return false
 	}
-	return parser.AudioObservation{}, false
+	entry, ok := cache.lookup(ctx, audio.relative)
+	if !ok || entry.size != audio.info.Size() || !entry.modifiedAt.Equal(audio.info.ModTime().Truncate(time.Microsecond)) {
+		return false
+	}
+	if entry.version == unknownFormatCacheVersion {
+		audio.err = parser.ErrUnknownFormat
+		return true
+	}
+	var observation parser.AudioObservation
+	if len(entry.observation) > maxParseCacheBytes || json.Unmarshal(entry.observation, &observation) != nil {
+		cache.warn("decode")
+		return false
+	}
+	if observation.Format == "" || parser.CacheVersion(observation.Format) != entry.version {
+		return false
+	}
+	observation.Artwork = nil
+	audio.observation = observation
+	return true
 }
 
 func (cache *parseCache) applyAudio(ctx context.Context, audio scanAudio) {
@@ -145,22 +155,29 @@ func (cache *parseCache) applyAudio(ctx context.Context, audio scanAudio) {
 		return
 	}
 	cache.stats.filesParsed++
-	if version := parser.CacheVersion(filepath.Ext(audio.path)); audio.err == nil && version != "" {
-		cache.write(ctx, audio.relative, audio.info.Size(), audio.info.ModTime().UTC().Truncate(time.Microsecond), version, audio.observation)
+	if errors.Is(audio.err, parser.ErrUnknownFormat) {
+		cache.write(ctx, audio, unknownFormatCacheVersion, []byte("{}"))
+		return
 	}
-}
-
-func (cache *parseCache) write(ctx context.Context, relative string, size int64, modifiedAt time.Time, version string, observation parser.AudioObservation) {
-	observation.Artwork = nil
-	payload, err := json.Marshal(observation)
+	version := parser.CacheVersion(audio.observation.Format)
+	if audio.err != nil || version == "" {
+		return
+	}
+	audio.observation.Artwork = nil
+	payload, err := json.Marshal(audio.observation)
 	if err != nil {
 		cache.warn("encode")
 		return
 	}
-	if len(payload) > maxParseCacheBytes {
-		return
+	if len(payload) <= maxParseCacheBytes {
+		cache.write(ctx, audio, version, payload)
 	}
-	_, err = cache.executor.ExecContext(ctx, `INSERT INTO library_parse_cache
+}
+
+func (cache *parseCache) write(ctx context.Context, audio scanAudio, version string, payload []byte) {
+	relative, size := audio.relative, audio.info.Size()
+	modifiedAt := audio.info.ModTime().UTC().Truncate(time.Microsecond)
+	_, err := cache.executor.ExecContext(ctx, `INSERT INTO library_parse_cache
         (root_id,relative_path,directory,source_size,source_modified_at,parser_version,observation,seen_scan_id)
         VALUES($1::uuid,$2,$3,$4,$5,$6,$7::jsonb,$8::uuid)
         ON CONFLICT(root_id,relative_path) DO UPDATE SET directory=EXCLUDED.directory,source_size=EXCLUDED.source_size,

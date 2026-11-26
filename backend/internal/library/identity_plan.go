@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
 	"github.com/qlqq/roomusic/backend/internal/library/parser"
@@ -16,6 +17,10 @@ import (
 type rootFingerprinter struct{ root registeredRoot }
 
 func (fingerprinter rootFingerprinter) Fingerprint(ctx context.Context, relativePath string) (string, error) {
+	return fingerprinter.FingerprintObserved(ctx, relativePath, 0, time.Time{})
+}
+
+func (fingerprinter rootFingerprinter) FingerprintObserved(ctx context.Context, relativePath string, size int64, modified time.Time) (string, error) {
 	identity, err := createTrackSourceIdentity(fingerprinter.root.ID, relativePath)
 	if err != nil {
 		return "", err
@@ -31,7 +36,14 @@ func (fingerprinter rootFingerprinter) Fingerprint(ctx context.Context, relative
 	if !isWithin(fingerprinter.root.Path, path) {
 		return "", errors.New("fingerprint source is outside the registered root")
 	}
-	return parser.ContentFingerprint(ctx, path)
+	if !modified.IsZero() && (size != info.Size() || !info.ModTime().Truncate(time.Microsecond).Equal(modified)) {
+		return "", ingest.ErrSourceChanged
+	}
+	value, readErr := parser.ContentFingerprint(ctx, path)
+	if err := checkReadTime(path, info); err != nil {
+		return "", err
+	}
+	return value, readErr
 }
 
 func (service *Service) fingerprinterFor(root registeredRoot) ingest.Fingerprinter {
@@ -44,8 +56,11 @@ func (service *Service) fingerprinterFor(root registeredRoot) ingest.Fingerprint
 // planRootIdentities 规划 root 的曲目身份，并把规划诊断写入扫描诊断、把计数写入日志。walkComplete 是该 root
 // 遍历证据是否完整。planned 为假表示规划本身失败，暂存行没有完整的规划，调用方不得写入；problem 非空表示
 // root 应记为不完整（规划失败、有文件或 scope 无法处理，或诊断写入失败）。
-func (service *Service) planRootIdentities(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, walkComplete bool, mode string) (planned bool, problem error) {
+func (service *Service) planRootIdentities(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, walkComplete bool, mode string, feedback *scanFeedback) (planned bool, problem error) {
 	plan, planErr := ingest.PlanStagedRoot(ctx, executor, scanID, root.ID, ingest.PlanOptions{Concurrency: service.scanWorkerCount(), Mode: mode, WalkComplete: walkComplete, Fingerprinter: service.fingerprinterFor(root)})
+	for range plan.ChangedSourceHolds {
+		feedback.skip(ctx)
+	}
 	var problems []error
 	record := func(kind, relativePath, message string) {
 		if err := service.recordDiagnosticWith(ctx, executor, scanID, relativePath, kind, message); err != nil {

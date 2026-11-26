@@ -68,8 +68,8 @@ func TestPostgreSQLScanLifecycleHeldFilesStillReconcilesDeletedSources(t *testin
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE id=$1::uuid AND source_status='missing'`, 1, before["Album/deleted.flac"])
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE id=$1::uuid AND title='damaged' AND content_fingerprint IS NOT NULL`, 1, before["Album/damaged.flac"])
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 3, root.ID)
-	requireDiagnosticCount(t, fixture, scan.ID, "unsupported_format", 1)
-	requireDiagnosticCount(t, fixture, scan.ID, "parse_failure", 1)
+	requireDiagnosticCount(t, fixture, scan.ID, "unsupported_format", 2)
+	requireDiagnosticCount(t, fixture, scan.ID, "parse_failure", 0)
 	if scan.Diagnostics.Total != 2 {
 		t.Errorf("过滤项不应产生诊断：%+v", scan.Diagnostics)
 	}
