@@ -18,6 +18,10 @@
 `ROOMUSIC_UPDATE_API_SAMPLES=1 ./scripts/test-integration.sh` 重写 `internal/app/testdata/api-samples/`，同一提交里同步前端 decoder
 （前端契约测试逐个解码这些样本）。新增端点或错误码时，把它加进该测试的固定流程与覆盖清单。样本只用合成素材，测试断言其中
 没有绝对路径、密码、Cookie 与令牌。
+前端解码器缺键即报错，遇到不认识的枚举值也报错，所以样本只录正常状态时，契约测试拦不住两类不一致：
+- 可空字段在部分状态下缺键：Go 结构里 `omitempty` 会把空值连键一起省掉，可空字段要明确写 `null`；
+- 只在异常或暂停状态才出现的取值，例如暂停原因、不可用原因、单曲才有的 `recording`。
+新增这类字段或取值时，要把会出现它们的状态也录成样本。识别结论、整理进度的 `*-matched`、`*-recording-conflict`、`progress-album-retry`、`progress-model-*` 就是这样补的。
 
 ### 整理固定样本回归
 
