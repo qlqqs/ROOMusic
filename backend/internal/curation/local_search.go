@@ -3,7 +3,6 @@ package curation
 import (
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
@@ -51,29 +50,24 @@ func LocalSearchEvidence(e catalog.CurationEvidence) catalog.CurationEvidence {
 // CompilationEvidence 按原始曲目署名判别无专辑艺人的合辑，显式合辑标记优先。
 func CompilationEvidence(e catalog.CurationEvidence) bool {
 	hasAlbumArtist := e.AlbumArtist != "" && e.Authenticity["album_artist"] != metadata.Placeholder && e.Authenticity["album_artist"] != metadata.Inferred
-	if metadata.IsCompilationPlaceholder(e.AlbumArtist) || !hasAlbumArtist && (e.FieldSources["artist"] == "compilation" || metadata.IsCompilationPlaceholder(e.Artist)) {
+	albumMarker := e.FieldSources["album_artist"] != "artist_distribution" && metadata.IsCompilationPlaceholder(e.AlbumArtist)
+	artistMarker := e.FieldSources["artist"] != "artist_distribution" && metadata.IsCompilationPlaceholder(e.Artist)
+	if albumMarker || !hasAlbumArtist && (e.FieldSources["artist"] == "compilation" || artistMarker) {
 		return true
 	}
 	if hasAlbumArtist || len(e.Tracks) < 4 {
 		return false
 	}
-	counts := make(map[string]int)
+	counts := metadata.PrimaryArtistCounts{}
 	for _, track := range e.Tracks {
 		if track.ArtistPlaceholder || track.Authenticity["artist"] == metadata.Placeholder || track.Authenticity["artist"] == metadata.Inferred {
 			continue
 		}
-		seen := map[string]bool{}
-		for _, name := range metadata.CanonicalArtistNames(track.Artist) {
-			key := strings.ToLower(name)
-			if seen[key] || metadata.IsCompilationPlaceholder(name) {
-				continue
-			}
-			seen[key] = true
-			counts[key]++
-			if counts[key]*2 > len(e.Tracks) {
-				return false
-			}
+		credit := track.Artist
+		if !track.ArtistCorrected && track.FirstArtistCredit != "" {
+			credit = track.FirstArtistCredit
 		}
+		counts.Add(credit)
 	}
-	return len(counts) >= 3
+	return counts.IsCompilation(len(e.Tracks))
 }

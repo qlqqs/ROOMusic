@@ -394,10 +394,10 @@ func discPartitions(directories []*discDirectory) int {
 	for _, directory := range directories {
 		observations = append(observations, directory.observations...)
 	}
-	knownArtists := knownAlbumArtists(observations)
+	knownArtists := knownAlbumArtists(observations, albumPartition)
 	partitions := map[string]bool{}
 	for _, observation := range observations {
-		if partition := compatibleAlbumPartition(observation, knownArtists); partition != "|" {
+		if partition := compatibleAlbumPartition(albumPartition(observation), knownArtists); partition != "|" {
 			partitions[partition] = true
 		}
 	}
@@ -554,10 +554,10 @@ func directoryLooseSingles(scope string, observations []SourceObservation, filen
 	return !albumFolder
 }
 
-func knownAlbumArtists(observations []SourceObservation) map[string]map[string]bool {
+func knownAlbumArtists(observations []SourceObservation, partitionOf func(SourceObservation) string) map[string]map[string]bool {
 	result := map[string]map[string]bool{}
 	for _, observation := range observations {
-		partition := albumPartition(observation)
+		partition := partitionOf(observation)
 		album, artist, found := strings.Cut(partition, "|")
 		if !found || album == "" || artist == "" {
 			continue
@@ -570,8 +570,7 @@ func knownAlbumArtists(observations []SourceObservation) map[string]map[string]b
 	return result
 }
 
-func compatibleAlbumPartition(observation SourceObservation, knownArtists map[string]map[string]bool) string {
-	partition := albumPartition(observation)
+func compatibleAlbumPartition(partition string, knownArtists map[string]map[string]bool) string {
 	album, artist, found := strings.Cut(partition, "|")
 	if !found || album == "" || artist != "" || len(knownArtists[album]) != 1 {
 		return partition
@@ -774,9 +773,9 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		// 都是独立的未知专辑候选。
 		if meta.scope == "" {
 			withAlbum := map[string][]SourceObservation{}
-			knownArtists := knownAlbumArtists(group)
+			knownArtists := knownAlbumArtists(group, albumPartition)
 			for _, o := range group {
-				if part := compatibleAlbumPartition(o, knownArtists); part != "|" {
+				if part := compatibleAlbumPartition(albumPartition(o), knownArtists); part != "|" {
 					withAlbum[part] = append(withAlbum[part], o)
 				} else {
 					addBucket(CandidateLooseUnknown, "", NormalizedPath(o.RelativePath), o)
@@ -804,8 +803,22 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 			b := addBucket(kind, meta.scope, partition, observations...)
 			b.originalKind = meta.kind
 		}
-		// 明确不同的专辑不共享候选；原来的多数和连续性只决定缺少标签的曲目跟随哪一组。
-		albums := stableValues(group, albumEvidence)
+		aliases := directoryAlbumAliases(group)
+		partitionOf := func(o SourceObservation) string {
+			album, artist, _ := strings.Cut(albumPartition(o), "|")
+			return aliases[album] + "|" + artist
+		}
+		knownArtists := knownAlbumArtists(group, partitionOf)
+		parts := map[string][]SourceObservation{}
+		albums := map[string]bool{}
+		for _, o := range group {
+			part := compatibleAlbumPartition(partitionOf(o), knownArtists)
+			parts[part] = append(parts[part], o)
+			if part != "|" {
+				album, _, _ := strings.Cut(part, "|")
+				albums[album] = true
+			}
+		}
 		if len(albums) <= 1 {
 			if formats := splitContinuousFormats(group, filenameEvidence); len(formats) > 0 {
 				for format, observations := range formats {
@@ -814,26 +827,22 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 				continue
 			}
 		}
-		partCounts := map[string]int{}
-		knownArtists := knownAlbumArtists(group)
-		for _, o := range group {
-			if part := compatibleAlbumPartition(o, knownArtists); part != "|" {
-				partCounts[part]++
-			}
-		}
 		winner, winnerCount, authoritativeCount := "", 0, 0
-		for part, count := range partCounts {
+		for part, tracks := range parts {
+			if part == "|" {
+				continue
+			}
+			count := len(tracks)
 			authoritativeCount += count
 			if count > winnerCount || (count == winnerCount && (winner == "" || part < winner)) {
 				winner, winnerCount = part, count
 			}
 		}
 		together := winnerCount*2 > authoritativeCount || continuousObservations(group, filenameEvidence)
-		if len(partCounts) <= 1 || len(albums) <= 1 && together {
+		if winnerCount == authoritativeCount || len(albums) <= 1 && together {
 			addDirectoryBucket(meta.kind, "", group)
 			continue
 		}
-		parts := splitByPartition(group, knownArtists)
 		if together && len(parts["|"]) > 0 {
 			parts[winner] = append(parts[winner], parts["|"]...)
 			delete(parts, "|")
@@ -1349,13 +1358,53 @@ func observationSortKey(o SourceObservation) string {
 	return NormalizedPath(o.RelativePath) + "\x00" + metadata.NormalizeValue(o.Title) + "\x00" + metadata.NormalizeValue(o.Album) + "\x00" + metadata.NormalizeValue(o.Artist)
 }
 
-func splitByPartition(obs []SourceObservation, knownArtists map[string]map[string]bool) map[string][]SourceObservation {
-	result := map[string][]SourceObservation{}
-	for _, o := range obs {
-		partition := compatibleAlbumPartition(o, knownArtists)
-		result[partition] = append(result[partition], o)
+// directoryAlbumAliases 只改变同目录的比较键，曲目观察和展示名保留原文。
+func directoryAlbumAliases(group []SourceObservation) map[string]string {
+	aliases := map[string]string{}
+	counts := map[string]int{}
+	artists := map[string]bool{}
+	startsAtOne := map[string]bool{}
+	var taggedPositions []discTrack
+	for _, o := range group {
+		album := albumEvidence(o)
+		if album != "" {
+			key := strings.ToLower(album)
+			aliases[album] = key
+			counts[key]++
+			if o.TrackNumber == 1 && !o.InferredFields["track_number"] {
+				startsAtOne[key] = true
+			}
+			if artist := metadata.NormalizeValue(o.AlbumArtist); artist != "" && !o.InferredFields["album_artist"] {
+				artists[strings.ToLower(artist)] = true
+			}
+		}
+		if o.TrackNumber > 0 && !o.InferredFields["track_number"] {
+			taggedPositions = append(taggedPositions, discTrack{Track: o.TrackNumber})
+		}
 	}
-	return result
+	if len(counts) < 2 || len(artists) > 1 {
+		return aliases
+	}
+	majority, votes, total := "", 0, 0
+	for album, count := range counts {
+		total += count
+		if count > votes {
+			majority, votes = album, count
+		}
+	}
+	if votes*2 <= total {
+		return aliases
+	}
+	// 文件名可以给两张混放专辑统一编号，独立的异名只采用整组标签曲号作佐证。
+	singleOutlier := total-votes == 1 && len(taggedPositions) == len(group) && continuousAlbum(taggedPositions)
+	for album, key := range aliases {
+		suffix := strings.LastIndex(key, "(")
+		sameBase := suffix > 0 && strings.HasSuffix(key, ")") && strings.TrimSpace(key[:suffix]) == majority
+		if singleOutlier || sameBase && !(startsAtOne[key] && startsAtOne[majority]) {
+			aliases[album] = majority
+		}
+	}
+	return aliases
 }
 
 func stableAnchorPartition(kind CandidateKind, groupingPartition string, obs []SourceObservation) string {

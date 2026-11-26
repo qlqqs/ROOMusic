@@ -8076,5 +8076,159 @@
       "artists": {"栗湾短笛社": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4"},
       "group_match": "46969ff9-2a86-5986-b062-dc88a12c2d29"
     }
+  },
+  {
+    "id": "control-cp1252-apostrophe",
+    "shape": "control_cp1252",
+    "local": {
+      "directory": "control-cp1252-apostrophe",
+      "album": "",
+      "artist": "Brass Orchard",
+      "format": "latin1",
+      "tracks": [
+        {"file": "01.mp3", "title": "Lantern Relay", "seconds": 43}
+      ],
+      "legacy_album_hex": "4b69746573922041746c6173"
+    },
+    "external": {
+      "artists": [],
+      "releases": []
+    },
+    "expect": {
+      "accept": ["unlisted"],
+      "scan": {"title": "Kites Atlas", "title_auth": "real"}
+    }
+  },
+  {
+    "id": "control-bonus-tracks",
+    "shape": "control_bonus_tracks",
+    "local": {
+      "directory": "Moth Lanterns (Bonus Tracks)",
+      "album": "Moth Lanterns (Bonus Tracks)",
+      "artist": "Tin Seed Quartet",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "Tin Seed Quartet"},
+      "tracks": [
+        {"file": "01.flac", "title": "Winter Glass", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "Chalk Ferry", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "Reed Mosaic", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "Copper Echo", "seconds": 64, "tags": {"TRACKNUMBER": "4"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "f24219a3-c67b-509d-a2b7-c5ee30622c0d", "name": "Tin Seed Quartet"}
+      ],
+      "releases": [
+        {
+          "id": "62e5ee59-f42a-539f-bb3d-0e8da5054b1f",
+          "group": "dee3226e-a643-5d91-ab48-8f41d0012931",
+          "title": "Moth Lanterns (Bonus Tracks)",
+          "grouptitle": "Moth Lanterns (Bonus Tracks)",
+          "artist": "f24219a3-c67b-509d-a2b7-c5ee30622c0d",
+          "tracks": [
+            {"id": "dc8098e4-2427-5270-a748-51980e2d519a", "trackid": "b48daf2f-8ef5-54e1-96c9-f71abf66aa85", "title": "Winter Glass", "artist": "f24219a3-c67b-509d-a2b7-c5ee30622c0d", "length": 43000},
+            {"id": "b32485bf-0eb9-5a89-ab51-654526bdadcf", "trackid": "c3faae10-2b50-5bc0-8292-a9a578b6b9f5", "title": "Chalk Ferry", "artist": "f24219a3-c67b-509d-a2b7-c5ee30622c0d", "length": 50000},
+            {"id": "47bd5205-a98a-507b-a699-872c44b63858", "trackid": "22fd6e8a-8bd2-5aec-a6c7-88514a07e58c", "title": "Reed Mosaic", "artist": "f24219a3-c67b-509d-a2b7-c5ee30622c0d", "length": 57000},
+            {"id": "21d49f49-2f72-543a-bb77-f7db62a13cb8", "trackid": "97678f5b-1d37-5210-8824-9a4ae28e361d", "title": "Copper Echo", "artist": "f24219a3-c67b-509d-a2b7-c5ee30622c0d", "length": 64000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "62e5ee59-f42a-539f-bb3d-0e8da5054b1f",
+      "group": "dee3226e-a643-5d91-ab48-8f41d0012931",
+      "recordings": ["dc8098e4-2427-5270-a748-51980e2d519a", "b32485bf-0eb9-5a89-ab51-654526bdadcf", "47bd5205-a98a-507b-a699-872c44b63858", "21d49f49-2f72-543a-bb77-f7db62a13cb8"],
+      "artists": {"Tin Seed Quartet": "f24219a3-c67b-509d-a2b7-c5ee30622c0d"},
+      "scan": {"title": "Moth Lanterns (Bonus Tracks)", "positions": ["1/1", "1/2", "1/3", "1/4"]}
+    }
+  },
+  {
+    "id": "control-format-words",
+    "shape": "control_format_words",
+    "local": {
+      "directory": "control-format-words",
+      "album": "Velvet Web over Copper Ape",
+      "artist": "Marsh Bell Workshop",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "Marsh Bell Workshop"},
+      "tracks": [
+        {"file": "01.flac", "title": "Silver Finch", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "Thread Across the Canal", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "b0c6f6db-1469-592a-b2b8-6cb320292eb2", "name": "Marsh Bell Workshop"}
+      ],
+      "releases": [
+        {
+          "id": "83e80f30-07f3-5d42-95bd-2f09ed9e4a83",
+          "group": "f6a8900f-3b54-5a6e-81df-9f870a055702",
+          "title": "Velvet Web over Copper Ape",
+          "grouptitle": "Velvet Web over Copper Ape",
+          "artist": "b0c6f6db-1469-592a-b2b8-6cb320292eb2",
+          "tracks": [
+            {"id": "86e69e1a-e593-587e-989c-91c08e95d10e", "trackid": "434c67a4-cd21-55fa-87a9-ad7bcc111f23", "title": "Silver Finch", "artist": "b0c6f6db-1469-592a-b2b8-6cb320292eb2", "length": 43000},
+            {"id": "284ad98e-5df2-5be3-8eae-5b5434c20bc2", "trackid": "1ff8516e-df95-5446-9676-13aedf05a574", "title": "Thread Across the Canal", "artist": "b0c6f6db-1469-592a-b2b8-6cb320292eb2", "length": 50000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "83e80f30-07f3-5d42-95bd-2f09ed9e4a83",
+      "group": "f6a8900f-3b54-5a6e-81df-9f870a055702",
+      "recordings": ["86e69e1a-e593-587e-989c-91c08e95d10e", "284ad98e-5df2-5be3-8eae-5b5434c20bc2"],
+      "artists": {"Marsh Bell Workshop": "b0c6f6db-1469-592a-b2b8-6cb320292eb2"},
+      "scan": {"title": "Velvet Web over Copper Ape", "title_auth": "real"}
+    }
+  },
+  {
+    "id": "control-two-artists",
+    "shape": "control_two_artists",
+    "local": {
+      "directory": "control-two-artists",
+      "album": "Porcelain Tides",
+      "artist": "",
+      "format": "flac",
+      "tracks": [
+        {"file": "01.flac", "title": "Lakeside Chimes", "seconds": 43, "tags": {"TRACKNUMBER": "1"}, "artist": "Alder Signal"},
+        {"file": "02.flac", "title": "Indigo Spokes", "seconds": 50, "tags": {"TRACKNUMBER": "2"}, "artist": "Birch Circuit"},
+        {"file": "03.flac", "title": "Linen Quay", "seconds": 57, "tags": {"TRACKNUMBER": "3"}, "artist": "Alder Signal"},
+        {"file": "04.flac", "title": "Saltwater Map", "seconds": 64, "tags": {"TRACKNUMBER": "4"}, "artist": "Birch Circuit"}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "eb2ff17b-0234-52dd-ae18-e9a517155a51", "name": "Alder Signal"},
+        {"id": "cbca1671-5d61-59d7-bfb5-ba02a7550855", "name": "Birch Circuit"}
+      ],
+      "releases": [
+        {
+          "id": "4bec2c14-9c2a-5426-9557-00e54d23bbdf",
+          "group": "48cc26cf-f057-516d-8a66-b0ab10b35925",
+          "title": "Porcelain Tides",
+          "grouptitle": "Porcelain Tides",
+          "artist": "eb2ff17b-0234-52dd-ae18-e9a517155a51",
+          "tracks": [
+            {"id": "b4cc34ed-b49a-59bc-b30e-4e3517a8cf60", "trackid": "f6fdbd5a-b2d4-5f77-bd71-7db4e65e47fe", "title": "Lakeside Chimes", "artist": "eb2ff17b-0234-52dd-ae18-e9a517155a51", "length": 43000},
+            {"id": "bb532f3f-0b1a-55f1-a780-e448aa612197", "trackid": "1871fd6e-e553-5352-86f4-148732b867b3", "title": "Indigo Spokes", "artist": "cbca1671-5d61-59d7-bfb5-ba02a7550855", "length": 50000},
+            {"id": "3981e75b-87e4-554c-b4c8-846bcccdec28", "trackid": "79a87309-5f67-548b-8a90-43ac8280468b", "title": "Linen Quay", "artist": "eb2ff17b-0234-52dd-ae18-e9a517155a51", "length": 57000},
+            {"id": "94ff1d01-f34f-5dd7-8698-132f0e5dc374", "trackid": "5d48be98-9cca-542c-8a46-bfd9fbffd246", "title": "Saltwater Map", "artist": "cbca1671-5d61-59d7-bfb5-ba02a7550855", "length": 64000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "4bec2c14-9c2a-5426-9557-00e54d23bbdf",
+      "group": "48cc26cf-f057-516d-8a66-b0ab10b35925",
+      "recordings": ["b4cc34ed-b49a-59bc-b30e-4e3517a8cf60", "bb532f3f-0b1a-55f1-a780-e448aa612197", "3981e75b-87e4-554c-b4c8-846bcccdec28", "94ff1d01-f34f-5dd7-8698-132f0e5dc374"],
+      "fields": {"album_artist": "Alder Signal"},
+      "artists": {"Alder Signal": "eb2ff17b-0234-52dd-ae18-e9a517155a51", "Birch Circuit": "cbca1671-5d61-59d7-bfb5-ba02a7550855"},
+      "scan": {"title": "Porcelain Tides", "artist": "Alder Signal", "compilation": false}
+    }
   }
 ]

@@ -60,6 +60,7 @@ type CurationObservation struct {
 }
 
 type CurationTrack struct {
+	FirstArtistCredit                                                string                           `json:"-"`
 	Legacy                                                           LegacyCandidates                 `json:"-"`
 	RelativePath                                                     string                           `json:"-"`
 	LocalTags                                                        map[string]string                `json:"-"`
@@ -347,6 +348,8 @@ func (e *CurationEvidence) setCurationBarcodes(barcode string, fromCue bool) {
 }
 
 const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_value,t.title),COALESCE(ca.text_value,t.artist),
+ COALESCE((SELECT raw_value FROM artist_tag_evidence WHERE track_id=t.id AND role='track_artist'
+    ORDER BY occurrence_index,tag_key COLLATE "C" LIMIT 1),''),
  COALESCE(ct.text_value,CASE WHEN valid.title THEN atitle.text_value END,t.title),COALESCE(ca.text_value,CASE WHEN valid.artist THEN aa.text_value END,t.artist),
  COALESCE((SELECT jsonb_object_agg(field_name,jsonb_build_object('source',source_kind,'inferred',inferred,'value',value))
     FROM track_observations WHERE track_id=t.id AND field_name IS NOT NULL
@@ -391,7 +394,7 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 		var releaseID string
 		var lyrics, staleTitle, staleArtist sql.NullString
 		var identifiers, observations []byte
-		if err := rows.Scan(&releaseID, &t.ID, &t.Title, &t.Artist, &t.EffectiveTitle, &t.EffectiveArtist,
+		if err := rows.Scan(&releaseID, &t.ID, &t.Title, &t.Artist, &t.FirstArtistCredit, &t.EffectiveTitle, &t.EffectiveArtist,
 			&observations, &t.TitleCorrected, &t.ArtistCorrected, &t.TitleAutomatic, &t.ArtistAutomatic, &staleTitle, &staleArtist, &t.Disc, &t.DiscNumber, &t.Position, &t.WorkTitle,
 			&t.OtherIdentifier, &t.DurationSeconds, &t.RelativePath, &t.LocalTitle, &t.LocalArtist, &t.SourceKind, &t.SourceRootID, &t.CueSheetPath, &t.ParentFile, &t.CueISRC,
 			&t.CueIndexFrames, &t.CueEndFrames, &lyrics, &t.ExternalLyrics, &t.ExternalID, &identifiers); err != nil {
