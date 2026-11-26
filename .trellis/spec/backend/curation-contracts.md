@@ -1142,6 +1142,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 ### 26.2 外部编号的写入（D4）
 
 - `ModelMatcher.Plan` 生成完整结构核对：专辑按碟与位置一一配对，外部明细完整，总数与各碟曲数相等且多于 4 首，至少一对可比，所有可比时长都在容差内；散放单曲要求时长、标题、艺人规范化后都相等。
+- 发行编号通过完整结构核对后，本地版本标识命中或同组恰好一个版本通过时才写版本对应并补条码、目录号、厂牌；同组多版通过只写发行组级对应，不写录音对应，补曲名沿用第 23.2 节。
 - 通过的由后端直接写入，记录 `verification=album_structure|recording_duration_text`，不送审。没通过的送独立审查，记录 `verification=independent_review`；
   审查批准后后端再复判，时长或真实文字的反证仍在、又没有独立正面证据时拒绝。核对与审查都在第一笔写入之前。
 

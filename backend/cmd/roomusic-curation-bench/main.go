@@ -65,6 +65,7 @@ func run(ctx context.Context, args []string) error {
 		return measureTolerance(sources.WithBackground(ctx), corpus.Releases, flags.Args())
 	case "real-corpus":
 		out := flags.String("out", "", "生成曲库的目录")
+		reference := flags.String("reference", "", "另存本次生成使用的公开发行明细 JSON")
 		ffmpeg := flags.String("ffmpeg", os.Getenv("ROOMUSIC_FFMPEG_PATH"), "ffmpeg 路径，默认使用 ROOMUSIC_FFMPEG_PATH 或 PATH")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
@@ -72,7 +73,7 @@ func run(ctx context.Context, args []string) error {
 		if *out == "" || flags.NArg() != 0 {
 			return errors.New("real-corpus 需要 -out 目录")
 		}
-		return generateCorpus(sources.WithBackground(ctx), corpus.Releases, *out, *ffmpeg)
+		return generateCorpus(sources.WithBackground(ctx), corpus.Releases, *out, *ffmpeg, *reference)
 	default:
 		return fmt.Errorf("未知子命令 %q", args[0])
 	}

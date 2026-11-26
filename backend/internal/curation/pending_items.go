@@ -76,6 +76,34 @@ func (w *Writer) ClaimPendingItems(ctx context.Context, conversation string, now
 
 // ClaimModelKind 在同一语句内复核类别、释放时间及可见性并领取；第二档还限定已巡检的发行。
 func (w *Writer) ClaimModelKind(ctx context.Context, conversation string, now time.Time, n int, targets []string, kind, releaseID string) ([]PendingItem, error) {
+	return w.modelKindItems(ctx, conversation, now, n, targets, kind, releaseID, nil)
+}
+
+// SelectionItems 读取同类首批项，取得候选详情期间不持有行锁。
+func (w *Writer) SelectionItems(ctx context.Context, now time.Time, n int) ([]PendingItem, error) {
+	return w.modelKindItems(ctx, "", now, n, []string{"release"}, "select", "", nil)
+}
+
+// ClaimPreparedSelection 只领取仍就绪且准备期间未变更的项，保留已补全的候选和依据。
+func (w *Writer) ClaimPreparedSelection(ctx context.Context, conversation string, now time.Time, prepared []PendingItem) ([]PendingItem, error) {
+	claimed, err := w.modelKindItems(ctx, conversation, now, len(prepared), []string{"release"}, "select", "", prepared)
+	byID := make(map[string]PendingItem, len(prepared))
+	for _, p := range prepared {
+		byID[p.ID] = p
+	}
+	for i, p := range claimed {
+		claimed[i].Evidence, claimed[i].Candidates = byID[p.ID].Evidence, byID[p.ID].Candidates
+	}
+	return claimed, err
+}
+
+func (w *Writer) DeferSelection(ctx context.Context, item PendingItem, next time.Time) error {
+	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET next_attempt_at=$3,updated_at=now()
+ WHERE id=$1 AND updated_at=$2 AND status IN ('waiting_model','waiting_route')`, item.ID, item.UpdatedAt, next)
+	return err
+}
+
+func (w *Writer) modelKindItems(ctx context.Context, conversation string, now time.Time, n int, targets []string, kind, releaseID string, prepared []PendingItem) ([]PendingItem, error) {
 	// 按同一发行或艺人分组。只有自查和联网需要艺人投影。
 	prefix := "WITH visible AS (" + catalog.VisibleReleaseIDsSQL + ")"
 	group, albums := "p.kind", "0"
@@ -94,22 +122,44 @@ func (w *Writer) ClaimModelKind(ctx context.Context, conversation string, now ti
 			albums = "COALESCE((SELECT n FROM album_counts WHERE artist=" + artist + "),0)"
 		}
 	}
-	return pendingRows(w.db.QueryContext(ctx, prefix+`, eligible AS (
- SELECT p.id,p.target_id,p.created_at,`+group+` AS pack,`+albums+` AS albums,
- CASE WHEN $5='' THEN 0 ELSE `+QueueRankSQL+` END AS priority`+modelQueueFromSQL+`
- AND p.target_type=ANY($4::text[]) AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$2)
- AND ($5='' OR `+modelKindSQL+`=$5 OR ($5='unavailable_web' AND p.route='web'))
+	query := prefix + `, eligible AS (
+ SELECT p.id,p.target_id,p.created_at,` + group + ` AS pack,` + albums + ` AS albums,
+ CASE WHEN $4='' THEN 0 ELSE ` + QueueRankSQL + ` END AS priority` + modelQueueFromSQL + `
+ AND p.target_type=ANY($3::text[]) AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1)
+ AND ($4='' OR ` + modelKindSQL + `=$4 OR ($4='unavailable_web' AND p.route='web'))
  ), seed AS (
- SELECT pack FROM eligible WHERE $6='' OR target_id=NULLIF($6,'')::uuid
+ SELECT pack FROM eligible WHERE $5='' OR target_id=NULLIF($5,'')::uuid
  ORDER BY albums DESC,priority,created_at,id LIMIT 1
  ), picked AS (
  SELECT p.id,e.priority,e.albums FROM eligible e JOIN curation_pending_items p ON p.id=e.id
- WHERE ($5='' OR e.pack=(SELECT pack FROM seed)) AND p.status IN ('waiting_model','waiting_route')
- ORDER BY (e.target_id=NULLIF($6,'')::uuid) DESC NULLS LAST,e.albums DESC,e.priority,e.created_at,e.id LIMIT $3 FOR UPDATE OF p SKIP LOCKED
- ), claimed AS (UPDATE curation_pending_items SET status='in_progress',conversation_id=$1,claimed_at=$2,updated_at=now(),next_attempt_at=NULL
- WHERE id IN (SELECT id FROM picked) RETURNING *)
- SELECT `+pendingColumns+` FROM (SELECT c.*,p.priority,p.albums FROM claimed c JOIN picked p ON p.id=c.id) ordered
- ORDER BY albums DESC,priority,created_at,id`, conversation, now, n, targets, kind, releaseID))
+ WHERE ($4='' OR e.pack=(SELECT pack FROM seed)) AND p.status IN ('waiting_model','waiting_route')
+`
+	args := []any{now, n, targets, kind, releaseID}
+	if conversation != "" {
+		args = append(args, conversation)
+	}
+	if len(prepared) > 0 {
+		var ids []string
+		var versions []time.Time
+		for _, p := range prepared {
+			ids = append(ids, p.ID)
+			versions = append(versions, p.UpdatedAt)
+		}
+		query += ` AND (p.id,p.updated_at) IN (SELECT * FROM unnest($7::uuid[],$8::timestamptz[]))`
+		args = append(args, ids, versions)
+	}
+	query += ` ORDER BY (e.target_id=NULLIF($5,'')::uuid) DESC NULLS LAST,e.albums DESC,e.priority,e.created_at,e.id LIMIT $2`
+	rows := "curation_pending_items"
+	if conversation != "" {
+		query += ` FOR UPDATE OF p SKIP LOCKED
+ ), claimed AS (UPDATE curation_pending_items SET status='in_progress',conversation_id=$6,claimed_at=$1,updated_at=now(),next_attempt_at=NULL
+ WHERE id IN (SELECT id FROM picked) RETURNING *)`
+		rows = "claimed"
+	} else {
+		query += ")"
+	}
+	return pendingRows(w.db.QueryContext(ctx, query+` SELECT `+pendingColumns+` FROM (SELECT c.*,p.priority,p.albums FROM `+rows+` c JOIN picked p ON p.id=c.id) ordered
+ ORDER BY albums DESC,priority,created_at,id`, args...))
 }
 
 func (w *Writer) ClaimedItems(ctx context.Context, conversation string) ([]PendingItem, error) {

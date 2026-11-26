@@ -1,0 +1,204 @@
+{
+  "during_backoff": {
+    "typos": [
+      {
+        "items": [
+          {
+            "kind": "verify_name",
+            "after": "Ambient",
+            "field": "title",
+            "route": null,
+            "before": "Ambinet",
+            "status": "waiting_model",
+            "candidates": 0,
+            "resolution": null
+          },
+          {
+            "kind": "release_match",
+            "after": null,
+            "field": null,
+            "route": "select",
+            "before": null,
+            "status": "waiting_model",
+            "candidates": 11,
+            "resolution": null
+          }
+        ],
+        "match_rule": null,
+        "patrol_issues": [
+          {
+            "id": "c939ec0e89c410fce1a9cbf698ce1ead0d16b5bc31c5e2e14aa0e3c7a7a91f59",
+            "kind": "typo",
+            "suggested": "Ambient"
+          }
+        ],
+        "program_state": "uncertain",
+        "scanned_title": "Ambinet",
+        "effective_title": "Ambinet",
+        "patrol_search_title": "Ambient"
+      },
+      {
+        "items": [
+          {
+            "kind": "verify_name",
+            "after": "菲主打",
+            "field": "title",
+            "route": null,
+            "before": "菲主答",
+            "status": "waiting_model",
+            "candidates": 0,
+            "resolution": null
+          },
+          {
+            "kind": "verify_name",
+            "after": "菲主打",
+            "field": "title",
+            "route": null,
+            "before": "菲主答",
+            "status": "waiting_model",
+            "candidates": 0,
+            "resolution": null
+          }
+        ],
+        "match_rule": "structure",
+        "patrol_issues": [
+          {
+            "id": "0f6f19e42d8b4aedc72894ef4da4240c866d1504eb2931f4cb83babb3dc0afb7",
+            "kind": "typo",
+            "suggested": "菲主打"
+          }
+        ],
+        "program_state": "matched",
+        "scanned_title": "菲主答",
+        "effective_title": "菲主答",
+        "patrol_search_title": "菲主打"
+      }
+    ],
+    "untagged": [
+      {
+        "route": "lookup",
+        "title": "Aphex Twin - …I Care Because You Do",
+        "evidence_title": "Aphex Twin - …I Care Because You Do",
+        "evidence_artist": "13",
+        "title_authenticity": "inferred",
+        "artist_authenticity": "inferred"
+      },
+      {
+        "route": "web",
+        "title": "Tori Amos - Boys for Pele",
+        "evidence_title": "Tori Amos - Boys for Pele",
+        "evidence_artist": "06",
+        "title_authenticity": "inferred",
+        "artist_authenticity": "inferred"
+      }
+    ],
+    "observed_at": "2026-11-26T00:59:08.853497+00:00",
+    "local_cleanup_tasks": 0
+  },
+  "last_observation": {
+    "typos": [
+      {
+        "items": [
+          {
+            "kind": "verify_name",
+            "after": "Ambient",
+            "field": "title",
+            "route": null,
+            "before": "Ambinet",
+            "status": "resolved",
+            "candidates": 0,
+            "resolution": "stale"
+          },
+          {
+            "kind": "release_match",
+            "after": null,
+            "field": null,
+            "route": "select",
+            "before": null,
+            "status": "resolved",
+            "candidates": 11,
+            "resolution": "model_matched"
+          },
+          {
+            "kind": "verify_name",
+            "after": "Ambient",
+            "field": "title",
+            "route": null,
+            "before": "Ambinet",
+            "status": "resolved",
+            "candidates": 0,
+            "resolution": "stale"
+          }
+        ],
+        "match_rule": "album_structure",
+        "patrol_issues": [
+          {
+            "id": "c939ec0e89c410fce1a9cbf698ce1ead0d16b5bc31c5e2e14aa0e3c7a7a91f59",
+            "kind": "typo",
+            "suggested": "Ambient"
+          }
+        ],
+        "program_state": "matched",
+        "scanned_title": "Ambinet",
+        "effective_title": "Ambinet",
+        "patrol_search_title": "Ambient"
+      },
+      {
+        "items": [
+          {
+            "kind": "verify_name",
+            "after": "菲主打",
+            "field": "title",
+            "route": null,
+            "before": "菲主答",
+            "status": "resolved",
+            "candidates": 0,
+            "resolution": "stale"
+          },
+          {
+            "kind": "verify_name",
+            "after": "菲主打",
+            "field": "title",
+            "route": null,
+            "before": "菲主答",
+            "status": "resolved",
+            "candidates": 0,
+            "resolution": "model_verified"
+          }
+        ],
+        "match_rule": "structure",
+        "patrol_issues": [
+          {
+            "id": "0f6f19e42d8b4aedc72894ef4da4240c866d1504eb2931f4cb83babb3dc0afb7",
+            "kind": "typo",
+            "suggested": "菲主打"
+          }
+        ],
+        "program_state": "matched",
+        "scanned_title": "菲主答",
+        "effective_title": "菲主打",
+        "patrol_search_title": "菲主打"
+      }
+    ],
+    "untagged": [
+      {
+        "route": "lookup",
+        "title": "Aphex Twin - …I Care Because You Do",
+        "evidence_title": "Aphex Twin - …I Care Because You Do",
+        "evidence_artist": "13",
+        "title_authenticity": "inferred",
+        "artist_authenticity": "inferred"
+      },
+      {
+        "route": "web",
+        "title": "Tori Amos - Boys for Pele",
+        "evidence_title": "Tori Amos - Boys for Pele",
+        "evidence_artist": "06",
+        "title_authenticity": "inferred",
+        "artist_authenticity": "inferred"
+      }
+    ],
+    "observed_at": "2026-11-26T01:07:04.017612+00:00",
+    "local_cleanup_tasks": 0
+  }
+}

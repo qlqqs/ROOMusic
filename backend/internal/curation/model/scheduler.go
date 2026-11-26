@@ -13,6 +13,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/operations"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
 var ErrStopped = errors.New("后台整理条件已变更")
@@ -158,11 +159,21 @@ func (s *Scheduler) poll(ctx context.Context) error {
 		if err != nil || kind == "" {
 			return err
 		}
+		if kind == SelectCandidate {
+			items, err = s.prepareSelection(ctx, now)
+			if err != nil || len(items) == 0 {
+				return err
+			}
+		}
 		conversation, err = s.launcher.CreateConversation(ctx, actor, "自动整理 "+now.Format("01-02 15:04"), progress.Model)
 		if err != nil {
 			return err
 		}
-		items, err = s.writer.ClaimModelKind(ctx, conversation, now, s.options.BatchSize, []string{"release", "artist"}, string(kind), releaseID)
+		if kind == SelectCandidate {
+			items, err = s.writer.ClaimPreparedSelection(ctx, conversation, now, items)
+		} else {
+			items, err = s.writer.ClaimModelKind(ctx, conversation, now, s.options.BatchSize, []string{"release", "artist"}, string(kind), releaseID)
+		}
 		if err != nil || len(items) == 0 {
 			return errors.Join(err, s.launcher.DeleteConversation(ctx, actor, conversation))
 		}
@@ -178,10 +189,6 @@ func (s *Scheduler) poll(ctx context.Context) error {
 		return s.release(ctx, conversation, false, nil)
 	}
 	if plan == "" && kind == SelectCandidate {
-		matcher := program.NewModelMatcher(s.db, s.writer, s.sources)
-		if err := matcher.PrepareSelection(ctx, items); err != nil {
-			return errors.Join(err, s.release(ctx, conversation, false, nil))
-		}
 		ready := items[:0]
 		for _, p := range items {
 			if string(p.Candidates) == "[]" {
@@ -250,6 +257,32 @@ func (s *Scheduler) poll(ctx context.Context) error {
 		items = rest
 	}
 	return nil
+}
+
+func (s *Scheduler) prepareSelection(ctx context.Context, now time.Time) ([]curation.PendingItem, error) {
+	items, err := s.writer.SelectionItems(ctx, now, s.options.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	if s.options.Lookup != nil {
+		ctx = s.options.Lookup.LookupTierContext(ctx)
+	}
+	matcher := program.NewModelMatcher(s.db, s.writer, s.sources)
+	for i := range items {
+		if err := matcher.PrepareSelection(ctx, items[i:i+1]); err != nil {
+			if !curation.IsSourceUnavailable(err) {
+				return nil, err
+			}
+			// 队列来源给出恢复时刻，普通后台读取失败会缓存十分钟。
+			next := s.options.Now().Add(10 * time.Minute)
+			var pause *sources.QueuePause
+			if errors.As(err, &pause) {
+				next = pause.RetryAt
+			}
+			return nil, s.writer.DeferSelection(ctx, items[i], next)
+		}
+	}
+	return items, nil
 }
 
 func (s *Scheduler) checkRunConditions(ctx context.Context, actor string, items []curation.PendingItem) error {

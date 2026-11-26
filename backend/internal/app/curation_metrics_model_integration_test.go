@@ -46,6 +46,9 @@ type metricsModel struct {
 	lowNames    map[string]bool
 	localReply  func(metricsPending) curation.LocalInput
 	rejectMerge bool
+
+	// 真实曲库没有标注全部艺人，缺少标注时不作身份结论。
+	manifestOracle bool
 }
 
 func newMetricsModel(t *testing.T) *metricsModel {
@@ -402,6 +405,10 @@ func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (me
 			id = item.ArtistID
 		}
 		target, ok := m.targets[id]
+		if !ok && m.manifestOracle && item.ArtistID != "" {
+			target = metricsModelTarget{SampleID: "未标注艺人"}
+			m.targets[id], ok = target, true
+		}
 		if !ok {
 			return rep, fmt.Errorf("待定项 %s 本地目标 %s 没有样本标注", item.ID, id)
 		}
@@ -459,7 +466,7 @@ func (m *metricsModel) patrolTool(item metricsPending) (metricsToolCall, error) 
 			if canonical == "" {
 				canonical = n.Name + " | "
 			}
-			if m.lowNames[n.Name] {
+			if m.lowNames[n.Name] || (m.manifestOracle && m.canonical[n.Name] == "") {
 				confidence = "low"
 			}
 			reply.Results = append(reply.Results, curation.PatrolResult{ID: n.ID, Canonical: canonical, Confidence: confidence})
@@ -523,9 +530,13 @@ func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, 
 					return metricsToolCall{"get_music_metadata", map[string]any{"entity": entity, "mbid": candidate.MBID, "include": include}}
 				}
 			}
+			// 受控 oracle 持有清单中的编号；搜索页未列出时仍按该编号向真实源求证。
+			if m.manifestOracle && uuid.Valid(expected) {
+				return metricsToolCall{"get_music_metadata", map[string]any{"entity": entity, "mbid": expected, "include": []string{"artist-credits", "recordings"}}}
+			}
 		case "get_music_metadata":
 			var found struct{ Metadata struct{ MBID string } }
-			if json.Unmarshal([]byte(result), &found) == nil && uuid.Valid(found.Metadata.MBID) {
+			if json.Unmarshal([]byte(result), &found) == nil && uuid.Valid(found.Metadata.MBID) && (!m.manifestOracle || found.Metadata.MBID == expected) {
 				return match(found.Metadata.MBID)
 			}
 		case "resolve_release_match":
@@ -571,6 +582,9 @@ func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, 
 			}
 		default:
 			return abandon
+		}
+		if m.manifestOracle && (item.Kind == "verify_artist_credit" || item.Kind == "verify_artist_merge") {
+			verdict = "uncertain"
 		}
 		return metricsToolCall{"submit_verification", map[string]string{"item_id": item.ID, "verdict": verdict, "reason": "按照合成样本的标注核对。"}}
 	}

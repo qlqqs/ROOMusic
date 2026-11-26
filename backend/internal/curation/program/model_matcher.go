@@ -181,6 +181,10 @@ func (m *ModelMatcher) Plan(ctx context.Context, item curation.PendingItem, exte
 	if err != nil {
 		return MatchPlan{}, err
 	}
+	match, err = m.checkModelEditions(ctx, e, item, match)
+	if err != nil {
+		return MatchPlan{}, err
+	}
 	p, err := planMatch(ctx, m.db, e, match)
 	if err != nil {
 		return MatchPlan{}, err
@@ -199,9 +203,6 @@ func (m *ModelMatcher) Plan(ctx context.Context, item curation.PendingItem, exte
 		trackLinks[t.ID] = t.ExternalID
 	}
 	for _, pair := range match.Pairs {
-		if pair.RecordingID == "" {
-			return MatchPlan{}, matchConflict("position_conflict")
-		}
 		existing := trackLinks[pair.TrackID]
 		if conflicts := linkConflicts(e, "track", pair.TrackID, existing, pair.RecordingID); len(conflicts) > 0 {
 			return MatchPlan{}, matchConflict(conflicts[0])
@@ -210,7 +211,11 @@ func (m *ModelMatcher) Plan(ctx context.Context, item curation.PendingItem, exte
 			linked++
 		}
 	}
-	if p.group.result == "conflict" && match.Release != nil && e.GroupExternalID != "" && e.GroupExternalID != match.Release.Group.ID {
+	groupID := match.GroupID
+	if match.Release != nil {
+		groupID = match.Release.Group.ID
+	}
+	if p.group.result == "conflict" && groupID != "" && e.GroupExternalID != "" && e.GroupExternalID != groupID {
 		return MatchPlan{}, matchConflict("existing_link")
 	}
 	if p.group.result == "suppressed" {
@@ -219,7 +224,14 @@ func (m *ModelMatcher) Plan(ctx context.Context, item curation.PendingItem, exte
 	if !linkNeeded(e, p.links.Links) {
 		return MatchPlan{}, operations.Conflict("nothing_to_apply", "已有相同的外部对应")
 	}
-	plan.Changes = []MatchChange{{"external_link", optionalText(before), externalID}, {"track_links", linked, len(match.Pairs)}}
+	if match.Level == "release_group" {
+		plan.Changes = []MatchChange{{"release_group_match", optionalText(e.ReleaseGroupMatchID), groupID}}
+		for _, track := range p.tracks {
+			plan.Changes = append(plan.Changes, MatchChange{"track_title/" + track.TrackID, track.ExpectedScan["title"], track.Fields["title"].Value})
+		}
+	} else {
+		plan.Changes = []MatchChange{{"external_link", optionalText(before), externalID}, {"track_links", linked, len(match.Pairs)}}
+	}
 	for _, field := range catalog.CorrectableFields {
 		if intent, ok := p.fields[field.Name]; ok {
 			var old any
@@ -233,7 +245,7 @@ func (m *ModelMatcher) Plan(ctx context.Context, item curation.PendingItem, exte
 		}
 	}
 	if p.group.link {
-		plan.Changes = append(plan.Changes, MatchChange{"group_external_link", nil, match.Release.Group.ID})
+		plan.Changes = append(plan.Changes, MatchChange{"group_external_link", nil, groupID})
 	}
 	if p.group.joinID != "" {
 		plan.Changes = append(plan.Changes, MatchChange{"group", e.GroupID, p.group.joinID})
@@ -294,7 +306,7 @@ func (m *ModelMatcher) readMatch(ctx context.Context, kind string, e catalog.Cur
 		var c comparison
 		c.compareRelease(e, "model", release)
 		c.compareTracks(e, "model", release)
-		if slices.Contains(c.conflicts, "position_conflict") {
+		if slices.Contains(c.conflicts, "position_conflict") || slices.ContainsFunc(c.pairs, func(p TrackPair) bool { return p.RecordingID == "" }) {
 			return r, matchConflict("position_conflict")
 		}
 		if !c.countEqual || len(c.pairs) == 0 {
@@ -350,6 +362,9 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 			}
 			expected := p.evidence
 			expected.ExternalID, expected.ExternalGroupID = e.ExternalID, e.ExternalGroupID
+			if plan.match.Level == "release_group" {
+				expected.ReleaseGroupMatchID = e.ReleaseGroupMatchID
+			}
 			if p.group.link {
 				expected.GroupExternalID = e.GroupExternalID
 			}
@@ -445,6 +460,8 @@ func allMatchLinks(e catalog.CurationEvidence, links []curation.LinkIntent) bool
 		switch l.ObjectType {
 		case "release":
 			current = e.ExternalID
+		case "release_group_match":
+			current = e.ReleaseGroupMatchID
 		case "release_group":
 			current = e.GroupExternalID
 		case "track":
@@ -466,6 +483,7 @@ type confirmedMatch struct {
 	GroupResult, JoinID                                                      string
 	LinkGroup                                                                bool
 	GroupID, GroupExternalID, GroupChangeSource, ExternalID, ExternalGroupID string
+	ReleaseGroupMatchID                                                      string
 	TrackExternalIDs                                                         []string
 	Automatic                                                                map[string]bool
 }
@@ -475,7 +493,7 @@ func (p MatchPlan) ConfirmationSnapshot() ([]byte, error) {
 	s := confirmedMatch{Match: p.match, Links: p.write.links.Links, External: p.write.links.External,
 		GroupResult: p.write.group.result, JoinID: p.write.group.joinID, LinkGroup: p.write.group.link,
 		GroupID: e.GroupID, GroupExternalID: e.GroupExternalID, GroupChangeSource: e.GroupChangeSource,
-		ExternalID: e.ExternalID, ExternalGroupID: e.ExternalGroupID, Automatic: e.Automatic}
+		ExternalID: e.ExternalID, ExternalGroupID: e.ExternalGroupID, ReleaseGroupMatchID: e.ReleaseGroupMatchID, Automatic: e.Automatic}
 	for _, track := range e.Tracks {
 		s.TrackExternalIDs = append(s.TrackExternalIDs, track.ExternalID)
 	}
@@ -500,6 +518,7 @@ func (m *ModelMatcher) ResumeConfirmation(ctx context.Context, item curation.Pen
 	}
 	before := fresh
 	before.GroupID, before.GroupExternalID, before.GroupChangeSource = s.GroupID, s.GroupExternalID, s.GroupChangeSource
+	before.ReleaseGroupMatchID = s.ReleaseGroupMatchID
 	before.ExternalID, before.ExternalGroupID, before.Automatic = s.ExternalID, s.ExternalGroupID, s.Automatic
 	before.Tracks = slices.Clone(fresh.Tracks)
 	for i, id := range s.TrackExternalIDs {
@@ -522,6 +541,10 @@ func (m *ModelMatcher) ResumeConfirmation(ctx context.Context, item curation.Pen
 		links: curation.LinkRequest{ReleaseID: item.TargetID, ExternalSource: "musicbrainz", Method: s.Match.Method, Confidence: "certain", External: s.External, Links: s.Links}}
 	if s.Match.Release != nil {
 		write.fields = missingFields(before, *s.Match.Release)
+	}
+	if s.Match.RepresentativeID != "" {
+		write.tracks = planTrackFields(before, s.Match)
+		write.trackTitleSource = s.Match.RepresentativeID
 	}
 	var verification MatchVerification
 	if s.Match.Verification != nil {

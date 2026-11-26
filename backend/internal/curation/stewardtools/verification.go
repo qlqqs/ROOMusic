@@ -70,7 +70,14 @@ func (a adapter) prepareVerification(ctx context.Context, c tool.Caller, raw jso
 	if err != nil {
 		return v, toolError(err)
 	}
-	proof, err := json.Marshal(v.plan)
+	var facts any = v.plan
+	if v.plan.NameMatch != nil {
+		facts = struct {
+			Source string                    `json:"source"`
+			Data   curation.VerificationPlan `json:"data"`
+		}{"backend_verified_musicbrainz", v.plan}
+	}
+	proof, err := json.Marshal(facts)
 	if err != nil {
 		return v, err
 	}
@@ -92,8 +99,7 @@ func (a adapter) submitVerification(ctx context.Context, c tool.Caller, raw json
 	}
 	ctx = bindItem(ctx, v.run, c, v.item)
 	if v.stale {
-		err = a.writer.FinishStaleVerification(ctx, v.item)
-		return json.RawMessage(`{"status":"stale"}`), toolError(err)
+		return a.retryStaleVerification(ctx, v.item)
 	}
 	if v.route {
 		if v.run.Abandon == nil {
@@ -127,8 +133,23 @@ func (a adapter) submitVerification(ctx context.Context, c tool.Caller, raw json
 		return nil, toolError(err)
 	}
 	id, err := a.writer.ApplyVerification(ctx, v.item, v.plan, batch, c.IdempotencyKey, v.run.Model)
+	var failure *operations.Failure
+	if errors.As(err, &failure) && failure.Code == "item_stale" {
+		return a.retryStaleVerification(ctx, v.item)
+	}
 	if err != nil {
 		return nil, toolError(err)
 	}
 	return json.Marshal(map[string]string{"operation_id": id})
+}
+
+func (a adapter) retryStaleVerification(ctx context.Context, item curation.PendingItem) (json.RawMessage, error) {
+	requeued, err := a.matcher.RetryStaleVerification(ctx, item)
+	if err != nil {
+		return nil, toolError(err)
+	}
+	if requeued {
+		return json.RawMessage(`{"status":"requeued"}`), nil
+	}
+	return json.RawMessage(`{"status":"stale"}`), nil
 }

@@ -1,0 +1,228 @@
+{
+  "during_selection": {
+    "releases": [
+      {
+        "items": [
+          {
+            "kind": "verify_name",
+            "route": null,
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "stale"
+          },
+          {
+            "kind": "verify_name",
+            "route": null,
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "model_verified"
+          }
+        ],
+        "directory": "02 - 王菲 - 菲主打",
+        "match_state": "matched",
+        "scanned_title": "菲主答",
+        "scanned_artist": "王菲",
+        "effective_title": "菲主打",
+        "effective_artist": "王菲"
+      },
+      {
+        "items": [
+          {
+            "kind": "local_cleanup",
+            "route": null,
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "local_cleanup"
+          },
+          {
+            "kind": "release_match",
+            "route": "select",
+            "status": "waiting_model",
+            "attempts": 0,
+            "retry_at": "2026-11-26T01:22:09.703914+00:00",
+            "resolution": null
+          }
+        ],
+        "directory": "06 - Tori Amos - Boys for Pele",
+        "match_state": "uncertain",
+        "scanned_title": "Tori Amos - Boys for Pele",
+        "scanned_artist": "06",
+        "effective_title": "Boys for Pele",
+        "effective_artist": "Tori Amos"
+      },
+      {
+        "items": [
+          {
+            "kind": "verify_name",
+            "route": "web",
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "suggestion_recorded"
+          },
+          {
+            "kind": "release_match",
+            "route": "select",
+            "status": "waiting_model",
+            "attempts": 0,
+            "retry_at": "2026-11-26T01:22:09.703914+00:00",
+            "resolution": null
+          }
+        ],
+        "directory": "11 - Moby - Ambient",
+        "match_state": "uncertain",
+        "scanned_title": "Ambinet",
+        "scanned_artist": "Moby",
+        "effective_title": "Ambinet",
+        "effective_artist": "Moby"
+      },
+      {
+        "items": [
+          {
+            "kind": "local_cleanup",
+            "route": null,
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "local_cleanup"
+          },
+          {
+            "kind": "release_match",
+            "route": "select",
+            "status": "waiting_model",
+            "attempts": 0,
+            "retry_at": "2026-11-26T01:22:09.703914+00:00",
+            "resolution": null
+          }
+        ],
+        "directory": "13 - Aphex Twin - …I Care Because You Do",
+        "match_state": "uncertain",
+        "scanned_title": "Aphex Twin - …I Care Because You Do",
+        "scanned_artist": "13",
+        "effective_title": "…I Care Because You Do",
+        "effective_artist": "Aphex Twin"
+      }
+    ],
+    "observed_at": "2026-11-26T01:22:12.241597+00:00"
+  },
+  "last_observation": {
+    "releases": [
+      {
+        "items": [
+          {
+            "kind": "verify_name",
+            "route": null,
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "stale"
+          },
+          {
+            "kind": "verify_name",
+            "route": null,
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "model_verified"
+          }
+        ],
+        "directory": "02 - 王菲 - 菲主打",
+        "match_state": "matched",
+        "scanned_title": "菲主答",
+        "scanned_artist": "王菲",
+        "effective_title": "菲主打",
+        "effective_artist": "王菲"
+      },
+      {
+        "items": [
+          {
+            "kind": "local_cleanup",
+            "route": null,
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "local_cleanup"
+          },
+          {
+            "kind": "release_match",
+            "route": "select",
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "model_matched"
+          }
+        ],
+        "directory": "06 - Tori Amos - Boys for Pele",
+        "match_state": "matched",
+        "scanned_title": "Tori Amos - Boys for Pele",
+        "scanned_artist": "06",
+        "effective_title": "Boys for Pele",
+        "effective_artist": "Tori Amos"
+      },
+      {
+        "items": [
+          {
+            "kind": "verify_name",
+            "route": "web",
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "suggestion_recorded"
+          },
+          {
+            "kind": "release_match",
+            "route": "select",
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "model_matched"
+          },
+          {
+            "kind": "verify_name",
+            "route": null,
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "stale"
+          }
+        ],
+        "directory": "11 - Moby - Ambient",
+        "match_state": "matched",
+        "scanned_title": "Ambinet",
+        "scanned_artist": "Moby",
+        "effective_title": "Ambinet",
+        "effective_artist": "Moby"
+      },
+      {
+        "items": [
+          {
+            "kind": "local_cleanup",
+            "route": null,
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "local_cleanup"
+          },
+          {
+            "kind": "release_match",
+            "route": "select",
+            "status": "resolved",
+            "attempts": 0,
+            "retry_at": null,
+            "resolution": "model_matched"
+          }
+        ],
+        "directory": "13 - Aphex Twin - …I Care Because You Do",
+        "match_state": "matched",
+        "scanned_title": "Aphex Twin - …I Care Because You Do",
+        "scanned_artist": "13",
+        "effective_title": "…I Care Because You Do",
+        "effective_artist": "Aphex Twin"
+      }
+    ],
+    "observed_at": "2026-11-26T01:22:55.385506+00:00"
+  }
+}

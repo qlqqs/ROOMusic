@@ -35,6 +35,25 @@ func (s *Sources) ReleaseFinder(sourceID string) (sources.ReleaseFinder, bool) {
 	return base, true
 }
 
+// ReleaseGroupEditions 与发行详情经过同一后台来源闸门。
+func (s *Sources) ReleaseGroupEditions(ctx context.Context, sourceID, groupID string) ([]string, bool, error) {
+	r, ok := s.lookup(sourceID)
+	if !ok {
+		return nil, false, sources.ErrUnavailable
+	}
+	finder, ok := r.Releases.(interface {
+		ReleaseGroupEditions(context.Context, string) ([]string, bool, error)
+	})
+	if !ok {
+		return nil, false, sources.ErrUnavailable
+	}
+	ctx, err := (guardedFinders{registration: r, gate: s}).background(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	return finder.ReleaseGroupEditions(ctx, groupID)
+}
+
 type guardedReleasePages struct {
 	guardedRelease
 	pages ReleasePageFinder

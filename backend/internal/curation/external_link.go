@@ -83,8 +83,17 @@ func (r LinkRequest) normalizedLinks() ([]LinkIntent, error) {
 		if (l.ObjectType != "release" && l.ObjectType != "track" && l.ObjectType != "release_group_match" && l.ObjectType != "release_group" && l.ObjectType != "artist") || !uuid.Valid(l.ObjectID) || !validExternalID(l.ExternalID) || (l.ExternalGroupID != "" && (l.ObjectType != "release" || !validExternalID(l.ExternalGroupID))) || seen[l.key()] {
 			return nil, operations.Invalid("invalid_input", "外部对应的对象或编号无效")
 		}
-		if (l.ObjectType == "artist" || l.ObjectType == "release_group_match") && !(l.ObjectType == "artist" && r.verification != nil && r.verification.item.Kind == "verify_artist_credit") && (r.Source.Kind != "source" || r.Source.Provider != "musicbrainz") {
-			return nil, operations.Invalid("invalid_input", "艺人与发行组级对应只接受 MusicBrainz 程序来源")
+		if r.Source.Kind != "source" || r.Source.Provider != "musicbrainz" {
+			switch l.ObjectType {
+			case "artist":
+				if r.verification == nil || r.verification.item.Kind != "verify_artist_credit" {
+					return nil, operations.Invalid("invalid_input", "艺人对应缺少 MusicBrainz 署名依据")
+				}
+			case "release_group_match":
+				if r.Source.Kind != "model" || r.ExternalSource != "musicbrainz" || r.Method != "album_structure" || r.CheckEvidence == nil {
+					return nil, operations.Invalid("invalid_input", "发行组级对应缺少 MusicBrainz 结构核对")
+				}
+			}
 		}
 		seen[l.key()] = true
 	}

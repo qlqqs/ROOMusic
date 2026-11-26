@@ -1,0 +1,314 @@
+{
+  "model_poll_ms": 250,
+  "try_later_errors": 1876,
+  "first_try_later": "2026-11-26T00:55:52.031523696Z",
+  "last_try_later": "2026-11-26T01:05:51.988434004Z",
+  "database_snapshots": [
+    {
+      "observed_at": "2026-11-26T00:56:57.387319+00:00",
+      "model_counts": [
+        {
+          "kind": "artist_identity",
+          "count": 10,
+          "route": null,
+          "status": "waiting_model"
+        },
+        {
+          "kind": "name_patrol",
+          "count": 61,
+          "route": null,
+          "status": "resolved"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "select",
+          "status": "waiting_model"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "lookup",
+          "status": "waiting_route"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "web",
+          "status": "waiting_route"
+        },
+        {
+          "kind": "verify_name",
+          "count": 2,
+          "route": null,
+          "status": "resolved"
+        },
+        {
+          "kind": "verify_name",
+          "count": 6,
+          "route": null,
+          "status": "waiting_model"
+        }
+      ],
+      "select_items": [
+        {
+          "kind": "release_match",
+          "route": "select",
+          "title": "Ambinet",
+          "status": "waiting_model",
+          "attempts": 0,
+          "candidates": 11,
+          "next_attempt_at": null
+        }
+      ],
+      "conversations": 261,
+      "empty_conversations": 198
+    },
+    {
+      "observed_at": "2026-11-26T00:57:59.354745+00:00",
+      "model_counts": [
+        {
+          "kind": "artist_identity",
+          "count": 10,
+          "route": null,
+          "status": "waiting_model"
+        },
+        {
+          "kind": "name_patrol",
+          "count": 61,
+          "route": null,
+          "status": "resolved"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "select",
+          "status": "waiting_model"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "lookup",
+          "status": "waiting_route"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "web",
+          "status": "waiting_route"
+        },
+        {
+          "kind": "verify_name",
+          "count": 2,
+          "route": null,
+          "status": "resolved"
+        },
+        {
+          "kind": "verify_name",
+          "count": 6,
+          "route": null,
+          "status": "waiting_model"
+        }
+      ],
+      "select_items": [
+        {
+          "kind": "release_match",
+          "route": "select",
+          "title": "Ambinet",
+          "status": "waiting_model",
+          "attempts": 0,
+          "candidates": 11,
+          "next_attempt_at": null
+        }
+      ],
+      "conversations": 459,
+      "empty_conversations": 396
+    },
+    {
+      "observed_at": "2026-11-26T01:06:38.535059+00:00",
+      "model_counts": [
+        {
+          "kind": "artist_identity",
+          "count": 10,
+          "route": null,
+          "status": "waiting_model"
+        },
+        {
+          "kind": "name_patrol",
+          "count": 61,
+          "route": null,
+          "status": "resolved"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "select",
+          "status": "in_progress"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "lookup",
+          "status": "waiting_route"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "web",
+          "status": "waiting_route"
+        },
+        {
+          "kind": "verify_name",
+          "count": 2,
+          "route": null,
+          "status": "resolved"
+        },
+        {
+          "kind": "verify_name",
+          "count": 6,
+          "route": null,
+          "status": "waiting_model"
+        }
+      ],
+      "select_items": [
+        {
+          "kind": "release_match",
+          "route": "select",
+          "title": "Ambinet",
+          "status": "in_progress",
+          "attempts": 0,
+          "candidates": 11,
+          "next_attempt_at": null
+        }
+      ],
+      "conversations": 1940,
+      "empty_conversations": 1877
+    },
+    {
+      "observed_at": "2026-11-26T01:06:43.648418+00:00",
+      "model_counts": [
+        {
+          "kind": "artist_identity",
+          "count": 1,
+          "route": null,
+          "status": "resolved"
+        },
+        {
+          "kind": "artist_identity",
+          "count": 9,
+          "route": null,
+          "status": "waiting_model"
+        },
+        {
+          "kind": "name_patrol",
+          "count": 61,
+          "route": null,
+          "status": "resolved"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "select",
+          "status": "resolved"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "lookup",
+          "status": "waiting_route"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "web",
+          "status": "waiting_route"
+        },
+        {
+          "kind": "verify_name",
+          "count": 8,
+          "route": null,
+          "status": "resolved"
+        },
+        {
+          "kind": "verify_name",
+          "count": 1,
+          "route": null,
+          "status": "waiting_model"
+        }
+      ],
+      "select_items": [
+        {
+          "kind": "release_match",
+          "route": "select",
+          "title": "Ambinet",
+          "status": "resolved",
+          "attempts": 0,
+          "candidates": 11,
+          "next_attempt_at": null
+        }
+      ],
+      "conversations": 1946,
+      "empty_conversations": 1876
+    },
+    {
+      "observed_at": "2026-11-26T01:07:04.073735+00:00",
+      "model_counts": [
+        {
+          "kind": "artist_identity",
+          "count": 11,
+          "route": null,
+          "status": "resolved"
+        },
+        {
+          "kind": "name_patrol",
+          "count": 63,
+          "route": null,
+          "status": "resolved"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "lookup",
+          "status": "resolved"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "select",
+          "status": "resolved"
+        },
+        {
+          "kind": "release_match",
+          "count": 1,
+          "route": "web",
+          "status": "resolved"
+        },
+        {
+          "kind": "verify_artist_credit",
+          "count": 2,
+          "route": null,
+          "status": "resolved"
+        },
+        {
+          "kind": "verify_name",
+          "count": 9,
+          "route": null,
+          "status": "resolved"
+        }
+      ],
+      "select_items": [
+        {
+          "kind": "release_match",
+          "route": "select",
+          "title": "Ambinet",
+          "status": "resolved",
+          "attempts": 0,
+          "candidates": 11,
+          "next_attempt_at": null
+        }
+      ],
+      "conversations": 1963,
+      "empty_conversations": 1876
+    }
+  ]
+}

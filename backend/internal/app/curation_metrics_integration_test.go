@@ -29,7 +29,12 @@ type metricEntry struct {
 }
 
 func TestPostgreSQLCurationMetrics(t *testing.T) {
-	samples := loadMetricSamples(t)
+	app, entries, endpoint := runMetricSamples(t, loadMetricSamples(t))
+	metricReport(t, app, entries, endpoint)
+}
+
+func runMetricSamples(t *testing.T, samples []metricSample) (*integrationTestApplication, []metricEntry, *metricsModel) {
+	t.Helper()
 	mock, err := upstreammock.New(upstreammock.Options{DataDir: writeMetricCatalog(t, samples)})
 	requireCurationOK(t, err)
 	upstream := httptest.NewServer(mock)
@@ -108,7 +113,7 @@ func TestPostgreSQLCurationMetrics(t *testing.T) {
 			t.Logf("已扫描并排空 %d/%d", i+1, len(samples))
 		}
 	}
-	metricReport(t, app, entries, endpoint)
+	return app, entries, endpoint
 }
 
 func scanAndConfirmCuration(t *testing.T, app *integrationTestApplication, admin *integrationTestUser) {

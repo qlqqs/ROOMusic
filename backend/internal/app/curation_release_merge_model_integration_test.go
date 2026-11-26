@@ -11,6 +11,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	curationtools "github.com/qlqq/roomusic/backend/internal/curation/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 )
 
 const releaseMergeProposalTool = "merge_releases"
@@ -73,7 +74,7 @@ func TestPostgreSQLCurationModelMergeReleases(t *testing.T) {
 			JOIN steward_reviews r ON r.id::text=o.origin->>'review_id'
 			WHERE o.id=$1 AND b.id=$2 AND b.tier='model' AND b.actor_id=$3 AND o.actor_id=$3 AND o.target_id=$4
 			AND o.operation_type='release_auto_merge' AND o.origin->>'source'='curation' AND o.origin->>'provider_kind'='model'
-			AND o.origin->>'provider'='test-main' AND o.origin->>'review_decision'='approved' AND r.policy_version=5`, op, batch, f.admin.id, f.a)
+			AND o.origin->>'provider'='test-main' AND o.origin->>'review_decision'='approved' AND r.policy_version=$5`, op, batch, f.admin.id, f.a, runtime.ReviewPolicyVersion)
 		b3RequireCount(t, f.application, 2, `SELECT count(*) FROM operations_release_targets WHERE operation_id=$1 AND release_id IN ($2,$3)`, op, f.a, f.b)
 		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions`)
 	})

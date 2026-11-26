@@ -1,0 +1,351 @@
+{
+  "observed_at": "2026-11-26T02:28:31.755507+00:00",
+  "samples": [
+    {
+      "id": "268fea44-0e8f-477b-b697-4b46071acb4b",
+      "n": "02",
+      "scanned": "菲主答",
+      "effective": "菲主打",
+      "program_status": "matched",
+      "release_links": [
+        {
+          "id": "732119e7-64bf-4110-932f-edc24f3f3adf",
+          "type": "release",
+          "method": "search"
+        }
+      ],
+      "recording_links": 14,
+      "auto_fields": {
+        "title": "菲主打",
+        "barcode": "731453690127",
+        "catalog_number": "CP-71035"
+      },
+      "items": [
+        {
+          "kind": "release_match",
+          "route": "lookup",
+          "status": "resolved",
+          "proposal": null,
+          "resolution": "patrol_requery",
+          "reason_codes": null
+        },
+        {
+          "kind": "verify_name",
+          "route": null,
+          "status": "resolved",
+          "proposal": {
+            "after": "菲主打",
+            "field": "title",
+            "before": "菲主答"
+          },
+          "resolution": "model_verified",
+          "reason_codes": null
+        },
+        {
+          "kind": "verify_name",
+          "route": "web",
+          "status": "resolved",
+          "proposal": {
+            "after": "菲主打",
+            "field": "title",
+            "before": "菲主答"
+          },
+          "resolution": "suggestion_recorded",
+          "reason_codes": [
+            "no_evidence"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "d8763c39-425a-4a1a-adad-3944c9338c2c",
+      "n": "06",
+      "scanned": "Tori Amos - Boys for Pele",
+      "effective": "Boys for Pele",
+      "program_status": "unlisted",
+      "release_links": null,
+      "recording_links": 0,
+      "auto_fields": {
+        "title": "Boys for Pele",
+        "album_artist": "Tori Amos"
+      },
+      "items": [
+        {
+          "kind": "local_cleanup",
+          "route": null,
+          "status": "resolved",
+          "proposal": null,
+          "resolution": "local_cleanup",
+          "reason_codes": null
+        },
+        {
+          "kind": "release_match",
+          "route": "web",
+          "status": "resolved",
+          "proposal": null,
+          "resolution": "patrol_requery",
+          "reason_codes": null
+        },
+        {
+          "kind": "release_match",
+          "route": "web",
+          "status": "resolved",
+          "proposal": null,
+          "resolution": "unlisted",
+          "reason_codes": null
+        },
+        {
+          "kind": "verify_artist_merge",
+          "route": "web",
+          "status": "resolved",
+          "proposal": null,
+          "resolution": "suggestion_recorded",
+          "reason_codes": [
+            "no_evidence"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b4f7542d-9d2d-4794-a51b-4e6761ce36a0",
+      "n": "11",
+      "scanned": "Ambinet",
+      "effective": "Ambinet",
+      "program_status": "matched",
+      "release_links": [
+        {
+          "id": "55dd9320-c408-34e0-9a86-5498a27ab359",
+          "type": "release_group_match",
+          "method": "album_structure"
+        }
+      ],
+      "recording_links": 0,
+      "auto_fields": null,
+      "items": [
+        {
+          "kind": "release_match",
+          "route": "lookup",
+          "status": "resolved",
+          "proposal": null,
+          "resolution": "patrol_requery",
+          "reason_codes": null
+        },
+        {
+          "kind": "verify_name",
+          "route": "web",
+          "status": "resolved",
+          "proposal": {
+            "after": "Ambient",
+            "field": "title",
+            "before": "Ambinet"
+          },
+          "resolution": "suggestion_recorded",
+          "reason_codes": [
+            "no_evidence"
+          ]
+        },
+        {
+          "kind": "release_match",
+          "route": "select",
+          "status": "resolved",
+          "proposal": null,
+          "resolution": "model_matched",
+          "reason_codes": null
+        }
+      ]
+    },
+    {
+      "id": "50ec172c-5b05-4967-8f51-11bf1fd856d6",
+      "n": "13",
+      "scanned": "Aphex Twin - …I Care Because You Do",
+      "effective": "…I Care Because You Do",
+      "program_status": "unlisted",
+      "release_links": null,
+      "recording_links": 0,
+      "auto_fields": {
+        "title": "…I Care Because You Do",
+        "album_artist": "Aphex Twin"
+      },
+      "items": [
+        {
+          "kind": "local_cleanup",
+          "route": null,
+          "status": "resolved",
+          "proposal": null,
+          "resolution": "local_cleanup",
+          "reason_codes": null
+        },
+        {
+          "kind": "release_match",
+          "route": "web",
+          "status": "resolved",
+          "proposal": null,
+          "resolution": "unlisted",
+          "reason_codes": null
+        }
+      ]
+    }
+  ],
+  "name_reviews": [
+    {
+      "n": "02",
+      "policy_version": 6,
+      "review_status": "completed",
+      "decision": "approved",
+      "verdict": "typo",
+      "operation_id": "f9717c52-fdb1-4679-bb6c-7d9bb9b35e38",
+      "proof": {
+        "within": 14,
+        "comparable": 14,
+        "release_id": "732119e7-64bf-4110-932f-edc24f3f3adf",
+        "link_method": "search",
+        "local_tracks": 14,
+        "release_title": "菲主打",
+        "external_tracks": 14
+      },
+      "name_match": null,
+      "proof_source": "backend_verified_musicbrainz"
+    }
+  ],
+  "tool_counts": {
+    "observed_at": "2026-11-26T02:28:31.852976+00:00",
+    "counts": [
+      {
+        "n": "02",
+        "kind": "verify_name",
+        "tool_name": "shelve_pending_item",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 1
+      },
+      {
+        "n": "02",
+        "kind": "verify_name",
+        "tool_name": "submit_verification",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 3
+      },
+      {
+        "n": "02",
+        "kind": "verify_name",
+        "tool_name": "web_search",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 4
+      },
+      {
+        "n": "06",
+        "kind": "release_match",
+        "tool_name": "fetch_page",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 4
+      },
+      {
+        "n": "06",
+        "kind": "release_match",
+        "tool_name": "get_music_metadata",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 4
+      },
+      {
+        "n": "06",
+        "kind": "release_match",
+        "tool_name": "shelve_pending_item",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 3
+      },
+      {
+        "n": "06",
+        "kind": "release_match",
+        "tool_name": "web_search",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 2
+      },
+      {
+        "n": "11",
+        "kind": "release_match",
+        "tool_name": "resolve_release_match",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 1
+      },
+      {
+        "n": "11",
+        "kind": "verify_name",
+        "tool_name": "shelve_pending_item",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 1
+      },
+      {
+        "n": "11",
+        "kind": "verify_name",
+        "tool_name": "submit_verification",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 2
+      },
+      {
+        "n": "11",
+        "kind": "verify_name",
+        "tool_name": "web_search",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 4
+      },
+      {
+        "n": "13",
+        "kind": "release_match",
+        "tool_name": "fetch_page",
+        "status": "failed",
+        "error_code": "fetch_failed",
+        "calls": 1
+      },
+      {
+        "n": "13",
+        "kind": "release_match",
+        "tool_name": "fetch_page",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 4
+      },
+      {
+        "n": "13",
+        "kind": "release_match",
+        "tool_name": "get_music_metadata",
+        "status": "failed",
+        "error_code": "source_unavailable",
+        "calls": 3
+      },
+      {
+        "n": "13",
+        "kind": "release_match",
+        "tool_name": "search_music_metadata",
+        "status": "failed",
+        "error_code": "source_unavailable",
+        "calls": 1
+      },
+      {
+        "n": "13",
+        "kind": "release_match",
+        "tool_name": "shelve_pending_item",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 3
+      },
+      {
+        "n": "13",
+        "kind": "release_match",
+        "tool_name": "web_search",
+        "status": "succeeded",
+        "error_code": null,
+        "calls": 2
+      }
+    ]
+  }
+}
