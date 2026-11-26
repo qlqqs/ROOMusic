@@ -1,1230 +1,377 @@
 # 自动整理合同
 
-## 1. 范围与触发
-
-M7 子任务 A（2026-11）给后台自动整理准备好写入、记录与撤销的地基：发行字段的**自动层**、来源与批次、按“这个值是否仍是这条操作写的”
-判断的撤销、“不再提出”标记与默认关闭的总开关。本任务**没有任何自动写入的调用方**（外部源、匹配与模型后台运行在后面的子任务），
-也没有界面；没打开开关的实例行为与之前相同。
-
-新增或修改以下内容时必须阅读并更新本文件：`release_auto_values`、`releases.auto_revision`、视图 `release_effective` 的三层取值、
-操作类型 `release_auto_correction`、`operations.batch_id` 与来源 `curation`、表 `curation_batches`、`curation_suppressions`、
-`curation_settings`、包 `backend/internal/curation` 与它的管理员接口。共同写入流程、人工修正与操作记录列表的通用规则仍在
-[受治理操作合同](./governance-contracts.md)。
-
-子任务 B1 在这个包里加了三样（第 11、12 节）：各外部源的开关、后台取得外部源能力的闸门、外部对应的存储。
-子任务 B2 加了外部封面与外部歌词的存放、写入与撤销（第 14 节），闸门多了封面与歌词两种能力。
-子任务 C 加了第一个生产调用方：程序层的后台循环、外部对应与强证据归组两个受治理写入口、暂停与进度（第 15 节）。
-外部源本身（怎样发请求）见[外部源合同](./sources-contracts.md)。
-
-决策依据：[ADR 0006](../../../docs/architecture/adr/0006-auto-curation-and-sources.md) 第 4、5、8、10 节。
-
-### 整理链重构（2026-11-25）
-
-ADR 0006 第 16 节的规则已落地，见第 22–27 节；与前面各节不一致处以第 22–27 节为准，各节开头另有标注。
-
-## 2. 数据模型（迁移 0058）
-
-- **`release_auto_values`**：自动层的当前意图，主键 `(release_id, field)`，形状与约束逐条照搬 `release_corrections`
-  （八个字段、`set` 或 `null`、标题与专辑艺人不能设空、取值的四种合法组合）。`operation_id` 是写下这个值的操作，延迟外键。
-- **`releases.auto_revision`**（`BIGINT NOT NULL DEFAULT 1`）：自动层的版本号，每次自动写入与它的撤销加一。它只用来满足
-  `operations_revision_ck` 并给记录排序，**不参与任何判断**；扫描不写它，视图不输出它。
-- **`release_effective`**：在八个修正连接之后再连接八次 `release_auto_values`。每个字段取 人工修正 → 自动层 → 扫描值 里第一个存在的；
-  修正或自动层明确设空时结果为空，不再往下取。展示艺人 `artist` 跟随专辑艺人的修正与自动值。列的名字、顺序与类型不变。
-- **`operations`**：`operations_type_ck` 增加 `release_auto_correction`；新列 `batch_id UUID`（可空，引用 `curation_batches`），
-  部分索引 `operations_batch_idx (batch_id, created_at DESC, id DESC) WHERE batch_id IS NOT NULL`；按来源筛选用表达式部分索引
-  `operations_provider_idx ((origin->>'provider'), created_at DESC, id DESC) WHERE origin->>'source' = 'curation'`。
-- **`artist_credits.layer`** 与 **`artist_names.origin`** 增加 `auto`。
-- **`curation_batches`**：`id`、`tier`（`program | model`）、`opened_at`、`closed_at`（可空）、`actor_id`（开批次时的开启者）。
-  改动数量不存列，读取时按 `operations.batch_id` 统计。
-- **`curation_suppressions`**：`id`、`target_type`、`target_id`、`subject`、`value_hash`、`value`（JSONB，展示用）、`operation_id`
-  （产生它的撤销操作，可空，延迟外键）、`created_by`、`created_at`；唯一 `(target_type, target_id, subject, value_hash)`。
-  目前只有 `target_type='release'`、`subject=字段名`。
-- **`curation_settings`**：单行表（`id` 恒为 1），`enabled`（默认 false）、`enabled_by`（可空）、`enabled_at`、`updated_at`。
-- **回退是有损的**：回退脚本丢弃自动值、不再提出标记、设置、批次、`release_auto_correction` 类型的操作及指向它们的撤销记录，
-  删除 `layer='auto'` 的署名事实，把 `origin='auto'` 的名字改回 `scan`。原来专辑艺人取自动层的发行，其有效署名与搜索值不会因为
-  重启而刷新（投影的代次与输入版本没有变）：**回退之后做一次完整重扫**；对该发行的任何一次人工修改也会刷新它。
-
-## 3. 结构隔离
-
-三层互不读写对方的表与版本号，这是结构保证，测试用断言固定：
-
-- 自动层的执行器与撤销只写 `release_auto_values` 与 `releases.auto_revision`，不写 `release_corrections` 与 `edit_revision`；
-  它们读视图只为在记录里保存“当时的有效值”，撤销响应里的 `revision` 读的是没有变化的 `edit_revision`。
-- 人工修正的执行器与撤销只写 `release_corrections` 与 `edit_revision`；之后的自动写入不妨碍撤销更早的人工修改。
-- 扫描的写入语句不涉及新表与新列；重扫之后自动值保持。
-- 认领不搬自动层：旧发行上的自动值留在旧发行上。
-
-## 4. 写入 `curation.Writer.Apply`
-
-只供进程内调用，**没有 HTTP 写入口**。
-
-```go
-type Source struct {
-    Kind     string // "source" 或 "model"
-    Provider string // ^[a-z0-9._:-]{1,64}$
-    Basis    string // 依据的摘要，至多 500 字节；展示时按不可信文本处理
-}
-type Request struct {
-    ReleaseID string
-    Fields    map[string]catalog.CorrectionIntent // 至少一项；只能 set 或 null，校验与人工修正相同
-    Source    Source
-    BatchID   string // 可空
-    Key       string // 幂等键（UUID），由调用方按自己的工作单元确定
-    RequestID string
-}
-type Applied struct {
-    OperationID string
-    Written     []string          // 实际写入的字段
-    Skipped     map[string]string // 字段 → suppressed | unchanged
-}
-```
-
-一次 `Apply` 是一次 `operations.Run`，事务内的顺序也是加锁顺序：
-
-1. `Run` 的幂等锁（操作者加键）。操作者是 `curation_settings.enabled_by`，在事务外先读一次作为 `Spec.ActorID`。
-2. 目录写锁，再锁发行行（`governance.LockAutoRelease`）。发行不存在或不可见 `not_found`。
-3. 核对设置（`FOR SHARE`）：`enabled` 为真，且 `enabled_by` 是启用状态的管理员（`identity.IsEnabledAdmin`），并且与第 1 步读到的相同；
-   否则 `409 curation_disabled`。
-4. 批次（如有）必须存在且未结束，否则 `409 batch_closed`。
-5. 逐字段过滤：命中“不再提出”的记 `suppressed`；与现有自动值相同的记 `unchanged`。没有剩下的字段 `409 nothing_to_apply`，
-   不产生记录（返回的 `Applied.Skipped` 仍说明每个字段的原因）。
-6. 写自动层（`operation_id` 为本次操作）、`auto_revision` 加一，调用与人工修正相同的派生刷新（艺人投影与搜索值）。
-7. 记录：类型 `release_auto_correction`，目标是发行，版本号用 `auto_revision`；前态记每个被写字段之前的自动值**及写入它的操作**，
-   后态记新的自动值与写入者，两边都带当时的有效值；`origin = {source:"curation", provider_kind, provider, basis}`；`batch_id` 写入列。
-
-- 指纹含操作类型、发行、各字段的规范化意图与 `provider`，不含 `basis`。同键同内容重放返回原结果。
-- “同一个值”由 `governance.AutoValueKey` 判定：规范化意图的 JSON 及其 SHA-256；`unchanged` 的比较与 `value_hash` 用同一个函数。
-- 人工修正存在时照样可以写自动层（值不生效，清除人工修正后才显示）。自动值等于当前扫描值也算有效写入。
-
-## 5. 撤销
-
-### 5.1 单条
-
-`release_auto_correction` 注册自己的 `Kind`，走 `POST /api/v1/operations/{id}/revert`，通用守卫不变（已撤销、撤销不能再撤销）。
-
-- 取目录写锁并锁发行行，**不要求发行可见**。
-- 对原操作写过的每个字段，核对自动层这一格的 `operation_id` 仍是原操作。全部是：逐格恢复成前态记的自动值与**原来的写入者**
-  （前态没有值就删除这一格），`auto_revision` 加一，刷新派生，并为每个被撤的值写“不再提出”（重复的忽略）。
-  任何一格不是：整条拒绝 `409 revert_conflict`，说明里带改写它的操作 ID；不做部分撤销。
-- 不读 `edit_revision` 作判断，所以之后的人工修改不妨碍撤销；恢复写入者使得“先撤后写的、再撤先写的”成立。
-- 撤销响应的 `revision` 是发行当前的 `edit_revision`（`operations.Outcome.ResponseRevision`；其余类型为 0，沿用记录的后一版本）。
-- `Describe`：`changes = {kind:"release_auto_correction", fields:[{field, before:{auto, effective}, after:{auto, effective}}]}`，
-  `auto` 是 `{mode, value?, operation_id}` 或 null；`revertible` = 未被撤销 ∧ 本身不是撤销 ∧ 每一格仍是这条操作写的（与发行是否可见无关）。
-- “不再提出”的写入经 `governance.AutoSuppressionWriter`：`governance` 定义接口、`curation` 实现、`app` 注入
-  （`governance.AutoCorrectionOperations(writer)`，缺了在装配时失败）。标记的 `created_by` 是执行撤销的人（`operations.ActorID(ctx)`）。
-
-### 5.2 按批、按来源
-
-`POST /api/v1/admin/curation/reverts`，见第 7 节。每次调用处理至多 100 条：
-
-- 候选是范围内不是撤销、还没被撤销的操作，按 `(created_at, id)` 倒序，从游标之后开始；倒序保证同一格上后写的先撤。
-  按批次的查询只用 `batch_id`（只有自动整理的操作才有批次），走 `operations_batch_idx`；按来源的查询用
-  `origin->>'source' = 'curation'` 与 `(origin->>'provider')`，走 `operations_provider_idx`。候选不按操作类型取，以后的结构类自动操作不用改这里。
-- 逐条 `operations.Run(撤销)`，每条一个事务、独立成败；操作者是发起请求的管理员。每条的幂等键由请求的键与操作 ID 派生（UUIDv5），
-  同时到达的同键请求由 `Run` 的幂等锁串行并重放。
-- **同一请求重试不产生新的撤销记录**：已经撤销的操作不再是候选。返回的 `reverted` 只统计这次调用实际撤销的条数，
-  总数看批次详情的 `operations` 与 `reverted`。
-- 它没有自己的状态表：每条撤销本身是一条受治理的操作记录。
-
-## 6. 不再提出
-
-- 写入：自动修改被撤销时（单条或成批）。键是（发行、字段、值的哈希）。
-- 读取：`Apply` 第 5 步。只挡同一个值；不同的值照常写入。
-- 管理员可以列出与逐条清除；清除后同一个值可以再次自动写入。
-
-## 7. 接口
-
-全部要求管理员；写接口先做同源检查。
-
-| 接口 | 说明 |
-| --- | --- |
-| `GET /api/v1/admin/curation/settings` | `{enabled, enabled_by:{id, username}\|null, enabled_at, active, inactive_reason}`；`active` 是“现在自动写入会不会被接受”，`inactive_reason` 为 `disabled`、`enabler_unavailable` 或 null |
-| `PUT /api/v1/admin/curation/settings` | `{enabled}`。打开时 `enabled_by` 记为调用者；关闭时保留 `enabled_by` 作为记录。关闭不动已有的自动层。返回同上 |
-| `GET /api/v1/admin/curation/batches?page=&page_size=` | 倒序分页（默认 50、最大 100）；每项 `{id, tier, opened_at, closed_at, operations, reverted}` |
-| `GET /api/v1/admin/curation/batches/{id}` | 单个批次；改动明细用操作记录列表按 `batch_id` 取 |
-| `POST /api/v1/admin/curation/reverts` | 需要 `Idempotency-Key`。`{scope:{kind:"batch", id} \| {kind:"provider", provider}, cursor}` → `{reverted, skipped:[{operation_id, code}], next_cursor}`；`next_cursor` 为 null 表示做完，客户端带着它和同一个键继续调用 |
-| `GET /api/v1/admin/curation/suppressions?release_id=&page=&page_size=` | 倒序分页；每项 `{id, target_type, target_id, subject, value_hash, value, operation_id, created_by, created_at}`；`value` 按不可信文本显示 |
-| `DELETE /api/v1/admin/curation/suppressions/{id}` | 成功返回 `204`，标记不存在返回 `404 not_found`。清除封面或歌词的任一标记时，同一事务内清除同一目标且 `operation_id` 相同、非空的对应标记（见第 14.5 节）。其余主题仅清除指定标记 |
-| `GET /api/v1/admin/curation/sources` | `{items:[{id, name, capabilities, enabled, active, inactive_reason}]}`，按注册顺序；见第 11 节 |
-| `PUT /api/v1/admin/curation/sources/{id}` | `{enabled}`，返回同上的一项；未知的源 `404 not_found` |
-| `GET /api/v1/operations` | 增加 `source`（只接受 `curation`）、`provider`、`batch_id`，与现有目标筛选之间是“并且”；有批次的记录带 `batch_id`（没有批次时省略）；`origin` 多出 `provider_kind`、`provider`、`basis` |
-| `GET /api/v1/releases/{id}/corrections` 与修正成功的响应 | 每个字段增加 `auto`：`{mode, value?, operation_id, provider_kind, provider}` 或 null；`effective_value` 是三层结果 |
-
-发行详情 `GET /api/v1/releases/{id}` 和版本对比 `GET /api/v1/release-groups/{id}/comparison` 的每个发行可带
-`auto_fields`（字符串数组）。它只列有自动值且没有人工修正行的字段名，包含自动设空的字段，排序与 `corrected_fields` 相同。
-字段名按实际存储列出，例如专辑艺人用 `album_artist`。没有符合条件的字段时省略 `auto_fields`。
-`corrected_fields` 仍只列人工修正的字段。
-
-“清除人工修正之后显示什么”的三处预览（修正的撤销预览、管家 `correct_release` 的清除预览、修正状态）取自动值，没有自动值才是扫描值
-（`CorrectionField.ValueAfterClear`）。
-
-## 8. 其他读取处
-
-- **需要关注**（`releasesql.FieldIssueRows`）：扫描拿不准的字段有修正行**或有自动行**时不计入；撤销自动值后重新计入。
-- **专辑级署名**（`catalog.LoadReleaseCredits`）：专辑艺人一行按有效的专辑艺人（修正优先，其次自动值）替换。
-- **署名事实与有效署名**：自动层的专辑艺人生成 `layer='auto'` 的事实；有效署名的层三选一——有专辑艺人的修正行用 `correction`，
-  否则有自动行用 `auto`，否则 `scan`。自动值是合辑占位名时发行级有效署名为空，与修正层的行为一致。
-- 管家的读取工具与审查证据经视图读有效值；管家的写工具仍只写人工修正。
-
-## 9. 开启者
-
-操作记在打开开关的管理员名下，不新造系统用户。现在管理员只有初始化时创建的那一位，没有修改角色的入口，最后一位管理员也不能被停用，
-所以“开启者失效”目前到不了；核对仍按 ADR 实现，没有为它做界面或接手流程。
-
-## 10. 错误码
-
-| 条件 | 响应 |
-| --- | --- |
-| 开关关着、开启者不是启用状态的管理员、开启者在事务外读取之后变了 | `409 curation_disabled` |
-| 批次不存在或已经结束 | `409 batch_closed` |
-| 所有字段都相同或已标记为不再提出 | `409 nothing_to_apply` |
-| 自动值已被更晚的自动整理改写；外部封面或歌词的行已不在或属于别的操作；它所属的发行已不存在 | `409 revert_conflict` |
-| 外部封面或歌词：本地已有、外部已有、已标记不再提出（`ExternalApplied.Skipped` 给出 `local_present`、`occupied`、`suppressed`） | `409 nothing_to_apply` |
-| 图片不合格（超过 16 MiB、不是四种格式、宽高读不出）；歌词规范化后为空、超过 64 KiB 或没有可显示的行；来源标识含冒号等不合形状的字符 | `400 invalid_input` |
-| 歌词的曲目不存在或不是 `present` | `404 not_found` |
-| 经闸门调用外部源时这个源的开关关着（进程内的错误，没有对应的 HTTP 写入口） | `409 source_disabled` |
-| 来源、依据、范围或游标无效；缺少或非 UUID 的 `Idempotency-Key` | `400 invalid_input` |
-| 批次、标记或发行的 ID 不是 UUID | `400 invalid_id` |
-| 批次或标记不存在 | `404 not_found` |
-
-其余（未登录、跨源、非管理员、分页、数据库不可用）与[受治理操作合同](./governance-contracts.md)第 8 节相同。
-
-## 11. 各源开关与闸门（子任务 B1）
-
-- **`curation_source_settings`**（迁移 0060）：`source`（主键，外部源的标识）、`enabled`、`updated_by`、`updated_at`。
-  没有行时取声明的 `DefaultEnabled`（MusicBrainz 为开）。源的清单来自 `app` 装配时注册的声明，不存库。
-- 接口返回的每一项：`enabled` 是这个源自己的开关；`active` 是“后台现在能不能用它”；`inactive_reason` 依次判断
-  `curation_disabled`（总开关关着）、`enabler_unavailable`（开启者不是启用状态的管理员）、`source_disabled`，都不是时为 null。
-- **闸门 `curation.Sources`**：后台代码只从它取能力（`ReleaseFinder`、`RecordingFinder`、`ArtistFinder`、`CoverFinder`、`LyricsFinder`，参数是源的标识）。
-  注册的源按顺序是 MusicBrainz、Cover Art Archive、LRCLIB、AcoustID（B3），都默认开；AcoustID 还要指纹工具可用、声明的密钥都填了才生效（发布镜像只有用户密钥一把，第 16 节）。
-  取到的是包了一层的实现，每个方法先 `Check`，再用 `sources.WithBackground(ctx, permit)` 调用适配器，`permit` 就是对这个源的 `Check`。
-  所以核对发生在调用开始时、读缓存之前、每次出站之前（排队之后与每次重试之前）：调用排队或等待重试期间开关被关掉，之后不再出站。
-- `Check` 在一个事务里读设置（与 `Writer.Apply` 相同的 `loadSettings`，开启者资格由 `identity.IsEnabledAdmin` 判断）：
-  总开关关着或开启者失效返回 `curation_disabled`，源的开关关着返回 `source_disabled`；都不调用适配器，缓存里有结果也不返回。
-- **开关只管后台。** 管家对话里的两个 MusicBrainz 工具持有适配器本身，不经过闸门：对话里的查询是用户本人发起的请求，
-  未开启自动整理的实例行为不变（见[管家联网合同](./steward-web-contracts.md)的音乐资料一节）。
-- 本任务里 `Sources` 没有生产调用方，由测试里的调用验证；子任务 C 的匹配循环是第一个调用方。
-
-## 12. 外部对应的存储（子任务 B1）
-
-**`external_links`**（迁移 0060）：`id`、`source`、`object_type`（`release | release_group | track | artist`）、`object_id`、`external_id`、
-`method`、`confidence`（两者只约束形状 `^[a-z0-9_]{1,32}$`；程序层写 `method` 为 `tag_id | barcode | catalog_number | isrc | disc_id`、`confidence` 为 `certain`，见第 15 节）、`operation_id`（可空，延迟外键）、`created_at`；
-唯一 `(source, object_type, object_id)`，反查索引 `(source, object_type, external_id)`。
-
-- 表里的每一行都是生效的对应；ADR 0006 所说的“状态”在这里是“行在不在”。一个本地对象在一个源里至多一个。
-- 对 MusicBrainz：发行 → release，专辑（本地的 release group）→ release group，曲目 → recording，艺人 → artist。
-- `object_id` 不设外键：非测试代码不删除这四类对象。艺人合并靠重定向，被并入的艺人身上的对应仍在——按外部 ID 反查艺人时要解析重定向。
-- 扫描、认领、人工修正的语句都不涉及这张表：重扫、认领、改名移动之后对应保持。
-- 事务内的函数：`PutLink`（写入或替换，返回被替换的行）、`RemoveLink`、`LinksOf`（按对象）、`ObjectsLinkedTo`（按外部 ID 反查）。
-  **它们不是受治理的写入口**：生产代码只经 `Writer.ApplyLinks`（类型 `external_link`，第 15.3 节）建立对应，它在执行器里调用这些函数。
-
-## 13. 必需测试与断言点
-
-集成测试在隔离的 PostgreSQL 上用合成数据运行；自动写入没有 HTTP 入口，测试直接调用 `curation.Writer.Apply`。
-
-| 断言点 | 用例 |
-| --- | --- |
-| 三层优先顺序，八个字段逐个覆盖，含两层各自设空 | `TestPostgreSQLCurationFieldPriority` |
-| 重扫（原样与扫描值变化）不动自动层 | `TestPostgreSQLCurationRescan` |
-| 自动写入不动 `edit_revision` 与修正行；人工修改与自动修改互不妨碍对方的撤销 | `TestPostgreSQLCurationIndependentRevisions` |
-| 同一字段两条自动修改的撤销顺序与写入者的恢复 | `TestPostgreSQLCurationRevertOrder` |
-| 专辑艺人的自动值对署名、艺人页、排序与搜索的影响与恢复 | `TestPostgreSQLCurationArtistProjection` |
-| 批次、按批撤销、部分跳过、同键重试不产生新的撤销记录 | `TestPostgreSQLCurationBatchRevert` |
-| 按来源撤销，超过 100 条时续做 | `TestPostgreSQLCurationProviderCursor` |
-| 不再提出：同值被挡、不同值通过、清除后恢复 | `TestPostgreSQLCurationSuppression` |
-| 开关与开启者 | `TestPostgreSQLCurationEnabler` |
-| 普通成员被拒绝 | `TestPostgreSQLCurationMemberDenied` |
-| “需要关注”随自动值与撤销变化 | `TestPostgreSQLCurationAttention` |
-| 并发：两次自动写入、撤销与自动写入（用事务锁制造交叠，不靠时间） | `TestPostgreSQLCurationConcurrent` |
-| 筛选与候选查询走 `operations_provider_idx`、`operations_batch_idx`；候选查询没有排序与顺序扫描 | `TestPostgreSQLCurationFilterPlans` |
-| 迁移升级与回退往返 | `TestPostgreSQLMigrationRollbackRoundTrip/0058_auto_curation.sql` |
-| 接口样本：`corrections/get-auto`、`operations/auto-list`、`operations/auto-reverted`、`curation/*` | `TestPostgreSQLAPIResponseSamples` 与前端 `api-contract.test.ts` |
-
-子任务 B1 的断言点：
-
-| 断言点 | 用例 |
-| --- | --- |
-| 闸门：总开关关闭、源关闭、开启者失效时拒绝，零出站，缓存里有结果也不返回；管家工具照常可用 | `TestPostgreSQLCurationSourcesGate` |
-| 调用在排队或等待重试时关掉开关，之后不再出站 | `TestPostgreSQLCurationSourcesGateDuringWait` |
-| 源开关接口：默认开、管理员读写、成员 403、未知源 404、`active` 与 `inactive_reason` | `TestPostgreSQLCurationSourcesSettings` |
-| 外部对应：一对象一源一条、替换返回旧行、按对象读、按外部 ID 反查；移动、重扫与认领之后保持 | `TestPostgreSQLCurationSourcesLinks` |
-| 迁移升级与回退往返 | `TestPostgreSQLMigrationRollbackRoundTrip/0060_curation_sources.sql` |
-| 接口样本：`curation/sources`、`curation/source-updated` | `TestPostgreSQLAPIResponseSamples` 与前端 `api-contract.test.ts` |
-
-子任务 B2 的断言点见第 14.7 节。
-
-视图多了八个连接：目录的四个 EXPLAIN 用例与 `TestPostgreSQLCatalogHTTPPerformance` 是门禁，要设启用参数才会运行
-（`ROOMUSIC_CATALOG_EXPLAIN=1`、`ROOMUSIC_CATALOG_EXPLAIN_OUTPUT`、`ROOMUSIC_CATALOG_HTTP_PERF_OUTPUT`），不设时是跳过而不是通过。
-
-## 14. 外部封面与外部歌词（子任务 B2）
-
-自动整理补的封面与歌词不占本地的位置：各有一张表，读取时本地优先、外部只补空缺，扫描不读写它们。
-写入与撤销是受治理操作；本任务**没有生产调用方**（什么时候取、取哪一个由子任务 C 决定），测试直接调用 `curation.Writer`。
-
-### 14.1 数据模型（迁移 0061）
-
-- **`release_external_artworks`**：主键 `release_id`（一个发行至多一张）；`content_hash`、`mime_type`、`width`、`height`、`storage_key` 与 `release_artworks` 同形；
-  `source`（源的标识，`^[a-z0-9._-]{1,64}$`）、`external_id`（1–128 字节；Cover Art Archive 是 `<外部发行 ID>/<图片编号>`）、
-  `operation_id`（写下它的操作，非空，延迟外键）、`created_at`；`storage_key` 上有索引。图片文件与本地封面在同一个内容寻址目录 `<数据目录>/artwork/`。
-- **`track_external_lyrics`**：主键 `track_id`（一首曲目至多一份）；`lyrics`（规范化后的文本，非空、不超过 65,536 字节）、`content_hash`、`source`、
-  `external_id`（LRCLIB 的记录编号）、`operation_id`、`created_at`。
-- `operations_type_ck` 增加 `release_external_artwork`、`track_external_lyrics`。两类操作的目标都是**发行**
-  （歌词操作的目标是曲目当时所在的发行，曲目记在状态里）；版本号用 `releases.auto_revision`。
-- 不再提出标记（`curation_suppressions`，结构不变）每次撤销写两条——同一张图的另一档缩略图内容不同，只按内容挡不住：
-
-  | 对象 | `target_type` | `subject` | `value_hash` |
-  | --- | --- | --- | --- |
-  | 封面的内容 | `release` | `artwork` | 图片字节的 SHA-256 |
-  | 封面的外部身份 | `release` | `artwork_source` | `source + "\x00" + external_id` 的 SHA-256 |
-  | 歌词的内容 | `track` | `lyrics` | 规范化后文本的 SHA-256 |
-  | 歌词的外部身份 | `track` | `lyrics_source` | `source + "\x00" + external_id` 的 SHA-256 |
-
-- **回退是有损的**：脚本先把 `steward_plan_items.operation_id` 里指向这两类操作及其撤销的引用置空（这个外键立即检查、不级联），
-  再删四种标记与两张表，删撤销记录再删操作，`SET CONSTRAINTS ALL IMMEDIATE` 之后恢复类型约束。已下载的图片文件留在 `artwork/` 里无人引用。
-
-### 14.2 读取
-
-- **封面**：`releasesql` 的连接片段是两个左连接（外部的只在没有本地行时连上），四列各取 `COALESCE(本地, 外部)`；所有摘要（发行、专辑的代表版本、
-  曲目摘要、搜索、最近添加、播放历史、待处理问题、认领建议）因此一致。`artwork.Store.Lookup` 按存储键在本地封面、外部封面和艺人图片表里找，图片接口不区分来源。
-  摘要里的 `artwork` 对象**没有来源字段**；哪些是自动补的从操作记录看。扫描反馈的封面指纹只看本地的。
-- **歌词**：`LoadTrackLyrics` 先用本地的；本地没有，或有但解析不出可显示的行时，用外部的，`source` 为 `online`
-  （见[歌词合同](./lyrics-contracts.md)）。“本地有歌词”在读取与写入两处是同一个判断：`catalog.ParseLyrics` 成功。
-- 本地封面或歌词出现后自动改用本地的，消失后回到外部的；外部的行一直留着。
-
-### 14.3 扫描与文件
-
-- 扫描的语句不涉及两张新表：全量重扫（含扫描删除本地封面关联的情形）、改名移动、认领之后外部封面与外部歌词保持。认领不搬它们。
-- `artwork/` 目录现在有两个写者（扫描与自动整理）。“数引用再删文件”与“落盘再写行”靠**存储键的事务级 advisory lock** 互斥
-  （两参数形式，类别是 ASCII 的 `ARTW`，第二个参数是存储键的哈希；永远最后取，在目录写锁与发行行锁之后）：
-  扫描与自动整理在写关联之前取锁并确认文件在；`Store.Discard` 开事务、取锁、数本地封面、外部封面和艺人图片的引用，为 0 才删文件。
-- `artwork.Store` 的导出入口：`Describe`（校验并算出键，不落盘）、`Write`／`WriteIfChanged`（在调用方的事务里取锁并落盘）、`Exists`、`Discard`。
-
-### 14.4 写入 `ApplyArtwork`、`ApplyLyrics`
-
-```go
-type ArtworkRequest struct { ReleaseID string; Data []byte; Source Source; ExternalID string; BatchID, Key, RequestID string }
-type LyricsRequest  struct { TrackID string; Text string; Source Source; ExternalID string; BatchID, Key, RequestID string }
-type ExternalApplied struct { OperationID string; Skipped string } // Skipped: local_present | occupied | suppressed
-```
-
-`Source.Kind` 必须是 `source`，`Provider` 按 `^[a-z0-9._-]{1,64}$` 校验（比 `Apply` 严：不允许冒号）。流程与 `Apply`（第 4 节）相同的部分不重复：
-
-1. 事务外只校验，不落盘：封面 `Store.Describe`；歌词 `metadata.NormalizeLyrics` 后 `catalog.ParseLyrics` 必须有可显示的行。
-2. 加锁：封面 `governance.LockAutoRelease`（要求发行可见）；歌词 `governance.LockAutoReleaseOfTrack`——先取目录写锁，再按曲目解析所在的发行
-   （扫描会把曲目改挂到别的发行），再锁发行行。然后核对设置与批次。
-3. 依次判断，命中即以 `409 nothing_to_apply` 结束，不产生记录、不落盘：
-   - `local_present`：发行有本地封面／曲目的本地歌词能解析出可显示的行；
-   - `occupied`：外部表里已有这一行，不论内容是否相同——**存放层面就是只补空缺，要换先撤销**。
-     封面的例外：这一行指向的文件已经不在磁盘上（恢复了数据库备份而没有数据目录）时视同没有，旧行被这次写入替换；旧行的操作此后撤不了，记录保留；
-   - `suppressed`：内容或外部身份的不再提出标记命中。
-4. 封面在事务里取存储键的锁并落盘；插入外部表的行；`auto_revision` 加一。
-5. 记录：前态是 `{"artwork": null}` 或 `{"track_id", "lyrics": null}`（替换了文件丢失的旧行时，前态记旧行的键、哈希、来源与原操作，只作记录）；
-   后态封面记 `{storage_key, content_hash, mime_type, width, height, source, external_id}`，歌词记
-   `{track_id, track_title, lyrics: {content_hash, kind, lines, source, external_id}}`，**不存歌词全文**。
-6. 封面：执行器写了文件而事务没有提交时，返回前 `Discard`。同键重放不进执行器，不落盘。
-
-指纹含类型、发行或曲目、内容哈希、`provider`、`external_id`，不含 `basis`。
-
-### 14.5 撤销与展示
-
-两个 `Kind` 在 `curation` 包（`ExternalArtworkOperations`、`ExternalLyricsOperations`），由 `app` 注册；单条撤销、按批与按来源的 `Reverter`、
-管家的 `revert_operation` 都自动覆盖它们。
-
-- 按**记录的目标发行**加锁，不要求可见；发行行已不存在时 `409 revert_conflict`。
-- 外部表这一行存在且 `operation_id` 是原操作：删除，`auto_revision` 加一，写两条不再提出（`created_by` 是执行撤销的人）；否则 `409 revert_conflict`。
-  不读 `edit_revision` 作判断，之后的人工修改不妨碍撤销；响应的 `revision` 是发行当前的 `edit_revision`。
-- 清除 `artwork` 或 `artwork_source`、`lyrics` 或 `lyrics_source` 中任一标记时，按 `target_type`、`target_id` 和非空的 `operation_id`
-  匹配对应主题，两条在同一事务中删除。对应标记不存在或指定标记的 `operation_id` 为空时，仅删除指定标记。
-- 封面的文件在提交之后清理：`operations.Outcome.AfterCommit`（`Run` 在提交成功后调用一次，重放与失败时不调用）里 `Store.Discard`。清理失败只记日志
-  `curation.artwork.discard_failed`。
-- `Describe` 的 `changes`：
-
-  ```jsonc
-  {"kind": "release_external_artwork", "source": "coverartarchive", "external_id": "…",
-   "artwork": {"resource_id": "<storage_key>", "mime": "image/jpeg", "width": 1200, "height": 1200}}
-  {"kind": "track_external_lyrics", "source": "lrclib", "external_id": "…",
-   "track": {"id": "…", "title": "…"}, "lyrics_kind": "synced", "lines": 42}
-  ```
-
-  `revertible` = 外部表这一行仍属于这条操作。撤销记录用被撤销操作的后态，内容不分前后。`track.title` 是记录里保存的当时的标题。
-  读不懂的状态不报错，`changes` 为 null（一条坏记录不能让整页列表失败）。撤销之后 `artwork.resource_id` 可能已经读不到图片。
-- 撤销预览（管家工具用）：一行，字段名 `artwork` 或 `lyrics`，前是 `{source, external_id}`（歌词另带 `track_title`），后是 null。
-
-### 14.6 已知限制
-
-- 歌词操作记在曲目当时所在的发行上：曲目之后被改挂到别的发行时，按新发行筛选操作记录看不到它。
-- 歌词的不再提出标记按曲目存；子任务 C 起按发行筛选的标记列表包含它的曲目与专辑上的标记（第 15.6 节）。
-- 两者都留给整理记录页（子任务 E1）按批次展示。
-- 恢复数据库备份而没有数据目录时，外部封面的行在、文件不在：摘要仍给出 `artwork`，图片接口 404。子任务 C 的缺口查询把它算作缺口重新获取
-  （第 15.4 节；新的写入替换旧行）。
-
-### 14.7 必需测试与断言点
-
-| 断言点 | 用例 |
-| --- | --- |
-| 读取优先：只有外部、本地出现、本地被全量扫描删除；各摘要与图片接口 | `TestPostgreSQLExternalArtworkPriority` |
-| 重扫、改名移动、认领之后保持；孤儿清理不删被外部引用的文件 | `TestPostgreSQLExternalArtworkRescan` |
-| 写入的记录、三种跳过、开关与开启者、无效图片与重放不落盘、回滚后的文件清理、文件丢失的旧行被替换 | `TestPostgreSQLExternalArtworkApply` |
-| 单条、按批、按来源撤销；两条不再提出；共享文件不删；人工修改版本号不变 | `TestPostgreSQLExternalArtworkRevert` |
-| 歌词的读取、写入、撤销；`online`；只有元标签的本地歌词 | `TestPostgreSQLExternalLyricsPriority`、`…Apply`、`…Revert` |
-| 并发：同一发行两次写入、写入与撤销、两个发行同一内容一写一撤（用锁制造交叠） | `TestPostgreSQLExternalConcurrent` |
-| 操作记录列表的 `changes` 与 `revertible`、坏记录不让列表失败、管家撤销工具 | 同名前缀的用例 |
-| `AfterCommit` 只在提交成功后调用一次 | `backend/internal/operations` 的集成用例 |
-| 闸门对封面与歌词两种能力 | `TestPostgreSQLCurationSourcesGate` |
-| 迁移升级与回退往返（含方案项的外键） | `TestPostgreSQLMigrationRollbackRoundTrip/0061_external_artwork_lyrics.sql` |
-| 接口样本：`tracks/lyrics-online`、`operations/external-*`、`curation/sources` | `TestPostgreSQLAPIResponseSamples` 与前端 `api-contract.test.ts` |
-
-
-## 15. 程序层：后台匹配与补全（子任务 C）
-
-子任务 C 加了自动整理的第一个生产调用方：后台循环 `backend/internal/curation/program`。它按缺口把发行与 MusicBrainz 对上，有把握的直接建立外部对应、
-补空缺字段、取封面与歌词、在强证据下归组；拿不准的形成待定项留给模型层（子任务 D）。本节记合同、判定规则与不变量；
-推导过程与取舍在本机归档的任务设计 `11-22-auto-curation-c-program/design.md`。
-
-### 15.1 数据模型（迁移 0062）
-
-- **`curation_work_states`**：主键 `(subject, target_id)`，`subject` 为 `release`、`artwork`（目标是发行）或 `lyrics`（目标是曲目）；`rule_version`、`input_digest`、
-  `status`（`pending | matched | unmatched | conflict | try_later | query_error | done`）、`attempts`（得出结论的次数）、`generation`（代次，每次得出结论加一）、`retry_count`、`next_attempt_at`、`result`。
-  存进去的规则版本是 `program.RuleVersion × 100 + textnorm.Version`。
-- **`curation_pending_items`**：每个发行每一种（`release_match | recording_match`）至多一条未结束的；状态 `waiting_model | in_progress | resolved | waiting_human | shelved`，
-  本任务只写 `waiting_model` 与 `resolved`（`resolution='program_matched'`）。`evidence`、`candidates`、`conflicts` 是 JSON，外部来的文本按不可信文本处理。
-- `curation_settings.paused`；`operations_type_ck` 增加 `external_link`。
-- 回退有损：删两张表、`paused` 列、`external_link` 操作与它的撤销、它建的对应、`external_link` 与 `group_join` 标记；自动整理做的归组（已有类型）保留。
-
-迁移 0103 给发行工作状态增加 `query_error`。查询期间在 `result.retry` 保存步骤、来源、原因与续查依据。旧的 `try_later` 从首步使用响应缓存重新查询。
-
-### 15.2 判定的不变量
-
-2026-11-25 起由第 23 节修订（`MatchRuleVersion` 102）：搜索可以判定、候选保存 100 条、终止状态与艺人别名。下文与第 23 节不一致处以第 23 节为准。
-
-
-- **输入只取人工修正与扫描值**，不读自动层：自动层是匹配的产出，不能拿来证明自己。证据经 `catalog.LoadCurationEvidence` 读取（`program` 不导入 `catalog/internal`）。
-- 依据顺序：标签 ID → 条码（含 CUE 的 MCN）→ 厂牌编号 → ISRC → 光盘目录（只用 CUE 整轨）→ 搜索；**命中即定**，命中的一步拿不准就不往后走。搜索与模糊目录从不判定。
-- **把握足够** = 核对后恰好剩一个候选 + 这一步要求的佐证 + 没有任何相反证据（冲突代码表见设计 3.3）。列表可能被截断（25 条）、候选多于 3 个、曲号重复都直接拿不准。
-- 已经有外部对应的发行判定为别的外部发行时是 `existing_link`，拿不准；程序从不替换已有的对应。
-- 发行和录音候选按外部返回顺序取前 10 条，保存时按外部 ID 排序。发行候选的厂牌编号去重后排序。
-
-专辑方式的依据（每一步至多按 ID 读取 3 个完整发行再核对；曲目数只在读取之后核对）：
-
-| 步 | `method` | 候选 | 这一步要求的佐证 |
-| --- | --- | --- | --- |
-| 1 | `tag_id` | 在库曲目的 `mb_release` 唯一（多于一个即 `mixed_release_tags`） | 位置对得上（曲号不是推断时允许本地是子集），并且 `count_equal` 或 `durations_ok` |
-| 2 | `barcode` | `ReleasesByBarcode`（含 MCN） | `count_equal`，并且 `durations_ok`、`title_match`、`artist_match` 至少一项 |
-| 3 | `catalog_number` | `ReleasesByCatalog` | `count_equal`，并且 `label_match` 或 `durations_ok` |
-| 4 | `isrc` | 至多 4 首的 `RecordingsByISRC` 结果里发行集合的交集 | `count_equal`，并且至少一对 ISRC 相符 |
-| 5 | `disc_id` | CUE 整轨逐碟的精确 disc ID 交集（任一碟模糊即 `disc_fuzzy`） | `count_equal`，并且 `title_match` 或 `artist_match` |
-| 6 | `search` | `SearchReleases` | 从不判定（`search_only`） |
-
-`durations_ok` = 可比较的对数 ≥ ⌈配对数/2⌉ 且全部在容差内。本地有推断的曲号时，每一对都必须可比较且在容差内（否则 `inferred_positions`）；(碟号、曲号)重复即 `position_conflict`。
-当前步骤有冲突的情况包括`list_truncated`（列表 25 条或录音的发行数 25）、`isrc_spread`（交集为空）、`ambiguous`（多个候选都通过）。
-
-相反证据（任何一条就拿不准）：`duration_mismatch`、`barcode_mismatch`、`catalog_mismatch`、`title_artist_mismatch`（第 2–4 步，标题与艺人都对不上）、
-`release_tag_mismatch`、`group_tag_mismatch`、`artist_tag_mismatch`、`disc_tag_mismatch`、`recording_tag_mismatch`、`track_tag_mismatch`、`isrc_mismatch`、
-`media_count_mismatch`、`media_format_mismatch`（本地是 CD 而外部没有 CD 介质）、`pseudo_release`、`suppressed`、`existing_link`。
-
-单曲方式：`tag_id`（`mb_recording` 唯一，外部时长已知且在容差内）→ `isrc`（按时长筛选后恰好一个且标题相等）→ `search`（从不判定）。
-信息不足（标题与艺人都是占位、没有任何标识）记 `no_match` + `insufficient_evidence`，不查询、不建待定项。
-
-- 零散单曲（`candidate_kind='loose_unknown'`）只对录音，不补发行字段、不取封面。
-- 时长容差 max(3 秒, 外部时长的 1%)；松比较是 `textnorm.Loose(textnorm.Text(x))`，空键不相等。
-
-### 15.3 写入
-
-| 步骤 | 写入口 | 规则 |
+本合同描述当前自动整理链。决定与规则依据 [ADR 0009](../../../docs/architecture/adr/0009-curation-chain-review.md)，通用事务、幂等和管理员鉴权依据 [受治理操作合同](./governance-contracts.md)。外部 HTTP 请求的重试和缓存依据 [外部源合同](./sources-contracts.md)。
+
+## 1. 扫描交来的输入
+
+### 1.1 扫描范围与稳定性
+
+手动扫描和每天定时扫描覆盖活动曲库根。首次成功的整根扫描建立目录监听，文件新建、删除、修改和改名按目录合并，最后一次事件后安静 2 秒再处理。正在写入的文件持续推迟。监听不到的根按 15 分钟、1 小时、4 小时、12 小时或每天增量扫描，默认 1 小时。网络共享和监听注册失败由程序识别，监听资源用尽也归为 `registration_failed`，程序不修改系统监听上限。确认扫描只读取发生变化的专辑目录及其碟片子目录，并在成员稳定 60 秒后提交整理输入。
+
+读文件前后各读取文件大小和原始修改时间，两次任一不同就丢弃本次结果，等待下一次事件。微秒截断只用于保存值。目录根不可用、子目录不可读、文件损坏或移动有歧义时保留旧数据。
+
+### 1.2 标签、文件名和附属文件
+
+扫描补读总曲数、总碟数、完整发行日期和原始发行日期、单曲与现场等媒体标记、录制或演出日期、增益与峰值、同步歌词、播客与有声书标记及常见注释字段。注释只为模型本地辅助提供编号线索，当前不直接用于显示、整理或播放。MP3 的 ID3v1 流派编号按编号表转换。`仅当 TCON 第一项为 `Podcast` 或 `Literature` 时设置对应媒体标记。`PCST`、`PCSP`、`ISPODCAST` 和 `ISAUDIOBOOK` 等键也会设置播客或有声书标记。扩展名仅预筛，音频和无扩展名文件按文件头确认格式，图片、文本和 CUE 不读文件头。未知格式与读文件错误分别记录。
+
+艺人名只在括号外按半角或全角分号、两侧有空格的 `/`、两侧有空格的 `feat.`、`ft.`、`with`、顿号、换行和 NUL 拆分。`&`、逗号和紧贴的 `/` 保留。中文古典流派只按“古典”“古典音乐”“古典乐”名单识别。占位值如 `Unknown Artist`、`Track 01` 当作没有值。旧编码只有一种可解码时整张使用该编码，多种都可解码时保留原样并等待本地辅助。
+
+保留按文件名推断艺人、年份、专辑和格式词的扫描规则。没有标签且没有模型时不按连字符猜艺人，曲号和格式词去掉后作为标题，专辑名取目录名，艺人为“未知艺术家”。
+
+### 1.3 归组与排序
+
+同目录出现多个专辑名时，依次用标签碟号与曲号、文件名碟号与曲号、两者混合、仅文件名曲号且把碟号当 1 检查是否从 1 到 N 连续。连续则归为一张。不连续时按音频格式拆分并再次检查，仍不连续才按专辑名或“艺人 + 专辑名”拆分。不使用“过半合成一张”。
+
+`disc`、`disk`、`cd` 加编号的子目录并入上一级。带名称的碟目录记录碟标题，Bonus 和特典碟排在正碟之后。专辑名比较忽略大小写、标点、空格和变音符号。文件中的 MusicBrainz 编号不参与归组。没有专辑艺人时按过半艺人、2–4 位并列或 5 位以上群星处理。Deluxe、Remastered 等版本词单独保存，不参与归组和身份。专辑目录及 Art、Artwork、Scans、Extras 子目录中的图片和文档绑定到专辑并保存图片格式和尺寸。排序键去标点、折叠变音，并将开头的英文 `The ` 移到末尾。
+
+缺碟号、缺曲号、无法识别碟目录名和字段打平时不推断。明确写出的 `CD2`、`1-03` 和 `A1` 保留。没有编号的曲目按文件名顺序排列但不写曲号。
+
+## 2. 识别查找顺序与结论
+
+### 2.1 查找准入
+
+已匹配且本地文件未变化的发行不再查询。专辑名和艺人齐全，或存在 MusicBrainz 编号、光盘目录、条码、目录号、ISRC 或其他可检索编号时进入查询。存在任一可检索编号时不做名字查询。名字只有一半且没有编号的不查。只有专辑名的合辑仍进入查询，散放单曲走标签、ISRC、AcoustID 和录音搜索路径。播客和有声书不查。占位标题和艺人同时存在且没有编号时不按名字查，启用声纹后使用声纹。没有模型时保留程序可确定的结果，不在多个候选中猜。
+
+### 2.2 查询顺序
+
+同一发行按以下顺序查询，某一步无结果才进入下一步，得到结构核对通过的结果立即停止。
+
+1. 文件中的 MusicBrainz 发行编号。
+2. CUE 的 TOC 光盘目录。
+3. 条码。
+4. 目录号和厂牌。
+5. 四首曲目的 ISRC。
+6. 四首曲目的 AcoustID 声纹。
+7. 完整名字查询，依次使用专辑名、艺人和曲数，去掉豪华版及编码词后不限曲数，再按艺人名查询。艺人查询只有一个结果时才按艺人编号继续。
+
+查询只使用本地名字，或本地辅助整理后的名字。任一可检索编号存在时跳过名字查询，第 1–6 步均无结果记 `unmatched`。程序不使用模型记忆中的事实。某一步得到候选但编号、曲数、时长或发行组对不上时立即记为 `conflict`，不改用更弱线索。所有编号步骤没有佐证记 `insufficient_corroboration`，名字查询失败记 `unmatched`，路由层的 `conflict` 原因为 `different_release_groups`，结构核对仍保存具体冲突代码。查询错误不产生结论。
+
+### 2.3 结构判定和发行组
+
+名字查询要求每张碟曲数相同，可比时长逐首在 3 秒或 1% 内，至少一半曲目可比较。四首及以下还要求专辑名和艺人一致。编号查询要求曲数相同并有一项独立佐证。佐证按方法分别判定：`tag_id` 用曲数或时长且可按位置取子集，`barcode` 用曲数并加时长、标题或艺人之一，`catalog_number` 用曲数并加厂牌或时长，`disc_id` 用曲数并加标题或艺人，`isrc` 用曲数并加一致 ISRC，`acoustid` 用曲数及时长并加一致录音。条码、目录号、发行编号、碟数、曲序、格式或艺人标签冲突时判为冲突。冲突代码还包括方法对应的 `*_tag_mismatch`、`duration_mismatch`、`position_conflict`、`mixed_release_tags`。
+
+同一发行组中专辑名、艺人和曲数一致的多个版本直接认到发行组。只有多于 4 首、非古典、非合辑、仅一个已知发行组且没有曲目级编号时，才可直接认发行组。部分覆盖时记录 `partial_subset` 或 `partial_superset`。合辑、古典和四首及以下短专辑逐版本核对。认到发行组时，本地推断曲名只从最早版本补齐。两张本地专辑认到同一版本时，没有重复曲目且合起来正好覆盖各碟才合并，有重复曲目则放入同一版本组，其余交模型或保持原样。
+
+### 2.4 结论、状态与重查
+
+整理工作状态保存在 `curation_work_states`，模型待定项保存在 `curation_pending_items`。新结论状态如下。
+
+| 状态 | 含义 | 重查条件 |
 | --- | --- | --- |
-| 外部对应 | `Writer.ApplyLinks`（类型 `external_link`） | 一次匹配一条记录（发行、配对的曲目、必要时本地专辑）；标记过的 `suppressed`、相同的 `unchanged`、已对应别处的 `occupied`；后态里发行那一项带 `external_group_id` |
-| 补空缺 | `Writer.Apply` 带 `OnlyEmpty` | 锁内跳过有修正行或自动值的字段（`occupied`）；只补标题（占位时）、专辑艺人、年份、厂牌、编号、条码 |
-| 归组 | `Writer.JoinGroup`（类型 `release_group_change`） | 见 15.5 |
-| 封面 | `Writer.ApplyArtwork` | 见 15.4 |
-| 歌词 | `Writer.ApplyLyrics` | 见 15.4 |
+| `matched` | 已与 MusicBrainz 发行、发行组、录音或艺人对应 | 本地文件变化或规则版本要求 |
+| `unmatched` | 已查询的来源没有可核对结果 | 本地变化、规则升级或 90 天到期 |
+| `conflict` | 查询结果与本地证据冲突 | 本地变化、规则升级，或模型识别判断 |
+| `try_later` | 来源暂停或等待重试 | 来源恢复 |
+| `query_error` | 该发行连续三次发生专属查询错误 | 本地变化或规则升级 |
 
-- 每一步的幂等键是 UUIDv5（目标、主题、规则版本、代次、步骤）。中断后重做回放原结果；清除标记之后代次已经前进，不会回放一条已撤销的操作。
-  `nothing_to_apply` 当作已完成；`idempotency_conflict` 时代次加一重试一次。
-- **外部对应的撤销**：每一项仍是这条操作写的才整条撤（否则 `409 revert_conflict`）；逐项删除，为每个外部 ID 写 `external_link` 标记（目标是那个对象，哈希为 `源 NUL 外部 ID`），
-  `auto_revision` 加一。撤销后摘要变化，发行被重新判定为 `suppressed` 拿不准并建待定项。
-- `Describe`：`changes = {kind:"external_link", source, method, confidence, external:{title, artist, date, country}, links:[{object_type, object_id, external_id, external_group_id?}]}`；
-  撤销记录的 `changes` 与被撤销的那条相同。
+历史记录仍可读 `uncertain`、`no_match`、`unlisted` 和 `no_usable_candidates`，这些值只读，不在本轮迁移。`unmatched` 记录查询过的平台和时间，90 天重查走完整程序步骤并包含声纹。`insufficient_evidence` 作为 `done` 结论保存。原因是 `candidates_revoked` 的 `unmatched` 和原因是 `ambiguous_editions` 的 `conflict` 均按 90 天重查。撤销或被占用的候选归入 `unmatched` 并提示候选已撤销。规则升级默认只重查未匹配、冲突和查询出错项，已匹配项只在对应规则版本要求时重查。
 
-### 15.4 封面与歌词
+### 2.5 识别结论的存储
 
-- 封面只在专辑方式：发行已对应 + 本地没有封面 + 外部封面行不在**或文件不在**。先取外部发行的主封面（`sources.FrontImage`），没有再取外部专辑的；
-  下载之前用 `curation.ExternalIdentitySuppressed` 查按图片编号的标记，命中就不下载。
-- 歌词不依赖匹配：曲目在库、本地与外部都没有歌词、标题不空、艺人不是占位、时长 > 0 时，先 `LyricsFor` 精确查询，不接受再 `SearchLyrics`。
-  接受 = 不是纯音乐、有歌词、时长差 ≤ 2 秒、标题松比较相等、艺人相合（相等，或按 feat./&/、等切开后第一个名字相等）；搜索结果按内容去重后恰好一份才写，同步的优先。
-- 歌词单独一轮，排在发行之后。
+`curation_work_states` 以 `(subject,target_id)` 为主键。`subject` 可为 `release`、`artwork`、`lyrics`、`artist_media` 或 `fingerprint`，并保存 `needs_work`、`manual_requested_at`、`queue_release_id`、`queue_class`、`queue_has_id`、`queue_gap`、`queue_artist_unlinked`、`queue_added_at`、`queue_identity`、`patrol_revision`、`local_rule_version`、`match_rule_version`、`identity_digest`、`gap_digest` 和 `requery_match_version`。发行结果原因还包括 `request_limit`、`ambiguous_editions`。其中 `artwork` 目标为发行，`lyrics` 目标为曲目。表保存 `rule_version`、`input_digest`、`file_digest`、`status`、`attempts`、`generation`、`retry_count`、`next_attempt_at`、`result`、`queue_release_id` 和 `updated_at`。发行状态约束包含 `pending`、`matched`、`uncertain`、`no_match`、`try_later`、`done`、`unlisted`、`no_usable_candidates`、`unmatched`、`conflict` 和 `query_error`。`file_digest` 由 SQL 函数 `curation_release_file_digest()` 计算，包含成员根、相对路径、字节数、微秒修改时间和 `releases.curation_member_signature`，使用 CUE 的上级路径。视图 `curation_eligible_releases` 只包含有 present 音频且不含播客或有声书标记的发行。
 
-### 15.5 强证据归组
+`curation_release_match_results` 每个发行和来源一行，保存 `release_id`、`source`、`status`（`matched`、`unmatched`、`conflict`）、`checked_at`、`reason`、`conflicts`、`snapshot_id`、`candidates` 和 `selection`。`selection` 只在状态为 `matched` 且对应仍属于这次选择时返回。`release_match_credit_parts` 保存 `release_id`、可空 `track_id`、`role`（`release_artist`、`album_artist`、`track_artist`）、`position`、`local_text`、`name`、`artist_mbid`、可空 `artist_link_id`、`basis_link_id` 和 `operation_id`。角色为 `track_artist` 时必须有曲目标识，位置从 1 开始，组合键保证每一段唯一。删除最后一条拆名段时，仅删除由 `split_credit` 方法建立且不再被其他段引用的艺人对应。
 
-- `JoinGroup` 在锁之后核对：发行有 MusicBrainz 的发行对应，且写下它的 `external_link` 记录后态里有外部专辑 ID X；目标专辑有对 X 的专辑对应。任一不满足 `409 no_strong_evidence`。
-- 发行最近一条未被撤销的 `release_group_change` 来源不是 `curation`（页面、对话、管家）→ `409 manual_structure`：人做过的结构决定优先。
-- 标记过不再归入（`group_join`，哈希为目标专辑 ID）→ `409 nothing_to_apply`。
-- `governance.GroupChangeOperations(suppressions)`：撤销来源为 `curation` 的归入时写 `group_join` 标记；人工的归组撤销不写。归组记录的后态多了 `action`。
-- 程序只做“归入”，不做“移出”。
+`curation_match_names` 保存通过外部对应核实的 MusicBrainz 名称。字段为 `release_id`、`target_type`（`release` 或 `track`）、`target_id`、`field`、`mb_value`、`external_id`、`basis_link_id` 和 `basis_operation_id`。`curation_artist_negative_pairs` 以无序规范化名字对为主键，保存 `reason`、`model`、`legacy` 和 `decided_at`。名字否定对永久阻止重复询问。
 
-### 15.6 后台循环、暂停与进度
+`curation_pending_items` 的识别项 `kind` 为 `release_match` 或 `recording_match`，状态为 `waiting_model`、`in_progress`、`resolved`、`shelved` 或 `waiting_route`。表还保存 `id`、`target_type`、`target_id`、可空 `artist_id`、`kind`、`rule_version`、`input_digest`、`identity_digest`、`route`、`evidence`、`candidates`、`conflicts`、`resolution`、`created_at`、`updated_at`、`resolved_at`、`conversation_id`、`claimed_at`、`next_attempt_at`、`attempts`、`review_retries`、`shelved_reason`、`match_rule_version`、`item_tool_calls`、`item_tokens`、`source_retry_count`、`claim_source_recovery_at`、`empty_count`、`single_request`、`reset_item_usage_on_claim`、`model_stop_code`、`artist_web_generation`、`artist_web_actor`、`artist_web_suspended` 和 `artist_web_priority`。每个目标和种类至多一条未结束项，`evidence`、`candidates` 和 `conflicts` 均为 JSON。模型和管理员读取时把外部文本按不可信文本处理。
 
-2026-11-25 起由第 25 节修订：单个逐页循环换成五条按状态取项的队列。下文与第 25 节不一致处以第 25 节为准。
+### 2.6 识别接口与结论读取
 
+`GET /api/v1/admin/curation/conflicts?page=&page_size=` 只返回可见且仍有整理资格的 `conflict` 结果。响应为 `{items,pagination}`，项包含发行标识、标题、来源、状态、查询时间、原因、冲突代码、候选、`snapshot_id` 和 `selection`，选择字段在列表中置空。
 
-- 单线程；总开关关、开启者失效、暂停时不读证据、不出站。启动时收掉遗留的 program 批次。
-- 每轮按（加入时间倒序、ID 倒序）键集分页，每页 100 个发行；重算摘要与状态比较，不同才处理。变化标记（扫描结束、设置、源设置、标记、操作记录、到期的重试）变了或 6 小时后再扫。
-- **闸门也挡暂停与扫描**：`curation.Sources` 的放行检查（每次出站之前）在暂停时返回 `409 curation_paused`，扫描进行中返回 `409 scan_running`（`WithScanCheck` 注入）。
-- 上游来源不可用按 25.3 退避。封面写入后文件仍缺失时保留原项级退避；本地指纹出错按发行错误计次（25.3）；源的开关关着时跳过这个主题。
-- 批次：第一次写入时开，满 500 条、1 小时、一轮结束、关闭或暂停时关；全被挡下的空批被移除。
-- `app.WithCurationProgram(false, …)` 关掉循环；`app` 包里共用的测试夹具默认关掉它（现有测试会打开总开关，循环会向真实外部服务发请求）。
+`GET /api/v1/admin/curation/releases/{id}/match-results` 返回 `results` 数组。每项含 `source`、`status`、`checked_at`、`reason`、`conflicts`、`candidates`、`snapshot_id` 和 `selection`。不存在或不可见的发行返回 `404 not_found`，无效标识返回 `400 invalid_input`。
 
-| 接口 | 说明 |
+候选字段包含 `entity`（`release`、`release_group` 或 `recording`）、`external_id`、`release_group_id`、`title`、`artist`、`date`、`country`、`track_count`、`barcode`、`catalog_numbers`、`method`、`source` 和 `status`。候选中的外部文本按不可信文本处理，`candidates` 为空数组而非 null。`snapshot_id` 总是出现，没有快照时为 `null`。`selection` 含 `external_id`、`selected_by`、`selected_at` 和 `operation_ids`，未选择时为 null。
+
+`POST /api/v1/admin/curation/releases/{id}/match-selection` 接受 `{source,snapshot_id,external_id}`，要求 `Idempotency-Key`。后端在发行锁内重新读取快照、候选、外部发行和本地证据，选择必须仍是当前候选并通过结构核对。摘要、文件、来源结果或候选发生变化返回 `409 item_stale`，选择无法满足结构核对的独立佐证返回 `409 insufficient_corroboration`，选择已被撤销或同值已标记时步骤内部跳过，不返回 `nothing_to_apply`。成功响应是更新后的匹配结果并包含实际 `operation_ids`。
+
+`POST /api/v1/admin/curation/releases/{id}/recheck` 不带请求体，仅对原因不是 `candidates_revoked` 的 `unmatched` 有效，写入新的待核对标记并返回 `202`，否则返回 `409 not_unlisted`。`POST /api/v1/admin/curation/model/retry` 触发当前模型失败段重试并返回模型进度。
+
+`POST /api/v1/admin/curation/releases/{id}/adopt-name` 接受 `{target_id,field,basis_operation_id,expected_revision}` 和 `Idempotency-Key`。`target_id` 为发行或曲目的目标，`field` 为可采用的名称字段。请求标识或依据不是 UUID 返回 `400 invalid_input`，依据操作不存在或不是当前 MusicBrainz 对应返回 `409 item_stale`，预期人工版本变化返回 `409 revision_conflict`，成功写人工层并返回 `{field,effective_value,revision,operation_id}`。
+
+### 2.7 规则版本、摘要和分类
+
+扫描本地规则版本、外部识别规则版本和资料投影规则版本分别保存。当前外部识别 `MatchRuleVersion=106`，本地辅助版本由 `LocalRuleVersion` 提供。发行工作状态同时保存 `local_rule_version`、`match_rule_version`、`identity_digest`、`gap_digest` 和 `file_digest`。外部识别摘要取扫描值、人工修正和本地辅助写入的自动值，不读取外部资料写入的自动值，摘要变化才使当前项重新排队。人工修正、来源开关、抑制标记、扫描结束和过期重试会改变相应摘要。
+
+`GET /api/v1/admin/curation/classifications` 返回 `{versions:{local_rule,external_match_rule},releases}`，`releases` 按可见发行统计整理分类。分类和摘要用于稳定判定、队列优先级和升级重查，接口不把内部哈希暴露给普通曲库读取。
+
+## 3. 写入、自动层和外部内容
+
+### 3.1 自动字段层
+
+`release_auto_values` 以 `(release_id, field)` 保存自动值，字段为 `title`、`album_artist`、`year`、`genre`、`label`、`catalog_number`、`edition` 和 `barcode`，包含 `mode`、`text_value`、`year_value`、`list_value`、`operation_id`、`writer_level` 和可空 `scan_basis`。`mode` 为 `set` 或 `null`，标题和专辑艺人不能为 `null`，年份范围 1–9999，流派列表 1–20 项，其余文本非空且最多 4096 字节。`release_effective` 按人工修正、自动值、扫描值取第一个存在的值，明确设空不会继续向下取。`releases.auto_revision` 每次自动写入和撤销加一，扫描不写入。自动层和人工修正分别使用自己的操作记录和版本号。
+
+`curation.Writer.Apply` 是进程内写入口。`Source.Kind` 为 `source` 或 `model`，`Provider` 符合 `^[a-z0-9._:-]{1,64}$`，`Basis` 最多 500 字节。请求含 `ReleaseID`、至少一个字段意图、可选 `BatchID`、幂等 `Key`、`RequestID` 和 `ConfirmedBy`。事务先锁幂等键、目录和发行，再核对总开关、开启者和批次，逐字段处理抑制和值相同情况，写自动层并刷新艺人投影、搜索值和操作记录。相同键和内容重放原结果。本地辅助写入或带 `ExpectedRevision` 的写入遇到人工修正返回 `409 manual_override`。
+
+自动写入不改文件，不写人工修正和 `edit_revision`。已存在人工修正时仍可写入自动层，清除人工修正后显示自动值。自动操作类型为 `release_auto_correction`，来源记录为 `origin={source:"curation",provider_kind,provider,basis}`。
+
+`Apply` 的事务锁顺序为幂等键、目录写锁、发行行。事务外读取开启者作为 `Spec.ActorID`，锁内以 `FOR SHARE` 重新读取设置并比较开启者。总开关关闭或开启者失效返回 `409 curation_disabled`，批次不存在或已关闭返回 `409 batch_closed`。每个字段分别过滤 `suppressed` 和 `unchanged`，返回 `Applied{OperationID,Written,Skipped}`。过滤后为空返回 `409 nothing_to_apply`，不产生操作记录。操作前后态同时记录自动值、写入者和当时有效值，重放依赖操作类型、目标、规范化字段意图和 provider 的指纹。
+
+单条自动撤销获取目录写锁和发行行锁，不要求发行可见。原操作写入的每一格都仍指向该操作时，逐格恢复前态和原写入者，自动版本加一并刷新派生投影，否则整条返回 `409 revert_conflict`。撤销响应的 `revision` 读取发行当前人工版本。撤销本身不是可再次撤销的候选，描述中的 `revertible` 由未撤销、非撤销操作和所有格仍归属原操作共同决定。
+
+### 3.2 对应、封面和歌词
+
+`external_links` 保存 MusicBrainz 的发行、发行组、录音和艺人对应。唯一键为 `(source, object_type, object_id)`，移动、重扫和认领不删除对应。生产代码可通过 `Writer.ApplyLinks` 及对应流程写入；`external_links` 还保存 Wikidata 艺人和 `release_group_match`。
+
+`ApplyArtwork` 和 `ApplyLyrics` 只补空缺。封面存 `release_external_artworks`，歌词存 `track_external_lyrics`。本地封面和可显示本地歌词优先，外部内容只在本地缺失时使用。外部内容已有、对应抑制命中或本地已有时返回 `409 nothing_to_apply`。封面数据不超过 16 MiB 且格式为 JPEG、PNG、WebP 或 GIF。歌词规范化后须有可显示行且不超过 64 KiB。封面文件和本地封面使用同一内容寻址目录，并以存储键事务锁保证写入和删除互斥。
+
+两个进程内请求的字段为 `ArtworkRequest{ReleaseID,Data,Source,ExternalID,BatchID,Key,RequestID}` 和 `LyricsRequest{TrackID,Text,Source,ExternalID,BatchID,Key,RequestID}`。返回 `ExternalApplied{OperationID,Skipped}`，`Skipped` 为 `local_present`、`occupied` 或 `suppressed`。艺人图片资料写入另可返回 `license_missing`。封面来源的 `Provider` 允许普通源标识或 `plugin:<id>`，长度和字符按实现校验。歌词操作的目标记录为曲目当时所在的发行。
+
+### 3.3 撤销与不再提出
+
+自动字段、对应、封面和歌词均通过治理操作撤销。自动字段只有当当前自动层仍由原操作写入时才整条恢复，否则返回 `409 revert_conflict`。撤销写入 `curation_suppressions`，键由目标、主题和规范化值哈希组成。清除抑制后同值可再次写入。按批次或来源撤销每次最多 100 条，使用 `(created_at,id)` 倒序游标和相同幂等键续做。
+
+### 3.4 曲目字段自动层
+
+`track_auto_values` 以 `(track_id,field)` 为主键，只允许 `title` 和 `artist`，`mode` 固定为 `set`，文本非空且不超过 4096 字节。`track_effective` 按人工曲目修正、曲目自动值、扫描值取第一个存在的值。曲目自动操作类型为 `track_auto_correction`，目标操作记录仍挂在所属发行，`tracks.edit_revision` 和发行的 `auto_revision` 分开维护。
+
+`Writer.ApplyTrack` 接受 `TrackRequest{TrackID,ReleaseID,ExpectedRevision,ArtistCredit,Fields,Source,BatchID,Key,RequestID,OnlyEmpty,ExpectedScan,ConversationID,ConfirmedBy}`。事务锁顺序为幂等键、目录写锁、发行行、曲目行。曲目必须仍在库中，指定发行必须仍归属该曲目，否则 `409 item_stale`。人工版本变化返回 `409 revision_conflict`。`OnlyEmpty` 遇人工行或自动行记 `occupied`，相同值记 `unchanged`，抑制标记命中记 `suppressed`，全部过滤返回 `409 nothing_to_apply`。自动写入刷新曲目搜索和艺人署名投影。单条撤销整条恢复每个字段的旧自动值和原写入者，任何字段已被覆盖或移除返回 `409 revert_conflict`。
+
+程序只在发行匹配后补占位或文件名推断的曲名和曲目艺人。按已配对的录音编号读取 MusicBrainz 详情，字段补全使用 `OnlyEmpty=true` 和由代次及曲目标识派生的幂等键。无候选记 `none`，外部 404 记 `unavailable`，暂时错误保留原状态。补上曲目艺人后重新计算歌词查询摘要。
+
+### 3.5 写入级别与扫描依据作废
+
+自动写入级别按来源声明，现行级别为程序外部资料 `4`、模型外部资料 `3`、模型参考值 `2`、模型本地辅助 `1`。同级或更高级别可替换低级别值，低级别字段返回 `skipped[field]="lower_priority"`。自动值保存 `writer_level` 和对应扫描字段的 `scan_basis`。扫描不直接改自动层。整理读取时发现当前扫描值与 `scan_basis` 不同，写 `release_auto_invalidation` 或 `track_auto_invalidation` 操作，使有效值回到扫描值。作废不写抑制标记，也不触发外部重新识别。撤销作废前重新核对自动值为空和扫描值仍相同，恢复原值、级别和写入者。
+
+### 3.6 署名拆分、艺人对应和自动合并
+
+`catalog.LoadCurationArtistCredits` 读取人工修正或扫描层的 `release_artist`、`album_artist` 和 `track_artist`。存在 `local_credit_parts` 时读取本地辅助自动层，并返回作曲、演奏和指挥署名；这些值不作为外部识别证据。程序按位置、规范化名字或同位 MusicBrainz MBID 对齐本地和外部署名。数量不等、公共 `Various Artists` 或 `[unknown]` MBID、外部 MBID 重复或同一身份出现多个 MBID 时跳过该组。通过的拆分写 `release_match_credit_parts`，方法为 `split_credit`，每组独立操作并支持撤销。
+
+`Writer.MergeArtists` 只接受 MusicBrainz 程序来源。它锁目录、按 UUID 排序的两方艺人行及两方的对应闭包，双方都必须有未撤销的同一 MBID 对应，闭包内不能有其他 MBID。保留有效署名条数较多者，平局保留 UUID 较小者。无强证据返回 `409 no_strong_evidence`，已重定向返回 `409 artist_redirected`，人工结构返回 `409 manual_structure`，已有合并标记返回 `409 nothing_to_apply`，目标艺人相同返回 `409 same_artist`。撤销自动合并同时恢复身份并写 `subject=artist_merge` 的不再提出标记。
+
+已匹配发行的艺人回填只按已有发行或录音对应执行一次，结果 `artist_links` 为 `done`、`none` 或 `unavailable`。回填复核输入摘要、规则版本和代次，不改变匹配次数。身份对应建立后，艺人资料投影才进入资料队列。
+
+### 3.7 同一外部发行的整张并入
+
+程序在当前 MusicBrainz 发行对应、字段补全和归组完成后，通过 `ObjectsLinkedTo` 找到同一外部发行的其他本地发行。以最小 `(disc_number,position)`、创建时间和 UUID 选目标，双方录音对应集合必须非空且不相交。仅在模型已配置时创建 `release_merge` 待定项，摘要包含双方发行摘要和对应操作标识。多于两张时同一目标按候选顺序排队。
+
+`Writer.MergeReleases` 只接受 `Source.Kind="model"`，锁目录和双方发行，重新核对待定项摘要、对应佐证、发行可见性和治理令牌。程序也可经 `MergeProgramEdition` 直接写入 `release_auto_merge`。成功写 `release_auto_merge`，保存 `operations_release_targets`、来源、会话和批次，返回 `{operation_id,release_id}`。缺少同一发行对应或录音集合相交返回 `409 no_strong_evidence`，人工结构返回 `409 manual_structure`，待定项变化返回 `409 item_stale`，已并入、形成链或超过大小限制分别返回 `release_merged`、`merge_chain`、`release_too_large`，合并目标变化、超出批次或例外待定项陈旧分别返回 `merge_changed`、`out_of_batch`、`exception_stale`。撤销恢复 `release_merges`、媒体来源和操作快照，并写一个归并抑制标记。程序只做并入，不做移出。
+
+### 3.8 外部资料读取和文件生命周期
+
+外部封面读取连接 `release_external_artworks`，本地封面存在时不连接外部行。外部歌词仅在本地歌词无法解析出可显示行时读取，读取来源标记为 `online`。搜索、最近添加、播放历史、待处理问题和图片接口共同使用本地优先结果。扫描、重扫、改名、移动和认领不写两张外部表。外部封面文件丢失时读取仍返回外部行，下一次写入可替换该行。
+
+封面写入先 `Store.Describe`，在事务内获取存储键锁并落盘，再插入外部表。事务回滚或执行器失败时 `Discard` 已落盘文件。撤销提交后用 `AfterCommit` 再次统计本地封面、外部封面和艺人图片的引用，只有零引用才删除文件。封面或歌词任一抑制标记被清除时，同一事务删除同目标、同操作且非空的配对标记。歌词操作记录曲目当时所在的发行，曲目迁移后按新发行筛选时不可见。
+
+### 3.9 三层隔离和有效读取
+
+自动层执行器和撤销只写自动表及 `auto_revision`，人工执行器和撤销只写人工表及 `edit_revision`，扫描语句不写两层。认领、改名和移动不搬自动层。人工修正优先，其次自动层，最后扫描层。`releasesql.FieldIssueRows` 在字段有人工修正或自动值时不计为“需要关注”，自动值撤销后重新计入。`catalog.LoadReleaseCredits` 使用有效专辑艺人替换专辑级署名。
+
+自动专辑艺人生成 `artist_credits.layer='auto'` 和 `artist_names.origin='auto'` 的事实。有效署名层按 `correction`、`auto`、`scan` 依次选择。自动值为合辑占位艺人时，发行级有效署名为空。管家读取和审查证据读取视图的有效值，管家写工具只写人工层。自动值与操作记录都不影响已有人工撤销的版本判断。
+
+### 3.10 开启者和源闸门
+
+打开总开关的管理员 ID 写在 `curation_settings.enabled_by` 和批次 `actor_id`，不创建系统用户。写入事务用 `FOR SHARE` 锁设置行并以 `identity.IsEnabledAdmin` 检查开启者仍启用。开启者失效或事务外读取的 ID 与锁内不同均返回 `409 curation_disabled`。当前管理员配置没有停用最后一位管理员的入口，因此接口只报告 `enabler_unavailable`，不提供接手流程。
+
+后台源调用都经过 `curation.Sources`。源 `Check` 在事务内读取总开关、开启者和源设置，随后在缓存读取前、排队后和每次出站前再次检查。总开关或开启者失效返回 `curation_disabled`，源开关关闭返回 `source_disabled`。闸门不返回缓存结果，也不调用适配器。管家对话的 MusicBrainz 工具直接持有适配器，不经过后台闸门。
+
+## 4. 出错、限流与队列
+
+429 和 503 请求在 10 秒内最多重试 5 次并遵从 `Retry-After`。来源连续失败从 5 秒起倍增，成功后清零。`Retry-After` 较长时等待可超过 180 秒。来源恢复时从失败步骤继续，前面结果使用缓存。专属于一张专辑的解析或声纹错误前两次间隔 5 秒、10 秒，第三次状态为 `query_error`。移除来源失败后的额外放慢间隔。
+
+识别、封面、歌词、艺人资料和本地声纹各有一条队列，每条一次处理一项并行运行。识别一次处理一张专辑。来源闸门在排队后、缓存读取前和每次重试前检查总开关、开启者和源开关。总开关关闭、开启者失效或源关闭时不出站，也不返回缓存结果。
+
+后台整理运行状态包括 `idle`、`running`、`disabled`、`paused` 和 `waiting_for_scan`。扫描进行中整理进入 `waiting_for_scan`。管理员可停止模型队列，已发出的请求按当前项完成后收尾。单项输入变化会使旧待定项失效。
+
+### 4.1 AcoustID 与声学指纹
+
+`track_acoustic_fingerprints` 以 `track_id` 为主键，保存 `pipeline_version`、`content_fingerprint`、`source_size`、`source_modified_at`、CUE 起止帧、`status`（`done` 或 `failed`）、`fingerprint`、`duration_seconds`、`failure_category`（`too_short`、`decode_failed`、`timeout`）、`attempts` 和 `computed_at`。`curation_source_keys` 以 `(source,name)` 为主键，保存加密密文、末四位、`status`（`unchecked`、`valid`、`invalid`）、更新者和时间。
+
+没有标签编号、条码、目录号和 ISRC 的项先进入本地声纹队列。其余项走到声纹步骤时按曲目缓存。缓存有效要求管线版本、内容指纹、大小、微秒修改时间和 CUE 区间全部相同。音频分析使用已打开的安全句柄，ffmpeg 读前 120 秒、11025 Hz、单声道 s16le，单曲 60 秒超时。向 AcoustID 发送整首或 CUE 区间的真实时长。精确时长小于 10 秒记 `too_short`，永久解码失败和超时保留诊断，源读取失败、文件变化和未知时长不写缓存。
+
+AcoustID 来源只有工具可用、密钥填写且密钥状态有效时才 active。源状态依次可能是 `curation_disabled`、`enabler_unavailable`、`source_disabled`、`fingerprint_unavailable`、`bundled_key_rejected`、`key_missing` 或 `key_invalid`。出站成功才把本次使用且密文未变化的 `unchecked` 密钥改为 `valid`。无效密钥按 compare-and-set 标记为 `invalid`，缓存命中不验证密钥。AcoustID 请求串行，最小间隔 334 毫秒，约每秒 3 次。429/503 和上游错误码按来源合同重试，声纹查询失败不会改写发行结论。
+
+声纹结果按曲数、碟数、录音 ID、分数和时长过滤。专辑需所有碟曲数一致、可比较曲目达到一半且没有 `acoustid_mismatch`、`acoustid_sparse`、`acoustid_spread`、`too_many` 或 `ambiguous` 冲突，得分低于 0.9 的匹配丢弃。单曲只接受唯一录音、标题相等和时长在 `max(3 秒,1%)` 容差内。声纹步骤提前查询后，识别队列直接消费缓存结果。规则版本升级只重开曾因声纹不可用而跳过且仍为遗留 `no_match` 或 `uncertain` 的发行。指纹计算或本地读取失败按专辑专属错误计次。
+
+### 4.2 队列取项、稳定确认和中断恢复
+
+识别、封面、歌词、艺人资料和声纹各有一条队列，队列标识固定为 `release`、`artwork`、`lyrics`、`artist_media`、`fingerprint`。每条队列一次处理一项，彼此并行。优先级依次为手动触发、新入库、可检索编号、已有缺口和本地信息完整项，同档按入库时间倒序。封面和艺人资料只有识别建立对应后才进入队列，歌词不依赖外部对应。
+
+候选写入时保存发行成员签名和 `releases.curation_changed_at`。最近一次成功扫描的签名与上次一致且最后变化满 60 秒才稳定。确认扫描按发行成员的实际目录合并读取，同一变化窗口只领取一次。失败、取消或局部覆盖只能使确认失效，不能授予稳定资格。整理程序在取得稳定输入后重新计算 `file_digest` 和输入摘要，摘要变化则结束旧项并按新代次入队。
+
+程序批次首次写入时打开，满 500 条、运行 1 小时、轮次结束、暂停或关闭时结束。空批次删除。每一步的幂等键由目标、主题、规则版本、代次和步骤派生，重启后回放原结果。总开关关闭、开启者失效、暂停或扫描运行时不读取证据、不出站。
+
+### 4.3 来源退避和进度字段
+
+各来源独立限速。429 和 503 请求在 10 秒内最多重试 5 次并遵循 `Retry-After`。其他可重试错误在队列路径立即暂停来源。来源连续失败按 5、10、20、40、80、160、180 秒暂停，随后按 `Retry-After` 等待，成功一次清零。来源恢复后从记录的失败步骤继续，前序结果走缓存。专属于一张发行的解析、参数拒绝或本地声纹错误按项计次，前两次间隔 5、10 秒，第三次状态为 `query_error`。来源等待不增加发行失败次数。
+
+`GET /api/v1/admin/curation/progress` 的 `queues` 固定五项，每项 `id`、`state`、`remaining`、`ready`、`successful_requests_per_second`、`completed_items_per_second`、`eta_seconds`、`pause_reason`、`source`、`retry_at`。队列状态为 `running`、`idle`、`paused`、`disabled`、`unavailable` 或 `waiting_for_scan`。暂停原因可为 `disabled`、`paused`、`waiting_for_scan`、`waiting_for_stability`、`waiting_for_fingerprint`、`source_disabled`、`rate_limited`、`source_unavailable`、`invalid_response`、`invalid_query` 或 `fingerprint_failed`。声纹预查的速度统计只计实际 AcoustID 请求。
+
+## 5. 模型的三件事与调用规则
+
+模型在整理链只承担三类工作。
+
+1. 本地辅助。判断旧编码、文字乱码、文件名标题、艺人拆分和归组。模型不联网，输出分为文字、编码、拆名和归组四类，由程序按固定规则逐项核对。文字必须来自同一目录成员的原始标签或路径，编码必须为整张可读取的候选编码，拆名必须按原分隔符重建署名，归组必须完整覆盖目录成员。文字和编码写入自动层最低级别，拆名写入 `local_credit_parts`，归组写入可撤销的 `local_model_groupings` 和 `local_model_grouping` 操作。
+2. 识别判断。一次调用提交候选线索和本地证据，由程序使用 MusicBrainz 闸门查询、结构核对和写入。模型不自己查 MusicBrainz，也不直接写入外部事实。
+3. 名字差异与艺人身份。对上 MusicBrainz 后比较名字差异，或在手动艺人联网功能中提出 MusicBrainz 艺人候选。结构核对通过才写对应，不能核对的候选进入人工确认。
+
+模型不进行巡检、独立审查或整理链内网页联网。模型未配置时程序照常执行可确定步骤，需要选择时保持原样。
+
+模型错误分为配置缺失、额度达到上限、临时提供方错误、请求被拒和空返回五类。配置缺失不创建会话，额度达到上限保留待定项并记录下一次可用时间，临时错误暂停整个模型段，请求被拒的单项搁置，空返回按项规则结束或重试但不写成未匹配。请求被拒的单项搁置，`temporary` 暂停整个模型段。模型日用量由 `curation_model_usage` 合并记录，单次请求默认最多发送 128000 token，设置值允许 1–10¹²。艺人联网单项最多 10 次工具调用和 50000 token。每次新项和重试前检查共享额度，实际 usage 通过 `RecordItemUsage` 记账。
+
+本地辅助待定项状态为 `waiting_model`、`waiting_route`、`in_progress`、`shelved` 或已结束状态。提交时复核规则版本、会话、输入摘要和扫描稳定性，过期项不写入。
+
+本地辅助的触发情况固定为七类，原因码和输入如下。
+
+| 情况 | 原因码 |
 | --- | --- |
-| `GET /api/v1/admin/curation/settings` | 增加 `paused` |
-| `PUT /api/v1/admin/curation/settings` | `{enabled?, paused?}`，至少一项，否则 `400 invalid_input`；`enabled` 从关到开时清除暂停 |
-| `GET /api/v1/admin/curation/progress` | `{state, rule_version, releases:{total, processed, matched, unmatched, conflict, try_later, query_error}, pending:{waiting_model}, batch:{id, opened_at, operations}\|null, last_pass_finished_at}`；只算可见发行；没装配循环时 `state="unavailable"` |
-| `GET /api/v1/admin/curation/suppressions?release_id=` | 同时列出这个发行的曲目与它所在专辑上的标记 |
+| 无名字标签或只有文件名 | `filename_only` |
+| 旧编码存在多种可解读方式 | `legacy_encoding` |
+| 署名含 `&` 或逗号，需要判断拆名 | `artist_split` |
+| 同目录专辑名不一致且曲号不连续 | `mixed_directory` |
+| 无法识别的碟片子目录 | `unknown_disc_directory` |
+| 缺曲号或多碟迹象下缺碟号 | `missing_position`、`missing_disc` |
+| 复合专辑名中混有艺人名 | `compound_title`、`missing_artist` |
 
-新错误码：`409 no_strong_evidence`、`409 manual_structure`、`409 curation_paused`、`409 scan_running`。
+扫描还会把曲号和碟号推断冲突统一记为对应的 `missing_position` 或 `missing_disc`。每个目录只建立一个 `local_cleanup` 项，目录内的多张专辑一起提供证据。目录项只有在 `evidence.release_ids` 中的全部发行进入 `curation_stable_releases` 后才能领取。同一目录的本地辅助项处于 `waiting_model`、`waiting_route` 或 `in_progress` 时，目录内全部发行都不进入识别队列。目录项结案后，这些发行一起放行并分别送入 MusicBrainz 识别队列。无模型时七类仍建立本地辅助项，程序不等待这些项而继续可确定的下一步，待模型配置后再处理。
 
-### 15.7 已知限制
+### 5.1 模型状态、额度和批次
 
-- 艺人的外部对应与同一外部艺人的自动合并在子任务 G；曲目标题与艺人的补全在子任务 I；声学指纹见第 16 节（子任务 B3）；待定项的处理在 D，界面在 E1、E2。
-- 撤销外部对应不连带撤销它带来的字段、封面与归组（各自独立可撤；按批撤销能一次撤完）。
-- 分轨抓取不重建光盘目录；音译或翻译了的专辑因 `title_artist_mismatch` 交给模型。
+模型进度 `state` 为 `idle`、`running`、`paused`、`disabled`、`waiting_for_scan`、`limit_reached` 或 `unavailable`，不会产生 `waiting_review`。`pause_kind` 的取值与错误类别一一对应。
 
-### 15.8 必需测试与断言点
-
-集成测试在隔离的 PostgreSQL 上用合成数据运行；外部源用测试里实现能力接口的假对象经 `curation.NewSources` 注册（走真实闸门），端到端用本地 HTTP 服务代替三个外部源。
-集成用例省略共同前缀 `TestPostgreSQLCurationProgram`。
-
-| 断言点 | 用例 |
-| --- | --- |
-| 专辑六步、单曲三步与各步要求的佐证；时长容差的内外边界 | `program` 包的 `TestAlbumCorroboration`、`TestAlbumMethodRequirements`、`TestSingleRules` |
-| 每一条相反证据各一个反例（冲突代码逐个断言） | `TestAlbumContraryEvidence/<冲突代码>` |
-| 候选多于 3 个、列表截断、ISRC 分散、模糊目录、信息不足、空键、命中即定 | `TestLookupBounds`、`TestFirstHitStopsLookup`、`TestAlbumCorroboration/barcode_second` |
-| CUE 的 MCN；由 CUE 重建光盘目录（B1 的已知向量）与不建目录的条件 | `TestCurationEvidenceMCN`、`TestDiscTOCFromCue` |
-| 歌词接受规则（时长、标题、艺人写法与分隔符、繁简与全半角、纯音乐、多份不同） | `TestLyricsAcceptance` |
-| 三个主题的摘要：稳定、按输入变化、时长取整 | `TestSubjectDigests`、`TestPostgreSQLCurationEvidenceProjection` |
-| U7 合成曲库各形态的结果与写入 | `Library/{picard,barcode,catalog,isrc_album,isrc_single,cue,multi_disc,chinese_search,untagged}` |
-| 补空缺只补真正空着的字段，人工优先 | `OnlyEmpty` |
-| 强证据归组、撤销后不再归入、人工移出之后不归回 | `Group/{revert,manual_detach}` |
-| 撤销对应后拿不准并建待定项；清除标记后是新的记录；待定项结束；代次 | `Relink` |
-| 总开关、开启者、暂停、扫描、单元进行中暂停或开始扫描；各源开关 | `Gates/*`、`SourceSwitches` |
-| 重扫不重复请求、规则版本、人工修正经变化标记触发重判 | `RealRescan`、`RescanAndChanges` |
-| `ErrTryLater` 的退避与尝试次数 | `Retry` |
-| 中断后重做回放、遗留批次；封面文件丢失后的恢复 | `Restart`、`RestartArtworkReplay` |
-| 经 `app` 装配的端到端（三个真实适配器 + 本地服务） | `EndToEnd` |
-| 外部对应的写入、撤销、展示；强证据归组；`OnlyEmpty`；暂停与闸门；进度与执行计划；标记列表 | `TestPostgreSQLCurationC{LinksApply,LinksRevert,LinksOperations,JoinGroup,OnlyEmpty,Paused,Progress,Suppressions}` |
-| 迁移升级与回退往返 | `TestPostgreSQLMigrationRollbackRoundTrip/0062_curation_program.sql` |
-| 接口样本：`curation/settings-paused`、`curation/progress`、`operations/link-list`、`operations/link-reverted` | `TestPostgreSQLAPIResponseSamples` 与前端 `api-contract.test.ts` |
-
-判定规则、代次与“仍是这条操作写的”等关键逻辑做了变异检查（每条相反证据、数量与时长佐证、条码的第二项佐证、歌词容差、命中即定、代次、强证据三项、人工结构、`OnlyEmpty`）。
-
-## 16. 声学指纹与 AcoustID（子任务 B3）
-
-子任务 B3 把 AcoustID 接进第 15 节的匹配：没有条码、编号、ISRC，标签又差的单曲与专辑可以靠音频本身对上 MusicBrainz。
-推导与取舍在本机归档的任务设计 `11-23-auto-curation-b3-acoustid/design.md`（第八节优先）；外部源一侧见[外部源合同](./sources-contracts.md) 8a 节，部署见[部署合同](./deployment-environment-contracts.md)。
-
-### 16.1 数据模型（迁移 0063）
-
-- **`track_acoustic_fingerprints`**：主键 `track_id`（随曲目删除）；`pipeline_version`；有效性键 `content_fingerprint`、`source_size`、`source_modified_at`、`cue_index_frames`、`cue_end_frames`；
-  `status`（`done | failed`）、`fingerprint`、`duration_seconds`、`failure_category`（`too_short | decode_failed | timeout`）、`attempts`、`computed_at`。
-  放在数据库而不是数据目录（ADR 0006 决策记录“AcoustID 实施时的补充”）：只为走到指纹这一步的曲目按需计算。
-- **`curation_source_keys`**：主键 `(source, name)`；`ciphertext`、`last_four`、`status`（`unchecked | valid | invalid`）、`updated_by`、`updated_at`。清除即删行。
-- 回退删除两张表。
-
-### 16.2 指纹的计算与缓存
-
-- 前五步全无线索的待识别发行进入声纹队列提前计算和查询；其余在匹配走到声纹时登记，按曲目缓存。缓存行的 `pipeline_version` 与有效性键和曲目当前值逐项相同才有效；音频不变不重算。
-- 取源与音频分析相同（允许的根、大小与修改时间核对、CUE 区间、DSD 转 PCM）；ffmpeg 以 `file:/dev/fd/3` 读打开的句柄（可定位），
-  解码前 120 秒为 11025 Hz 单声道 s16le，经管道交给 `fpcalc -format s16le -rate 11025 -channels 1 -length 120 -json -`。单首时限 60 秒。
-- 发给 AcoustID 的时长是整首时长（CUE 虚拟轨是区间长度；最后一首没有结束帧时取曲目时长），不是解码的 120 秒。
-- 三种结果：
-  - 算出；
-  - 永久算不出：`too_short`（精确时长 < 10 秒，比较时不取整）；
-  - 暂时算不出：取源失败、文件变了、时长未知。暂时的结果不写缓存。
-- `decode_failed`、`timeout` 保留最近的诊断，发行到期时重新计算。
-- `catalog.CurationEvidence`、`catalog.CurationTrack` 与曲目查询的标识种类**没有新增任何字段**：发行摘要是整个证据结构的哈希，加字段会让全库重做。
-  指纹按曲目 ID 经 `program.Fingerprints` 取，由 `app` 把 `playback.Fingerprints` 适配进来。
-
-### 16.3 密钥与源的状态
-
-- `SourceSettings.keys`：只有声明了密钥的源才有（其余省略，现有输出不变），形状为 `[{name, configured, last_four, status}]`，按声明顺序每把一项。
-- `inactive_reason` 依次判断：
-  1. `curation_disabled`
-  2. `enabler_unavailable`
-  3. `source_disabled`
-  4. `fingerprint_unavailable`：指纹工具自检没通过
-  5. `bundled_key_rejected`：内置的应用密钥本进程内被 AcoustID 拒过（ADR 0006 决策记录“AcoustID 内置应用密钥”）
-  6. `key_missing`：有一把没填
-  7. `key_invalid`：都填了，有一把无效
-- 第 4、5 条由 `SourceRegistration.Unavailable func() string` 给出（空串表示可用；`app` 装配 AcoustID 时按指纹工具与 `BundledKeyRejected()` 返回）。
-- 加密用唯一的实例密钥存储（`app` 里只建一个，交给管家与闸门），绑定 `instance` 与 `curation.source_key.<源>.<名>`；解密失败当作无效。
-  `curation` 只依赖一个 `Seal`/`Open` 小接口，不导入 `platform/secret`。
-- **回写**：
-  - 真正出站成功时，把这次用到的、仍是同一密文的 `unchecked` 改成 `valid`；缓存命中不算。
-  - `InvalidKeyError{Name}` 只把那一把、并且仍是这次密文的标为 `invalid`（compare-and-set，换上的新密钥不会被旧请求标坏）。
-  - 回写只改 `status`，**不改 `updated_at`**；`updated_at` 进入变化标记，改了会让进行中的一轮重来。
-  - 填写与清除会推进变化标记；清除只删行时，同一事务里更新源设置的时间。
-- 闸门 `Check("acoustid")` 在这几种原因时返回 `409 source_disabled`；暂停、扫描与数据库错误照常返回各自的错误。
-
-| 接口 | 说明 |
-| --- | --- |
-| `PUT /api/v1/admin/curation/sources/{id}/keys/{name}` | `{key}`，去掉首尾空白后 1–128 个可打印 ASCII，否则 `400 invalid_input` → 这个源的 `SourceSettings` |
-| `DELETE /api/v1/admin/curation/sources/{id}/keys/{name}` | → 这个源的 `SourceSettings` |
-
-管理员与同源检查同其他源接口。新错误码 `400 key_not_supported`（源没有密钥）；未知源或未声明的密钥名 `404 not_found`。密钥的变更不进操作记录。
-
-### 16.4 匹配的新一步
-
-**可用性**：工作者用 `Check("acoustid")` 判断。只有 `not_found`（没注册）与 `source_disabled` 算不可用，其余错误照常往上抛。可用时向 `MatchWithFingerprint` 传入指纹步骤，
-`Match` 的签名不变（等于不带指纹）。结果多一个 `fingerprint` 字段，写进工作状态的 `result`：
-
-| 值 | 含义 |
-| --- | --- |
-| `used` | 走到了这一步，并且 AcoustID 可用 |
-| `unavailable` | 走到了这一步，但 AcoustID 不可用；途中遇到 `ErrInvalidKey` 或 `source_disabled` 也是这个值，并且照常往下走到搜索 |
-| `not_reached` | 前面某一步命中，或者因为别的原因提前返回 |
-
-**专辑方式**（第 6 步 `acoustid`，在 `disc_id` 与 `search` 之间）：
-
-1. 抽样：与 ISRC 相同的位置，在全部曲目里取至多 4 首。算出的不到一半：确定性短轨使可用样本不足时，这一步无命中。计算或查询出错中断本轮，按第 25.3 节处理。
-2. 逐首查询，只要分数 ≥ 0.9 的录音，得到每首的录音集合 R_t。
-3. 去掉曲目数或碟数与本地不符的发行（两个值都给了才比较），再在有结果的曲目之间求发行交集。
-   - 抽样 ≥ 2 首却只有 1 首有结果 → `acoustid_sparse`；
-   - 交集为空 → `acoustid_spread`；
-   - 多个发行候选按第 23.2 节核对。
-4. 按 ID 读回完整发行后核对，通过 = `count_equal` ∧ `durations_ok` ∧ 每首有结果的抽样曲目配对到的录音 ∈ R_t。
-   - 配对到的录音不在 R_t 里 → `acoustid_mismatch`；
-   - 其余相反证据同第 2–4 步，`title_artist_mismatch` 也适用。
-5. 候选用 AcoustID 返回的发行信息生成，并带 `score`（`omitempty`；其他方法的候选不带）：各有结果曲目里出现在这个发行上的录音最高分，再取这些曲目之间的最小值。
-
-**单曲方式**（在 `isrc` 与 `search` 之间）：
-
-- 分数 ≥ 0.9 的录音按时长筛选。剩下多于 3 个 → `too_many`；不多于 3 个时，逐个用 MusicBrainz 的 `RecordingByID` 读回正式数据，再交给 `DecideSingle`。
-- 标题不是占位，并且与录音标题松比较不相等 → `title_mismatch`。
-
-**信息不足**：指纹可用时不再提前返回；但指纹这一步没命中时，仍记 `no_match` + `insufficient_evidence`，不建待定项。
-
-依据文案 `acoustid` 是“声学指纹”。
-
-### 16.5 重新处理（规则版本不变，仍是 1）
-
-`needsWork` 对 `release` 主题多一个条件，必须同时满足：
-
-- 本轮 AcoustID 可用（一轮开始时判断一次）；
-- 状态是 `no_match` 或 `uncertain`；
-- 满足下面两条之一：
-  - `result.fingerprint == "unavailable"`；
-  - 没有这个字段（B3 之前写的），`method` 是空或 `search`，并且 `conflicts` 里没有 `track_count`。
-
-**只因为这一条才被重开的发行**，在处理前再判断一次可用性：不可用就跳过，不写状态。
-
-结果：
-
-- 没填密钥的实例升级后，一个发行也不重做。
-- 填齐密钥后，只重做那些“走到了指纹这一步却因为它不可用而跳过”的发行，每个一次。
-- 已对上的发行、在前面各步就拿不准的发行，以及封面与歌词，都不受影响。
-
-### 16.6 已知限制
-
-- 专辑方式里，外部已合并掉的旧录音 ID 可能误报 `acoustid_mismatch`，结果只是拿不准，交给模型。
-- 同一首歌在 MusicBrainz 里常有重复录音，单曲方式会出现较多 `ambiguous`。
-- 同一张专辑多个版本的曲数与碟数吻合时按第 23.2 节判定。
-- 真实的匹配比例要到 V12 的真实试用才知道。
-- arm64 的 fpcalc 只在发布流水线的构建阶段验证（经自带的 glibc 加载器运行，构建时核对版本并对合成正弦波算一次指纹；见部署环境合同）。CI 的镜像任务只构建 amd64，改动镜像后用发布流水线的手动运行验证 arm64。
-
-### 16.7 必需测试与断言点
-
-| 断言点 | 用例 |
-| --- | --- |
-| 适配器：POST、gzip、六项表单、映射、去重、发行的曲目数与碟数、缓存命中、换任一把密钥仍命中 | `sources/acoustid` 的 `TestLookupFingerprintRequestMappingAndCache` |
-| 全实例间隔 ≥ 334 ms；429/14、503/13 的退避与用尽；码 4、17、6 各自命名、不缓存；码 3、8 是空结果 | `TestLookupFingerprintGlobalInterval`、`TestLookupFingerprintBackoff`、`TestLookupFingerprintErrors` |
-| 专辑方式每条通过与不通过（抽样不足、暂时失败、sparse、spread、too_many、曲目数与碟数筛选、mismatch、title_artist_mismatch、ambiguous） | `program` 的 `TestB3FingerprintAlbumRules` |
-| 单曲方式（读回正式录音、分数、too_many、ambiguous、时长、title_mismatch、占位标题） | `TestB3FingerprintSingleRules` |
-| 信息不足、`fingerprint` 三种取值、途中密钥失效或源关闭时回退到搜索 | `TestB3FingerprintReachAndFallback` |
-| 不带指纹时与 B3 之前逐字段相同 | `TestB3MatchWithoutFingerprint`（同一组期望在 `main` 上也通过） |
-| 三个摘要的基准哈希与 `main` 相同 | `TestB3DigestBaseline` |
-| `needsWork` 的 32 种组合与旧状态的推断 | `TestB3FingerprintNeedsWork` |
-| 密钥接口（403、两种 400、两种 404、顺序、原因顺序、脱敏、密文用途、清除删行、变化标记） | `TestPostgreSQLB3AcoustIDKeyAPI` |
-| 内置应用密钥（ADR 0006 决策记录“AcoustID 内置应用密钥”）：声明只有 user、表单用内置值、被拒只记一次日志并置标记；闸门只列 user、旧 application 行隐藏且清除 404、被拒不标 user、原因 `bundled_key_rejected` | `sources/acoustid` 的 `TestLookupFingerprintBundledKeyForm`、`TestLookupFingerprintBundledKeyRejection`；`TestPostgreSQLB3AcoustIDBundledKeyGate` |
-| 回写：出站成功才 `valid`、时间不变、码 6 只标用户密钥、缓存命中不验证、compare-and-set | `TestPostgreSQLB3AcoustIDKeyWriteback` |
-| 真实 ffmpeg 与 fpcalc：整轨与 CUE、缓存、内容指纹与 CUE 帧与版本变化后重算、短轨边界、解码失败的冷却与上限 | `TestPostgreSQLB3AcousticFingerprintCache` |
-| 经 `app` 装配的一轮：占位专辑对上、补字段、待定候选带分数、两种无效密钥各自标记并回退搜索 | `TestPostgreSQLB3AcoustIDProgram` |
-| 指纹工具缺失或自检失败时其余三源、匹配、封面、歌词不受影响 | `TestPostgreSQLB3FingerprintToolUnavailable` |
-| 升级：没有密钥或不全时零重做；齐备后只重开该重开的、一次；其余代次与媒体状态不变 | `TestPostgreSQLB3LegacyWorkReopenedOnce` |
-| 暂停与扫描时闸门错误照常抛出、不写状态 | `TestPostgreSQLB3FingerprintGatePauseAndScan` |
-| 抽取取源函数后音频分析行为不变 | 现有 `TestFFmpegAnalysis*`、`TestPostgreSQLAnalysis*`、`TestAnalysisWorker*` |
-| 接口样本：`curation/sources`、`curation/source-key-set`、`curation/source-key-cleared`、`errors/curation-key-not-supported` | `TestPostgreSQLAPIResponseSamples` 与前端 `api-contract.test.ts` |
-
-## 17. D：模型后台判断
-
-### 17.1 数据模型与来源
-
-迁移 0064 给自动整理设置增加 `model`、`model_daily_token_limit` 和独立的 `model_updated_at`。只改模型设置时，程序层的变化标记 `updated_at` 保持原值。按服务器本地日期在 `curation_model_usage` 原子累加输入与输出 token。主模型、独立审查与会话摘要均计入，缺少的计数字段作零。
-
-待定项保存领取、有效回答次数、空答次数、重审次数、下次尝试时间和搁置原因。迁移 0101 起，因模型请求被拒或连续空答搁置的项在本地文件变更或有效模型变化时重开；因内容过长搁置的项也可在调高单次上限后重开。以下候选变化规则适用于旧的搁置项。程序重判时，搁置项的输入摘要 `input_digest`、候选 `candidates` 或冲突 `conflicts` 任一项与保存值不同，就回到 `waiting_model`，清零未处理次数并清空搁置原因。候选与冲突按 `jsonb` 值用 `IS DISTINCT FROM` 比较。三项相同则继续搁置。重判保留 `waiting_human` 项的原有内容。`resolved` 项保留原处理结果，并排除在未结束项的冲突索引之外。
-
-同一代的本地投影刷新保留领取关系、会话、候选与各计数，并同步完整证据摘要。程序完成新一轮识别时，将上一代仍在领取中的识别项结为 `superseded`；仍需模型时另建项。旧会话提交须通过原项 ID 和领取检查。`curation_model_exceptions` 以方案项 ID 唯一，保存待定项、工具输入、预览、模型写入者、审查决定与理由、会话和人工决定。删除会话会清空例外的会话引用，例外仍可读取。0064 回退会删除整理会话、例外和按日用量。
-
-### 17.2 调度、停止与收尾
-
-2026-11-25 起由第 26 节修订：任务分档、D4 免审、未采用的建议。下文与第 26 节不一致处以第 26 节为准。
-
-
-应用在管家恢复完成后启动 `model.Scheduler.Run(ctx)`。调度器先关闭遗留 model 批次，作废遗留后台方案，将处理中的项放回队列并清除领取与重审信息，保留未处理次数。默认每分钟轮询。启动与每步开始前检查开关、开启者仍是有效管理员、暂停、扫描、待定项目标所需来源、开启者的管家配置和每日额度。每一步还核对开启者身份与启动时相同。
-
-先处理已到期的重审会话，使用其待审后台方案。方案已作废或归属已变更则释放待定项。新会话归开启者，按创建时间和 ID 领取最多五个到期且目标有效的项。发行需可见且 MusicBrainz 启用，艺人需为有效身份且网络搜索可用，行锁使用 `SKIP LOCKED`。第一条消息只携带程序产生的项 ID、种类与冲突代码。候选和证据经工具的不可信输出返回。模型批次在首次写入时打开，运行收尾时关闭。
-
-运行返回 `completed`、`step_limit` 或 `token_limit` 时，调度器在收尾前复查每步开始前的条件（含开启者身份），条件已不满足则按 `curation_stopped` 收尾。
-
-| 运行结束原因 | 遗留的处理中项 |
-| --- | --- |
-| `completed`、`step_limit`、`token_limit` | 按 25.4 对本批仍持有领取的项逐项记空答 |
-| `review_unavailable` | 保留方案，依次延迟 5 分钟、30 分钟和 2 小时重审。第三次重审仍失败则作废方案并延迟 24 小时回队 |
-| `curation_stopped`、`cancelled` | 作废方案、释放领取，保留未处理次数 |
-| `provider_error` | 作废方案、释放领取。调度器按第 25.4 节的五类规则处理 |
-| `internal_error`、意外的 `awaiting_confirmation` | 记录异常、作废方案、释放领取 |
-
-### 17.3 工具、审查与写入
-
-后台来源为 `curation`。注册表在列出与调用时检查白名单。可用的目录工具包括 `get_release`、`get_release_evidence`、`get_album`、`get_track`、`search_library` 以及目录的专辑、艺人、艺人专辑与曲目、发行问题列表。音乐资料查询 `search_music_metadata`、`get_music_metadata` 经 MusicBrainz 后台闸门。下表列出 D 引入的四种工具，I 新增的 `correct_track` 见第 18.3 节。
-
-| 工具 | 合同 |
-| --- | --- |
-| `read_pending_items` | 仅读取当前会话领取的项。可传 `item_ids`，结果包含标识、种类、发行、冲突、证据和候选，按不可信数据处理 |
-| `resolve_release_match` | 输入 `item_id`、`external_id` 和 `basis.note`。按 ID 读回发行或录音，核对摘要、曲目配对、已有对应与标记。独立审查批准后经程序写入链建立对应、补缺、按强证据归组，记录匹配结论与 `model_matched` |
-| `correct_release` | 后台只接受本批发行的设值或留空，锁内核对人工版本，已有人工修正返回 `manual_override`，批外返回 `out_of_batch`。后台写自动层。对话与 MCP 沿用人工修正 |
-| `shelve_pending_item` | 输入 `item_id` 与 `reason`，只改变本批待定项状态，记录搁置原因 |
-
-对应的外部源始终是 `musicbrainz`。模型操作的来源为 `curation`，记录会话、审查、`provider_kind=model` 和规范化的模型名（小写、非法字符替换成连字符、最多 64 字节）。依据最多 500 字节，按 UTF-8 边界截断。建立对应使用工具调用的幂等键，补缺与归组按步骤派生键。撤销对应后，以该对应支持的归组按已有归组撤销合同单独处理。
-
-审查策略第 2 版在证据中携带标记为 `program_untrusted_external` 的外部对应与未结束待定项的候选摘要。后台一步第 21 项 shared 提案收到 `too_many_proposals`。没通过与转人工的提案进入持久例外，取舍分别为 `rejected_by_review` 和 `escalated`，模型可继续处理本批其余项。
-
-### 17.4 人工决策
-
-采纳者认领 `open → accepting`，用当前状态重新计算 `preview.changes`。前后值变化返回 `exception_stale` 并重新开放。字段修正经 `CorrectionExecutor` 写人工层，使用当前人工版本，来源包含原审查、会话及 `review_decision=human`。匹配经 `ModelMatcher.Apply` 写对应与自动层，保留模型来源，操作者为采纳者，批次为空。幂等键由例外 ID 和步骤派生。保存 `accepted` 及实际操作 ID。多步匹配在首笔写入前将恢复快照暂存在例外预览的内部字段，接口仅返回公开变化。进程中断后，原采纳者按首笔操作键对账，核对证据摘要与已建立的对应，再以原键续做余下步骤。结论与操作编号在同一事务保存并清除快照。
-
-不采纳字段时按规范化值写不再提出标记。不采纳匹配时按发行或单曲的曲目 ID 写 MusicBrainz 对应标记。标记、`declined` 和待定项收尾在同一事务提交。该项所有例外均有决定后，采纳匹配记 `resolved/human_accepted`。仅拒绝匹配记 `resolved/human_declined`。只有字段例外则回到 `waiting_model`。程序已先解决的项保留程序结论。
-
-### 17.5 管理员 REST 接口与错误码
-
-路径前缀为 `/api/v1/admin/curation`。读写均要求管理员，写接口检查同源。未授权、非管理员、数据库故障分别沿用 401、403、503 合同。
-
-| 方法与路径 | 请求与响应 |
-| --- | --- |
-| `PUT /settings` | `model` 最多 200 字节，空串使用开启者对话模型。`daily_token_limit` 为 1 至 10¹² 的整数或 null，默认 10000000。省略保留原值。GET、PUT 都返回这两项。无效值返回 400 `invalid_input` |
-| `GET /progress` | `model` 段含 `state`、可空 `unavailable_reason`、有效模型、`today.{date,input_tokens,output_tokens}`、`daily_token_limit`、仅统计可见发行和有效艺人的 `items.{waiting_model,in_progress,waiting_human,shelved}` |
-| `GET /exceptions` | `status=open\|all`（默认 open）、`page`、`page_size`（最多 100）。返回 `items,total,page,page_size`。包含发行摘要、输入、变化、审查与决定。参数错误返回 400 `invalid_input` |
-| `POST /exceptions/{id}/accept` | 返回 `{exception,operation_ids}`。前值变化为 409 `exception_stale`，匹配受开关、资料源或当前可写内容限制时为 409 `curation_disabled`、`source_disabled`、`nothing_to_apply`。外部源暂时失败为 503 `source_unavailable` |
-| `POST /exceptions/{id}/decline` | 返回 `{exception}`。两个决定接口均校验 ID 与例外状态，分别可返回 400 `invalid_id`、404 `not_found`、409 `exception_decided` |
-| `GET /conversations` | 本管理员的整理会话，返回 `items,pagination`，每项含 `kind=curation` 与 `item_counts`。详情、事件及续聊使用管家会话接口 |
-
-模型状态为 `idle`、`running`、`waiting_review`、`paused`、`disabled`、`waiting_for_scan`、`limit_reached` 或 `unavailable`。不可用原因区分 `not_configured`、`key_needs_reentry`、`tool_unsupported`、`enabler_unavailable`、`source_disabled` 与 `provider_error`。例如开启者未配置管家时，程序仍可继续匹配，模型状态为 `unavailable/not_configured`。达到每日上限后，新的服务器本地日期使用该日累计量重新判断。
-
-样例登记在 `recordCurationSamples`：`curation/settings-model`、`curation/progress`、`curation/conversations`、`curation/exceptions`、`curation/exception-accepted`、`curation/exception-declined` 以及 `errors/{exception-stale,exception-decided,curation-conversation,curation-plan}`。
-
-### 17.6 必需测试与断言点
-
-| 断言点 | 用例 |
-| --- | --- |
-| R1 会话类型、模式、开启者、首条消息与五项上限；普通列表隐藏及模式锁定 | `TestPostgreSQLCurationModelStartsCurationConversation`、`TestPostgreSQLStewardCurationConversationHiddenAndLocked` |
-| R2 读取候选、独立审查、模型批次内建立对应、补缺与归组，以及按条和按批撤销 | `TestPostgreSQLCurationModelResolveMatchProgramChain` |
-| R3 同名修正工具按来源落层；拒绝清除、批外发行与人工字段覆盖 | `TestPostgreSQLCurationModelCorrectReleaseAutoLayer` |
-| R4 审查批准、拒绝、转人工后继续；不可用按 5 分钟、30 分钟、2 小时重审，耗尽后延迟 24 小时 | `TestPostgreSQLCurationModelReviewPaths`、`TestPostgreSQLCurationModelReviewUnavailableBackoff` |
-| R5 主动搁置、证据变化重开、连续三次未处理后搁置 | `TestPostgreSQLCurationModelShelveAndReopen`、`TestPostgreSQLCurationModelUnhandledThreeTimes` |
-| R6 启停条件、开启者变更、凭据取消、登出后继续；最后一步暂停后释放领取并保留次数 | `TestPostgreSQLCurationModelStopConditions` |
-| R7 主模型、审查、摘要按日计量，对话用量排除；额度用尽、跨日恢复和不限额 | `TestPostgreSQLCurationModelDailyLimit` |
-| 领取中的待定项随程序重判刷新摘要与证据、保留领取；其他状态的既有行为；领取后补歌词再匹配不是 `item_stale` | `TestPostgreSQLCurationPendingUpsert`、`TestPostgreSQLCurationModelPlanAfterClaimRefresh` |
-| R8 人工采纳、前值冲突、重复决定、拒绝后的字段与对应标记；分步匹配中断后原管理员续做 | `TestPostgreSQLCurationExceptionAcceptDecline` |
-| R9 外部证据来源、后台第 21 项提案和旧版批准的执行守卫 | `TestPostgreSQLStewardReviewPolicyV2Evidence`、`TestBackgroundTwentyFirstSharedCallRejected`、`TestPostgreSQLStewardReviewV1ApprovalRejected` |
-| R10 三个对话占满时仍可启动后台运行，后台名额全实例唯一 | `TestPostgreSQLCurationModelBackgroundSlot`、`TestSupervisorBackgroundSlot` |
-| R11 设置校验、显式 null、模型进度、例外分页和筛选、管理员权限与决定接口错误码 | `TestPostgreSQLCurationModelAPI`、`TestPostgreSQLCurationModelAPIMatchErrors`、`TestPostgreSQLCurationExceptionAcceptDecline` |
-| R12 开启者未配置管家时报告原因，程序层仍可建立对应 | `TestPostgreSQLCurationModelUnconfiguredEnabler` |
-| 重启后释放遗留领取、保留未处理次数、作废后台方案并关闭模型批次 | `TestPostgreSQLCurationModelRestartRecovery` |
-
-## 18. I：曲目字段的自动层、程序补全与模型例外
-
-### 18.1 写入与撤销
-
-`Writer.ApplyTrack(ctx, TrackRequest) (Applied, error)` 接受曲目标识、可选的所属发行、来源、批次、幂等键及第 4 节的写入上下文。`Fields` 至少含一项，仅接受 `title`、`artist` 的 `set` 意图。文本沿用人工修正的规范化与 4096 字节限制。指纹包含类型、曲目标识、规范化的字段、provider，以及传入的非零预期版本和为真的 `OnlyEmpty`。
-
-事务按幂等锁、目录写锁、发行行、曲目行的顺序加锁。曲目必须在库。指定发行时在锁内核对归属，变更返回 `409 item_stale`。预期版本与曲目人工版本不同返回 `409 revision_conflict`。开启者、批次和后台领取关系沿用第 4、17 节。带版本的模型请求触及人工字段时整条返回 `409 manual_override`。其余请求逐字段过滤，`OnlyEmpty` 遇到人工行或自动行记 `occupied`，命中同一曲目、字段和值的标记记 `suppressed`，相同自动值记 `unchanged`。全部跳过时返回 `409 nothing_to_apply` 和各字段原因。
-
-写入 `track_auto_values` 后递增所属发行的 `auto_revision`，刷新曲目搜索，改艺人时同时刷新发行署名。操作类型为 `track_auto_correction`，目标是发行，前后态带曲目标识、当时的有效曲名，以及逐字段的自动值、写入者和有效值。操作列表的 `changes.track` 包含 `id,title`。
-
-撤销允许曲目已离库。逐格核对原操作仍拥有全部字段，再整体恢复前态及原写入者，原先没有自动值的格子删除。任何一格被覆盖或移除均返回 `409 revert_conflict`。成功时在同一事务为每个被撤值写入 `target_type=track` 的“不再提出”标记，响应的 `revision` 为曲目当前人工版本。单条、按批和按来源撤销共用此规则。曲目改挂其他发行后，原记录保留当时的发行，撤销记录归当前发行。
-
-### 18.2 程序匹配与存量补做
-
-只有程序层的已匹配发行执行曲目补全。在发行字段之后、归组之前，按配对的录音 ID 从 MusicBrainz 发行曲目或单曲录音取得标题、署名。同一录音在发行中出现多次且取值冲突时跳过。标题占位或由文件名、默认值推出时可以补，艺人占位时可以补。先过滤空值、超长值和已标记的意图，再按曲目用 `OnlyEmpty=true` 写入，每步幂等键由本代次的 `track_fields/<track_id>` 派生。程序完成匹配后记 `result.track_fields="done"`。模型匹配和匹配例外采纳保留原预览及结果格式。
-
-存量补做要求发行工作状态为 `matched`、规则版本和输入摘要相符、结果尚无 `track_fields`，且有待补曲目和已有外部对应。一次按已有对应读发行或录音，用已保存的曲目对应配对。补做沿用原代次，在可重复读事务内重新核对发行证据、工作状态和代次，合并结果字段。执行补全记 `done`，没有候选字段记 `none`，外部 404 记 `unavailable`。暂时不可用或源关闭时保留原状态，下轮仍可补做。
-
-曲目自动值不进入发行匹配摘要。歌词空缺、外部查询、候选核对、歌词摘要和写入操作的曲名快照使用有效值。补上艺人可触发这首曲目的歌词重查，无修正时沿用原摘要。
-
-### 18.3 工具、审查与例外
-
-`correct_track` 使用 `release_id, track_id, expected_revision, changes, basis`。在库曲目的版本由 `get_track.revision` 提供。对话和 MCP 的 `set`、`clear` 走人工执行器，清除人工行后取自动值或扫描值，归属不符返回 `404 not_found`。后台只允许本批发行的曲目，预览和执行都核对版本、人工优先及不再提出标记，实际写入使用模型来源和模型批次。批外发行返回 `out_of_batch`，后台清除返回 `invalid_correction`。
-
-审查证据包含发行和曲目目标、曲目版本、所属发行、扫描值和有效字段，以及外部对应。沿用现有审查策略版本。后台按发行定位待定项；曲目例外额外返回 `track: {id,title}`。采纳时锁定曲目，核对发行与待定项，重新计算预览，差异返回 `exception_stale`。相符时按当前曲目版本写人工层并在同一事务完成例外。不采纳时逐字段为曲目和值写入“不再提出”标记。
-
-样本见 `operations/track-auto-list`、`operations/track-auto-reverted`、`curation/exceptions-track`。
-
-### 18.4 必需测试与断言点
-
-| 断言点 | 用例 |
-| --- | --- |
-| `OnlyEmpty` 保留人工和自动值，报告 `occupied`、`suppressed`、`unchanged`，拒绝 `manual_override` 和 `item_stale` | `TestPostgreSQLTrackAutoApply` |
-| 单条撤销恢复自动前值与原写入者，写入曲目字段标记，拒绝撤销被覆盖的操作 | `TestPostgreSQLTrackAutoRevert` |
-| 按批倒序撤销，保留其他批次 | `TestPostgreSQLTrackAutoBatchRevert` |
-| 按来源撤销，恢复其他来源的前值与写入者 | `TestPostgreSQLTrackAutoProviderRevert` |
-| 曲目与发行的人工版本独立，自动写入和撤销递增发行自动版本 | `TestPostgreSQLTrackAutoIndependentRevisions` |
-| 并发只补空缺时仅有一次写入成功并拥有字段 | `TestPostgreSQLTrackAutoConcurrent` |
-| 专辑和单曲从 MusicBrainz 补占位或推断的字段，保留人工值、自动值和不再提出标记 | `TestPostgreSQLCurationProgramTrackFields` |
-| 已匹配发行按现有对应补做一次并保留状态及代次，404 记 `unavailable`，暂时失败保留原状态 | `TestPostgreSQLCurationTrackFieldsBackfillOnce` |
-| 补全艺人后以有效值重查歌词，读取返回在线歌词 | `TestPostgreSQLCurationLyricsUsesEffectiveArtist` |
-| 后台修正写入模型批次的自动层，拒绝批外发行、曲目归属不符和 `clear` | `TestPostgreSQLCurationModelCorrectTrackAutoLayer` |
-| 管家对话修正写入人工层并校验曲目归属 | `TestPostgreSQLStewardCorrectTrackManual` |
-| 例外采纳写人工层，前值变更返回 `exception_stale`，不采纳后程序及模型跳过该字段值 | `TestPostgreSQLCurationExceptionTrackAcceptDecline` |
-| 审查收到发行和曲目目标、曲目版本、扫描值、有效值与外部对应 | `TestPostgreSQLStewardReviewTrackEvidence` |
-
-## 19. G：艺人对应、自动合并与回填
-
-### 19.1 署名取证与对应写入
-
-`catalog.LoadCurationArtistCredits(ctx, q, releaseID)` 按位置返回发行的 `release_artist`、`album_artist` 和各在库曲目的 `track_artist`，每项保留原署名、位置和当前艺人 ID。字段有人工修正（包括设空）时取修正层，其余取扫描层。身份依次按曲目指派、发行指派、全局名字绑定、名字键初始身份路由，再解开一跳重定向。目录准备中返回 `ErrArtistCatalogPreparing`。
-
-程序在有把握的匹配中逐组对位。两个发行角色分别与 `Release.Artists` 对位，曲目经已配对的录音 ID 取外部曲目署名，同一录音在外部发行出现多次时跳过该录音。单曲方式取 `Recording.Artists`。
-
-- 每组本地与外部署名数量相等且至少一位，本地署名按从 1 开始的连续位置对位、身份各异，外部 ID 非空、各异，并排除 Various Artists 和 [unknown] 的公共 MBID。
-- 每位的 `textnorm.Text` 名字相同，或标签列表等长且该位 MBID 与外部署名相同。发行标签取所有在库曲目一致的有序 `mb_album_artist`，曲目取自己的有序 `mb_artist`。任一位无法对上，整组跳过。
-- 同一发行的各组为同一身份给出不同 MBID 时，丢弃该身份的全部对应。例如两首歌给同一位艺人对出不同 MBID，其他艺人的一致对应仍可写入。
-
-`writeMatch` 在普通对应之后、字段补全之前以独立步骤 `artist_links` 调用一次 `Writer.ApplyLinks`。写入参数为 `object_type=artist`、`method=artist_credit`、`confidence=certain`、`Source={Kind:"source", Provider:"musicbrainz"}`。写入事务持 CATP 锁重读非自动层署名，只接受发行内的当前身份，否则返回 `invalid_input`。已有对应沿用 `unchanged`、`occupied`、`suppressed` 判定。撤销沿用外部对应的归属检查和逐项标记。已由艺人级 `artist_link` 接管的对应行跳过，操作描述给出跳过数，发行同次建立的其他对应仍可撤销。
-
-### 19.2 同一 MusicBrainz 艺人的自动合并
-
-新匹配和回填在对应步骤之后，按本发行涉及的 MBID 反查本地身份，解开一跳重定向后至少有两位才尝试合并。每对使用程序批次及步骤 `artist_merge/<mbid>/<较小本地ID>/<较大本地ID>`。
-
-`Writer.MergeArtists(ctx, ArtistAutoMerge{A, B, ExternalID, Source, BatchID, Key})` 返回操作 ID 和保留的艺人 ID。只接受 MusicBrainz 程序来源。幂等指纹包含操作类型、排序后的艺人对、外部 ID、提供者及规则 `same_mb_artist/1`。执行器获取 CATP 和按 UUID 排序的艺人行锁，检查双方仍是当前身份，保留有效署名条数较多的一方，平局保留 UUID 较小者。写入复用治理的 `mergeLocked`，与人工合并共享意图恢复、投影和收藏刷新。
-
-每方的身份闭包由该艺人及直接重定向到它的全部身份组成。事务以共享锁保护两个闭包的 MusicBrainz 艺人对应，两侧各要有一条对应归属于尚未撤销的 `external_link` 操作，操作后态包含同一来源、对象、外部 ID。两个闭包的全部艺人对应只能指向请求中的唯一 MBID。写入前经 `checkExternalWriter` 核对开启者和批次。
-
-| 条件 | 结果 |
-| --- | --- |
-| 模型来源或无效请求 | `invalid_input` |
-| 任一方已重定向 | `artist_redirected` |
-| 公共 MBID、任一侧缺少记录佐证、闭包内还有其他 MBID | `no_strong_evidence` |
-| 两闭包之间任一方向存在 `artist_merge` 标记 | `nothing_to_apply` |
-| 同一次拆分或撤销合并同时涉及两个闭包，或当前忽略键对按全局名字路由分别归属两侧 | `manual_structure` |
-
-程序遇到 `nothing_to_apply`、`manual_structure`、`no_strong_evidence`、`artist_redirected`、`revision_conflict`、`artist_catalog_not_ready`、`artist_scope_too_large` 时仅跳过当前艺人对，其他错误交回工作循环。
-
-撤销自动合并时，`Writer.SuppressArtistMerge` 与还原身份共用事务。标记写一行，`target_type=artist`、`target_id` 为较小 ID、`subject=artist_merge`，值为另一方的 `{artist_id,name}`，哈希取另一方 ID 的 SHA-256。即使其中一方后来又被并入第三位艺人，该标记也会通过闭包命中。
-
-### 19.3 已匹配发行的回填
-
-程序完成新匹配时记 `result.artist_links="done"`。模型匹配保留空缺标记，交由程序以 MusicBrainz 来源补做；艺人目录准备中也保留补做机会。存量回填要求当前规则版本、输入摘要相符、状态为 `matched`、结果缺少 `artist_links`，且发行已有外部对应（单曲要求唯一在库曲目已有录音对应）。
-
-回填与曲目字段共用一次按既有对应读取的外部发行或录音，沿用原代次。已尝试对应记 `done`，没有可对位项记 `none`，外部 404 记 `unavailable`；源关闭或暂时不可用留待重试。在可重复读事务内复核摘要、代次和工作状态的更新时间后，将标记合入原结果。规则版本与发行匹配次数保持原值。若上一次回填已经提交对应和部分合并，重试时署名可能解析到新身份。出现幂等冲突时，以开启者、原代次步骤键、发行和匹配方法核实已提交的对应步骤，再继续余下的合并。
-
-### 19.4 必需测试与断言点
-
-| 用例 | 必需断言 |
-| --- | --- |
-| `TestAlignCredits`、`TestAlignCreditsTrackLayers`、`TestAlignCreditsConflictingArtist` | 按取证署名对位，整组等长、名字或同位标签吻合、排除公共身份；一位艺人对应多个 MBID 时仍保留其他一致对应。 |
-| `TestPostgreSQLCurationArtistLinks` | 专辑与曲目、单曲的程序对应；忽略自动层、优先人工修正；位置或名字不符时跳过，模型写入被拒。 |
-| `TestPostgreSQLCurationArtistLinksBackfill` | 已匹配发行仅按已有对应读取一次，补写标记，保留规则版本、代次、摘要和匹配次数。 |
-| `TestPostgreSQLCurationExternalLinkArtistRevertSuppresses` | 撤销后同一艺人与外部编号的对应被抑制，另一编号仍可写入。 |
-| `TestPostgreSQLCurationAutoMergeSameMusicBrainzArtist` | 同 MBID 的艺人合并，保留有效署名多的一方，记录程序来源和批次。 |
-| `TestPostgreSQLCurationAutoMergeBlocked` | 闭包标记、人工拆分、忽略行、人工撤销、多个 MBID 和已重定向分别返回约定错误。 |
-| `TestPostgreSQLCurationAutoMergeRevertSuppresses` | 按批撤销写入艺人对标记，后续匹配和人工并入第三位艺人后的回填均保留分开决定。 |
-| `TestPostgreSQLCurationAutoMergeReplay` | 回填结论落库前中断，重启后沿用代次并完成标记，对应与合并各只记录一次。 |
-
-## 20. H：同一外部发行的整张并入
-
-### 20.1 发现、目标选择和排队
-
-程序匹配与模型匹配都在 `writeMatch` 的对应、补全和归组步骤完成后，以当前 MusicBrainz 发行编号 X 调用 `ObjectsLinkedTo(ctx, tx, "musicbrainz", "release", X)`。追加匹配步骤可能改变发行摘要，因此按全部步骤完成后的库内证据发现。单曲录音匹配没有发行对应。
-
-在可见、未并入且有对应佐证的发行中，比较各自在库曲目最小的 `(disc_number, position)`，取较小的一方为目标。平局按发行 `created_at`、UUID 升序决定。两边各有至少一个已对应的录音，集合互不相交。例：第 1 碟和第 2 碟各对应一组不同录音时，第 1 碟的发行接收第 2 碟。两种音频格式对应相同录音时，跳过这一对。
-
-仅目标创建 `kind=release_merge`、`conflicts=["same_external_release"]` 的待定项。唯一候选保存来源的 `release_id,title,disc_count,track_count`。摘要为有序 JSON 数组 `[目标 ReleaseDigest, 来源 ReleaseDigest, 目标对应操作 ID, 来源对应操作 ID]` 的 SHA-256。三个及以上发行时，同一目标每次只有一条开放项。已有项保留其固定候选；有后续候选时在证据中记 `queued=true`，当前项结束后程序按 X 重新取证排下一条。摘要变化时旧项结束，新项重新领取和审查。
-
-### 20.2 写入、强证据和程序错误
-
-后台工具 `merge_releases` 只接受 `{"item_id":"待定项 UUID","basis":{"note":"依据"}}`，预览从领取项读取两方。专用注册表与对话、MCP 共用权限和运行名额管理。后两者的人工工具合同见[整张发行并入](./release-merge-contracts.md)。
-
-`Writer.MergeReleases(ctx, ReleaseAutoMerge)` 遵循第 17 节开启者、后台会话、领取关系和模型批次合同。锁住目录与双方发行后重读源与目标，核对证据、待定项摘要和治理令牌。模型来源、会话、批次及审查随 `release_auto_merge` 操作保存。成功返回 `{operation_id,release_id}`，同一事务结束本项为 `resolved/model_merged`。其他涉及双方的开放合并项沿用治理的 `resolved/merged`。
-
-| 条件 | 结果 |
-| --- | --- |
-| 缺 MusicBrainz 发行对应、两方的 X 不同，或任何一方缺少佐证 | `no_strong_evidence`。佐证要求当前对应的写入操作为针对该发行的未撤销 `external_link`，后态来源为 MusicBrainz，且 links 包含相同对象和外部编号 |
-| 任一方没有在库录音对应，或两边录音集合相交 | `no_strong_evidence` |
-| 双方有 `release_merge` 不再提出标记 | `nothing_to_apply` |
-| 双方在不同组，其中一方最近生效的归组为人工操作 | `manual_structure` |
-| 已并入、形成链，或超过治理上限 | `release_merged`、`merge_chain`、`release_too_large` |
-| 待定项或摘要变更，或治理令牌过期 | `item_stale` 或 `merge_changed` |
-
-程序遇到前四行的六种业务错误只跳过当前对，其他错误交回工作循环。自动撤销和标记沿用[发行并入的撤销合同](./release-merge-contracts.md)。
-
-### 20.3 审查与例外
-
-第 4 版审查读取双方可见发行摘要、本地碟数和曲目数、MusicBrainz 发行对应、佐证操作 ID、录音数量和交集。外部发行碟数与曲目数取自对应操作后态的 `external.disc_count` 和 `external.track_count`，旧对应缺值显示“不可用”。发行并入审查证据中的 `layout` 按治理合并计划列出碟序、原发行与原碟号，`layout_track_total` 不超过 300 首时逐曲列出位置、本地有效标题和已生效的录音对应，超过时保留碟级信息并标记 `tracks_omitted=true`。归组及发行并入缺少生效的对应时由后端直接转人工。执行仍受版本、期限与证据摘要约束。[管家独立审查合同](./steward-review-contracts.md)
-
-未通过或转人工的项按工具输入的 `item_id` 进入例外。管理员采纳时重新计算令牌，在锁内比较原预览、核对强证据，以采纳者为操作者记录模型来源和人工审查决定。操作、例外操作编号及 `resolved/human_accepted` 同时提交。前态变化返回 `exception_stale` 并重新开放例外。不采纳在同一事务写双方的 `release_merge` 标记与例外决定，按第 17 节结束待定项。
-
-### 20.4 存量回填
-
-新发行匹配完成时保存 `result.release_merge="done"`。已匹配发行有既有发行对应、摘要和当前规则相符且结果缺少该键时，复用现有对应执行一次本地发现。在可重复读事务中核对摘要、代次和工作状态更新时间，把标记合入现存结果。单独补做并入发现无需 MusicBrainz 网络请求，保留原规则版本、代次和尝试次数。
-
-### 20.5 必需测试
-
-| 用例 | 必需断言 |
-| --- | --- |
-| `TestPostgreSQLCurationReleaseMergeProposed` | 程序和模型均可发现；碟号、曲序、创建时间、UUID 决定目标；同一对只建一项；存量只回填一次；三方在同一目标排队 |
-| `TestPostgreSQLCurationModelMergeReleases` | 后台工具登记；模型经第 4 版审查写入模型批次和 `release_auto_merge`，待定项 `model_merged`；人工并入结束目标和候选涉及的待定项 |
-| `TestPostgreSQLCurationMergeBlocked` | 录音相交、缺发行对应、缺操作佐证、操作已撤销、标记、人工分组和链式分别返回约定错误 |
-| `TestPostgreSQLCurationMergeRevert` | 按批和按来源撤销均写标记并阻止再发现；后续人工结构操作使自动撤销跳过 |
-| `TestPostgreSQLCurationExceptionMergeAcceptDecline` | 采纳以当前管理员身份执行；前态及令牌变化返回 `exception_stale`；不采纳写标记 |
-| `TestPostgreSQLStewardReviewPolicyV4MergeEvidence` | 第 4 版证据包含双方和录音交集，外部计数取自对应操作后态；旧版批准被拒；缺少对应直接转人工 |
-
-## 21. 艺人图片与简介
-
-程序层按有效艺人调度 `artist_media`。有对应时读取家族内 MusicBrainz 或 Wikidata 艺人对应。按家族可见的资料等级选择查询来源，缺项或较高等级的来源可触发补全。人工资料等级最高，家族中已有人工图片或简介时，程序层跳过该项的自动查询，写入事务也复查人工层。无对应时按“网络搜索与身份待定项”的主署名范围查询。图片依次查 Fanart.tv、TheAudioDB、Commons。简介依次查中文维基百科、TheAudioDB 中文、英文维基百科、TheAudioDB 英文。源闸门处理总开关、单源开关和密钥状态。上一源出错可以继续尝试下一源，仍有缺口且遇到暂时错误时按工作状态退避。已有 Q 号时，Commons 和维基百科使用该条目的 P18 与中英文站点链接，写入依据为 Q 号。Fanart.tv 与 TheAudioDB 使用 MBID，只有 Q 号时跳过这两个源。输入摘要涵盖艺人 MBID、Q 号、资料缺口、来源状态与抑制标记。
-
-`ApplyArtistImage`、`ApplyArtistBio` 以 `artist` 为操作目标。图片先经受管图片存储校验，简介为最多 4000 个 Unicode 字符的纯文本。写入顺序为操作幂等锁、目录写锁、艺人行锁；事务内复查总开关、批次及家族内的依据对应。两张外部资料表的 `basis_source`、`basis_id` 记录实际使用的 `musicbrainz` 与 MBID 或 `wikidata` 与 Q 号。同一家族已有同级或更高等级的自动资料返回 `occupied`，来源条目命中撤销标记返回 `suppressed`，Commons 缺少许可名返回 `license_missing`。三种情况均返回 `nothing_to_apply` 并保留跳过原因。图片与简介分别写一条操作，类型为 `artist_external_artwork`、`artist_external_bio`，保存在本轮整理批次，`origin.provider` 为实际内容来源。
-
-资料行与操作记录在同一事务写入，图片按内容寻址并持有存储键锁。操作快照保存出处、许可与图片资源或简介内容。每次写入或撤销都递增 `artists.auto_revision`，撤销响应带目标的人工版本 `edit_revision`。操作列表展示艺人摘要和图片规格或简介语言、字符数。
-
-单条、按批次与按来源撤销共用同一执行器。仅删除原操作仍持有的资料行，标记保存在写入时的艺人身份上。标记的 `subject` 为 `artist_image` 或 `artist_bio`，`value={source,external_id}`，`value_hash` 是来源 ID、NUL 和外部条目标识的 SHA-256。图片没有独立条目标识时用下载地址的 SHA-256。新一轮查询核对有效身份和并入方的标记。图片撤销提交后，`Discard` 在存储键锁内核对发行封面、艺人的人工图片和自动图片以及 `artwork_retained` 的引用，再清理文件。写入失败只清理这次实际写过的文件。回退迁移清除资料行、对应操作与抑制标记、工作状态；SQL 回退不会访问数据目录中的图片文件。
-
-### 人工资料与指定对应
-
-`artist_manual_image`、`artist_manual_bio` 保存变更前后的人工层快照。人工层与自动层分别存放，清除人工层后按家族读取规则重新选出可见资料。四个写接口都经过操作幂等锁、CATP、有效身份解析和艺人行锁，复查版本并递增 `edit_revision`。人工操作不带 `origin`。接口字段见[艺人合同](./artist-contracts.md)。
-
-标记不对按字段在事务外识别当前显示层及所属操作。事务内复查可见行、层和归属，期间已变化返回 409 `revert_conflict`。人工层的清除本身可撤销。自动层先锁原操作行再取得 CATP、艺人行锁，复用该操作的撤销和抑制逻辑。字段为空返回 409 `nothing_to_apply`。
-
-`artist_link` 在有效身份上写对应。写入和预览共用 Q 号校验 `^Q[1-9][0-9]{0,11}$`。MusicBrainz 条目带 Wikidata 链接时一并写 Q 号，Wikidata 条目有唯一 P434 时一并写 MBID。人工可以替换同源对应，整组相同时返回 `nothing_to_apply`，原行所属操作保留。模型写入带模型来源、会话和批次，已有同源行按 `occupied` 跳过。模型写入撤销时登记 `external_link` 抑制标记。艺人级操作不提供发行匹配的自动合并证据。
-
-变更前保存对应的完整行及归属。同一事务移除依据已失效的自动资料，保存被删除行供撤销。迁移 0072 先从旧操作的 `origin.basis` 回填历史 MBID，缺少时取家族内唯一的 MusicBrainz 艺人对应，两者均缺时保留资料且依据为空。后续改对应时也保留依据为空的资料。
-
-撤销直接移除当前家族内以被撤回对应为依据的自动资料，这一步不登记图片或简介的抑制标记。随后恢复原资料和原对应，跳过原写入操作已被撤销的对应。操作列表的可撤销判断与执行共用检查。对应行已换归属或移除、待恢复资料离开当前家族，或者同一位置已有其他需要保留的自动资料时，撤销返回 `revert_conflict`。人工图片被替换或清除，以及写入或撤销对应时移除自动图片，均由执行该变化的操作在 `artwork_retained(storage_key, operation_id)` 登记旧内容键。登记长期保留，图片查询与清理均将其计为引用。
-
-迁移 0072 的回退有损。回退删除人工资料表、图片保留登记、新增类型操作及其撤销记录，并删除 `artist_link` 写入的对应。先前被替换的发行对应和被清除的自动资料不会由 SQL 回退恢复。
-
-## 插件来源的整理与撤销
-
-内置来源之后，四种媒体查询分别按安装顺序尝试支持该能力的插件。艺人简介先完成内置来源的中英文查询，再查插件。默认关闭，源开关和密钥沿用外部源设置，插件声明列出可能收到资料的上游基础地址。歌词和封面写入前检查实际提供结果的源。新打开插件或更改密钥后，以前未命中的空缺可以重新查询。操作和抑制标记使用稳定的 `plugin:<id>`，删除插件后仍可按该标识撤销。见[插件合同](plugin-contracts.md)。
-
-## 网络搜索与身份待定项
-
-迁移 0105 建立艺人联网队列，管理员显式启动查找。单人使用 `GET/POST /api/v1/artists/{id}/web-search`，全量、进度和停止使用 `GET/POST/DELETE /api/v1/admin/curation/artist-web-search`。队列按照专辑主署名、曲目主署名排序，只领取当前运行代次中尚无 MusicBrainz 对应的有效艺人。停止保留剩余项和本项次数，重新启动接续。旧自动项不领取，历史建议仍可处理。查过且输入摘要未变的艺人跳过。艺人资料补齐继续处理已有对应和按名称查询的插件。
-
-`resolve_artist_identity` 接受 MusicBrainz 艺人编号、说明和本项实际取得的 1 至 5 个网页引用。程序查询候选艺人名下发行，逐版核实其署名含候选 MBID，再按 A2.3 核对逐碟曲数、曲序和时长。四首及以下还须专辑名吻合，艺人条件以发行署名中的候选 MBID 为准，本地艺名可以不同。吻合即确认艺人，唯一版本写版本及曲目对应，同组多版只认到组，跨组记发行冲突，仅写艺人对应。完全无结构吻合时留给管理员通过现有例外接口确认或否掉，否掉会抑制该对应。手动队列不走独立审查。匹配后的图片、简介由资料程序补齐。
-
-每位艺人最多执行 10 次工具调用。每次模型请求和重试前检查共享日账与本项剩余的 50000 token，按完整协议请求估算输入并限制输出。已发送请求按上游报告结算，最后一次实耗可越过余量，触线后停止发送。上游完全缺报 usage 时，本项扣除输入估算加此次输出上限，共享日账仅记录已报告用量。
-
-历史网页资料的写入与撤销合同如下。
-
-* `submit_artist_media` 提交一项或两项资料，共用 1 至 5 个 `{url,title}` 网页引用。标题 schema 使用 `maxLength: 500`。标题清理为纯文本后允许空串，长度以艺人页使用的 500 个 UTF-16 码元为上限。写库前复查引用数量、URL 形状及标题长度与编码。简介去 HTML 后为 20 至 4000 个 Unicode 字符，语言为 zh 或 en。图片所在网页须在引用中，下载限 10 秒、16 MiB，校验格式和尺寸，短边至少 200 像素。图片下载和引用公网检查使用管家联网合同的出站规则。媒体操作来源为 `model/web_search`，模型名单独记录。任一项写入即以 `resolved/model_media` 结束本次待定项。[管家联网合同](steward-web-contracts.md)
-* 写入按对应、名字或模型领取关系复查依据。有许可来源、插件、网络搜索的等级依次降低。更高等级的自动资料事务内替换家族内的低等级行，旧行保存在操作的 `replaced` 快照。撤销只删除新操作持有的行，旧图提交后按引用清理。网络搜索图片的外部标识是图片地址的 SHA-256，简介固定为 `artist`。插件沿用条目 ID。
-* 例外同时返回可空的 `release` 和 `artist`，后者形状为 `{id,name}`。同项允许多个未决身份候选。采纳时复查预览，记录确认者并写对应，仅将同项的 `open` 候选置为 `superseded`。`accepting` 候选保留原状态和确认者，后续由其采纳流程按 `occupied` 等既有判定处理。待定项的采纳收尾在没有 `open` 或 `accepting` 候选时将该项置为 `resolved`。不采纳时写 `external_link` 抑制，最后一个候选被拒后本次查找结为 `no_result`。状态接口返回 `none|queued|running|shelved|waiting_human` 与 `candidates` 数组，候选引用的标题为 `""`。
-* 离线试用可为 mock 的 `-script` 选择 `backend/internal/upstreammock/testdata/artist-{identity,media,candidates}.json`。用主署名“纸屿”试验身份与同名候选，用“海岸来信”试验图片与简介。示例插件用“折纸灯乐团”试验按名补简介。
-
-工具边界验证应覆盖第六条引用、501 字标题、经管家出站放行名单登记的内网地址，以及纯文本标题写入。集成验证应覆盖单项资料写入后原待定项的结论、剩余缺口的新摘要、人工资料优先和程序收尾时的例外状态。
-
-## 22. 规则版本、识别摘要与发行分类（整理链 A，2026-11-25）
-
-依据 ADR 0006 第 16.2 节。
-
-### 22.1 三种规则版本
-
-| 常量（`curation/program/worker.go`） | 当前值 | 升级时 |
+| 错误类别 | `pause_kind` | 后续处理 |
 | --- | --- | --- |
-| `LocalRuleVersion` | 4（第 27.3 节） | 只重算真实性、分类与缺口，不发外部请求 |
-| `MatchRuleVersion` | 105 | 对第 23.6 节指定的工作状态登记一次 requery_match_version |
-| `PatrolPromptVersion` | 1 | 不让任何工作状态到期；只作用于新巡检与手动重新巡检 |
+| 配置或模型能力拒绝 | `configuration` | 暂停到配置修改或手动探测成功 |
+| 上游余额或账户额度用尽 | `provider_quota` | 暂停，每小时最多一次小探测 |
+| 临时 429、5xx、超时或断流 | `temporary` | 单步短重试后按 5 秒起倍增，`Retry-After` 较长时可超过 180 秒 |
+| 回复为空 | `empty_replies` | 单项按 5、10 秒重试，三次后记 `no_result`，十项连续空答暂停 |
+| 请求被拒或 JSON 字段无效 | 无独立 `pause_kind`，被拒单项搁置，十项相同拒绝后为 `configuration` | 整批 HTTP 400 拆成单项，单项记搁置原因 |
 
-迁移 0086 给 `curation_work_states` 加 `local_rule_version`、`match_rule_version`、`identity_digest`、`gap_digest`、`requery_match_version`，
-给 `curation_pending_items` 加 `match_rule_version`、`identity_digest`。旧列 `rule_version`、`input_digest` 保留并继续写。
+模型段还返回 `configured`、`reason_detail`、`retry_at`、`can_retry`、`context_hint`、`unavailable_reason`、`model`、`today`、`daily_token_limit` 和 `items`。`unavailable_reason` 包括 `not_configured`、`key_needs_reentry`、`tool_unsupported`、`tool_unsupported_override`、`enabler_unavailable`、`source_disabled`、`configuration`、`provider_quota`、`empty_replies` 和 `provider_error`，其中 `configuration`、`provider_quota`、`empty_replies` 是模型暂停时带出的暂停类别。暂停类别 `temporary` 对外写成 `provider_error`，达到日上限时 `pause_kind` 为 `daily_limit`。整理和手动艺人联网共用 `curation_model_usage` 的服务器本地日账。主模型、模型摘要和艺人联网都计入，管家普通对话不计入。`model_concurrency` 默认 4，允许 1–16。调低并发时在途项继续，运行数降到上限以下才补位。
 
-### 22.2 两份摘要
+调度顺序固定为本地辅助、识别判断、名字差异与艺人身份，其中手动艺人联网项优先于其他项，`release_merge` 与识别判断同属该档。每批最多领取五个到期项。完整请求输入按 JSON 估算，`max_request_tokens` 默认 128000，允许 1–10¹²。输出预算为 `min(8192,max(1,floor(预算/8)))`。放不下的项留到下一批，单项继续超限则逐步保留最多三个候选并搁置为内容过长。模型请求前检查日额度，每次实际使用按上游报告记账，艺人联网每位最多 10 次工具调用和 50000 token。
 
-- **识别摘要**只哈希原始输入：标题与采用的署名及其原始来源名、条码与目录号与厂牌、碟结构、在库曲目的碟位曲序与整秒时长与 inferred 位、
-  标签标识与 ISRC、可重建的 CUE 目录、已有对应与 `external_link` 抑制标记。不含真实性等解释结果，因此本地规则升级不改变识别摘要。
-  文件摘要决定是否因物理文件变化重查。成员签名含根、路径和大小（含 CUE 文本），实际音频另计去重、排序的路径、大小及微秒修改时间。同尺寸的 CUE 文本改动无法检测；本轮光盘目录仅取现有 CUE 镜像 TOC。
-- **缺口摘要**记各可写字段的真实性、人工与自动占用、抑制标记，以及封面、歌词的有无。只有缺口摘要变化时，重算本地计划与发生变化的媒体主题，不重新识别。
-- 整份发行指纹（`curation.ReleaseDigest`）保持不变，继续作为写入校验：待定项 `input_digest`、模型预览与采纳、确认恢复、并入证据都用它。
+请求成功决定或明确的 `undetermined` 才增加项级回答次数。失败、来源等待和缓存命中不增加次数。空返回只累计空答次数，5 秒、10 秒后重试，第三次结案为模型没有结果，不写成 `unmatched`。连续十个不同项被同一拒绝或空答时暂停当前模型段。模型批次 400 错误先拆成单项发送，单项仍被拒才按安全原因搁置。日额度达到上限时保留项和计数，进入下一日或提高额度后继续。
 
-旧格式行（新列为空）首次遇到新程序：用整份指纹核对旧 `input_digest`，相同则直接写入新列作为基线、不发请求；不同按普通变化处理。
-基于 result 标记的维护（曲目字段回填、艺人对应回填、并入发现）在同一轮照常进行。解释改变了缺口的旧行（例如 `display_fallback` 曲目艺人成为可补），
-按已有对应读取一次发行详情用于补全，不搜索。
+### 5.2 识别判断
 
-### 22.3 真实性
+识别判断只在程序完成 MusicBrainz 查询后对 `unmatched` 或 `conflict` 项建立 `release_match` 或 `recording_match` 待定项。一次模型调用只给出候选线索，程序再查询和结构核对。线索可为候选标题、艺人、条码、目录号、版本词和媒体类型，不能提交发行编号、录音编号或 ISRC。每项最多 6 次实际 HTTP 查询，游标和预算保存在 `curation_work_states.result.judge`，缓存命中不扣次数。候选列表按外部 ID 排序，单步最多保存 100 条，截断或候选过多直接交人工。已存在硬冲突时停在当前步骤，不继续更弱线索。
 
-`catalog/metadata/curation_authenticity.go` 的纯函数按字段来源与人工层给出 `real`、`inferred`、`placeholder`：
+短专辑最多四首时，名字线索命中唯一外部候选后可由独立本地证据补足标题差异。模型提供的标题、艺人和编号必须分别命中外部版本、本地艺人、所有碟曲目位置、真实曲名和可比时长，并通过原有硬反证检查。无效响应连续三次后将该项记为 `query_error` 并保留原因。成功候选由程序保存 `snapshot_id`、`candidates` 和 `curation_release_match_results`，模型不会保存 `selection` 或直接建立对应；选择由管理员接口完成。
 
-| 来源 | 类别 |
+### 5.3 名字差异与艺人身份
+
+`verify_name` 的决定为 `typo`、`keep` 或 `undetermined`。只有已对上 MusicBrainz 且本地名字与外部名字为同一文字、相差 1–2 处时才建立核对项，版本后缀和 `feat.` 不计入差异。`typo` 采用已核实的 MusicBrainz 写法并按核对等级写自动层（第 3 级或第 2 级），不写 `curation_match_names` 或人工层；`keep` 保留本地原文，`undetermined` 不写入。相同无序名字对只询问一次，否定结果永久写入 `curation_artist_negative_pairs` 并阻止重复询问。艺人身份 `same` 才建立 MusicBrainz 艺人对应或合并，`different` 写否定对，`undetermined` 保持原样。独立审查不再介入这些决定。
+
+## 6. 整理艺人
+
+艺人身份联网是管理员手动触发的独立功能，不依赖自动整理总开关，也不创建专辑整理项。单艺人入口为 `GET /api/v1/artists/{id}/web-search` 和 `POST /api/v1/artists/{id}/web-search`。全量队列为 `GET /api/v1/admin/curation/artist-web-search`、`POST /api/v1/admin/curation/artist-web-search` 和 `DELETE /api/v1/admin/curation/artist-web-search`。
+
+队列状态为 `idle`、`running` 或 `stopped`，单项状态为 `none`、`queued`、`running`、`shelved` 或 `waiting_human`。输入摘要包含艺人有效姓名、别名、发行结构、文件摘要、规则版本和来源配置。摘要未变化且已有结论或候选时不重复入队。停止只阻止尚未发出的项，恢复继续当前代次。
+
+模型只能提交 `source=musicbrainz`、合法 MBID、候选名称、说明和 1–5 个引用 URL。程序读取候选艺人及其发行，用曲数、碟曲数、曲序和时长与本地发行逐张核对。结构吻合时通过现有治理入口写入艺人、发行和曲目对应，并唤醒图片和简介投影。没有结构吻合时写入 `curation_model_exceptions` 的 `open` 候选，由管理员通过 `POST /api/v1/admin/curation/exceptions/{id}/accept` 或 `/decline` 决定。候选过期时返回 `exception_stale`。
+
+艺人已存在对应、已重定向或未配置模型与网页来源时，单艺人接口返回相应冲突。艺人图片和简介只在 MusicBrainz 对应建立后由资料队列补齐，排在专辑识别之后。
+
+### 6.1 艺人联网队列字段
+
+`curation_artist_web_queue` 是固定单行表，`state` 为 `idle`、`running` 或 `stopped`，保存 `generation`、`actor_id`、`started_at` 和 `stopped_at`。艺人待定项 kind 为 `artist_identity`，保存 `artist_web_generation`、`artist_web_actor`、`artist_web_suspended` 和 `artist_web_priority`，并按代次、优先级和艺人标识建立索引。艺人状态响应为 `{configured,can_start,can_stop,queue,usage,state,candidates}`。`queue` 含 `generation`、`position`、`total`，`usage` 含 `tool_calls`、`tokens`、`tool_call_limit=10` 和 `token_limit=50000`。候选项含 `exception_id`、`source`、`external_id`、`name`、可空 `description`、`note` 和 `citations`。
+
+单艺人 POST 未配置网页搜索返回 `409 search_unconfigured`，未配置模型返回 `409 model_not_configured`，已有对应返回 `409 artist_already_linked`，已重定向返回 `409 artist_redirected`，不在主署名范围返回 `409 artist_out_of_scope`。重复 POST 复用当前代次，不创建重复项。全量队列 POST 返回 `202` 和 `{state,generation,total,queued,running,processed,configured,can_start,can_stop,retry_at}`，DELETE 将当前代次处于 `waiting_model`、`waiting_route` 或 `in_progress` 的项挂起并标记 `artist_web_suspended=true`，GET 返回队列统计。接受或否掉只接受手动队列 `resolve_artist_identity` 候选，其他项返回 `404`。艺人候选接受和否掉沿用 `POST /api/v1/admin/curation/exceptions/{id}/accept` 与 `/decline`，接受响应为 `{exception,operation_ids}`，否掉响应为 `{exception}`。
+
+### 6.2 艺人资料投影
+
+已建立 MusicBrainz 艺人对应后，`artist_media` 队列按艺人家族的有效对应查询图片和简介。人工资料优先于自动资料，家族中同级或更高等级的自动资料会使当前项返回 `occupied`。资料操作目标为艺人，表为 `artist_external_artworks` 和 `artist_external_bios`，图片与简介分别使用 `artist_external_artwork` 和 `artist_external_bio`，保存 `basis_source`、`basis_id`、许可和资源或文本快照。图片大小和格式先由受管图片存储校验，简介最多 4000 个 Unicode 字符。来源条目被抑制时返回 `suppressed`，缺少许可名时返回 `license_missing`，通过 `nothing_to_apply` 结束并返回跳过原因。
+
+资料读取按来源等级和可见身份家族合并。图片源依次为 Fanart.tv、TheAudioDB、Commons、插件，简介源依次为中文维基百科、TheAudioDB 中文、英文维基百科、TheAudioDB 英文、插件。资料队列也处理只有 Wikidata 对应的艺人以及插件来源。艺人图片和简介操作支持单条、按批次和按来源撤销，撤销标记主题为 `artist_image` 或 `artist_bio`，标记值为 `{source,external_id}`。提交后清理图片前按内容寻址存储键统计引用。
+
+## 7. 进度、存储与接口
+
+### 7.1 表和源闸门
+
+整理使用 `curation_settings`、`curation_batches`、`curation_work_states`、`curation_pending_items`、`curation_model_exceptions`、`curation_model_usage`、`curation_model_state`、`curation_suppressions`、`external_links`、`release_auto_values`、`release_external_artworks`、`track_external_lyrics`、`artist_external_artworks` 和 `artist_external_bios`。外部源设置在 `curation_source_settings`，源声明由应用装配注册。MusicBrainz、Cover Art Archive、LRCLIB 和 AcoustID 按注册顺序提供能力。AcoustID 还要求指纹工具和密钥可用。治理操作类型包括 `release_auto_correction`、`track_auto_correction`、`release_external_artwork`、`track_external_lyrics`、`external_link`、`release_group_change`、`release_merge`、`release_auto_merge`、`artist_merge`、`artist_link`、`artist_manual_image`、`artist_manual_bio`、`artist_external_artwork`、`artist_external_bio` 和 `local_model_grouping`。
+
+源接口返回 `enabled`、`active` 和 `inactive_reason`。`inactive_reason` 还包括 `fingerprint_unavailable`、`bundled_key_rejected`、`search_unconfigured`、`key_missing` 和 `key_invalid`。后台调用统一经 `curation.Sources`，管家对话里的 MusicBrainz 工具直接使用适配器。
+
+主要表的字段如下。
+
+| 表 | 字段和约束 |
 | --- | --- |
-| `tag`、各格式的标签来源、`cue_sheet`、`cue_track`、`cue_virtual`、`rip_log`、非空人工设值 | 真实 |
-| `filename_fallback`、`folder_fallback`、`folder`、`album_title`、`folder_structure`、`path_order_fallback` | 推断 |
-| `display_fallback`、`default_fallback`、合辑展示署名（`compilation`）、空来源且值为“未知专辑”“未知艺术家” | 占位 |
+| `release_auto_values` | `(release_id,field)` 主键，八个字段的 `mode`、`text_value`、`year_value`、`list_value`、`operation_id`、`writer_level` 和 `scan_basis`。标题和专辑艺人不能设空 |
+| `releases` | `auto_revision BIGINT NOT NULL DEFAULT 1`、`curation_attempted_change_at` |
+| `operations` | `batch_id UUID` 可空，`origin` 含 `provider_kind`、`provider`、`basis`。自动字段类型为 `release_auto_correction` |
+| `curation_batches` | `id`、`tier`（`program` 或 `model`）、`opened_at`、`closed_at`、`actor_id`。详情实时统计 `operations` 和 `reverted` |
+| `curation_suppressions` | `id`、`target_type`、`target_id`、`subject`、`value_hash`、展示用 `value`、`operation_id`、`created_by`、`created_at`，唯一键为目标、主题和值哈希 |
+| `curation_settings` | 单行 `id=1`，`enabled`、`enabled_by`（`{id,username}`）、`enabled_at`、`updated_at`、`paused`、`model`、`model_daily_token_limit`、`max_request_tokens`、`model_concurrency`。每日上限默认 10,000,000。 |
+| `curation_source_settings` | `source` 主键、`enabled`、`updated_by`、`updated_at` |
+| `external_links` | `id`、`source`、`object_type`、`object_id`、`external_id`、`method`、`confidence`、可空 `operation_id`、`created_at`。唯一键为 `(source,object_type,object_id)` |
+| `release_external_artworks` | `release_id` 主键、`content_hash`、`mime_type`、`width`、`height`、`storage_key`、`source`、`external_id`、`operation_id`、`created_at` |
+| `track_external_lyrics` | `track_id` 主键、规范化 `lyrics`、`content_hash`、`source`、`external_id`、`operation_id`、`created_at` |
+| `track_acoustic_fingerprints` | `track_id` 主键、`pipeline_version`、内容指纹、大小、微秒修改时间、CUE 起止帧、`status`、`fingerprint`、`duration_seconds`、`failure_category`、`attempts`、`computed_at` |
+| `curation_source_keys` | `(source,name)` 主键、加密 `ciphertext`、`last_four`、`status`（`unchecked`、`valid`、`invalid`）、`updated_by`、`updated_at` |
+| `release_merges` | `source_release_id` 主键、`target_release_id`、`operation_id`、`merged_at`，源与目标不能相同 |
+| `operations_release_targets` | `(operation_id,release_id)` 主键，为整张并入操作保存所有涉及发行 |
+| `release_match_credit_parts` | 发行、曲目、角色、位置、本地文本、姓名、MBID、对应和依据操作，删除触发器清理最后一条拆名对应 |
+| `local_credit_parts` | `operation_id`、目标、角色、来源片段、原文、拆分段和连接词，用于本地辅助拆名 |
+| `local_model_groupings` | `root_id`、`directory_key`、唯一 `operation_id`、源摘要、目录集合、分配 JSON 和其他路径 |
+| `curation_release_match_results` | `(release_id,source)` 主键，状态、查询时间、原因、冲突、`snapshot_id`、候选和选择；`snapshot_id`、候选和选择无值时分别为 `null`、空数组和 `null`。 |
+| `curation_match_names` | 发行、目标类型、目标、字段、MusicBrainz 名称、外部编号、依据对应和依据操作 |
+| `curation_artist_negative_pairs` | 无序名字对主键、原因、模型、`legacy`、决定时间 |
+| `curation_model_state` | 单行配置状态，字段为 `config_key`、`model_key`、`pause_kind`、`reason_code`、`reason_detail`、`retry_at`、`backoff_seconds`、`streak_key`、`streak_items`、`tools_verified`。 |
+| `curation_pending_items` | 目标、`kind`、`evidence`、`input_digest`、`status`、`attempts`、`next_attempt_at`、会话摘要、`review_retries`、`shelved_reason`、`match_rule_version`、`identity_digest`、`route`、`item_tool_calls`、`item_tokens`、`source_retry_count`、`claim_source_recovery_at`、`empty_count`（0–3）、`model_stop_code`、`single_request`、`reset_item_usage_on_claim`。艺人手动队列另有 `artist_web_generation`、`artist_web_priority`、`artist_web_suspended`、`artist_web_actor`。状态 CHECK 允许 `waiting_model`、`in_progress`、`resolved`、`shelved`、`waiting_route`，打开项唯一索引不含 `verify_*` 与 `name_patrol`。|
+| `curation_artist_web_queue` | 单行 `id=true`、`state`（`idle`、`running`、`stopped`）、`generation`、`actor_id`、`started_at`、`stopped_at` |
 
-人工设空表示缺值且禁止补写。`TitlePlaceholder`、`ArtistPlaceholder`、`TitleInferred` 由它导出。占位值不进入外部搜索与歌词查询；
-搜索证据记录是否用到推断值（`uses_inferred`）。交给模型的待定项证据在发行与每条曲目旁附 `authenticity`，按字段名给类别。
+进度响应的 `releases` 含 `total`、`processed`、`matched`、`unmatched`、`conflict`、`try_later`、`query_error`，`pending` 含 `waiting_model`。每条队列含 `id`、`state`、`remaining`、`ready`、速率、`eta_seconds`、`pause_reason`、`source` 和 `retry_at`。模型进度含运行数、并发数、配置状态、暂停原因、重试时间、模型名、日用量和 `waiting_model`、`in_progress`、`shelved` 计数，`waiting_route` 计入 `waiting_model`。
 
-### 22.4 发行分类
+### 7.2 管理员接口
 
-按顺序取首个命中，只看可见发行与在库曲目：
+所有管理员写接口要求同源请求。主要接口如下。
 
-1. `tagged_id`：至少一首曲目有标签 `mb_release`（散放单曲为 `mb_recording`）。
-2. `insufficient`：标题与艺人都是占位，且没有条码、目录号、ISRC、任何外部编号，也不能重建 CUE 目录。
-3. `has_gaps`：标题或艺人不是真实值、任一曲目标题不是真实值、年份为空、没有本地封面，至少一项成立。
-4. `local_complete`：其余。
-
-缺口排序键为（标题与艺人中非真实的个数，非真实曲名数，缺本地封面，缺年份），逐项降序。
-
-`GET /api/v1/admin/curation/classifications`（管理员）返回同一快照的计数，四类之和等于 `total`，空库全为零：
-
-```json
-{"versions": {"local_rule": 2, "external_match_rule": 101, "patrol_prompt": 1},
- "releases": {"total": 0, "tagged_id": 0, "has_gaps": 0, "local_complete": 0, "insufficient": 0}}
-```
-
-按 `PageCurationReleases` 分页实时计算，不读文件、不调外部能力。
-
-## 23. 程序匹配规则与终止状态（识别规则 105）
-
-依据 ADR 0006 第 16.3 节。MusicBrainz 查询写法的实测见整理链父任务的 `research/mb-query-probes-2026-11-25.md`。
-
-### 23.1 查询
-
-发行 MBID、CUE 镜像 TOC、条码、目录号及厂牌、ISRC（至多四轨）、声纹（至多四轨）、文字依次执行。当前步骤取得候选即核对并停止，只有空结果才继续。查过可用编号的对象在声纹后结束。散曲查录音编号和 ISRC。
-
-文字使用当前可搜索的专辑名与艺人，散曲使用曲名与曲目艺人。合辑认可 Various Artists 编号。名字缺一项且无编号时跳过；两项均缺且无编号时仅在声纹可用时进入。先按名字与曲数查，空页才清理版本或格式字样、去掉曲数再查。仍为空时，分页 finder 查艺人，名字或别名只对应一个身份才按其 arid 查。简单 finder 最多执行前两次文字查询。程序不读取巡检名。
-
-### 23.2 专辑判定（命中即停）
-
-| 级别 | 条件 | 结果 |
-| --- | --- | --- |
-| 标识 | 第 15.2 节的方法条件；`tag_id` 另加文字反证：专辑标题与艺人都不等、且已配对的真实曲名一对都不相等（至少有一对可比）时记 `tag_text_mismatch`，定不下来 | 版本级 |
-| 发行组唯一 | 完整候选中至少两版，专辑与艺人合并键相等，曲数相等，同属一个已知发行组且没有已知反证；普通专辑多于四首 | 发行组级 |
-| 结构吻合 | 单版、合辑、古典或四首及以下的候选逐版核对：同碟曲数、总曲数相等，时长通过，无硬冲突；≤4 首另要求标题与艺人相等 | 一个通过为版本级；同组多个通过为发行组级 |
-| 定不下来 | 其余有可用候选的 | 待定项（识别兜底第一档） |
-
-- 普通同组多版直接定到组。需要补推断曲名时只读取最早一版（同日按编号排序），代表版只提供已核对的曲名。同名候选跨组记 `different_release_groups`。
-
-仅在 B2 名字线索产生唯一候选时，四首及以下专辑可由独立本地证据补足标题差异。模型的查询标题须命中外部版，本地艺人、所有碟轨位置、真实本地曲名与可比时长须逐一吻合，并通过原有硬反证检查。普通 S8 和部分吻合继续采用 A2.3 原判据。
-
-### 23.3 发行组级对应
-
-- `external_links` 新对象类型 `release_group_match`：`object_id` 是这张本地发行，`external_id` 是外部发行组编号，由 `external_link` 操作持有，可撤销并写抑制标记。
-- 可以用于：按发行组取封面（`CoverTarget{Kind:"release_group"}`）、专辑归组的强证据（`checkGroupEvidence` 认本发行未撤销的 `release_group_match`）、艺人对应。
-- 组级缺年份时使用发行组的 first-release-date，摘要缺日期时只查组实体。版本级专属字段不补（同组多版通过时取的参考版只补曲名）、录音对应、发行并入的发现与执行。
-
-### 23.4 散放单曲与艺人
-
-- 散放单曲：标签录音、ISRC、声纹之后是文字搜索（带覆盖容差的 `dur` 区间）。真实标题与艺人、完整页、恰好一个通过：录音对应；多个通过且有序外部艺人编号完全相同：只建立艺人对应；署名显示相同而编号不同算歧义。推断文字只接受恰好一个通过。
-- 艺人对应：人数相同、位置对应；名字规范化后相同，或是外部登记的别名（`artist/<id>?inc=aliases+url-rels`，与艺人资料共用同一次读取与缓存），即写 `artist_credit` 对应。艺人搜索用不带字段名的引号短语，能匹配别名。
-- 名字不同也不是别名的同位署名写入 `curation_artist_credit_proposals`（状态 `open`，由子任务 E 消费）；署名人数不同但本地全文恰等于外部姓名及连接词的拼接时按外部位置建对应，显示沿用本地文字；合辑与古典中能证实的角色错位跳过。程序不自动改名。
-
-### 23.5 零候选与终止状态
-
-`curation_release_match_results` 按发行与来源保存最近一次结论和查询时间。无查询的对象保留独立媒体队列的父投影，跳过计入 processed；查询失败不改最近成功时间。
-
-| 状态 | 处理 |
+| 方法和路径 | 当前行为 |
 | --- | --- |
-| matched | 保留 release、release_group、recording 或 artist 级别 |
-| conflict | 第 1–6 步命中但与本地不符，或名字步骤发现合并键相同的候选分属不同已知发行组（different_release_groups）。有模型时交识别判断 |
-| unmatched | 查空或名字步骤的候选均未通过结构或名称核对时，结论的 conflicts 为空，待定项保留候选证据。按本次查询时间再约 90 天；到期含声纹并沿用初次识别判断。完整候选全部被撤销或占用时记 reason=candidates_revoked，停用周期重查 |
-| `try_later` | 等待来源或发行重试，携带出错步骤和来源 |
-| `query_error` | 连续三轮发行查询错误；文件变化或识别规则升级后再查 |
+| `GET /api/v1/admin/curation/settings` | 返回 `enabled`、`enabled_by`（`{id,username}`）、`enabled_at`、`active`、`inactive_reason` |
+| `PUT /api/v1/admin/curation/settings` | 设置 `{enabled}`，打开时记录开启者 |
+| `GET /api/v1/admin/curation/progress` | 返回程序与模型进度 |
+| `GET /api/v1/admin/curation/sources` | 按注册顺序返回源能力和状态 |
+| `PUT /api/v1/admin/curation/sources/{id}` | 设置源 `{enabled}` |
+| `PUT /api/v1/admin/curation/sources/{id}/keys/{name}` | 设置源密钥 |
+| `DELETE /api/v1/admin/curation/sources/{id}/keys/{name}` | 删除源密钥 |
+| `GET /api/v1/admin/curation/batches?page=&page_size=` | 倒序分页返回批次 |
+| `GET /api/v1/admin/curation/batches/{id}` | 只返回批次摘要，不包含操作明细 |
+| `POST /api/v1/admin/curation/reverts` | 按批次或来源批量撤销，带 `Idempotency-Key` 和游标 |
+| `GET /api/v1/admin/curation/suppressions?release_id=&page=&page_size=` | 倒序分页返回抑制标记 |
+| `DELETE /api/v1/admin/curation/suppressions/{id}` | 成功 `204`，未知标记 `404 not_found` |
+| `GET /api/v1/admin/curation/classifications` | 返回发行分类和规则版本 |
+| `GET /api/v1/admin/curation/conflicts` | 返回冲突分页 |
+| `GET /api/v1/admin/curation/releases/{id}/match-results` | 返回识别候选和核对结果 |
+| `POST /api/v1/admin/curation/releases/{id}/recheck` | 请求重新核对并返回 `202` |
+| `POST /api/v1/admin/curation/releases/{id}/match-selection` | 管理员选择识别候选 |
+| `POST /api/v1/admin/curation/releases/{id}/adopt-name` | 采用名称建议 |
+| `POST /api/v1/admin/curation/model/retry` | 重试模型队列 |
+| `POST /api/v1/admin/curation/exceptions/{id}/accept` | 接受艺人候选 |
+| `POST /api/v1/admin/curation/exceptions/{id}/decline` | 否掉艺人候选 |
 
-新增或清除影响候选的 MusicBrainz 对应抑制标记时，同一事务登记所属发行重判。
+设置响应还包含 `model_concurrency`、`model`、`daily_token_limit`、`max_request_tokens` 和 `paused`，关闭状态的 `inactive_reason` 为 `disabled`。批次项目字段为 `{id,tier,opened_at,closed_at,operations,reverted}`。批量撤销请求为 `{scope:{kind:"batch",id}|{kind:"provider",provider},cursor}`，响应为 `{reverted,skipped:[{operation_id,code}],next_cursor}`。源项目字段为 `{id,name,capabilities,enabled,active,keys,requirements,upstreams,inactive_reason}`。抑制项目字段为 `{id,target_type,target_id,subject,value_hash,value,operation_id,created_by,created_at}`。
 
-管理员用 `GET /api/v1/admin/curation/releases/{id}/match-results` 读取按来源排序的 results，含 source、status、checked_at、reason、conflicts；无记录为空数组。历史时间未知用 null。进度的 releases 提供 matched、unmatched、conflict、total、processed、try_later、query_error。原 POST recheck 接受普通未匹配，返回 202，维持仅程序的手动触发。
+设置 PUT 接受 `enabled`、`paused`、`model`、`daily_token_limit`、`max_request_tokens` 和 `model_concurrency` 的部分更新，至少提供一个字段。`model` 最多 200 字节，空串表示使用开启者管家模型。`daily_token_limit` 接受 null 或 1–10¹² 的整数，`max_request_tokens` 必须为 1–10¹² 的整数，`model_concurrency` 只能为 1–16。仅从关闭到开启 `enabled` 时记录调用者并清除 `paused`，关闭不清除已有自动层。提高 `max_request_tokens` 会重新打开因 `content_too_long` 搁置的项，切换模型会重置已停下的项。模型 PUT 的字段变化不改变程序输入摘要。
 
-### 23.6 升级
+`GET /api/v1/admin/curation/progress` 返回 `state`、`rule_version`、`releases`、`pending`、`batch`、`queues`、`model` 和 `last_pass_finished_at`。`model` 段包含 `running`、`concurrency`、`configured`、`pause_kind`、`reason_detail`、`retry_at`、`can_retry`、`context_hint`、`state`、`unavailable_reason`、`model`、`today`、`daily_token_limit` 和 `items`。`today` 含日期、输入 token 和输出 token。没有装配程序循环时程序 `state` 和队列状态为 `unavailable`。
 
-105 的默认重查对象为未匹配（含候选已撤销）、有冲突及查询出错。将来的特定升级可声明复核级别及门槛，此时版级或录音级只读原对应 ID，其他级别保持原结论。
+后台整理会话的列表和详情使用管家会话接口，整理合同只约定会话 `kind=curation`、开启者、项计数和删除时的繁忙冲突。艺人图片、简介、链接等 HTTP 写接口属于 [艺人合同](./artist-contracts.md)。管家普通对话、网页工具和审查证据分别见 [管家运行时合同](./steward-runtime-contracts.md)、[管家联网合同](./steward-web-contracts.md) 和 [管家审查合同](./steward-review-contracts.md)，不在本合同重复定义。
 
-## 24. 自动层的写入先后与作废（整理链 F，2026-11-25）
+修正接口 `GET /api/v1/releases/{id}/corrections` 和修正成功响应中的每个字段带 `auto`，其值为 `{mode,value?,operation_id,provider_kind,provider}` 或 `null`，`effective_value` 是人工、自动、扫描三层结果。发行详情和版本对比可带 `auto_fields`，仅列有自动值且没有人工修正的字段。
 
-依据 ADR 0006 第 16.5 节。修订第 4 节与第 18.1 节“后写的替换先写的”。
+发行详情的识别投影总带 `musicbrainz_names` 数组，每项为 `{target_type,target_id,field,local_value,effective_value,musicbrainz_value,basis_operation_id,external_id,revision,can_adopt}`，无项目时为空数组。艺人对应投影带 `judged_by_model`，只有 `model_identity` 建立的对应才为真，并带对应操作 `operation_id`。
 
-### 24.1 级别
+### 7.3 状态、错误码和测试锚点
 
-迁移 0088 给 `release_auto_values`、`track_auto_values` 各加 `writer_level smallint` 与 `scan_basis jsonb`。
+自动整理错误码包括 `curation_disabled`、`curation_paused`、`scan_running`、`source_disabled`、`batch_closed`、`nothing_to_apply`、`revert_conflict`、`invalid_input`、`invalid_id`、`invalid_json`、`invalid_pagination`、`not_found`、`source_unavailable`、`database_unavailable`、`exception_stale`、`exception_decided`、`item_stale`、`insufficient_corroboration`、`revision_conflict`、`manual_override`、`out_of_batch`、`no_strong_evidence`、`manual_structure`、`artist_scope_too_large`、`release_merged`、`merge_chain`、`release_too_large`、`merge_changed`、`same_artist`、`not_unlisted`、`evidence_changed`、`artist_catalog_not_ready`、`contradictory_evidence`、`approval_required`、`key_missing`、`key_invalid`、`plugin_changed`、`search_unconfigured`、`artist_web_disabled`、`model_not_configured`、`artist_already_linked`、`artist_redirected` 和 `artist_out_of_scope`。外部封面和歌词会返回 `local_present`、`occupied` 或 `suppressed` 的跳过原因，艺人图片资料另可返回 `license_missing`。未登录、非管理员、跨源、分页和数据库错误沿用治理合同错误映射。
 
-| `writer_level` | 依据 | 写入方 |
-| --- | --- | --- |
-| 4 | 程序依据外部源 | 程序层的补空与曲目字段 |
-| 3 | 模型选择、后端核实的外部源 | `ModelMatcher` 的补空（含采纳匹配例外）；子任务 E 核实外部源后传此级 |
-| 2 | 库内写法或带引用的网页 | 子任务 E、D 核实依据后显式传此级 |
-| 1 | 本地文字整理 | 现有 `correct_release`、`correct_track`（没有可核实的结构化依据）；子任务 D 的本地整理 |
+集成测试直接调用 `curation.Writer.Apply`、`ApplyArtwork`、`ApplyLyrics` 和撤销器；`match-selection` HTTP 接口也会写入第 4 级自动值和对应。固定样本回归覆盖扫描输入、查找顺序、结构判定、自动层优先级、撤销顺序、源闸门、模型额度、艺人身份和各管理员接口。全量真实轮不作为验收门槛。
 
-- 级别由后端经 `curation.Source.WriterLevel` 传给 `Apply`、`ApplyTrack`，模型预览向 `CheckModelCorrection`、`CheckModelTrackCorrection` 传相同级别，模型不能自报。
-- 在 `Writer.applyFields` 的事务内逐字段判定：同级或更高级别可以替换；低级别遇到高级别返回 `skipped[field]="lower_priority"`，其余字段照常提交；全部跳过返回 409 `nothing_to_apply`。
-- 旧行：程序写的按 4，历史模型写的按 3。
+### 7.4 测试锚点
 
-### 24.2 扫描依据与作废
-
-- 写入时记录对应扫描字段的原始 JSON 值（`scan_basis`）；SQL NULL 表示升级前写入、没有依据，这类旧值不作废。
-- 扫描不改自动层。整理读取证据时比较依据与当前扫描值，不同则该自动值作废：受治理操作，来源 `curation / source / scan`，
-  数据库类型沿用 `release_auto_correction`、`track_auto_correction`，`changes.kind` 为 `release_auto_invalidation`、`track_auto_invalidation`，
-  `fields[]` 的前后两侧为 `{auto, effective, scan_value}`，曲目记录另带 `track: {id, title}`。
-- 作废后有效值回到新的扫描值，缺口按当前状态重新出现。作废不写“不再提出”。撤销作废时核对字段仍空、扫描值仍匹配，恢复原值、级别与写入者，以确认时的扫描值作为新依据。
-- 级别、依据不进整份指纹与识别摘要；只作废自动值不触发外部重新识别。
-
-## 25. 队列、多来源并行与中断恢复（整理链 B，2026-11-25）
-
-依据 ADR 0006 第 16.4 节。迁移 0089、0090。
-
-### 25.1 队列与取项
-
-- 五条程序队列各一个取项循环：识别（`release`）、封面（`artwork`）、歌词（`lyrics`）、艺人资料（`artist_media`）、声纹（`fingerprint`，计算本机声纹并提前查 AcoustID，识别队列消费准备好的结果并读 MusicBrainz 详情）。
-- 每次按状态与优先级取下一项，不存翻页位置。`curation_work_states` 为从未处理的目标补 `pending` 行；`pending` 不计入进度的 processed。
-- 优先级：手动触发 → 新入库（首次启用后第一次完整扫描的最大入库时间之后创建的发行）→ 有可检索的外部编号、条码或 ISRC → 有缺口（按 A 的缺口排序键降序）→ 本地完整（艺人尚无外部对应的在前）。本地齐全且无可查编号的发行，即使刚入库也排在缺口之后。同档按入库时间倒序。
-- 封面与艺人资料在识别确定身份后取得资格；歌词不依赖外部对应。同一发行的并发写入靠现有写入路径的行锁与锁内复核串行；结论、待定项与清待做标记同一事务；多步写入沿用步骤派生幂等键重放。
-- 普通未匹配的周期重查与手动重查沿用第 23.5 节。
-
-### 25.2 稳定（D7）
-
-- 扫描在候选写入时记录发行的成员签名（根、规范相对路径、字节数），新建或成员变化时记 `releases.curation_changed_at` 并清除确认。扫描中发现文件又长大或支持格式的文件解析失败，也记为变化。
-- 稳定：最近一次成功扫描的成员签名与上次一致，且距最后一次变化满 60 秒。不看文件修改时间。失败、取消或部分可读的扫描只能使确认失效，不能授予确认。升级前已有的数据视为稳定。
-- 待确认的发行成员安静满 60 秒后，整理协调器经现有扫描锁只重扫这些成员所在的目录。合并发行按实际成员覆盖所有相关目录，多碟合并范围；正在写入或扫描时让路。同一发行的同一变化窗口与建行同事务领取一次；其他发行的扫描不能消费这个窗口。成功且覆盖全部成员、签名一致且无未读或增长的文件才能授予确认。拷贝中暂停超过 2 秒可使已拷完的曲目可见，整理资格仍按 60 秒规则判断。
-
-### 25.3 来源退避
-
-- 各来源各自的限速器；Cover Art Archive 的清单与图片用它自己声明的限速器，不再占 MusicBrainz 的额度。
-- 429、503 先在同一请求内尝试，含首次最多 5 次。等待从 300 ms 起翻倍，上限 3 秒，重试预算共 10 秒。有效的 `Retry-After` 在剩余预算内优先，每次重发重新取得来源许可。短重试成功即继续本项。
-- 来源连续失败按 5、10、20、40、80、160、180 秒暂停，此后每轮 180 秒；Retry-After 更长时采用上游期限。各来源独立，成功一次清零，正常 404 同样表示来源恢复。发送间隔固定为来源声明值。同源竞争时，界面交互 → 普通识别 → 本地齐全的低优先识别 → 艺人资料。
-- 发行等待来源时不累计发行失败次数。来源恢复就唤醒该来源的等待行，到期没有其他流量时由正常请求试查。续查读取失败步骤及步骤内的有效响应缓存。
-- 只有该发行的查询错误（响应解析失败、查询参数被拒、本地计算失败）按轮计数，前两轮分别等 5、10 秒，第三轮停止。已完成的有效步骤中断连续失败；缺少适用线索或有效查空才能进入较弱的一步。
-
-### 25.4 给模型调度的接口
-
-| 接口 | 约定 |
+| 断言范围 | 测试锚点 |
 | --- | --- |
-| `NextModelKind` | 每个空闲名额按“本地辅助 → 识别判断 → 名字和艺人核对”取有可领项的类别 |
-| 手动整理艺人 | 显式启动的艺人代次单独领取，复用模型名额和共享日额度，网页工具仅供该队列 |
-| `BeforeModelItem` | 每项开始前检查共享日额度；已开始的项允许完成 |
-
-管理员通过 `GET/PUT /api/v1/admin/curation/settings` 读写整数 `model_concurrency`（迁移 0096，默认 4，范围 1–16）。保存后立即按新值分派。调低时在途项继续，运行数降到新上限以下再补位。`GET /api/v1/admin/curation/progress` 的 `model.running` 是正在处理的模型运行数，一次合批调用占一个名额。`model.concurrency` 是当前上限。
-
-调度器在内存中为会话包预留发行和艺人键，跨类别和重审跳过与在途包冲突的项。同艺人包内的多步任务逐项运行，同类核对可在一个请求中逐项作答。关闭时等待在途项收尾，重启按 17.2 回收遗留领取。
-
-整理主模型的五类结果在迁移 0101 对应的调度合同第 1 版中生效。配置及当前连续段保存在单行 `curation_model_state`，项级重试保存在 `curation_pending_items`。已发请求按实耗记账。
-
-| 结果 | 后续行为 |
-| --- | --- |
-| 请求被拒 | 多项普通 HTTP 400 整批交还，标记每项单发；单项拒绝按安全原因搁置，连续十个不同项同样被拒则暂停配置 |
-| 配置问题 | HTTP 401/403、明确的模型不存在或工具能力拒绝，暂停到配置修改或手动工具探测成功 |
-| 上游额度用完 | HTTP 402、400/429 或流事件明确表示余额不足，暂停并每小时只做一次小探测，可手动重试 |
-| 临时故障 | 普通 429、500/502/503/504/529、超时、无法连接或流中断，先在单步重试预算内重发，再按上游时刻等待；无提示时 5 秒起翻倍至 180 秒 |
-| 回复无效 | 只给缺失或无效项累计空答，5 秒、10 秒后重试，第三次记“模型没给出结果”；十个不同项连续空答提示换模型 |
-
-只有成功决定或明确的“定不了”增加项的回答次数，后者在 `evidence.decision_reason` 保存理由，以 `undetermined` 结案。失败与来源等待不计入回答次数。有效答案打断连续段。更换有效模型清空项级故障标记。配置、开关、扫描、每日余额和实际所需的来源在创建会话前核对；需要补资料的项按来源恢复时间推迟，已备齐证据的项可继续。
-
-`max_request_tokens` 默认 128000，范围 1–10¹²。按所选协议的完整 JSON 估算输入，并为输出留 min(8192, max(1, floor(预算/8)))。同优先级同回答合同的项按队列顺序试装，放不下的留到下批。本地辅助按完整目录发送。单项超出时仅在发送副本保留评分最高的至多三个候选并逐减；仍超限记“内容太长”，无会话和上游请求。
-
-### 25.5 进度
-
-`GET /api/v1/admin/curation/progress` 增加 `queues`，固定五项，顺序同 25.1。`releases.try_later` 计等待中的发行，`releases.query_error` 计已因三次专辑错误停止的发行。
-
-| 字段 | 含义 |
-| --- | --- |
-| `id`、`state` | 队列标识；`running`、`idle`、`paused`、`disabled`、`waiting_for_scan` |
-| `remaining`、`ready` | 有该主题需求的未完成目标（含在途与等待）；现在可领的数量 |
-| `successful_requests_per_second`、`completed_items_per_second` | 最近 5 分钟实测；没有样本为 null；声纹预查计实际 AcoustID 请求 |
-| `eta_seconds` | 剩余项数除以实测项速度，加上来源冷却的剩余时间；无法估计为 null，排空为 0 |
-| `pause_reason`、`source`、`retry_at` | `disabled`、`paused`、`waiting_for_scan`、`waiting_for_stability`、`waiting_for_fingerprint`、`source_disabled`、`rate_limited`、`source_unavailable`；来源暂停或专辑等待重试时带来源与重试时刻，专辑原因有 `invalid_response`、`invalid_query`、`fingerprint_failed` |
-
-## 26. 模型兜底（整理链 E，2026-11-25，审查策略第 5 版）
-
-依据 ADR 0006 第 16.6 节。迁移 0091。模型用量不是优化目标，限制只为防写错与防失控。
-
-### 26.1 一次识别判断
-
-程序在 MusicBrainz 实际查询后形成未匹配或有冲突结论，有模型时按可见、稳定的 `curation_eligible_releases` 建识别项。目录本地辅助先行。识别与名字核对单次提交无工具的 JSON，按项领取、分批、预算、错误和结算沿用 25.4。模型可先选本项候选，再按把握递减给名字、同名艺人、原文编号、版本或类型。程序先核对选项，再按组查询。条码和目录号必须逐字出现在单个本地标签、注释或路径分量。每张以实际出站计六次，缓存复用，预算和组下标随程序状态持久化。
-
-### 26.2 采用与挑选
-
-通过 23.2 才可建立对应。组内多张通过时保存 conflict、ambiguous_editions 和候选，停止查证。管理员读取 `GET /api/v1/admin/curation/conflicts`，按快照及外部编号提交 `POST /api/v1/admin/curation/releases/{id}/match-selection`，重新结构核对后应用。匹配结果带 candidates、snapshot_id、selection。文件或规则变化及到期重查先走程序。
-
-### 26.3 名字与艺人
-
-等价、跨文字、版本或合作署名后缀、明显不同的名字直接保留。同一文字一两字差异发名字核对，typo 采用已核实对应的原文，keep 或 undetermined 结项。艺人身份 same 使用受治理对应或合并，different 记无序名字对，其他发行同对也跳过。操作可撤销，人工字段受保护。名字核对独立于发行完成状态。专辑详情的 musicbrainz_names 按来源操作展示，管理员可携当前修订和依据调用 adopt-name 写人工层。
-
-## 27. 本地整理与显示名
-
-### 27.2 显示名与搜索
-
-合并后的艺人显示库内可见发行与曲目里出现次数最多的写法；并列时取合并身份的外部主名称；有人工改名的优先，自动合并优先以有人工名的一方为目标。搜索投影包含合并双方的全部原写法、人工名与显示名。
-
-### 27.3 本地整理
-
-- `local_cleanup` 以完整目录为一项。七种扫描结果可请求本地辅助：无名字标签、旧编码多解、含 & 或逗号的原署名、同目录按不同专辑名分开且曲号不连续、同一非根父目录下疑似同套的未识别碟目录、缺曲号或多碟迹象下缺碟号、复合专辑名。缺艺人的半个名字先补再查。匹配后确定性拆分失败由识别程序提供原署名引用。
-- 模型查看本项成员、标签、注释、原文件与目录名、编码读法、平票和编号来源。只使用 `submit_local_cleanup`。带理由的 `undetermined` 结案；`apply` 提交 `texts,encodings,splits,grouping` 的任意组合。领取、调用额度和失败处理沿用第 25 节。
-- 后台逐项核对。本地单一片段经文字归一、标点转空格后须包含提交文字。每张只能从扫描候选中选一个编码，后台解全部乱码字段。署名以段和连接词逐字重建原串。归组须完整覆盖可调整文件，确定的曲位和 CUE 边界受保护，每张每碟曲号唯一。
-- 写入采用 `origin.mode=local_cleanup`，显示为模型推断，自动字段级别 1。保留署名显示串，按有序段投影本地艺人。独立归组记录在下一次扫描消费。各项可撤销，程序核对后直接写入。已配主模型的相关发行先等本地辅助和归组确认，再用可核实的输入查询。具体版匹配可替换本地推断。
-
-### 27.4 已知局限
-
-艺人入库按 `textnorm.Text` 规范化后的名字归一（`catalog/internal/artistgraph/names.go`），没有人工区分时，同名的不同人共用一个本地艺人。本任务不拆开。
-
-## 28. 真实试用缺口与现实情形（2026-11-26，`MatchRuleVersion` 104，`LocalRuleVersion` 3，审查策略第 7 版）
-
-依据任务 `11-26-curation-live-gaps` 的 PRD（R1–R29，任务已归档，归档目录不纳入 Git）。第 23–27 节与本节不一致处以本节为准。
-
-### 28.1 来源不可用与连续无决定
-
-- 第二档与联网项在本次领取中遇到来源不可用（包括工具内部的 5xx、429 或网络错误），且没有成功写入时，放弃、结束和建议出口都走 `try_later`。保留原路线、尝试次数和代次，不调用 `FinishUnlisted`，不以 `suggestion_recorded` 结案。下次时间取来源恢复时刻与项级退避的较晚者。项级退避从 5 秒起连续翻倍，上限 10 分钟，成功后清零。
-- 工具次数与 token 保存在待定项上。本档任一累计值达到 D16 上限，且来源仍在冷却或本项有来源不可用记录时，保持原路线等待。下次时间按来源恢复时刻与项级退避计算，期间不开新会话，不记未收录。到期领取时才清零本档两项计数，再完整查一轮；当日用量继续保留。来源可用且本项没有故障记录时沿用 26.1 的触限处理。
-- 工具错误区分 `not_found` 与 `source_unavailable`，提示说明来源不可用时不必放弃。
-- 识别答复去掉代码块包裹后逐项校验，未通过的项按 25.4 单独重试。旧第二档及联网档仍按各自的放弃路径收尾。
-- 硬反证（时长、真实文字）留下的建议 `can_accept=false`，手动采纳返回 409 `nothing_to_apply`。
-
-### 28.2 发行组级对应的补充用途
-
-- **专辑标题佐证**：本发行有生效的 `release_group_match`，后端读回的组标题规范化后等于候选值，且组内没有一个版本的标题等于本地原值时，组标题作为专辑标题纠错的结构佐证，交独立审查，批准后按级别 3 写入。曲目标题与版本字段仍不从组级取得。审查策略升为第 7 版。
-- **同组多版**：第二档、联网档提示与 `resolve_release_match` 说明告知模型，分不出版本时提交任一结构吻合的版本，后端只建组级对应；经审查的提交在写入前同样判版。
-- **子集与超集**（`match_partial.go`）：
-  - 子集要求本地每首与外部不同曲目一一配对（标题规范化相等、时长在容差内），本地至少 max(4, 外部曲数一半)；
-  - 超集要求外部某版是本地的完整前缀，多出的曲目只在末尾；
-  - 吻合候选恰好同属一个组时，只建组级对应，`rule` 为 `partial_subset` 或 `partial_superset`，不建录音对应、不补版本字段。程序与模型提交共用同一判定。
-  - 部分吻合要求专辑名与艺人合并键均相等。已知异名且曲数不同的候选跳过详情；同一步有候选即终止搜索。
-  - 模型提交部分吻合的版本时，后端补读其它发行组里仍可能吻合的候选详情（摘要曲数不可能构成子集或超集的不读、也不计为未排除）。只剩提交的组吻合时落组级对应；多个组都吻合时拒绝，错误码 `track_count`，错误文本列出这些组的编号与标题并提示勿重复提交；补读遇来源不可用原样返回，走 28.1 的稍后重试。
-
-### 28.3 匹配判定
-
-- **合作署名**：专辑与曲目艺人比较前，双方把 feat.、ft.、featuring、&、、、/、;、x、×、with 统一为同一分隔符；`and` 不作连接词。
-- **发行组唯一级**：本地有可比时长时，所有可比时长都须在容差内，否则降到结构吻合或待定。
-- **反证**：判 `tag_text_mismatch` 时，程序比较纳入外部艺人登记的别名。
-- **同名不同人**：`arid:` 过滤的查询有候选即核对并保存结论。
-- **版本级署名的艺人对应**：自动层署名（级别 3、4）来自已生效的版本级对应时，按人数与位置写 `artist_credit`，不再交联网查身份；撤销该对应或作废该自动值时，同一事务复核并撤除派生对应。组级对应不派生。
-
-### 28.4 模型可取得的信息
-
-后端判定所需的每类外部信息，模型都能在首条消息或工具里取得：
-- 首条消息含 `route`、`evidence.route_history`（此前各档放弃与被拒原因）与 `write_requirements`（后端接受写入的佐证要求）；
-- `get_music_metadata` 增 `release_group`（组标题与带结构摘要的版本列表，长列表按 `offset`/`next_offset` 翻页）与艺人 `aliases`。
-
-### 28.5 扫描侧（`LocalRuleVersion` 3）
-
-细则见 `library-scan-tags.md`、`library-scan-grouping.md`。
-- 真实性新增来源 `legacy_encoding`（旧编码唯一读法，推断）与 `garbled`（乱码按占位处理，多解可由本地辅助从整张候选编码里选择）。符合西文字节特征的标签保留扫描来源。没有其它标签时读 ID3v1；唯一读法由扫描应用并保留推断来源。
-- 中英文占位词（Unknown Artist、Track NN、未知艺术家等）判为占位；`Untitled` 不算。
-- 无 `ALBUMARTIST` 且至少 4 首、至少 3 位不同主艺人、无人担任超过半数曲目的主艺人时判为合辑，专辑艺人取推断值 Various Artists；扫描与整理按每首真实署名拆分后的第一位统计。
-- 同目录曲号分段从 1 重起时推断碟号；`A1`、`B2` 曲号按面解析，A/B 面为第 1 碟、C/D 面为第 2 碟，均标为推断。
-- 目录名识别“艺人 - 年份 - 专辑”等写法，推断值清除明确码率和采样规格。格式词仅在括号格式标记中或成组出现时清除。零候选放宽可用标签里的格式与码率标记另查。
-- 同目录专辑标签按大小写与空白归一。括号后缀变体和连续标签曲号中的单首异名依归组合同并回。各自成立的专辑独立归组。
-
-### 28.6 升级
-
-- 103：未收录、待定，以及冲突码为 `track_count`、`position_conflict`、`artist_mismatch`、`tag_text_mismatch` 的待定项各补查一次，已匹配的不重查。
-- 104：已匹配且版本级对应仍生效、署名自动值来自该发行、本地艺人尚无对应的发行，用已缓存的发行详情离线补建艺人对应；缓存不存在就跳过，不出站。
-
-- 105：当前文件摘要与判定见第 22.2、23 节。已匹配默认不重查。
-
-### 28.7 模型并发
-
-见第 25.4 节（迁移 0096，`model_concurrency` 默认 4）。领取时跳过同艺人、同发行的项；每日上限每项开始前检查，并发时至多超出“并发数减一”项；模型接口 429/503 在请求内重试成功时继续本次运行，重试结束后仍失败才按第 25.4 节暂停领取，保留项的尝试次数。
+| 八个发行字段三层优先级、自动值和人工值隔离、重扫不改自动层、自动写入并发与撤销顺序 | `TestPostgreSQLCurationFieldPriority`、`TestPostgreSQLCurationRescan`、`TestPostgreSQLCurationIndependentRevisions`、`TestPostgreSQLCurationRevertOrder` |
+| 曲目字段 `OnlyEmpty`、人工优先、自动撤销、按批和按来源撤销、发行与曲目版本独立 | `TestPostgreSQLTrackAutoApply`、`TestPostgreSQLTrackAutoRevert`、`TestPostgreSQLTrackAutoBatchRevert`、`TestPostgreSQLTrackAutoIndependentRevisions` |
+| 外部对应、封面、歌词的读取优先、文件回滚、重扫保持和 `AfterCommit` 清理 | `TestPostgreSQLExternalArtworkPriority`、`TestPostgreSQLExternalArtworkRescan`、`TestPostgreSQLExternalArtworkApply`、`TestPostgreSQLExternalArtworkRevert`、`TestPostgreSQLExternalLyricsPriority`、`TestPostgreSQLExternalConcurrent` |
+| 程序六步查询、单曲查询、相反证据、曲目数和时长边界、命中即停 | `TestAlbumCorroboration`、`TestAlbumMethodRequirements`、`TestSingleRules`、`TestAlbumContraryEvidence`、`TestFirstHitStopsLookup` |
+| 识别结论每源一行、冲突分页、快照选择、幂等和陈旧项 | `TestPostgreSQLProgramMatchResultsAPI`、`TestPostgreSQLJudgeConflictSelectionRevalidatesSnapshot`、`TestPostgreSQLProgramModelMatchSameKeyKeepsNewerConclusion` |
+| 强证据归组、同外部发行整张并入、链式和人工结构冲突、撤销抑制 | `TestPostgreSQLCurationCJoinGroup`、`TestPostgreSQLCurationReleaseMergeProposed`、`TestPostgreSQLCurationMergeBlocked`、`TestPostgreSQLCurationMergeRevert` |
+| 艺人署名拆分、MusicBrainz 对应、同 MBID 自动合并和已匹配发行回填 | `TestPostgreSQLCurationArtistLinks`、`TestPostgreSQLCurationAutoMergeSameMusicBrainzArtist`、`TestPostgreSQLCurationArtistLinksBackfill` |
+| AcoustID 请求、缓存有效性、密钥状态、源闸门、指纹工具不可用和升级重开 | `TestLookupFingerprintRequestMappingAndCache`、`TestLookupFingerprintErrors`、`TestPostgreSQLB3AcoustIDKeyAPI`、`TestPostgreSQLB3FingerprintToolUnavailable`、`TestPostgreSQLB3LegacyWorkReopenedOnce` |
+| 本地辅助七类输入、目录级一次调用、文字编码拆名归组写入与撤销、目录内多张后续识别 | `TestPostgreSQLLocalAssistSevenReasons`、`TestPostgreSQLLocalAssistGroupingRevert`、`TestPostgreSQLLocalAssistBeforeMatch`、`TestPostgreSQLCurationModelRulesDirectoryAndPriority` |
+| 模型五类错误、空答、分批、共享日账、六次识别预算、名字否定对和艺人联网额度 | `TestPostgreSQLCurationModelDailyLimit`、`TestPostgreSQLCurationModelRulesBatch400`、`TestPostgreSQLJudgeHTTPBudget`、`TestPostgreSQLJudgeNameKeepUncertainAndLateCorrection`、`TestPostgreSQLArtistWebSearchOrderedQueue` |
+| 总开关、开启者、暂停、扫描、源开关、进度、接口样本、分页、回退迁移和过滤执行计划 | `TestPostgreSQLCurationEnabler`、`TestPostgreSQLCurationSourcesGate`、`TestPostgreSQLCurationCProgress`、`TestPostgreSQLAPIResponseSamples`、`TestPostgreSQLMigrationRollbackRoundTrip`、`TestPostgreSQLCurationFilterPlans` |
