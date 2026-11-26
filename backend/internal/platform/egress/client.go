@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -56,6 +57,7 @@ func NewClient(options Options) (*http.Client, error) {
 		DialContext:       transport.dialContext,
 		ForceAttemptHTTP2: true,
 	}
+	registerTransport(transport)
 	return &http.Client{
 		Transport: transport,
 		Timeout:   options.Timeout,
@@ -76,6 +78,9 @@ type allowlistKey struct{}
 type policyTransport struct {
 	options   Options
 	transport *http.Transport
+	mu        sync.Mutex
+	config    *ProxyConfig
+	proxied   *http.Transport
 }
 
 // RoundTrip 检查协议并把本次请求的放行结果传给拨号边界。
@@ -87,13 +92,34 @@ func (transport *policyTransport) RoundTrip(request *http.Request) (*http.Respon
 	if err != nil {
 		return nil, err
 	}
+	cfg, pool := transport.proxyPool()
+	useProxy, ips, err := transport.route(request.Context(), request.URL, allowed, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if useProxy {
+		if cfg.CredentialsUnavailable {
+			return nil, &Error{Code: CodeProxyAuth}
+		}
+		return proxyRoundTrip(pool, request)
+	}
 	ctx := context.WithValue(request.Context(), allowlistKey{}, allowed)
+	if len(ips) > 0 {
+		ctx = context.WithValue(ctx, directAddressesKey{}, ips)
+	}
 	return transport.transport.RoundTrip(request.Clone(ctx))
 }
 
 // CloseIdleConnections 允许 http.Client 关闭底层空闲连接。
 func (transport *policyTransport) CloseIdleConnections() {
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
 	transport.transport.CloseIdleConnections()
+	if transport.proxied != nil {
+		transport.proxied.CloseIdleConnections()
+		transport.proxied = nil
+		transport.config = nil
+	}
 }
 
 func checkScheme(request *http.Request) error {
@@ -109,9 +135,12 @@ func (transport *policyTransport) dialContext(ctx context.Context, network, addr
 		return nil, err
 	}
 	allowed, _ := ctx.Value(allowlistKey{}).(bool)
-	addresses, err := transport.addresses(ctx, host, allowed)
-	if err != nil {
-		return nil, err
+	addresses, _ := ctx.Value(directAddressesKey{}).([]netip.Addr)
+	if len(addresses) == 0 {
+		addresses, err = transport.addresses(ctx, host, allowed)
+		if err != nil {
+			return nil, err
+		}
 	}
 	dialer := &net.Dialer{}
 	for _, ip := range addresses {
@@ -184,6 +213,9 @@ func CheckEndpoint(ctx context.Context, client *http.Client, endpoint string) er
 	allowed, err := transport.allowed(address)
 	if err != nil {
 		return err
+	}
+	if cfg := activeProxy.Load(); cfg != nil && transport.options.Policy == Unrestricted && (cfg.Bypass == nil || !cfg.Bypass(address)) {
+		return ctx.Err()
 	}
 	_, err = transport.addresses(ctx, address.Hostname(), allowed)
 	return err

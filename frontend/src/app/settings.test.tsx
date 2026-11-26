@@ -14,8 +14,8 @@ const legacyAddresses = [
   ["/system/backups?tab=files&extra=a%20b#files", "/settings/backups?tab=files&extra=a%20b#files"],
 ] as const;
 
-const managementPaths = ["/settings/library", `/settings/library/scans/${scanId}`, "/settings/members", "/settings/curation", "/settings/operations", "/settings/backups", "/settings/clients", "/settings/insights"];
-const managementApis = ["/api/v1/users", "/api/v1/library-roots", "/api/v1/library-root-operations", "/api/v1/scans", "/api/v1/scans/active", `/api/v1/scans/${scanId}`, `/api/v1/scans/${scanId}/report`, "/api/v1/operations", "/api/v1/system/version", "/api/v1/system/backups", "/api/v1/admin/curation/settings", "/api/v1/admin/curation/progress", "/api/v1/admin/curation/sources", "/api/v1/admin/curation/batches", "/api/v1/admin/curation/suppressions", "/api/v1/admin/insights", "/api/v1/admin/subsonic"];
+const managementPaths = ["/settings/library", `/settings/library/scans/${scanId}`, "/settings/members", "/settings/curation", "/settings/operations", "/settings/backups", "/settings/network", "/settings/clients", "/settings/insights"];
+const managementApis = ["/api/v1/users", "/api/v1/library-roots", "/api/v1/library-root-operations", "/api/v1/scans", "/api/v1/scans/active", `/api/v1/scans/${scanId}`, `/api/v1/scans/${scanId}/report`, "/api/v1/operations", "/api/v1/system/version", "/api/v1/system/backups", "/api/v1/admin/curation/settings", "/api/v1/admin/curation/progress", "/api/v1/admin/curation/sources", "/api/v1/admin/curation/batches", "/api/v1/admin/curation/suppressions", "/api/v1/admin/insights", "/api/v1/admin/network/proxy", "/api/v1/admin/subsonic"];
 
 function setup(current: string | null = "curator") {
   const api = installFakeApi();
@@ -35,13 +35,13 @@ function expectAddress(actual: string, expected: string) {
 }
 
 describe("设置页与权限", () => {
-  it("管理员有账号、播放、Agent、关于、音乐目录、成员、自动整理、局域网设备、第三方客户端、操作记录、备份与匿名统计十二栏，账号展示用户名、角色与修改密码", async () => {
+  it("管理员有账号、播放、Agent、关于、音乐目录、成员、自动整理、局域网设备、网络、第三方客户端、操作记录、备份与匿名统计十三栏，账号展示用户名、角色与修改密码", async () => {
     setup();
     renderApp({ path: "/settings/account" });
     await accountHeading();
     const links = within(screen.getByRole("navigation", { name: "设置" })).getAllByRole("link");
     expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
-      ["账号", "/settings/account"], ["播放", "/settings/playback"], ["Agent", "/settings/agent"], ["关于", "/settings/about"], ["音乐目录", "/settings/library"], ["成员", "/settings/members"], ["自动整理", "/settings/curation"], ["局域网设备", "/settings/devices"], ["第三方客户端", "/settings/clients"], ["操作记录", "/settings/operations"], ["备份", "/settings/backups"], ["匿名统计", "/settings/insights"],
+      ["账号", "/settings/account"], ["播放", "/settings/playback"], ["Agent", "/settings/agent"], ["关于", "/settings/about"], ["音乐目录", "/settings/library"], ["成员", "/settings/members"], ["自动整理", "/settings/curation"], ["局域网设备", "/settings/devices"], ["网络", "/settings/network"], ["第三方客户端", "/settings/clients"], ["操作记录", "/settings/operations"], ["备份", "/settings/backups"], ["匿名统计", "/settings/insights"],
     ]);
     expect(links[0]?.getAttribute("aria-current")).toBe("page");
     const main = within(screen.getByRole("main"));

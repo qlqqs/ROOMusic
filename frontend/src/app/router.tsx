@@ -41,6 +41,7 @@ const OperationsPage = lazyRouteComponent(() => import("./routes/operations-page
 const CurationPage = lazyRouteComponent(() => import("./routes/curation-page"), "CurationPage");
 const BackupsPage = lazyRouteComponent(() => import("./routes/backups-page"), "BackupsPage");
 const LanDevicesPage = lazyRouteComponent(() => import("./routes/lan-devices-page"), "LanDevicesPage");
+const NetworkPage = lazyRouteComponent(() => import("./routes/network-page"), "NetworkPage");
 const InsightsPage = lazyRouteComponent(() => import("./routes/insights-page"), "InsightsPage");
 const ClientsPage = lazyRouteComponent(() => import("./routes/clients-page"), "ClientsPage");
 const AboutPage = lazyRouteComponent(() => import("./routes/about-page"), "AboutPage");
@@ -538,6 +539,18 @@ function LanDevicesRoute() {
 
 const lanDevicesRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/devices", component: LanDevicesRoute });
 
+function NetworkRoute() {
+  return (
+    <AdminGate>
+      <LazyPage>
+        <NetworkPage />
+      </LazyPage>
+    </AdminGate>
+  );
+}
+
+const networkRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/network", component: NetworkRoute });
+
 function ClientsRoute() {
   return (
     <AdminGate>
@@ -592,7 +605,7 @@ const routeTree = rootRoute.addChildren([
     artistCandidatesRoute,
     stewardRoute,
     stewardConversationRoute,
-    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, agentSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, curationRoute, operationsRoute, backupsRoute, lanDevicesRoute, clientsRoute, insightsRoute, aboutRoute]),
+    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, agentSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, curationRoute, operationsRoute, backupsRoute, lanDevicesRoute, networkRoute, clientsRoute, insightsRoute, aboutRoute]),
     notFoundRoute,
   ]),
 ]);
