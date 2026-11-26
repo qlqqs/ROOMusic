@@ -272,7 +272,7 @@ func TestRequesterGetBytesRetryAndFailureMemory(t *testing.T) {
 		},
 	})
 	ctx := WithBackground(t.Context())
-	for _, elapsed := range []time.Duration{0, 9*time.Minute + 59*time.Second} {
+	for _, elapsed := range []time.Duration{0, 4 * time.Second} {
 		now = now.Add(elapsed)
 		data, typ, err := r.GetBytes(ctx, server.URL, "image/*", 64)
 		if !errors.Is(err, ErrTryLater) || data != nil || typ != "" || hits.Load() != 5 || !slices.Equal(waits, []time.Duration{3 * time.Second, 4 * time.Second, time.Second, time.Second}) {

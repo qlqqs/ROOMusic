@@ -170,6 +170,12 @@ func TestLookupFingerprintBackoff(t *testing.T) {
 					t.Fatalf("结果=%v 错误=%v 出站=%d 退避=%v", got, err, outbound.Load(), delays)
 				}
 				for i, delay := range delays {
+					if failure.status == 429 || failure.status == 503 {
+						if want := 300 * time.Millisecond << i; delay != want {
+							t.Errorf("第 %d 次退避=%s，期望 %s", i+1, delay, want)
+						}
+						continue
+					}
 					base := time.Second << (i + 1)
 					if delay < base || delay >= base+base/2 {
 						t.Errorf("第 %d 次退避=%s，期望 [%s, %s)", i+1, delay, base, base+base/2)

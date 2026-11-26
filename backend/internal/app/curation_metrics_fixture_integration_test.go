@@ -56,15 +56,21 @@ func (e metricExpect) withOutcomeRules() metricExpect {
 			e.Accept = []string{"no_usable_candidates", "unlisted"}
 		}
 	}
-	// 允许放弃对应时，也接受只作记录的建议；开放建议必须逐条不可采纳。
+	// 允许放弃对应时保留建议终态。仅反例一律要求建议不可采纳。
 	if slices.Contains(e.Accept, "unlisted") || slices.Contains(e.Accept, "no_usable_candidates") {
 		if !slices.Contains(e.Accept, "suggestion") {
 			e.Accept = append(slices.Clone(e.Accept), "suggestion")
 		}
-		canAccept := false
-		e.SuggestionCanAccept = &canAccept
+		if !e.allowsMatch() {
+			canAccept := false
+			e.SuggestionCanAccept = &canAccept
+		}
 	}
 	return e
+}
+
+func (e metricExpect) allowsMatch() bool {
+	return slices.Contains(e.Accept, "release") || slices.Contains(e.Accept, "release_group")
 }
 
 type metricLocal struct {

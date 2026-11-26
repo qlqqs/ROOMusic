@@ -125,7 +125,7 @@ func TestPostgreSQLCurationProgramRetry(t *testing.T) {
 		return nil
 	}
 	f.run(t)
-	for i, delay := range []time.Duration{2 * time.Second, 4 * time.Second} {
+	for i, delay := range []time.Duration{5 * time.Second, 10 * time.Second} {
 		requireUnattemptedProgramState(t, f.stateFor(t, "release", f.a))
 		queues, err := f.worker.QueueProgress(t.Context())
 		requireCurationOK(t, err)

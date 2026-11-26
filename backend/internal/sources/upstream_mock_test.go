@@ -200,6 +200,7 @@ func TestUpstreamMockSourceScenarios(t *testing.T) {
 						},
 						After: func(delay time.Duration) <-chan time.Time {
 							delays = append(delays, delay)
+							now = now.Add(delay)
 							ready := make(chan time.Time, 1)
 							ready <- now
 							return ready
@@ -229,7 +230,7 @@ func TestUpstreamMockSourceScenarios(t *testing.T) {
 					}
 					switch scenario {
 					case "unavailable", "rate_limited":
-						want := []time.Duration{7 * time.Second, 7 * time.Second, 7 * time.Second, 7 * time.Second}
+						want := []time.Duration{7 * time.Second}
 						if !reflect.DeepEqual(delays, want) {
 							t.Errorf("退避=%v，期望每次依照 Retry-After 等待 7 秒", delays)
 						}

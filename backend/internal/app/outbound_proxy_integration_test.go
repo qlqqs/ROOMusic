@@ -427,7 +427,7 @@ func TestPostgreSQLOutboundProxyCurationBackoff(t *testing.T) {
 	requireCurationOK(t, err)
 	queue := queues[0]
 	if queue.ID != "release" || queue.State != "paused" || queue.PauseReason == nil || *queue.PauseReason != "source_unavailable" ||
-		queue.Source == nil || *queue.Source != "musicbrainz" || queue.RetryAt == nil || !queue.RetryAt.Equal(f.clock.options().Now().Add(2*time.Second)) {
+		queue.Source == nil || *queue.Source != "musicbrainz" || queue.RetryAt == nil || !queue.RetryAt.Equal(f.clock.options().Now().Add(5*time.Second)) {
 		t.Fatalf("代理断开后的整理队列 %+v", queue)
 	}
 	if attempts.Load() != 2 || retryWaits.Load() != 1 {

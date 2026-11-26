@@ -49,6 +49,20 @@ func IsSourceUnavailable(err error) bool {
 	return errors.Is(err, sources.ErrUnavailable) || errors.Is(err, sources.ErrTryLater) || errors.Is(err, sources.ErrRateLimited)
 }
 
+// MatchSourceRecoveryTime 把共享查询来源的冷却传给单项额度判断。
+func MatchSourceRecoveryTime(ctx context.Context) time.Time {
+	return sources.QueueRecoveryTime(ctx, "musicbrainz")
+}
+
+// NextSourceRetry 同时满足项级退避和上游给出的恢复时间。
+func NextSourceRetry(now, recovery time.Time, previous int) time.Time {
+	next := now.Add(sources.SourceRetryDelay(previous))
+	if recovery.After(next) {
+		return recovery
+	}
+	return next
+}
+
 func SourceRecoveryTime(err error) time.Time {
 	var pause *sources.QueuePause
 	if errors.As(err, &pause) {

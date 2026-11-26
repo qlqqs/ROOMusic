@@ -481,7 +481,9 @@ func backgroundSourceError(ctx context.Context, err error) error {
 		return err
 	}
 	if run, ok := curation.ModelRunFrom(ctx); ok && run.SourceUnavailable != nil {
-		run.SourceUnavailable(curation.SourceRecoveryTime(err))
+		if err := run.SourceUnavailable(ctx, curation.SourceRecoveryTime(err)); err != nil {
+			return err
+		}
 	}
 	return &tool.Error{Code: "source_unavailable", Message: "来源暂不可用，稍后会自动重试，无需放弃本项"}
 }

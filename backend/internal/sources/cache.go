@@ -55,29 +55,29 @@ func readEntry(path string) (entry, error) {
 	return e, err
 }
 
-func (c *cache) lookup(ctx context.Context, key string, background, readResponse bool) (entry, bool, bool) {
+func (c *cache) lookup(ctx context.Context, key string, background, readResponse bool) (entry, bool, time.Time) {
 	if c.dir == "" {
-		return entry{}, false, false
+		return entry{}, false, time.Time{}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if background && c.now().Before(c.failures[key]) {
-		return entry{}, false, true
+		return entry{}, false, c.failures[key]
 	}
 	if !readResponse {
-		return entry{}, false, false
+		return entry{}, false, time.Time{}
 	}
 	e, err := readEntry(c.path(key))
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			c.warning(ctx)
 		}
-		return entry{}, false, false
+		return entry{}, false, time.Time{}
 	}
-	return e, (e.Status == 200 || e.Status == 404) && c.now().Before(e.ExpiresAt), false
+	return e, (e.Status == 200 || e.Status == 404) && c.now().Before(e.ExpiresAt), time.Time{}
 }
 
-func (c *cache) fail(key string) {
+func (c *cache) fail(key string, until time.Time) {
 	if c.dir == "" {
 		return
 	}
@@ -92,7 +92,7 @@ func (c *cache) fail(key string) {
 		}
 		c.nextSweep = now.Add(10 * time.Minute)
 	}
-	c.failures[key] = now.Add(10 * time.Minute)
+	c.failures[key] = until
 }
 
 func (c *cache) store(ctx context.Context, key string, status int, body []byte, empty, background bool) {

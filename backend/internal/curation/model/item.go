@@ -33,14 +33,24 @@ func taskKind(p curation.PendingItem) TaskKind {
 	}
 }
 
-func itemLimit(kind TaskKind, calls int, tokens int64) bool {
+func itemLimits(kind TaskKind) (calls int, tokens int64) {
 	switch kind {
 	case LookupCandidate:
-		return calls > 20 || tokens > 150000
+		return 20, 150000
 	case WebFallback:
-		return calls > 30 || tokens > 300000
+		return 30, 300000
 	}
-	return false
+	return 0, 0
+}
+
+func itemLimit(kind TaskKind, calls int, tokens int64) bool {
+	maxCalls, maxTokens := itemLimits(kind)
+	return maxCalls > 0 && (calls > maxCalls || tokens > maxTokens)
+}
+
+func itemAtLimit(kind TaskKind, calls int, tokens int64) bool {
+	maxCalls, maxTokens := itemLimits(kind)
+	return maxCalls > 0 && (calls >= maxCalls || tokens >= maxTokens)
 }
 
 // 首条消息按整项拆包；不截断曲目清单。大小沿用管家消息请求的 1 MiB 边界。
@@ -169,15 +179,23 @@ func (f *sourceFailures) record(recovery time.Time) {
 	}
 }
 
-func (f sourceFailures) retryAt(now time.Time) time.Time {
+func (f sourceFailures) retryAt(now time.Time, previous int) time.Time {
 	if f.count == 0 {
 		return time.Time{}
 	}
-	next := now.Add(10 * time.Minute)
-	if f.recovery.After(next) {
-		return f.recovery
+	return curation.NextSourceRetry(now, f.recovery, previous)
+}
+
+func (s *Scheduler) deferSourceItem(ctx context.Context, p curation.PendingItem, conversation string, retryAt time.Time) error {
+	kind := taskKind(p)
+	// 普通执行允许刚好用完本档额度。来源重试要在领取前留出完整的新一轮额度。
+	atLimit := itemAtLimit(kind, p.ItemToolCalls, p.ItemTokens)
+	if atLimit {
+		if next := s.options.Now().Add(7 * 24 * time.Hour); next.After(retryAt) {
+			retryAt = next
+		}
 	}
-	return next
+	return s.writer.DeferModelItem(ctx, p, conversation, string(kind), retryAt, atLimit)
 }
 
 func (s *Scheduler) abandon(ctx context.Context, p curation.PendingItem, model, conversation, reason string, retryAt time.Time) error {
@@ -187,7 +205,7 @@ func (s *Scheduler) abandon(ctx context.Context, p curation.PendingItem, model, 
 		}
 	}
 	if !retryAt.IsZero() {
-		return s.writer.DeferModelItem(ctx, p, conversation, string(taskKind(p)), retryAt)
+		return s.deferSourceItem(ctx, p, conversation, retryAt)
 	}
 	if taskKind(p) == SelectCandidate {
 		return s.writer.AdvanceModelItem(ctx, p, conversation, string(SelectCandidate), "lookup", reason)

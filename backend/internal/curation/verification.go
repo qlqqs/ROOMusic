@@ -624,7 +624,7 @@ func (w *Writer) HandleStaleVerification(ctx context.Context, item PendingItem, 
 		if item.InputDigest != digest {
 			result, err := tx.ExecContext(ctx, `UPDATE curation_pending_items SET status='waiting_model',
  input_digest=$4,identity_digest=$5,evidence=$6,route=NULL,conversation_id=NULL,claimed_at=NULL,next_attempt_at=NULL,
- attempts=0,review_retries=0,item_tool_calls=0,item_tokens=0,updated_at=now()
+ attempts=0,review_retries=0,item_tool_calls=0,item_tokens=0,source_retry_count=0,claim_source_recovery_at=NULL,reset_item_usage_on_claim=false,updated_at=now()
  WHERE id=$1 AND input_digest=$2 AND conversation_id=$3 AND status='in_progress'`,
 				item.ID, item.InputDigest, item.ConversationID, digest, identity, evidence)
 			if err := requireChanged(result, err, "item_stale", "待定项状态已变更"); err != nil {

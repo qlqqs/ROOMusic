@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 )
 
 type liveSampleScore struct {
+	Suggestions   []metricSuggestion  `json:"suggestions,omitempty"`
 	SourceRetries []metricSourceRetry `json:"waiting_source_retry,omitempty"`
 	Outcome       string              `json:"outcome"`
 	Accept        []string            `json:"accept"`
@@ -94,6 +96,8 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 	links := metricStoredLinks(t, app)
 	fields := metricStoredFields(t, app)
 	suggestions := metricSuggestions(t, app)
+	answers := suggestionAnswers{}
+	rules := make([]metricExpect, len(entries))
 	retries := metricSourceRetries(t, app, time.Now())
 	waitingMatch := map[string]bool{}
 	for _, retry := range retries {
@@ -179,6 +183,7 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 			want.Accept = []string{"release", "release_group"}
 		}
 		want = want.withOutcomeRules()
+		rules[i] = want
 		s.Samples = append(s.Samples, liveSampleScore{Title: e.Title, PublicID: e.ID, Accept: want.Accept})
 		byDir[e.Directory] = i
 		publicTracks := map[[2]int]sources.Track{}
@@ -244,9 +249,13 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 			default:
 				score.Outcome = states[id]
 			}
-			for _, problem := range metricSuggestionIssues(t, e.Title, want, suggestions[id]) {
-				issue(i, fmt.Sprintf("%s %s，期望 %s，实际 %s", problem.Kind, problem.Field, problem.Expected, problem.Actual))
+			answers[id] = maps.Clone(expected)
+			if !partial {
+				answers[id]["external_link"] = []string{r.ID}
+				answers[id]["track_links"] = []string{fmt.Sprint(len(publicTracks))}
 			}
+			answers[id]["release_group_match"] = []string{r.Group.ID}
+			answers[id]["group_external_link"] = []string{r.Group.ID}
 			s.Samples[i].Exact = s.Samples[i].Exact || exact
 			s.Samples[i].GroupOnly = s.Samples[i].GroupOnly || (!exact && directGroup)
 			if exact || directGroup {
@@ -305,7 +314,8 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 		if title == "" {
 			title = tr.RecordingTitle
 		}
-		checkFields(i, id, file, map[string][]string{"title": {metadata.NormalizeValue(title)}, "artist": {liveCreditText(credits)}})
+		answers[id] = map[string][]string{"title": {metadata.NormalizeValue(title)}, "artist": {liveCreditText(credits)}}
+		checkFields(i, id, file, answers[id])
 	})
 	for key := range wantTracks {
 		issue(byDir[path.Dir(key)], "扫描缺曲："+key)
@@ -324,6 +334,10 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 		var id, name string
 		requireCurationOK(t, rows.Scan(&id, &name))
 		artistNames[id] = metadata.NormalizeValue(name)
+		answers[id] = map[string][]string{}
+		for _, mb := range artistIDs[artistNames[id]] {
+			answers[id]["artist_link"] = append(answers[id]["artist_link"], "musicbrainz/"+mb)
+		}
 		for _, i := range owner[id] {
 			checkLinks(i, "artist", id, name, artistIDs[artistNames[id]])
 		}
@@ -401,8 +415,16 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 			}
 		}
 	}
+	for _, id := range slices.Sorted(maps.Keys(suggestions)) {
+		for _, i := range owner[id] {
+			s.Samples[i].Suggestions = append(s.Samples[i].Suggestions, suggestions[id]...)
+		}
+	}
 	for i := range s.Samples {
 		score := &s.Samples[i]
+		for _, problem := range metricSuggestionIssues(entries[i].Title, entries[i].ReleaseIDs, rules[i], score.Suggestions, answers) {
+			issue(i, fmt.Sprintf("%s %s，期望 %s，实际 %s", problem.Kind, problem.Field, problem.Expected, problem.Actual))
+		}
 		if score.Outcome != metricWaitingSource && !slices.Contains(score.Accept, score.Outcome) {
 			issue(i, fmt.Sprintf("终态 %q，允许 %v", score.Outcome, score.Accept))
 		}
@@ -429,7 +451,8 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 	return s
 }
 
-func TestPostgreSQLCurationLiveAttributionScope(t *testing.T) {
+func liveSyntheticScoreFixture(t *testing.T) (*integrationTestApplication, []metricEntry, *metricsModel, liveAlbum) {
+	t.Helper()
 	samples := loadMetricSamples(t)
 	index := slices.IndexFunc(samples, func(s metricSample) bool { return s.ID == "spoken-book" })
 	if index < 0 {
@@ -449,6 +472,11 @@ func TestPostgreSQLCurationLiveAttributionScope(t *testing.T) {
 	requireCurationOK(t, os.WriteFile(file, raw, 0644))
 	t.Setenv("ROOMUSIC_LIVE_REFERENCE", file)
 	album := liveAlbum{ID: ref.ID, Group: ref.Group.ID, Title: ref.Title, Directory: sample.Local.Directory, ReleaseIDs: []string{entries[0].release}, Expect: sample.Expect}
+	return app, entries, endpoint, album
+}
+
+func TestPostgreSQLCurationLiveAttributionScope(t *testing.T) {
+	app, entries, endpoint, album := liveSyntheticScoreFixture(t)
 	endpoint.mu.Lock()
 	defer endpoint.mu.Unlock()
 	safe := liveCorpusScore(t, app, []liveAlbum{album}, endpoint.routes)
@@ -502,4 +530,51 @@ func TestPostgreSQLCurationLiveAttributionScope(t *testing.T) {
 	mustExec(t, app, `UPDATE steward_tool_calls SET error_code='invalid_input' WHERE message_id=$1`, message)
 	checkRetry(false)
 
+}
+
+func TestPostgreSQLLiveGapsSuggestionScore(t *testing.T) {
+	app, entries, endpoint, album := liveSyntheticScoreFixture(t)
+	release := entries[0].release
+	item := uuid.New()
+	mustExec(t, app, `INSERT INTO curation_pending_items(id,target_type,target_id,kind,status,rule_version,input_digest,evidence,resolution,resolved_at)
+        VALUES($1,'release',$2,'verify_name','resolved',1,'合成评分','{}','suggestion_recorded',now())`, item, release)
+	mustExec(t, app, `INSERT INTO curation_model_exceptions(pending_item_id,tool,input,preview,provider,reason_code)
+        VALUES($1,'submit_verification','{}','{}','test','no_evidence')`, item)
+	endpoint.mu.Lock()
+	defer endpoint.mu.Unlock()
+	for _, tc := range []struct {
+		name, route, value string
+		accepted           bool
+	}{
+		{"组级正确", "release_group", album.Title, true},
+		{"版本错值", "release", "另一部作品", false},
+		{"反例同值", "no_usable_candidates", album.Title, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			album.Expect.Accept = []string{tc.route, "suggestion"}
+			album.Expect.Fields = map[string]string{"title": album.Title}
+			entries[0].sample.Expect = album.Expect
+			mustExec(t, app, `UPDATE curation_model_exceptions SET preview=jsonb_build_object('changes',jsonb_build_array(jsonb_build_object('field','title','after',$2::text))) WHERE pending_item_id=$1`, item, tc.value)
+			live := liveCorpusScore(t, app, []liveAlbum{album}, endpoint.routes)
+			regression := metricScoreEntries(t, app, entries, endpoint.routes)[0]
+			if live.Samples[0].Accepted != tc.accepted || regression.Accepted != tc.accepted {
+				t.Fatalf("应符合预期=%t，试用 %v，度量 %v", tc.accepted, live.Samples[0].Reasons, regression.Rejected)
+			}
+			data, err := json.Marshal(live)
+			requireCurationOK(t, err)
+			var report struct {
+				Samples []struct {
+					Suggestions []struct {
+						Field, Value string
+						CanAccept    *bool `json:"can_accept"`
+					}
+				}
+			}
+			requireCurationOK(t, json.Unmarshal(data, &report))
+			got := report.Samples[0].Suggestions
+			if len(got) != 1 || got[0].Field != "title" || got[0].Value != tc.value || got[0].CanAccept == nil || !*got[0].CanAccept {
+				t.Fatalf("试用报告未如实记录建议：%s", data)
+			}
+		})
+	}
 }

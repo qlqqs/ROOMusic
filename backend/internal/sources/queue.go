@@ -70,18 +70,31 @@ func (q *QueuePolicy) Pause(source string) *QueuePause {
 	return nil
 }
 
+func QueueRecoveryTime(ctx context.Context, source string) time.Time {
+	if queue, ok := ctx.Value(queueKey{}).(queueRequest); ok {
+		if pause := queue.policy.Pause(source); pause != nil {
+			return pause.RetryAt
+		}
+	}
+	return time.Time{}
+}
+
 // Unavailable 用于返回暂时不可用但没有 HTTP 响应详情的来源。
 func (q *QueuePolicy) Unavailable(source string) *QueuePause {
-	pause, _ := q.failed(source, "source_unavailable", "", false)
+	pause, _ := q.failed(source, "source_unavailable", 0, false)
 	return pause
 }
 
-func (q *QueuePolicy) failed(source, reason, retryAfter string, network bool) (*QueuePause, int) {
+func (q *QueuePolicy) failed(source, reason string, retryAfter time.Duration, network bool) (*QueuePause, int) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	s := q.sources[source]
 	now := q.now()
 	if now.Before(s.pause.RetryAt) {
+		if until := now.Add(retryAfter); until.After(s.pause.RetryAt) {
+			s.pause.RetryAt = until
+			q.sources[source] = s
+		}
 		return &s.pause, s.level
 	}
 	if network && !s.networkError {
@@ -91,24 +104,19 @@ func (q *QueuePolicy) failed(source, reason, retryAfter string, network bool) (*
 	}
 	s.networkError = false
 	s.level = min(8, s.level+1)
-	requested, _ := retryAfterDelay(retryAfter, now)
-	cooldown := min(10*time.Minute, 2*time.Second<<(s.level-1))
-	s.pause = QueuePause{Source: source, Reason: reason, RetryAt: now.Add(max(cooldown, requested))}
+	cooldown := max(SourceRetryDelay(s.level-1), retryAfter)
+	s.pause = QueuePause{Source: source, Reason: reason, RetryAt: now.Add(cooldown)}
 	q.sources[source] = s
 	return &s.pause, s.level
 }
 
-func (q *QueuePolicy) recovered(source string) int {
+// SourceRetryDelay 按此前已排定的连续重试次数计算下一次等待。
+func SourceRetryDelay(previous int) time.Duration {
+	return min(10*time.Minute, 5*time.Second<<min(previous, 7))
+}
+
+func (q *QueuePolicy) recovered(source string) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	s := q.sources[source]
-	s.level = max(0, s.level-1)
-	s.pause = QueuePause{}
-	s.networkError = false
-	if s.level == 0 {
-		delete(q.sources, source)
-	} else {
-		q.sources[source] = s
-	}
-	return s.level
+	delete(q.sources, source)
 }

@@ -92,9 +92,11 @@ type PendingItem struct {
 	CanonicalTitle, CanonicalArtist                         string `json:"-"`
 	ConversationID                                          string
 	ClaimedAt, NextAttemptAt                                *time.Time
+	ClaimSourceRecoveryAt                                   *time.Time `json:"-"`
 	ItemToolCalls                                           int
 	ItemTokens                                              int64
 	Attempts, ReviewRetries                                 int
+	SourceRetryCount                                        int `json:"-"`
 	ShelvedReason                                           *string
 	ID, TargetType, TargetID, ArtistID, Kind, Status, Route string
 	RuleVersion, MatchRuleVersion                           int16
@@ -109,6 +111,8 @@ type PendingItem struct {
 // 程序再见到同一组候选时，保留模型已升级的路线及待求证事实。
 const sameModelInputsSQL = `(COALESCE(p.identity_digest,p.input_digest)=COALESCE(excluded.identity_digest,excluded.input_digest)
  AND p.candidates=excluded.candidates AND p.conflicts=excluded.conflicts)`
+
+const keepModelRouteSQL = `(` + sameModelInputsSQL + ` OR p.source_retry_count>0)`
 
 func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
 	target, insert := item.TargetID, `INSERT INTO curation_pending_items AS p(target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,match_rule_version,identity_digest,route)
@@ -130,15 +134,15 @@ func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
  evidence=CASE WHEN `+sameModelInputsSQL+` THEN excluded.evidence || jsonb_strip_nulls(jsonb_build_object(
  'unverified_facts',p.evidence->'unverified_facts','route_history',p.evidence->'route_history')) ELSE excluded.evidence END,
  candidates=excluded.candidates,conflicts=excluded.conflicts,updated_at=now(),
- route=CASE WHEN `+sameModelInputsSQL+` AND p.route IN ('lookup','web') THEN p.route ELSE excluded.route END,
- status=CASE WHEN p.status='in_progress' THEN p.status WHEN `+sameModelInputsSQL+` AND p.route IN ('lookup','web')
+ route=CASE WHEN `+keepModelRouteSQL+` AND p.route IN ('lookup','web') THEN p.route ELSE excluded.route END,
+ status=CASE WHEN p.status='in_progress' THEN p.status WHEN `+keepModelRouteSQL+` AND p.route IN ('lookup','web')
  THEN 'waiting_route' ELSE excluded.status END,
  attempts=CASE WHEN p.status='shelved' THEN 0 ELSE p.attempts END,
  shelved_reason=CASE WHEN p.status='in_progress' THEN p.shelved_reason END,
  conversation_id=CASE WHEN p.status='in_progress' THEN p.conversation_id END,
  claimed_at=CASE WHEN p.status='in_progress' THEN p.claimed_at END,
  review_retries=CASE WHEN p.status='in_progress' THEN p.review_retries ELSE 0 END,
- next_attempt_at=CASE WHEN p.status IN ('waiting_model','in_progress') OR (p.status='waiting_route' AND `+sameModelInputsSQL+`) THEN p.next_attempt_at END
+ next_attempt_at=CASE WHEN p.status IN ('waiting_model','in_progress') OR (p.status='waiting_route' AND `+keepModelRouteSQL+`) THEN p.next_attempt_at END
  WHERE p.status IN ('waiting_model','waiting_route','in_progress')
  OR (p.status='shelved' AND (p.candidates IS DISTINCT FROM excluded.candidates OR
      CASE WHEN p.identity_digest IS NOT NULL AND excluded.identity_digest IS NOT NULL THEN p.identity_digest<>excluded.identity_digest

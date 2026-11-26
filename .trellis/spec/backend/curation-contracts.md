@@ -467,7 +467,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 - 单线程；总开关关、开启者失效、暂停时不读证据、不出站。启动时收掉遗留的 program 批次。
 - 每轮按（加入时间倒序、ID 倒序）键集分页，每页 100 个发行；重算摘要与状态比较，不同才处理。变化标记（扫描结束、设置、源设置、标记、操作记录、到期的重试）变了或 6 小时后再扫。
 - **闸门也挡暂停与扫描**：`curation.Sources` 的放行检查（每次出站之前）在暂停时返回 `409 curation_paused`，扫描进行中返回 `409 scan_running`（`WithScanCheck` 注入）。
-- `ErrTryLater` → `try_later`，退避 min(24 小时, 10 分钟 × 2^n)，不计尝试次数；源的开关关着 → 跳过这个主题，不写状态。
+- 上游来源不可用按 25.3 退避。程序在本地指纹待重算或封面写入后文件仍缺失时，保留项级 `try_later`，退避 min(24 小时, 10 分钟 × 2^n)，并尊重指纹重算时间。两者都不计尝试次数；源的开关关着时跳过这个主题。
 - 批次：第一次写入时开，满 500 条、1 小时、一轮结束、关闭或暂停时关；全被挡下的空批被移除。
 - `app.WithCurationProgram(false, …)` 关掉循环；`app` 包里共用的测试夹具默认关掉它（现有测试会打开总开关，循环会向真实外部服务发请求）。
 
@@ -1099,8 +1099,8 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 ### 25.3 来源退避
 
 - 各来源各自的限速器；Cover Art Archive 的清单与图片用它自己声明的限速器，不再占 MusicBrainz 的额度。
-- 队列调用遇到 429、503 或连续两次暂时网络错误时暂停这个来源：级别 0–8，冷却取 max(Retry-After, min(10 分钟, 2 秒 × 2^(级别−1)))，发出间隔放慢为声明下限 × 2^级别（上限 60 秒），
-  冷却结束只放行一个试探请求，有效响应后降一级逐步恢复。状态在内存，重启后从声明下限开始。只暂停依赖这个来源的队列。
+- 429、503 先在同一请求内尝试，含首次最多 5 次。等待从 300 ms 起翻倍，上限 3 秒，重试预算共 10 秒。有效的 `Retry-After` 在剩余预算内优先，每次重发重新取得来源许可。短重试成功即继续本项。
+- 短重试用尽、上游等待超出预算，或连续两次暂时网络错误时，只暂停依赖该来源的队列。冷却从 5 秒起连续翻倍，最长 10 分钟，并等到上游指定的恢复时刻。级别为 0–8，出站间隔为声明下限 × 2^级别（上限 60 秒）。有效响应清零退避和限速级别。来源冷却保存在进程内。
 - 来源不可用不改该项的尝试次数、代次与结论，与“查无结果”分开记。JSON 响应缓存沿用现有规则。
 
 ### 25.4 给模型调度的接口
@@ -1138,11 +1138,11 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | 任务 | 领取 | 运行形态与上限 | 去向 |
 | --- | --- | --- | --- |
 | 第一档选择 | 有可用候选的 `release_match`、`recording_match`，发行与录音分批 | 一次主模型请求，不带工具与原生搜索；首条消息含本地真实性、逐碟曲序与时长、每个候选的完整曲目；严格 JSON：`select`（只接受发给该项的编号）或 `upgrade` | 选定的交 26.2；升级进 `waiting_route/lookup` |
-| 第二档自己查 | `waiting_route/lookup`（第一档升级与 C 的零候选），`LookupTierReady` 为真才启动 | 管家后台运行，按艺人打包，`search_music_metadata`、`get_music_metadata`、提交任何 MB 编号、放弃；每项 20 次工具调用、15 万 token | 放弃或触限：网络搜索可用转 `web`，否则 `FinishUnlisted` |
+| 第二档自己查 | `waiting_route/lookup`（第一档升级与 C 的零候选），`LookupTierReady` 为真才启动 | 管家后台运行，按艺人打包，`search_music_metadata`、`get_music_metadata`、提交任何 MB 编号、放弃；每项 20 次工具调用、15 万 token | 来源可用时放弃或触限：网络搜索可用转 `web`，否则 `FinishUnlisted` |
 | 核对判断 | `verify_artist_credit`（C 的署名提案）、`verify_artist_merge`、`verify_name`；`release_merge` 单独打包 | 只开放提交判断；身份取同一/不同/拿不准，纠正取错字/写法差异/译名差异/拿不准；沿用管家单次运行的总保护 | 写法或译名差异不改；有主张而缺证据转联网 |
-| 联网兜底 | `waiting_route/web`、第二档放弃、无外部对应的 `artist_identity`、待求证的建议；按艺人在库专辑组数降序 | `web_search` 或原生搜索、`fetch_page`、提交；每项 30 次工具调用、30 万 token；单独的每日上限 `web_daily_token_limit` | 无结果或触限即结束；发行识别无对应调用 `FinishUnlisted` |
+| 联网兜底 | `waiting_route/web`、第二档放弃、无外部对应的 `artist_identity`、待求证的建议；按艺人在库专辑组数降序 | `web_search` 或原生搜索、`fetch_page`、提交；每项 30 次工具调用、30 万 token；单独的每日上限 `web_daily_token_limit` | 来源可用时无结果或触限即结束；发行识别无对应调用 `FinishUnlisted` |
 
-- 每日上限（总的与联网的）在项边界检查（`BeforeModelItem`），达到上限时已开始的项可以完成，总日额度和联网日额度最多各额外消耗「并发数减一」个在途项的用量。到期重审重新占用名额时复查日额度，额度用尽则保留原方案。单项上限按每次请求后实际的 usage 与工具调用次数累计，超过即停止该项的新调用。
+- 每日上限（总的与联网的）在项边界检查（`BeforeModelItem`），达到上限时已开始的项可以完成，总日额度和联网日额度最多各额外消耗「并发数减一」个在途项的用量。到期重审重新占用名额时复查日额度，额度用尽则保留原方案。第二档与联网档按每次请求的实际 usage 与工具调用次数记账。相同路线的 `try_later` 跨会话累计，来源故障时达到上限按 28.1 排定复查。来源可用时沿用本档的超额处理。
 - 自查和联网的 MusicBrainz 工具调用共用现有来源限速器。后台网页工具按开启者、工具组和整理会话计量，同一会话的各项与重审共用额度，并行会话各自计量。交互用户沿用每用户限额。
 - 联网用量同时计入总用量；`curation_model_usage` 加联网输入、输出列。
 
@@ -1207,7 +1207,8 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 28.1 来源不可用与连续无决定
 
-- 第二档与联网项在本项运行中遇到来源不可用（工具结果 `source_unavailable`，或工具内部读详情得到来源 5xx、429、网络错误），且没有成功提交时，走 `try_later`：保持原路线，`next_attempt_at` 不早于来源恢复时刻，不增加尝试次数，不调用 `FinishUnlisted`。触及单项上限时同样处理。
+- 第二档与联网项在本次领取中遇到来源不可用（包括工具内部的 5xx、429 或网络错误），且没有成功写入时，放弃、结束和建议出口都走 `try_later`。保留原路线、尝试次数和代次，不调用 `FinishUnlisted`，不以 `suggestion_recorded` 结案。下次时间取来源恢复时刻与项级退避的较晚者。项级退避从 5 秒起连续翻倍，上限 10 分钟，成功后清零。
+- 工具次数与 token 保存在待定项上。本档任一累计值达到 D16 上限，且来源仍在冷却或本项有来源不可用记录时，保持原路线等待。下次时间取来源恢复时刻与本次触限后 7 天的较晚者，期间不开新会话，不记未收录。到期领取时才清零本档两项计数，再完整查一轮；当日用量继续保留。来源可用且本项没有故障记录时沿用 26.1 的触限处理。
 - 工具错误区分 `not_found` 与 `source_unavailable`，提示说明来源不可用时不必放弃。
 - 第一档回复去掉代码块包裹后逐项校验，不合格项只给该项记一次。第一、二档与联网档同一项连续三次没有可执行的决定，走放弃路径：第一档升到 `waiting_route/lookup`；第二档在联网可用时转联网，否则未收录；联网档未收录。不再进入 `shelved`。
 - 硬反证（时长、真实文字）留下的建议 `can_accept=false`，手动采纳返回 409 `nothing_to_apply`。
