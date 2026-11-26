@@ -123,6 +123,9 @@ func (a adapter) submitVerification(ctx context.Context, c tool.Caller, raw json
 		if err != nil {
 			return nil, toolError(err)
 		}
+		if id == "" {
+			return json.RawMessage(`{"status":"try_later"}`), nil
+		}
 		return json.Marshal(map[string]string{"suggestion_id": id})
 	}
 	if c.ReviewID == "" || c.ReviewDecision != "approved" {

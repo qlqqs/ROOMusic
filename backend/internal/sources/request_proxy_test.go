@@ -84,7 +84,7 @@ func TestRequesterOutboundProxyBackoff(t *testing.T) {
 				err := call()
 				var pause *QueuePause
 				if !errors.As(err, &pause) || !errors.Is(err, ErrTryLater) || errors.Is(err, ErrNotFound) ||
-					pause.Source != "fixture" || pause.Reason != "source_unavailable" || !pause.RetryAt.Equal(now.Add(2*time.Second)) {
+					pause.Source != "fixture" || pause.Reason != "source_unavailable" || !pause.RetryAt.Equal(now.Add(5*time.Second)) {
 					t.Fatalf("退避错误 %v，状态 %+v", err, pause)
 				}
 			}
@@ -99,7 +99,7 @@ func TestRequesterOutboundProxyBackoff(t *testing.T) {
 			}
 
 			egress.SetProxy(&working)
-			now = now.Add(2 * time.Second)
+			now = now.Add(5 * time.Second)
 			if err := call(); err != nil || decoded != 1 || recovered != 1 || queue.Pause("fixture") != nil {
 				t.Fatalf("退避结束后请求错误 %v，解码 %d 次，恢复 %d 次", err, decoded, recovered)
 			}

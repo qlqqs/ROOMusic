@@ -70,11 +70,14 @@ type Declaration struct {
 | | 对话 | 后台 |
 | --- | --- | --- |
 | 限速排队 | 优先；排队超过 10 秒返回 `ErrRateLimited` | 让对话先走；一直等到轮到或 ctx 结束 |
-| 503、429、网络错误 | 不重试，`ErrUnavailable` | 按 `Retry-After`（秒数或 HTTP 日期）等待，没有时指数退避加抖动，单次至多 60 秒；至多重试 4 次，之后 `ErrTryLater` |
+| 503、429 | 请求内短重试，用尽返回 `ErrUnavailable` | 相同短重试，用尽返回 `ErrTryLater` 并携带恢复时刻 |
+| 暂时网络错误 | `ErrUnavailable` | 原有指数退避加抖动，单次至多 60 秒，最多重试 4 次；队列连续两次失败进入来源冷却 |
 | 其他非 200（404 除外）、响应结构不对、地址策略拒绝 | `ErrUnavailable` | `ErrTryLater`，不重试 |
 | 单次请求时限 | `GetJSON` 20 秒，`GetBytes` 60 秒 | 同左 |
 | 响应读取上限 | `GetJSON` 2 MiB | `GetJSON` 8 MiB；`GetBytes` 由调用方给 |
-| 失败的进程内记忆 | 不读不写，每次都真实尝试 | 用尽重试后记 10 分钟，期间同一请求直接 `ErrTryLater` |
+| 失败的进程内记忆 | 不读不写，每次都真实尝试 | 普通后台请求用尽后记 5 秒，遇到更晚的上游恢复时刻则记到该时刻；队列使用共享来源冷却 |
+
+503、429 含首次最多尝试 5 次。等待从 300 ms 起翻倍，上限 3 秒，重试总预算 10 秒。有效的 `Retry-After`（秒数或 HTTP 日期）优先，等待超出剩余预算时交回调用方。每次重发都重新取得来源许可，遵守 ctx 取消。队列连续失败从 5 秒起翻倍，最长 10 分钟，以较晚的上游恢复时刻为准，成功清零。
 
 哨兵错误：`ErrNotFound`、`ErrRateLimited`、`ErrUnavailable`、`ErrTryLater`、`ErrInvalidQuery`、`ErrInvalidKey`（B3，不重试、不缓存、不记失败记忆）。
 
@@ -211,7 +214,7 @@ type Declaration struct {
 
 ### Wikidata
 
-无 Q 号时用 `list=search` 和 `srsearch=haswbstatement:P434=<MBID>`，唯一匹配才继续。按 Q 号用 `action=wbgetentities&props=claims|sitelinks&sitefilter=zhwiki|enwiki` 查询。P18 跳过 deprecated，优先 preferred，再取第一张普通照片。使用与维基百科、Commons 相同的维基媒体策略，每个来源同时最多一个请求，带项目 User-Agent 和 `Accept-Encoding: gzip`。429 和 503 的后台重试遵循 Retry-After，缺失时至少等待 5 秒。
+无 Q 号时用 `list=search` 和 `srsearch=haswbstatement:P434=<MBID>`，唯一匹配才继续。按 Q 号用 `action=wbgetentities&props=claims|sitelinks&sitefilter=zhwiki|enwiki` 查询。P18 跳过 deprecated，优先 preferred，再取第一张普通照片。使用与维基百科、Commons 相同的维基媒体策略，每个来源同时最多一个请求，带项目 User-Agent 和 `Accept-Encoding: gzip`。429 和 503 遵循第 4 节的短重试预算与 Retry-After。
 
 按 Q 号预览身份使用 `action=wbgetentities`，`ids` 只传一个符合 `^Q[1-9][0-9]{0,11}$` 的 Q 号，`props=labels|aliases|descriptions|claims`，`languages=zh|en|mul|zh-hans|zh-cn|zh-hant|zh-tw|ja`。名称和描述分别按请求语言顺序选第一个非空值，其他名称和别名参与本地比较。没有名称时，Wikidata 预览显示 Q 号，MusicBrainz 预览显示 MBID。读取声明中未弃用的 P31（实体类型）和 P434（MusicBrainz 艺人 MBID）。唯一的 P434 可作为同时写入的 MusicBrainz 对应。艺人姓名的一致性在本地比较，请求只外发条目 ID、语言及字段选择。开发 mock 支持同一组字段，Q900005 提供无 P434 且有 Commons 图片与中文维基百科条目的合成样本。
 
@@ -255,7 +258,7 @@ type Declaration struct {
 | --- | --- |
 | 限速：间隔、对话优先、对话排队超时、后台等待 | `backend/internal/sources` 的限速器用例 |
 | 缓存：三种有效期、不落盘的失败、目录为空、目录不可写、结构不对的 200 | `backend/internal/sources/musicbrainz/request_policy_test.go` |
-| 重试与错误：`Retry-After`、退避、上限、后台的断网是“稍后再试”、对话不重试 | 同上 |
+| 重试与错误：`Retry-After`、退避、上限、后台的断网是“稍后再试”、对话网络错误不重试 | 同上 |
 | 重定向：放行；主机、协议降级、端口、带凭据、次数各自被拒且不重试；每跳的请求头；一条链一个许可；两跳之间放行回调拒绝 | `backend/internal/sources` 与 `sources/coverartarchive` 的用例 |
 | `GetBytes`：404、超限、重试、不写响应缓存、失败记忆 | 同上 |
 | Cover Art Archive：清单解析、两种目标、选图、四档回退、PDF、两个限速器各自计数、默认装配与 MusicBrainz 共用同一个限速器 | `backend/internal/sources/coverartarchive` |

@@ -205,7 +205,7 @@ func TestLyricsForRetriesBackground429And503(t *testing.T) {
 			w.Header().Set("Retry-After", "5")
 			w.WriteHeader(http.StatusTooManyRequests)
 		case 2:
-			w.Header().Set("Retry-After", "7")
+			w.Header().Set("Retry-After", "4")
 			w.WriteHeader(http.StatusServiceUnavailable)
 		default:
 			io.WriteString(w, lyricRecord)
@@ -222,7 +222,7 @@ func TestLyricsForRetriesBackground429And503(t *testing.T) {
 		return tick
 	}
 	got, err := New(opts).LyricsFor(sources.WithBackground(t.Context()), sources.LyricsQuery{Title: "合成曲目", Artist: "合成艺人"})
-	if err != nil || got != wantLyric || hits.Load() != 3 || !slices.Equal(waits, []time.Duration{5 * time.Second, 7 * time.Second}) {
+	if err != nil || got != wantLyric || hits.Load() != 3 || !slices.Equal(waits, []time.Duration{5 * time.Second, 4 * time.Second}) {
 		t.Fatalf("重试得到 %#v，错误 %v，出站 %d 次，等待 %v", got, err, hits.Load(), waits)
 	}
 }

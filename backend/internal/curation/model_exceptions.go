@@ -73,6 +73,9 @@ func (w *Writer) CreateException(ctx context.Context, e ModelException) (string,
 
 // RecordSuggestion 将一个已领取项的具体主张和终态一起写入；同批的独立主张各保留一条。
 func (w *Writer) RecordSuggestion(ctx context.Context, e ModelException) (string, error) {
+	if run, ok := ModelRunFrom(ctx); ok && run.DeferSuggestion != nil && run.PendingItemID == e.PendingItemID && run.DeferSuggestion() {
+		return "", nil
+	}
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err

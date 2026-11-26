@@ -20,7 +20,8 @@ type ModelRun struct {
 	ConversationID, Model  string
 	ActorID, PendingItemID string
 	TaskKind               string
-	SourceUnavailable      func(time.Time)
+	SourceUnavailable      func(context.Context, time.Time) error
+	DeferSuggestion        func() bool
 	Abandon                func(context.Context, string, string) error
 	EvidencePage           func(context.Context, string, string) (string, error)
 	ToolInputDigest        string

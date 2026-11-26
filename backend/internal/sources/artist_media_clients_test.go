@@ -216,7 +216,7 @@ func TestArtistMediaRetryClassification(t *testing.T) {
 	}{
 		{"rate_limited", "17", http.StatusTooManyRequests, 17 * time.Second},
 		{"retry_date", now.Add(33 * time.Second).Format(http.TimeFormat), http.StatusServiceUnavailable, 33 * time.Second},
-		{"default_minimum", "", http.StatusServiceUnavailable, 5 * time.Second},
+		{"default_minimum", "", http.StatusServiceUnavailable, 300 * time.Millisecond},
 		{"offline", "", 0, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -239,10 +239,14 @@ func TestArtistMediaRetryClassification(t *testing.T) {
 			}
 			ctx := sources.WithBackground(t.Context())
 			bio, err := wikipedia.New(opts).ArtistBio(ctx, sources.ArtistLinks{WikipediaZH: "Sample"}, "zh")
-			if !errors.Is(err, sources.ErrTryLater) || bio.Text != "" || len(delays) != 4 {
+			wantWaits := 4
+			if tc.delay > 10*time.Second {
+				wantWaits = 0
+			}
+			if !errors.Is(err, sources.ErrTryLater) || bio.Text != "" || len(delays) != wantWaits {
 				t.Fatalf("简介=%+v, err=%v, 退避=%v，期望稍后再试", bio, err, delays)
 			}
-			if tc.delay != 0 && delays[0] != tc.delay {
+			if wantWaits > 0 && tc.delay != 0 && delays[0] != tc.delay {
 				t.Errorf("首次退避=%v，期望 %v", delays[0], tc.delay)
 			}
 			if tc.header != "" {

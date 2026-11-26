@@ -97,6 +97,22 @@ func (s *Scheduler) recover(ctx context.Context) error {
 	if err := s.launcher.ResolvePlans(ctx, ""); err != nil {
 		return err
 	}
+	items, err := s.writer.InterruptedSourceItems(ctx)
+	if err != nil {
+		return err
+	}
+	now := s.options.Now()
+	for _, item := range items {
+		next := now
+		if item.ClaimSourceRecoveryAt != nil {
+			next = curation.NextSourceRetry(now, *item.ClaimSourceRecoveryAt, item.SourceRetryCount)
+		} else if !itemAtLimit(taskKind(item), item.ItemToolCalls, item.ItemTokens) {
+			continue
+		}
+		if err := s.deferSourceItem(ctx, item, item.ConversationID, next); err != nil {
+			return err
+		}
+	}
 	return s.writer.RecoverInProgress(ctx)
 }
 
@@ -353,12 +369,9 @@ func (s *Scheduler) prepareSelection(ctx context.Context, items []curation.Pendi
 			if !curation.IsSourceUnavailable(err) {
 				return nil, err
 			}
-			// 队列来源给出恢复时刻，普通后台读取失败会缓存十分钟。
-			next := s.options.Now().Add(10 * time.Minute)
-			if recovery := curation.SourceRecoveryTime(err); !recovery.IsZero() {
-				next = recovery
-			}
-			return nil, s.writer.DeferSelection(ctx, items[i], next)
+			var failures sourceFailures
+			failures.record(curation.SourceRecoveryTime(err))
+			return nil, s.writer.DeferSelection(ctx, items[i], failures.retryAt(s.options.Now(), items[i].SourceRetryCount))
 		}
 	}
 	return items, nil
@@ -413,7 +426,7 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 			if (kind == LookupCandidate || kind == WebFallback) && curation.IsSourceUnavailable(err) {
 				var failures sourceFailures
 				failures.record(curation.SourceRecoveryTime(err))
-				return "completed", s.writer.DeferModelItem(ctx, items[0], conversation, string(kind), failures.retryAt(s.options.Now()))
+				return "completed", s.deferSourceItem(ctx, items[0], conversation, failures.retryAt(s.options.Now(), items[0].SourceRetryCount))
 			}
 			return "internal_error", errors.Join(err, s.release(ctx, conversation, false, nil))
 		}
@@ -422,28 +435,57 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		params.Run.PendingItemID = items[0].ID
 	}
 	var failures sourceFailures
+	var suggestionDeferred bool
+	trackedID := ""
+	p := items[0]
+	calls, tokens := p.ItemToolCalls, p.ItemTokens
+	if p.ClaimSourceRecoveryAt != nil {
+		failures.record(*p.ClaimSourceRecoveryAt)
+	}
+	sourceRetryAt := func(now time.Time) time.Time {
+		if itemAtLimit(kind, calls, tokens) {
+			// 当前请求可能已用完额度，还没有机会从工具取得来源错误。
+			if recovery := curation.MatchSourceRecoveryTime(ctx); recovery.After(failures.recovery) {
+				failures.record(recovery)
+			}
+			if failures.count == 0 && p.SourceRetryCount > 0 {
+				return now
+			}
+		}
+		return failures.retryAt(now, p.SourceRetryCount)
+	}
 	if kind == LookupCandidate || kind == WebFallback {
-		params.Run.SourceUnavailable = failures.record
+		trackedID = p.ID
+		params.Run.SourceUnavailable = func(ctx context.Context, recovery time.Time) error {
+			if recovery.IsZero() {
+				recovery = s.options.Now()
+			}
+			failures.record(recovery)
+			return s.writer.RecordClaimSourceFailure(ctx, p, conversation, recovery)
+		}
+		params.Run.DeferSuggestion = func() bool {
+			suggestionDeferred = !sourceRetryAt(s.options.Now()).IsZero()
+			return suggestionDeferred
+		}
 	}
 	params.Run.Abandon = func(ctx context.Context, id, reason string) error {
-		for _, p := range items {
-			if id == p.ID {
+		for _, item := range items {
+			if id == item.ID {
 				if err := s.checkRunConditions(ctx, actor, items); err != nil {
 					return err
 				}
-				return s.abandon(ctx, p, model, conversation, reason, failures.retryAt(s.options.Now()))
+				item.ItemToolCalls, item.ItemTokens = calls, tokens
+				return s.abandon(ctx, item, model, conversation, reason, sourceRetryAt(s.options.Now()))
 			}
 		}
 		return ErrStopped
 	}
 	var usageErr error
-	trackedID := ""
-	if kind == LookupCandidate || kind == WebFallback {
-		trackedID = items[0].ID
-	}
-	calls, tokens := items[0].ItemToolCalls, items[0].ItemTokens
 	startingItem := plan == ""
 	params.BeforeStep = func(ctx context.Context) error {
+		if suggestionDeferred {
+			return ErrItemCompleted
+		}
 		if usageErr != nil {
 			return usageErr
 		}
@@ -456,7 +498,7 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 			}
 			startingItem = false
 		}
-		if itemLimit(kind, calls, tokens) {
+		if itemLimit(kind, calls, tokens) || (itemAtLimit(kind, calls, tokens) && !sourceRetryAt(s.options.Now()).IsZero()) {
 			return ErrItemLimit
 		}
 		if len(items) == 1 {
@@ -523,7 +565,9 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		reason, err = r.Wait(context.WithoutCancel(ctx))
 	}
 	now := s.options.Now()
-	if itemLimit(kind, calls, tokens) && reason != "provider_error" && reason != "cancelled" && reason != "review_unavailable" {
+	if itemAtLimit(kind, calls, tokens) && !sourceRetryAt(now).IsZero() {
+		reason = "item_limit"
+	} else if itemLimit(kind, calls, tokens) && reason != "provider_error" && reason != "cancelled" && reason != "review_unavailable" {
 		reason = "item_limit"
 	}
 	if providerReported.Load() {
@@ -544,7 +588,10 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		var finishErr error
 		if !itemsFinished {
-			finishErr = s.finish(cleanup, actor, model, conversation, reason, retries, now, items, failures.retryAt(now))
+			finishErr = s.finish(cleanup, actor, model, conversation, reason, retries, now, items, sourceRetryAt(now))
+			if finishErr == nil && trackedID != "" && (p.SourceRetryCount > 0 || failures.count > 0) {
+				finishErr = s.writer.ClearResolvedSourceFailures(cleanup, trackedID, conversation)
+			}
 			itemsFinished = finishErr == nil
 		}
 		if itemsFinished && batch != "" {
@@ -593,16 +640,18 @@ func (s *Scheduler) pauseProvider(delay time.Duration) {
 }
 
 func (s *Scheduler) finish(ctx context.Context, actor, model, id, reason string, retries int, now time.Time, items []curation.PendingItem, retryAt time.Time) error {
-	if !retryAt.IsZero() && (reason == "completed" || reason == "step_limit" || reason == "token_limit") {
+	if !retryAt.IsZero() && reason != "review_unavailable" && reason != "item_limit" {
 		reason = "try_later"
 	}
 	switch reason {
 	case "item_limit", "try_later":
-		if err := s.checkRunConditions(ctx, actor, items); err != nil {
-			if errors.Is(err, ErrStopped) {
-				return s.release(ctx, id, false, nil)
+		if retryAt.IsZero() {
+			if err := s.checkRunConditions(ctx, actor, items); err != nil {
+				if errors.Is(err, ErrStopped) {
+					return s.release(ctx, id, false, nil)
+				}
+				return err
 			}
-			return err
 		}
 		if err := s.launcher.ResolvePlans(ctx, id); err != nil {
 			return err

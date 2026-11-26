@@ -11,11 +11,11 @@ import (
 )
 
 const pendingColumns = `id,target_type,coalesce(target_id::text,''),coalesce(artist_id::text,''),kind,status,rule_version,input_digest,evidence,candidates,conflicts,
- resolution,created_at,updated_at,resolved_at,coalesce(conversation_id::text,''),claimed_at,next_attempt_at,attempts,review_retries,shelved_reason,COALESCE(match_rule_version,0),COALESCE(identity_digest,''),COALESCE(route,''),item_tool_calls,item_tokens`
+ resolution,created_at,updated_at,resolved_at,coalesce(conversation_id::text,''),claimed_at,next_attempt_at,attempts,review_retries,shelved_reason,COALESCE(match_rule_version,0),COALESCE(identity_digest,''),COALESCE(route,''),item_tool_calls,item_tokens,source_retry_count,claim_source_recovery_at`
 
 func scanPending(row interface{ Scan(...any) error }) (PendingItem, error) {
 	var p PendingItem
-	err := row.Scan(&p.ID, &p.TargetType, &p.TargetID, &p.ArtistID, &p.Kind, &p.Status, &p.RuleVersion, &p.InputDigest, &p.Evidence, &p.Candidates, &p.Conflicts, &p.Resolution, &p.CreatedAt, &p.UpdatedAt, &p.ResolvedAt, &p.ConversationID, &p.ClaimedAt, &p.NextAttemptAt, &p.Attempts, &p.ReviewRetries, &p.ShelvedReason, &p.MatchRuleVersion, &p.IdentityDigest, &p.Route, &p.ItemToolCalls, &p.ItemTokens)
+	err := row.Scan(&p.ID, &p.TargetType, &p.TargetID, &p.ArtistID, &p.Kind, &p.Status, &p.RuleVersion, &p.InputDigest, &p.Evidence, &p.Candidates, &p.Conflicts, &p.Resolution, &p.CreatedAt, &p.UpdatedAt, &p.ResolvedAt, &p.ConversationID, &p.ClaimedAt, &p.NextAttemptAt, &p.Attempts, &p.ReviewRetries, &p.ShelvedReason, &p.MatchRuleVersion, &p.IdentityDigest, &p.Route, &p.ItemToolCalls, &p.ItemTokens, &p.SourceRetryCount, &p.ClaimSourceRecoveryAt)
 	return p, err
 }
 func pendingRows(rows *sql.Rows, err error) ([]PendingItem, error) {
@@ -100,7 +100,7 @@ func (w *Writer) ClaimPreparedSelection(ctx context.Context, conversation string
 }
 
 func (w *Writer) DeferSelection(ctx context.Context, item PendingItem, next time.Time) error {
-	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET next_attempt_at=$3,updated_at=now()
+	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET next_attempt_at=$3,source_retry_count=source_retry_count+1,updated_at=now()
  WHERE id=$1 AND updated_at=$2 AND status IN ('waiting_model','waiting_route')`, item.ID, item.UpdatedAt, next)
 	return err
 }
@@ -154,7 +154,10 @@ func (w *Writer) modelKindItems(ctx context.Context, conversation string, now ti
 	rows := "curation_pending_items"
 	if conversation != "" {
 		query += ` FOR UPDATE OF p SKIP LOCKED
- ), claimed AS (UPDATE curation_pending_items SET status='in_progress',conversation_id=$7,claimed_at=$1,updated_at=now(),next_attempt_at=NULL
+ ), claimed AS (UPDATE curation_pending_items SET status='in_progress',conversation_id=$7,claimed_at=$1,updated_at=now(),next_attempt_at=NULL,
+ item_tool_calls=CASE WHEN reset_item_usage_on_claim THEN 0 ELSE item_tool_calls END,
+ item_tokens=CASE WHEN reset_item_usage_on_claim THEN 0 ELSE item_tokens END,
+ source_retry_count=CASE WHEN reset_item_usage_on_claim OR $4='select' THEN 0 ELSE source_retry_count END,reset_item_usage_on_claim=false
  WHERE id IN (SELECT id FROM picked) RETURNING *)`
 		rows = "claimed"
 	} else {
@@ -176,18 +179,38 @@ func (w *Writer) ReleaseClaimed(ctx context.Context, conversation string, countA
 func (w *Writer) ReleaseModelItems(ctx context.Context, conversation string, ids []string, countAttempt bool, nextAttemptAt *time.Time) error {
 	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET
  attempts=attempts+$2::boolean::int,status=CASE WHEN $2 AND attempts>=2 THEN 'shelved' WHEN route IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,
+ source_retry_count=CASE WHEN $2 THEN 0 ELSE source_retry_count END,
  shelved_reason=CASE WHEN $2 AND attempts>=2 THEN 'unhandled' END,
  conversation_id=NULL,claimed_at=NULL,review_retries=0,next_attempt_at=$3,updated_at=now()
  WHERE status='in_progress' AND conversation_id=$1 AND ($4::uuid[] IS NULL OR id=ANY($4::uuid[]))`, conversation, countAttempt, nextAttemptAt, ids)
 	return err
 }
 
-// DeferModelItem 保留该项的原路线和尝试次数，重试重新分配单项用量，已记的当日用量保留。
-func (w *Writer) DeferModelItem(ctx context.Context, item PendingItem, conversation, route string, next time.Time) error {
+// RecordClaimSourceFailure 保留本次领取里最晚的来源恢复时刻，重审与进程恢复共用。
+func (w *Writer) RecordClaimSourceFailure(ctx context.Context, item PendingItem, conversation string, recovery time.Time) error {
+	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET claim_source_recovery_at=GREATEST(claim_source_recovery_at,$4)
+ WHERE id=$1 AND input_digest=$2 AND conversation_id=$3 AND status='in_progress' AND COALESCE(identity_digest,'')=$5`,
+		item.ID, item.InputDigest, conversation, recovery, item.IdentityDigest)
+	return err
+}
+
+func (w *Writer) ClearResolvedSourceFailures(ctx context.Context, itemID, conversation string) error {
+	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET source_retry_count=0,claim_source_recovery_at=NULL
+ WHERE id=$1 AND conversation_id=$2 AND status='resolved'`, itemID, conversation)
+	return err
+}
+
+func (w *Writer) InterruptedSourceItems(ctx context.Context) ([]PendingItem, error) {
+	return pendingRows(w.db.QueryContext(ctx, `SELECT `+pendingColumns+` FROM curation_pending_items WHERE status='in_progress'
+ AND (claim_source_recovery_at IS NOT NULL OR source_retry_count>0)`))
+}
+
+// DeferModelItem 保留该项的原路线和尝试次数，保留本档用量。触限后只在到期领取时重置。
+func (w *Writer) DeferModelItem(ctx context.Context, item PendingItem, conversation, route string, next time.Time, resetOnClaim bool) error {
 	r, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET status='waiting_route',route=$4,
- conversation_id=NULL,claimed_at=NULL,next_attempt_at=$5,review_retries=0,item_tool_calls=0,item_tokens=0,updated_at=now()
+ conversation_id=NULL,claimed_at=NULL,next_attempt_at=$5,review_retries=0,source_retry_count=source_retry_count+1,claim_source_recovery_at=NULL,reset_item_usage_on_claim=$8,updated_at=now()
  WHERE id=$1 AND input_digest=$2 AND conversation_id=$3 AND status='in_progress'
- AND COALESCE(identity_digest,'')=$6 AND COALESCE(route,'')=$7`, item.ID, item.InputDigest, conversation, route, next, item.IdentityDigest, item.Route)
+ AND COALESCE(identity_digest,'')=$6 AND COALESCE(route,'')=$7`, item.ID, item.InputDigest, conversation, route, next, item.IdentityDigest, item.Route, resetOnClaim)
 	return requireChanged(r, err, "item_stale", "待定项已变更")
 }
 
@@ -291,7 +314,7 @@ func (w *Writer) AdvanceModelItem(ctx context.Context, item PendingItem, convers
 	r, err := tx.ExecContext(ctx, `UPDATE curation_pending_items SET route=$4,status='waiting_route',identity_digest=NULLIF($6,''),
  evidence=jsonb_set(evidence,'{route_history}',COALESCE(evidence->'route_history','[]'::jsonb) ||
  jsonb_build_object('from',$8::text,'to',$4::text,'reason',$9::text)),
- conversation_id=NULL,claimed_at=NULL,next_attempt_at=NULL,attempts=0,review_retries=0,item_tool_calls=0,item_tokens=0,updated_at=now()
+ conversation_id=NULL,claimed_at=NULL,next_attempt_at=NULL,attempts=0,review_retries=0,item_tool_calls=0,item_tokens=0,source_retry_count=0,claim_source_recovery_at=NULL,reset_item_usage_on_claim=false,updated_at=now()
  WHERE id=$1 AND input_digest=$2 AND conversation_id=$3 AND status='in_progress' AND COALESCE(identity_digest,'')=$5 AND COALESCE(route,'')=$7`, item.ID, item.InputDigest, conversation, route, item.IdentityDigest, identity, item.Route, from, reason)
 	if err := requireChanged(r, err, "item_stale", "待定项已变更"); err != nil {
 		return err

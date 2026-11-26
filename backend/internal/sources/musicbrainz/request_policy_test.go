@@ -182,16 +182,16 @@ func TestFailureMemory(t *testing.T) {
 		}
 	}
 	c := New(opts)
-	call(c, false, 1)
-	call(c, true, 6)
+	call(c, false, 5)
+	call(c, true, 10)
 	requireNoCacheFiles(t, opts.DataDirectory)
-	now = now.Add(10*time.Minute - time.Nanosecond)
-	call(c, true, 6)
-	call(c, false, 7)
-	call(c, true, 7)
-	call(New(opts), true, 12)
+	now = now.Add(5*time.Second - time.Nanosecond)
+	call(c, true, 10)
+	call(c, false, 15)
+	call(c, true, 15)
+	call(New(opts), true, 20)
 	now = now.Add(time.Nanosecond)
-	call(c, true, 17)
+	call(c, true, 25)
 }
 
 func TestRetrySchedule(t *testing.T) {
@@ -201,7 +201,7 @@ func TestRetrySchedule(t *testing.T) {
 		status int
 		header string
 	}{
-		{"unavailable", 503, "17"}, {"rateLimited", 429, start.Add(13 * time.Second).Format(http.TimeFormat)}, {"backoff", 503, ""},
+		{"unavailable", 503, "2"}, {"rateLimited", 429, start.Add(3 * time.Second).Format(http.TimeFormat)}, {"backoff", 503, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var hits atomic.Int32
@@ -228,20 +228,20 @@ func TestRetrySchedule(t *testing.T) {
 			for i, delay := range delays {
 				switch tc.name {
 				case "unavailable":
-					if delay != 17*time.Second {
+					if delay != 2*time.Second {
 						t.Fatal(delays)
 					}
 				case "rateLimited":
 					want := time.Duration(0)
 					if i == 0 {
-						want = 13 * time.Second
+						want = 3 * time.Second
 					}
 					if delay != want {
 						t.Fatal(delays)
 					}
 				case "backoff":
-					base := time.Second << (i + 1)
-					if delay < base || delay >= 2*base || delay > 60*time.Second {
+					base := 300 * time.Millisecond << i
+					if delay != base {
 						t.Fatalf("第 %d 次退避 %s，基数 %s", i+1, delay, base)
 					}
 				}

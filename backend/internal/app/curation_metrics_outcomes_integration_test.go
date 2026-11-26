@@ -13,18 +13,58 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation"
 )
 
-// 从与 API 相同的读取入口取得 can_accept，保留不可采纳的观察和没有字段变更的建议。
-func metricSuggestions(t *testing.T, app *integrationTestApplication) map[string][]curation.ModelException {
+type metricSuggestion struct {
+	ID        string          `json:"id"`
+	Target    string          `json:"target_id"`
+	Tool      string          `json:"tool"`
+	Field     string          `json:"field"`
+	Value     json.RawMessage `json:"value"`
+	CanAccept bool            `json:"can_accept"`
+}
+
+func metricSuggestionDetails(t *testing.T, item curation.ModelException, owner string) []metricSuggestion {
 	t.Helper()
-	found := map[string][]curation.ModelException{}
+	row := metricSuggestion{ID: item.ID, Target: owner, Tool: item.Tool, CanAccept: item.CanAccept}
+	if item.Track != nil {
+		row.Target = item.Track.ID
+	}
+	var preview struct {
+		Changes []struct {
+			Field string
+			After json.RawMessage
+		}
+	}
+	// 无字段变更的观察也占一条，字段为空，值为 null。
+	if len(item.Preview) == 0 || item.Preview[0] != '{' {
+		return []metricSuggestion{row}
+	}
+	requireCurationOK(t, json.Unmarshal(item.Preview, &preview))
+	if len(preview.Changes) == 0 {
+		return []metricSuggestion{row}
+	}
+	var details []metricSuggestion
+	for _, change := range preview.Changes {
+		row.Field, row.Value = change.Field, change.After
+		details = append(details, row)
+	}
+	return details
+}
+
+func metricSuggestions(t *testing.T, app *integrationTestApplication) map[string][]metricSuggestion {
+	t.Helper()
+	found := map[string][]metricSuggestion{}
 	writer := curation.NewWriter(app.database, app.dataDirectory, nil)
 	for page := 1; ; page++ {
 		items, total, err := writer.ListExceptions(t.Context(), "open", page, 100)
 		requireCurationOK(t, err)
 		for _, item := range items {
+			var owner string
 			if item.Release != nil {
-				found[item.Release.ID] = append(found[item.Release.ID], item)
+				owner = item.Release.ID
+			} else if item.Artist != nil {
+				owner = item.Artist.ID
 			}
+			found[owner] = append(found[owner], metricSuggestionDetails(t, item, owner)...)
 		}
 		if int64(page*100) >= total {
 			return found
@@ -32,25 +72,37 @@ func metricSuggestions(t *testing.T, app *integrationTestApplication) map[string
 	}
 }
 
-func metricSuggestionIssues(t *testing.T, sample string, w metricExpect, items []curation.ModelException) []metricIssue {
-	t.Helper()
+type suggestionAnswers map[string]map[string][]string
+
+func (row metricSuggestion) answer() string {
+	var value string
+	if len(row.Value) > 0 && row.Value[0] == '"' && json.Unmarshal(row.Value, &value) == nil {
+		return value
+	}
+	if row.Tool == "resolve_artist_identity" && row.Field == "artist_link" {
+		var entry curation.ArtistLinkPreview
+		if json.Unmarshal(row.Value, &entry) == nil {
+			return entry.Source + "/" + entry.ExternalID
+		}
+	}
+	return string(row.Value)
+}
+
+func metricSuggestionIssues(sample string, releases []string, w metricExpect, rows []metricSuggestion, answers suggestionAnswers) []metricIssue {
 	found := map[string][]string{}
 	var issues []metricIssue
-	for _, item := range items {
-		if w.SuggestionCanAccept != nil && item.CanAccept != *w.SuggestionCanAccept {
-			issues = append(issues, metricIssue{Kind: "suggestion_can_accept", Target: sample, Field: item.Tool, Expected: fmt.Sprint(*w.SuggestionCanAccept), Actual: fmt.Sprint(item.CanAccept)})
+	for _, row := range rows {
+		value := row.answer()
+		if slices.Contains(releases, row.Target) {
+			found[row.Field] = append(found[row.Field], value)
 		}
-		var preview struct {
-			Changes []struct {
-				Field string
-				After any
-			}
+		if w.SuggestionCanAccept != nil && row.CanAccept != *w.SuggestionCanAccept {
+			issues = append(issues, metricIssue{Kind: "suggestion_can_accept", Target: sample, Field: row.Field, Expected: fmt.Sprint(*w.SuggestionCanAccept), Actual: fmt.Sprint(row.CanAccept)})
+			continue
 		}
-		// 只有带字段变更的预览能佐证所标注的建议值。
-		if len(w.Suggestions) > 0 && item.Track == nil && json.Unmarshal(item.Preview, &preview) == nil {
-			for _, ch := range preview.Changes {
-				found[ch.Field] = append(found[ch.Field], fmt.Sprint(ch.After))
-			}
+		allowed := answers[row.Target][row.Field]
+		if w.allowsMatch() && row.CanAccept && (value == "" || !slices.Contains(allowed, value)) {
+			issues = append(issues, metricIssue{Kind: "suggestion_value", Target: sample, Field: row.Field, Expected: strings.Join(allowed, " 或 "), Actual: value})
 		}
 	}
 	for _, field := range slices.Sorted(maps.Keys(w.Suggestions)) {
@@ -60,6 +112,75 @@ func metricSuggestionIssues(t *testing.T, sample string, w metricExpect, items [
 		}
 	}
 	return issues
+}
+
+func metricCreditName(artists map[string]string, artist string, credits []metricCredit) string {
+	if len(credits) == 0 {
+		return artists[artist]
+	}
+	var b strings.Builder
+	for _, credit := range credits {
+		b.WriteString(artists[credit.Artist])
+		b.WriteString(credit.JoinPhrase)
+	}
+	return b.String()
+}
+
+func metricSampleAnswers(e metricEntry) suggestionAnswers {
+	w := e.sample.Expect
+	fields := map[string][]string{"external_link": {w.Release}, "group_external_link": {w.Group}, "release_group_match": {w.GroupMatch, w.Group}}
+	if len(w.Recordings) > 0 {
+		fields["track_links"] = []string{fmt.Sprint(len(w.Recordings))}
+	}
+	artists := map[string]string{}
+	recordings := map[string]metricRecording{}
+	for _, artist := range e.sample.External.Artists {
+		artists[artist.ID] = artist.Name
+	}
+	for _, r := range e.sample.External.Releases {
+		for _, track := range r.Tracks {
+			recordings[track.ID] = track
+		}
+		if r.ID == w.Release {
+			fields["title"] = []string{r.Title}
+			fields["album_artist"] = []string{metricCreditName(artists, r.Artist, r.Credits)}
+			fields["label"] = []string{r.Label}
+			fields["catalog_number"] = []string{r.Catalog}
+			fields["barcode"] = []string{r.Barcode}
+			if len(r.Date) >= 4 {
+				fields["year"] = []string{r.Date[:4]}
+			}
+		} else if w.Release == "" && r.Group == w.GroupMatch && r.GroupTitle != "" {
+			fields["title"] = []string{r.GroupTitle}
+		}
+	}
+	for field, value := range w.Suggestions {
+		fields[field] = []string{value}
+	}
+	for field, value := range w.Fields {
+		fields[field] = []string{value}
+	}
+	answers := suggestionAnswers{e.release: fields}
+	for i, track := range e.tracks {
+		answers[track] = map[string][]string{}
+		if i < len(w.Recordings) {
+			if recording, ok := recordings[w.Recordings[i]]; ok {
+				answers[track]["title"] = []string{recording.Title}
+				answers[track]["artist"] = []string{metricCreditName(artists, recording.Artist, recording.Credits)}
+			}
+		}
+		if i < len(w.TrackFields) {
+			for field, value := range w.TrackFields[i] {
+				answers[track][field] = []string{value}
+			}
+		}
+	}
+	for name, id := range e.artists {
+		if mb := w.Artists[name]; mb != "" {
+			answers[id] = map[string][]string{"artist_link": {"musicbrainz/" + mb}}
+		}
+	}
+	return answers
 }
 
 // 已接受的安全终态可独立成立；遗漏可选的艺人链接不会使正确的未收录变成信息缺陷。
@@ -118,7 +239,11 @@ func metricEvaluateOutcomes(t *testing.T, app *integrationTestApplication, entri
 		default:
 			s.Outcome = s.Match.Status
 		}
-		for _, issue := range metricSuggestionIssues(t, s.ID, want, suggestions[entry.release]) {
+		rows := slices.Clone(suggestions[entry.release])
+		for _, id := range slices.Compact(slices.Sorted(maps.Values(entry.artists))) {
+			rows = append(rows, suggestions[id]...)
+		}
+		for _, issue := range metricSuggestionIssues(s.ID, []string{entry.release}, want, rows, metricSampleAnswers(entry)) {
 			s.issue(issue)
 		}
 		if s.Outcome != metricWaitingSource && !slices.Contains(s.Accept, s.Outcome) {
@@ -133,7 +258,7 @@ func metricEvaluateOutcomes(t *testing.T, app *integrationTestApplication, entri
 		}
 		for _, issue := range s.Reasons {
 			switch issue.Kind {
-			case "wrong_merge", "wrong_link", "wrong_field", "open_pending", "unexpected_outcome", "missing_suggestion", "suggestion_can_accept", "source_closed", "stalled", "scan_field", "scan_structure", "route_missing":
+			case "wrong_merge", "wrong_link", "wrong_field", "open_pending", "unexpected_outcome", "missing_suggestion", "suggestion_can_accept", "suggestion_value", "source_closed", "stalled", "scan_field", "scan_structure", "route_missing":
 			case "missing_field":
 				// 新样本中的纠错和推断是该样本显式要求的行为。
 				if len(entry.sample.Expect.Accept) == 0 || s.Outcome != "release" && s.Outcome != "release_group" && s.Outcome != "local_cleanup" {
@@ -174,15 +299,36 @@ func TestMetricsSafeOutcomesAndAttribution(t *testing.T) {
 		})
 	}
 
-	accept := false
-	w := metricExpect{Accept: allowed, SuggestionCanAccept: &accept}
-	observation := curation.ModelException{Tool: "submit_verification", CanAccept: false}
-	actionable := curation.ModelException{Tool: "resolve_release_match", CanAccept: true}
-	if issues := metricSuggestionIssues(t, "合成现场版", w, []curation.ModelException{observation}); len(issues) != 0 {
-		t.Fatal(issues)
-	}
-	if issues := metricSuggestionIssues(t, "合成现场版", w, []curation.ModelException{observation, actionable}); len(issues) != 1 || issues[0].Kind != "suggestion_can_accept" {
-		t.Fatalf("可采纳的对应建议应单独列错：%+v", issues)
+}
+
+func TestMetricsSuggestionValues(t *testing.T) {
+	entry := metricEntry{release: "合成发行", tracks: []string{"合成曲目"}, sample: metricSample{Expect: metricExpect{Fields: map[string]string{"title": "合成专辑"}, TrackFields: []map[string]string{{"title": "合成曲名"}}}}}
+	truth := metricSampleAnswers(entry)
+	for _, tc := range []struct {
+		name, route, target, value string
+		canAccept                  bool
+		issue                      string
+	}{
+		{"版本正确", "release", entry.release, "合成专辑", true, ""},
+		{"组级正确", "release_group", entry.release, "合成专辑", true, ""},
+		{"版本错值", "release", entry.release, "合成错字", true, "suggestion_value"},
+		{"曲目正确", "release_group", entry.tracks[0], "合成曲名", true, ""},
+		{"曲目误用专辑答案", "release_group", entry.tracks[0], "合成专辑", true, "suggestion_value"},
+		{"未收录反例即使同值也不可采纳", "unlisted", entry.release, "合成专辑", true, "suggestion_can_accept"},
+		{"无候选反例", "no_usable_candidates", entry.release, "合成错字", true, "suggestion_can_accept"},
+		{"反例仅供观察", "no_usable_candidates", entry.release, "合成错字", false, ""},
+		{"正例仅供观察", "release", entry.release, "合成错字", false, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			value, err := json.Marshal(tc.value)
+			requireCurationOK(t, err)
+			rule := metricExpect{Accept: []string{tc.route, "unlisted"}}.withOutcomeRules()
+			row := metricSuggestion{Target: tc.target, Field: "title", Value: value, CanAccept: tc.canAccept}
+			issues := metricSuggestionIssues("合成样本", []string{entry.release}, rule, []metricSuggestion{row}, truth)
+			if tc.issue == "" && len(issues) != 0 || tc.issue != "" && (len(issues) != 1 || issues[0].Kind != tc.issue) {
+				t.Fatalf("期望问题 %q，实际 %+v", tc.issue, issues)
+			}
+		})
 	}
 }
 
@@ -200,8 +346,8 @@ func TestLiveCorpusSafeOutcomes(t *testing.T) {
 			continue
 		}
 		rule := album.Expect.withOutcomeRules()
-		if !slices.Equal(rule.Accept, allowed) || rule.SuggestionCanAccept == nil || *rule.SuggestionCanAccept {
-			t.Errorf("%s 允许结果 %v，应为 %v 且每条建议均不可采纳", album.Title, rule.Accept, allowed)
+		if !slices.Equal(rule.Accept, allowed) || rule.SuggestionCanAccept != nil {
+			t.Errorf("%s 允许结果 %v，应为 %v 且可采纳的建议按值核对", album.Title, rule.Accept, allowed)
 		}
 		delete(want, album.Tags)
 	}

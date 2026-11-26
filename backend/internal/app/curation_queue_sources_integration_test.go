@@ -70,7 +70,7 @@ func TestPostgreSQL整理队列限流时歌词和艺人资料继续(t *testing.T
 	setScenario(`{"scenario":"rate_limited","retry_after":2}`)
 	b3Enable(t, app, admin)
 	clock.advance(t, time.Second)
-	requireBackoff(2*time.Second, 1)
+	requireBackoff(5*time.Second, 5)
 
 	// 在 MusicBrainz 冷却已生效后才加入歌词缺口与可独立补资料的 Q 号。
 	mustExec(t, app, `UPDATE tracks SET duration_seconds=180 WHERE id=$1`, track)
@@ -80,7 +80,7 @@ func TestPostgreSQL整理队列限流时歌词和艺人资料继续(t *testing.T
 		VALUES(gen_random_uuid(),'wikidata','artist',$1,'Q900005','artist_credit','certain')`, artist)
 	mustExec(t, app, `INSERT INTO scan_runs(id,status,started_at,finished_at) VALUES($1,'succeeded',now(),now())`, uuid.New())
 	clock.advance(t, time.Second)
-	requireBackoff(time.Second, 1)
+	requireBackoff(4*time.Second, 5)
 	if s := b3WorkState(t, app, "lyrics", track); s.Status != "done" || s.Attempts != 1 {
 		t.Fatalf("限流中歌词应已补齐，状态 %+v", s)
 	}
@@ -102,15 +102,15 @@ func TestPostgreSQL整理队列限流时歌词和艺人资料继续(t *testing.T
 		t.Fatalf("声纹队列不计网络请求：%+v", q)
 	}
 
-	clock.advance(t, time.Second)
-	requireBackoff(4*time.Second, 2)
+	clock.advance(t, 4*time.Second)
+	requireBackoff(10*time.Second, 10)
 	setScenario(`{"scenario":"ok"}`)
-	clock.advance(t, 3*time.Second)
-	requireBackoff(time.Second, 2)
+	clock.advance(t, 9*time.Second)
+	requireBackoff(time.Second, 10)
 	clock.advance(t, time.Second)
 	s := b3WorkState(t, app, "release", release)
 	if s.Status != "matched" || s.Attempts != 1 || s.Generation != 1 || s.RetryCount != 0 ||
-		mbReads() != 3 || s.NextAttemptAt != nil {
+		mbReads() != 11 || s.NextAttemptAt != nil {
 		t.Fatalf("MusicBrainz 恢复后状态 %+v，共 %d 次发行请求", s, mbReads())
 	}
 	q := progress().Queues[0]

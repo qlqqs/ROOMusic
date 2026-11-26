@@ -221,10 +221,10 @@ func (r *Requester) do(ctx context.Context, spec requestSpec) (response, error) 
 	}
 	key := cacheKey(keyInput)
 	queue, queued := ctx.Value(queueKey{}).(queueRequest)
-	e, hit, failed := r.cache.lookup(ctx, key, background && !queued, spec.decode != nil || spec.binaryCache)
-	if failed {
+	e, hit, failedUntil := r.cache.lookup(ctx, key, background && !queued, spec.decode != nil || spec.binaryCache)
+	if !failedUntil.IsZero() {
 		r.hit(ctx)
-		return response{}, ErrTryLater
+		return response{}, &QueuePause{Source: r.cache.source, Reason: "source_unavailable", RetryAt: failedUntil}
 	}
 	if hit {
 		if spec.binaryCache {
@@ -249,22 +249,48 @@ func (r *Requester) do(ctx context.Context, spec requestSpec) (response, error) 
 		}
 		r.cache.warning(ctx)
 	}
+	deadline := r.cache.now().Add(10 * time.Second)
+	var throttled *QueuePause
 	for attempt := 1; ; attempt++ {
-		res, err := r.attempt(ctx, c, background, request, attempt, spec, key, queue, failure)
+		attemptCtx := ctx
+		cancel := func() {}
+		if throttled != nil {
+			remaining := deadline.Sub(r.cache.now())
+			if remaining <= 0 {
+				break
+			}
+			attemptCtx, cancel = context.WithTimeout(ctx, remaining)
+		}
+		res, err := r.attempt(attemptCtx, c, background, request, attempt, spec, key, queue, failure)
+		expired := errors.Is(attemptCtx.Err(), context.DeadlineExceeded)
+		cancel()
+		if ctx.Err() != nil {
+			return response{}, ctx.Err()
+		}
+		if throttled != nil && expired && err != nil {
+			break
+		}
 		if err != nil || !res.retry {
 			return res, err
 		}
-		if attempt >= 5 {
-			r.cache.fail(key)
-			return response{}, ErrTryLater
-		}
-		delay := retryDelay(res.retryAfter, r.cache.now(), attempt)
-		if r.wikimedia && (res.status == http.StatusTooManyRequests || res.status == http.StatusServiceUnavailable) {
-			if requested, ok := retryAfterDelay(res.retryAfter, r.cache.now()); ok {
-				delay = requested
-			} else {
-				delay = max(delay, 5*time.Second)
+		now := r.cache.now()
+		var delay time.Duration
+		if res.status == http.StatusTooManyRequests || res.status == http.StatusServiceUnavailable {
+			requested, ok := retryAfterDelay(res.retryAfter, now)
+			throttled = &QueuePause{Source: r.cache.source, Reason: "rate_limited", RetryAt: now.Add(requested)}
+			delay = requested
+			if !ok {
+				delay = min(300*time.Millisecond<<(attempt-1), 3*time.Second)
 			}
+		} else {
+			if attempt >= 5 {
+				r.cache.fail(key, now.Add(SourceRetryDelay(0)))
+				return response{}, failure
+			}
+			delay = retryDelay(res.retryAfter, now, attempt)
+		}
+		if throttled != nil && (attempt >= 5 || delay >= deadline.Sub(now)) {
+			break
 		}
 		select {
 		case <-ctx.Done():
@@ -272,6 +298,18 @@ func (r *Requester) do(ctx context.Context, spec requestSpec) (response, error) 
 		case <-r.after(delay):
 		}
 	}
+	if queue.policy != nil {
+		return response{}, r.pauseQueue(queue, throttled.Reason, max(0, throttled.RetryAt.Sub(r.cache.now())), false)
+	}
+	if background {
+		now := r.cache.now()
+		if earliest := now.Add(SourceRetryDelay(0)); earliest.After(throttled.RetryAt) {
+			throttled.RetryAt = earliest
+		}
+		r.cache.fail(key, throttled.RetryAt)
+		return response{}, throttled
+	}
+	return response{}, failure
 }
 
 func (spec requestSpec) interpret(res response) (empty, retry bool, err error) {
@@ -359,8 +397,8 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 	}
 	throttled := res.status == http.StatusTooManyRequests || res.status == http.StatusServiceUnavailable
 	network := res.retry && res.body == nil && !throttled && attempt == 1
-	if queue.policy != nil && throttled {
-		return response{}, r.pauseQueue(queue, "rate_limited", res.retryAfter, false)
+	if throttled {
+		return res, nil
 	}
 	result, err := r.decodeResponse(ctx, spec, res, key, background, failure)
 	if queue.policy == nil {
@@ -368,7 +406,8 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 	}
 	if (err == nil && !result.retry) || errors.Is(err, ErrNotFound) {
 		if res.status >= 200 && res.status < 300 || res.status == http.StatusNotFound {
-			r.limiter.setLevel(queue.policy.recovered(source))
+			queue.policy.recovered(source)
+			r.limiter.setLevel(0)
 			if res.status != http.StatusNotFound && queue.success != nil {
 				queue.success(source)
 			}
@@ -382,14 +421,14 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 		return response{}, err
 	}
 	if result.retry || errors.Is(err, ErrTryLater) || errors.Is(err, ErrUnavailable) {
-		if pause := r.pauseQueue(queue, "source_unavailable", res.retryAfter, network); pause != nil {
+		if pause := r.pauseQueue(queue, "source_unavailable", 0, network); pause != nil {
 			return response{}, pause
 		}
 	}
 	return result, err
 }
 
-func (r *Requester) pauseQueue(queue queueRequest, reason, retryAfter string, network bool) *QueuePause {
+func (r *Requester) pauseQueue(queue queueRequest, reason string, retryAfter time.Duration, network bool) *QueuePause {
 	pause, level := queue.policy.failed(r.cache.source, reason, retryAfter, network)
 	r.limiter.setLevel(level)
 	return pause
@@ -551,7 +590,10 @@ func fetch(client *http.Client, req *http.Request, limit int64, allStatuses bool
 	}
 	defer resp.Body.Close()
 	res := response{status: resp.StatusCode, contentType: resp.Header.Get("Content-Type"), retryAfter: resp.Header.Get("Retry-After")}
-	res.retry = resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable
+	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
+		res.retry = true
+		return res
+	}
 	if allStatuses || req.Method == http.MethodPost || resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotFound {
 		if resp.ContentLength > limit {
 			return res
