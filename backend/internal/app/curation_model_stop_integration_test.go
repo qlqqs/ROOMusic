@@ -1,10 +1,12 @@
 package app
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 )
@@ -60,6 +62,82 @@ func TestPostgreSQLCurationModelConcurrentProviderCooldown(t *testing.T) {
 			resumed.complete(t)
 		})
 	}
+}
+
+func TestPostgreSQLCurationModelConcurrentProviderBackoff(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	const concurrency, readyItems = 3, 4
+	for i := range readyItems {
+		title := fmt.Sprintf("核对专辑 %d", i+1)
+		release, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{
+			title: title, artist: fmt.Sprintf("核对艺人 %d", i+1), tracks: []string{"present"},
+		})
+		queueModelVerification(t, f, "verify_name", curation.VerificationCandidate{
+			ReleaseID: release, Field: "title", Before: title, After: "候选标题",
+		})
+	}
+	f.update(t, http.MethodPut, curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": concurrency})
+	var requests [concurrency]schedulerRequest
+	for i := range requests {
+		requests[i] = f.next(t, false)
+	}
+	if p := f.progress(t); p.Concurrency != concurrency || p.Running != concurrency || p.Items.WaitingModel != readyItems-concurrency {
+		t.Fatalf("预期三个核对请求在途且一个核对项排队，实际进度 %+v", p)
+	}
+
+	start := f.clock.now.Load()
+	failure := schedulerHTTPFailure{status: http.StatusServiceUnavailable}
+	isCooling := func(p curation.ModelProgress) bool {
+		return p.State == "unavailable" && p.UnavailableReason != nil && *p.UnavailableReason == "provider_error"
+	}
+	checkCooldown := func(elapsed time.Duration, want bool) {
+		t.Helper()
+		f.clock.now.Store(start + int64(elapsed))
+		if p := f.progress(t); isCooling(p) != want {
+			t.Fatalf("距首次失败 %s 时，预期冷却=%t，实际进度 %+v", elapsed, want, p)
+		}
+	}
+
+	// 等每次失败释放领取后才推进时钟，由测试控制三次失败的先后顺序。
+	for i, request := range requests {
+		f.clock.now.Store(start + int64(time.Duration(i)*time.Second))
+		request.fail <- failure
+		schedulerWait(t, fmt.Sprintf("第 %d 个失败项释放且仍在冷却", i+1), func() bool {
+			p := f.progress(t)
+			return isCooling(p) && p.Running == concurrency-i-1 && p.Items.WaitingModel == int64(readyItems-concurrency+i+1)
+		})
+	}
+
+	// 通过进度接口的状态变化约束冷却截止时刻。
+	checkCooldown(10*time.Minute-time.Second, true)
+	select {
+	case <-f.requests:
+		t.Fatal("冷却期间提前领取了核对项")
+	case <-time.After(100 * time.Millisecond):
+	}
+	const lastFailure = (concurrency - 1) * time.Second
+	checkCooldown(lastFailure+10*time.Minute, false)
+
+	// 越过冷却截止时刻并确认调度器重新领取，挂起其他请求直到第四次失败。
+	const nextFailure = lastFailure + 10*time.Minute + time.Second
+	f.clock.now.Store(start + int64(nextFailure))
+	for i := range requests {
+		requests[i] = f.next(t, false)
+	}
+	requests[0].fail <- failure
+	schedulerWait(t, "冷却到期后的失败项释放并重新进入冷却", func() bool {
+		p := f.progress(t)
+		return isCooling(p) && p.Running == concurrency-1 && p.Items.WaitingModel == readyItems-concurrency+1
+	})
+	checkCooldown(nextFailure+20*time.Minute-time.Second, true)
+	checkCooldown(nextFailure+20*time.Minute, false)
+	requests[0] = f.next(t, false)
+	f.pause(t)
+	for _, request := range requests {
+		request.complete(t)
+	}
+	schedulerWait(t, "暂停后所有核对请求结束", func() bool { return f.progress(t).Running == 0 })
 }
 
 func (f *schedulerFixture) update(t *testing.T, method, path string, body any) {

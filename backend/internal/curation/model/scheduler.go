@@ -572,11 +572,15 @@ func (s *Scheduler) release(ctx context.Context, id string, count bool, next *ti
 
 func (s *Scheduler) pauseProvider(delay time.Duration) {
 	s.mu.Lock()
+	now := s.options.Now()
 	if delay < 0 {
-		s.providerBackoff = min(6*time.Hour, max(10*time.Minute, s.providerBackoff*2))
+		// 同一冷却期内，在途请求的失败只延后恢复时刻。
+		if !now.Before(s.providerUntil) {
+			s.providerBackoff = min(6*time.Hour, max(10*time.Minute, s.providerBackoff*2))
+		}
 		delay = s.providerBackoff
 	}
-	until := s.options.Now().Add(delay)
+	until := now.Add(delay)
 	if until.After(s.providerUntil) {
 		s.providerUntil = until
 	}
