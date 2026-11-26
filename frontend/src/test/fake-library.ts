@@ -1,4 +1,4 @@
-import { decodeRootList, decodeRootOperationList, type RootDTO, type RootOperationDTO, type ScanDTO, type ScanScheduleDTO } from "../features/library/api/decoders";
+import { decodeRootList, decodeRootOperationList, pollIntervalMinutes, type RootListItemDTO, type RootOperationDTO, type ScanDTO, type ScanScheduleDTO } from "../features/library/api/decoders";
 import type { FakeApi } from "./fake-api";
 import { sampleBody } from "./api-samples";
 import { jsonResponse, sampleResponse, type RecordedRequest } from "./http";
@@ -7,7 +7,7 @@ type DiagnosticsBody = { items: { id: string; kind: string; path: string | null;
 
 /** 测试用的目录与扫描后端替身的状态：测试可以直接读写，用来模拟“别处改了数据”或预置扫描。 */
 export type FakeLibrary = {
-  roots: RootDTO[];
+  roots: RootListItemDTO[];
   /** 最新的在前，与后端一致。 */
   operations: RootOperationDTO[];
   scans: Map<string, ScanDTO>;
@@ -112,7 +112,8 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
       const name = path.split("/").filter(Boolean).pop() ?? path;
       let root = library.roots.find((candidate) => candidate.name === name);
       if (root === undefined) {
-        root = { id: uuidOf("a", nextRoot++), path: name, name, status: "active", revision: 1, created_at: now(), updated_at: now(), excluded_paths: [] };
+        // 新目录在首次完整扫描之前还没定监听方式，间隔是默认的 1 小时。
+        root = { id: uuidOf("a", nextRoot++), path: name, name, status: "active", revision: 1, created_at: now(), updated_at: now(), excluded_paths: [], scan_watch_mode: null, poll_interval_minutes: 60 };
         library.roots.push(root);
       }
       const body = { id: root.id, name: root.name, status: root.status, revision: root.revision };
@@ -121,6 +122,17 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
       return jsonResponse(201, body);
     }),
   );
+
+  // 定时扫描间隔：只收五档（与后端相同的严格 JSON 由真实后端负责，这里只校验值）；返回保存后的间隔。
+  api.on("PUT", /^\/api\/v1\/library-roots\/([^/]+)\/scan-interval$/, (request) => {
+    const id = /^\/api\/v1\/library-roots\/([^/]+)\/scan-interval/.exec(request.path)?.[1];
+    const root = library.roots.find((candidate) => candidate.id === id);
+    if (root === undefined) return errorResponse(404, "not_found", "目录不存在");
+    const minutes = (request.body as { poll_interval_minutes?: unknown } | null)?.poll_interval_minutes;
+    if (typeof minutes !== "number" || !(pollIntervalMinutes as readonly number[]).includes(minutes)) return sampleResponse("errors/root-scan-interval-invalid-input");
+    root.poll_interval_minutes = minutes;
+    return jsonResponse(200, { poll_interval_minutes: minutes });
+  });
 
   const change = (kind: "disable" | "restore", request: RecordedRequest, id: string, expectedRevision: number): Response => {
     const fingerprint = { root_id: id, kind, expected_revision: expectedRevision };
@@ -131,7 +143,7 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
     if (root === undefined) return errorResponse(404, "not_found", "目录不存在");
     const expectedStatus = kind === "disable" ? "active" : "disabled";
     if (root.revision !== expectedRevision || root.status !== expectedStatus) return sampleResponse("errors/revision-conflict");
-    const updated: RootDTO = { ...root, status: kind === "disable" ? "disabled" : "active", revision: root.revision + 1, updated_at: now() };
+    const updated: RootListItemDTO = { ...root, status: kind === "disable" ? "disabled" : "active", revision: root.revision + 1, updated_at: now() };
     library.roots[index] = updated;
     const body = { id, path: updated.name, status: updated.status, revision: updated.revision };
     recordOperation({ operation: kind, status: "succeeded", root_id: id, revision: updated.revision });

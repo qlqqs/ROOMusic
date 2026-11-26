@@ -27,9 +27,13 @@ import (
 )
 
 type registeredRoot struct {
-	ID, Path   string
-	Exclusions []string
-	filter     scanFilter
+	revision           int64
+	baseline, lastPoll sql.NullTime
+	interval           int
+	directories        []string
+	ID, Path           string
+	Exclusions         []string
+	filter             scanFilter
 }
 
 type scanExecutor interface {
@@ -98,7 +102,7 @@ func scanStatusAllowsMissingReconciliation(status string) bool {
 	return status == "succeeded"
 }
 
-func (service *Service) runScan(scanID string, execution *scanExecution, mode string) {
+func (service *Service) runScan(scanID string, execution *scanExecution, mode string, targets scanTargets) {
 	scanContext, cancel := context.WithCancel(service.scanContext)
 	pollDone := make(chan struct{})
 	stopReason := make(chan error, 1)
@@ -114,14 +118,26 @@ func (service *Service) runScan(scanID string, execution *scanExecution, mode st
 			service.runningScan = ""
 		}
 		service.scanMutex.Unlock()
+		wakeWatch(service.watch.refresh)
 	}()
 	executor := uncancelableScanExecutor{scanExecutor: execution.connection}
 	roots, loadError := service.loadRegisteredRoots(scanContext, executor)
+	if loadError == nil {
+		roots, loadError = scopedRoots(scanContext, executor, roots, targets)
+	}
 	outcome := scanOutcome{Complete: loadError == nil, Failed: loadError != nil}
 	if loadError != nil {
 		roots = nil
 	}
 	feedback := newScanFeedback(service, executor, scanID, roots)
+	if loadError == nil {
+		loadError = feedback.rememberCoveredReleases(scanContext)
+		if loadError != nil {
+			outcome.Complete = false
+			outcome.Failed = true
+			roots = nil
+		}
+	}
 	if loadError == nil && !service.countScanRoots(scanContext, executor, scanID, roots, feedback) {
 		outcome.Complete = false
 	}
@@ -144,6 +160,8 @@ func (service *Service) runScan(scanID string, execution *scanExecution, mode st
 			if errors.Is(rootError, errStagingCleanup) {
 				break
 			}
+		} else if root.directories == nil {
+			feedback.completedWholeRoots = append(feedback.completedWholeRoots, root)
 		}
 		if scanContext.Err() == nil {
 			feedback.fraction(1, 1)
@@ -248,7 +266,11 @@ func (service *Service) finalizeScan(ctx context.Context, connection *sql.Conn, 
 		if feedback != nil {
 			changes = feedback.changes
 		}
-		if err := ingest.MarkMissingSourcesWithFeedback(ctx, transaction, scanID, rootIDs, changes); err != nil {
+		var directories []byte
+		if feedback != nil {
+			directories = feedback.coverage
+		}
+		if err := ingest.MarkMissingInDirectories(ctx, transaction, scanID, rootIDs, directories, changes); err != nil {
 			return "", err
 		}
 	}
@@ -261,6 +283,17 @@ func (service *Service) finalizeScan(ctx context.Context, connection *sql.Conn, 
 	} else if status == "incomplete" {
 		errorMessage = "scan_incomplete"
 	}
+	if feedback != nil && (status == "succeeded" || status == "incomplete") {
+		for _, root := range feedback.completedWholeRoots {
+			// 其他根失败时仍可重探已有基线的根。首次监听只在整次成功后开启。
+			if status == "incomplete" && !root.baseline.Valid {
+				continue
+			}
+			if _, err := transaction.ExecContext(ctx, `UPDATE library_roots SET watch_baseline_at=now() WHERE id=$1 AND revision=$2 AND status='active'`, root.ID, root.revision); err != nil {
+				return "", err
+			}
+		}
+	}
 	if err := finalizeScanFeedback(ctx, transaction, scanID, status, errorMessage, feedback); err != nil {
 		return "", err
 	}
@@ -271,7 +304,7 @@ func (service *Service) finalizeScan(ctx context.Context, connection *sql.Conn, 
 }
 
 func (service *Service) loadRegisteredRoots(context context.Context, executor scanExecutor) ([]registeredRoot, error) {
-	rows, err := executor.QueryContext(context, `SELECT r.id::text,r.path,to_json(COALESCE(array_agg(e.relative_path ORDER BY e.relative_path COLLATE "C") FILTER (WHERE e.relative_path IS NOT NULL),ARRAY[]::text[]))
+	rows, err := executor.QueryContext(context, `SELECT r.id::text,r.path,r.revision,r.watch_baseline_at,r.last_poll_started_at,r.poll_interval_minutes,to_json(COALESCE(array_agg(e.relative_path ORDER BY e.relative_path COLLATE "C") FILTER (WHERE e.relative_path IS NOT NULL),ARRAY[]::text[]))
  FROM library_roots r LEFT JOIN library_root_exclusions e ON e.root_id=r.id
  WHERE r.status='active' GROUP BY r.id ORDER BY r.path,r.id`)
 	if err != nil {
@@ -282,7 +315,7 @@ func (service *Service) loadRegisteredRoots(context context.Context, executor sc
 	for rows.Next() {
 		var root registeredRoot
 		var exclusions []byte
-		if err := rows.Scan(&root.ID, &root.Path, &exclusions); err != nil {
+		if err := rows.Scan(&root.ID, &root.Path, &root.revision, &root.baseline, &root.lastPoll, &root.interval, &exclusions); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(exclusions, &root.Exclusions); err != nil {
@@ -349,7 +382,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 	})
 	defer pipeline.pool.Close()
 	var lyricsIndex sidecarLyricsIndex
-	err := filepath.WalkDir(root.Path, func(path string, entry fs.DirEntry, walkError error) error {
+	err := root.walk(func(path string, entry fs.DirEntry, walkError error) error {
 		if err := ctx.Err(); err != nil {
 			complete = false
 			return err
@@ -457,7 +490,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 		if !registeredRootAvailable(root.Path) {
 			return errors.Join(errors.New("root unavailable before organizing"), service.recordDiagnosticWith(ctx, executor, scanID, "", "root_unavailable", "注册目录当前不可用"))
 		}
-		if pipeline.seen == 0 && !pipeline.walkErrorSeen && !pipeline.excludedHit {
+		if root.directories == nil && pipeline.seen == 0 && !pipeline.walkErrorSeen && !pipeline.excludedHit {
 			present, err := ingest.RootHasPresentTracks(ctx, executor, root.ID)
 			if err != nil {
 				return errors.Join(err, service.recordDiagnosticWith(ctx, executor, scanID, "", "database_error", "无法读取目录来源"))
@@ -466,7 +499,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 				return errors.Join(errors.New("empty root"), service.recordDiagnosticWith(ctx, executor, scanID, "", "root_empty", "目录是空的，可能还没挂载"))
 			}
 		}
-		if !pipeline.walkErrorSeen {
+		if root.directories == nil && !pipeline.walkErrorSeen {
 			cache.cleanup(ctx)
 		}
 		if alignErr := ingest.AlignCueStagingScopes(ctx, executor, scanID, root.ID); alignErr != nil {
@@ -476,7 +509,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 				captureProcessingError(diagnosticError)
 			}
 		}
-		if markErr := ingest.MarkDiscParentScopes(ctx, executor, scanID, root.ID); markErr != nil {
+		if markErr := ingest.MarkDiscParentScopes(ctx, executor, scanID, root.ID, root.directories); markErr != nil {
 			complete = false
 			captureProcessingError(markErr)
 			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法标记碟父目录独占范围"); diagnosticError != nil {
@@ -520,7 +553,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 				}
 			}
 			feedback.checkHeldFiles(root)
-			if !pipeline.walkErrorSeen && ctx.Err() == nil {
+			if root.directories == nil && !pipeline.walkErrorSeen && ctx.Err() == nil {
 				if err := ingest.CleanupCandidateStates(ctx, executor, scanID, root.ID); err != nil {
 					service.warnCandidateState(scanID, root.ID, "cleanup")
 				}

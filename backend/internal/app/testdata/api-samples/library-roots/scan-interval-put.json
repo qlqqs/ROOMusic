@@ -1,0 +1,6 @@
+{
+  "body": {
+    "poll_interval_minutes": 240
+  },
+  "status": 200
+}

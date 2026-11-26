@@ -64,3 +64,7 @@
 - O 线配合：`PlannedVersionGroup` 从整批暂存规划（包含被跳过候选）读取已有组 ID，供其它新版本加入；`ReleaseGroupOf` 仍在新发行提交后为后续版本补组 ID，不搬动已有发行。跳过不进入候选写入与反馈记账，不改曲目归属；根结束沿用 `EmptiedGroupMoves` 的真实归属差异与旧组腾空判据，不因跳过触发收藏转移。
 - `RecordCandidateState(ctx,db,rootID,candidateKey,releaseID,signature)` 只在候选及封面成功后 upsert（`artwork_unreadable` 不视为失败）；完整重扫也记录但不判断跳过。状态读取失败只 WARN 后正常写入，记录失败只 WARN、留待下轮；均不重试。安全事件 `library.scan.candidate_state_failed` 只含扫描/root ID 与 `operation=read/record/cleanup`，不输出来源路径或 SQL。
 - `CleanupCandidateStates(ctx,db,scanID,rootID)` 用 `NOT EXISTS scan_observations` 删除本次暂存中未见的候选键；调用方在规划完成、根遍历完整且未取消时执行，再清暂存。取消、`walk_error`、空根保护或规划失败不清；清理失败只 WARN，不改变曲目对账。清理不要求本次所有候选写入成功，仍见到的失败候选保留旧状态。
+
+#### 按目录的增量范围
+
+局部增量保留原登记根与相对路径。普通目录扫直属文件，多碟扩至父目录及同级碟，跨目录 CUE 带上已知引用；同根相关目录一起暂存和配对。指纹借用与消失曲目判定只使用本轮实际覆盖的来源。根不可用继续抑制 missing，可访问的根内已删除的子目录可作局部空目录对账。局部扫描保留整根解析缓存及候选状态的清理给后续整根扫描。本次调度改动没有扫描或整理规则版本增量。

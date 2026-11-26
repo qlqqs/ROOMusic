@@ -23,7 +23,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 ## 2. 接口签名
 
 - 目录新增响应：`{ "id": string, "name": string, "status": "active" | "disabled", "revision": integer }`。
-- 目录列表项目：`id`、安全 basename `path`/`name`、`status`、`revision`、时间戳与必需的 `excluded_paths: string[]`（无排除时 `[]`，相对路径按字节升序）；
+- 目录列表项目：`id`、安全 basename `path`/`name`、`status`、`revision`、`scan_watch_mode`（realtime、scheduled 或 null）、`poll_interval_minutes`、时间戳与必需的 `excluded_paths: string[]`（无排除时 `[]`，相对路径按字节升序）；
   不返回原始绝对路径。
 - `POST /api/v1/library-roots/{id}/relocate`：同源、管理员、必需 `Idempotency-Key`；请求为
   `{"path":"/music/nas-new/Music","expected_revision":4}`，成功返回 `200`。

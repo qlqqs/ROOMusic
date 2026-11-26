@@ -10,6 +10,7 @@ import {
   decodeRootExclusions,
   decodeRootList,
   decodeRootOperationList,
+  decodeRootScanInterval,
   decodeScan,
   decodeScanPage,
   decodeScanReport,
@@ -20,8 +21,9 @@ import {
   type RootChangedDTO,
   type RootCreatedDTO,
   type RootExclusionsDTO,
-  type RootDTO,
+  type RootListItemDTO,
   type RootOperationDTO,
+  type RootScanIntervalDTO,
   type ScanDTO,
   type ScanMode,
   type ScanPageDTO,
@@ -29,7 +31,7 @@ import {
   type ScanScheduleDTO,
 } from "./decoders";
 
-export function fetchRoots(signal?: AbortSignal): Promise<ApiResponse<{ items: RootDTO[] }>> {
+export function fetchRoots(signal?: AbortSignal): Promise<ApiResponse<{ items: RootListItemDTO[] }>> {
   return apiRequest({ method: "GET", path: "/api/v1/library-roots", signal }, decodeRootList);
 }
 
@@ -151,4 +153,12 @@ export function saveScanSchedule(schedule: ScanScheduleDTO): Promise<ApiResponse
 /** 后台音频分析的进度（所有登录用户）。 */
 export function fetchAnalysisProgress(signal?: AbortSignal): Promise<ApiResponse<AnalysisProgressDTO>> {
   return apiRequest({ method: "GET", path: "/api/v1/audio-analysis/progress", signal }, decodeAnalysisProgress);
+}
+
+/** 定时扫描的间隔（分钟，见 pollIntervalMinutes）：只对定时扫描的目录起作用；重复保存同样的值不改变计时起点，不需要幂等键。 */
+export function saveRootScanInterval(id: string, minutes: number): Promise<ApiResponse<RootScanIntervalDTO>> {
+  return apiRequest(
+    { method: "PUT", path: `/api/v1/library-roots/${id}/scan-interval`, body: { poll_interval_minutes: minutes } },
+    decodeRootScanInterval,
+  );
 }
