@@ -1,8 +1,10 @@
 import type {
+  CurationClassificationsDTO,
   CurationConversationDTO,
   CurationExceptionDTO,
   CurationModelProgressDTO,
   CurationProgressDTO,
+  CurationQueueDTO,
   CurationSettingsDTO,
   CurationSourceDTO,
   ProgramState,
@@ -42,6 +44,14 @@ export type CurationData = {
   exceptions: CurationExceptionDTO[];
   conversations: CurationConversationDTO[];
   counter: number;
+  /** 本地分类的计数（整理链 A）；为 null 时全部算“有缺口”。 */
+  classifications: CurationClassificationsDTO["releases"] | null;
+  /** 收到的“重新巡检”请求数（整理链 D）。 */
+  repatrols: number;
+  /** 五条程序队列（整理链 B）；为 null 时都空闲、已排空。 */
+  queues: CurationQueueDTO[] | null;
+  /** 今天的联网用量与联网上限是否用尽（整理链 E）。 */
+  web: { today: { input_tokens: number; output_tokens: number }; limitReached: boolean; retryAt: string | null };
 };
 
 const ADMIN = { id: "00000000-0000-4000-8000-000000000002", username: "curator" };
@@ -72,6 +82,10 @@ export function curationDataOf(governance: GovernanceData | null = null): Curati
     releases: { total: 0, processed: 0, matched: 0, uncertain: 0, no_match: 0, try_later: 0, unlisted: 0, no_usable_candidates: 0 },
     batches: [],
     suppressions: [],
+    classifications: null,
+    repatrols: 0,
+    queues: null,
+    web: { today: { input_tokens: 0, output_tokens: 0 }, limitReached: false, retryAt: null },
     revertPageSize: 100,
     fingerprintAvailable: true,
     bundledKeyRejected: false,
@@ -203,6 +217,24 @@ export function idleQueues() {
   }));
 }
 
+/** 本地分类的计数：没有指定时全部算“有缺口”，四类之和等于 total。 */
+export function respondToCurationClassifications(data: CurationData): ApiResult {
+  const total = data.releases.total;
+  return {
+    status: 200,
+    body: {
+      releases: data.classifications ?? { total, tagged_id: 0, has_gaps: total, local_complete: 0, insufficient: 0 },
+      versions: { local_rule: 2, external_match_rule: 102, patrol_prompt: 1 },
+    },
+  };
+}
+
+/** 重新巡检：只记一次，返回 202 空体。 */
+export function respondToRepatrol(data: CurationData): ApiResult {
+  data.repatrols += 1;
+  return { status: 202, body: null };
+}
+
 export function respondToCurationProgress(data: CurationData): ApiResult {
   const open = data.batches.find((batch) => batch.closedAt === null);
   return {
@@ -212,7 +244,7 @@ export function respondToCurationProgress(data: CurationData): ApiResult {
       last_pass_finished_at: stateOf(data) === "idle" && data.settings.enabled ? "2026-01-05T00:10:00Z" : null,
       model: modelProgressOf(data),
       pending: { waiting_model: data.model.items.waiting_model },
-      queues: idleQueues(),
+      queues: data.queues ?? idleQueues(),
       releases: data.releases,
       rule_version: 101,
       state: stateOf(data),
@@ -319,9 +351,9 @@ function modelProgressOf(data: CurationData): CurationModelProgressDTO {
     today: { date: "2026-01-05", ...data.model.today },
     unavailable_reason: state === "unavailable" ? data.model.unavailableReason : null,
     web_daily_token_limit: data.settings.web_daily_token_limit,
-    web_limit_reached: false,
-    web_retry_at: null,
-    web_today: { date: "2026-01-05", input_tokens: 0, output_tokens: 0 },
+    web_limit_reached: data.web.limitReached,
+    web_retry_at: data.web.retryAt,
+    web_today: { date: "2026-01-05", ...data.web.today },
   };
 }
 

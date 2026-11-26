@@ -50,7 +50,7 @@ const createMessages: Readonly<Record<string, string>> = {
   conversation_busy: "这个对话正在回答或有等你确认的方案，现在不能切换模式。",
   // M7 D：自动整理的会话模式固定，后台方案由后台自己处理。
   curation_conversation: "自动整理的对话固定用“审查后执行”，不能切换模式。",
-  curation_plan: "这是后台自动整理的方案，由后台处理；需要你决定的项在“自动整理”页的例外里。",
+  curation_plan: "这是后台自动整理的方案，由后台处理；没有自动执行的修改记在“自动整理”页的“未采用的建议”里。",
 };
 
 const noticeTitles = {

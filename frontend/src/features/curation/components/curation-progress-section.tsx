@@ -1,10 +1,13 @@
 import { Link } from "@tanstack/react-router";
+import { AudioWaveform, Disc3, FileText, Image, UserRound } from "lucide-react";
+import type { ReactNode } from "react";
 import { formatCount } from "../../../shared/lib/number";
 import { formatDateTime } from "../../../shared/lib/time";
 import { QueryContent, SettingRow, SettingsGroup, Skeleton } from "../../../shared/ui";
-import type { CurationProgressDTO, CurationSettingsDTO } from "../api/decoders";
-import { programStateText } from "../curation-text";
-import { useCurationProgress } from "../hooks/use-curation";
+import type { CurationProgressDTO, CurationQueueDTO, CurationSettingsDTO } from "../api/decoders";
+import { programStateText, queueNames, queueText } from "../curation-text";
+import { useCurationClassifications, useCurationProgress } from "../hooks/use-curation";
+import { EvidenceProviderRow } from "./evidence-provider-row";
 import styles from "./curation-sections.module.css";
 
 /** 已处理的比例：没有发行时为 0。 */
@@ -12,11 +15,20 @@ export function processedRatio(progress: CurationProgressDTO): number {
   return progress.releases.total === 0 ? 0 : Math.min(1, progress.releases.processed / progress.releases.total);
 }
 
+const queueIcons: Record<CurationQueueDTO["id"], ReactNode> = {
+  release: <Disc3 size={16} aria-hidden="true" />,
+  artwork: <Image size={16} aria-hidden="true" />,
+  lyrics: <FileText size={16} aria-hidden="true" />,
+  artist_media: <UserRound size={16} aria-hidden="true" />,
+  fingerprint: <AudioWaveform size={16} aria-hidden="true" />,
+};
+
 /**
- * “进度”卡片：后台的状态、已处理与总数（进度条的数值来自服务器）、各类结果的计数与当前批次；拿不准的待定项写在“模型判断”里。
+ * “进度”卡片：后台的状态、已处理与总数（进度条的数值来自服务器）、各类结果的计数、五条队列（整理链 B）、本地分类、
+ * 依据库内或网页写入的修改与当前批次；拿不准的待定项写在“模型判断”里。
  * 从未打开过时收成一行；后台工作时每 10 秒刷新（见 progressRefetchInterval）。
  */
-export function CurationProgressSection({ settings }: { settings: CurationSettingsDTO | undefined }) {
+export function CurationProgressSection({ settings, refresh }: { settings: CurationSettingsDTO | undefined; refresh: () => void }) {
   const progress = useCurationProgress(settings);
   const neverEnabled = settings !== undefined && !settings.enabled && settings.enabled_at === null;
   return (
@@ -28,7 +40,7 @@ export function CurationProgressSection({ settings }: { settings: CurationSettin
               <span className={styles.value}>未打开 · 曲库共 {formatCount(data.releases.total)} 个发行</span>
             </SettingRow>
           ) : (
-            <ProgressRows progress={data} />
+            <ProgressRows progress={data} refresh={refresh} />
           )
         }
       </QueryContent>
@@ -36,7 +48,7 @@ export function CurationProgressSection({ settings }: { settings: CurationSettin
   );
 }
 
-function ProgressRows({ progress }: { progress: CurationProgressDTO }) {
+function ProgressRows({ progress, refresh }: { progress: CurationProgressDTO; refresh: () => void }) {
   const { releases } = progress;
   const ratio = processedRatio(progress);
   const state = programStateText[progress.state];
@@ -69,9 +81,31 @@ function ProgressRows({ progress }: { progress: CurationProgressDTO }) {
       <SettingRow label="结果" plainLabel>
         <span className={styles.value}>
           对上 {formatCount(releases.matched)} · 拿不准 {formatCount(releases.uncertain)} · 没对上 {formatCount(releases.no_match)}
+          {releases.unlisted > 0 ? ` · 外部库未收录 ${formatCount(releases.unlisted)}` : ""}
+          {releases.no_usable_candidates > 0 ? ` · 无可用候选 ${formatCount(releases.no_usable_candidates)}` : ""}
           {releases.try_later > 0 ? ` · 稍后再试 ${formatCount(releases.try_later)}` : ""}
         </span>
       </SettingRow>
+      {progress.state === "unavailable"
+        ? null
+        : progress.queues.map((queue) => (
+            <SettingRow
+              key={queue.id}
+              label={
+                <span className={styles.iconLabel} title={`${queueNames[queue.id]}队列`}>
+                  {queueIcons[queue.id]}
+                  {queueNames[queue.id]}
+                </span>
+              }
+              plainLabel
+            >
+              <span className={styles.value} aria-label={`${queueNames[queue.id]}队列：${queueText(queue, formatDateTime)}`}>
+                {queueText(queue, formatDateTime)}
+              </span>
+            </SettingRow>
+          ))}
+      <ClassificationRow />
+      <EvidenceProviderRow refresh={refresh} />
       {progress.batch === null ? null : (
         <SettingRow label="当前批次" plainLabel>
           <span className={styles.value}>
@@ -83,5 +117,20 @@ function ProgressRows({ progress }: { progress: CurationProgressDTO }) {
         </SettingRow>
       )}
     </>
+  );
+}
+
+/** 本地分类（整理链 A）：可见发行按信息完整程度的四类计数，决定排队的先后。读不到时不显示这一行。 */
+function ClassificationRow() {
+  const classifications = useCurationClassifications();
+  const data = classifications.data;
+  if (data === undefined) return null;
+  const { releases } = data;
+  return (
+    <SettingRow label="本地分类" description="按标签的完整程度排队：带外部编号的先查，信息不足的只在有声纹时识别。" plainLabel>
+      <span className={styles.value}>
+        带编号 {formatCount(releases.tagged_id)} · 有缺口 {formatCount(releases.has_gaps)} · 本地完整 {formatCount(releases.local_complete)} · 信息不足 {formatCount(releases.insufficient)}
+      </span>
+    </SettingRow>
   );
 }

@@ -38,7 +38,8 @@ type Decision = {
 };
 
 /**
- * “例外”卡片（M7 D、E2）：后台审查没通过或转给人确认的提案，新的在前，等管理员采纳或不采纳。
+ * “未采用的建议”卡片（M7 D、E2，整理链 E 起取代“例外”）：没有自动执行的提案（审查没通过、拿不准或找不到佐证），新的在前；
+ * 不需要处理，想采纳的可以手动采纳；can_accept 为 false 的只能查看或不采纳（例如判断为写法差异）。不计待办，导航不显示数量。
  * 采纳由服务器按当时的状态重新核对后执行，记为当前管理员的人工确认；不采纳写“不再提出”的标记。两者都先确认。
  * 外部来的文字（外部编号、审查理由、前后值）按不可信文本显示。页码来自 URL（exception_page）；mine 时（当前管理员是开启者）给“查看过程”。
  * refresh 让目录与详情在采纳之后更新（由 app 提供）。
@@ -144,13 +145,15 @@ export function CurationExceptionsSection({
       hideLabelWhenStacked: true,
       cell: (item) => (
         <span className={styles.actions}>
-          <Button
-            variant="primary"
-            onClick={() => setDecision({ exception: item, action: "accept" })}
-          >
-            采纳
-            <VisuallyHidden>对{targetName(item)}的修改</VisuallyHidden>
-          </Button>
+          {item.can_accept ? (
+            <Button
+              variant="primary"
+              onClick={() => setDecision({ exception: item, action: "accept" })}
+            >
+              采纳
+              <VisuallyHidden>对{targetName(item)}的修改</VisuallyHidden>
+            </Button>
+          ) : null}
           <Button
             onClick={() => setDecision({ exception: item, action: "decline" })}
           >
@@ -176,11 +179,11 @@ export function CurationExceptionsSection({
     data !== undefined && !outOfRange && data.total > 0 ? data : null;
   return (
     <SettingsGroup
-      title="例外"
+      title="未采用的建议"
       footer={
         listed === null ? null : (
           <Pagination
-            label="例外分页"
+            label="未采用的建议分页"
             page={listed.page}
             pageCount={pageCountOf(listed.total, listed.page_size)}
             renderLink={(targetPage, props) => (
@@ -202,17 +205,17 @@ export function CurationExceptionsSection({
       </p>
       <QueryContent
         query={exceptions}
-        loading={<Skeleton label="正在加载例外" lines={3} />}
+        loading={<Skeleton label="正在加载未采用的建议" lines={3} />}
       >
         {(page) =>
           outOfRange ? (
-            <Skeleton label="正在加载例外" lines={3} />
+            <Skeleton label="正在加载未采用的建议" lines={3} />
           ) : page.total === 0 ? (
-            <p>没有等你处理的例外。</p>
+            <p>没有未采用的建议。</p>
           ) : (
             <div aria-busy={exceptions.isPlaceholderData}>
               <DataTable
-                caption="等你处理的例外"
+                caption="未采用的建议"
                 columns={columns}
                 rows={page.items}
                 rowKey={(item) => item.id}
@@ -274,7 +277,7 @@ export function CurationExceptionsSection({
   );
 }
 
-/** 例外的对象：艺人写名字，发行写“标题 · 艺人”。 */
+/** 建议的对象：艺人写名字，发行写“标题 · 艺人”。 */
 function targetName(exception: CurationExceptionDTO): string {
   if (exception.artist !== null) return exception.artist.name || "（无名字）";
   if (exception.release === null) return "—";

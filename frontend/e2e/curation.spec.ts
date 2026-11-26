@@ -49,7 +49,7 @@ for (const width of [1440, 375, 390]) {
     seedCuration(mock);
     await page.goto("/settings/curation");
     await expect(page.getByRole("heading", { name: "自动整理", exact: true, level: 1 })).toBeVisible();
-    for (const name of ["进度", "模型判断", "例外", "外部源", "批次", "不再提出"]) await expect(page.getByRole("region", { name, exact: true })).toBeVisible();
+    for (const name of ["进度", "模型判断", "未采用的建议", "外部源", "批次", "不再提出"]) await expect(page.getByRole("region", { name, exact: true })).toBeVisible();
     await expect(page.getByText("正在整理", { exact: true })).toBeVisible();
     await expect(page.getByRole("table", { name: "自动整理的批次" }).getByRole("row")).toHaveCount(2);
     await expectNoHorizontalOverflow(page, `自动整理 ${width}`);
@@ -96,7 +96,7 @@ for (const width of [1440, 375, 390]) {
 }
 
 for (const width of [1440, 390]) {
-  test(`模型判断与例外 ${width}：用量、设置与采纳确认框的布局`, async ({ page, backend }) => {
+  test(`模型判断与未采用的建议 ${width}：用量、设置与采纳确认框的布局`, async ({ page, backend }) => {
     await page.setViewportSize({ width, height: 900 });
     const mock = await backend.start({ signedInAs: "curator" });
     seedCuration(mock);
@@ -144,11 +144,11 @@ for (const width of [1440, 390]) {
     await expect(model.getByText("正在判断", { exact: true })).toBeVisible();
     await expect(model.getByRole("progressbar", { name: "今天的用量" })).toBeVisible();
     await expect(model.getByRole("link", { name: "自动整理 01-05 08:00" })).toBeVisible();
-    const exceptions = page.getByRole("region", { name: "例外", exact: true });
-    await expect(exceptions.getByRole("table", { name: "等你处理的例外" })).toBeVisible();
-    await expectNoHorizontalOverflow(page, `模型判断与例外 ${width}`);
-    await expectNoSeriousViolations(page, `模型判断与例外 ${width}`);
-    await expectMinimumFontSize(page, `模型判断与例外 ${width}`);
+    const exceptions = page.getByRole("region", { name: "未采用的建议", exact: true });
+    await expect(exceptions.getByRole("table", { name: "未采用的建议" })).toBeVisible();
+    await expectNoHorizontalOverflow(page, `模型判断与未采用的建议 ${width}`);
+    await expectNoSeriousViolations(page, `模型判断与未采用的建议 ${width}`);
+    await expectMinimumFontSize(page, `模型判断与未采用的建议 ${width}`);
     await model.screenshot({ path: `/tmp/roomusic-e2-model-${width}.png` });
     await exceptions.screenshot({ path: `/tmp/roomusic-e2-exceptions-${width}.png` });
 
@@ -159,7 +159,7 @@ for (const width of [1440, 390]) {
     await expectNoSeriousViolations(page, `采纳确认 ${width}`);
     await dialog.getByRole("button", { name: "采纳" }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(exceptions.getByRole("table", { name: "等你处理的例外" }).getByRole("row")).toHaveCount(2);
+    await expect(exceptions.getByRole("table", { name: "未采用的建议" }).getByRole("row")).toHaveCount(2);
   });
 }
 

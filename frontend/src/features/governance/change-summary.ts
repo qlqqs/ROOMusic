@@ -25,6 +25,10 @@ const sourceNames: Record<string, string> = {
   wikipedia: "维基百科",
   fanarttv: "Fanart.tv",
   theaudiodb: "TheAudioDB",
+  acoustid: "AcoustID",
+  web_search: "网络搜索",
+  // 模型依据库内写法写入的修改（整理链 E），不是外部源，但按同样的方式筛选与撤销。
+  library_evidence: "库内佐证",
 };
 
 /** 外部源的显示名。 */
