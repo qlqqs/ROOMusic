@@ -8,7 +8,7 @@ func TestFieldAuthenticity(t *testing.T) {
 		inferred, corrected        bool
 		want                       Authenticity
 	}{
-		{"同字标签真名", "artist", "未知艺术家", "flac_vorbis_comment", false, false, Real},
+		{"明确标签中的占位词", "artist", "未知艺术家", "flac_vorbis_comment", false, false, Placeholder},
 		{"缺来源的展示值", "release_title", "未知专辑", "", false, false, Placeholder},
 		{"历史真名", "artist", "合成艺人", "", false, false, Real},
 		{"历史推断观察", "artist", "合成艺人", "", true, false, Inferred},

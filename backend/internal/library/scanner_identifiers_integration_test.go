@@ -208,7 +208,7 @@ func TestPostgreSQLTrackIdentifiersCommonVersionUpgrade(t *testing.T) {
 
 	// 子进程用 c3 生成缓存与身份。移除现版代码额外生成的标识事实以构造升级前的数据库状态。
 	runScanWithVersionOverlay(t, fixture, root, filepath.Join("parser", "version.go"),
-		regexp.MustCompile("(const CommonVersion = )(\\d+)"), -1)
+		regexp.MustCompile("(const CommonVersion = )(\\d+)"), 3-parser.CommonVersion)
 	if _, err := fixture.database.Exec("DELETE FROM track_identifiers WHERE track_id IN (SELECT id FROM tracks WHERE source_root_id=$1::uuid)", root.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestPostgreSQLTrackIdentifiersCommonVersionUpgrade(t *testing.T) {
 
 	service, logs := newIncrementalTestService(t, fixture)
 	scan, summary := runIncrementalTestScan(t, service, logs, root)
-	t.Logf("c3 → c4 增量扫描：解析 %d，缓存命中 %d，写入候选 %d，跳过候选 %d",
+	t.Logf("c3 → 当前版本 增量扫描：解析 %d，缓存命中 %d，写入候选 %d，跳过候选 %d",
 		summary.FilesParsed, summary.ParseCacheHits, summary.CandidatesWritten, summary.CandidatesSkipped)
 	if summary.FilesParsed != 2 || summary.ParseCacheHits != 0 || summary.CandidatesWritten != 2 || summary.CandidatesSkipped != 0 {
 		t.Fatalf("升级后增量扫描应重解析全部文件并重写候选，实际 %+v", summary)
@@ -248,8 +248,8 @@ func TestPostgreSQLTrackIdentifiersCommonVersionUpgrade(t *testing.T) {
 	}
 	for path, value := range map[string]string{flac: scanMBID1, mp3: scanMBID2} {
 		previous, current := cacheBefore[path], cacheAfter[path]
-		if current.ParserVersion != "c4.f1" || current.SeenScanID != scan.ID || !current.UpdatedAt.After(previous.UpdatedAt) {
-			t.Errorf("升级后 %s 的缓存应重新写成 c4.f1，前 %+v，后 %+v", path, previous, current)
+		if current.ParserVersion != parser.CacheVersion(filepath.Ext(path)) || current.SeenScanID != scan.ID || !current.UpdatedAt.After(previous.UpdatedAt) {
+			t.Errorf("升级后 %s 的缓存应重新写成当前版本，前 %+v，后 %+v", path, previous, current)
 		}
 		requireScannedIdentifiers(t, fixture, before[path].ID, scannedIdentifier{"mb_recording", value, 0})
 	}

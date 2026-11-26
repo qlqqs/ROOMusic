@@ -1,23 +1,45 @@
 package ingest
 
-import "github.com/qlqq/roomusic/backend/internal/catalog/metadata"
+import (
+	"strings"
 
-// applyCompilation 保留真实专辑艺人，否则按占位词或非目录观察的严格多数合辑标志决定。
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
+)
+
+// applyCompilation 按候选实际曲目统计艺人分布与合辑标志。
 func applyCompilation(observations []SourceObservation, artist, albumArtist *FieldDecision) {
-	if albumArtist.Value != "" && !metadata.IsCompilationPlaceholder(albumArtist.Value) {
-		return
-	}
-	physical, compilations := 0, 0
+	taggedAlbumArtist := false
+	counts := map[string]int{}
+	highest := 0
+	compilations := 0
 	for _, observation := range observations {
-		if observation.SourceKind == "folder" {
-			continue
+		taggedAlbumArtist = taggedAlbumArtist || observation.AlbumArtist != "" && !observation.InferredFields["album_artist"]
+		if metadata.FieldAuthenticity("artist", observation.Artist, observation.FieldSources["artist"], observation.InferredFields["artist"], false) == metadata.Real {
+			seen := map[string]bool{}
+			for _, name := range metadata.CanonicalArtistNames(observation.Artist) {
+				key := strings.ToLower(name)
+				if seen[key] || metadata.IsCompilationPlaceholder(name) || metadata.FieldAuthenticity("artist", name, "", false, false) == metadata.Placeholder {
+					continue
+				}
+				seen[key] = true
+				counts[key]++
+				highest = max(highest, counts[key])
+			}
 		}
-		physical++
 		if observation.Compilation {
 			compilations++
 		}
 	}
-	if !metadata.IsCompilationPlaceholder(artist.Value) && compilations*2 <= physical {
+	if !taggedAlbumArtist && len(observations) >= 4 && len(counts) >= 3 && highest*2 <= len(observations) {
+		*albumArtist = FieldDecision{Field: "album_artist", Value: "Various Artists", Source: "artist_distribution", Confidence: "low", Action: "uncertain_apply", RuleID: "compilation_distribution_v1", Reason: "inferred_value", Candidates: []string{"Various Artists"}}
+		*artist = *albumArtist
+		artist.Field = "artist"
+		return
+	}
+	if albumArtist.Value != "" && !metadata.IsCompilationPlaceholder(albumArtist.Value) {
+		return
+	}
+	if !metadata.IsCompilationPlaceholder(artist.Value) && compilations*2 <= len(observations) {
 		return
 	}
 	*artist = FieldDecision{

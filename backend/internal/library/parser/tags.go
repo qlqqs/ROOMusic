@@ -37,6 +37,20 @@ func parseNumber(value string) int {
 	return returnValue
 }
 
+// setTrackNumber 保留黑胶面的原标签序号，待同一候选内各面的长度已知再换算曲位。
+func setTrackNumber(o *AudioObservation, value string) {
+	number := strings.ToUpper(strings.TrimSpace(strings.SplitN(value, "/", 2)[0]))
+	o.VinylSide = 0
+	if len(number) >= 2 && number[0] >= 'A' && number[0] <= 'Z' && strings.Trim(number[1:], "0123456789") == "" {
+		if pos, err := strconv.ParseUint(number[1:], 10, 30); err == nil && pos > 0 {
+			o.VinylSide = int(number[0]-'A') + 1
+			o.TrackNumber = int(pos)
+			return
+		}
+	}
+	o.TrackNumber = parseNumber(value)
+}
+
 func setAudioTag(observation *AudioObservation, key, value string) error {
 	if kind := metadata.IdentifierKindForTag(key); kind != "" {
 		observation.Identifiers = metadata.AppendIdentifierValues(observation.Identifiers, kind, value)
@@ -73,7 +87,7 @@ func setAudioTag(observation *AudioObservation, key, value string) error {
 	case "ALBUM", "ALBUMTITLE":
 		observation.Album = value
 	case "TRACKNUMBER":
-		observation.TrackNumber = parseNumber(value)
+		setTrackNumber(observation, value)
 	case "DISCNUMBER":
 		observation.DiscNumber = parseNumber(value)
 	case "DATE", "YEAR":
@@ -136,6 +150,14 @@ func applyFilenameFallback(path string, observation AudioObservation) AudioObser
 		observation.Album = filepath.Base(filepath.Dir(path))
 		observation.Inferred = true
 		observation.InferredFields["album"] = true
+	}
+	if observation.VinylSide > 0 {
+		observation.Inferred = true
+		observation.InferredFields["track_number"] = true
+		if observation.DiscNumber <= 0 {
+			observation.DiscNumber = (observation.VinylSide + 1) / 2
+			observation.InferredFields["disc_number"] = true
+		}
 	}
 	if observation.TrackNumber <= 0 {
 		observation.TrackNumber = 1

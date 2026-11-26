@@ -22,8 +22,8 @@ func TestCacheVersionKnownExtensions(t *testing.T) {
 }
 
 func TestM4ACacheVersion(t *testing.T) {
-	if got := CacheVersion(".m4a"); got != "c4.f2" {
-		t.Errorf("CacheVersion(.m4a) = %q，期望 c4.f2", got)
+	if got := CacheVersion(".m4a"); got != "c5.f2" {
+		t.Errorf("CacheVersion(.m4a) = %q，期望 c5.f2", got)
 	}
 }
 
@@ -56,7 +56,7 @@ func TestCreditRoleCommonVersion(t *testing.T) {
 }
 
 func TestIdentifiersCommonVersion(t *testing.T) {
-	if CommonVersion != 4 {
-		t.Fatalf("CommonVersion = %d，期望扫描标识版本 4", CommonVersion)
+	if CommonVersion < 4 {
+		t.Fatalf("CommonVersion = %d，期望至少为扫描标识版本 4", CommonVersion)
 	}
 }

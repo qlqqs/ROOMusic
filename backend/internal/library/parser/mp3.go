@@ -40,6 +40,11 @@ func parseMP3(path string) (AudioObservation, error) {
 		return observation, fmt.Errorf("invalid MP3 stream")
 	}
 	if info, statErr := file.Stat(); statErr == nil {
+		if string(header[:3]) != "ID3" {
+			if err := readID3v1(file, info.Size(), &observation); err != nil {
+				return observation, err
+			}
+		}
 		applyMP3StreamFacts(file, info.Size(), &observation)
 	}
 	finalizeTags(&observation)
@@ -128,6 +133,9 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 				continue
 			}
 			for _, raw := range decodeID3ArtistValues(payload) {
+				if payload[0] == 0 {
+					observation.markLatinArtist(frameID, raw)
+				}
 				if err := captureArtistTag(observation, frameID, raw); err != nil {
 					return err
 				}
@@ -143,14 +151,29 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			}
 			continue
 		}
-		value := decodeID3Text(frame)
+		payload, ok := id3FramePayload(frame, major, formatFlags)
+		if !ok || len(payload) == 0 {
+			continue
+		}
+		value := decodeID3Text(payload)
+		if frameID == "TIT2" || frameID == "TALB" {
+			field := "title"
+			if frameID == "TALB" {
+				field = "album"
+			}
+			delete(observation.LegacyText, field)
+			if payload[0] == 0 {
+				raw, _, _ := bytes.Cut(payload[1:], []byte{0})
+				rememberID3Text(observation, field, raw)
+			}
+		}
 		switch frameID {
 		case "TIT2":
 			observation.Title = value
 		case "TALB":
 			observation.Album = value
 		case "TRCK":
-			observation.TrackNumber = parseNumber(value)
+			setTrackNumber(observation, value)
 		case "TPOS":
 			observation.DiscNumber = parseNumber(value)
 		case "TDRC", "TYER":
@@ -471,6 +494,9 @@ func parseID3TXXX(frame []byte, observation *AudioObservation) error {
 		}
 	}
 	for _, raw := range values {
+		if frame[0] == 0 {
+			observation.markLatinArtist(key, raw)
+		}
 		if err := setAudioTag(observation, key, raw); err != nil {
 			return err
 		}

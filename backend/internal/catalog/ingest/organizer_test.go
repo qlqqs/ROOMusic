@@ -82,17 +82,9 @@ func TestOrganizeSameDirectoryConflictUsesMajorityOrStableSplit(t *testing.T) {
 		{RelativePath: "album/02.flac", Directory: "album", Album: "Winner", AlbumArtist: "Artist"},
 		{RelativePath: "album/03.flac", Directory: "album", Album: "Other", AlbumArtist: "Artist"},
 	})
-	if len(majority) != 1 || majority[0].Title != "Winner" {
-		t.Fatalf("strict majority was not retained with attention: %#v", majority)
-	}
-	foundFieldAttention := false
-	for _, decision := range majority[0].Decisions {
-		if decision.Field == "title" && decision.Action == "uncertain_apply" {
-			foundFieldAttention = true
-		}
-	}
-	if !foundFieldAttention || len(majority[0].Attention) != 0 {
-		t.Fatalf("field attention was missing or duplicated as grouping attention: %#v", majority[0])
+	if len(majority) != 2 || majority[0].Title != "Other" || len(majority[0].Mediums[1]) != 1 ||
+		majority[1].Title != "Winner" || len(majority[1].Mediums[1]) != 2 {
+		t.Fatalf("不同专辑标签应分开：%#v", majority)
 	}
 
 	tie := []SourceObservation{
@@ -886,12 +878,12 @@ func TestOrganizeSameDirectoryFilenameDecisionTable(t *testing.T) {
 		inferred bool
 	}
 	cases := []struct {
-		name         string
-		items        []SourceObservation
-		kind         CandidateKind
-		counts       []int
-		positions    map[string]positionEvidence
-		inconsistent bool
+		name        string
+		items       []SourceObservation
+		kind        CandidateKind
+		counts      []int
+		positions   map[string]positionEvidence
+		splitAlbums bool
 	}{
 		{"01_单格式标签一致", tagged("flac", 1, 10, "Album"), CandidateOrdinary, []int{10}, nil, false},
 		{"02_双格式各十首", concat(tagged("flac", 1, 10, "Album"), tagged("mp3", 1, 10, "Album")), CandidateFormatSplit, []int{10, 10}, nil, false},
@@ -899,9 +891,9 @@ func TestOrganizeSameDirectoryFilenameDecisionTable(t *testing.T) {
 		{"04_跨格式不重号", concat(tagged("flac", 1, 5, "Album"), tagged("mp3", 6, 10, "Album")), CandidateOrdinary, []int{10}, nil, false},
 		{"05_两格式长度不同仍各自连续", concat(tagged("flac", 1, 10, "Album"), tagged("mp3", 1, 7, "Album")), CandidateFormatSplit, []int{7, 10}, nil, false},
 		{"06_一个格式缺号不切", concat(tagged("flac", 1, 10, "Album"), concat(tagged("mp3", 1, 1, "Album"), concat(tagged("mp3", 3, 3, "Album"), tagged("mp3", 5, 5, "Album")))), CandidateOrdinary, []int{13}, nil, false},
-		{"07_标签平票但连续合张", concat(tagged("flac", 1, 5, "A"), tagged("flac", 6, 10, "B")), CandidateOrdinary, []int{10}, nil, true},
+		{"07_标签平票且曲号连续仍按专辑拆分", concat(tagged("flac", 1, 5, "A"), tagged("flac", 6, 10, "B")), CandidateSameDirSplit, []int{5, 5}, nil, true},
 		{"08_标签平票且重号仍拆", duplicateTags, CandidateSameDirSplit, []int{5, 5}, nil, false},
-		{"09_部分无专辑标签用文件名连续合张", partialAlbums, CandidateOrdinary, []int{12}, nil, true},
+		{"09_连续文件中无标签曲目跟随稳定多数", partialAlbums, CandidateSameDirSplit, []int{5, 7}, nil, true},
 		{"10_无标签纯数字文件名", untagged("1.flac", "2.flac", "10.flac"), CandidateOrdinary, []int{3}, map[string]positionEvidence{
 			"1.flac": {1, "filename_fallback", true}, "2.flac": {2, "filename_fallback", true}, "10.flac": {10, "filename_fallback", true},
 		}, false},
@@ -952,18 +944,18 @@ func TestOrganizeSameDirectoryFilenameDecisionTable(t *testing.T) {
 					}
 				}
 				counts = append(counts, count)
-				if tc.inconsistent {
-					if candidate.Title != "A" {
-						t.Errorf("平票标题应按稳定多数决选 A，得到 %q", candidate.Title)
-					}
-					found := false
-					for _, decision := range candidate.Decisions {
-						if decision.Field == "title" && decision.Action == "uncertain_apply" && decision.Reason == "inconsistent_candidates" && decision.Source == "tag" {
-							found = true
+				if tc.splitAlbums {
+					for _, tracks := range candidate.Mediums {
+						for _, track := range tracks {
+							o := track.Observation
+							if o.InferredFields["album"] {
+								if candidate.Title != "A" {
+									t.Errorf("无标签曲目应跟随平票优先的 A，得到 %q", candidate.Title)
+								}
+							} else if candidate.Title != o.Album {
+								t.Errorf("曲目标签 %q 被归到 %q", o.Album, candidate.Title)
+							}
 						}
-					}
-					if !found || len(candidate.Attention) != 0 {
-						t.Errorf("连续合张仍应保留字段不一致、而非归组冲突：%#v", candidate)
 					}
 				}
 			}
