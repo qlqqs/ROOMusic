@@ -26,6 +26,8 @@ const modelQueueFromSQL = ` FROM curation_pending_items p
  LEFT JOIN curation_work_states r ON r.subject='release' AND r.target_id=COALESCE(p.target_id,work.queue_release_id)
  CROSS JOIN curation_settings settings
  WHERE settings.id=1 AND p.status IN ('waiting_model','waiting_route') AND (p.artist_web_generation IS NOT NULL OR ` + PendingTargetVisibleSQL + `)
+ AND (p.kind<>'local_cleanup' OR NOT EXISTS(
+ SELECT jsonb_array_elements_text(p.evidence->'release_ids')::uuid EXCEPT SELECT id FROM curation_stable_releases))
  AND (CASE WHEN p.kind='artist_identity' THEN EXISTS(SELECT FROM curation_artist_web_queue q
  WHERE q.generation=p.artist_web_generation AND q.state='running' AND NOT p.artist_web_suspended) ELSE COALESCE(p.target_id,work.queue_release_id) IS NULL OR EXISTS (SELECT FROM curation_stable_releases stable
  WHERE stable.id=COALESCE(p.target_id,work.queue_release_id)) END)`

@@ -16,6 +16,7 @@ type unit struct {
 	generation             int
 	releaseID, inputDigest string
 	releaseState           curation.WorkState
+	matchCursor            matchRetry
 	releaseInput           *catalog.CurationEvidence
 	checked                bool
 	offline, programOnly   bool

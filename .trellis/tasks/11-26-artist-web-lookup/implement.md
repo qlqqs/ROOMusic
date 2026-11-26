@@ -6,7 +6,7 @@
 
 1. **建立手动队列存储与状态接口。**
 
-   修改 `backend/migrations/NNNN_artist_web_lookup.sql`、对应 `.down.sql`、`backend/internal/curation/artist_web_queue.go`，为 `curation_pending_items` 增加艺人网页代次列并建立 `curation_artist_web_queue` 单行控制表。实现单艺人加入、全量加入、停止、接续和状态读取，复用现有艺人证据摘要与 `UpsertPendingItem`。不在这一步发送模型或网页请求。
+   修改 `backend/migrations/0105_artist_web_lookup.sql`、对应 `.down.sql`、`backend/internal/curation/artist_web_queue.go`，为 `curation_pending_items` 增加艺人网页代次列并建立 `curation_artist_web_queue` 单行控制表。实现单艺人加入、全量加入、停止、接续和状态读取，复用现有艺人证据摘要与 `UpsertPendingItem`。不在这一步发送模型或网页请求。
 
    风险是迁移编号与子任务 5 冲突、旧自动项被误加入新代次、重复点击创建重复项。领取条件必须同时检查代次、队列状态、艺人仍无 MusicBrainz 对应和输入摘要。
 
@@ -127,6 +127,6 @@
 ## 实现验证结果
 
 - 第 7 步的艺人联网集成筛选通过，共 15 个顶层用例，含子用例。依赖方向门禁与第 1 步嵌入迁移回滚文件检查通过。
-- 迁移使用当时的下一号 0103 在隔离合成库完成 up/down/up。交付文件按约定使用 NNNN，主代理合入时需同时给正向和回滚文件编号。
+- 艺人联网队列的正向和回滚迁移号为 0105。
 - 第 2、5 步单独运行的集成筛选分别命中 ProgramScope、SourceRequirements。第 3、4 步专项集成筛选没有命中用例。第 1 至 5 步针对新合同命名的单元测试尚未由测试代理加入，包编译通过。测试代理继续补齐不同配置和额度、队列启停与并发、同组与跨组等对照样本。
 - 规范检索及 git diff --check 完成。前端改动归主代理，工作区保留未提交改动。

@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"bytes"
+
 	"slices"
 	"strings"
 	"unicode"
@@ -79,4 +80,27 @@ func looksWestern(raw []byte) bool {
 		}
 	}
 	return hasASCIILetter
+}
+
+// DecodeLegacyField 还原标签原字节和同一署名中的 Unicode 段。
+func DecodeLegacyField(field string, raw []byte, parts []LegacyArtistPart, decode func([]byte) string) string {
+	if len(parts) == 0 {
+		return decode(raw)
+	}
+	var names []string
+	for _, part := range parts {
+		name := part.Text
+		if len(part.Raw) > 0 {
+			name = decode(part.Raw)
+			if name == "" {
+				return ""
+			}
+		}
+		names = append(names, name)
+	}
+	value := JoinArtistValues(names...)
+	if field == "artist" {
+		return CanonicalTrackArtist(value)
+	}
+	return value
 }

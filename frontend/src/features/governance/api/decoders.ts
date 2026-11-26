@@ -224,6 +224,7 @@ const OPERATION_TYPES = [
   "release_claim",
   "release_merge",
   "release_auto_merge",
+  "local_model_grouping",
   "release_auto_correction",
   "release_external_artwork",
   "track_external_lyrics",
@@ -419,6 +420,24 @@ const claimChangesDecoder = d.object({
 const mergeChangesShape = { source: d.object({ id: d.uuid(), title: d.string() }), medium_count: d.integer({ min: 0 }) };
 const releaseMergeChangesDecoder = d.object({ kind: d.literal("release_merge"), ...mergeChangesShape });
 const releaseAutoMergeChangesDecoder = d.object({ kind: d.literal("release_auto_merge"), ...mergeChangesShape });
+// 模型归组（本地辅助，ADR 0009 第 6.2 节）：一次答复把一个目录里的文件归成几张专辑并定碟号、曲号。album 是这次答复里的专辑序号标签，
+// 只用来分组；path 是根内相对路径。previous 是写入前由模型归组的分配（原来按扫描规则归组时为 null）；撤销记录两者互换。
+// file 是来源文件（CUE 虚拟轨时是父音频），size 与 modified（微秒）是核对时的文件状态，root_id 是所在的曲库目录。
+const localGroupingAssignmentDecoder = d.object({
+  album: d.string({ min: 1, max: 200 }),
+  disc: d.integer({ min: 1 }),
+  track: d.integer({ min: 1 }),
+  path: d.string({ min: 1, max: 4096 }),
+  file: d.string({ min: 1, max: 4096 }),
+  root_id: d.uuid(),
+  size: d.integer({ min: 0 }),
+  modified: d.integer(),
+});
+const localModelGroupingChangesDecoder = d.object({
+  kind: d.literal("local_model_grouping"),
+  assignments: d.nullable(d.array(localGroupingAssignmentDecoder, { max: d.unbounded })),
+  previous: d.nullable(d.array(localGroupingAssignmentDecoder, { max: d.unbounded })),
+});
 
 // 艺人的治理（M5 ⑤，都不能撤销：合并的反向是拆开，改名的反向是再改名）。名字是当时的快照。
 const artistSnapshotDecoder = d.object({ id: d.uuid(), name: d.string() });
@@ -455,6 +474,7 @@ type OperationChanges =
   | d.Infer<typeof claimChangesDecoder>
   | d.Infer<typeof releaseMergeChangesDecoder>
   | d.Infer<typeof releaseAutoMergeChangesDecoder>
+  | d.Infer<typeof localModelGroupingChangesDecoder>
   | d.Infer<typeof autoInvalidationChangesDecoder>
   | d.Infer<typeof trackAutoInvalidationChangesDecoder>;
 // 按 kind 选择解码器；未知的 kind 整体拒绝（后端新增操作类型时，样本契约测试先失败，在这里补上才算确认前端已经知道）。
@@ -477,6 +497,7 @@ const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   if (kind === "release_claim") return claimChangesDecoder(input, path);
   if (kind === "release_merge") return releaseMergeChangesDecoder(input, path);
   if (kind === "release_auto_merge") return releaseAutoMergeChangesDecoder(input, path);
+  if (kind === "local_model_grouping") return localModelGroupingChangesDecoder(input, path);
   if (kind === "artist_merge") return artistMergeChangesDecoder(input, path);
   if (kind === "artist_split") return artistSplitChangesDecoder(input, path);
   if (kind === "artist_rename") return artistRenameChangesDecoder(input, path);

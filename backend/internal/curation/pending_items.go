@@ -353,13 +353,17 @@ func (w *Writer) FinishModelItem(ctx context.Context, item PendingItem, conversa
 		return err
 	}
 	defer tx.Rollback()
-	if err = countModelAnswer(ctx, tx, item.ID, conversation); err != nil {
+	if err = finishModelItem(ctx, tx, item, conversation, resolution); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func finishModelItem(ctx context.Context, tx *sql.Tx, item PendingItem, conversation, resolution string) error {
+	if err := countModelAnswer(ctx, tx, item.ID, conversation); err != nil {
 		return err
 	}
 	r, err := tx.ExecContext(ctx, `UPDATE curation_pending_items SET status='resolved',resolution=$4,resolved_at=now(),updated_at=now(),claimed_at=NULL,next_attempt_at=NULL
  WHERE id=$1 AND input_digest=$2 AND conversation_id=$3 AND status='in_progress' AND COALESCE(identity_digest,'')=$5`, item.ID, item.InputDigest, conversation, resolution, item.IdentityDigest)
-	if err = requireChanged(r, err, "item_stale", "待定项已变更"); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return requireChanged(r, err, "item_stale", "待定项已变更")
 }

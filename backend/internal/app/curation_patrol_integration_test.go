@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -291,13 +290,10 @@ func TestPostgreSQL整理本地模型只写本地片段并保留碟号曲序(t *
 	if e := scanned[entry.release]; e.Title != "海港剪报" || e.Authenticity["title"] != metadata.Inferred {
 		t.Fatalf("扫描应从目录推断去噪后的专辑名，实际为 %q、%v", e.Title, e.Authenticity["title"])
 	}
-	var input curation.LocalInput
-	raw, err := json.Marshal(map[string]any{"title": "海港剪报", "artist": "凭空编造艺人", "tracks": []map[string]string{
-		{"track_id": entry.tracks[0], "title": "纸灯"},
-		{"track_id": entry.tracks[1], "title": "凭空编造曲名"},
-	}})
-	requireCurationOK(t, err)
-	requireCurationOK(t, json.Unmarshal(raw, &input))
+	input := curation.LocalInput{Decision: "apply", Texts: []curation.LocalText{
+		{Target: entry.release, Field: "title", Value: "海港剪报"}, {Target: entry.release, Field: "album_artist", Value: "凭空编造艺人"},
+		{Target: entry.tracks[0], Field: "title", Value: "纸灯"}, {Target: entry.tracks[1], Field: "title", Value: "凭空编造曲名"},
+	}}
 	endpoint.localReply = func(metricsPending) curation.LocalInput { return input }
 	endpoint.configure(t, app, &admin, map[string]metricsModelTarget{entry.release: {SampleID: s.ID}}, upstream)
 	setPatrolTestSource(t, app, &admin, "musicbrainz", false)

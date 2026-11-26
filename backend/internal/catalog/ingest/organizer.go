@@ -642,6 +642,22 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		scope string
 	}{}
 	for i, o := range items {
+		if o.ModelGroup != "" {
+			o.structureDisc = o.ModelDisc
+			o.InferredFields = cloneBoolMap(o.InferredFields)
+			o.FieldSources = cloneStringMap(o.FieldSources)
+			if o.TrackNumber != o.ModelTrack {
+				o.FieldSources["track_number"] = "model_inferred"
+				o.InferredFields["track_number"] = true
+			}
+			if o.DiscNumber != o.ModelDisc || o.FieldSources["disc_number"] == "default_fallback" {
+				o.FieldSources["disc_number"] = "model_inferred"
+				o.InferredFields["disc_number"] = true
+			}
+			o.TrackNumber, o.DiscNumber = o.ModelTrack, o.ModelDisc
+			addBucket(CandidateOrdinary, "model:"+o.ModelGroup, o.ModelGroup, o)
+			continue
+		}
 		loc := locations[i]
 		kind, scope := CandidateOrdinary, loc.dir
 		if loc.isDiscDir {
@@ -832,6 +848,9 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 	for _, key := range keys {
 		b := buckets[key]
 		obs := b.obs
+		if len(obs) > 0 && obs[0].ModelGroup != "" {
+			b.scope = locateObservation(obs[0]).dir
+		}
 		sort.Slice(obs, func(i, j int) bool { return observationSortKey(obs[i]) < observationSortKey(obs[j]) })
 		c := OrganizedCandidate{Anchor: CandidateAnchor{Kind: b.kind, Scope: b.scope, Partition: stableAnchorPartition(b.kind, b.partition, obs)}, ReleaseGroupKey: key, Mediums: map[int][]OrganizedTrack{}, MediumTitles: map[int]string{}}
 		obs = decodeCandidateLegacy(obs)
@@ -907,7 +926,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 				c.MediumTitles[disc] = title
 			}
 			position := o.TrackNumber
-			if position < 1 || o.InferredFields["track_number"] && o.FieldSources["track_number"] != "filename_fallback" && o.FieldSources["track_number"] != "vinyl_side" {
+			if position < 1 || o.InferredFields["track_number"] && o.FieldSources["track_number"] != "filename_fallback" && o.FieldSources["track_number"] != "vinyl_side" && o.FieldSources["track_number"] != "model_inferred" {
 				position = 0
 			}
 			c.Mediums[disc] = append(c.Mediums[disc], OrganizedTrack{Observation: o, Position: position, Disc: disc})
@@ -1253,7 +1272,7 @@ func observationSortKey(o SourceObservation) string {
 
 // 稳定锚只使用格式或来源路径。
 func stableAnchorPartition(kind CandidateKind, groupingPartition string, obs []SourceObservation) string {
-	if kind == CandidateFormatSplit {
+	if kind == CandidateFormatSplit || len(obs) > 0 && obs[0].ModelGroup != "" {
 		return groupingPartition
 	}
 	if kind == CandidateOrdinary || kind == CandidateMultiDisc || kind == CandidateBoxLeaf {

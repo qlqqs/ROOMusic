@@ -3,7 +3,6 @@ package program
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
@@ -32,23 +31,15 @@ type FingerprintStep struct {
 	Prints Fingerprints
 }
 
-// 本地缓存的重算时间可晚于发行的常规退避；取源失败仍使用常规退避。
-type fingerprintWithRetry interface {
-	FingerprintWithRetry(context.Context, string) (TrackFingerprint, FingerprintStatus, time.Duration, error)
+var errLocalPrint = errors.New("local_fingerprint_failed")
+
+type sampleFailure struct {
+	source string
+	err    error
 }
 
-type fingerprintRetry struct{ delay time.Duration }
-
-func (e *fingerprintRetry) Error() string { return sources.ErrTryLater.Error() }
-func (e *fingerprintRetry) Unwrap() error { return sources.ErrTryLater }
-
-func (fp *FingerprintStep) read(ctx context.Context, trackID string) (TrackFingerprint, FingerprintStatus, time.Duration, error) {
-	if prints, ok := fp.Prints.(fingerprintWithRetry); ok {
-		return prints.FingerprintWithRetry(ctx, trackID)
-	}
-	value, status, err := fp.Prints.Fingerprint(ctx, trackID)
-	return value, status, 0, err
-}
+func (e *sampleFailure) Error() string { return e.source + ": " + e.err.Error() }
+func (e *sampleFailure) Unwrap() error { return e.err }
 
 type sampledFingerprint struct {
 	trackID string
@@ -58,9 +49,9 @@ type sampledFingerprint struct {
 func (fp *FingerprintStep) sample(ctx context.Context, tracks []catalog.CurationTrack) ([]sampledFingerprint, error) {
 	var prints []sampledFingerprint
 	var transient bool
-	var retryAfter time.Duration
+
 	for _, track := range tracks {
-		print, status, delay, err := fp.read(ctx, track.ID)
+		print, status, err := fp.Prints.Fingerprint(ctx, track.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -69,13 +60,9 @@ func (fp *FingerprintStep) sample(ctx context.Context, tracks []catalog.Curation
 			prints = append(prints, sampledFingerprint{track.ID, print})
 		case FingerprintTransient:
 			transient = true
-			retryAfter = max(retryAfter, delay)
 		}
 	}
 	if 2*len(prints) < len(tracks) {
-		if retryAfter > 0 {
-			return nil, &fingerprintRetry{delay: retryAfter}
-		}
 		if transient {
 			return nil, sources.ErrTryLater
 		}
@@ -92,46 +79,36 @@ type fingerprintHit struct {
 
 func (fp *FingerprintStep) match(ctx context.Context, mode string, e catalog.CurationEvidence, f sources.ReleaseFinder, rf sources.RecordingFinder) (MatchResult, string, error) {
 	tracks := sampleFour(e.SortedTracks())
-	var prints []sampledFingerprint
+	var hits []fingerprintHit
+	var queried bool
 	var err error
-	if attempt := currentAttempt(ctx); attempt != nil {
-		prints, err = attempt.worker.queuedSamples(ctx, attempt.item, tracks)
+	if a := currentAttempt(ctx); a != nil {
+		hits, queried, err = a.worker.queuedHits(ctx, a.item, tracks)
 	} else {
+		var prints []sampledFingerprint
 		prints, err = fp.sample(ctx, tracks)
+		if err == nil {
+			queried = len(prints) > 0
+			for _, sample := range prints {
+				var hit fingerprintHit
+				hit, err = fp.lookup(ctx, sample.trackID, sample.print)
+				if err != nil {
+					break
+				}
+				if len(hit.recordings) > 0 {
+					hits = append(hits, hit)
+				}
+			}
+		}
+	}
+	if errors.Is(err, sources.ErrInvalidKey) || failureCode(err) == "source_disabled" {
+		return MatchResult{}, "unavailable", nil
 	}
 	if err != nil {
 		return MatchResult{}, "used", err
 	}
-	var hits []fingerprintHit
-	for _, sample := range prints {
-		matches, err := found(fp.Finder.LookupFingerprint(ctx, sources.Fingerprint(sample.print)))
-		if errors.Is(err, sources.ErrInvalidKey) || failureCode(err) == "source_disabled" {
-			return MatchResult{}, "unavailable", nil
-		}
-		if err != nil {
-			return MatchResult{}, "used", sourceFailure(ctx, "acoustid", err)
-		}
-		hit := fingerprintHit{trackID: sample.trackID, scores: make(map[string]float64)}
-		for _, m := range matches {
-			if m.Score < 0.9 {
-				continue
-			}
-			for _, r := range m.Recordings {
-				if r.ID == "" {
-					continue
-				}
-				if _, ok := hit.scores[r.ID]; !ok {
-					hit.recordings = append(hit.recordings, r)
-				}
-				hit.scores[r.ID] = max(hit.scores[r.ID], m.Score)
-			}
-		}
-		if len(hit.recordings) > 0 {
-			hits = append(hits, hit)
-		}
-	}
 	if len(hits) == 0 {
-		return MatchResult{noFingerprintQuery: len(prints) == 0}, "used", nil
+		return MatchResult{noFingerprintQuery: !queried}, "used", nil
 	}
 	var result MatchResult
 	if mode == "single" {
@@ -142,6 +119,29 @@ func (fp *FingerprintStep) match(ctx context.Context, mode string, e catalog.Cur
 		result = scoreCandidates(result, scores)
 	}
 	return result, "used", err
+}
+
+func (fp *FingerprintStep) lookup(ctx context.Context, id string, print TrackFingerprint) (fingerprintHit, error) {
+	matches, err := queryResult(fp.Finder.LookupFingerprint(ctx, sources.Fingerprint(print)))
+	if err != nil {
+		return fingerprintHit{}, &sampleFailure{"acoustid", sourceFailure(ctx, "acoustid", err)}
+	}
+	hit := fingerprintHit{trackID: id, scores: make(map[string]float64)}
+	for _, m := range matches {
+		if m.Score < 0.9 {
+			continue
+		}
+		for _, r := range m.Recordings {
+			if r.ID == "" {
+				continue
+			}
+			if _, ok := hit.scores[r.ID]; !ok {
+				hit.recordings = append(hit.recordings, r)
+			}
+			hit.scores[r.ID] = max(hit.scores[r.ID], m.Score)
+		}
+	}
+	return hit, nil
 }
 
 func fingerprintReleases(e catalog.CurationEvidence, hits []fingerprintHit, sampled int) (releaseList, map[string]float64) {
@@ -231,7 +231,7 @@ func fingerprintSingle(ctx context.Context, e catalog.CurationEvidence, f source
 	var official []sources.Recording
 	scores := map[string]float64{}
 	for _, row := range byLength {
-		r, err := found(f.RecordingByID(ctx, row.ID))
+		r, err := queryResult(f.RecordingByID(ctx, row.ID))
 		if err != nil {
 			return MatchResult{}, err
 		}

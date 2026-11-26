@@ -15,10 +15,11 @@ import (
 
 // 重查期间仍保留首次未收录的时间，来源退避后从同一模式接上。
 type releaseReviewState struct {
-	Manual        bool       `json:"manual_recheck,omitempty"`
-	UnlistedSince *time.Time `json:"unlisted_since,omitempty"`
-	RecheckedAt   *time.Time `json:"rechecked_at,omitempty"`
-	Reason        string     `json:"reason,omitempty"`
+	Retry         *matchRetry `json:"retry,omitempty"`
+	Manual        bool        `json:"manual_recheck,omitempty"`
+	UnlistedSince *time.Time  `json:"unlisted_since,omitempty"`
+	RecheckedAt   *time.Time  `json:"rechecked_at,omitempty"`
+	Reason        string      `json:"reason,omitempty"`
 }
 
 func previousReview(s curation.WorkState) (releaseReviewState, error) {
@@ -31,11 +32,33 @@ func previousReview(s curation.WorkState) (releaseReviewState, error) {
 }
 
 func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationEvidence, fingerprintRequired bool) (MatchResult, error) {
+	configured, err := w.localConfigured(ctx, "release")
+	if err != nil {
+		return MatchResult{}, err
+	}
+	if configured {
+		var ready bool
+		if err := w.db.QueryRowContext(ctx, `SELECT `+localDependencySQL+` FROM (SELECT $1::uuid target_id) r`, e.ID).Scan(&ready); err != nil {
+			return MatchResult{}, err
+		}
+		if !ready {
+			return MatchResult{}, errWaitingForLocal
+		}
+	}
+	cursor := &u.matchCursor
 	step, err := w.fingerprintStep(ctx)
 	if err != nil {
 		return MatchResult{}, err
 	}
-	fixed := u.releaseState.Status == "matched" && (e.ExternalID != "" || e.CandidateKind == "loose_unknown" && len(e.Tracks) == 1 && e.Tracks[0].ExternalID != "")
+	review, err := previousReview(u.releaseState)
+	if err != nil {
+		return MatchResult{}, err
+	}
+	if previous := review.Retry; previous != nil && u.releaseState.MatchRuleVersion == MatchRuleVersion && previous.Files == e.FileDigest && u.releaseState.IdentityDigest == u.identityDigest {
+		*cursor = *previous
+		cursor.resume = previous.Step
+	}
+	fixed := (u.releaseState.Status == "matched" || cursor.resume == "existing_link") && (e.ExternalID != "" || e.CandidateKind == "loose_unknown" && len(e.Tracks) == 1 && e.Tracks[0].ExternalID != "")
 	if allowed, _ := releaseAdmission(e, step != nil); !allowed && !fixed {
 		m := newMatch("album", "")
 		if e.CandidateKind == "loose_unknown" {
@@ -54,8 +77,9 @@ func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationE
 	}
 	a, _ := w.sources.ArtistFinder("musicbrainz")
 	if fixed {
+		cursor.enter("existing_link")
 		if e.ExternalID != "" {
-			release, err := found(r.ReleaseByID(ctx, e.ExternalID))
+			release, err := queryResult(r.ReleaseByID(ctx, e.ExternalID))
 			if err != nil {
 				return MatchResult{}, err
 			}
@@ -64,7 +88,7 @@ func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationE
 			}
 			return DecideAlbum(e, "tag_id", []sources.Release{release}), nil
 		}
-		recording, err := found(f.RecordingByID(ctx, e.Tracks[0].ExternalID))
+		recording, err := queryResult(f.RecordingByID(ctx, e.Tracks[0].ExternalID))
 		if err != nil {
 			return MatchResult{}, err
 		}
@@ -74,9 +98,9 @@ func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationE
 		return DecideSingle(e, "tag_id", []sources.Recording{recording}), nil
 	}
 	if fingerprintRequired && step == nil {
-		return MatchResult{}, operations.Conflict("source_disabled", "识别来源未启用")
+		return MatchResult{}, errQueueUnchanged
 	}
-	return matchWithOptions(ctx, e, r, f, step, MatchOptions{Artists: a})
+	return matchWithOptions(ctx, e, r, f, step, MatchOptions{Artists: a, retry: cursor})
 }
 
 func (w *Worker) concludeMatch(ctx context.Context, u *unit, e catalog.CurationEvidence, m MatchResult) (out outcome, err error) {
@@ -89,7 +113,7 @@ func (w *Worker) concludeMatch(ctx context.Context, u *unit, e catalog.CurationE
 			}
 			out.match = m
 		}
-		out.group, out.artistLinks, out.proposals, err = w.applyMatch(ctx, u, e, m)
+		out.group, out.artistLinks, out.proposals, err = w.applyMatch(ctx, u, e, m, &out.localRequests)
 		if errors.Is(err, errArtistCreditUnconfirmed) {
 			out.match.Status, out.match.Route = "uncertain", "select"
 			out.match.Level, out.match.Rule = "", ""
@@ -156,3 +180,11 @@ func differentNamedGroups(e catalog.CurationEvidence, candidates []Candidate) bo
 	}
 	return false
 }
+
+type stepFailure struct {
+	retry *matchRetry
+	err   error
+}
+
+func (e *stepFailure) Error() string { return e.err.Error() }
+func (e *stepFailure) Unwrap() error { return e.err }

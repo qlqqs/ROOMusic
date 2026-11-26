@@ -302,3 +302,7 @@ Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-
 ## 程序识别规则 105
 
 0102_curation_program_match 增加工作行的物理文件摘要、按发行及来源保存的识别结论、可撤销的实名拆分明细，登记 unmatched、conflict 与普通未匹配到期索引。历史查询时间不可考时用 NULL。downgrade 删除这些新证据，恢复旧分类与扫描署名，已有并入与自动年份可用治理操作撤销。
+
+## 本地辅助的持久化
+
+`local_credit_parts` 按操作、目标、角色和原署名引用存放原串、分段、连接词。`local_model_groupings` 按根与目录键保存唯一有效的归组操作、来源摘要和完整分配。两表到 operations 的外键在提交时校验，使业务行和操作记录能由同一事务发布。

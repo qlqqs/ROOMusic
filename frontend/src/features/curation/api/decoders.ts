@@ -139,7 +139,8 @@ const progressDecoder = d.object({
   model: modelProgressDecoder,
   pending: d.object({ waiting_model: count() }),
   queues: d.array(queueDecoder, { min: PROGRAM_QUEUE_IDS.length, max: PROGRAM_QUEUE_IDS.length }),
-  // 识别结论（ADR 0009 第 4.6 节）：已匹配、未匹配（含候选已撤销）、有冲突；try_later 是等来源恢复后接着查的。
+  // 识别结论（ADR 0009 第 4.6 节）：已匹配、未匹配（含候选已撤销）、有冲突；try_later 是等来源恢复后接着查的，
+  // query_error 是只和这张专辑有关的错误连续 3 次后停下的（本地文件变了或规则升级才再查）。
   releases: d.object({
     matched: count(),
     unmatched: count(),
@@ -147,6 +148,7 @@ const progressDecoder = d.object({
     processed: count(),
     total: count(),
     try_later: count(),
+    query_error: count(),
   }),
   rule_version: d.integer({ min: 1 }),
   state: d.oneOf(PROGRAM_STATES),

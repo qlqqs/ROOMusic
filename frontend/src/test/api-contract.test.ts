@@ -301,6 +301,7 @@ const successContracts: Record<string, Contract> = {
   "operations/artist-source-filter": { status: 200, decode: decodeOperationPage },
   "operations/artist-union-filter": { status: 200, decode: decodeOperationPage },
   "operations/artists": { status: 200, decode: decodeOperationPage },
+  "operations/local-model-grouping": { status: 200, decode: decodeOperationPage },
   "operations/artist-merge-revertible": { status: 200, decode: decodeOperationPage },
   "operations/artist-merge-revert-record": { status: 200, decode: decodeOperationPage },
   "operations/artist-merge-reverted": { status: 200, decode: decodeRevertResult },

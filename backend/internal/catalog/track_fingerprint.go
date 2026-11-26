@@ -12,7 +12,6 @@ type FingerprintSource struct {
 	TrackAnalysisCandidate
 	ExactDurationSeconds float64
 	DurationSeconds      int
-	Attempts             int
 	Cached               *AcousticFingerprint
 }
 
@@ -23,7 +22,7 @@ type AcousticFingerprint struct {
 }
 
 // LoadFingerprintSource 按曲目读取；来源不在当前工作集时返回 sql.ErrNoRows。
-// 解码错误和超时冷却一天，第三次失败后保留结果，too_short 一直有效。
+// 成功和 too_short 按文件快照复用；解码失败与超时由发起查询的发行控制重试。
 func (s *Store) LoadFingerprintSource(ctx context.Context, trackID string, version int16) (FingerprintSource, error) {
 	var src FingerprintSource
 	var status sql.NullString
@@ -33,8 +32,8 @@ func (s *Store) LoadFingerprintSource(ctx context.Context, trackID string, versi
  CASE WHEN t.source_kind='cue_virtual' AND t.cue_end_frames IS NOT NULL AND t.cue_index_frames IS NOT NULL
       THEN (t.cue_end_frames-t.cue_index_frames)::float8/75
       WHEN dd.duration_seconds>0 AND dd.duration_seconds<'Infinity'::float8 THEN dd.duration_seconds
-      ELSE -1 END, COALESCE(f.attempts,0),
- CASE WHEN f.status='done' OR f.failure_category='too_short' OR f.attempts>=3 OR f.computed_at >= NOW()-INTERVAL '24 hours'
+      ELSE -1 END,
+ CASE WHEN f.status='done' OR f.failure_category='too_short'
       THEN f.status END,COALESCE(f.fingerprint,''),COALESCE(f.duration_seconds,0),COALESCE(f.failure_category,'')
  FROM tracks t JOIN library_roots lr ON lr.id=t.source_root_id
  LEFT JOIN track_display_durations dd ON dd.track_id=t.id
@@ -44,7 +43,7 @@ func (s *Store) LoadFingerprintSource(ctx context.Context, trackID string, versi
  WHERE t.id=$1::uuid AND t.source_status='present' AND lr.status='active' AND t.source_size IS NOT NULL
  AND t.source_modified_at IS NOT NULL`, trackID, version).Scan(&src.TrackID, &src.RootID, &src.RelativePath, &src.SourceKind,
 		&src.ContentFingerprint, &src.SourceSize, &src.SourceModifiedAt, &src.CueParentRelativePath, &src.CueIndexFrames, &src.CueEndFrames,
-		&src.ExactDurationSeconds, &src.Attempts, &status, &cached.Value, &cached.DurationSeconds, &cached.FailureCategory)
+		&src.ExactDurationSeconds, &status, &cached.Value, &cached.DurationSeconds, &cached.FailureCategory)
 	if err != nil {
 		return FingerprintSource{}, err
 	}
@@ -79,8 +78,7 @@ func (s *Store) SaveAcousticFingerprint(ctx context.Context, src FingerprintSour
  attempts=CASE WHEN old.status='failed' AND EXCLUDED.status='failed' AND `+sameFingerprintInput+`
                THEN old.attempts+1 ELSE 1 END,computed_at=NOW()
  WHERE NOT (`+sameFingerprintInput+`) OR ($12 AND old.failure_category IS DISTINCT FROM 'too_short')
- OR (old.status='failed' AND old.failure_category<>'too_short'
-  AND old.attempts<3 AND old.computed_at < NOW()-INTERVAL '24 hours')
+ OR (old.status='failed' AND old.failure_category<>'too_short')
  RETURNING true`, src.TrackID, version, src.ContentFingerprint, src.SourceSize, src.SourceModifiedAt,
 		src.CueIndexFrames, src.CueEndFrames, status, result.Value, result.DurationSeconds, result.FailureCategory, belowMinimumDuration).Scan(&saved)
 	if errors.Is(err, sql.ErrNoRows) {

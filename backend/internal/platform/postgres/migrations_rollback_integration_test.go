@@ -19,6 +19,15 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	104: `INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
+ VALUES ('d1030000-0000-4000-8000-000000000001','f1030000-0000-4000-8000-000000000001','local_model_grouping','release',
+ 'e1030000-0000-4000-8000-000000000001',gen_random_uuid(),'grouping',1,2,'{}','{}','{}','fixture');
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id,reverts_operation_id)
+ SELECT gen_random_uuid(),actor_id,'revert',target_type,target_id,gen_random_uuid(),'undo',2,3,'{}','{}','{}','fixture',id
+ FROM operations WHERE id='d1030000-0000-4000-8000-000000000001';`,
+	103: `UPDATE curation_work_states SET status='query_error',retry_count=3,next_attempt_at=NULL,
+ result=result || '{"retry":{"step":"isrc","kind":"album","source":"musicbrainz","reason":"invalid_response"}}'::jsonb
+ WHERE subject='release' AND target_id='e9800000-0000-4000-8000-000000000002';`,
 	102: `UPDATE curation_work_states SET requery_match_version=105
  WHERE subject='release' AND target_id='e9800000-0000-4000-8000-000000000002';
  INSERT INTO curation_release_match_results(release_id,source,status,checked_at,conflicts)
@@ -330,6 +339,10 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			db := openMigrationTestDatabase(t)
 			// 每个候选独立建 schema，之前即使有不可回退迁移也不会妨碍后续测试。
 			rollbackApply(t, db, migrationPrefix(available, m.Version-1))
+			if m.Version == 103 {
+				rollbackExec(t, db, `INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status,result,updated_at,next_attempt_at)
+ VALUES('release','e9800000-0000-4000-8000-000000000002',104,repeat('a',64),'try_later','{"reason":"synthetic"}',now(),now());`)
+			}
 			if m.Version == 31 {
 				// 新信号引用升级前已有的发行，保证回退只需删除新版信号表。
 				rollbackExec(t, db, `INSERT INTO release_groups(id) VALUES('c1000000-0000-4000-8000-000000000001');
@@ -569,6 +582,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
         ('release','e9800000-0000-4000-8000-000000000003',104,repeat('b',64),'no_usable_candidates','{"reason":"candidates_revoked"}'),
         ('release','e9800000-0000-4000-8000-000000000004',104,repeat('c',64),'uncertain','{"method":"search","conflicts":["too_many"]}');`)
 			}
+			if strings.HasSuffix(m.Name, "_curation_local_assist.sql") {
+				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role) VALUES('f1030000-0000-4000-8000-000000000001','local-assist-rollback','synthetic','admin');`)
+			}
 			scanGrouping := strings.HasSuffix(m.Name, "_scan_grouping.sql")
 			if scanGrouping {
 				rollbackExec(t, db, scanGroupingLegacyRows)
@@ -598,6 +614,14 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			if m.Version == 102 {
 				assertProgramMatchMigration(t, db)
+			}
+			if m.Version == 103 {
+				var status, result string
+				err := db.QueryRowContext(t.Context(), `SELECT status,result::text FROM curation_work_states
+					WHERE subject='release' AND target_id='e9800000-0000-4000-8000-000000000002'`).Scan(&status, &result)
+				if err != nil || status != "try_later" || strings.Contains(result, "\"retry\"") {
+					t.Fatalf("0103 下行应恢复旧 try_later 并清除断点，状态=%q 结果=%s 错误=%v", status, result, err)
+				}
 			}
 			if scanGrouping {
 				assertScanGroupingMigrationUp(t, db)
@@ -1066,4 +1090,83 @@ func checkScanGroupingAttachmentConstraints(t *testing.T, db *sql.DB) {
 	if err := db.QueryRowContext(t.Context(), `SELECT count(*) FROM release_attachments`).Scan(&count); err != nil || count != 2 {
 		t.Errorf("删除临时发行后附件数 = %d，期望保留原发行的两条附件，错误 %v", count, err)
 	}
+}
+
+func TestPostgreSQLLocalAssistUpgrade(t *testing.T) {
+	available, err := loadMigrations(migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var target migration
+	for _, m := range available {
+		if strings.HasSuffix(m.Name, "_curation_local_assist.sql") {
+			target = m
+			break
+		}
+	}
+	if target.Version == 0 {
+		t.Fatal("缺少本地辅助迁移")
+	}
+	db := openMigrationTestDatabase(t)
+	before := migrationPrefix(available, target.Version-1)
+	after := migrationPrefix(available, target.Version)
+	rollbackApply(t, db, before)
+	rollbackExec(t, db, `
+ INSERT INTO users(id,username,password_hash,role)
+ VALUES('a1030000-0000-4000-8000-000000000001','local-upgrade-test','synthetic','admin');
+ INSERT INTO library_roots(id,path) VALUES('a1030000-0000-4000-8000-000000000002','/synthetic/local-upgrade');
+ INSERT INTO release_groups(id) VALUES('a1030000-0000-4000-8000-000000000003');
+ INSERT INTO releases(id,group_id,title,artist,source_root_id) VALUES
+ ('a1030000-0000-4000-8000-000000000004','a1030000-0000-4000-8000-000000000003','旧标题','旧艺人','a1030000-0000-4000-8000-000000000002'),
+ ('a1030000-0000-4000-8000-000000000005','a1030000-0000-4000-8000-000000000003','另一发行','旧艺人','a1030000-0000-4000-8000-000000000002');
+ INSERT INTO curation_model_usage(day,input_tokens,output_tokens) VALUES('2026-01-01',321,123);
+ INSERT INTO curation_pending_items(id,target_type,target_id,kind,status,rule_version,input_digest,evidence,resolution,resolved_at,claimed_at)
+ SELECT id::uuid,'release',CASE WHEN status='in_progress' THEN 'a1030000-0000-4000-8000-000000000005'::uuid ELSE 'a1030000-0000-4000-8000-000000000004'::uuid END,'local_cleanup',status,3,id,'{}',resolution,
+ CASE WHEN resolution IS NOT NULL THEN now() END, CASE WHEN status='in_progress' THEN now() END
+ FROM (VALUES ('a1030000-0000-4000-8000-000000000011','resolved','local_cleanup'),
+ ('a1030000-0000-4000-8000-000000000012','waiting_model',NULL),
+ ('a1030000-0000-4000-8000-000000000013','in_progress',NULL)) AS old(id,status,resolution);
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
+ SELECT id::uuid,'a1030000-0000-4000-8000-000000000001',kind,'release','a1030000-0000-4000-8000-000000000004',gen_random_uuid(),kind,1,2,'{}','{}','{}','local-upgrade'
+ FROM (VALUES ('a1030000-0000-4000-8000-000000000021','release_auto_correction'),
+ ('a1030000-0000-4000-8000-000000000022','release_auto_correction')) AS old(id,kind);
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id,reverts_operation_id)
+ SELECT 'a1030000-0000-4000-8000-000000000023',actor_id,'revert',target_type,target_id,gen_random_uuid(),'undo-old',2,3,'{}','{}','{}','local-upgrade',id
+ FROM operations WHERE id='a1030000-0000-4000-8000-000000000022';
+ INSERT INTO release_auto_values(release_id,field,mode,text_value,operation_id)
+ VALUES('a1030000-0000-4000-8000-000000000004','title','set','已写一部分','a1030000-0000-4000-8000-000000000021');
+ `)
+	require := func(query string) {
+		t.Helper()
+		var got bool
+		if err := db.QueryRowContext(t.Context(), query).Scan(&got); err != nil || !got {
+			t.Fatalf("查询 %s 应为真，实际 %v，错误 %v", query, got, err)
+		}
+	}
+	checkOld := func() {
+		t.Helper()
+		require(`SELECT input_tokens=321 AND output_tokens=123 FROM curation_model_usage WHERE day='2026-01-01'`)
+		require(`SELECT text_value='已写一部分' FROM release_auto_values WHERE field='title'`)
+		require(`SELECT reverts_operation_id='a1030000-0000-4000-8000-000000000022' FROM operations WHERE id='a1030000-0000-4000-8000-000000000023'`)
+		require(`SELECT count(*)=3 AND count(*) FILTER(WHERE resolution='inputs_changed')=2 AND count(*) FILTER(WHERE resolution='local_cleanup')=1
+			FROM curation_pending_items WHERE kind='local_cleanup' AND status='resolved' AND rule_version=3`)
+	}
+	rollbackApply(t, db, after)
+	checkOld()
+	rollbackExec(t, db, `
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id,reverts_operation_id)
+ VALUES ('a1030000-0000-4000-8000-000000000030','a1030000-0000-4000-8000-000000000001','local_model_grouping','release',
+ 'a1030000-0000-4000-8000-000000000004',gen_random_uuid(),'group',3,4,'{}','{}','{}','local-upgrade',NULL),
+ ('a1030000-0000-4000-8000-000000000031','a1030000-0000-4000-8000-000000000001','revert','release',
+ 'a1030000-0000-4000-8000-000000000004',gen_random_uuid(),'undo-group',4,5,'{}','{}','{}','local-upgrade','a1030000-0000-4000-8000-000000000030');
+ INSERT INTO local_credit_parts(operation_id,target_id,role,source_ref,raw,parts,joins)
+ VALUES('a1030000-0000-4000-8000-000000000021','a1030000-0000-4000-8000-000000000004','album_artist','synthetic','甲 & 乙','["甲","乙"]','[" & "]');
+ `)
+	rollbackApply(t, db, before)
+	checkOld()
+	require(`SELECT to_regclass('local_model_groupings') IS NULL AND to_regclass('local_credit_parts') IS NULL`)
+	require(`SELECT count(*)=3 FROM operations`)
+	rollbackApply(t, db, after)
+	checkOld()
+	require(`SELECT NOT EXISTS(SELECT FROM local_model_groupings) AND NOT EXISTS(SELECT FROM local_credit_parts)`)
 }

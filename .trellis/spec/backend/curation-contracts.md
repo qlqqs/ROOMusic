@@ -384,12 +384,14 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 ### 15.1 数据模型（迁移 0062）
 
 - **`curation_work_states`**：主键 `(subject, target_id)`，`subject` 为 `release`、`artwork`（目标是发行）或 `lyrics`（目标是曲目）；`rule_version`、`input_digest`、
-  `status`（`matched | uncertain | no_match | try_later | done`）、`attempts`（得出结论的次数）、`generation`（代次，每次得出结论加一）、`retry_count`、`next_attempt_at`、`result`。
+  `status`（`pending | matched | unmatched | conflict | try_later | query_error | done`）、`attempts`（得出结论的次数）、`generation`（代次，每次得出结论加一）、`retry_count`、`next_attempt_at`、`result`。
   存进去的规则版本是 `program.RuleVersion × 100 + textnorm.Version`。
 - **`curation_pending_items`**：每个发行每一种（`release_match | recording_match`）至多一条未结束的；状态 `waiting_model | in_progress | resolved | waiting_human | shelved`，
   本任务只写 `waiting_model` 与 `resolved`（`resolution='program_matched'`）。`evidence`、`candidates`、`conflicts` 是 JSON，外部来的文本按不可信文本处理。
 - `curation_settings.paused`；`operations_type_ck` 增加 `external_link`。
 - 回退有损：删两张表、`paused` 列、`external_link` 操作与它的撤销、它建的对应、`external_link` 与 `group_join` 标记；自动整理做的归组（已有类型）保留。
+
+迁移 0103 给发行工作状态增加 `query_error`。查询期间在 `result.retry` 保存步骤、来源、原因与续查依据。旧的 `try_later` 从首步使用响应缓存重新查询。
 
 ### 15.2 判定的不变量
 
@@ -467,7 +469,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 - 单线程；总开关关、开启者失效、暂停时不读证据、不出站。启动时收掉遗留的 program 批次。
 - 每轮按（加入时间倒序、ID 倒序）键集分页，每页 100 个发行；重算摘要与状态比较，不同才处理。变化标记（扫描结束、设置、源设置、标记、操作记录、到期的重试）变了或 6 小时后再扫。
 - **闸门也挡暂停与扫描**：`curation.Sources` 的放行检查（每次出站之前）在暂停时返回 `409 curation_paused`，扫描进行中返回 `409 scan_running`（`WithScanCheck` 注入）。
-- 上游来源不可用按 25.3 退避。程序在本地指纹待重算或封面写入后文件仍缺失时，保留项级 `try_later`，退避 min(24 小时, 10 分钟 × 2^n)，并尊重指纹重算时间。两者都不计尝试次数；源的开关关着时跳过这个主题。
+- 上游来源不可用按 25.3 退避。封面写入后文件仍缺失时保留原项级退避；本地指纹出错按发行错误计次（25.3）；源的开关关着时跳过这个主题。
 - 批次：第一次写入时开，满 500 条、1 小时、一轮结束、关闭或暂停时关；全被挡下的空批被移除。
 - `app.WithCurationProgram(false, …)` 关掉循环；`app` 包里共用的测试夹具默认关掉它（现有测试会打开总开关，循环会向真实外部服务发请求）。
 
@@ -475,7 +477,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | --- | --- |
 | `GET /api/v1/admin/curation/settings` | 增加 `paused` |
 | `PUT /api/v1/admin/curation/settings` | `{enabled?, paused?}`，至少一项，否则 `400 invalid_input`；`enabled` 从关到开时清除暂停 |
-| `GET /api/v1/admin/curation/progress` | `{state, rule_version, releases:{total, processed, matched, uncertain, no_match, try_later}, pending:{waiting_model}, batch:{id, opened_at, operations}\|null, last_pass_finished_at}`；只算可见发行；没装配循环时 `state="unavailable"` |
+| `GET /api/v1/admin/curation/progress` | `{state, rule_version, releases:{total, processed, matched, unmatched, conflict, try_later, query_error}, pending:{waiting_model}, batch:{id, opened_at, operations}\|null, last_pass_finished_at}`；只算可见发行；没装配循环时 `state="unavailable"` |
 | `GET /api/v1/admin/curation/suppressions?release_id=` | 同时列出这个发行的曲目与它所在专辑上的标记 |
 
 新错误码：`409 no_strong_evidence`、`409 manual_structure`、`409 curation_paused`、`409 scan_running`。
@@ -529,15 +531,15 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 16.2 指纹的计算与缓存
 
-- 只在匹配走到指纹这一步时按需计算，按曲目缓存。缓存行的 `pipeline_version` 与有效性键和曲目当前值逐项相同才有效；音频不变不重算。
+- 前五步全无线索的待识别发行进入声纹队列提前计算和查询；其余在匹配走到声纹时登记，按曲目缓存。缓存行的 `pipeline_version` 与有效性键和曲目当前值逐项相同才有效；音频不变不重算。
 - 取源与音频分析相同（允许的根、大小与修改时间核对、CUE 区间、DSD 转 PCM）；ffmpeg 以 `file:/dev/fd/3` 读打开的句柄（可定位），
   解码前 120 秒为 11025 Hz 单声道 s16le，经管道交给 `fpcalc -format s16le -rate 11025 -channels 1 -length 120 -json -`。单首时限 60 秒。
 - 发给 AcoustID 的时长是整首时长（CUE 虚拟轨是区间长度；最后一首没有结束帧时取曲目时长），不是解码的 120 秒。
 - 三种结果：
   - 算出；
-  - 永久算不出：`too_short`（精确时长 < 10 秒，比较时不取整），或缓存里的失败还没到重试时间；
+  - 永久算不出：`too_short`（精确时长 < 10 秒，比较时不取整）；
   - 暂时算不出：取源失败、文件变了、时长未知。暂时的结果不写缓存。
-- `decode_failed`、`timeout` 照音频分析的规则重试：24 小时后，至多 3 次。
+- `decode_failed`、`timeout` 保留最近的诊断，发行到期时重新计算。
 - `catalog.CurationEvidence`、`catalog.CurationTrack` 与曲目查询的标识种类**没有新增任何字段**：发行摘要是整个证据结构的哈希，加字段会让全库重做。
   指纹按曲目 ID 经 `program.Fingerprints` 取，由 `app` 把 `playback.Fingerprints` 适配进来。
 
@@ -582,7 +584,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 **专辑方式**（第 6 步 `acoustid`，在 `disc_id` 与 `search` 之间）：
 
-1. 抽样：与 ISRC 相同的位置，在全部曲目里取至多 4 首。算出的不到一半：如果有暂时原因，整个发行记 `try_later`；否则这一步不算命中。
+1. 抽样：与 ISRC 相同的位置，在全部曲目里取至多 4 首。算出的不到一半：确定性短轨使可用样本不足时，这一步无命中。计算或查询出错中断本轮，按第 25.3 节处理。
 2. 逐首查询，只要分数 ≥ 0.9 的录音，得到每首的录音集合 R_t。
 3. 去掉曲目数或碟数与本地不符的发行（两个值都给了才比较），再在有结果的曲目之间求发行交集。
    - 抽样 ≥ 2 首却只有 1 首有结果 → `acoustid_sparse`；
@@ -914,7 +916,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ## 网络搜索与身份待定项
 
-管理员显式启动艺人联网队列。单人使用 `GET/POST /api/v1/artists/{id}/web-search`，全量、进度和停止使用 `GET/POST/DELETE /api/v1/admin/curation/artist-web-search`。队列按照专辑主署名、曲目主署名排序，只领取当前运行代次中尚无 MusicBrainz 对应的有效艺人。停止保留剩余项和本项次数，重新启动接续。旧自动项不领取，历史建议仍可处理。查过且输入摘要未变的艺人跳过。艺人资料补齐继续处理已有对应和按名称查询的插件。
+迁移 0105 建立艺人联网队列，管理员显式启动查找。单人使用 `GET/POST /api/v1/artists/{id}/web-search`，全量、进度和停止使用 `GET/POST/DELETE /api/v1/admin/curation/artist-web-search`。队列按照专辑主署名、曲目主署名排序，只领取当前运行代次中尚无 MusicBrainz 对应的有效艺人。停止保留剩余项和本项次数，重新启动接续。旧自动项不领取，历史建议仍可处理。查过且输入摘要未变的艺人跳过。艺人资料补齐继续处理已有对应和按名称查询的插件。
 
 `resolve_artist_identity` 接受 MusicBrainz 艺人编号、说明和本项实际取得的 1 至 5 个网页引用。程序查询候选艺人名下发行，逐版核实其署名含候选 MBID，再按 A2.3 核对逐碟曲数、曲序和时长。四首及以下还须专辑名吻合，艺人条件以发行署名中的候选 MBID 为准，本地艺名可以不同。吻合即确认艺人，唯一版本写版本及曲目对应，同组多版只认到组，跨组记发行冲突，仅写艺人对应。完全无结构吻合时留给管理员通过现有例外接口确认或否掉，否掉会抑制该对应。手动队列不走独立审查。匹配后的图片、简介由资料程序补齐。
 
@@ -937,7 +939,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 | 常量（`curation/program/worker.go`） | 当前值 | 升级时 |
 | --- | --- | --- |
-| `LocalRuleVersion` | 3（第 28 节） | 只重算真实性、分类与缺口，不发外部请求 |
+| `LocalRuleVersion` | 4（第 27.3 节） | 只重算真实性、分类与缺口，不发外部请求 |
 | `MatchRuleVersion` | 105 | 对第 23.6 节指定的工作状态登记一次 requery_match_version |
 | `PatrolPromptVersion` | 1 | 不让任何工作状态到期；只作用于新巡检与手动重新巡检 |
 
@@ -1031,10 +1033,12 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | matched | 保留 release、release_group、recording 或 artist 级别 |
 | conflict | 第 1–6 步命中但与本地不符，或名字步骤发现合并键相同的候选分属不同已知发行组（different_release_groups）。有模型时交识别判断 |
 | unmatched | 查空或名字步骤的候选均未通过结构或名称核对时，结论的 conflicts 为空，待定项保留候选证据。按本次查询时间再约 90 天；到期含声纹并沿用初次识别判断。完整候选全部被撤销或占用时记 reason=candidates_revoked，停用周期重查 |
+| `try_later` | 等待来源或发行重试，携带出错步骤和来源 |
+| `query_error` | 连续三轮发行查询错误；文件变化或识别规则升级后再查 |
 
 新增或清除影响候选的 MusicBrainz 对应抑制标记时，同一事务登记所属发行重判。
 
-管理员用 `GET /api/v1/admin/curation/releases/{id}/match-results` 读取按来源排序的 results，含 source、status、checked_at、reason、conflicts；无记录为空数组。历史时间未知用 null。进度的 releases 提供 matched、unmatched、conflict、total、processed、try_later。原 POST recheck 接受普通未匹配，返回 202，维持仅程序的手动触发。
+管理员用 `GET /api/v1/admin/curation/releases/{id}/match-results` 读取按来源排序的 results，含 source、status、checked_at、reason、conflicts；无记录为空数组。历史时间未知用 null。进度的 releases 提供 matched、unmatched、conflict、total、processed、try_later、query_error。原 POST recheck 接受普通未匹配，返回 202，维持仅程序的手动触发。
 
 ### 23.6 升级
 
@@ -1074,7 +1078,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 25.1 队列与取项
 
-- 五条程序队列各一个取项循环：识别（`release`）、封面（`artwork`）、歌词（`lyrics`）、艺人资料（`artist_media`）、声纹（`fingerprint`，只算本机声纹，AcoustID 查询仍在识别里）。
+- 五条程序队列各一个取项循环：识别（`release`）、封面（`artwork`）、歌词（`lyrics`）、艺人资料（`artist_media`）、声纹（`fingerprint`，计算本机声纹并提前查 AcoustID，识别队列消费准备好的结果并读 MusicBrainz 详情）。
 - 每次按状态与优先级取下一项，不存翻页位置。`curation_work_states` 为从未处理的目标补 `pending` 行；`pending` 不计入进度的 processed。
 - 优先级：手动触发 → 新入库（首次启用后第一次完整扫描的最大入库时间之后创建的发行）→ 有可检索的外部编号、条码或 ISRC → 有缺口（按 A 的缺口排序键降序）→ 本地完整（艺人尚无外部对应的在前）。本地齐全且无可查编号的发行，即使刚入库也排在缺口之后。同档按入库时间倒序。
 - 封面与艺人资料在识别确定身份后取得资格；歌词不依赖外部对应。同一发行的并发写入靠现有写入路径的行锁与锁内复核串行；结论、待定项与清待做标记同一事务；多步写入沿用步骤派生幂等键重放。
@@ -1090,8 +1094,9 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 - 各来源各自的限速器；Cover Art Archive 的清单与图片用它自己声明的限速器，不再占 MusicBrainz 的额度。
 - 429、503 先在同一请求内尝试，含首次最多 5 次。等待从 300 ms 起翻倍，上限 3 秒，重试预算共 10 秒。有效的 `Retry-After` 在剩余预算内优先，每次重发重新取得来源许可。短重试成功即继续本项。
-- 短重试用尽、上游等待超出预算，或连续两次暂时网络错误时，只暂停依赖该来源的队列。冷却从 5 秒起连续翻倍，最长 10 分钟，并等到上游指定的恢复时刻。级别为 0–8，出站间隔为声明下限 × 2^级别（上限 60 秒）。有效响应清零退避和限速级别。来源冷却保存在进程内。
-- 来源不可用不改该项的尝试次数、代次与结论，与“查无结果”分开记。JSON 响应缓存沿用现有规则。
+- 来源连续失败按 5、10、20、40、80、160、180 秒暂停，此后每轮 180 秒；Retry-After 更长时采用上游期限。各来源独立，成功一次清零，正常 404 同样表示来源恢复。发送间隔固定为来源声明值。同源竞争时，界面交互 → 普通识别 → 本地齐全的低优先识别 → 艺人资料。
+- 发行等待来源时不累计发行失败次数。来源恢复就唤醒该来源的等待行，到期没有其他流量时由正常请求试查。续查读取失败步骤及步骤内的有效响应缓存。
+- 只有该发行的查询错误（响应解析失败、查询参数被拒、本地计算失败）按轮计数，前两轮分别等 5、10 秒，第三轮停止。已完成的有效步骤中断连续失败；缺少适用线索或有效查空才能进入较弱的一步。
 
 ### 25.4 给模型调度的接口
 
@@ -1121,15 +1126,15 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 25.5 进度
 
-`GET /api/v1/admin/curation/progress` 增加 `queues`，固定五项，顺序同 25.1：
+`GET /api/v1/admin/curation/progress` 增加 `queues`，固定五项，顺序同 25.1。`releases.try_later` 计等待中的发行，`releases.query_error` 计已因三次专辑错误停止的发行。
 
 | 字段 | 含义 |
 | --- | --- |
 | `id`、`state` | 队列标识；`running`、`idle`、`paused`、`disabled`、`waiting_for_scan` |
 | `remaining`、`ready` | 有该主题需求的未完成目标（含在途与等待）；现在可领的数量 |
-| `successful_requests_per_second`、`completed_items_per_second` | 最近 5 分钟实测；没有样本为 null；声纹没有请求速度 |
+| `successful_requests_per_second`、`completed_items_per_second` | 最近 5 分钟实测；没有样本为 null；声纹预查计实际 AcoustID 请求 |
 | `eta_seconds` | 剩余项数除以实测项速度，加上来源冷却的剩余时间；无法估计为 null，排空为 0 |
-| `pause_reason`、`source`、`retry_at` | `disabled`、`paused`、`waiting_for_scan`、`waiting_for_stability`、`waiting_for_fingerprint`、`source_disabled`、`rate_limited`、`source_unavailable`；来源暂停时带来源与预计恢复时刻 |
+| `pause_reason`、`source`、`retry_at` | `disabled`、`paused`、`waiting_for_scan`、`waiting_for_stability`、`waiting_for_fingerprint`、`source_disabled`、`rate_limited`、`source_unavailable`；来源暂停或专辑等待重试时带来源与重试时刻，专辑原因有 `invalid_response`、`invalid_query`、`fingerprint_failed` |
 
 ## 26. 模型兜底（整理链 E，2026-11-25，审查策略第 5 版）
 
@@ -1194,10 +1199,10 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 27.3 本地整理
 
-- 只处理扫描解析后标题、艺人或曲目标题仍是占位值，或推断值里带明显杂质（年份、格式、编号、方括号内容）的专辑；扫描已能解析的“01 - 艺人 - 曲名”不进模型。
-- 按目录提供文件名、目录名与现有标签，只给 `submit_local_cleanup`（`item_id`，可选 `title`、`artist`、`tracks:[{track_id,title}]`）。
-- 后端在写入事务中复核：每个值规范化后必须出现在某个本地片段里，否则丢弃。通过的按模型来源、`writer_level=1`、`origin.mode=local_cleanup` 写自动层，标为模型推断。曲序与碟号不改。
-- 整理出的值可以作搜索输入，认定仍须时长核对（第 23.2 节）。
+- `local_cleanup` 以完整目录为一项。七种扫描结果可请求本地辅助：无名字标签、旧编码多解、含 & 或逗号的原署名、同目录按不同专辑名分开且曲号不连续、同一非根父目录下疑似同套的未识别碟目录、缺曲号或多碟迹象下缺碟号、复合专辑名。缺艺人的半个名字先补再查。匹配后确定性拆分失败由识别程序提供原署名引用。
+- 模型查看本项成员、标签、注释、原文件与目录名、编码读法、平票和编号来源。只使用 `submit_local_cleanup`。带理由的 `undetermined` 结案；`apply` 提交 `texts,encodings,splits,grouping` 的任意组合。领取、调用额度和失败处理沿用第 25 节。
+- 后台逐项核对。本地单一片段经文字归一、标点转空格后须包含提交文字。每张只能从扫描候选中选一个编码，后台解全部乱码字段。署名以段和连接词逐字重建原串。归组须完整覆盖可调整文件，确定的曲位和 CUE 边界受保护，每张每碟曲号唯一。
+- 写入采用 `origin.mode=local_cleanup`，显示为模型推断，自动字段级别 1。保留署名显示串，按有序段投影本地艺人。独立归组记录在下一次扫描消费。各项可撤销，程序核对后直接写入。已配主模型的相关发行先等本地辅助和归组确认，再用可核实的输入查询。具体版匹配可替换本地推断。
 
 ### 27.4 已知局限
 
@@ -1243,7 +1248,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 ### 28.5 扫描侧（`LocalRuleVersion` 3）
 
 细则见 `library-scan-tags.md`、`library-scan-grouping.md`。
-- 真实性新增来源 `legacy_encoding`（旧编码唯一读法，推断）与 `garbled`（多种读法，按占位处理，不进查询，可进本地整理并以各读法作本地片段）。符合西文字节特征的标签保留扫描来源。没有其它标签时读 ID3v1；唯一读法由程序写本地层，级别 1。
+- 真实性新增来源 `legacy_encoding`（旧编码唯一读法，推断）与 `garbled`（乱码按占位处理，多解可由本地辅助从整张候选编码里选择）。符合西文字节特征的标签保留扫描来源。没有其它标签时读 ID3v1；唯一读法由扫描应用并保留推断来源。
 - 中英文占位词（Unknown Artist、Track NN、未知艺术家等）判为占位；`Untitled` 不算。
 - 无 `ALBUMARTIST` 且至少 4 首、至少 3 位不同主艺人、无人担任超过半数曲目的主艺人时判为合辑，专辑艺人取推断值 Various Artists；扫描与整理按每首真实署名拆分后的第一位统计。
 - 同目录曲号分段从 1 重起时推断碟号；`A1`、`B2` 曲号按面解析，A/B 面为第 1 碟、C/D 面为第 2 碟，均标为推断。

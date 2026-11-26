@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	LocalRuleVersion    int16 = 3
+	LocalRuleVersion    int16 = curation.LocalRuleVersion
 	MatchRuleVersion    int16 = 105
 	PatrolPromptVersion int16 = 1
 
@@ -25,6 +25,7 @@ const (
 )
 
 type Options struct {
+	LocalModelConfigured                         func(context.Context) (bool, error)
 	CachedReleaseCredits                         func(string) (*sources.Release, error)
 	Fingerprints                                 Fingerprints
 	ConfirmScan                                  func(context.Context) error
@@ -72,7 +73,7 @@ func NewWorker(db *sql.DB, writer *curation.Writer, sourceGate *curation.Sources
 		opts.PollInterval = time.Minute
 	}
 	if opts.ScanInterval <= 0 {
-		opts.ScanInterval = 30 * time.Second
+		opts.ScanInterval = 2 * time.Second
 	}
 	if opts.FullPassInterval <= 0 {
 		opts.FullPassInterval = 6 * time.Hour
@@ -117,6 +118,7 @@ func (w *Worker) wait(ctx context.Context, delay time.Duration) {
 	select {
 	case <-ctx.Done():
 	case <-w.opts.After(delay):
+	case <-w.policy.Changes():
 	}
 }
 

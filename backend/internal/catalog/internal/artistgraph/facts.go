@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -22,17 +23,90 @@ type creditFact struct {
 	Layer     string  `json:"layer"`
 }
 
+// 同一标签原文可以包含重复空白。用引用和原始字节找分段，展示文字仅用于选中当前采用的整组标签。
+type localArtistSource struct {
+	raw   []string
+	names []string
+}
+
+func localArtistNames(ctx context.Context, tx *sql.Tx, ids []string) (map[string][]localArtistSource, error) {
+	rows, err := tx.QueryContext(ctx, `WITH owners AS (
+ SELECT a.operation_id,a.release_id AS target FROM release_auto_values a WHERE a.field='album_artist' AND a.release_id=ANY($1::uuid[])
+ UNION ALL SELECT a.operation_id,t.id FROM media m JOIN tracks t ON t.medium_id=m.id JOIN track_auto_values a ON a.track_id=t.id AND a.field='artist' WHERE m.release_id=ANY($1::uuid[])
+ ), parts AS (
+ SELECT p.* FROM owners o JOIN local_credit_parts p ON (p.operation_id,p.target_id)=(o.operation_id,o.target)
+ ), sources AS (
+ SELECT DISTINCT p.operation_id,p.target_id,e.track_id,e.role FROM parts p JOIN artist_tag_evidence e
+ ON e.track_id::text=split_part(p.source_ref,'/',1) AND p.source_ref=e.track_id::text||'/'||e.tag_key||'/'||e.occurrence_index::text
+ AND p.raw=e.raw_value AND e.role=CASE p.role WHEN 'release_artist' THEN 'track_artist' ELSE p.role END
+ ), entries AS (
+ SELECT s.target_id,s.track_id::text||'/'||s.role AS source,e.occurrence_index,e.tag_key,e.raw_value,p.parts
+ FROM sources s JOIN artist_tag_evidence e ON (e.track_id,e.role)=(s.track_id,s.role)
+ LEFT JOIN parts p ON p.operation_id=s.operation_id AND p.target_id=s.target_id AND p.raw=e.raw_value
+ AND p.source_ref=e.track_id::text||'/'||e.tag_key||'/'||e.occurrence_index::text
+ AND e.role=CASE p.role WHEN 'release_artist' THEN 'track_artist' ELSE p.role END
+ UNION ALL SELECT target_id,source_ref,0,'',raw,parts FROM parts WHERE source_ref=target_id::text||'/scan/'||role
+ ) SELECT target_id::text,source,raw_value,parts FROM entries ORDER BY target_id,source,occurrence_index,tag_key`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := map[string][]localArtistSource{}
+	var previousID, previousSource string
+	for rows.Next() {
+		var id, source, raw string
+		var data []byte
+		if err := rows.Scan(&id, &source, &raw, &data); err != nil {
+			return nil, err
+		}
+		if id != previousID || source != previousSource {
+			result[id] = append(result[id], localArtistSource{})
+			previousID, previousSource = id, source
+		}
+		entry := &result[id][len(result[id])-1]
+		entry.raw = append(entry.raw, raw)
+		names := metadata.CanonicalArtistNames(raw)
+		if data != nil {
+			if err := json.Unmarshal(data, &names); err != nil {
+				return nil, err
+			}
+		}
+		for _, name := range names {
+			if !slices.Contains(entry.names, name) {
+				entry.names = append(entry.names, name)
+			}
+		}
+	}
+	return result, rows.Err()
+}
+
 // refreshFacts 重建当前扫描事实与发行和曲目艺人的自动层、修正层，返回本次新建身份；不触碰任何艺人治理表。
 func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, error) {
 	resolver := nameResolver{tx: tx, names: map[string]string{}}
 	facts := []creditFact{}
 	// 同一曲目同人同角色的多种细分只建一条事实，避免同批 upsert 重复命中。
 	seenTrackCredits := make(map[[4]string]bool)
+	localSources, err := localArtistNames(ctx, tx, ids)
+	if err != nil {
+		return nil, err
+	}
 	add := func(releaseID, trackID, role, raw, layer string) error {
 		if !nonempty(raw) {
 			return nil
 		}
 		names := metadata.CanonicalArtistNames(raw)
+		if layer == "auto" {
+			id := trackID
+			if id == "" {
+				id = releaseID
+			}
+			for _, source := range localSources[id] {
+				if metadata.CanonicalTrackArtist(metadata.NormalizeValue(strings.Join(source.raw, " / "))) == metadata.CanonicalTrackArtist(metadata.NormalizeValue(raw)) {
+					names = source.names
+					break
+				}
+			}
+		}
 		if len(names) > 100 {
 			return fmt.Errorf("artist subject exceeds name budget")
 		}

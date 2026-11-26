@@ -27,10 +27,14 @@ func TestScanProgressCandidateDefinition(t *testing.T) {
 			t.Errorf("candidate %s", name)
 		}
 	}
-	for _, name := range []string{"cover.jpg", "x.log", "x.txt", "no_extension"} {
+	for _, name := range []string{"cover.jpg", "x.log", "x.txt"} {
 		if isScanCandidate(name) {
 			t.Errorf("attachment %s", name)
 		}
+	}
+	// 空扩展名仍进入音频候选判定，最终格式由文件头读取决定。
+	if !isScanCandidate("no_extension") {
+		t.Error("无扩展名文件应进入音频候选")
 	}
 }
 func TestScanProgressDriftCancellationAndOverflow(t *testing.T) {

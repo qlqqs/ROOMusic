@@ -16,6 +16,7 @@ import (
 type SearchNames struct{ Title, Artist, ArtistID string }
 type MatchOptions struct {
 	Artists sources.ArtistFinder
+	retry   *matchRetry
 }
 type SearchPage struct {
 	curation.PageInfo
@@ -42,6 +43,31 @@ type MatchSnapshot struct {
 	RecordingIDs         map[string]map[string]bool `json:"recording_ids,omitempty"`
 }
 
+// 断点只记录进入步骤时已有的证据，步骤内的读取重新走来源响应缓存。
+type matchRetry struct {
+	Files  string       `json:"files"`
+	Step   string       `json:"step"`
+	Kind   string       `json:"kind"`
+	Source string       `json:"source"`
+	Reason string       `json:"reason"`
+	Pages  []SearchPage `json:"pages,omitempty"`
+
+	Fingerprint string `json:"fingerprint,omitempty"`
+	resume      string
+}
+
+func (r *matchRetry) enter(step string) bool {
+	if r == nil {
+		return true
+	}
+	if r.resume != "" && r.resume != step {
+		return false
+	}
+	r.resume = ""
+	r.Step = step
+	return true
+}
+
 func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources.ReleaseFinder, rf sources.RecordingFinder, fp *FingerprintStep, opts MatchOptions) (MatchResult, error) {
 	if err := ctx.Err(); err != nil {
 		return MatchResult{}, err
@@ -60,55 +86,71 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 	completeNames := names.Title != "" && (names.Artist != "" || e.Compilation && mode == "album")
 	emptyNames := names.Title == "" && names.Artist == ""
 	var prior []SearchPage
+	if opts.retry != nil {
+		prior = opts.retry.Pages
+	}
+	enter := func(step string) bool {
+		if !opts.retry.enter(step) {
+			return false
+		}
+		if opts.retry != nil {
+			opts.retry.Pages = slices.Clone(prior)
+		}
+		return true
+	}
 	if hasID {
 		if mode == "single" {
-			m, err := singleIdentifiers(ctx, e, rf)
+			m, err := singleIdentifiers(ctx, e, rf, enter)
 			if m.Status != "" || err != nil {
 				return m, err
 			}
-			prior = m.Snapshot.Pages
+			prior = append(prior, m.Snapshot.Pages...)
 		} else {
-			ids := tags(e.Tracks, "mb_release")
-			if len(ids) > 1 {
-				return DecideAlbum(e, "tag_id", nil), nil
-			}
-			if len(ids) == 1 {
-				r, err := found(f.ReleaseByID(ctx, ids[0]))
-				if err != nil {
-					return MatchResult{}, err
+			if enter("tag_id") {
+				ids := tags(e.Tracks, "mb_release")
+				if len(ids) > 1 {
+					return DecideAlbum(e, "tag_id", nil), nil
 				}
-				if r.ID != "" {
-					if r.ID != ids[0] {
-						return MatchResult{}, sources.ErrUnavailable
-					}
-					ev, artists, err := checkArtistNames(ctx, e, []sources.Release{r}, opts.Artists)
+				if len(ids) == 1 {
+					r, err := queryResult(f.ReleaseByID(ctx, ids[0]))
 					if err != nil {
 						return MatchResult{}, err
 					}
-					m := DecideAlbum(ev, "tag_id", []sources.Release{r})
-					if slices.Contains(m.Candidates[0].Conflicts, "tag_text_mismatch") {
-						if artists == nil {
-							artists = map[string]sources.Artist{}
+					if r.ID != "" {
+						if r.ID != ids[0] {
+							return MatchResult{}, sources.ErrInvalidResponse
 						}
-						agree, err := tagArtistNamesAgree(ctx, r, albumArtist(e), "", opts.Artists, artists)
+						ev, artists, err := checkArtistNames(ctx, e, []sources.Release{r}, opts.Artists)
 						if err != nil {
 							return MatchResult{}, err
 						}
-						if agree {
-							m = decideAlbum(ev, "tag_id", []sources.Release{r}, MatchSnapshot{TagArtist: albumArtist(e), TagReleaseID: r.ID})
+						m := DecideAlbum(ev, "tag_id", []sources.Release{r})
+						if slices.Contains(m.Candidates[0].Conflicts, "tag_text_mismatch") {
+							if artists == nil {
+								artists = map[string]sources.Artist{}
+							}
+							agree, err := tagArtistNamesAgree(ctx, r, albumArtist(e), "", opts.Artists, artists)
+							if err != nil {
+								return MatchResult{}, err
+							}
+							if agree {
+								m = decideAlbum(ev, "tag_id", []sources.Release{r}, MatchSnapshot{TagArtist: albumArtist(e), TagReleaseID: r.ID})
+							}
 						}
+						m.ArtistEvidence, m.Snapshot.Artists, m.Snapshot.ArtistID = artists, artists, ev.ArtistMBID
+						return m, nil
 					}
-					m.ArtistEvidence, m.Snapshot.Artists, m.Snapshot.ArtistID = artists, artists, ev.ArtistMBID
-					return m, nil
 				}
 			}
-			discs, err := discCandidates(ctx, f, e)
-			if err != nil {
-				return MatchResult{}, err
-			}
-			if discs.hit {
-				discs.pages = prior
-				return checkCandidates(ctx, f, e, "disc_id", discs, opts)
+			if enter("disc_id") {
+				discs, err := discCandidates(ctx, f, e)
+				if err != nil {
+					return MatchResult{}, err
+				}
+				if discs.hit {
+					discs.pages = prior
+					return checkCandidates(ctx, f, e, "disc_id", discs, opts)
+				}
 			}
 			if pf, ok := f.(curation.ReleasePageFinder); ok {
 				for _, q := range []curation.ReleaseSearch{
@@ -118,15 +160,18 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 					if len(q.Barcodes) == 0 && q.CatalogNumber == "" {
 						continue
 					}
-					page, err := found(pf.SearchReleasePage(ctx, q))
-					if err != nil {
-						return MatchResult{}, err
-					}
-					ev := albumPageResult(page, false).Snapshot.Pages[0]
 					method := "catalog_number"
 					if len(q.Barcodes) > 0 {
 						method = "barcode"
 					}
+					if !enter(method) {
+						continue
+					}
+					page, err := queryResult(pf.SearchReleasePage(ctx, q))
+					if err != nil {
+						return MatchResult{}, err
+					}
+					ev := albumPageResult(page, false).Snapshot.Pages[0]
 					ev.Kind = method
 					prior = append(prior, ev)
 					if len(page.Items) == 0 {
@@ -138,24 +183,28 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 					}
 					return checkCandidates(ctx, f, e, method, list, opts)
 				}
-			} else if m, err := legacyAlbumIDs(ctx, e, f); err != nil || m.Status != "" {
+			} else if m, err := legacyAlbumIDs(ctx, e, f, enter); err != nil || m.Status != "" {
 				return m, err
 			}
-			isrcs, err := isrcCandidates(ctx, rf, e)
-			if err != nil {
-				return MatchResult{}, err
+			if enter("isrc") {
+				isrcs, err := isrcCandidates(ctx, rf, e)
+				if err != nil {
+					return MatchResult{}, err
+				}
+				prior = append(prior, isrcs.pages...)
+				if isrcs.hit {
+					isrcs.pages = prior
+					return checkCandidates(ctx, f, e, "isrc", isrcs, opts)
+				}
 			}
-			prior = append(prior, isrcs.pages...)
-			if isrcs.hit {
-				isrcs.pages = prior
-				return checkCandidates(ctx, f, e, "isrc", isrcs, opts)
-			}
-
 		}
 	}
 	fingerprint := "unavailable"
+	if opts.retry != nil && opts.retry.resume == "name" && opts.retry.Fingerprint != "" {
+		fingerprint = opts.retry.Fingerprint
+	}
 	var queriedPrint bool
-	if fp != nil && (hasID || completeNames || emptyNames) {
+	if enter("acoustid") && fp != nil && (hasID || completeNames || emptyNames) {
 		m, state, err := fp.match(ctx, mode, e, f, rf)
 		fingerprint = state
 		queriedPrint = state == "used" && !m.noFingerprintQuery
@@ -178,6 +227,10 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 	}
 	if !e.Compilation {
 		names.ArtistID = ""
+	}
+	enter("name")
+	if opts.retry != nil {
+		opts.retry.Fingerprint = fingerprint
 	}
 	m, err := textSearch(ctx, searchInput, mode, names, f, rf, opts.Artists)
 
@@ -293,10 +346,10 @@ func queryText(ctx context.Context, mode string, e catalog.CurationEvidence, n S
 			return newMatch(mode, ""), nil
 		}
 		if pf, ok := f.(curation.ReleasePageFinder); ok {
-			p, err := found(pf.SearchReleasePage(ctx, q))
+			p, err := queryResult(pf.SearchReleasePage(ctx, q))
 			return albumPageResult(p, relaxed), err
 		}
-		rows, err := found(f.SearchReleases(ctx, sources.ReleaseQuery{Title: q.Title, Artist: q.Artist, TrackCount: q.TrackCount}))
+		rows, err := queryResult(f.SearchReleases(ctx, sources.ReleaseQuery{Title: q.Title, Artist: q.Artist, TrackCount: q.TrackCount}))
 		return albumPageResult(curation.ReleasePage{Items: rows}, relaxed), err
 	}
 	if n.ArtistID == "" && (n.Title == "" || n.Artist == "") {
@@ -308,10 +361,10 @@ func queryText(ctx context.Context, mode string, e catalog.CurationEvidence, n S
 		q.LengthMS = &ms
 	}
 	if pf, ok := rf.(curation.RecordingPageFinder); ok {
-		p, err := found(pf.SearchRecordingPage(ctx, q))
+		p, err := queryResult(pf.SearchRecordingPage(ctx, q))
 		return recordingPageResult(p, relaxed), err
 	}
-	rows, err := found(rf.SearchRecordings(ctx, sources.RecordingQuery{Title: q.Title, Artist: q.Artist, LengthMS: q.LengthMS}))
+	rows, err := queryResult(rf.SearchRecordings(ctx, sources.RecordingQuery{Title: q.Title, Artist: q.Artist, LengthMS: q.LengthMS}))
 	return recordingPageResult(curation.RecordingPage{Items: rows}, relaxed), err
 }
 
@@ -418,10 +471,10 @@ func lookupArtist(ctx context.Context, f sources.ArtistFinder, name string) (map
 	var err error
 	p := SearchPage{Kind: "artist"}
 	if pf, ok := f.(curation.ArtistPageFinder); ok {
-		page, ferr := found(pf.SearchArtistPage(ctx, name))
+		page, ferr := queryResult(pf.SearchArtistPage(ctx, name))
 		rows, err, p.PageInfo = page.Items, ferr, page.PageInfo
 	} else {
-		rows, err = found(f.SearchArtists(ctx, name))
+		rows, err = queryResult(f.SearchArtists(ctx, name))
 	}
 	hits := map[string]sources.Artist{}
 	for _, a := range rows {
@@ -457,7 +510,7 @@ func checkArtistNames(ctx context.Context, e catalog.CurationEvidence, rows []so
 		a, ok := known[credit.ArtistID]
 		if !ok {
 			var err error
-			a, err = found(f.ArtistByID(ctx, credit.ArtistID))
+			a, err = queryResult(f.ArtistByID(ctx, credit.ArtistID))
 			if err != nil {
 				return e, nil, err
 			}

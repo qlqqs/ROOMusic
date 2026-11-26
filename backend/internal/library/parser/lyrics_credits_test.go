@@ -18,8 +18,7 @@ func TestLyricsCreditsDesignExamples(t *testing.T) {
 			want: []metadata.Credit{
 				{Role: "lyricist", Name: "冥凰", Source: "lyrics"},
 				{Role: "composer", Name: "兰天奇", Source: "lyrics"},
-				{Role: "arranger", Name: "兰天奇", Source: "lyrics"},
-				{Role: "arranger", Name: "高艺蒙", Source: "lyrics"},
+				{Role: "arranger", Name: "兰天奇/高艺蒙", Source: "lyrics"},
 				{Role: "producer", Name: "梦帆", Source: "lyrics"},
 			},
 		},
@@ -28,8 +27,7 @@ func TestLyricsCreditsDesignExamples(t *testing.T) {
 			want: []metadata.Credit{
 				{Role: "lyricist", Name: "冥凰", Source: "lyrics"},
 				{Role: "composer", Name: "周杰伦", Source: "tag"},
-				{Role: "arranger", Name: "兰天奇", Source: "lyrics"},
-				{Role: "arranger", Name: "高艺蒙", Source: "lyrics"},
+				{Role: "arranger", Name: "兰天奇/高艺蒙", Source: "lyrics"},
 				{Role: "producer", Name: "梦帆", Source: "lyrics"},
 			},
 		},

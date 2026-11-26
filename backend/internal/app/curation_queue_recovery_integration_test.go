@@ -98,3 +98,82 @@ func TestPostgreSQL整理重启复用响应及已提交写入(t *testing.T) {
 	f.assertCount(t, 1, `SELECT count(*) FROM operations WHERE target_id=$1 AND operation_type='release_auto_correction'`, f.a)
 	f.assertCount(t, 0, `SELECT count(*) FROM curation_batches WHERE closed_at IS NULL`)
 }
+
+func TestPostgreSQL整理重启后界面成功仍按原期限探测(t *testing.T) {
+	f := newProgramFixture(t)
+	_, remote := f.tagged(t)
+	f.enable(t)
+	var available atomic.Bool
+	var backgroundReads, uiReads atomic.Int32
+	uiID := "30000000-0000-4000-8000-000000000002"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/mb/release/" + remote.ID:
+			backgroundReads.Add(1)
+			if !available.Load() {
+				w.Header().Set("Retry-After", "245")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			fmt.Fprintf(w, `{"id":%q,"title":"Album A","artist-credit":[{"name":"Artist A","artist":{"id":"a","name":"Artist A"}}],
+				"release-group":{"id":%q},"media":[{"position":1,"track-count":1,"tracks":[
+				{"id":%q,"position":1,"length":100000,"recording":{"id":%q}}]}]}`,
+				remote.ID, remote.Group.ID, remote.Media[0].Tracks[0].ID, remote.Media[0].Tracks[0].RecordingID)
+		case "/mb/release/" + uiID:
+			uiReads.Add(1)
+			fmt.Fprintf(w, `{"id":%q,"title":"界面预览专辑","artist-credit":[{"name":"合成艺人","artist":{"id":"ui","name":"合成艺人"}}],
+				"release-group":{"id":%q},"media":[{"position":1,"track-count":1,"tracks":[
+				{"id":%q,"position":1,"length":100000,"recording":{"id":%q}}]}]}`,
+				uiID, remote.Group.ID, remote.Media[0].Tracks[0].ID, remote.Media[0].Tracks[0].RecordingID)
+		default:
+			t.Errorf("意外请求 %s", r.URL)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+	reconnect := func() *musicbrainz.Client {
+		mb := musicbrainz.New(sources.Options{BaseURL: upstream.URL + "/mb", Now: f.clock.options().Now,
+			NewClient: b3HTTPClient(upstream), Limiter: sources.NewLimiter(0, nil, nil)})
+		f.gate = curation.NewSources(f.application.database,
+			curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: mb, Recordings: mb},
+		).WithScanCheck(f.scanCheck)
+		return mb
+	}
+	reconnect()
+	f.run(t)
+	until := f.clock.options().Now().Add(245 * time.Second)
+	requireWaiting := func() {
+		t.Helper()
+		state := f.stateFor(t, "release", f.a)
+		queues, err := f.worker.QueueProgress(t.Context())
+		requireCurationOK(t, err)
+		q := queues[0]
+		if state.Status != "try_later" || state.RetryCount != 0 || state.NextAttemptAt == nil || !state.NextAttemptAt.Equal(until) ||
+			q.RetryAt == nil || !q.RetryAt.Equal(until) || q.Source == nil || *q.Source != "musicbrainz" || backgroundReads.Load() != 1 {
+			t.Fatalf("原期限 %s 前应只有首个后台失败，专辑 %+v，队列 %+v，后台请求 %d", until, state, q, backgroundReads.Load())
+		}
+	}
+	requireWaiting()
+	f.stop()
+	select {
+	case <-f.done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("首个工作者未退出")
+	}
+
+	mb := reconnect()
+	f.run(t)
+	available.Store(true)
+	release, err := mb.ReleaseByID(t.Context(), uiID)
+	if err != nil || release.ID != uiID || uiReads.Load() != 1 {
+		t.Fatalf("界面请求应真实成功一次，得到 %q，错误 %v，请求 %d", release.ID, err, uiReads.Load())
+	}
+	requireWaiting()
+	f.clock.advance(t, 244*time.Second)
+	requireWaiting()
+	f.clock.advance(t, time.Second)
+	state := f.assertRelease(t, f.a, "matched", "tag_id")
+	if state.NextAttemptAt != nil || state.RetryCount != 0 || state.Attempts != 1 || backgroundReads.Load() != 2 {
+		t.Fatalf("原期限到达后应由第 2 个后台请求恢复并完成，状态 %+v，后台请求 %d", state, backgroundReads.Load())
+	}
+}

@@ -33,13 +33,16 @@ func TestScannerMergeFormatsFilenameInference(t *testing.T) {
 			}
 			for _, track := range candidates[0].Mediums[1] {
 				observation := track.Observation
-				if track.Position < 1 || track.Position > 2 || track.Disc != 1 || observation.Title != fmt.Sprintf("合成曲目%d", track.Position) || observation.Artist != "合成艺人" {
+				if track.Position < 1 || track.Position > 2 || track.Disc != 1 || observation.Title != fmt.Sprintf("合成艺人 - 合成曲目%d", track.Position) || observation.Artist != "未知艺术家" {
 					t.Fatalf("新格式文件名推断不正确：%+v", track)
 				}
-				for _, field := range []string{"title", "artist", "track_number", "disc_number"} {
+				for _, field := range []string{"title", "track_number", "disc_number"} {
 					if !observation.InferredFields[field] || observation.FieldSources[field] != "filename_fallback" {
 						t.Fatalf("%s 未保留文件名推断证据：%+v", field, observation)
 					}
+				}
+				if observation.FieldSources["artist"] != "display_fallback" {
+					t.Fatalf("无标签文件名不应拆出艺人，来源应为 display_fallback：%+v", observation)
 				}
 			}
 		})

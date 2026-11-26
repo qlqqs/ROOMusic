@@ -225,7 +225,7 @@ func liveOracle(t *testing.T, app *integrationTestApplication, admin *integratio
 	})
 	m.localReply = func(item metricsPending) curation.LocalInput {
 		a := known[item.ReleaseID]
-		return curation.LocalInput{Title: a.Title, Artist: a.Artist}
+		return metricLocalAnswer(item, a.Title, a.Artist)
 	}
 	m.configure(t, app, admin, targets, search)
 	return m

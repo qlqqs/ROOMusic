@@ -70,9 +70,17 @@ func TestLimiterWaitDeadlineAndCancellation(t *testing.T) {
 		if err := l.acquire(ctx, true); err != nil {
 			t.Fatal(err)
 		}
-		chat := make(chan error, 1)
+		type waitResult struct {
+			err     error
+			elapsed time.Duration
+		}
+		chat := make(chan waitResult, 1)
 		bg := make(chan error, 1)
-		go func() { chat <- l.acquire(ctx, false) }()
+		go func() {
+			start := time.Now()
+			err := l.acquire(ctx, false)
+			chat <- waitResult{err, time.Since(start)}
+		}()
 		go func() { bg <- l.acquire(ctx, true) }()
 		synctest.Wait()
 		time.Sleep(10*time.Second - time.Nanosecond)
@@ -82,8 +90,8 @@ func TestLimiterWaitDeadlineAndCancellation(t *testing.T) {
 		default:
 		}
 		time.Sleep(2 * time.Nanosecond)
-		if err := <-chat; !errors.Is(err, ErrRateLimited) {
-			t.Fatalf("超过十秒返回 %v", err)
+		if got := <-chat; !errors.Is(got.err, ErrRateLimited) || got.elapsed != 10*time.Second {
+			t.Fatalf("界面应在十秒时返回限流，实际等待 %v，错误 %v", got.elapsed, got.err)
 		}
 		time.Sleep(time.Hour)
 		select {
@@ -96,5 +104,64 @@ func TestLimiterWaitDeadlineAndCancellation(t *testing.T) {
 			t.Fatal(err)
 		}
 		l.release(false)
+	})
+}
+
+func TestLimiterFourQueuePrioritiesAndIndependentSources(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx := t.Context()
+		shared := NewLimiter(time.Second, time.Now, time.After)
+		other := NewLimiter(time.Second, time.Now, time.After)
+		policy := NewQueuePolicy(time.Now)
+		for _, limiter := range []*Limiter{shared, other} {
+			if err := limiter.acquire(ctx, true); err != nil {
+				t.Fatal(err)
+			}
+		}
+		type permit struct {
+			name string
+			err  error
+		}
+		granted := make(chan permit, 5)
+		for _, tc := range []struct {
+			name       string
+			limiter    *Limiter
+			priority   QueuePriority
+			background bool
+		}{
+			{"艺人资料", shared, QueueArtistMedia, true},
+			{"本地齐全识别", shared, QueueLocalComplete, true},
+			{"普通识别", shared, QueueNormal, true},
+			{"界面", shared, QueueNormal, false},
+			{"另一来源", other, QueueArtistMedia, true},
+		} {
+			callCtx := ctx
+			if tc.background {
+				callCtx = policy.Context(ctx, tc.priority, nil)
+			}
+			go func() { granted <- permit{tc.name, tc.limiter.acquire(callCtx, tc.background)} }()
+			synctest.Wait()
+		}
+		requirePermit := func(want string) {
+			t.Helper()
+			synctest.Wait()
+			select {
+			case got := <-granted:
+				if got.err != nil || got.name != want {
+					t.Fatalf("取得许可 %+v，期望 %s", got, want)
+				}
+			default:
+				t.Fatalf("%s 未取得许可", want)
+			}
+		}
+		other.release(false)
+		requirePermit("另一来源")
+		// 留住另一来源的许可，验证本来源无需等待该请求结束。
+		for _, name := range []string{"界面", "普通识别", "本地齐全识别", "艺人资料"} {
+			shared.release(false)
+			requirePermit(name)
+		}
+		shared.release(false)
+		other.release(false)
 	})
 }

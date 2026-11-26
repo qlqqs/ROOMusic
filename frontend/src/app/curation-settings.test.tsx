@@ -163,7 +163,7 @@ describe("总开关与暂停", () => {
 describe("进度", () => {
   it("从未打开过时收成一行；打开后写出状态与计数", async () => {
     const { curation } = setup();
-    curation.releases = { total: 12, processed: 4, matched: 3, unmatched: 0, conflict: 1, try_later: 0 };
+    curation.releases = { total: 12, processed: 4, matched: 3, unmatched: 0, conflict: 1, try_later: 0, query_error: 0 };
     renderApp({ path: "/settings/curation" });
     const progress = await group("进度");
     expect(await within(progress).findByText("未打开 · 曲库共 12 个发行")).toBeTruthy();
@@ -175,7 +175,7 @@ describe("进度", () => {
     seedBatch(curation, { id: BATCH, openedAt: "2026-01-05T00:00:00Z", closedAt: null });
     seedAutoOperation(governance, { type: "external_link", releaseId: releaseOf(albumA()), changes: linkChanges("Sample Symphonies"), provider: "musicbrainz", batchId: BATCH });
     curation.state = "running";
-    curation.releases = { total: 10, processed: 4, matched: 3, unmatched: 0, conflict: 1, try_later: 2 };
+    curation.releases = { total: 10, processed: 4, matched: 3, unmatched: 0, conflict: 1, try_later: 2, query_error: 0 };
     curation.model.items = { ...curation.model.items, waiting_model: 1 };
     renderApp({ path: "/settings/curation" });
     const progress = await group("进度");
@@ -224,12 +224,21 @@ describe("进度：队列、分类与佐证来源（整理链 G）", () => {
   it("结果写出已匹配、未匹配与有冲突；本地分类写四类计数", async () => {
     const { curation } = setup();
     enableCuration(curation);
-    curation.releases = { total: 10, processed: 10, matched: 6, unmatched: 4, conflict: 0, try_later: 0 };
+    curation.releases = { total: 10, processed: 10, matched: 6, unmatched: 4, conflict: 0, try_later: 0, query_error: 0 };
     curation.classifications = { total: 10, tagged_id: 2, has_gaps: 5, local_complete: 2, insufficient: 1 };
     renderApp({ path: "/settings/curation" });
     const progress = await group("进度");
     expect((await within(progress).findByText("结果")).parentElement?.parentElement?.textContent).toBe("结果已匹配 6 · 未匹配 4 · 有冲突 0");
     expect(await within(progress).findByText("带编号 2 · 有缺口 5 · 本地完整 2 · 信息不足 1")).toBeTruthy();
+  });
+
+  it("查询出错有计数时追加结果提示", async () => {
+    const { curation } = setup();
+    enableCuration(curation);
+    curation.releases = { total: 10, processed: 10, matched: 6, unmatched: 2, conflict: 0, try_later: 0, query_error: 2 };
+    renderApp({ path: "/settings/curation" });
+    const progress = await group("进度");
+    expect((await within(progress).findByText("结果")).parentElement?.parentElement?.textContent).toBe("结果已匹配 6 · 未匹配 2 · 有冲突 0 · 查询出错 2");
   });
 
   it("依据库内或网页写入：各写条数，菜单里可以查看与整批撤销", async () => {
@@ -502,7 +511,7 @@ describe("操作记录的自动整理筛选", () => {
 describe("概览", () => {
   it("曲库里有发行而从未打开过：管理员看到提示，不再提示之后不再出现", async () => {
     const { curation } = setup();
-    curation.releases = { total: 3, processed: 0, matched: 0, unmatched: 0, conflict: 0, try_later: 0 };
+    curation.releases = { total: 3, processed: 0, matched: 0, unmatched: 0, conflict: 0, try_later: 0, query_error: 0 };
     const user = userEvent.setup();
     renderApp({ path: "/" });
     expect(await screen.findByText("曲库扫描好了")).toBeTruthy();
@@ -514,7 +523,7 @@ describe("概览", () => {
 
   it("打开过之后不提示；成员不提示也不请求", async () => {
     const { curation } = setup();
-    curation.releases = { total: 3, processed: 0, matched: 0, unmatched: 0, conflict: 0, try_later: 0 };
+    curation.releases = { total: 3, processed: 0, matched: 0, unmatched: 0, conflict: 0, try_later: 0, query_error: 0 };
     enableCuration(curation);
     renderApp({ path: "/" });
     expect(await screen.findByRole("heading", { level: 1, name: "概览" })).toBeTruthy();

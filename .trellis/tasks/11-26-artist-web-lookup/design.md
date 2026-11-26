@@ -70,7 +70,7 @@
 
 迁移在表中插入固定行，并为 `curation_pending_items.artist_web_generation` 建索引。迁移不把历史自动项转入任何代次。旧列默认空值保持可读，down 删除新列和单行表，历史待定项、例外、对应和日账保留。
 
-迁移文件按合入时的最大编号顺延，预定名称为 `backend/migrations/NNNN_artist_web_lookup.sql` 与同名 `.down.sql`。子任务 5 若占用预定编号，由主代理按父任务的迁移顺序调整文件名，不改变 SQL 合同。
+迁移文件为 `backend/migrations/0105_artist_web_lookup.sql` 和 `backend/migrations/0105_artist_web_lookup.down.sql`，排在查询重试（0103）和本地辅助（0104）之后。
 
 ## 4. HTTP 契约
 
@@ -139,7 +139,7 @@
 
 ## 7. 已定口径
 
-1. 迁移文件使用 `NNNN` 占位，合入父任务时按当时最大迁移号顺延。实现与接口文档不依赖具体编号。
+1. 艺人联网队列使用迁移号 0105。
 2. 单艺人接口保留 `/api/v1/artists/{id}/web-search`，全量队列使用 `/api/v1/admin/curation/artist-web-search`，前端按本设计字段读取状态。
 3. 候选 MusicBrainz 艺人名下只要有一张发行（或同组的几版）与本地该艺人的专辑结构吻合，艺人身份直接写入。专辑写入复用子任务 5 的判定，唯一一版认到版本，同组几版认到组且不补版本字段，跨组不写专辑对应并记录冲突，艺人对应仍写入。完全没有结构吻合时才将候选列给用户确认或否掉。
 

@@ -71,14 +71,14 @@ func TestArtworkDirectoriesFollowReleaseDirectoryThenTracks(t *testing.T) {
 			want: []string{"A", "A/CD1", "A/CD2", "A/CD3", "A/CD4", "A/CD5", "A/CD6", "A/CD7", "A/CD8", "A/CD9", "A/CD10"},
 		},
 		{
-			// 非连续碟号不合并，Box 叶子只查自己的目录，不查 Box 父目录。
-			name: "box leaf stays in its own directory",
+			// 整理链归组规则取消了连续碟号前提，Box 叶子按同一逻辑父目录归组。
+			name: "box leaves follow logical parent",
 			observations: []SourceObservation{
 				{RelativePath: "Box/Disc 1/a.flac", Directory: "Box/Disc 1", Album: "Set", DiscNumber: 1, TrackNumber: 1},
 				{RelativePath: "Box/Disc 3/b.flac", Directory: "Box/Disc 3", Album: "Set", DiscNumber: 3, TrackNumber: 1},
 			},
-			kind: CandidateBoxLeaf,
-			want: []string{"Box/Disc 1"},
+			kind: CandidateMultiDisc,
+			want: []string{"Box", "Box/Disc 1", "Box/Disc 3"},
 		},
 		{
 			name: "loose files at the registered root",
@@ -93,12 +93,11 @@ func TestArtworkDirectoriesFollowReleaseDirectoryThenTracks(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			candidates := OrganizeObservations(test.observations)
-			if test.kind == CandidateBoxLeaf {
-				// 两个 Box 叶子各成一个候选，取碟 1 那个。
-				if len(candidates) != 2 {
-					t.Fatalf("candidates = %d, want 2", len(candidates))
+			if test.name == "box leaves follow logical parent" {
+				// 新规则按逻辑父目录合并非连续碟号的 Box 叶子。
+				if len(candidates) != 1 {
+					t.Fatalf("candidates = %d, want 1", len(candidates))
 				}
-				candidates = candidates[:1]
 			}
 			if len(candidates) != 1 || candidates[0].Anchor.Kind != test.kind {
 				t.Fatalf("unexpected candidates: %#v", candidates)

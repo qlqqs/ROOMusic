@@ -2,6 +2,7 @@ package program
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"maps"
 	"slices"
@@ -311,8 +312,19 @@ func mergeLinkedArtists(ctx context.Context, writer *curation.Writer, source cur
 	return nil
 }
 
-func planCreditSplits(local catalog.CurationArtistCredits, e catalog.CurationEvidence, m MatchResult) []curation.CreditSplit {
-	var splits []curation.CreditSplit
+type localCreditRequest struct{ trackID, role, raw string }
+type localCreditRequests []localCreditRequest
+
+func (requests localCreditRequests) project(ctx context.Context, tx *sql.Tx, releaseID string) error {
+	for _, r := range requests {
+		if err := curation.RequestLocalCreditSplit(ctx, tx, releaseID, r.trackID, r.role, "", r.raw); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func planCreditSplits(local catalog.CurationArtistCredits, e catalog.CurationEvidence, m MatchResult) (splits []curation.CreditSplit, requests localCreditRequests) {
 	paired := map[string]string{}
 	for _, p := range m.Pairs {
 		paired[p.TrackID] = p.RecordingID
@@ -345,8 +357,13 @@ func planCreditSplits(local catalog.CurationArtistCredits, e catalog.CurationEvi
 				s.LocalText = e.AlbumArtist
 			}
 		}
-		s.LocalText = strings.TrimSpace(s.LocalText)
-		if s.BasisID == "" || s.LocalText == "" || s.LocalText != strings.TrimSpace(credits(g.external)) {
+		raw := s.LocalText
+		s.LocalText = strings.TrimSpace(raw)
+		if s.BasisID == "" || s.LocalText == "" {
+			continue
+		}
+		if s.LocalText != strings.TrimSpace(credits(g.external)) {
+			requests = append(requests, localCreditRequest{g.trackID, g.role, raw})
 			continue
 		}
 		seenNames, seenIDs := map[string]bool{}, map[string]bool{}
@@ -362,7 +379,7 @@ func planCreditSplits(local catalog.CurationArtistCredits, e catalog.CurationEvi
 			splits = append(splits, s)
 		}
 	}
-	return splits
+	return splits, requests
 }
 
 func writeCreditSplits(ctx context.Context, writer *curation.Writer, req curation.LinkRequest, splits []curation.CreditSplit, write matchStep) error {

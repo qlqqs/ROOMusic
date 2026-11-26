@@ -53,6 +53,8 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       return "合并发行";
     case "release_auto_merge":
       return "自动合并发行";
+    case "local_model_grouping":
+      return "模型归组";
     case "release_auto_correction":
       return item.changes?.kind === "release_auto_invalidation" ? "自动值作废" : "自动补全发行信息";
     case "track_correction":
@@ -84,6 +86,7 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       if (item.changes?.kind === "release_issue_review") return "撤销核对";
       if (item.changes?.kind === "release_claim") return "撤销认领";
       if (item.changes?.kind === "release_merge" || item.changes?.kind === "release_auto_merge") return "撤销合并";
+      if (item.changes?.kind === "local_model_grouping") return "撤销模型归组";
       if (item.changes?.kind === "release_auto_correction") return "撤销自动补全";
       if (item.changes?.kind === "track_correction") return "撤销曲目修改";
       if (item.changes?.kind === "track_auto_correction") return "撤销曲目的自动补全";
@@ -197,6 +200,14 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
       moved === null ? `从${source}认领：没有迁移任何修改` : `从${source}认领：${moved}`,
       ...(kept === null ? [] : [`保留这个版本已有的：${kept}`]),
     ];
+  }
+  // 模型归组：写出归成几张专辑、几碟；撤销（或分配为空）就是恢复为扫描时的归组，之后按目录重扫。
+  if (changes.kind === "local_model_grouping") {
+    const to = reverse ? changes.previous : changes.assignments;
+    if (to === null || to.length === 0) return ["恢复为扫描时的归组"];
+    const albums = new Set(to.map((row) => row.album)).size;
+    const discs = new Set(to.map((row) => `${row.album}/${row.disc}`)).size;
+    return [albums === 1 ? `按模型的判断把 ${to.length} 个文件归成一张专辑${discs > 1 ? `（${discs} 碟）` : ""}` : `按模型的判断把 ${to.length} 个文件分成 ${albums} 张专辑`];
   }
   // 发行整张并入（M7 H）：来源的碟接在这个版本后面；撤销时把碟还给来源，来源恢复为单独的发行。
   if (changes.kind === "release_merge" || changes.kind === "release_auto_merge") {

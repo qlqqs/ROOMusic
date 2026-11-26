@@ -205,12 +205,13 @@ type Alias struct {
 }
 
 var (
-	ErrNotFound     = errors.New("not_found")
-	ErrRateLimited  = errors.New("rate_limited")
-	ErrUnavailable  = errors.New("source_unavailable")
-	ErrTryLater     = errors.New("try_later")
-	ErrInvalidQuery = errors.New("invalid_query")
-	ErrInvalidKey   = errors.New("invalid_key")
+	ErrNotFound        = errors.New("not_found")
+	ErrRateLimited     = errors.New("rate_limited")
+	ErrInvalidResponse = errors.New("invalid_source_response")
+	ErrUnavailable     = errors.New("source_unavailable")
+	ErrTryLater        = errors.New("try_later")
+	ErrInvalidQuery    = errors.New("invalid_query")
+	ErrInvalidKey      = errors.New("invalid_key")
 )
 
 // InvalidKeyError 指明外部源拒绝了哪一项密钥。
