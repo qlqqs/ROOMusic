@@ -15,13 +15,19 @@ type metricScore struct {
 }
 
 type metricDetail struct {
-	ID         string            `json:"id"`
-	Shape      string            `json:"shape"`
-	Complete   bool              `json:"complete"`
-	Match      metricMatch       `json:"match"`
-	Requests   map[string]int    `json:"requests"`
-	Reasons    []metricIssue     `json:"reasons"`
-	ModelItems []metricModelItem `json:"model_items,omitempty"`
+	ID            string             `json:"id"`
+	Shape         string             `json:"shape"`
+	OracleInfoGap bool               `json:"oracle_information_gap,omitempty"`
+	Outcome       string             `json:"outcome"`
+	Accept        []string           `json:"accept"`
+	Accepted      bool               `json:"accepted"`
+	Rejected      []string           `json:"acceptance_issues,omitempty"`
+	Attribution   *metricAttribution `json:"failure_attribution,omitempty"`
+	Complete      bool               `json:"complete"`
+	Match         metricMatch        `json:"match"`
+	Requests      map[string]int     `json:"requests"`
+	Reasons       []metricIssue      `json:"reasons"`
+	ModelItems    []metricModelItem  `json:"model_items,omitempty"`
 }
 
 type metricModelItem struct {
@@ -91,6 +97,9 @@ func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries [
 		releaseIndex[e.release] = i
 		sampleIndex[e.sample.ID] = i
 		own(e.release, i)
+		for _, id := range e.tracks {
+			own(id, i)
+		}
 		for _, id := range e.artists {
 			own(id, i)
 		}
@@ -106,9 +115,11 @@ func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries [
 		LEFT JOIN tracks t ON t.id=c.track_id LEFT JOIN media m ON m.id=t.medium_id`, func(rows *sql.Rows) {
 		var release, name, id string
 		requireCurationOK(t, rows.Scan(&release, &name, &id))
-		if i, ok := releaseIndex[release]; ok {
-			artists[i][name] = id
-			own(id, i)
+		if _, ok := releaseIndex[release]; ok {
+			for _, member := range slices.Clone(owners[release]) {
+				artists[member][name] = id
+				own(id, member)
+			}
 		}
 	})
 
@@ -125,7 +136,7 @@ func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries [
 		requireCurationOK(t, rows.Scan(&id, &group, &m.Status, &m.Method, &conflicts, &m.Level, &m.Rule, &m.CandidateCount, &m.PendingStatus, &m.Resolution))
 		requireCurationOK(t, json.Unmarshal(conflicts, &m.Conflicts))
 		groupIDs[id] = group
-		if i, ok := releaseIndex[id]; ok {
+		for _, i := range owners[id] {
 			scores[i].Match = m
 		}
 	})
@@ -257,6 +268,11 @@ func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries [
 			scores[owner].OpenPending++
 		}
 		scores[owner].OpenExceptions += exceptions
+		if status == "shelved" {
+			for _, i := range involved {
+				scores[i].issue(metricIssue{Kind: "stalled", Target: entries[i].sample.ID, Field: kind, Expected: "自动结束或有计划的重试", Actual: status})
+			}
+		}
 		if open {
 			for _, i := range involved {
 				label := entries[owner].sample.ID
@@ -267,6 +283,7 @@ func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries [
 			}
 		}
 	})
+	metricEvaluateOutcomes(t, app, entries, scores)
 	for i := range scores {
 		issues := scores[i].Reasons
 		slices.SortFunc(issues, func(a, b metricIssue) int {

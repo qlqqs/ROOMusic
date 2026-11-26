@@ -27,6 +27,7 @@ import (
 )
 
 type liveAlbum struct {
+	Expect                         metricExpect `json:"expect"`
 	ID, Group, Artist, Title, Tags string
 	LocalTitle                     string `json:"local_title"`
 	Directory                      string
@@ -125,7 +126,7 @@ func liveScan(t *testing.T, app *integrationTestApplication, admin *integrationT
 
 func liveOracle(t *testing.T, app *integrationTestApplication, admin *integrationTestUser, albums []liveAlbum, search string) *metricsModel {
 	t.Helper()
-	t.Setenv("ROOMUSIC_CURATION_METRICS_MODEL", "oracle")
+	t.Setenv("ROOMUSIC_CURATION_METRICS_MODEL", os.Getenv("ROOMUSIC_LIVE_MODE"))
 	m := newMetricsModel(t)
 	targets := map[string]metricsModelTarget{}
 	known := map[string]liveAlbum{}
@@ -204,8 +205,8 @@ func Test真实曲库队列试用(t *testing.T) {
 	if mode == "" {
 		t.Skip("仅在显式开启真实来源试用时运行")
 	}
-	if mode != "program" && mode != "oracle" && mode != "real" {
-		t.Fatal("ROOMUSIC_LIVE_MODE 只接受 program、oracle 或 real")
+	if mode != "program" && mode != "oracle" && mode != "oracle_open" && mode != "real" {
+		t.Fatal("ROOMUSIC_LIVE_MODE 只接受 program、oracle、oracle_open 或 real")
 	}
 	out := os.Getenv("ROOMUSIC_LIVE_OUT")
 	if out == "" {
@@ -240,7 +241,7 @@ func Test真实曲库队列试用(t *testing.T) {
 	var meter *liveResponseMeter
 	limit := 22 * time.Minute
 	switch mode {
-	case "oracle":
+	case "oracle", "oracle_open":
 		oracle = liveOracle(t, app, &admin, albums, liveSearch(t, &searches))
 	case "real":
 		meter = new(liveResponseMeter)
@@ -332,8 +333,12 @@ func Test真实曲库队列试用(t *testing.T) {
 		requireCurationOK(t, os.WriteFile(out, append(b, '\n'), 0644))
 	}
 	write()
-	result["score"] = liveCorpusScore(t, app, albums, routes)
+	score := liveCorpusScore(t, app, albums, routes)
+	result["score"] = score
 	write()
+	if mode == "real" && score.Attribution["info_missing"] != 0 {
+		t.Errorf("真实试用中 %d 个未完整达标样本缺少决策信息，见逐样本归因", score.Attribution["info_missing"])
+	}
 	if !drained {
 		t.Fatalf("试用超时，已处理 %d/%d，待模型 %d，运行中 %d", p.Releases.Processed, p.Releases.Total, p.Model.Items.WaitingModel, p.Model.Items.InProgress)
 	}

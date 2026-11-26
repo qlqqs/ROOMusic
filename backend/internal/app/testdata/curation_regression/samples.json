@@ -5816,5 +5816,2148 @@
       "group_with": [],
       "merge_artist_with": []
     }
+  },
+  {
+    "id": "disc-folders",
+    "shape": "multidisc",
+    "local": {
+      "directory": "disc-folders",
+      "album": "雁砾双谱",
+      "artist": "砾环室",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "砾环室"},
+      "tracks": [
+        {"file": "CD1/01.flac", "title": "雁砾双谱之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "CD1/02.flac", "title": "雁砾双谱之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "CD2/01.flac", "title": "雁砾双谱之铃", "seconds": 57, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "CD2/02.flac", "title": "雁砾双谱之帆", "seconds": 64, "tags": {"TRACKNUMBER": "2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "0d3808af-3d40-5f7e-86ee-0876702a1232", "name": "砾环室"}
+      ],
+      "releases": [
+        {
+          "id": "4e05f319-cada-587b-8508-3b6585e2df57",
+          "group": "c83973b9-6774-5530-b649-904ae01d4c3b",
+          "title": "雁砾双谱",
+          "grouptitle": "雁砾双谱",
+          "artist": "0d3808af-3d40-5f7e-86ee-0876702a1232",
+          "tracks": [
+            {"id": "6ac798b3-beaa-5a68-a94d-622995990b42", "trackid": "acc8d563-675b-540d-b2da-3f7888af3a1c", "title": "雁砾双谱之楔", "artist": "0d3808af-3d40-5f7e-86ee-0876702a1232", "length": 43000, "disc": 1},
+            {"id": "8f05aef9-b2d6-5eab-962d-a068974644f4", "trackid": "1df4a1df-2430-5ac7-9e9e-5b37c461c75c", "title": "雁砾双谱之绳", "artist": "0d3808af-3d40-5f7e-86ee-0876702a1232", "length": 50000, "disc": 1},
+            {"id": "23aa90a9-6e5e-5704-89dc-acc957f43a4b", "trackid": "43504ee6-e208-5689-b910-b52322804c8f", "title": "雁砾双谱之铃", "artist": "0d3808af-3d40-5f7e-86ee-0876702a1232", "length": 57000, "disc": 2},
+            {"id": "587538f9-ae73-5886-910c-8f922a26f5fb", "trackid": "4a10dcdd-d371-5a76-84c0-eba3111cc56b", "title": "雁砾双谱之帆", "artist": "0d3808af-3d40-5f7e-86ee-0876702a1232", "length": 64000, "disc": 2}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "4e05f319-cada-587b-8508-3b6585e2df57",
+      "group": "c83973b9-6774-5530-b649-904ae01d4c3b",
+      "recordings": ["6ac798b3-beaa-5a68-a94d-622995990b42", "8f05aef9-b2d6-5eab-962d-a068974644f4", "23aa90a9-6e5e-5704-89dc-acc957f43a4b", "587538f9-ae73-5886-910c-8f922a26f5fb"],
+      "artists": {"砾环室": "0d3808af-3d40-5f7e-86ee-0876702a1232"},
+      "scan": {
+        "positions": ["1/1", "1/2", "2/1", "2/2"]
+      }
+    }
+  },
+  {
+    "id": "disc-reset",
+    "shape": "multidisc",
+    "local": {
+      "directory": "disc-reset",
+      "album": "舷灯双匣",
+      "artist": "折砂室",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "折砂室"},
+      "tracks": [
+        {"file": "1-01.flac", "title": "舷灯双匣之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "1-02.flac", "title": "舷灯双匣之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "2-01.flac", "title": "舷灯双匣之铃", "seconds": 57, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "2-02.flac", "title": "舷灯双匣之帆", "seconds": 64, "tags": {"TRACKNUMBER": "2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "b9e9e2c1-40ad-554e-b511-28c0376173d0", "name": "折砂室"}
+      ],
+      "releases": [
+        {
+          "id": "0b085a86-1492-583b-a110-716ff3d9ba36",
+          "group": "2ce4691c-4f00-57ea-a903-1666ba2f7162",
+          "title": "舷灯双匣",
+          "grouptitle": "舷灯双匣",
+          "artist": "b9e9e2c1-40ad-554e-b511-28c0376173d0",
+          "tracks": [
+            {"id": "cdc90a89-775c-5f42-bdac-8663257017cb", "trackid": "31e538e6-beb3-5cf5-9396-b45804ff7879", "title": "舷灯双匣之楔", "artist": "b9e9e2c1-40ad-554e-b511-28c0376173d0", "length": 43000, "disc": 1},
+            {"id": "e0b9985f-3b62-50c7-9189-264ea033b003", "trackid": "ec3206e3-67bc-544c-96f0-c927b3c5d85a", "title": "舷灯双匣之绳", "artist": "b9e9e2c1-40ad-554e-b511-28c0376173d0", "length": 50000, "disc": 1},
+            {"id": "fe1f653f-98fb-5aa4-aeed-e268f82177f5", "trackid": "2eef88cf-4f43-5340-93dc-184d4a426c94", "title": "舷灯双匣之铃", "artist": "b9e9e2c1-40ad-554e-b511-28c0376173d0", "length": 57000, "disc": 2},
+            {"id": "5baa8a28-fc42-51fa-baf9-a5996f276f83", "trackid": "af99f5d0-cfd2-5e16-a9ad-6a6201b3890f", "title": "舷灯双匣之帆", "artist": "b9e9e2c1-40ad-554e-b511-28c0376173d0", "length": 64000, "disc": 2}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "0b085a86-1492-583b-a110-716ff3d9ba36",
+      "group": "2ce4691c-4f00-57ea-a903-1666ba2f7162",
+      "recordings": ["cdc90a89-775c-5f42-bdac-8663257017cb", "e0b9985f-3b62-50c7-9189-264ea033b003", "fe1f653f-98fb-5aa4-aeed-e268f82177f5", "5baa8a28-fc42-51fa-baf9-a5996f276f83"],
+      "artists": {"折砂室": "b9e9e2c1-40ad-554e-b511-28c0376173d0"},
+      "scan": {
+        "positions": ["1/1", "1/2", "2/1", "2/2"],
+        "inferred_positions": true
+      }
+    }
+  },
+  {
+    "id": "subset-alternate",
+    "shape": "subset",
+    "local": {
+      "directory": "subset-alternate",
+      "album": "青瓷旋梯",
+      "artist": "青瓷旋梯社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "青瓷旋梯社"},
+      "tracks": [
+        {"file": "01.flac", "title": "青瓷旋梯之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "03.flac", "title": "青瓷旋梯之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "05.flac", "title": "青瓷旋梯之雾", "seconds": 71, "tags": {"TRACKNUMBER": "5"}},
+        {"file": "07.flac", "title": "青瓷旋梯之羽", "seconds": 85, "tags": {"TRACKNUMBER": "7"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "cfa65188-fa8e-5e07-be66-d895e71b450f", "name": "青瓷旋梯社"}
+      ],
+      "releases": [
+        {
+          "id": "a7a56036-10cd-5199-86ad-75cc4d361b3d",
+          "group": "613c7c1f-54fd-561f-9830-9ab44a8bcce1",
+          "title": "青瓷旋梯",
+          "grouptitle": "青瓷旋梯",
+          "artist": "cfa65188-fa8e-5e07-be66-d895e71b450f",
+          "tracks": [
+            {"id": "78e92414-144b-5a32-89ee-046a9068c0eb", "trackid": "b6e52f33-fc7e-5e7b-bf4f-ff295316b311", "title": "青瓷旋梯之楔", "artist": "cfa65188-fa8e-5e07-be66-d895e71b450f", "length": 43000},
+            {"id": "5f00c62e-f1a1-52ba-8067-ea963f683a66", "trackid": "b4fa8250-b0c5-5f54-9dda-1d2b823816cf", "title": "青瓷旋梯之绳", "artist": "cfa65188-fa8e-5e07-be66-d895e71b450f", "length": 50000},
+            {"id": "52b85bf9-3e5f-5cc7-87fd-3e3aee429aaf", "trackid": "6420827e-a511-5a1d-bb79-fa819fc3a1bf", "title": "青瓷旋梯之铃", "artist": "cfa65188-fa8e-5e07-be66-d895e71b450f", "length": 57000},
+            {"id": "4afb4343-f015-5dfb-a039-b5c500688b0d", "trackid": "1c3b2344-5910-5cc3-8197-4451dff1e9e0", "title": "青瓷旋梯之帆", "artist": "cfa65188-fa8e-5e07-be66-d895e71b450f", "length": 64000},
+            {"id": "fa822fd0-28f5-548c-93d7-f1b0ed0e8077", "trackid": "e358384e-4ae5-5a9a-81cd-d0851f87cba3", "title": "青瓷旋梯之雾", "artist": "cfa65188-fa8e-5e07-be66-d895e71b450f", "length": 71000},
+            {"id": "741a60de-8169-54ae-a93d-2948c1dfad90", "trackid": "e176f8de-0a83-5478-b376-fca9d7358538", "title": "青瓷旋梯之砂", "artist": "cfa65188-fa8e-5e07-be66-d895e71b450f", "length": 78000},
+            {"id": "44141114-1810-5820-af32-59bc4a88e302", "trackid": "71bd0649-9693-5569-93e5-7fa0f2cb3947", "title": "青瓷旋梯之羽", "artist": "cfa65188-fa8e-5e07-be66-d895e71b450f", "length": 85000},
+            {"id": "8cbd0cdb-ec6b-5cea-9d06-10ea70863e2b", "trackid": "791dd123-80fd-5aca-8067-c06e66c97c05", "title": "青瓷旋梯之堤", "artist": "cfa65188-fa8e-5e07-be66-d895e71b450f", "length": 92000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release_group"],
+      "group": "613c7c1f-54fd-561f-9830-9ab44a8bcce1",
+      "artists": {"青瓷旋梯社": "cfa65188-fa8e-5e07-be66-d895e71b450f"},
+      "group_match": "613c7c1f-54fd-561f-9830-9ab44a8bcce1"
+    }
+  },
+  {
+    "id": "subset-too-small",
+    "shape": "subset",
+    "local": {
+      "directory": "subset-too-small",
+      "album": "砂铜微径",
+      "artist": "砂铜微径社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "砂铜微径社"},
+      "tracks": [
+        {"file": "01.flac", "title": "砂铜微径之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "03.flac", "title": "砂铜微径之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "05.flac", "title": "砂铜微径之雾", "seconds": 71, "tags": {"TRACKNUMBER": "5"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "0ef1f173-e10a-55b2-a993-d9301a988143", "name": "砂铜微径社"}
+      ],
+      "releases": [
+        {
+          "id": "14473a8d-62f4-5138-81a3-dbbbf70ac07d",
+          "group": "71e02bc3-c8aa-5147-ae9f-8c915d4129bb",
+          "title": "砂铜微径",
+          "grouptitle": "砂铜微径",
+          "artist": "0ef1f173-e10a-55b2-a993-d9301a988143",
+          "tracks": [
+            {"id": "ba478c69-b4d9-5fb0-a062-7624fa532189", "trackid": "3f6cd4df-f162-55a2-83c7-f5e61970201f", "title": "砂铜微径之楔", "artist": "0ef1f173-e10a-55b2-a993-d9301a988143", "length": 43000},
+            {"id": "61680374-ee31-5d39-94e7-ae256fdee212", "trackid": "5eaa0215-4614-517c-9f16-9b4c004596f8", "title": "砂铜微径之绳", "artist": "0ef1f173-e10a-55b2-a993-d9301a988143", "length": 50000},
+            {"id": "9502345a-4a34-58c1-a702-365ebc6f9993", "trackid": "6b4e456a-b0d4-5b5e-93eb-5179aa8873c1", "title": "砂铜微径之铃", "artist": "0ef1f173-e10a-55b2-a993-d9301a988143", "length": 57000},
+            {"id": "3c09db4e-232b-5605-849a-6aaaac72368e", "trackid": "987553b1-f144-5abb-b78b-cee540468102", "title": "砂铜微径之帆", "artist": "0ef1f173-e10a-55b2-a993-d9301a988143", "length": 64000},
+            {"id": "452251d1-99ae-554c-9f26-dbe23ea36929", "trackid": "b8f8a7b0-ca33-5605-824b-629e6532a09a", "title": "砂铜微径之雾", "artist": "0ef1f173-e10a-55b2-a993-d9301a988143", "length": 71000},
+            {"id": "578891f2-ff46-5992-999a-cea181ddd9fc", "trackid": "aa9e603f-958d-5b60-b22c-a905b78e6881", "title": "砂铜微径之砂", "artist": "0ef1f173-e10a-55b2-a993-d9301a988143", "length": 78000},
+            {"id": "7ddfb385-35f4-55f6-a197-5b7915f56732", "trackid": "82915c42-5eae-525e-a4b4-121fd9183f4a", "title": "砂铜微径之羽", "artist": "0ef1f173-e10a-55b2-a993-d9301a988143", "length": 85000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["unlisted"],
+      "artists": {"砂铜微径社": "0ef1f173-e10a-55b2-a993-d9301a988143"}
+    }
+  },
+  {
+    "id": "bonus-tail",
+    "shape": "superset",
+    "local": {
+      "directory": "bonus-tail",
+      "album": "芒灯小径",
+      "artist": "芒灯小径社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "芒灯小径社"},
+      "tracks": [
+        {"file": "01.flac", "title": "芒灯小径之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "芒灯小径之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "芒灯小径之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "芒灯小径之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}},
+        {"file": "bonus.flac", "title": "悬匣小曲", "seconds": 82, "tags": {"TRACKNUMBER": "5"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "a1294146-acc0-5801-a5c5-0f0c02fe5e29", "name": "芒灯小径社"}
+      ],
+      "releases": [
+        {
+          "id": "7f5b9c42-3587-5197-bf98-bf22632c7087",
+          "group": "0962ef95-c68b-59ee-92d9-e31fe19f2689",
+          "title": "芒灯小径",
+          "grouptitle": "芒灯小径",
+          "artist": "a1294146-acc0-5801-a5c5-0f0c02fe5e29",
+          "tracks": [
+            {"id": "785e09f2-fdf3-562b-af7f-343ca9679cbf", "trackid": "424f487a-0aef-56a1-98f4-421493b90ec1", "title": "芒灯小径之楔", "artist": "a1294146-acc0-5801-a5c5-0f0c02fe5e29", "length": 43000},
+            {"id": "ecdf3ac1-8ab6-57af-a13d-8d8e0c2ab680", "trackid": "a718a0b5-b3b8-538e-b83f-e37c5d978fc0", "title": "芒灯小径之绳", "artist": "a1294146-acc0-5801-a5c5-0f0c02fe5e29", "length": 50000},
+            {"id": "03f66291-4625-5654-b971-593cdd11186c", "trackid": "9ae1bb08-ebb0-5372-94f7-1a5e6be7a32a", "title": "芒灯小径之铃", "artist": "a1294146-acc0-5801-a5c5-0f0c02fe5e29", "length": 57000},
+            {"id": "f728a74f-28f9-5ab4-8449-e8a512d84f59", "trackid": "10a32942-08d4-5feb-b06b-18e1ff369385", "title": "芒灯小径之帆", "artist": "a1294146-acc0-5801-a5c5-0f0c02fe5e29", "length": 64000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release_group"],
+      "group": "0962ef95-c68b-59ee-92d9-e31fe19f2689",
+      "artists": {"芒灯小径社": "a1294146-acc0-5801-a5c5-0f0c02fe5e29"},
+      "group_match": "0962ef95-c68b-59ee-92d9-e31fe19f2689"
+    }
+  },
+  {
+    "id": "bonus-middle",
+    "shape": "superset",
+    "local": {
+      "directory": "bonus-middle",
+      "album": "檀格暗渠",
+      "artist": "檀格暗渠社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "檀格暗渠社"},
+      "tracks": [
+        {"file": "01.flac", "title": "檀格暗渠之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "檀格暗渠之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "bonus.flac", "title": "悬匣小曲", "seconds": 82, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "03.flac", "title": "檀格暗渠之铃", "seconds": 57, "tags": {"TRACKNUMBER": "4"}},
+        {"file": "04.flac", "title": "檀格暗渠之帆", "seconds": 64, "tags": {"TRACKNUMBER": "5"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "d530eb80-6ad3-5ca5-9864-1362b6628275", "name": "檀格暗渠社"}
+      ],
+      "releases": [
+        {
+          "id": "ae3a4d57-6206-5d38-88f1-645457d97c36",
+          "group": "457e8a9f-c310-5399-b7ba-af97e8cfdc33",
+          "title": "檀格暗渠",
+          "grouptitle": "檀格暗渠",
+          "artist": "d530eb80-6ad3-5ca5-9864-1362b6628275",
+          "tracks": [
+            {"id": "f45001e7-dbe1-5aac-beb2-5ea463262815", "trackid": "b42ef9bd-d6a3-5e67-8cd1-24cfea47aab6", "title": "檀格暗渠之楔", "artist": "d530eb80-6ad3-5ca5-9864-1362b6628275", "length": 43000},
+            {"id": "a12a3e08-a769-50d6-a1e7-d81b8a8465c3", "trackid": "1ce0c39a-e75d-511b-b05f-0a2866ad361d", "title": "檀格暗渠之绳", "artist": "d530eb80-6ad3-5ca5-9864-1362b6628275", "length": 50000},
+            {"id": "561ed3a8-85b2-5f68-8ca2-b049af39d885", "trackid": "165d79ea-91c7-5114-8692-eb70f7ca8982", "title": "檀格暗渠之铃", "artist": "d530eb80-6ad3-5ca5-9864-1362b6628275", "length": 57000},
+            {"id": "dd156116-0142-514e-9084-7d61f71a04fa", "trackid": "f48a9b1f-04f2-51b6-b84b-035f0f9e72c6", "title": "檀格暗渠之帆", "artist": "d530eb80-6ad3-5ca5-9864-1362b6628275", "length": 64000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["unlisted"],
+      "artists": {"檀格暗渠社": "d530eb80-6ad3-5ca5-9864-1362b6628275"}
+    }
+  },
+  {
+    "id": "single-side-a",
+    "shape": "single_b_side",
+    "local": {
+      "directory": "single-side-a",
+      "album": "灰砾灯塔",
+      "artist": "灰砾灯塔社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "灰砾灯塔社"},
+      "tracks": [
+        {"file": "01.flac", "title": "灰砾灯塔之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "70d8ff4e-8fba-57e7-8260-9ac33fb9756b", "name": "灰砾灯塔社"}
+      ],
+      "releases": [
+        {
+          "id": "0179d359-a206-54ce-b34d-6ad6aa419643",
+          "group": "a3a206de-b590-587e-b89f-ca1638b4ba2f",
+          "title": "灰砾灯塔",
+          "grouptitle": "灰砾灯塔",
+          "artist": "70d8ff4e-8fba-57e7-8260-9ac33fb9756b",
+          "tracks": [
+            {"id": "f46aa67a-878d-5e0c-b992-9a395c317af9", "trackid": "732166e2-477d-5982-a3d7-87f03c7d8195", "title": "灰砾灯塔之楔", "artist": "70d8ff4e-8fba-57e7-8260-9ac33fb9756b", "length": 43000},
+            {"id": "fd5749b8-9b58-5623-a528-9d432ad1ff44", "trackid": "7880010d-5eba-5836-838e-4e4adf40a301", "title": "灰砾灯塔之绳", "artist": "70d8ff4e-8fba-57e7-8260-9ac33fb9756b", "length": 50000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["unlisted"],
+      "artists": {"灰砾灯塔社": "70d8ff4e-8fba-57e7-8260-9ac33fb9756b"}
+    }
+  },
+  {
+    "id": "single-side-b",
+    "shape": "single_b_side",
+    "local": {
+      "directory": "single-side-b",
+      "album": "旧栈沙盘",
+      "artist": "旧栈沙盘社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "旧栈沙盘社"},
+      "tracks": [
+        {"file": "02.flac", "title": "旧栈沙盘之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "60d8d630-d3e3-5f61-9629-2888683d7878", "name": "旧栈沙盘社"}
+      ],
+      "releases": [
+        {
+          "id": "a665bbce-804a-5eb4-b13c-335ccd616ac7",
+          "group": "719ce6f8-0d58-50e1-8f6b-2c8d43068508",
+          "title": "旧栈沙盘",
+          "grouptitle": "旧栈沙盘",
+          "artist": "60d8d630-d3e3-5f61-9629-2888683d7878",
+          "tracks": [
+            {"id": "f5856235-7b42-5d26-9ce5-daaa5bf4fdd8", "trackid": "72714236-50d4-5a0f-8b94-6e82ef324ae0", "title": "旧栈沙盘之楔", "artist": "60d8d630-d3e3-5f61-9629-2888683d7878", "length": 43000},
+            {"id": "8d7e5a28-51a1-5f56-b992-38d708a4d907", "trackid": "328f76aa-5f2f-5ec8-b5a9-92417c1429ce", "title": "旧栈沙盘之绳", "artist": "60d8d630-d3e3-5f61-9629-2888683d7878", "length": 50000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["unlisted"],
+      "artists": {"旧栈沙盘社": "60d8d630-d3e3-5f61-9629-2888683d7878"}
+    }
+  },
+  {
+    "id": "noise-year",
+    "shape": "noisy_directory",
+    "local": {
+      "directory": "砂廊回钟室 - 2007 - 砂廊回钟 [FLAC]",
+      "album": "",
+      "artist": "砂廊回钟室",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "砂廊回钟室"},
+      "tracks": [
+        {"file": "01.flac", "title": "砂廊回钟之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "砂廊回钟之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "砂廊回钟之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "砂廊回钟之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "6a7575ae-4a41-5b3d-8522-6e8a59e9bb35", "name": "砂廊回钟室"}
+      ],
+      "releases": [
+        {
+          "id": "91a9ae50-af5d-56c9-b1be-87c81e676e45",
+          "group": "a205f3dd-b2c2-5a3e-98c5-b814c0511366",
+          "title": "砂廊回钟",
+          "grouptitle": "砂廊回钟",
+          "artist": "6a7575ae-4a41-5b3d-8522-6e8a59e9bb35",
+          "tracks": [
+            {"id": "0cb4e46c-2d92-55ea-ab9c-7a07577cd9a1", "trackid": "89fb599e-0517-5aff-bd5f-b2449adad077", "title": "砂廊回钟之楔", "artist": "6a7575ae-4a41-5b3d-8522-6e8a59e9bb35", "length": 43000},
+            {"id": "a0776d0c-bcf7-559d-b366-e732cb3e36f8", "trackid": "77a94765-785f-5dd8-b400-4c81fa72ddee", "title": "砂廊回钟之绳", "artist": "6a7575ae-4a41-5b3d-8522-6e8a59e9bb35", "length": 50000},
+            {"id": "ae024ac3-ae09-5006-a679-6a11ccd01783", "trackid": "0d068291-242f-57e8-9a58-b54316e1d815", "title": "砂廊回钟之铃", "artist": "6a7575ae-4a41-5b3d-8522-6e8a59e9bb35", "length": 57000},
+            {"id": "d7d77c85-efdd-50fc-a9a6-cdd04e1b166e", "trackid": "e0b14db8-5661-5d60-9d31-839adcc48d15", "title": "砂廊回钟之帆", "artist": "6a7575ae-4a41-5b3d-8522-6e8a59e9bb35", "length": 64000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "91a9ae50-af5d-56c9-b1be-87c81e676e45",
+      "group": "a205f3dd-b2c2-5a3e-98c5-b814c0511366",
+      "recordings": ["0cb4e46c-2d92-55ea-ab9c-7a07577cd9a1", "a0776d0c-bcf7-559d-b366-e732cb3e36f8", "ae024ac3-ae09-5006-a679-6a11ccd01783", "d7d77c85-efdd-50fc-a9a6-cdd04e1b166e"],
+      "artists": {"砂廊回钟室": "6a7575ae-4a41-5b3d-8522-6e8a59e9bb35"},
+      "scan": {"title": "砂廊回钟", "title_auth": "inferred"}
+    }
+  },
+  {
+    "id": "noise-bitrate",
+    "shape": "noisy_directory",
+    "local": {
+      "directory": "[2014] 潮铰薄暮 320kbps",
+      "album": "潮铰薄暮 320kbps",
+      "artist": "潮铰薄暮室",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "潮铰薄暮室"},
+      "tracks": [
+        {"file": "01.flac", "title": "潮铰薄暮之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "潮铰薄暮之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "潮铰薄暮之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "潮铰薄暮之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}},
+        {"file": "05.flac", "title": "潮铰薄暮之雾", "seconds": 71, "tags": {"TRACKNUMBER": "5"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "e06e698a-eaef-56e3-8f2d-155239fa539e", "name": "潮铰薄暮室"}
+      ],
+      "releases": [
+        {
+          "id": "aca7a7ba-4cea-5996-8c39-5d9ecb45c126",
+          "group": "626301f5-76ba-5d8c-aed6-357d13e8d46b",
+          "title": "潮铰薄暮",
+          "grouptitle": "潮铰薄暮",
+          "artist": "e06e698a-eaef-56e3-8f2d-155239fa539e",
+          "tracks": [
+            {"id": "6b43eb4e-0bef-5bc8-aea1-73d07727baac", "trackid": "c6f57936-8c5c-5e6d-afb5-4adface8009d", "title": "潮铰薄暮之楔", "artist": "e06e698a-eaef-56e3-8f2d-155239fa539e", "length": 43000},
+            {"id": "9a70af36-32f6-5636-9fc9-c3efb89e985b", "trackid": "d6820030-583c-5263-b51a-492811a3e929", "title": "潮铰薄暮之绳", "artist": "e06e698a-eaef-56e3-8f2d-155239fa539e", "length": 50000},
+            {"id": "6a71d0ff-0494-59ad-99b6-3d02850cf19b", "trackid": "7499b958-baf1-54e9-9fe5-48f98f5a0654", "title": "潮铰薄暮之铃", "artist": "e06e698a-eaef-56e3-8f2d-155239fa539e", "length": 57000},
+            {"id": "f2e17463-9d8c-54ef-89ac-1f1db66b3d04", "trackid": "fc651141-5dcc-558e-9a98-b3aeb2814045", "title": "潮铰薄暮之帆", "artist": "e06e698a-eaef-56e3-8f2d-155239fa539e", "length": 64000},
+            {"id": "c9b5999a-49d1-5cac-8c4e-62017f2cb45a", "trackid": "5e787e50-dd6e-53d1-ae5c-21939fd65ef4", "title": "潮铰薄暮之雾", "artist": "e06e698a-eaef-56e3-8f2d-155239fa539e", "length": 71000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "aca7a7ba-4cea-5996-8c39-5d9ecb45c126",
+      "group": "626301f5-76ba-5d8c-aed6-357d13e8d46b",
+      "recordings": ["6b43eb4e-0bef-5bc8-aea1-73d07727baac", "9a70af36-32f6-5636-9fc9-c3efb89e985b", "6a71d0ff-0494-59ad-99b6-3d02850cf19b", "f2e17463-9d8c-54ef-89ac-1f1db66b3d04", "c9b5999a-49d1-5cac-8c4e-62017f2cb45a"],
+      "artists": {"潮铰薄暮室": "e06e698a-eaef-56e3-8f2d-155239fa539e"},
+      "scan": {"relaxed_title": "潮铰薄暮"}
+    }
+  },
+  {
+    "id": "legacy-id3v1",
+    "shape": "legacy_encoding",
+    "local": {
+      "directory": "legacy-id3v1",
+      "album": "",
+      "artist": "Kestrel Foil Loft",
+      "format": "id3v1",
+      "tags": {"ALBUMARTIST": "Kestrel Foil Loft"},
+      "tracks": [
+        {"file": "01.mp3", "title": "Paper Spindle", "seconds": 43, "tags": {"TRACKNUMBER": "1"}}
+      ],
+      "legacy_album_hex": "c8a5b5e5ceed"
+    },
+    "external": {
+      "artists": [],
+      "releases": []
+    },
+    "expect": {
+      "accept": ["local_cleanup"],
+      "scan": {
+        "title": "È¥µåÎí",
+        "forbidden_query": ["È¥µåÎí"],
+        "local_title": "去靛雾"
+      },
+      "fields": {"title": "去靛雾"}
+    }
+  },
+  {
+    "id": "legacy-latin1",
+    "shape": "legacy_encoding",
+    "local": {
+      "directory": "legacy-latin1",
+      "album": "",
+      "artist": "Kestrel Foil Spindle",
+      "format": "latin1",
+      "tags": {"ALBUMARTIST": "Kestrel Foil Spindle"},
+      "tracks": [
+        {"file": "01.mp3", "title": "Tin Lattice", "seconds": 43, "tags": {"TRACKNUMBER": "1"}}
+      ],
+      "legacy_album_hex": "b5e5ceed"
+    },
+    "external": {
+      "artists": [],
+      "releases": []
+    },
+    "expect": {
+      "accept": ["local_cleanup", "unlisted"],
+      "scan": {
+        "title": "µåÎí",
+        "forbidden_query": ["µåÎí"],
+        "decodings": ["靛雾", "萄昲"],
+        "require_local_item": true
+      }
+    }
+  },
+  {
+    "id": "credits-ft",
+    "shape": "joint_credit",
+    "local": {
+      "directory": "credits-ft",
+      "album": "釉窗横笛",
+      "artist": "磁纹枝 ft. 砂翅钟",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "磁纹枝 ft. 砂翅钟"},
+      "tracks": [
+        {"file": "01.flac", "title": "釉窗横笛之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "釉窗横笛之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "釉窗横笛之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "釉窗横笛之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "1694a3d8-4996-5545-8578-c25647dcc3c9", "name": "磁纹枝"},
+        {"id": "e8fc2bbc-1501-5da8-8e07-3d00a6fb4746", "name": "砂翅钟"}
+      ],
+      "releases": [
+        {
+          "id": "04c25ec2-03e3-560e-a54c-58c9b728e2e7",
+          "group": "411b3b18-ab39-5bfb-9ab1-25c19668e785",
+          "title": "釉窗横笛",
+          "grouptitle": "釉窗横笛",
+          "artist": "1694a3d8-4996-5545-8578-c25647dcc3c9",
+          "tracks": [
+            {
+              "id": "8d9b868a-86b2-54cb-9574-106b0b2d84a5",
+              "trackid": "0e7be3fc-5aec-5200-b142-3c70ea7d1ce5",
+              "title": "釉窗横笛之楔",
+              "artist": "1694a3d8-4996-5545-8578-c25647dcc3c9",
+              "length": 43000,
+              "credits": [
+                {"artist": "1694a3d8-4996-5545-8578-c25647dcc3c9", "joinphrase": " featuring "},
+                {"artist": "e8fc2bbc-1501-5da8-8e07-3d00a6fb4746"}
+              ]
+            },
+            {
+              "id": "c1c1b145-4918-5c62-a76b-d0ea262b3129",
+              "trackid": "92775168-1b83-5b77-8d7a-317751f45529",
+              "title": "釉窗横笛之绳",
+              "artist": "1694a3d8-4996-5545-8578-c25647dcc3c9",
+              "length": 50000,
+              "credits": [
+                {"artist": "1694a3d8-4996-5545-8578-c25647dcc3c9", "joinphrase": " featuring "},
+                {"artist": "e8fc2bbc-1501-5da8-8e07-3d00a6fb4746"}
+              ]
+            },
+            {
+              "id": "d40b86b9-0586-5a14-bcd8-16f8c4c39348",
+              "trackid": "2af3461e-4814-5999-a12b-e682db42165c",
+              "title": "釉窗横笛之铃",
+              "artist": "1694a3d8-4996-5545-8578-c25647dcc3c9",
+              "length": 57000,
+              "credits": [
+                {"artist": "1694a3d8-4996-5545-8578-c25647dcc3c9", "joinphrase": " featuring "},
+                {"artist": "e8fc2bbc-1501-5da8-8e07-3d00a6fb4746"}
+              ]
+            },
+            {
+              "id": "a1b0322b-9bfb-5213-a211-a338dd98d243",
+              "trackid": "4e8aa4de-c8ab-5834-9617-250537148800",
+              "title": "釉窗横笛之帆",
+              "artist": "1694a3d8-4996-5545-8578-c25647dcc3c9",
+              "length": 64000,
+              "credits": [
+                {"artist": "1694a3d8-4996-5545-8578-c25647dcc3c9", "joinphrase": " featuring "},
+                {"artist": "e8fc2bbc-1501-5da8-8e07-3d00a6fb4746"}
+              ]
+            }
+          ],
+          "credits": [
+            {"artist": "1694a3d8-4996-5545-8578-c25647dcc3c9", "joinphrase": " featuring "},
+            {"artist": "e8fc2bbc-1501-5da8-8e07-3d00a6fb4746"}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "04c25ec2-03e3-560e-a54c-58c9b728e2e7",
+      "group": "411b3b18-ab39-5bfb-9ab1-25c19668e785",
+      "recordings": ["8d9b868a-86b2-54cb-9574-106b0b2d84a5", "c1c1b145-4918-5c62-a76b-d0ea262b3129", "d40b86b9-0586-5a14-bcd8-16f8c4c39348", "a1b0322b-9bfb-5213-a211-a338dd98d243"],
+      "artists": {"磁纹枝": "1694a3d8-4996-5545-8578-c25647dcc3c9", "砂翅钟": "e8fc2bbc-1501-5da8-8e07-3d00a6fb4746"}
+    }
+  },
+  {
+    "id": "credits-ideographic",
+    "shape": "joint_credit",
+    "local": {
+      "directory": "credits-ideographic",
+      "album": "雾枢方阵",
+      "artist": "苍灯格、赤砾匣",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "苍灯格、赤砾匣"},
+      "tracks": [
+        {"file": "01.flac", "title": "雾枢方阵之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "雾枢方阵之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "雾枢方阵之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "雾枢方阵之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "09002bc9-3fd2-5510-b5ee-ca84b764cdfa", "name": "苍灯格"},
+        {"id": "a12c2a26-6a2b-5cf6-bcf6-5c70f40d2509", "name": "赤砾匣"}
+      ],
+      "releases": [
+        {
+          "id": "3a5efe55-4d31-5cf1-8e81-8f4dc17ea126",
+          "group": "652794c4-6f2a-525d-919a-935d747d3ac9",
+          "title": "雾枢方阵",
+          "grouptitle": "雾枢方阵",
+          "artist": "09002bc9-3fd2-5510-b5ee-ca84b764cdfa",
+          "tracks": [
+            {
+              "id": "3dd60539-2d4a-5edb-b738-b3dd2b800a2c",
+              "trackid": "070b2fa7-731f-5290-a1fd-69f5d4d33d0e",
+              "title": "雾枢方阵之楔",
+              "artist": "09002bc9-3fd2-5510-b5ee-ca84b764cdfa",
+              "length": 43000,
+              "credits": [
+                {"artist": "09002bc9-3fd2-5510-b5ee-ca84b764cdfa", "joinphrase": " & "},
+                {"artist": "a12c2a26-6a2b-5cf6-bcf6-5c70f40d2509"}
+              ]
+            },
+            {
+              "id": "acda9547-ab4d-52b8-973c-ea872cd838f0",
+              "trackid": "4c9cf2ed-f3d9-51f0-9892-b3933716f122",
+              "title": "雾枢方阵之绳",
+              "artist": "09002bc9-3fd2-5510-b5ee-ca84b764cdfa",
+              "length": 50000,
+              "credits": [
+                {"artist": "09002bc9-3fd2-5510-b5ee-ca84b764cdfa", "joinphrase": " & "},
+                {"artist": "a12c2a26-6a2b-5cf6-bcf6-5c70f40d2509"}
+              ]
+            },
+            {
+              "id": "b4fb3742-19aa-558c-a475-69d02f2f3187",
+              "trackid": "abef9ee3-099e-577c-ac32-4d8e7797a0ab",
+              "title": "雾枢方阵之铃",
+              "artist": "09002bc9-3fd2-5510-b5ee-ca84b764cdfa",
+              "length": 57000,
+              "credits": [
+                {"artist": "09002bc9-3fd2-5510-b5ee-ca84b764cdfa", "joinphrase": " & "},
+                {"artist": "a12c2a26-6a2b-5cf6-bcf6-5c70f40d2509"}
+              ]
+            },
+            {
+              "id": "4f7124da-506f-51ee-9f63-fcb0d492cd40",
+              "trackid": "eb5c55b6-c1e1-55ec-a4fa-819dcbd3f6dc",
+              "title": "雾枢方阵之帆",
+              "artist": "09002bc9-3fd2-5510-b5ee-ca84b764cdfa",
+              "length": 64000,
+              "credits": [
+                {"artist": "09002bc9-3fd2-5510-b5ee-ca84b764cdfa", "joinphrase": " & "},
+                {"artist": "a12c2a26-6a2b-5cf6-bcf6-5c70f40d2509"}
+              ]
+            }
+          ],
+          "credits": [
+            {"artist": "09002bc9-3fd2-5510-b5ee-ca84b764cdfa", "joinphrase": " & "},
+            {"artist": "a12c2a26-6a2b-5cf6-bcf6-5c70f40d2509"}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "3a5efe55-4d31-5cf1-8e81-8f4dc17ea126",
+      "group": "652794c4-6f2a-525d-919a-935d747d3ac9",
+      "recordings": ["3dd60539-2d4a-5edb-b738-b3dd2b800a2c", "acda9547-ab4d-52b8-973c-ea872cd838f0", "b4fb3742-19aa-558c-a475-69d02f2f3187", "4f7124da-506f-51ee-9f63-fcb0d492cd40"],
+      "artists": {"苍灯格": "09002bc9-3fd2-5510-b5ee-ca84b764cdfa", "赤砾匣": "a12c2a26-6a2b-5cf6-bcf6-5c70f40d2509"}
+    }
+  },
+  {
+    "id": "sampler-even",
+    "shape": "compilation_no_albumartist",
+    "local": {
+      "directory": "sampler-even",
+      "album": "汐格合声",
+      "artist": "",
+      "format": "flac",
+      "tags": {},
+      "tracks": [
+        {"file": "01.flac", "title": "汐格合声之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}, "artist": "汐格合声甲"},
+        {"file": "02.flac", "title": "汐格合声之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}, "artist": "汐格合声甲"},
+        {"file": "03.flac", "title": "汐格合声之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}, "artist": "汐格合声乙"},
+        {"file": "04.flac", "title": "汐格合声之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}, "artist": "汐格合声丙"}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "89ad4ac3-39f7-470e-963a-56509c546377", "name": "Various Artists"},
+        {"id": "c1b1760f-00bf-5151-91f4-33334f874ff4", "name": "汐格合声甲"},
+        {"id": "0f02aced-e526-5b9e-b6fa-a4cb253bae35", "name": "汐格合声乙"},
+        {"id": "f73c1121-0309-5d33-984b-ee834b8e8434", "name": "汐格合声丙"}
+      ],
+      "releases": [
+        {
+          "id": "fec4ca6f-3e2f-54cc-858c-64fa73d519b7",
+          "group": "c5c7234b-b2a6-553d-9905-4193ef28aae8",
+          "title": "汐格合声",
+          "grouptitle": "汐格合声",
+          "artist": "89ad4ac3-39f7-470e-963a-56509c546377",
+          "tracks": [
+            {"id": "59bbe3f3-aa1e-52be-905a-cbf152c385d8", "trackid": "4b67d1bf-4373-589f-b2e4-00c17b757029", "title": "汐格合声之楔", "artist": "c1b1760f-00bf-5151-91f4-33334f874ff4", "length": 43000},
+            {"id": "b816bf08-c180-5e28-b68c-0f4d040c5832", "trackid": "a9a7dee3-30ed-5fd6-8519-49d680dcac0a", "title": "汐格合声之绳", "artist": "c1b1760f-00bf-5151-91f4-33334f874ff4", "length": 50000},
+            {"id": "83e8fc4e-140e-51f3-a056-24075eb69d3d", "trackid": "94ac14ad-2fb9-570d-9541-b4c0003244e3", "title": "汐格合声之铃", "artist": "0f02aced-e526-5b9e-b6fa-a4cb253bae35", "length": 57000},
+            {"id": "a2305fc6-6655-503c-adf8-902054004ec3", "trackid": "9706dde3-aa65-5f2f-b826-bbafa3eba4e3", "title": "汐格合声之帆", "artist": "f73c1121-0309-5d33-984b-ee834b8e8434", "length": 64000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "fec4ca6f-3e2f-54cc-858c-64fa73d519b7",
+      "group": "c5c7234b-b2a6-553d-9905-4193ef28aae8",
+      "recordings": ["59bbe3f3-aa1e-52be-905a-cbf152c385d8", "b816bf08-c180-5e28-b68c-0f4d040c5832", "83e8fc4e-140e-51f3-a056-24075eb69d3d", "a2305fc6-6655-503c-adf8-902054004ec3"],
+      "artists": {"汐格合声甲": "c1b1760f-00bf-5151-91f4-33334f874ff4", "汐格合声乙": "0f02aced-e526-5b9e-b6fa-a4cb253bae35", "汐格合声丙": "f73c1121-0309-5d33-984b-ee834b8e8434"},
+      "scan": {"artist": "Various Artists", "artist_auth": "inferred", "compilation": true}
+    }
+  },
+  {
+    "id": "sampler-odd",
+    "shape": "compilation_no_albumartist",
+    "local": {
+      "directory": "sampler-odd",
+      "album": "碱纹拼音",
+      "artist": "",
+      "format": "flac",
+      "tags": {},
+      "tracks": [
+        {"file": "01.flac", "title": "碱纹拼音之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}, "artist": "碱纹拼音甲"},
+        {"file": "02.flac", "title": "碱纹拼音之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}, "artist": "碱纹拼音甲"},
+        {"file": "03.flac", "title": "碱纹拼音之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}, "artist": "碱纹拼音乙"},
+        {"file": "04.flac", "title": "碱纹拼音之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}, "artist": "碱纹拼音丙"},
+        {"file": "05.flac", "title": "碱纹拼音之雾", "seconds": 71, "tags": {"TRACKNUMBER": "5"}, "artist": "碱纹拼音丁"}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "89ad4ac3-39f7-470e-963a-56509c546377", "name": "Various Artists"},
+        {"id": "4086485a-dd5a-5f6b-a733-ad6f1f88e205", "name": "碱纹拼音甲"},
+        {"id": "a488af67-3f6e-56e3-9653-ec7ba370281f", "name": "碱纹拼音乙"},
+        {"id": "a4783d6d-c615-5d9b-bddd-8601bce50ec9", "name": "碱纹拼音丙"},
+        {"id": "04aecb86-c4d9-5bf0-b633-da4cacf1dd79", "name": "碱纹拼音丁"}
+      ],
+      "releases": [
+        {
+          "id": "53c3b06c-07e7-5f6d-9596-1012d69ae2e9",
+          "group": "35020955-8dad-51e3-8fa7-6a213d158941",
+          "title": "碱纹拼音",
+          "grouptitle": "碱纹拼音",
+          "artist": "89ad4ac3-39f7-470e-963a-56509c546377",
+          "tracks": [
+            {"id": "99eeaf26-6eaa-5462-8e3a-14d74135e0dd", "trackid": "1b86175f-e55a-5e52-bd92-48ebeda5b416", "title": "碱纹拼音之楔", "artist": "4086485a-dd5a-5f6b-a733-ad6f1f88e205", "length": 43000},
+            {"id": "c4363a54-0f60-561d-b077-322f30258b44", "trackid": "335a002f-7500-5ec0-95e6-12a02aa6b786", "title": "碱纹拼音之绳", "artist": "4086485a-dd5a-5f6b-a733-ad6f1f88e205", "length": 50000},
+            {"id": "1283163e-4de1-5d3e-a06b-6aa92926a7eb", "trackid": "4dd9c1f5-9dd2-5323-bb36-7cd0746f0215", "title": "碱纹拼音之铃", "artist": "a488af67-3f6e-56e3-9653-ec7ba370281f", "length": 57000},
+            {"id": "ec89884e-ec70-5dab-85a1-f0c7b7568838", "trackid": "ced60693-05d1-56af-9036-e2df8df3b323", "title": "碱纹拼音之帆", "artist": "a4783d6d-c615-5d9b-bddd-8601bce50ec9", "length": 64000},
+            {"id": "003452e3-4621-5766-a237-4c6ea807c47c", "trackid": "c9c5da3e-b2cc-5342-a2b3-c88516db35f5", "title": "碱纹拼音之雾", "artist": "04aecb86-c4d9-5bf0-b633-da4cacf1dd79", "length": 71000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "53c3b06c-07e7-5f6d-9596-1012d69ae2e9",
+      "group": "35020955-8dad-51e3-8fa7-6a213d158941",
+      "recordings": ["99eeaf26-6eaa-5462-8e3a-14d74135e0dd", "c4363a54-0f60-561d-b077-322f30258b44", "1283163e-4de1-5d3e-a06b-6aa92926a7eb", "ec89884e-ec70-5dab-85a1-f0c7b7568838", "003452e3-4621-5766-a237-4c6ea807c47c"],
+      "artists": {"碱纹拼音甲": "4086485a-dd5a-5f6b-a733-ad6f1f88e205", "碱纹拼音乙": "a488af67-3f6e-56e3-9653-ec7ba370281f", "碱纹拼音丙": "a4783d6d-c615-5d9b-bddd-8601bce50ec9", "碱纹拼音丁": "04aecb86-c4d9-5bf0-b633-da4cacf1dd79"},
+      "scan": {"artist": "Various Artists", "artist_auth": "inferred", "compilation": true}
+    }
+  },
+  {
+    "id": "copy-ochre-flac",
+    "shape": "duplicate_copy",
+    "local": {
+      "directory": "copy-ochre-flac",
+      "album": "赭格双流",
+      "artist": "赭格双流社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "赭格双流社"},
+      "tracks": [
+        {"file": "01.flac", "title": "赭格双流之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "赭格双流之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "d661b3de-38d3-5980-9aea-2d8afbf8034c", "name": "赭格双流社"}
+      ],
+      "releases": [
+        {
+          "id": "df4c4478-34a3-54b1-92a6-4f90120c33d6",
+          "group": "fe9b4e40-e98a-5844-914f-8e52a80151c2",
+          "title": "赭格双流",
+          "grouptitle": "赭格双流",
+          "artist": "d661b3de-38d3-5980-9aea-2d8afbf8034c",
+          "tracks": [
+            {"id": "a1128983-b858-5bb8-99fb-2d17fa6d9105", "trackid": "736ae2d2-3040-566d-9029-f8cd6a6c6d87", "title": "赭格双流之楔", "artist": "d661b3de-38d3-5980-9aea-2d8afbf8034c", "length": 43000},
+            {"id": "f04d0a8a-ed9d-5e1d-ae6c-a43d9ea32600", "trackid": "e9935035-d164-5ec2-9026-9fdd0f329664", "title": "赭格双流之绳", "artist": "d661b3de-38d3-5980-9aea-2d8afbf8034c", "length": 50000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "df4c4478-34a3-54b1-92a6-4f90120c33d6",
+      "group": "fe9b4e40-e98a-5844-914f-8e52a80151c2",
+      "recordings": ["a1128983-b858-5bb8-99fb-2d17fa6d9105", "f04d0a8a-ed9d-5e1d-ae6c-a43d9ea32600"],
+      "artists": {"赭格双流社": "d661b3de-38d3-5980-9aea-2d8afbf8034c"},
+      "group_with": ["copy-ochre-mp3"]
+    }
+  },
+  {
+    "id": "copy-ochre-mp3",
+    "shape": "duplicate_copy",
+    "local": {
+      "directory": "copy-ochre-mp3",
+      "album": "赭格双流",
+      "artist": "赭格双流社",
+      "format": "mp3",
+      "tags": {"ALBUMARTIST": "赭格双流社"},
+      "tracks": [
+        {"file": "01.mp3", "title": "赭格双流之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.mp3", "title": "赭格双流之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "d661b3de-38d3-5980-9aea-2d8afbf8034c", "name": "赭格双流社"}
+      ],
+      "releases": [
+        {
+          "id": "df4c4478-34a3-54b1-92a6-4f90120c33d6",
+          "group": "fe9b4e40-e98a-5844-914f-8e52a80151c2",
+          "title": "赭格双流",
+          "grouptitle": "赭格双流",
+          "artist": "d661b3de-38d3-5980-9aea-2d8afbf8034c",
+          "tracks": [
+            {"id": "a1128983-b858-5bb8-99fb-2d17fa6d9105", "trackid": "736ae2d2-3040-566d-9029-f8cd6a6c6d87", "title": "赭格双流之楔", "artist": "d661b3de-38d3-5980-9aea-2d8afbf8034c", "length": 43000},
+            {"id": "f04d0a8a-ed9d-5e1d-ae6c-a43d9ea32600", "trackid": "e9935035-d164-5ec2-9026-9fdd0f329664", "title": "赭格双流之绳", "artist": "d661b3de-38d3-5980-9aea-2d8afbf8034c", "length": 50000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "df4c4478-34a3-54b1-92a6-4f90120c33d6",
+      "group": "fe9b4e40-e98a-5844-914f-8e52a80151c2",
+      "recordings": ["a1128983-b858-5bb8-99fb-2d17fa6d9105", "f04d0a8a-ed9d-5e1d-ae6c-a43d9ea32600"],
+      "artists": {"赭格双流社": "d661b3de-38d3-5980-9aea-2d8afbf8034c"},
+      "group_with": ["copy-ochre-flac"]
+    }
+  },
+  {
+    "id": "copy-flint-flac",
+    "shape": "duplicate_copy",
+    "local": {
+      "directory": "copy-flint-flac",
+      "album": "燧片双棱",
+      "artist": "燧片双棱社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "燧片双棱社"},
+      "tracks": [
+        {"file": "01.flac", "title": "燧片双棱之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "燧片双棱之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "b4a8727a-3a62-5ce7-8bde-c39f4e563432", "name": "燧片双棱社"}
+      ],
+      "releases": [
+        {
+          "id": "26f058ac-2ed2-5f15-bdfc-3b54e625a0c4",
+          "group": "4fb6841e-79ae-506c-9c6a-68f360dd869a",
+          "title": "燧片双棱",
+          "grouptitle": "燧片双棱",
+          "artist": "b4a8727a-3a62-5ce7-8bde-c39f4e563432",
+          "tracks": [
+            {"id": "1b4c678d-9281-5b80-8a54-478477d6e948", "trackid": "b338ba5d-4370-5961-9e8b-d95e36b7f88a", "title": "燧片双棱之楔", "artist": "b4a8727a-3a62-5ce7-8bde-c39f4e563432", "length": 43000},
+            {"id": "eac9c827-e653-50c1-b1eb-c9f2c1bbedf7", "trackid": "1bb1a818-f4f8-550a-a6af-b3275f9a48aa", "title": "燧片双棱之绳", "artist": "b4a8727a-3a62-5ce7-8bde-c39f4e563432", "length": 50000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "26f058ac-2ed2-5f15-bdfc-3b54e625a0c4",
+      "group": "4fb6841e-79ae-506c-9c6a-68f360dd869a",
+      "recordings": ["1b4c678d-9281-5b80-8a54-478477d6e948", "eac9c827-e653-50c1-b1eb-c9f2c1bbedf7"],
+      "artists": {"燧片双棱社": "b4a8727a-3a62-5ce7-8bde-c39f4e563432"},
+      "group_with": ["copy-flint-mp3"]
+    }
+  },
+  {
+    "id": "copy-flint-mp3",
+    "shape": "duplicate_copy",
+    "local": {
+      "directory": "copy-flint-mp3",
+      "album": "燧片双棱",
+      "artist": "燧片双棱社",
+      "format": "mp3",
+      "tags": {"ALBUMARTIST": "燧片双棱社"},
+      "tracks": [
+        {"file": "01.mp3", "title": "燧片双棱之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.mp3", "title": "燧片双棱之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "b4a8727a-3a62-5ce7-8bde-c39f4e563432", "name": "燧片双棱社"}
+      ],
+      "releases": [
+        {
+          "id": "26f058ac-2ed2-5f15-bdfc-3b54e625a0c4",
+          "group": "4fb6841e-79ae-506c-9c6a-68f360dd869a",
+          "title": "燧片双棱",
+          "grouptitle": "燧片双棱",
+          "artist": "b4a8727a-3a62-5ce7-8bde-c39f4e563432",
+          "tracks": [
+            {"id": "1b4c678d-9281-5b80-8a54-478477d6e948", "trackid": "b338ba5d-4370-5961-9e8b-d95e36b7f88a", "title": "燧片双棱之楔", "artist": "b4a8727a-3a62-5ce7-8bde-c39f4e563432", "length": 43000},
+            {"id": "eac9c827-e653-50c1-b1eb-c9f2c1bbedf7", "trackid": "1bb1a818-f4f8-550a-a6af-b3275f9a48aa", "title": "燧片双棱之绳", "artist": "b4a8727a-3a62-5ce7-8bde-c39f4e563432", "length": 50000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "26f058ac-2ed2-5f15-bdfc-3b54e625a0c4",
+      "group": "4fb6841e-79ae-506c-9c6a-68f360dd869a",
+      "recordings": ["1b4c678d-9281-5b80-8a54-478477d6e948", "eac9c827-e653-50c1-b1eb-c9f2c1bbedf7"],
+      "artists": {"燧片双棱社": "b4a8727a-3a62-5ce7-8bde-c39f4e563432"},
+      "group_with": ["copy-flint-flac"]
+    }
+  },
+  {
+    "id": "mixed-lock-main",
+    "shape": "mixed_directory",
+    "local": {
+      "directory": "mixed-lock",
+      "album": "潮锁倾角",
+      "artist": "潮锁坊",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "潮锁坊"},
+      "tracks": [
+        {"file": "01.flac", "title": "潮锁倾角之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "潮锁倾角之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "潮锁倾角之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "abd4842e-ab79-560f-8982-2ba19f64a1ee", "name": "潮锁坊"}
+      ],
+      "releases": [
+        {
+          "id": "d8607cd8-c8b5-57f5-a248-9856d835f00f",
+          "group": "42a5cbb3-c7c7-5fb9-b7e1-baa00347ccdb",
+          "title": "潮锁倾角",
+          "grouptitle": "潮锁倾角",
+          "artist": "abd4842e-ab79-560f-8982-2ba19f64a1ee",
+          "tracks": [
+            {"id": "f641e9d0-0f0b-5760-9990-3b373618b1c7", "trackid": "8e32ed2b-73ff-5824-af28-598eccc925b1", "title": "潮锁倾角之楔", "artist": "abd4842e-ab79-560f-8982-2ba19f64a1ee", "length": 43000},
+            {"id": "fa9e5c94-f734-545f-b2fb-a36ce6719b36", "trackid": "f1080a34-bef6-5ae9-bb87-0e8de09a39ae", "title": "潮锁倾角之绳", "artist": "abd4842e-ab79-560f-8982-2ba19f64a1ee", "length": 50000},
+            {"id": "1d4209d4-77c4-57e1-aac4-3dcff15817ed", "trackid": "ec12372f-7ac3-520b-bfb3-3f8feb4c4e5d", "title": "潮锁倾角之铃", "artist": "abd4842e-ab79-560f-8982-2ba19f64a1ee", "length": 57000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "d8607cd8-c8b5-57f5-a248-9856d835f00f",
+      "group": "42a5cbb3-c7c7-5fb9-b7e1-baa00347ccdb",
+      "recordings": ["f641e9d0-0f0b-5760-9990-3b373618b1c7", "fa9e5c94-f734-545f-b2fb-a36ce6719b36", "1d4209d4-77c4-57e1-aac4-3dcff15817ed"],
+      "artists": {"潮锁坊": "abd4842e-ab79-560f-8982-2ba19f64a1ee"}
+    }
+  },
+  {
+    "id": "mixed-lock-minor",
+    "shape": "mixed_directory",
+    "local": {
+      "directory": "mixed-lock",
+      "album": "潮锁侧棱",
+      "artist": "潮锁坊",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "潮锁坊"},
+      "tracks": [
+        {"file": "04.flac", "title": "潮锁侧棱之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "05.flac", "title": "潮锁侧棱之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "abd4842e-ab79-560f-8982-2ba19f64a1ee", "name": "潮锁坊"}
+      ],
+      "releases": [
+        {
+          "id": "78986d8b-790c-5821-b3fd-f0bbf652ddd2",
+          "group": "69a9845d-3606-574e-9825-3245ac6f6a6a",
+          "title": "潮锁侧棱",
+          "grouptitle": "潮锁侧棱",
+          "artist": "abd4842e-ab79-560f-8982-2ba19f64a1ee",
+          "tracks": [
+            {"id": "2d99a133-f5cc-5e93-8c1a-977a1fe27e9d", "trackid": "840c9a1f-bdd2-5744-86b7-667a158f8092", "title": "潮锁侧棱之楔", "artist": "abd4842e-ab79-560f-8982-2ba19f64a1ee", "length": 43000},
+            {"id": "48b0728e-7b9d-5956-9f8b-3c098c75f91f", "trackid": "9127898f-c74d-57bc-b567-677f7290dd60", "title": "潮锁侧棱之绳", "artist": "abd4842e-ab79-560f-8982-2ba19f64a1ee", "length": 50000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "78986d8b-790c-5821-b3fd-f0bbf652ddd2",
+      "group": "69a9845d-3606-574e-9825-3245ac6f6a6a",
+      "recordings": ["2d99a133-f5cc-5e93-8c1a-977a1fe27e9d", "48b0728e-7b9d-5956-9f8b-3c098c75f91f"],
+      "artists": {"潮锁坊": "abd4842e-ab79-560f-8982-2ba19f64a1ee"}
+    }
+  },
+  {
+    "id": "mixed-mica-main",
+    "shape": "mixed_directory",
+    "local": {
+      "directory": "mixed-mica",
+      "album": "云母倾角",
+      "artist": "云母坊",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "云母坊"},
+      "tracks": [
+        {"file": "01.flac", "title": "云母倾角之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "云母倾角之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "云母倾角之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "8c41bdd7-33e6-5f70-92dc-e5abbbeb149a", "name": "云母坊"}
+      ],
+      "releases": [
+        {
+          "id": "4d39c3fe-9b54-5dba-8660-e4fc7303a86f",
+          "group": "df002820-ae29-5d2f-92d3-2c457aaa4423",
+          "title": "云母倾角",
+          "grouptitle": "云母倾角",
+          "artist": "8c41bdd7-33e6-5f70-92dc-e5abbbeb149a",
+          "tracks": [
+            {"id": "99dd3282-dfb8-5c32-9cab-54573ee3783c", "trackid": "42bf91b8-1c34-5636-ab16-83764c8d5a0a", "title": "云母倾角之楔", "artist": "8c41bdd7-33e6-5f70-92dc-e5abbbeb149a", "length": 43000},
+            {"id": "9ce07f02-fd68-53dc-b353-c0baf84fb72c", "trackid": "cff9b65b-cfb9-5f6e-9f5c-76cf8fa4397d", "title": "云母倾角之绳", "artist": "8c41bdd7-33e6-5f70-92dc-e5abbbeb149a", "length": 50000},
+            {"id": "24903d3b-5d66-54dc-aaa8-59c86cf32aea", "trackid": "a57d1d3f-5988-5728-87b9-030eb087e46c", "title": "云母倾角之铃", "artist": "8c41bdd7-33e6-5f70-92dc-e5abbbeb149a", "length": 57000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "4d39c3fe-9b54-5dba-8660-e4fc7303a86f",
+      "group": "df002820-ae29-5d2f-92d3-2c457aaa4423",
+      "recordings": ["99dd3282-dfb8-5c32-9cab-54573ee3783c", "9ce07f02-fd68-53dc-b353-c0baf84fb72c", "24903d3b-5d66-54dc-aaa8-59c86cf32aea"],
+      "artists": {"云母坊": "8c41bdd7-33e6-5f70-92dc-e5abbbeb149a"}
+    }
+  },
+  {
+    "id": "mixed-mica-minor",
+    "shape": "mixed_directory",
+    "local": {
+      "directory": "mixed-mica",
+      "album": "云母侧棱",
+      "artist": "云母坊",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "云母坊"},
+      "tracks": [
+        {"file": "04.flac", "title": "云母侧棱之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "05.flac", "title": "云母侧棱之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "8c41bdd7-33e6-5f70-92dc-e5abbbeb149a", "name": "云母坊"}
+      ],
+      "releases": [
+        {
+          "id": "e907102c-3afc-59c2-9ed2-02051f2c43ee",
+          "group": "d8cd0740-3e05-5b95-9457-a69f2b32e7c3",
+          "title": "云母侧棱",
+          "grouptitle": "云母侧棱",
+          "artist": "8c41bdd7-33e6-5f70-92dc-e5abbbeb149a",
+          "tracks": [
+            {"id": "f2dc52e0-4be7-5841-9af4-59aa9c0d10e7", "trackid": "9b1eba4d-0ebe-5585-9af5-55829c2a8732", "title": "云母侧棱之楔", "artist": "8c41bdd7-33e6-5f70-92dc-e5abbbeb149a", "length": 43000},
+            {"id": "21cd7012-f234-5567-8e94-4796ac153ce5", "trackid": "83c86253-7ed3-5a59-ac5d-e4364efaf036", "title": "云母侧棱之绳", "artist": "8c41bdd7-33e6-5f70-92dc-e5abbbeb149a", "length": 50000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "e907102c-3afc-59c2-9ed2-02051f2c43ee",
+      "group": "d8cd0740-3e05-5b95-9457-a69f2b32e7c3",
+      "recordings": ["f2dc52e0-4be7-5841-9af4-59aa9c0d10e7", "21cd7012-f234-5567-8e94-4796ac153ce5"],
+      "artists": {"云母坊": "8c41bdd7-33e6-5f70-92dc-e5abbbeb149a"}
+    }
+  },
+  {
+    "id": "live-applause",
+    "shape": "live_duration_conflict",
+    "local": {
+      "directory": "live-applause",
+      "album": "灰缎剧场",
+      "artist": "灰缎剧场社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "灰缎剧场社"},
+      "tracks": [
+        {"file": "01.flac", "title": "灰缎剧场之楔", "seconds": 52, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "灰缎剧场之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "灰缎剧场之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "灰缎剧场之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}},
+        {"file": "05.flac", "title": "灰缎剧场之雾", "seconds": 71, "tags": {"TRACKNUMBER": "5"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "a897678b-a540-5d33-a493-b7b46e54e4bc", "name": "灰缎剧场社"}
+      ],
+      "releases": [
+        {
+          "id": "07e6fcbb-9033-51aa-a1ff-aeedfb999364",
+          "group": "6e9f5ada-bccc-593a-ae21-0b9f95e502c2",
+          "title": "灰缎剧场",
+          "grouptitle": "灰缎剧场",
+          "artist": "a897678b-a540-5d33-a493-b7b46e54e4bc",
+          "tracks": [
+            {"id": "f9ab3825-1d8b-5a61-bca4-6f76ddb0839b", "trackid": "a6e2f138-36d6-5ab1-8e64-302365804d78", "title": "灰缎剧场之楔", "artist": "a897678b-a540-5d33-a493-b7b46e54e4bc", "length": 43000},
+            {"id": "a98d2b7e-f720-5a94-8bbf-0108170a73ae", "trackid": "6cd9bbc8-254b-5e74-89bf-8dfed6fd492a", "title": "灰缎剧场之绳", "artist": "a897678b-a540-5d33-a493-b7b46e54e4bc", "length": 50000},
+            {"id": "68e156a6-ae41-54e5-b35b-7fae3b551a91", "trackid": "d1db9834-1718-5e25-995b-2ae838fd0eef", "title": "灰缎剧场之铃", "artist": "a897678b-a540-5d33-a493-b7b46e54e4bc", "length": 57000},
+            {"id": "8c9271c5-e582-557b-b1bb-8a60c2f07fa7", "trackid": "3a015075-e1e5-56ae-9e31-a2e616240368", "title": "灰缎剧场之帆", "artist": "a897678b-a540-5d33-a493-b7b46e54e4bc", "length": 64000},
+            {"id": "6edd9739-00a6-5db2-a74d-b40562c175d6", "trackid": "d64b012d-d748-5139-8a4d-d9c4c0e59f0a", "title": "灰缎剧场之雾", "artist": "a897678b-a540-5d33-a493-b7b46e54e4bc", "length": 71000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["unlisted", "suggestion"],
+      "suggestion_can_accept": false,
+      "artists": {"灰缎剧场社": "a897678b-a540-5d33-a493-b7b46e54e4bc"}
+    }
+  },
+  {
+    "id": "live-room",
+    "shape": "live_duration_conflict",
+    "local": {
+      "directory": "live-room",
+      "album": "银纹剧院",
+      "artist": "银纹剧院社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "银纹剧院社"},
+      "tracks": [
+        {"file": "01.flac", "title": "银纹剧院之楔", "seconds": 57, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "银纹剧院之绳", "seconds": 61, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "银纹剧院之铃", "seconds": 82, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "银纹剧院之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}},
+        {"file": "05.flac", "title": "银纹剧院之雾", "seconds": 78, "tags": {"TRACKNUMBER": "5"}},
+        {"file": "06.flac", "title": "银纹剧院之砂", "seconds": 83, "tags": {"TRACKNUMBER": "6"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "e85701a6-528d-538d-a14d-c25bc0a6ffad", "name": "银纹剧院社"}
+      ],
+      "releases": [
+        {
+          "id": "28670cfc-b2d6-5196-8ea6-11182f00935b",
+          "group": "3273f9c9-c7af-5b50-b1a8-8dd7746fc0e1",
+          "title": "银纹剧院",
+          "grouptitle": "银纹剧院",
+          "artist": "e85701a6-528d-538d-a14d-c25bc0a6ffad",
+          "tracks": [
+            {"id": "94d0e501-729b-5b7d-bd7a-a483591a6727", "trackid": "018bab71-38e8-58f5-9290-d244dfebd310", "title": "银纹剧院之楔", "artist": "e85701a6-528d-538d-a14d-c25bc0a6ffad", "length": 43000},
+            {"id": "3146d6c2-67e3-5e15-9e15-4051a0b21bd9", "trackid": "38aaba34-c083-53b8-aeb2-dd9de102a1ff", "title": "银纹剧院之绳", "artist": "e85701a6-528d-538d-a14d-c25bc0a6ffad", "length": 50000},
+            {"id": "b808f63b-ed52-574a-bd46-47c1a1767648", "trackid": "3bcbe985-a0d5-5efc-84a3-0fd742a84e8a", "title": "银纹剧院之铃", "artist": "e85701a6-528d-538d-a14d-c25bc0a6ffad", "length": 57000},
+            {"id": "29abe5aa-8ca8-5581-9bcc-1023f0441d8c", "trackid": "9c9b3bc2-85f8-515a-b65c-79ee0c0015ad", "title": "银纹剧院之帆", "artist": "e85701a6-528d-538d-a14d-c25bc0a6ffad", "length": 64000},
+            {"id": "8821a503-e655-5ab1-a27b-180f648a291a", "trackid": "52c5dbc3-fd92-59ab-b869-be139e588500", "title": "银纹剧院之雾", "artist": "e85701a6-528d-538d-a14d-c25bc0a6ffad", "length": 71000},
+            {"id": "e64143f3-f14c-5f16-90c1-23eb3a9a4e80", "trackid": "4323b672-0d83-5c49-9cbb-d424756d1f8e", "title": "银纹剧院之砂", "artist": "e85701a6-528d-538d-a14d-c25bc0a6ffad", "length": 78000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["unlisted", "suggestion"],
+      "suggestion_can_accept": false,
+      "artists": {"银纹剧院社": "e85701a6-528d-538d-a14d-c25bc0a6ffad"}
+    }
+  },
+  {
+    "id": "vinyl-single",
+    "shape": "vinyl_sides",
+    "local": {
+      "directory": "vinyl-single",
+      "album": "朱格盘面",
+      "artist": "朱格盘面社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "朱格盘面社"},
+      "tracks": [
+        {"file": "A-2.flac", "title": "朱格盘面之楔", "seconds": 43, "tags": {"TRACKNUMBER": "A1"}},
+        {"file": "A-1.flac", "title": "朱格盘面之绳", "seconds": 50, "tags": {"TRACKNUMBER": "A2"}},
+        {"file": "B-2.flac", "title": "朱格盘面之铃", "seconds": 57, "tags": {"TRACKNUMBER": "B1"}},
+        {"file": "B-1.flac", "title": "朱格盘面之帆", "seconds": 64, "tags": {"TRACKNUMBER": "B2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "2f11dcdb-13b0-5465-a147-b165998656f5", "name": "朱格盘面社"}
+      ],
+      "releases": [
+        {
+          "id": "92677e71-da61-5a79-8b35-7e8ed0247b61",
+          "group": "de4e1bf7-eed5-57c9-b49a-530a4b153a23",
+          "title": "朱格盘面",
+          "grouptitle": "朱格盘面",
+          "artist": "2f11dcdb-13b0-5465-a147-b165998656f5",
+          "tracks": [
+            {"id": "6b65d199-b430-5d75-a8a5-f4fc2aa7c94d", "trackid": "de32e723-d6a4-53b7-92d1-2e27d6fc5d1f", "title": "朱格盘面之楔", "artist": "2f11dcdb-13b0-5465-a147-b165998656f5", "length": 43000, "disc": 1},
+            {"id": "13f0b7d4-62f6-5001-9e71-1e9b12d3c068", "trackid": "b53f26c5-3f90-5cb0-a0b3-1cbc6d20d408", "title": "朱格盘面之绳", "artist": "2f11dcdb-13b0-5465-a147-b165998656f5", "length": 50000, "disc": 1},
+            {"id": "362981f9-31c7-55f9-a1d7-21f381a6a4a2", "trackid": "4988b824-b302-5b1e-89ee-7034e4a20c91", "title": "朱格盘面之铃", "artist": "2f11dcdb-13b0-5465-a147-b165998656f5", "length": 57000, "disc": 1},
+            {"id": "af8921f8-0c69-5d76-be84-b5a3cbfefe54", "trackid": "2e67c48d-2848-5667-b965-b8df6d466f46", "title": "朱格盘面之帆", "artist": "2f11dcdb-13b0-5465-a147-b165998656f5", "length": 64000, "disc": 1}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "92677e71-da61-5a79-8b35-7e8ed0247b61",
+      "group": "de4e1bf7-eed5-57c9-b49a-530a4b153a23",
+      "recordings": ["6b65d199-b430-5d75-a8a5-f4fc2aa7c94d", "13f0b7d4-62f6-5001-9e71-1e9b12d3c068", "362981f9-31c7-55f9-a1d7-21f381a6a4a2", "af8921f8-0c69-5d76-be84-b5a3cbfefe54"],
+      "artists": {"朱格盘面社": "2f11dcdb-13b0-5465-a147-b165998656f5"},
+      "scan": {
+        "positions": ["1/1", "1/2", "1/3", "1/4"],
+        "inferred_positions": true
+      }
+    }
+  },
+  {
+    "id": "vinyl-double",
+    "shape": "vinyl_sides",
+    "local": {
+      "directory": "vinyl-double",
+      "album": "云钉四面",
+      "artist": "云钉四面社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "云钉四面社"},
+      "tracks": [
+        {"file": "A-2.flac", "title": "云钉四面之楔", "seconds": 43, "tags": {"TRACKNUMBER": "A1"}},
+        {"file": "A-1.flac", "title": "云钉四面之绳", "seconds": 50, "tags": {"TRACKNUMBER": "A2"}},
+        {"file": "B-2.flac", "title": "云钉四面之铃", "seconds": 57, "tags": {"TRACKNUMBER": "B1"}},
+        {"file": "B-1.flac", "title": "云钉四面之帆", "seconds": 64, "tags": {"TRACKNUMBER": "B2"}},
+        {"file": "C-2.flac", "title": "云钉四面之雾", "seconds": 71, "tags": {"TRACKNUMBER": "C1"}},
+        {"file": "C-1.flac", "title": "云钉四面之砂", "seconds": 78, "tags": {"TRACKNUMBER": "C2"}},
+        {"file": "D-2.flac", "title": "云钉四面之羽", "seconds": 85, "tags": {"TRACKNUMBER": "D1"}},
+        {"file": "D-1.flac", "title": "云钉四面之堤", "seconds": 92, "tags": {"TRACKNUMBER": "D2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "63bf443e-9985-5d63-8626-2b50f17f4825", "name": "云钉四面社"}
+      ],
+      "releases": [
+        {
+          "id": "7373b67f-c05b-568f-bbbd-50131b42311a",
+          "group": "68779cce-628c-5c22-b2bd-181ae9f7df9c",
+          "title": "云钉四面",
+          "grouptitle": "云钉四面",
+          "artist": "63bf443e-9985-5d63-8626-2b50f17f4825",
+          "tracks": [
+            {"id": "483c6ac6-1806-54c7-be0e-dbd30271fbad", "trackid": "eae6c9b3-aa45-5696-99d0-b5b180af88ba", "title": "云钉四面之楔", "artist": "63bf443e-9985-5d63-8626-2b50f17f4825", "length": 43000, "disc": 1},
+            {"id": "5b250efa-8a73-56ba-8954-14a60bfc9190", "trackid": "cbc156bb-55b0-5c38-b1e2-4b51a3f230b4", "title": "云钉四面之绳", "artist": "63bf443e-9985-5d63-8626-2b50f17f4825", "length": 50000, "disc": 1},
+            {"id": "7ebdf628-8b72-59d6-9d8b-278e43fcf4b3", "trackid": "5ec21d5d-fc39-52b8-ba9a-d1cf15df3fc3", "title": "云钉四面之铃", "artist": "63bf443e-9985-5d63-8626-2b50f17f4825", "length": 57000, "disc": 1},
+            {"id": "e3b39b4e-6c8f-52cd-8911-1eeb5361882f", "trackid": "0d2273e3-3c17-5574-8dfe-9f3062e4ca69", "title": "云钉四面之帆", "artist": "63bf443e-9985-5d63-8626-2b50f17f4825", "length": 64000, "disc": 1},
+            {"id": "eb97d4e9-a60a-50c9-87be-ad1915c1a3b9", "trackid": "a3ff2761-02d4-54ed-b828-cb89b821c0ad", "title": "云钉四面之雾", "artist": "63bf443e-9985-5d63-8626-2b50f17f4825", "length": 71000, "disc": 2},
+            {"id": "98030834-ae7b-5d62-9664-dbbb844cde79", "trackid": "2331cc43-fa96-5cd1-aae3-c861d4cef33b", "title": "云钉四面之砂", "artist": "63bf443e-9985-5d63-8626-2b50f17f4825", "length": 78000, "disc": 2},
+            {"id": "3747c72f-bcb7-56ca-81ba-00fc8a1b2a1e", "trackid": "099b6821-a890-59e4-89ba-7ccf2137f2a2", "title": "云钉四面之羽", "artist": "63bf443e-9985-5d63-8626-2b50f17f4825", "length": 85000, "disc": 2},
+            {"id": "03e22a36-0552-5470-be48-d93f0dfacf34", "trackid": "0828286d-6a84-5731-858e-46b31b821bab", "title": "云钉四面之堤", "artist": "63bf443e-9985-5d63-8626-2b50f17f4825", "length": 92000, "disc": 2}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "7373b67f-c05b-568f-bbbd-50131b42311a",
+      "group": "68779cce-628c-5c22-b2bd-181ae9f7df9c",
+      "recordings": ["483c6ac6-1806-54c7-be0e-dbd30271fbad", "5b250efa-8a73-56ba-8954-14a60bfc9190", "7ebdf628-8b72-59d6-9d8b-278e43fcf4b3", "e3b39b4e-6c8f-52cd-8911-1eeb5361882f", "eb97d4e9-a60a-50c9-87be-ad1915c1a3b9", "98030834-ae7b-5d62-9664-dbbb844cde79", "3747c72f-bcb7-56ca-81ba-00fc8a1b2a1e", "03e22a36-0552-5470-be48-d93f0dfacf34"],
+      "artists": {"云钉四面社": "63bf443e-9985-5d63-8626-2b50f17f4825"},
+      "scan": {
+        "positions": ["1/1", "1/2", "1/3", "1/4", "2/1", "2/2", "2/3", "2/4"],
+        "inferred_positions": true
+      }
+    }
+  },
+  {
+    "id": "hidden-silence",
+    "shape": "hidden_track",
+    "local": {
+      "directory": "hidden-silence",
+      "album": "锡白尾灯",
+      "artist": "锡白尾灯社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "锡白尾灯社"},
+      "tracks": [
+        {"file": "01.flac", "title": "锡白尾灯之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "锡白尾灯之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "锡白尾灯之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "锡白尾灯之帆", "seconds": 153, "tags": {"TRACKNUMBER": "4"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "71d2fd57-0bc8-5d5a-afa5-3b6f900e1866", "name": "锡白尾灯社"}
+      ],
+      "releases": [
+        {
+          "id": "03dcea46-df52-5b64-8ffa-7ee89364b648",
+          "group": "d4a34aaa-0f48-5f8b-9c2a-5f5207bbc2fa",
+          "title": "锡白尾灯",
+          "grouptitle": "锡白尾灯",
+          "artist": "71d2fd57-0bc8-5d5a-afa5-3b6f900e1866",
+          "tracks": [
+            {"id": "0fce70f0-9eb2-5457-be3a-6ab3043de3d5", "trackid": "381e8bd8-4d07-53a3-884d-b6e7d3f0a4cc", "title": "锡白尾灯之楔", "artist": "71d2fd57-0bc8-5d5a-afa5-3b6f900e1866", "length": 43000},
+            {"id": "db772151-7344-57f1-8128-05a0554611a9", "trackid": "166fea04-e808-5c9b-a9ce-efd3adb771b1", "title": "锡白尾灯之绳", "artist": "71d2fd57-0bc8-5d5a-afa5-3b6f900e1866", "length": 50000},
+            {"id": "2c4de452-4dc3-54b5-b370-b2909343b1f4", "trackid": "629013e9-73b2-5f49-8b91-58cf789a563d", "title": "锡白尾灯之铃", "artist": "71d2fd57-0bc8-5d5a-afa5-3b6f900e1866", "length": 57000},
+            {"id": "3fb7dd72-ce99-54d9-a56c-6241f822da49", "trackid": "83bee68e-4a4d-5fc2-8cf8-e4e581f9cedb", "title": "锡白尾灯之帆", "artist": "71d2fd57-0bc8-5d5a-afa5-3b6f900e1866", "length": 64000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["unlisted"],
+      "artists": {"锡白尾灯社": "71d2fd57-0bc8-5d5a-afa5-3b6f900e1866"}
+    }
+  },
+  {
+    "id": "hidden-reprise",
+    "shape": "hidden_track",
+    "local": {
+      "directory": "hidden-reprise",
+      "album": "石青尾帆",
+      "artist": "石青尾帆社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "石青尾帆社"},
+      "tracks": [
+        {"file": "01.flac", "title": "石青尾帆之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "石青尾帆之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "石青尾帆之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "石青尾帆之帆", "seconds": 153, "tags": {"TRACKNUMBER": "4"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "133c1a85-8b47-5e7d-9646-6f9219d0cf1f", "name": "石青尾帆社"}
+      ],
+      "releases": [
+        {
+          "id": "0895620b-b3b5-5288-b0a9-feb9ff791d3c",
+          "group": "dc57c168-c6f4-582a-86d5-a96ed867d82c",
+          "title": "石青尾帆",
+          "grouptitle": "石青尾帆",
+          "artist": "133c1a85-8b47-5e7d-9646-6f9219d0cf1f",
+          "tracks": [
+            {"id": "e2e7734c-18f2-554a-8b0e-31c8d1971b72", "trackid": "c2cb803c-1a57-5dcf-92c1-fc6a9886c3fd", "title": "石青尾帆之楔", "artist": "133c1a85-8b47-5e7d-9646-6f9219d0cf1f", "length": 43000},
+            {"id": "1e18a34b-cd57-5590-97c1-e5cb17baa666", "trackid": "b9673e25-20ba-53ed-990c-bb294c04748f", "title": "石青尾帆之绳", "artist": "133c1a85-8b47-5e7d-9646-6f9219d0cf1f", "length": 50000},
+            {"id": "9268262b-ba00-5680-9e78-170d16c8be8f", "trackid": "21b8434e-4028-526f-befb-36a3de959ae8", "title": "石青尾帆之铃", "artist": "133c1a85-8b47-5e7d-9646-6f9219d0cf1f", "length": 57000},
+            {"id": "b2863180-ab80-529e-9b29-5e97c9302f69", "trackid": "a0c5f42d-4041-54b9-9413-734bd149d9d2", "title": "石青尾帆之帆", "artist": "133c1a85-8b47-5e7d-9646-6f9219d0cf1f", "length": 64000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["unlisted"],
+      "artists": {"石青尾帆社": "133c1a85-8b47-5e7d-9646-6f9219d0cf1f"}
+    }
+  },
+  {
+    "id": "translated-trellis",
+    "shape": "translated_album",
+    "local": {
+      "directory": "translated-trellis",
+      "album": "筱纹小站",
+      "artist": "Kasa Silt",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "Kasa Silt", "CATALOGNUMBER": "VK-731"},
+      "tracks": [
+        {"file": "01.flac", "title": "Vell tone 1", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "Vell tone 2", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "Vell tone 3", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "Vell tone 4", "seconds": 64, "tags": {"TRACKNUMBER": "4"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "aec3206b-2c8c-5f1f-ae96-b5472951bf95",
+          "name": "苇墨阶",
+          "aliases": ["Kasa Silt"]
+        }
+      ],
+      "releases": [
+        {
+          "id": "e9cc5a52-e9c7-5443-8a79-05293f4a2425",
+          "group": "7b562bf5-9471-5cbb-bac4-bcc126c8d6b3",
+          "title": "锈窗枝格",
+          "grouptitle": "锈窗枝格",
+          "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95",
+          "tracks": [
+            {"id": "a6fd542c-fce0-534e-9630-5ad4de92e764", "trackid": "7bd4eb04-89a1-54c7-b818-b510b4401683", "title": "锈窗枝格之楔", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 43000},
+            {"id": "92a00b5f-e014-55a2-ab6d-b756e4254155", "trackid": "f63127b4-5f82-5d89-a7d6-669dd80e01f8", "title": "锈窗枝格之绳", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 50000},
+            {"id": "8c3ee58d-1550-5621-a2c8-9383fc19823e", "trackid": "2136518e-f662-56b8-b345-7da45d8ace02", "title": "锈窗枝格之铃", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 57000},
+            {"id": "994661fa-3ad0-507c-9c44-5e75c5cba901", "trackid": "d6b368aa-f834-5fc2-9866-d56656356e0d", "title": "锈窗枝格之帆", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 64000}
+          ],
+          "catalog": "VK-731"
+        },
+        {
+          "id": "d3cd3460-f9f9-55ef-8bab-707643846782",
+          "group": "d31f723e-844e-5657-a68d-3ff0dd1d816f",
+          "title": "锈窗枝格异谱1",
+          "grouptitle": "锈窗枝格异谱1",
+          "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95",
+          "tracks": [
+            {"id": "9aada67f-4078-5b8a-bb76-ca443af3194a", "trackid": "8aec3182-da87-50c1-81fe-68e6d82b52e1", "title": "锈窗枝格之楔", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 69000},
+            {"id": "8b45877f-48fe-545e-9ed6-a6e6e6f794cb", "trackid": "ab165c95-d181-5ec3-807d-bbeaf9019414", "title": "锈窗枝格之绳", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 76000},
+            {"id": "90c5ff2d-429e-5111-8fcb-8d4f7b804224", "trackid": "6ac91a89-807c-5625-b02d-a477bc9148d9", "title": "锈窗枝格之铃", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 83000},
+            {"id": "70017544-9674-5fa0-8027-713fe3ac9ffa", "trackid": "ed874f2f-dd95-5c1c-a264-1891eeeb2483", "title": "锈窗枝格之帆", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 90000}
+          ],
+          "catalog": "VK-731"
+        },
+        {
+          "id": "96d50510-1325-5ec8-bb57-bd1b2f587683",
+          "group": "ece345fa-b707-5f6b-b6e3-4fd325dc258a",
+          "title": "锈窗枝格异谱2",
+          "grouptitle": "锈窗枝格异谱2",
+          "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95",
+          "tracks": [
+            {"id": "195b69bc-d516-507b-9c01-d0f15d327c5b", "trackid": "cb52d4e6-a454-5464-a889-86e7ddd0d049", "title": "锈窗枝格之楔", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 69000},
+            {"id": "d474dafa-cffe-517c-804d-06963620f372", "trackid": "13e19f1e-9728-57f3-9076-096ad9c1d272", "title": "锈窗枝格之绳", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 76000},
+            {"id": "b255c556-8c74-5758-9bc6-9f5582f8547f", "trackid": "66550da9-030b-57cb-b5b1-141e39aa7d87", "title": "锈窗枝格之铃", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 83000},
+            {"id": "77e2053c-d7a4-5b68-a27c-5d0213ce7aeb", "trackid": "b5436bfb-f785-5972-894e-97036a9eb451", "title": "锈窗枝格之帆", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 90000}
+          ],
+          "catalog": "VK-731"
+        },
+        {
+          "id": "9b22321d-4ddb-59d6-8c3f-d074f7cc5e7c",
+          "group": "08fca12f-74fc-551c-87d1-3550944bbb8f",
+          "title": "锈窗枝格异谱3",
+          "grouptitle": "锈窗枝格异谱3",
+          "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95",
+          "tracks": [
+            {"id": "d9e592e7-1341-57a0-998a-f289b40a6c60", "trackid": "37ab2db0-e784-5f6a-af83-d79131897bc0", "title": "锈窗枝格之楔", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 69000},
+            {"id": "635a9d45-99f7-5b9a-ac76-2b96f9861a44", "trackid": "49d0fe60-4e21-5c9e-a714-9492f3c80a2a", "title": "锈窗枝格之绳", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 76000},
+            {"id": "5458aca8-049b-5f5f-b86e-b1aab9dd3a0f", "trackid": "63b73168-1b7f-51c9-b8c9-4b8181966f5f", "title": "锈窗枝格之铃", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 83000},
+            {"id": "61f4c1cf-7981-593e-86da-55d7222f8aca", "trackid": "e44a9cf7-7c4a-59b4-8b8b-bf694748c3b0", "title": "锈窗枝格之帆", "artist": "aec3206b-2c8c-5f1f-ae96-b5472951bf95", "length": 90000}
+          ],
+          "catalog": "VK-731"
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "e9cc5a52-e9c7-5443-8a79-05293f4a2425",
+      "group": "7b562bf5-9471-5cbb-bac4-bcc126c8d6b3",
+      "recordings": ["a6fd542c-fce0-534e-9630-5ad4de92e764", "92a00b5f-e014-55a2-ab6d-b756e4254155", "8c3ee58d-1550-5621-a2c8-9383fc19823e", "994661fa-3ad0-507c-9c44-5e75c5cba901"],
+      "artists": {"Kasa Silt": "aec3206b-2c8c-5f1f-ae96-b5472951bf95"},
+      "scan": {"require_match_item": true}
+    }
+  },
+  {
+    "id": "translated-basin",
+    "shape": "translated_album",
+    "local": {
+      "directory": "translated-basin",
+      "album": "弧环铜舟",
+      "artist": "Teri Vell",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "Teri Vell", "CATALOGNUMBER": "VK-932"},
+      "tracks": [
+        {"file": "01.flac", "title": "Vell tone 1", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "Vell tone 2", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "Vell tone 3", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "Vell tone 4", "seconds": 64, "tags": {"TRACKNUMBER": "4"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "370c5135-9b17-5941-9dab-4bbc7ec119c0",
+          "name": "灰狐釉",
+          "aliases": ["Teri Vell"]
+        }
+      ],
+      "releases": [
+        {
+          "id": "91742d37-0e48-58ef-8dad-f6ca33bb3086",
+          "group": "acde8be7-f364-5a06-964d-8317be9a10ab",
+          "title": "雾栈弧光",
+          "grouptitle": "雾栈弧光",
+          "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0",
+          "tracks": [
+            {"id": "20c14d76-7c6f-5fd6-8528-62bb2af861cb", "trackid": "d3b5f76f-1672-56b1-85f5-53b461a53f3e", "title": "雾栈弧光之楔", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 43000},
+            {"id": "9d4f8bbf-d73a-5e78-b8e8-541084f788b1", "trackid": "9ee5fc91-abf4-5ad4-abbc-b5117f4f09ce", "title": "雾栈弧光之绳", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 50000},
+            {"id": "c76760ba-6922-531e-94b3-2a6b33ab10ef", "trackid": "cf0935f2-45e0-5637-a315-8ab25b658991", "title": "雾栈弧光之铃", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 57000},
+            {"id": "38268935-d030-5143-ab50-c3328da185d4", "trackid": "c842a2ec-6c28-561c-a0d4-92c712ee09a1", "title": "雾栈弧光之帆", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 64000}
+          ],
+          "catalog": "VK-932"
+        },
+        {
+          "id": "42202b67-5fbb-579e-baaa-5dc9e4550b58",
+          "group": "baf0ad61-0d4e-59f8-98c1-caba9d0dffee",
+          "title": "雾栈弧光异谱1",
+          "grouptitle": "雾栈弧光异谱1",
+          "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0",
+          "tracks": [
+            {"id": "a0d38840-31b0-50fb-8fe6-dc7bb2b40078", "trackid": "4e4b581b-cda7-5cf0-a28b-1552ebedb3bd", "title": "雾栈弧光之楔", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 69000},
+            {"id": "829f073d-6414-5daf-b8e5-579bb9d403cb", "trackid": "bbcd3f80-492e-509c-a257-f8ef0528d4c4", "title": "雾栈弧光之绳", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 76000},
+            {"id": "196d2b6a-39c8-5fd8-b433-ad7848628003", "trackid": "bf00fd1b-8333-5258-a846-974afbf07287", "title": "雾栈弧光之铃", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 83000},
+            {"id": "81936ba3-03a4-5e52-b40c-ede5c481fe8a", "trackid": "34e3b2cb-4db6-5367-8332-ed66548db9bd", "title": "雾栈弧光之帆", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 90000}
+          ],
+          "catalog": "VK-932"
+        },
+        {
+          "id": "dbc08ff7-7888-5c9f-a349-9fde38f73726",
+          "group": "fde62952-de4c-5d5e-9a35-31f63820a7e8",
+          "title": "雾栈弧光异谱2",
+          "grouptitle": "雾栈弧光异谱2",
+          "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0",
+          "tracks": [
+            {"id": "8905b2be-1a8d-52e7-9eb0-dd21605461f9", "trackid": "f6267b6f-7fff-50a1-a0c1-3decb1f71f81", "title": "雾栈弧光之楔", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 69000},
+            {"id": "94ba7da6-15cd-5376-ac25-a992207f62d1", "trackid": "0026580c-6267-5d62-90b6-ae2aa924ad6c", "title": "雾栈弧光之绳", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 76000},
+            {"id": "ffd67655-8285-56cc-bc16-1af63c4fb510", "trackid": "a5e776bc-4394-5cdb-a6d1-457953e5a97a", "title": "雾栈弧光之铃", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 83000},
+            {"id": "0c67c893-b9f6-595d-9c52-42f70c92702a", "trackid": "b02014af-31d6-5037-8c3c-b405605469d6", "title": "雾栈弧光之帆", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 90000}
+          ],
+          "catalog": "VK-932"
+        },
+        {
+          "id": "1fc78bdb-e133-5f11-be81-0ff9a6b8062a",
+          "group": "5807ee4b-4778-5039-86ea-446f5090d747",
+          "title": "雾栈弧光异谱3",
+          "grouptitle": "雾栈弧光异谱3",
+          "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0",
+          "tracks": [
+            {"id": "e0b89490-36ac-5234-948e-5f587f2d3dde", "trackid": "8090d6cc-bc40-58ab-9116-e2d56f6cffae", "title": "雾栈弧光之楔", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 69000},
+            {"id": "46845218-09e6-527f-9ccc-a219d24c91c5", "trackid": "c815c4f3-aa63-5c87-80e9-d25acbdb51ae", "title": "雾栈弧光之绳", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 76000},
+            {"id": "b54e70ee-c69a-5c6f-b741-09b86f9fab94", "trackid": "fded0e7a-2a60-500d-ade7-2ddd6655d343", "title": "雾栈弧光之铃", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 83000},
+            {"id": "8cabfedc-68a2-5623-8669-320a9a6e042c", "trackid": "616b5b22-2619-5657-95af-6ed446bb7238", "title": "雾栈弧光之帆", "artist": "370c5135-9b17-5941-9dab-4bbc7ec119c0", "length": 90000}
+          ],
+          "catalog": "VK-932"
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "91742d37-0e48-58ef-8dad-f6ca33bb3086",
+      "group": "acde8be7-f364-5a06-964d-8317be9a10ab",
+      "recordings": ["20c14d76-7c6f-5fd6-8528-62bb2af861cb", "9d4f8bbf-d73a-5e78-b8e8-541084f788b1", "c76760ba-6922-531e-94b3-2a6b33ab10ef", "38268935-d030-5143-ab50-c3328da185d4"],
+      "artists": {"Teri Vell": "370c5135-9b17-5941-9dab-4bbc7ec119c0"},
+      "scan": {"require_match_item": true}
+    }
+  },
+  {
+    "id": "placeholder-english",
+    "shape": "english_placeholder",
+    "local": {
+      "directory": "placeholder-english",
+      "album": "Unknown Album",
+      "artist": "Unknown Artist",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "Unknown Artist"},
+      "tracks": [
+        {"file": "01.flac", "title": "Track 01", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "Audio Track 02", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
+      ]
+    },
+    "external": {
+      "artists": [],
+      "releases": []
+    },
+    "expect": {
+      "accept": ["unlisted", "local_cleanup"],
+      "scan": {
+        "title_auth": "placeholder",
+        "artist_auth": "placeholder",
+        "track_title_auth": "placeholder",
+        "require_local_item": true,
+        "forbidden_query": ["Unknown Artist", "Unknown Album", "Track 01", "Audio Track 02"]
+      }
+    }
+  },
+  {
+    "id": "placeholder-untitled",
+    "shape": "english_placeholder",
+    "local": {
+      "directory": "placeholder-untitled",
+      "album": "Untitled",
+      "artist": "Pewter Wisp",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "Pewter Wisp"},
+      "tracks": [
+        {"file": "01.flac", "title": "Untitled之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "Untitled之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "4dd9433b-e0ae-55a0-94b9-526953d93948", "name": "Pewter Wisp"}
+      ],
+      "releases": [
+        {
+          "id": "bfc28efb-957e-598a-b167-076f05e8ad13",
+          "group": "ee47b13d-d954-52bf-a077-89a45f1f328a",
+          "title": "Untitled",
+          "grouptitle": "Untitled",
+          "artist": "4dd9433b-e0ae-55a0-94b9-526953d93948",
+          "tracks": [
+            {"id": "53732658-5750-51e7-83b8-92317018749e", "trackid": "18868a0c-b884-57a1-bccb-8560de8b84bc", "title": "Untitled之楔", "artist": "4dd9433b-e0ae-55a0-94b9-526953d93948", "length": 43000},
+            {"id": "82c74fea-8642-5bb2-ae27-9bf0048cb80b", "trackid": "246af785-f212-5a67-85cb-0b0be1deb952", "title": "Untitled之绳", "artist": "4dd9433b-e0ae-55a0-94b9-526953d93948", "length": 50000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "bfc28efb-957e-598a-b167-076f05e8ad13",
+      "group": "ee47b13d-d954-52bf-a077-89a45f1f328a",
+      "recordings": ["53732658-5750-51e7-83b8-92317018749e", "82c74fea-8642-5bb2-ae27-9bf0048cb80b"],
+      "artists": {"Pewter Wisp": "4dd9433b-e0ae-55a0-94b9-526953d93948"},
+      "scan": {"title_auth": "real"}
+    }
+  },
+  {
+    "id": "spoken-book",
+    "shape": "spoken_audio",
+    "local": {
+      "directory": "spoken-book",
+      "album": "浮栈朗读卷",
+      "artist": "浮栈朗读卷编辑室",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "浮栈朗读卷编辑室", "GENRE": "Audiobook"},
+      "tracks": [
+        {"file": "01.flac", "title": "浮栈朗读卷之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "浮栈朗读卷之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "浮栈朗读卷之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}}
+      ]
+    },
+    "external": {
+      "artists": [],
+      "releases": []
+    },
+    "expect": {
+      "accept": ["unlisted"]
+    }
+  },
+  {
+    "id": "spoken-podcast",
+    "shape": "spoken_audio",
+    "local": {
+      "directory": "spoken-podcast",
+      "album": "铅灰电台访谈",
+      "artist": "铅灰电台访谈编辑室",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "铅灰电台访谈编辑室", "GENRE": "Podcast"},
+      "tracks": [
+        {"file": "01.flac", "title": "铅灰电台访谈之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "铅灰电台访谈之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "铅灰电台访谈之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}}
+      ]
+    },
+    "external": {
+      "artists": [],
+      "releases": []
+    },
+    "expect": {
+      "accept": ["unlisted"]
+    }
+  },
+  {
+    "id": "namesake-fir-1",
+    "shape": "external_namesake",
+    "local": {
+      "directory": "namesake-fir-1",
+      "album": "Frost Kiln Lark 井棱手札",
+      "artist": "Frost Kiln Lark",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "Frost Kiln Lark", "MUSICBRAINZ_ALBUMID": "1cf638a4-733b-5cd2-af24-7c40de067b7d"},
+      "tracks": [
+        {"file": "01.flac", "title": "Frost Kiln Lark 井棱手札之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "Frost Kiln Lark 井棱手札之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "Frost Kiln Lark 井棱手札之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "9da9771d-6f89-5760-b607-375f5b816daa", "name": "Frost Kiln Lark"}
+      ],
+      "releases": [
+        {
+          "id": "1cf638a4-733b-5cd2-af24-7c40de067b7d",
+          "group": "ad3a0e79-bfd3-533e-aa22-77663c1958d7",
+          "title": "Frost Kiln Lark 井棱手札",
+          "grouptitle": "Frost Kiln Lark 井棱手札",
+          "artist": "9da9771d-6f89-5760-b607-375f5b816daa",
+          "tracks": [
+            {"id": "b85f10ef-1683-54c2-a6ee-07742c13c422", "trackid": "dc24f1e8-7c17-5866-a987-cf133b91b40a", "title": "Frost Kiln Lark 井棱手札之楔", "artist": "9da9771d-6f89-5760-b607-375f5b816daa", "length": 43000},
+            {"id": "816f4eea-9898-53eb-a2de-fa36f67256b3", "trackid": "71e1b31e-0cf8-5144-b877-b56c1f8e5659", "title": "Frost Kiln Lark 井棱手札之绳", "artist": "9da9771d-6f89-5760-b607-375f5b816daa", "length": 50000},
+            {"id": "b4255e97-d42e-56bb-af52-606eddbacb14", "trackid": "d0afe0f8-2921-5690-b236-f1a39858ed04", "title": "Frost Kiln Lark 井棱手札之铃", "artist": "9da9771d-6f89-5760-b607-375f5b816daa", "length": 57000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "1cf638a4-733b-5cd2-af24-7c40de067b7d",
+      "group": "ad3a0e79-bfd3-533e-aa22-77663c1958d7",
+      "recordings": ["b85f10ef-1683-54c2-a6ee-07742c13c422", "816f4eea-9898-53eb-a2de-fa36f67256b3", "b4255e97-d42e-56bb-af52-606eddbacb14"],
+      "artists": {"Frost Kiln Lark": "9da9771d-6f89-5760-b607-375f5b816daa"}
+    }
+  },
+  {
+    "id": "namesake-fir-2",
+    "shape": "external_namesake",
+    "local": {
+      "directory": "namesake-fir-2",
+      "album": "Frost Kiln Lark 棉灰暗纹",
+      "artist": "Frost Kiln Lark",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "Frost Kiln Lark"},
+      "tracks": [
+        {"file": "01.flac", "title": "Frost Kiln Lark 棉灰暗纹之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "Frost Kiln Lark 棉灰暗纹之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "Frost Kiln Lark 棉灰暗纹之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "a117c7ef-8605-5247-be5e-329b06dbba05", "name": "Frost Kiln Lark"}
+      ],
+      "releases": [
+        {
+          "id": "047e1deb-52b1-58d5-a968-0d8ceba0c101",
+          "group": "f7fb2362-f061-5804-b127-12f397d7eb30",
+          "title": "Frost Kiln Lark 棉灰暗纹",
+          "grouptitle": "Frost Kiln Lark 棉灰暗纹",
+          "artist": "a117c7ef-8605-5247-be5e-329b06dbba05",
+          "tracks": [
+            {"id": "e320620b-752d-51c3-a4dd-1cd4f2ee3da2", "trackid": "752d590c-e9ff-59cb-999f-77b9cdb4ec20", "title": "Frost Kiln Lark 棉灰暗纹之楔", "artist": "a117c7ef-8605-5247-be5e-329b06dbba05", "length": 43000},
+            {"id": "65f5551d-cf65-508b-8737-38e6805f9ae3", "trackid": "a0d6f77f-6690-5c10-b0a9-68d176e7bd92", "title": "Frost Kiln Lark 棉灰暗纹之绳", "artist": "a117c7ef-8605-5247-be5e-329b06dbba05", "length": 50000},
+            {"id": "46c9f960-ee1c-5de6-a64d-a1399652a6bd", "trackid": "88b26506-c317-55ca-8f2f-d1bc1220b9ef", "title": "Frost Kiln Lark 棉灰暗纹之铃", "artist": "a117c7ef-8605-5247-be5e-329b06dbba05", "length": 57000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "047e1deb-52b1-58d5-a968-0d8ceba0c101",
+      "group": "f7fb2362-f061-5804-b127-12f397d7eb30",
+      "recordings": ["e320620b-752d-51c3-a4dd-1cd4f2ee3da2", "65f5551d-cf65-508b-8737-38e6805f9ae3", "46c9f960-ee1c-5de6-a64d-a1399652a6bd"],
+      "artists": {"Frost Kiln Lark": "9da9771d-6f89-5760-b607-375f5b816daa"},
+      "scan": {"artist_retry": "9da9771d-6f89-5760-b607-375f5b816daa"}
+    }
+  },
+  {
+    "id": "namesake-brass-1",
+    "shape": "external_namesake",
+    "local": {
+      "directory": "namesake-brass-1",
+      "album": "Amber Quarry Wren 井棱手札",
+      "artist": "Amber Quarry Wren",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "Amber Quarry Wren", "MUSICBRAINZ_ALBUMID": "ee6ae09f-1b67-558c-806b-60e38f9125b5"},
+      "tracks": [
+        {"file": "01.flac", "title": "Amber Quarry Wren 井棱手札之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "Amber Quarry Wren 井棱手札之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "Amber Quarry Wren 井棱手札之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "be7a1333-929b-5ca8-9fe4-df50b094a493", "name": "Amber Quarry Wren"}
+      ],
+      "releases": [
+        {
+          "id": "ee6ae09f-1b67-558c-806b-60e38f9125b5",
+          "group": "d6c2c5c6-c20e-508a-8e2d-614060c73c57",
+          "title": "Amber Quarry Wren 井棱手札",
+          "grouptitle": "Amber Quarry Wren 井棱手札",
+          "artist": "be7a1333-929b-5ca8-9fe4-df50b094a493",
+          "tracks": [
+            {"id": "80eccca3-af38-5e7d-881c-2053796a0bce", "trackid": "490aadff-0d4c-56f6-9fdc-f6fa5b21993a", "title": "Amber Quarry Wren 井棱手札之楔", "artist": "be7a1333-929b-5ca8-9fe4-df50b094a493", "length": 43000},
+            {"id": "ba01d930-a519-549f-8299-ef49b88b01ea", "trackid": "5946dd1b-aef2-55e7-872c-1798e13b0103", "title": "Amber Quarry Wren 井棱手札之绳", "artist": "be7a1333-929b-5ca8-9fe4-df50b094a493", "length": 50000},
+            {"id": "15fdcb64-5d94-579f-85e6-c91340f9bbcb", "trackid": "31c5b1ba-f323-54ee-a375-aad931530787", "title": "Amber Quarry Wren 井棱手札之铃", "artist": "be7a1333-929b-5ca8-9fe4-df50b094a493", "length": 57000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "ee6ae09f-1b67-558c-806b-60e38f9125b5",
+      "group": "d6c2c5c6-c20e-508a-8e2d-614060c73c57",
+      "recordings": ["80eccca3-af38-5e7d-881c-2053796a0bce", "ba01d930-a519-549f-8299-ef49b88b01ea", "15fdcb64-5d94-579f-85e6-c91340f9bbcb"],
+      "artists": {"Amber Quarry Wren": "be7a1333-929b-5ca8-9fe4-df50b094a493"}
+    }
+  },
+  {
+    "id": "namesake-brass-2",
+    "shape": "external_namesake",
+    "local": {
+      "directory": "namesake-brass-2",
+      "album": "Amber Quarry Wren 棉灰暗纹",
+      "artist": "Amber Quarry Wren",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "Amber Quarry Wren"},
+      "tracks": [
+        {"file": "01.flac", "title": "Amber Quarry Wren 棉灰暗纹之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "Amber Quarry Wren 棉灰暗纹之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "Amber Quarry Wren 棉灰暗纹之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "062949a3-ad22-586b-b97f-a0d802c8ef14", "name": "Amber Quarry Wren"}
+      ],
+      "releases": [
+        {
+          "id": "dc8fb64a-510f-5571-8b1c-23fc239d77ae",
+          "group": "abc8aeb8-c3b6-5bfa-a0d5-0ccc08f4d57f",
+          "title": "Amber Quarry Wren 棉灰暗纹",
+          "grouptitle": "Amber Quarry Wren 棉灰暗纹",
+          "artist": "062949a3-ad22-586b-b97f-a0d802c8ef14",
+          "tracks": [
+            {"id": "765c0e85-950c-5fa1-88bc-8c8201934227", "trackid": "55ad8cd4-f577-5dcc-8eef-510cf4bbb84b", "title": "Amber Quarry Wren 棉灰暗纹之楔", "artist": "062949a3-ad22-586b-b97f-a0d802c8ef14", "length": 43000},
+            {"id": "3657176a-63a2-54db-9382-5d205176f586", "trackid": "29b24198-dce0-54a5-805c-9b3914a15e3f", "title": "Amber Quarry Wren 棉灰暗纹之绳", "artist": "062949a3-ad22-586b-b97f-a0d802c8ef14", "length": 50000},
+            {"id": "63165843-42e6-5576-9fc8-1e199b1962ca", "trackid": "35de5a4c-d9b4-54b9-af3b-4f95ba1d4f99", "title": "Amber Quarry Wren 棉灰暗纹之铃", "artist": "062949a3-ad22-586b-b97f-a0d802c8ef14", "length": 57000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release"],
+      "release": "dc8fb64a-510f-5571-8b1c-23fc239d77ae",
+      "group": "abc8aeb8-c3b6-5bfa-a0d5-0ccc08f4d57f",
+      "recordings": ["765c0e85-950c-5fa1-88bc-8c8201934227", "3657176a-63a2-54db-9382-5d205176f586", "63165843-42e6-5576-9fc8-1e199b1962ca"],
+      "artists": {"Amber Quarry Wren": "be7a1333-929b-5ca8-9fe4-df50b094a493"},
+      "scan": {"artist_retry": "be7a1333-929b-5ca8-9fe4-df50b094a493"}
+    }
+  },
+  {
+    "id": "typo-group-fix",
+    "shape": "group_title_typo",
+    "local": {
+      "directory": "typo-group-fix",
+      "album": "Quill Velum",
+      "artist": "Quill Vellum Guild",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "Quill Vellum Guild", "CATALOGNUMBER": "VG-731"},
+      "tracks": [
+        {"file": "01.flac", "title": "Quill Vellum之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "Quill Vellum之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "Quill Vellum之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "Quill Vellum之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}},
+        {"file": "05.flac", "title": "Quill Vellum之雾", "seconds": 71, "tags": {"TRACKNUMBER": "5"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "ba88c070-c598-5568-9cca-12c2830d1d34", "name": "Quill Vellum Guild"}
+      ],
+      "releases": [
+        {
+          "id": "563f5169-7246-5a21-b980-3bd5911d4aed",
+          "group": "c0540fc7-02d9-519f-9f29-c8942155254e",
+          "title": "Quill Vellum",
+          "grouptitle": "Quill Vellum",
+          "artist": "ba88c070-c598-5568-9cca-12c2830d1d34",
+          "tracks": [
+            {"id": "17d9b30b-abd1-5690-97ba-4b0f7c62d544", "trackid": "04ebae65-107f-5f02-a9d0-5ab19e7dddae", "title": "Quill Vellum之楔", "artist": "ba88c070-c598-5568-9cca-12c2830d1d34", "length": 43000},
+            {"id": "da389cbe-f2db-57a1-be31-099304451736", "trackid": "ed630c1d-b155-5d10-8163-d63f72fbfc45", "title": "Quill Vellum之绳", "artist": "ba88c070-c598-5568-9cca-12c2830d1d34", "length": 50000},
+            {"id": "d90673be-75bc-5b06-8ab5-ae99e6885491", "trackid": "acb1e71b-f548-527e-96b8-16add6612b6f", "title": "Quill Vellum之铃", "artist": "ba88c070-c598-5568-9cca-12c2830d1d34", "length": 57000},
+            {"id": "de155e62-2edf-5943-9f53-02e79fe47f25", "trackid": "657d6dbc-9da5-5dc1-bc99-52c1e4409b76", "title": "Quill Vellum之帆", "artist": "ba88c070-c598-5568-9cca-12c2830d1d34", "length": 64000},
+            {"id": "b8d30b52-f5d2-5783-b983-cee7dc94283a", "trackid": "67adbbce-056c-5252-944e-a40fc1be9e0d", "title": "Quill Vellum之雾", "artist": "ba88c070-c598-5568-9cca-12c2830d1d34", "length": 71000}
+          ],
+          "catalog": "VG-731"
+        },
+        {
+          "id": "a1ba14c7-30ac-559c-890b-7dc26fc0cdd3",
+          "group": "c0540fc7-02d9-519f-9f29-c8942155254e",
+          "title": "Quill Vellum",
+          "grouptitle": "Quill Vellum",
+          "artist": "ba88c070-c598-5568-9cca-12c2830d1d34",
+          "tracks": [
+            {"id": "17d9b30b-abd1-5690-97ba-4b0f7c62d544", "trackid": "236529c9-a686-54be-a24f-e80fb337180c", "title": "Quill Vellum之楔", "artist": "ba88c070-c598-5568-9cca-12c2830d1d34", "length": 43000},
+            {"id": "da389cbe-f2db-57a1-be31-099304451736", "trackid": "5b77b0b5-8779-5499-b56a-0e8df1ed5a20", "title": "Quill Vellum之绳", "artist": "ba88c070-c598-5568-9cca-12c2830d1d34", "length": 50000},
+            {"id": "d90673be-75bc-5b06-8ab5-ae99e6885491", "trackid": "85b10cec-887a-594c-bc27-5392ede7e4cc", "title": "Quill Vellum之铃", "artist": "ba88c070-c598-5568-9cca-12c2830d1d34", "length": 57000},
+            {"id": "de155e62-2edf-5943-9f53-02e79fe47f25", "trackid": "41ac8a21-971f-5c66-aeb7-9e233d3a14b0", "title": "Quill Vellum之帆", "artist": "ba88c070-c598-5568-9cca-12c2830d1d34", "length": 64000},
+            {"id": "b8d30b52-f5d2-5783-b983-cee7dc94283a", "trackid": "0aaf6ae7-4697-5ca0-824c-7c28fe9c6cfd", "title": "Quill Vellum之雾", "artist": "ba88c070-c598-5568-9cca-12c2830d1d34", "length": 71000}
+          ],
+          "catalog": "VG-731",
+          "country": "XY",
+          "date": "2012-07-11"
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release_group"],
+      "group": "c0540fc7-02d9-519f-9f29-c8942155254e",
+      "artists": {"Quill Vellum Guild": "ba88c070-c598-5568-9cca-12c2830d1d34"},
+      "group_match": "c0540fc7-02d9-519f-9f29-c8942155254e",
+      "fields": {"title": "Quill Vellum"}
+    }
+  },
+  {
+    "id": "typo-group-variant",
+    "shape": "group_title_typo",
+    "local": {
+      "directory": "typo-group-variant",
+      "album": "Silt Arbour",
+      "artist": "Silt Arbor Guild",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "Silt Arbor Guild", "CATALOGNUMBER": "VG-412"},
+      "tracks": [
+        {"file": "01.flac", "title": "Silt Arbor之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "Silt Arbor之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "Silt Arbor之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "Silt Arbor之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}},
+        {"file": "05.flac", "title": "Silt Arbor之雾", "seconds": 71, "tags": {"TRACKNUMBER": "5"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "db5f15e3-ee30-5915-8696-ba9b148b6286", "name": "Silt Arbor Guild"}
+      ],
+      "releases": [
+        {
+          "id": "720bc5d4-4f05-5331-8696-2cfbbf68371f",
+          "group": "ba81c470-2ab7-5ae9-a3c5-4204e9c5f195",
+          "title": "Silt Arbor",
+          "grouptitle": "Silt Arbor",
+          "artist": "db5f15e3-ee30-5915-8696-ba9b148b6286",
+          "tracks": [
+            {"id": "e5ebe678-964e-51e6-8623-378fc91a8aa4", "trackid": "b5c23096-630d-57dd-8de5-45cb5f5873ee", "title": "Silt Arbor之楔", "artist": "db5f15e3-ee30-5915-8696-ba9b148b6286", "length": 43000},
+            {"id": "61497994-db17-5ad3-9630-c53c31bebd92", "trackid": "688c8f84-bc5a-5c30-98fb-c2df96eee68f", "title": "Silt Arbor之绳", "artist": "db5f15e3-ee30-5915-8696-ba9b148b6286", "length": 50000},
+            {"id": "a2655bc6-ebc7-505f-90e6-5a1726d7fbae", "trackid": "58662e3e-b145-5cec-a43c-62907dc51778", "title": "Silt Arbor之铃", "artist": "db5f15e3-ee30-5915-8696-ba9b148b6286", "length": 57000},
+            {"id": "15688cb5-c96e-53e4-a3df-357464d75bd8", "trackid": "ae67ba93-f098-5813-a3d5-08fdc58316dd", "title": "Silt Arbor之帆", "artist": "db5f15e3-ee30-5915-8696-ba9b148b6286", "length": 64000},
+            {"id": "e1ce555b-f95b-577c-8f01-5bd806c8cb8d", "trackid": "e96e35f1-f214-5df0-a96a-0f817dbf6d3e", "title": "Silt Arbor之雾", "artist": "db5f15e3-ee30-5915-8696-ba9b148b6286", "length": 71000}
+          ],
+          "catalog": "VG-412"
+        },
+        {
+          "id": "6fc1815e-8d8d-53a7-a4a5-8dfce747ecb8",
+          "group": "ba81c470-2ab7-5ae9-a3c5-4204e9c5f195",
+          "title": "Silt Arbour",
+          "grouptitle": "Silt Arbor",
+          "artist": "db5f15e3-ee30-5915-8696-ba9b148b6286",
+          "tracks": [
+            {"id": "e5ebe678-964e-51e6-8623-378fc91a8aa4", "trackid": "6b7879eb-1063-5cf5-a4cd-baa3ac8b32d0", "title": "Silt Arbor之楔", "artist": "db5f15e3-ee30-5915-8696-ba9b148b6286", "length": 43000},
+            {"id": "61497994-db17-5ad3-9630-c53c31bebd92", "trackid": "b639a8bf-f255-5ac0-9073-57dca0906a86", "title": "Silt Arbor之绳", "artist": "db5f15e3-ee30-5915-8696-ba9b148b6286", "length": 50000},
+            {"id": "a2655bc6-ebc7-505f-90e6-5a1726d7fbae", "trackid": "b107ce54-f66e-5357-886e-b37753b48bd3", "title": "Silt Arbor之铃", "artist": "db5f15e3-ee30-5915-8696-ba9b148b6286", "length": 57000},
+            {"id": "15688cb5-c96e-53e4-a3df-357464d75bd8", "trackid": "dbefe7b3-f20e-5597-90d3-2a046e69eb10", "title": "Silt Arbor之帆", "artist": "db5f15e3-ee30-5915-8696-ba9b148b6286", "length": 64000},
+            {"id": "e1ce555b-f95b-577c-8f01-5bd806c8cb8d", "trackid": "9043cc1c-e0ff-5eb6-a469-07f2feaba530", "title": "Silt Arbor之雾", "artist": "db5f15e3-ee30-5915-8696-ba9b148b6286", "length": 71000}
+          ],
+          "catalog": "VG-412",
+          "country": "XY",
+          "date": "2012-07-11"
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release_group"],
+      "group": "ba81c470-2ab7-5ae9-a3c5-4204e9c5f195",
+      "artists": {"Silt Arbor Guild": "db5f15e3-ee30-5915-8696-ba9b148b6286"},
+      "group_match": "ba81c470-2ab7-5ae9-a3c5-4204e9c5f195",
+      "suggestions": {"title": "Silt Arbor"}
+    }
+  },
+  {
+    "id": "editions-model-short",
+    "shape": "model_ambiguous_editions",
+    "local": {
+      "directory": "editions-model-short",
+      "album": "雾锚铭牌",
+      "artist": "雾锚铭牌坊",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "雾锚铭牌坊"},
+      "tracks": [
+        {"file": "01.flac", "title": "雾锚铭牌之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "雾锚铭牌之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "雾锚铭牌之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "name": "雾锚铭牌坊"}
+      ],
+      "releases": [
+        {
+          "id": "caacc97d-05ca-58d6-83a6-60236cfb10cd",
+          "group": "d425b230-0e10-51be-8051-dabbc3cb7899",
+          "title": "雾锚铭牌",
+          "grouptitle": "雾锚铭牌",
+          "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1",
+          "tracks": [
+            {"id": "f8b1dda8-4d94-54a5-b8e3-89bda69f0bc0", "trackid": "e4bfd665-04a0-5e97-a206-bda064affe41", "title": "雾锚铭牌之楔", "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "length": 43000},
+            {"id": "86ae021c-38a7-5228-8076-d0b7f7f10e51", "trackid": "9d8e768e-024c-5b4f-be3f-fc00c8e97b19", "title": "雾锚铭牌之绳", "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "length": 50000},
+            {"id": "d7495635-9726-59e3-b992-f2c13ed6e6bc", "trackid": "f048c7ef-9ddc-59ee-bfda-a6c9ec1cbf18", "title": "雾锚铭牌之铃", "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "length": 57000}
+          ]
+        },
+        {
+          "id": "284de330-1e72-5420-bf32-8d3fbfa11db6",
+          "group": "d425b230-0e10-51be-8051-dabbc3cb7899",
+          "title": "雾锚铭牌",
+          "grouptitle": "雾锚铭牌",
+          "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1",
+          "tracks": [
+            {"id": "f8b1dda8-4d94-54a5-b8e3-89bda69f0bc0", "trackid": "96f5410a-05dd-552f-84ee-dfcc475d4802", "title": "雾锚铭牌之楔", "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "length": 43000},
+            {"id": "86ae021c-38a7-5228-8076-d0b7f7f10e51", "trackid": "698f9a8f-ff85-5f16-84c6-105e6c7d13fd", "title": "雾锚铭牌之绳", "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "length": 50000},
+            {"id": "d7495635-9726-59e3-b992-f2c13ed6e6bc", "trackid": "82c4f8a1-f71c-5ecd-b775-c0b6c899bb47", "title": "雾锚铭牌之铃", "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "length": 57000}
+          ],
+          "country": "XY",
+          "date": "2012-07-11"
+        },
+        {
+          "id": "00ce76a6-4b6a-533c-b842-5ec624ced125",
+          "group": "d425b230-0e10-51be-8051-dabbc3cb7899",
+          "title": "雾锚铭牌",
+          "grouptitle": "雾锚铭牌",
+          "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1",
+          "tracks": [
+            {"id": "f8b1dda8-4d94-54a5-b8e3-89bda69f0bc0", "trackid": "dd4bfd90-74cb-5915-9ef1-76fbce0f613f", "title": "雾锚铭牌之楔", "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "length": 43000},
+            {"id": "86ae021c-38a7-5228-8076-d0b7f7f10e51", "trackid": "80b52fbd-84b6-536a-897e-9b9236589258", "title": "雾锚铭牌之绳", "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "length": 50000},
+            {"id": "d7495635-9726-59e3-b992-f2c13ed6e6bc", "trackid": "7741c36d-e3f1-59fb-b7b3-d8622da26223", "title": "雾锚铭牌之铃", "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "length": 57000}
+          ],
+          "country": "XY",
+          "date": "2013-07-11"
+        },
+        {
+          "id": "a7f95f27-4a89-563b-b0ad-df344f38a0d8",
+          "group": "d425b230-0e10-51be-8051-dabbc3cb7899",
+          "title": "雾锚铭牌",
+          "grouptitle": "雾锚铭牌",
+          "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1",
+          "tracks": [
+            {"id": "f8b1dda8-4d94-54a5-b8e3-89bda69f0bc0", "trackid": "ecf6a450-91a2-535e-92a7-14f0e16f58de", "title": "雾锚铭牌之楔", "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "length": 43000},
+            {"id": "86ae021c-38a7-5228-8076-d0b7f7f10e51", "trackid": "80457238-6a06-53b4-b2a1-0c0b1e5ca413", "title": "雾锚铭牌之绳", "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "length": 50000},
+            {"id": "d7495635-9726-59e3-b992-f2c13ed6e6bc", "trackid": "1842bef1-3fa7-5e27-bb35-a61199b0ed06", "title": "雾锚铭牌之铃", "artist": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1", "length": 57000}
+          ],
+          "country": "XY",
+          "date": "2014-07-11"
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release_group"],
+      "group": "d425b230-0e10-51be-8051-dabbc3cb7899",
+      "artists": {"雾锚铭牌坊": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1"},
+      "group_match": "d425b230-0e10-51be-8051-dabbc3cb7899",
+      "scan": {"require_match_item": true}
+    }
+  },
+  {
+    "id": "editions-model-quartet",
+    "shape": "model_ambiguous_editions",
+    "local": {
+      "directory": "editions-model-quartet",
+      "album": "沉栈木纹",
+      "artist": "沉栈木纹坊",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "沉栈木纹坊"},
+      "tracks": [
+        {"file": "01.flac", "title": "沉栈木纹之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "沉栈木纹之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "沉栈木纹之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "沉栈木纹之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "55bee63f-6701-53f3-967f-318b67578182", "name": "沉栈木纹坊"}
+      ],
+      "releases": [
+        {
+          "id": "7d6a264f-e5ff-5842-93bd-46f66ed710fa",
+          "group": "e1e5c582-562d-557e-bd48-550828a3dad7",
+          "title": "沉栈木纹",
+          "grouptitle": "沉栈木纹",
+          "artist": "55bee63f-6701-53f3-967f-318b67578182",
+          "tracks": [
+            {"id": "6cee329c-2710-5566-a4ce-157b99d1d113", "trackid": "2c747bd3-f46b-5137-847a-81d09b748d7a", "title": "沉栈木纹之楔", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 43000},
+            {"id": "0566b3e2-4f0a-5a19-a684-1350b291fc12", "trackid": "b9563965-c370-581e-83c9-4f9441af5f6c", "title": "沉栈木纹之绳", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 50000},
+            {"id": "b2212952-8a6e-500d-a6ec-83f30ee7c5d2", "trackid": "d902301c-d5ed-55f3-8403-d8a6f462f7dc", "title": "沉栈木纹之铃", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 57000},
+            {"id": "8e914c94-a0b6-5da7-8b9a-2a0c6fdbf071", "trackid": "21f7420d-3d80-5729-9643-879f65eaed9d", "title": "沉栈木纹之帆", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 64000}
+          ]
+        },
+        {
+          "id": "b669b646-7eb0-551e-b7ac-515a06bd4df1",
+          "group": "e1e5c582-562d-557e-bd48-550828a3dad7",
+          "title": "沉栈木纹",
+          "grouptitle": "沉栈木纹",
+          "artist": "55bee63f-6701-53f3-967f-318b67578182",
+          "tracks": [
+            {"id": "6cee329c-2710-5566-a4ce-157b99d1d113", "trackid": "f5ba4359-923d-51bd-b514-01ef4947687d", "title": "沉栈木纹之楔", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 43000},
+            {"id": "0566b3e2-4f0a-5a19-a684-1350b291fc12", "trackid": "8da47b3c-c840-52b0-b671-36dfd92fd76e", "title": "沉栈木纹之绳", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 50000},
+            {"id": "b2212952-8a6e-500d-a6ec-83f30ee7c5d2", "trackid": "c0a4dd82-5369-53f2-ba28-43bee1ad667f", "title": "沉栈木纹之铃", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 57000},
+            {"id": "8e914c94-a0b6-5da7-8b9a-2a0c6fdbf071", "trackid": "cd368d3d-7134-5a77-943d-bc139997ee4a", "title": "沉栈木纹之帆", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 64000}
+          ],
+          "country": "XY",
+          "date": "2012-07-11"
+        },
+        {
+          "id": "c2a5c739-2f75-53e7-bf7a-80311ffa245c",
+          "group": "e1e5c582-562d-557e-bd48-550828a3dad7",
+          "title": "沉栈木纹",
+          "grouptitle": "沉栈木纹",
+          "artist": "55bee63f-6701-53f3-967f-318b67578182",
+          "tracks": [
+            {"id": "6cee329c-2710-5566-a4ce-157b99d1d113", "trackid": "b607d03e-6d73-564a-8970-b7b590aa0bfd", "title": "沉栈木纹之楔", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 43000},
+            {"id": "0566b3e2-4f0a-5a19-a684-1350b291fc12", "trackid": "710bb84e-7e82-5727-bb3d-cbe9a9b891f1", "title": "沉栈木纹之绳", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 50000},
+            {"id": "b2212952-8a6e-500d-a6ec-83f30ee7c5d2", "trackid": "18a71541-f9a2-5f6b-a9d2-dbaaefa0a212", "title": "沉栈木纹之铃", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 57000},
+            {"id": "8e914c94-a0b6-5da7-8b9a-2a0c6fdbf071", "trackid": "2200339a-c461-5c72-bfb3-d81d6c3e0722", "title": "沉栈木纹之帆", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 64000}
+          ],
+          "country": "XY",
+          "date": "2013-07-11"
+        },
+        {
+          "id": "f8d501ea-5f7f-56fb-8792-da73378056a9",
+          "group": "e1e5c582-562d-557e-bd48-550828a3dad7",
+          "title": "沉栈木纹",
+          "grouptitle": "沉栈木纹",
+          "artist": "55bee63f-6701-53f3-967f-318b67578182",
+          "tracks": [
+            {"id": "6cee329c-2710-5566-a4ce-157b99d1d113", "trackid": "7644e96b-b605-57dc-af44-bfd3b59c7abd", "title": "沉栈木纹之楔", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 43000},
+            {"id": "0566b3e2-4f0a-5a19-a684-1350b291fc12", "trackid": "31e346dd-c8f2-5dee-9be3-a2bf80530ab6", "title": "沉栈木纹之绳", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 50000},
+            {"id": "b2212952-8a6e-500d-a6ec-83f30ee7c5d2", "trackid": "e557edf7-a947-539d-9299-792a899690ee", "title": "沉栈木纹之铃", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 57000},
+            {"id": "8e914c94-a0b6-5da7-8b9a-2a0c6fdbf071", "trackid": "803d3eec-2de5-5c1a-b52b-e211b9571d35", "title": "沉栈木纹之帆", "artist": "55bee63f-6701-53f3-967f-318b67578182", "length": 64000}
+          ],
+          "country": "XY",
+          "date": "2014-07-11"
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release_group"],
+      "group": "e1e5c582-562d-557e-bd48-550828a3dad7",
+      "artists": {"沉栈木纹坊": "55bee63f-6701-53f3-967f-318b67578182"},
+      "group_match": "e1e5c582-562d-557e-bd48-550828a3dad7",
+      "scan": {"require_match_item": true}
+    }
   }
 ]

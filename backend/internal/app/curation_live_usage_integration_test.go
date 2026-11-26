@@ -13,6 +13,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation/model"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
+	"github.com/qlqq/roomusic/backend/internal/upstreammock"
 )
 
 // 仅记录阶段、应用生成的项编号及 Responses 返回的数值，不保存请求、输出或请求头。
@@ -49,26 +50,15 @@ func (m *liveResponseMeter) begin(body []byte) *liveResponseCall {
 				continue
 			}
 			pending, ok, err := metricsPendingItems(content)
-			if !ok || err != nil {
+			if !ok || err != nil || len(pending) == 0 {
 				continue
 			}
+			c.items = nil
+			c.stage = metricsPendingStage(pending[0], req.Instructions)
 			for _, p := range pending {
 				if uuid.Valid(p.ID) {
 					c.items = append(c.items, p.ID)
 				}
-				switch p.Kind {
-				case "local_cleanup":
-					c.stage = "local_cleanup"
-				case "name_patrol":
-					c.stage = "patrol"
-				}
-			}
-			break
-		}
-		for _, k := range []model.TaskKind{model.LookupCandidate, model.WebFallback, model.VerifyEvidence, model.SelectCandidate} {
-			if strings.Contains(req.Instructions, backgroundPrompt(k)) {
-				c.stage = string(k)
-				break
 			}
 		}
 		if req.Instructions == runtime.SummarySystemPrompt {
@@ -363,5 +353,63 @@ func Test真实模型计量保留分块事件并只取末帧用量(t *testing.T)
 	}
 	if kept.String() != stream || call.status != 200 || call.input == nil || *call.input != 37 || call.output == nil || *call.output != 11 {
 		t.Fatal("转发流或终帧的接口用量不符")
+	}
+}
+
+func TestMetricsRouteWithSharedTools(t *testing.T) {
+	const id = "53000000-0000-4000-8000-000000000038"
+	for _, tc := range []struct {
+		name, route      string
+		prompt           model.TaskKind
+		stage, firstTool string
+	}{
+		{"联网字段优先", "web", model.LookupCandidate, "web", "web_search"},
+		{"第二档字段优先", "lookup", model.WebFallback, "lookup", "search_music_metadata"},
+		{"旧联网消息", "", model.WebFallback, "web", "web_search"},
+		{"旧第二档消息", "", model.LookupCandidate, "lookup", "search_music_metadata"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			item := map[string]any{"item_id": id, "release_id": "专辑甲", "kind": "release_match", "evidence": map[string]string{"title": "竹笺折痕"}}
+			if tc.route != "" {
+				item["route"] = tc.route
+			}
+			raw, err := json.Marshal([]any{item})
+			requireCurationOK(t, err)
+			msg := `<roomusic-source type="curation_pending" trust="untrusted">` + string(raw) + "</roomusic-source>"
+			system := backgroundPrompt(tc.prompt)
+			both := []string{"search_music_metadata", "get_music_metadata", "web_search", "fetch_page"}
+			var chatTools []map[string]any
+			var responseTools []map[string]string
+			for _, name := range both {
+				chatTools = append(chatTools, map[string]any{"type": "function", "function": map[string]string{"name": name}})
+				responseTools = append(responseTools, map[string]string{"type": "function", "name": name})
+			}
+			raw, err = json.Marshal(map[string]any{"tools": chatTools, "messages": []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": msg}}})
+			requireCurationOK(t, err)
+			var q metricsChatRequest
+			requireCurationOK(t, json.Unmarshal(raw, &q))
+			m := metricsModel{mode: "oracle", targets: map[string]metricsModelTarget{"专辑甲": {SampleID: "合成样本"}}, routes: map[string][]string{}}
+			rep, err := m.pendingReply(t.Context(), q)
+			requireCurationOK(t, err)
+			if rep.category != tc.stage || !slices.Equal(m.routes[id], []string{tc.stage}) || len(rep.calls) != 1 || rep.calls[0].name != tc.firstTool {
+				t.Fatalf("模型档位或首个工具不符 %+v", rep)
+			}
+			if tc.stage == "web" {
+				var after []upstreammock.OracleMessage
+				requireCurationOK(t, json.Unmarshal([]byte(`[{"role":"assistant","tool_calls":[{"id":"合成查询","function":{"name":"web_search","arguments":"{}"}}]},{"role":"tool","tool_call_id":"合成查询","content":"<roomusic-source kind=\"tool\" name=\"web_search\">{\"results\":[]}</roomusic-source>"}]`), &after))
+				q.Messages = append(q.Messages, after...)
+				next, err := m.pendingReply(t.Context(), q)
+				requireCurationOK(t, err)
+				if next.category != "web" || len(next.calls) != 1 || next.calls[0].name != "search_music_metadata" {
+					t.Fatalf("联网档继续读取开放库的用量应归于同档 %+v", next)
+				}
+			}
+			raw, err = json.Marshal(map[string]any{"instructions": system, "tools": responseTools, "input": []map[string]string{{"role": "user", "content": msg}}})
+			requireCurationOK(t, err)
+			call := new(liveResponseMeter).begin(raw)
+			if call.stage != tc.stage || !slices.Equal(call.items, []string{id}) {
+				t.Fatalf("真实协议计量 %s %v，期望 %s %s", call.stage, call.items, tc.stage, id)
+			}
+		})
 	}
 }
