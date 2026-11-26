@@ -9,7 +9,8 @@ import { ArtistNames } from "./artist-names";
 import styles from "./track-info.module.css";
 
 /** 选中曲目在版本里的位置：多张介质时写第几张。 */
-export type TrackPlace = { disc: number | null; number: number };
+/** number 为 null 表示曲号缺失：不按在碟里的位置补号。 */
+export type TrackPlace = { disc: number | null; number: number | null };
 
 type TrackInfoProps = {
   track: ReleaseTrackDTO;
@@ -56,7 +57,7 @@ export function TrackInfo({ track, place, albumArtist, sharedCredits, renderExtr
   const artist = track.artist.trim();
   const credits = groupTrackCredits(trackCredits(track, sharedCredits));
   const format = formatText(track);
-  const placeText = [place.disc === null ? null : `第 ${place.disc} 张`, `第 ${place.number} 首`, track.duration_seconds === null ? null : formatDuration(track.duration_seconds)].filter((part) => part !== null).join(" · ");
+  const placeText = [place.disc === null ? null : `第 ${place.disc} 张`, place.number === null ? null : `第 ${place.number} 首`, track.duration_seconds === null ? null : formatDuration(track.duration_seconds)].filter((part) => part !== null).join(" · ");
   return (
     <Panel title="曲目信息" headingRef={headingRef} action={<Button variant="icon" icon={<X size={16} />} label="关闭曲目信息" onClick={onClose} />}>
       <div className={styles.lead}>

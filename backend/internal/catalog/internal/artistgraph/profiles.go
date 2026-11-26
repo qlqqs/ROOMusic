@@ -94,7 +94,7 @@ func refreshProfiles(ctx context.Context, tx *sql.Tx, ids []string, gen int64) e
  WHERE redirect_artist_id=ANY($1::uuid[]) AND display_name IS NOT NULL
  ), name_lists AS (SELECT artist_id,jsonb_agg(jsonb_build_object('name_id',name_id,'source_artist_id',source_artist_id,'original',original)) AS names
  FROM search_names GROUP BY artist_id)
- SELECT a.id::text,COALESCE(pop.external_name,pop.spelling,fallback.spelling,a.initial_name),o.display_name,COALESCE(n.names,'[]'::jsonb) FROM artists a
+ SELECT a.id::text,COALESCE(pop.external_name,pop.spelling,fallback.spelling,a.initial_name),o.display_name,COALESCE(n.names,'[]'::jsonb),catalog_list_sort_key(COALESCE(o.display_name,pop.external_name,pop.spelling,fallback.spelling,a.initial_name)) FROM artists a
  LEFT JOIN artist_overrides o ON o.artist_id=a.id
  LEFT JOIN popular pop ON pop.artist_id=a.id
  LEFT JOIN fallback ON fallback.artist_id=a.id LEFT JOIN name_lists n ON n.artist_id=a.id
@@ -103,14 +103,14 @@ func refreshProfiles(ctx context.Context, tx *sql.Tx, ids []string, gen int64) e
 		return err
 	}
 	type profile struct {
-		id, auto string
-		manual   sql.NullString
-		names    []byte
+		id, auto, listSort string
+		manual             sql.NullString
+		names              []byte
 	}
 	profiles := []profile{}
 	for rows.Next() {
 		var p profile
-		if err = rows.Scan(&p.id, &p.auto, &p.manual, &p.names); err != nil {
+		if err = rows.Scan(&p.id, &p.auto, &p.manual, &p.names, &p.listSort); err != nil {
 			rows.Close()
 			return err
 		}
@@ -127,6 +127,7 @@ func refreshProfiles(ctx context.Context, tx *sql.Tx, ids []string, gen int64) e
 		Effective string `json:"effective"`
 		Sort      string `json:"sort"`
 		Initial   string `json:"initial"`
+		ListSort  string `json:"list_sort"`
 	}
 	profileValues := make([]profileValue, 0, len(profiles))
 	searchValues := []searchName{}
@@ -135,11 +136,11 @@ func refreshProfiles(ctx context.Context, tx *sql.Tx, ids []string, gen int64) e
 		if p.manual.Valid {
 			name = p.manual.String
 		}
-		initial, err := InitialGroup(name)
+		initial, err := InitialGroup(p.listSort)
 		if err != nil {
 			return err
 		}
-		profileValues = append(profileValues, profileValue{p.id, p.auto, name, textnorm.Text(name), initial})
+		profileValues = append(profileValues, profileValue{p.id, p.auto, name, textnorm.Text(name), initial, p.listSort})
 		var names []searchName
 		if err = json.Unmarshal(p.names, &names); err != nil {
 			return err
@@ -160,11 +161,11 @@ func refreshProfiles(ctx context.Context, tx *sql.Tx, ids []string, gen int64) e
 	if err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO artist_profiles(artist_id,auto_display_name,effective_display_name,sort_key,initial_group,version,applied_generation)
- SELECT v.id,v.auto,v.effective,v.sort,v.initial,$2,$3 FROM jsonb_to_recordset($1::jsonb)
- AS v(id uuid,auto text,effective text,sort text,initial text)
+	if _, err = tx.ExecContext(ctx, `INSERT INTO artist_profiles(artist_id,auto_display_name,effective_display_name,sort_key,initial_group,version,applied_generation,list_sort_key)
+ SELECT v.id,v.auto,v.effective,v.sort,v.initial,$2,$3,v.list_sort FROM jsonb_to_recordset($1::jsonb)
+ AS v(id uuid,auto text,effective text,sort text,initial text,list_sort text)
  ON CONFLICT(artist_id) DO UPDATE SET auto_display_name=EXCLUDED.auto_display_name,
- effective_display_name=EXCLUDED.effective_display_name,sort_key=EXCLUDED.sort_key,initial_group=EXCLUDED.initial_group,version=EXCLUDED.version,
+ effective_display_name=EXCLUDED.effective_display_name,list_sort_key=EXCLUDED.list_sort_key,sort_key=EXCLUDED.sort_key,initial_group=EXCLUDED.initial_group,version=EXCLUDED.version,
  applied_generation=EXCLUDED.applied_generation`, string(data), Version, gen); err != nil {
 		return err
 	}

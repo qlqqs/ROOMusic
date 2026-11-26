@@ -60,6 +60,9 @@ func inferFilenameNumbers(stem string) filenameNumbers {
 			if match[2] >= 0 {
 				result.Disc = filenameNumber(stem[match[2]:match[3]])
 				result.pattern = "disc_track"
+				if strings.ContainsAny(stem[match[3]:match[4]], "-._") {
+					result.pattern = "explicit_disc_track"
+				}
 				result.firstEnd = filenamePrefixEnd(stem, match[3])
 			}
 			return result
@@ -131,10 +134,10 @@ func prepareFilenameEvidence(items []SourceObservation) map[string]filenameNumbe
 		for path := range evidence.paths {
 			parsed := numbers[path]
 			count := evidence.patterns[parsed.pattern]
-			if parsed.pattern == "" || count >= 2 && count*2 > len(evidence.paths) {
+			if parsed.pattern == "" || parsed.pattern == "explicit_disc_track" || count >= 2 && count*2 > len(evidence.paths) {
 				continue
 			}
-			if parsed.pattern == "disc_track" && parsed.Disc > 0 {
+			if parsed.pattern == "disc_track" {
 				parsed = filenameNumbers{Track: parsed.Disc, prefixEnd: parsed.firstEnd}
 			} else {
 				parsed = inferFilenameTrailingNumber(filenameStem(path))

@@ -169,6 +169,25 @@ describe("元数据页：列表与筛选", () => {
 });
 
 describe("元数据页：详情", () => {
+  it("缺失曲目按各自碟号显示曲号未知或实际曲号", async () => {
+    const { governance } = setup();
+    const releaseId = releaseOf(albumA());
+    seedIssues(governance, releaseId, {
+      missing: [
+        { id: "00000000-0000-4000-8000-0000000000e1", title: "Sarabande", medium: 1, position: 4, source: "alpha/04.flac", lastSeenAt: "2026-01-02T08:30:00Z" },
+        { id: "00000000-0000-4000-8000-0000000000e2", title: "Prelude", medium: 2, position: 0, source: "alpha/prelude.flac", lastSeenAt: "2026-01-02T08:30:00Z" },
+      ],
+    });
+    renderApp({ path: `/issues?release=${releaseId}` });
+
+    const missing = within(await screen.findByRole("table", { name: "缺失的曲目" }));
+    const known = within(missing.getByRole("row", { name: /^Sarabande / }));
+    const unknown = within(missing.getByRole("row", { name: /^Prelude / }));
+    expect(known.getByRole("cell", { name: "第 1 张 · 第 4 首" })).toBeTruthy();
+    expect(unknown.getByRole("cell", { name: "第 2 张 · 曲号未知" })).toBeTruthy();
+    expect(unknown.queryByRole("cell", { name: /第 \d+ 首/ })).toBeNull();
+  });
+
   it("选中的版本写进地址并带 aria-current；详情逐条列出字段、归组冲突（文件与同一目录的其他版本）与缺失曲目", async () => {
     setup();
     const user = userEvent.setup();

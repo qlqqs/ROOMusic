@@ -91,7 +91,7 @@ func trimDiscRemainder(text string) string {
 	}
 }
 
-// stripAlbumDiscMarker 保留开头标记的后缀，否则从标记处截断；不产生空专辑名。
+// stripAlbumDiscMarker 归一结构碟标记，保留碟标记两侧的标题文字。
 func stripAlbumDiscMarker(album string) (stripped string, disc int, ok bool) {
 	marker, found := parseDiscMarker(album)
 	if !found {
@@ -100,6 +100,8 @@ func stripAlbumDiscMarker(album string) (stripped string, disc int, ok bool) {
 	stripped = marker.Prefix
 	if marker.AtStart {
 		stripped = marker.Suffix
+	} else if marker.Suffix != "" {
+		stripped += " " + marker.Suffix
 	}
 	if stripped == "" {
 		return album, 0, false
@@ -123,6 +125,14 @@ func isBonusRemainder(text string) bool {
 				return true
 			}
 		}
+	}
+	return false
+}
+
+func standaloneBonusDir(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "bonus", "bonus disc", "bonus disk", "bonus cd", "extra", "extras", "special", "特典", "初回特典", "附赠", "附录", "赠品", "おまけ":
+		return true
 	}
 	return false
 }

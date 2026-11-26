@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -219,5 +220,46 @@ func runVersionUpgradedScan(t *testing.T, format bool) {
 	}
 	for extension, count := range map[string]int{".flac": 1, ".mp3": 1} {
 		assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM library_parse_cache WHERE root_id=$1 AND relative_path LIKE $2 AND parser_version=$3`, count, root.ID, "%"+extension, parser.CacheVersion(extension))
+	}
+}
+
+func TestPostgreSQLScanGroupingVersionSevenToEight(t *testing.T) {
+	if os.Getenv("ROOMUSIC_TEST_SCAN_VERSION_CASE") == t.Name() {
+		f, root := openVersionScanFixture(t)
+		if ingest.GroupingVersion != 7 {
+			t.Fatalf("旧进程归组版本 = %d，期望 7", ingest.GroupingVersion)
+		}
+		service := scannerTestApplication(f)
+		requireScanStatus(t, runTestScan(t, f, service, root), "succeeded")
+		assertDatabaseCount(t, f, `SELECT count(*) FROM library_parse_cache WHERE root_id=$1::uuid AND parser_version=$2`, 1, root.ID, parser.CacheVersion(".flac"))
+		return
+	}
+	if ingest.GroupingVersion != 8 {
+		t.Fatalf("当前归组版本 = %d，期望 8", ingest.GroupingVersion)
+	}
+	f := newLibraryFixture(t)
+	root := insertScannerRoot(t, f, "grouping-version-seven-to-eight")
+	service, logs := newIncrementalTestService(t, f)
+	writeAudio(t, root, "Album/One.flac", audioFile{seed: 77, title: "One", album: "Album", track: 1})
+	source := filepath.Join("..", "catalog", "ingest", "version.go")
+	runScanWithVersionOverlay(t, f, root, source, regexp.MustCompile(`(const GroupingVersion = )(\d+)`), -1)
+	before := readIncrementalTestCandidateStates(t, f, root)
+	ids := presentTrackIDs(t, f, root.ID)
+	release := releaseIDsByTitle(t, f, root.ID)["Album"]
+	cache := readIncrementalTestCache(t, f, root)["Album/One.flac"]
+	if cache.ParserVersion != parser.CacheVersion(".flac") || release == "" || ids["Album/One.flac"] == "" {
+		t.Fatalf("版本 7 未建立解析缓存、发行和曲目：缓存=%s，发行=%q，曲目=%v", cache.ParserVersion, release, ids)
+	}
+	_, upgraded := runIncrementalTestScan(t, service, logs, root)
+	if upgraded.FilesParsed != 0 || upgraded.ParseCacheWrites != 0 || upgraded.ParseCacheHits != 1 || upgraded.CandidatesWritten != 1 || upgraded.CandidatesSkipped != 0 {
+		t.Errorf("7→8 应复用解析缓存且重写候选：%+v", upgraded)
+	}
+	state := readIncrementalTestCandidateStates(t, f, root)
+	assertIncrementalTestCandidateRewrites(t, before, state, release)
+	requireTrackAt(t, presentTrackIDs(t, f, root.ID), "Album/One.flac", ids["Album/One.flac"])
+	_, repeated := runIncrementalTestScan(t, service, logs, root)
+	if repeated.FilesParsed != 0 || repeated.ParseCacheHits != 1 || repeated.CandidatesWritten != 0 || repeated.CandidatesSkipped != 1 ||
+		!reflect.DeepEqual(state, readIncrementalTestCandidateStates(t, f, root)) {
+		t.Errorf("升级后再次未变应跳过：%+v", repeated)
 	}
 }

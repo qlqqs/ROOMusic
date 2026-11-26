@@ -82,9 +82,8 @@ func TestOrganizeSameDirectoryConflictUsesMajorityOrStableSplit(t *testing.T) {
 		{RelativePath: "album/02.flac", Directory: "album", Album: "Winner", AlbumArtist: "Artist"},
 		{RelativePath: "album/03.flac", Directory: "album", Album: "Other", AlbumArtist: "Artist"},
 	})
-	if len(majority) != 2 || majority[0].Title != "Other" || len(majority[0].Mediums[1]) != 1 ||
-		majority[1].Title != "Winner" || len(majority[1].Mediums[1]) != 2 {
-		t.Fatalf("不同专辑标签应分开：%#v", majority)
+	if len(majority) != 1 || majority[0].Title != "Winner" || len(majority[0].Mediums[1]) != 3 {
+		t.Fatalf("连续文件名应归为同一张：%#v", majority)
 	}
 
 	tie := []SourceObservation{
@@ -175,7 +174,7 @@ func TestOrganizeSameDirectoryWithInferredAlbum(t *testing.T) {
 			}
 			delete(wantTitles, relativePath)
 			if relativePath == untagged.RelativePath {
-				const wantGroupKey = "same_dir_split\x00Downloads\x00|@Downloads/guest.flac"
+				const wantGroupKey = "same_dir_split\x00Downloads\x00flac|艺人|"
 				if candidate.ReleaseGroupKey != wantGroupKey {
 					t.Errorf("无标签曲目的归组键 = %q，期望 %q", candidate.ReleaseGroupKey, wantGroupKey)
 				}
@@ -186,22 +185,17 @@ func TestOrganizeSameDirectoryWithInferredAlbum(t *testing.T) {
 		}
 	})
 
-	t.Run("仅一种专辑标签时无标签曲目并入该专辑", func(t *testing.T) {
-		sameAlbum := second
-		sameAlbum.Album = first.Album
-		got := OrganizeObservations([]SourceObservation{first, sameAlbum, untagged})
-		if len(got) != 1 || got[0].Anchor.Kind != CandidateOrdinary || got[0].Title != first.Album {
-			t.Fatalf("期望同目录曲目归入专辑 %q，实际 %+v", first.Album, got)
+	t.Run("曲号重复时缺名曲按艺人分组", func(t *testing.T) {
+		same := second
+		same.Album = first.Album
+		got := OrganizeObservations([]SourceObservation{first, same, untagged})
+		if len(got) != 2 {
+			t.Fatalf("缺名曲应独立归组：%#v", got)
 		}
-		var paths []string
-		for _, tracks := range got[0].Mediums {
-			for _, track := range tracks {
-				paths = append(paths, track.Observation.RelativePath)
+		for _, c := range got {
+			if c.Title == first.Album && len(c.Mediums[1]) != 2 || c.Title == unknownCandidateTitle && len(c.Mediums[1]) != 1 {
+				t.Fatalf("分组错误：%#v", c)
 			}
-		}
-		slices.Sort(paths)
-		if want := []string{first.RelativePath, untagged.RelativePath, second.RelativePath}; !slices.Equal(paths, want) {
-			t.Errorf("专辑曲目来源 = %v，期望 %v", paths, want)
 		}
 	})
 }
@@ -211,13 +205,8 @@ func TestOrganizeNonContiguousDiscDirectoriesStayLeafCandidates(t *testing.T) {
 		{RelativePath: "Box/Disc 1/a.flac", Directory: "Box/Disc 1", Album: "Set", DiscNumber: 1},
 		{RelativePath: "Box/Disc 3/b.flac", Directory: "Box/Disc 3", Album: "Set", DiscNumber: 3},
 	})
-	if len(got) != 2 {
-		t.Fatalf("non-contiguous discs merged: %#v", got)
-	}
-	for _, candidate := range got {
-		if candidate.Anchor.Kind != CandidateBoxLeaf {
-			t.Fatalf("candidate kind = %s, want box leaf", candidate.Anchor.Kind)
-		}
+	if len(got) != 1 || got[0].Anchor.Kind != CandidateMultiDisc || len(got[0].Mediums[1]) != 1 || len(got[0].Mediums[3]) != 1 {
+		t.Fatalf("碟目录应上提并保留编号：%#v", got)
 	}
 }
 
@@ -246,8 +235,12 @@ func TestOrganizeTagAlbumOutranksFolderFallback(t *testing.T) {
 		{RelativePath: "dir/three.flac", Directory: "dir", Album: "dir", InferredFields: map[string]bool{"album": true}, FieldSources: map[string]string{"album": "folder_fallback"}},
 	}
 	got := OrganizeObservations(observations)
-	if len(got) != 1 || got[0].Title != "Tagged" {
-		t.Fatalf("tag album did not outrank fallback: %#v", got)
+	titles := map[string]int{}
+	for _, c := range got {
+		titles[c.Title]++
+	}
+	if len(got) != 3 || titles["Tagged"] != 1 || titles[unknownCandidateTitle] != 2 {
+		t.Fatalf("无艺人、无专辑且无曲号的文件应各自分开：%+v", got)
 	}
 }
 
@@ -415,7 +408,7 @@ func TestOrganizerAssignsStableFallbackTrackPositions(t *testing.T) {
 		t.Fatalf("unexpected candidates: %#v", got)
 	}
 	for index, track := range got[0].Mediums[1] {
-		if track.Position != index+1 || track.Observation.TrackNumber != index+1 || track.Observation.FieldSources["track_number"] != "path_order_fallback" || track.Observation.RelativePath != fmt.Sprintf("album/%c.flac", 'a'+rune(index)) {
+		if track.SortPosition != index+1 || track.Position != 0 || track.Observation.TrackNumber != 0 || track.Observation.RelativePath != fmt.Sprintf("album/%c.flac", 'a'+rune(index)) {
 			t.Fatalf("fallback order at %d: %#v", index, track)
 		}
 	}
@@ -432,12 +425,9 @@ func TestOrganizerFallbackPositionsPreserveExplicitTags(t *testing.T) {
 		t.Fatalf("unexpected candidates: %#v", got)
 	}
 	for index, track := range got[0].Mediums[1] {
-		if track.Position != index+1 || track.Observation.RelativePath != fmt.Sprintf("album/%c.flac", 'a'+rune(index)) {
-			t.Fatalf("mixed explicit/fallback order at %d: %#v", index, track)
+		if track.SortPosition != index+1 || track.Position != []int{2, 0, 0}[index] || track.Observation.RelativePath != []string{"album/b.flac", "album/a.flac", "album/c.flac"}[index] {
+			t.Fatalf("明确曲号和顺序：%#v", track)
 		}
-	}
-	if got[0].Mediums[1][1].Observation.FieldSources["track_number"] == "path_order_fallback" {
-		t.Fatalf("explicit track position was overwritten: %#v", got[0].Mediums[1][1])
 	}
 
 	explicitDisc := OrganizeObservations([]SourceObservation{{
@@ -447,7 +437,7 @@ func TestOrganizerFallbackPositionsPreserveExplicitTags(t *testing.T) {
 		TrackNumber:  1,
 		DiscNumber:   7,
 	}})
-	if len(explicitDisc) != 1 || len(explicitDisc[0].Mediums[7]) != 1 || len(explicitDisc[0].Mediums[2]) != 0 {
+	if len(explicitDisc) != 1 || len(explicitDisc[0].Mediums[2]) != 1 || explicitDisc[0].Mediums[2][0].Observation.DiscNumber != 7 {
 		t.Fatalf("explicit disc position was overwritten by folder structure: %#v", explicitDisc)
 	}
 }
@@ -621,7 +611,6 @@ func TestOrganizeDiscDirectoryDecisionTable(t *testing.T) {
 	type folder struct {
 		name, album, artist string
 		disc                int
-		exclusive           bool
 	}
 	type wantCandidate struct {
 		kind                 CandidateKind
@@ -636,45 +625,45 @@ func TestOrganizeDiscDirectoryDecisionTable(t *testing.T) {
 		want    []wantCandidate
 	}{
 		{"Scans and Artwork contain no audio observations", nil, nil, nil},
-		{"plain CD directories with conflicting disc tags", []folder{{"A/CD1", "Album", "Artist", 8, true}, {"A/CD2", "Album", "Artist", 9, true}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{}}}},
-		{"plain CD directories without tags", []folder{{"A/CD1", "", "", 0, true}, {"A/CD2", "", "", 0, true}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "A", "", []int{1, 2}, map[int]string{}}}},
-		{"existing Disc 1 and Disc 2", []folder{{"A/Disc 1", "Album", "Artist", 1, false}, {"A/Disc 2", "Album", "Artist", 2, false}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{}}}},
-		{"English number words", []folder{{"A/Disc One", "Album", "Artist", 1, true}, {"A/Disc Two", "Album", "Artist", 2, true}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{}}}},
-		{"bracketed markers", []folder{{"A/[Disc 1]", "Album", "Artist", 1, true}, {"A/[Disc 2]", "Album", "Artist", 2, true}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{}}}},
-		{"of-total markers", []folder{{"A/Disc 1 of 2", "Album", "Artist", 1, true}, {"A/Disc 2 of 2", "Album", "Artist", 2, true}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{}}}},
-		{"CD1 bonus suffix", []folder{{"A/CD1", "Album", "Artist", 1, true}, {"A/CD2", "Album", "Artist", 2, true}, {"A/CD1 Bonus", "Album", "Artist", 1, true}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2, 3}, map[int]string{3: "Bonus"}}}},
-		{"bonus CD prefix", []folder{{"A/CD1", "Album", "Artist", 1, true}, {"A/CD2", "Album", "Artist", 2, true}, {"A/Bonus CD1", "Album", "Artist", 1, true}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2, 3}, map[int]string{3: "Bonus"}}}},
-		{"repeated titled positive discs", []folder{{"A/CD1", "Album", "Artist", 1, true}, {"A/CD2", "Album", "Artist", 2, true}, {"A/CD1 (Live)", "Album", "Artist", 1, true}, {"A/CD2 (Live)", "Album", "Artist", 2, true}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2, 3, 4}, map[int]string{3: "Live", 4: "Live"}}}},
-		{"duplicate subtitles without a plain positive disc", []folder{{"A/Disc 1 - 夏", "Album", "Artist", 1, true}, {"A/Disc 2 - 冬", "Album", "Artist", 2, true}, {"A/Disc 1 - 春", "Album", "Artist", 1, true}}, nil, []wantCandidate{{CandidateBoxLeaf, "A/Disc 1 - 夏", "Album", "Artist", []int{1}, map[int]string{}}, {CandidateBoxLeaf, "A/Disc 1 - 春", "Album", "Artist", []int{1}, map[int]string{}}, {CandidateBoxLeaf, "A/Disc 2 - 冬", "Album", "Artist", []int{2}, map[int]string{}}}},
-		{"labeled gap", []folder{{"A/CD1", "Album", "Artist", 1, true}, {"A/CD3", "Album", "Artist", 3, true}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 3}, map[int]string{}}}},
-		{"unlabeled gap", []folder{{"A/CD1", "", "", 0, true}, {"A/CD3", "", "", 0, true}}, nil, []wantCandidate{{CandidateBoxLeaf, "A/CD1", "CD1", "", []int{1}, map[int]string{}}, {CandidateBoxLeaf, "A/CD3", "CD3", "", []int{3}, map[int]string{}}}},
-		{"partially labeled gap", []folder{{"A/CD1", "Album", "Artist", 1, true}, {"A/CD3", "", "", 0, true}}, nil, []wantCandidate{{CandidateBoxLeaf, "A/CD1", "Album", "Artist", []int{1}, map[int]string{}}, {CandidateBoxLeaf, "A/CD3", "CD3", "", []int{3}, map[int]string{}}}},
-		{"gap starts at two", []folder{{"A/CD2", "Album", "Artist", 2, true}, {"A/CD3", "Album", "Artist", 3, true}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{2, 3}, map[int]string{}}}},
-		{"one exclusive disc fallback", []folder{{"A/CD1", "", "", 0, true}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "A", "", []int{1}, map[int]string{}}}},
-		{"one disc plus direct audio", []folder{{"A/CD1", "", "", 0, false}}, []SourceObservation{{RelativePath: "A/direct.flac", Directory: "A"}}, []wantCandidate{{CandidateBoxLeaf, "A/CD1", "CD1", "", []int{1}, map[int]string{}}, {CandidateOrdinary, "A", "A", "", []int{1}, map[int]string{}}}},
-		{"nonexclusive prefixed disc in artist folder", []folder{{"艺人/某精选 CD1", "", "", 0, false}}, []SourceObservation{{RelativePath: "艺人/另一张专辑/01.flac", Directory: "艺人/另一张专辑"}}, []wantCandidate{{CandidateBoxLeaf, "艺人/某精选 CD1", "某精选", "", []int{1}, map[int]string{}}, {CandidateOrdinary, "艺人/另一张专辑", "另一张专辑", "", []int{1}, map[int]string{}}}},
-		{"nested audio makes parent nonexclusive", []folder{{"艺人/某精选 CD1", "", "", 0, false}}, []SourceObservation{{RelativePath: "艺人/某精选 CD1/附录/01.flac", Directory: "艺人/某精选 CD1/附录"}}, []wantCandidate{{CandidateBoxLeaf, "艺人/某精选 CD1", "某精选", "", []int{1}, map[int]string{}}, {CandidateOrdinary, "艺人/某精选 CD1/附录", "附录", "", []int{1}, map[int]string{}}}},
-		{"nonexclusive subtitled discs stay leaves", []folder{{"艺人/Disc 1 - 夏", "Album", "Artist", 1, false}, {"艺人/Disc 2 - 冬", "Album", "Artist", 2, false}}, []SourceObservation{{RelativePath: "艺人/另一张专辑/01.flac", Directory: "艺人/另一张专辑"}}, []wantCandidate{{CandidateBoxLeaf, "艺人/Disc 1 - 夏", "Album", "Artist", []int{1}, map[int]string{}}, {CandidateBoxLeaf, "艺人/Disc 2 - 冬", "Album", "Artist", []int{2}, map[int]string{}}, {CandidateOrdinary, "艺人/另一张专辑", "另一张专辑", "", []int{1}, map[int]string{}}}},
-		{"plain discs with sibling bonus directory", []folder{{"A/CD1", "Album", "Artist", 1, false}, {"A/CD2", "Album", "Artist", 2, false}}, []SourceObservation{{RelativePath: "A/Bonus/01.flac", Directory: "A/Bonus"}}, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{}}, {CandidateOrdinary, "A/Bonus", "Bonus", "", []int{1}, map[int]string{}}}},
-		{"prefixed single disc fallback", []folder{{"Box/A CD1", "", "", 0, true}}, nil, []wantCandidate{{CandidateMultiDisc, "Box", "A", "", []int{1}, map[int]string{}}}},
-		{"conflicting album tags stay split", []folder{{"A/CD1", "First", "Artist", 1, true}, {"A/CD2", "Second", "Artist", 2, true}}, nil, []wantCandidate{{CandidateBoxLeaf, "A/CD1", "First", "Artist", []int{1}, map[int]string{}}, {CandidateBoxLeaf, "A/CD2", "Second", "Artist", []int{2}, map[int]string{}}}},
-		{"album title disc markers normalize and group", []folder{{"A/CD1", "X (Disc 1)", "Artist", 1, false}, {"A/CD2", "X (Disc 2)", "Artist", 2, false}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "X", "Artist", []int{1, 2}, map[int]string{}}}},
-		{"different prefixes remain leaves", []folder{{"Box/X CD1", "", "", 0, true}, {"Box/X CD2", "", "", 0, true}, {"Box/Y CD1", "", "", 0, true}}, nil, []wantCandidate{{CandidateBoxLeaf, "Box/X CD1", "X", "", []int{1}, map[int]string{}}, {CandidateBoxLeaf, "Box/X CD2", "X", "", []int{2}, map[int]string{}}, {CandidateBoxLeaf, "Box/Y CD1", "Y", "", []int{1}, map[int]string{}}}},
-		{"plain numeric folders are ordinary", []folder{{"A/1", "", "", 0, false}, {"A/2", "", "", 0, false}}, nil, []wantCandidate{{CandidateOrdinary, "A/1", "1", "", []int{1}, map[int]string{}}, {CandidateOrdinary, "A/2", "2", "", []int{1}, map[int]string{}}}},
-		{"root CD directories retain strict grouping", []folder{{"CD1", "Album", "Artist", 1, false}, {"CD2", "Album", "Artist", 2, false}}, nil, []wantCandidate{{CandidateMultiDisc, "", "Album", "Artist", []int{1, 2}, map[int]string{}}}},
+		{"plain CD directories with conflicting disc tags", []folder{{"A/CD1", "Album", "Artist", 8}, {"A/CD2", "Album", "Artist", 9}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{}}}},
+		{"plain CD directories without tags", []folder{{"A/CD1", "", "", 0}, {"A/CD2", "", "", 0}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "A", "", []int{1, 2}, map[int]string{}}}},
+		{"existing Disc 1 and Disc 2", []folder{{"A/Disc 1", "Album", "Artist", 1}, {"A/Disc 2", "Album", "Artist", 2}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{}}}},
+		{"English number words", []folder{{"A/Disc One", "Album", "Artist", 1}, {"A/Disc Two", "Album", "Artist", 2}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{}}}},
+		{"bracketed markers", []folder{{"A/[Disc 1]", "Album", "Artist", 1}, {"A/[Disc 2]", "Album", "Artist", 2}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{}}}},
+		{"of-total markers", []folder{{"A/Disc 1 of 2", "Album", "Artist", 1}, {"A/Disc 2 of 2", "Album", "Artist", 2}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{}}}},
+		{"CD1 bonus suffix", []folder{{"A/CD1", "Album", "Artist", 1}, {"A/CD2", "Album", "Artist", 2}, {"A/CD1 Bonus", "Album", "Artist", 1}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2, 3}, map[int]string{3: "Bonus"}}}},
+		{"bonus CD prefix", []folder{{"A/CD1", "Album", "Artist", 1}, {"A/CD2", "Album", "Artist", 2}, {"A/Bonus CD1", "Album", "Artist", 1}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2, 3}, map[int]string{3: "Bonus"}}}},
+		{"repeated titled positive discs", []folder{{"A/CD1", "Album", "Artist", 1}, {"A/CD2", "Album", "Artist", 2}, {"A/CD1 (Live)", "Album", "Artist", 1}, {"A/CD2 (Live)", "Album", "Artist", 2}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{1: "Live", 2: "Live"}}}},
+		{"duplicate subtitles without a plain positive disc", []folder{{"A/Disc 1 - 夏", "Album", "Artist", 1}, {"A/Disc 2 - 冬", "Album", "Artist", 2}, {"A/Disc 1 - 春", "Album", "Artist", 1}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2}, map[int]string{2: "冬"}}}},
+		{"labeled gap", []folder{{"A/CD1", "Album", "Artist", 1}, {"A/CD3", "Album", "Artist", 3}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 3}, map[int]string{}}}},
+		{"unlabeled gap", []folder{{"A/CD1", "", "", 0}, {"A/CD3", "", "", 0}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "A", "", []int{1, 3}, map[int]string{}}}},
+		{"partially labeled gap", []folder{{"A/CD1", "Album", "Artist", 1}, {"A/CD3", "", "", 0}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 3}, map[int]string{}}}},
+		{"gap starts at two", []folder{{"A/CD2", "Album", "Artist", 2}, {"A/CD3", "Album", "Artist", 3}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{2, 3}, map[int]string{}}}},
+		{"one exclusive disc fallback", []folder{{"A/CD1", "", "", 0}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "A", "", []int{1}, map[int]string{}}}},
+		{"one disc plus direct audio", []folder{{"A/CD1", "", "", 0}}, []SourceObservation{{RelativePath: "A/direct.flac", Directory: "A"}}, []wantCandidate{{CandidateMultiDisc, "A", "A", "", []int{1}, map[int]string{}}}},
+		{"nonexclusive prefixed disc in artist folder", []folder{{"艺人/某精选 CD1", "", "", 0}}, []SourceObservation{{RelativePath: "艺人/另一张专辑/01.flac", Directory: "艺人/另一张专辑"}}, []wantCandidate{{CandidateMultiDisc, "艺人", "某精选", "", []int{1}, map[int]string{}}, {CandidateOrdinary, "艺人/另一张专辑", "另一张专辑", "", []int{1}, map[int]string{}}}},
+		{"nested audio makes parent nonexclusive", []folder{{"艺人/某精选 CD1", "", "", 0}}, []SourceObservation{{RelativePath: "艺人/某精选 CD1/附录/01.flac", Directory: "艺人/某精选 CD1/附录"}}, []wantCandidate{{CandidateMultiDisc, "艺人", "某精选", "", []int{1}, map[int]string{}}, {CandidateMultiDisc, "艺人/某精选 CD1", "某精选 CD1", "", []int{1}, map[int]string{1: "附录"}}}},
+		{"nonexclusive subtitled discs stay leaves", []folder{{"艺人/Disc 1 - 夏", "Album", "Artist", 1}, {"艺人/Disc 2 - 冬", "Album", "Artist", 2}}, []SourceObservation{{RelativePath: "艺人/另一张专辑/01.flac", Directory: "艺人/另一张专辑"}}, []wantCandidate{{CandidateMultiDisc, "艺人", "Album", "Artist", []int{1, 2}, map[int]string{1: "夏", 2: "冬"}}, {CandidateOrdinary, "艺人/另一张专辑", "另一张专辑", "", []int{1}, map[int]string{}}}},
+		{"plain discs with sibling bonus directory", []folder{{"A/CD1", "Album", "Artist", 1}, {"A/CD2", "Album", "Artist", 2}}, []SourceObservation{{RelativePath: "A/Bonus/01.flac", Directory: "A/Bonus"}}, []wantCandidate{{CandidateMultiDisc, "A", "Album", "Artist", []int{1, 2, 3}, map[int]string{3: "Bonus"}}}},
+		{"prefixed single disc fallback", []folder{{"Box/A CD1", "", "", 0}}, nil, []wantCandidate{{CandidateMultiDisc, "Box", "A", "", []int{1}, map[int]string{}}}},
+		{"conflicting album tags stay split", []folder{{"A/CD1", "First", "Artist", 1}, {"A/CD2", "Second", "Artist", 2}}, nil, []wantCandidate{{CandidateMultiDisc, "A", unknownCandidateTitle, "Artist", []int{1, 2}, map[int]string{}}}},
+		{"album title disc markers normalize and group", []folder{{"A/CD1", "X (Disc 1)", "Artist", 1}, {"A/CD2", "X (Disc 2)", "Artist", 2}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "X", "Artist", []int{1, 2}, map[int]string{}}}},
+		{"different prefixes remain leaves", []folder{{"Box/X CD1", "", "", 0}, {"Box/X CD2", "", "", 0}, {"Box/Y CD1", "", "", 0}}, nil, []wantCandidate{{CandidateMultiDisc, "Box", "Box", "", []int{1, 2}, map[int]string{}}}},
+		{"plain numeric folders are ordinary", []folder{{"A/1", "", "", 0}, {"A/2", "", "", 0}}, nil, []wantCandidate{{CandidateOrdinary, "A/1", "1", "", []int{1}, map[int]string{}}, {CandidateOrdinary, "A/2", "2", "", []int{1}, map[int]string{}}}},
+		{"root CD directories retain strict grouping", []folder{{"CD1", "Album", "Artist", 1}, {"CD2", "Album", "Artist", 2}}, nil, []wantCandidate{{CandidateMultiDisc, "", "Album", "Artist", []int{1, 2}, map[int]string{}}}},
 		{"root album tags with disc markers", nil, []SourceObservation{{RelativePath: "X (Disc 1).flac", Album: "X (Disc 1)", DiscNumber: 1, InferredFields: map[string]bool{"disc_number": true}}, {RelativePath: "X (Disc 2).flac", Album: "X (Disc 2)", DiscNumber: 1, InferredFields: map[string]bool{"disc_number": true}}}, []wantCandidate{{CandidateLooseAlbum, "", "X", "", []int{1, 2}, map[int]string{}}}},
-		{"exclusive unlabeled subtitle avoids directory artist fallback", []folder{{"A/Disc 1 - 夏", "", "", 0, true}, {"A/Disc 2 - 冬", "", "", 0, true}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "A", "", []int{1, 2}, map[int]string{1: "夏", 2: "冬"}}}},
-		{"nonexclusive Jay Chou prefixed leaf retains artist", []folder{{"周杰伦 - 叶惠美 CD1", "", "", 0, false}}, nil, []wantCandidate{{CandidateBoxLeaf, "周杰伦 - 叶惠美 CD1", "周杰伦 - 叶惠美", "周杰伦", []int{1}, map[int]string{}}}},
+		{"exclusive unlabeled subtitle avoids directory artist fallback", []folder{{"A/Disc 1 - 夏", "", "", 0}, {"A/Disc 2 - 冬", "", "", 0}}, nil, []wantCandidate{{CandidateMultiDisc, "A", "A", "", []int{1, 2}, map[int]string{1: "夏", 2: "冬"}}}},
+		{"nonexclusive Jay Chou prefixed leaf retains artist", []folder{{"周杰伦 - 叶惠美 CD1", "", "", 0}}, nil, []wantCandidate{{CandidateMultiDisc, "", "周杰伦 - 叶惠美", "周杰伦", []int{1}, map[int]string{}}}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			observations := append([]SourceObservation(nil), tc.direct...)
 			for _, dir := range tc.folders {
-				observation := SourceObservation{RelativePath: dir.name + "/01.flac", Directory: dir.name, Album: dir.album, Artist: dir.artist, AlbumArtist: dir.artist, DiscNumber: dir.disc, DiscParentExclusive: dir.exclusive, InferredFields: map[string]bool{"disc_number": dir.disc == 0}}
+				observation := SourceObservation{RelativePath: dir.name + "/01.flac", Directory: dir.name, Album: dir.album, Artist: dir.artist, AlbumArtist: dir.artist, DiscNumber: dir.disc, InferredFields: map[string]bool{"disc_number": dir.disc == 0}}
 				observations = append(observations, observation)
 			}
-			// 无标签时保留解析器给出的低置信度目录标题，不能伪造权威标签。
+			// 无标签时保留解析器给出的低置信度目录标题，保留其推断来源。
 			for i := range observations {
 				o := &observations[i]
 				if o.Album == "" && o.Directory != "" {
@@ -726,7 +715,7 @@ func TestOrganizeDiscDirectoryDecisionTable(t *testing.T) {
 					}
 				}
 				// 每份合成输入恰有一轨；目录顺序与期望的介质位置一一对应。
-				if want.kind == CandidateMultiDisc && len(tc.folders) == len(want.discs) {
+				if want.kind == CandidateMultiDisc && len(tc.direct) == 0 && len(tc.folders) == len(want.discs) {
 					for i, folder := range tc.folders {
 						tracks := candidate.Mediums[want.discs[i]]
 						if len(tracks) != 1 || tracks[0].Observation.RelativePath != folder.name+"/01.flac" || tracks[0].Disc != want.discs[i] {
@@ -746,7 +735,7 @@ func TestOrganizeDiscNumberEvidencePriority(t *testing.T) {
 		want        int
 		source      string
 	}{
-		{"标签优先于专辑名和目录", SourceObservation{RelativePath: "A/CD3/01.flac", Album: "X (Disc 4)", DiscNumber: 2, FieldSources: map[string]string{"disc_number": "tag"}}, 2, "tag"},
+		{"标签碟号作为证据保留", SourceObservation{RelativePath: "A/CD3/01.flac", Album: "X (Disc 4)", DiscNumber: 2, FieldSources: map[string]string{"disc_number": "tag"}}, 2, "tag"},
 		{"专辑名优先于目录", SourceObservation{RelativePath: "A/CD3/01.flac", Album: "X (Disc 2)", DiscNumber: 1, InferredFields: map[string]bool{"disc_number": true}}, 2, "album_title"},
 		{"目录优先于默认值", SourceObservation{RelativePath: "A/CD3/01.flac", DiscNumber: 1, InferredFields: map[string]bool{"disc_number": true}}, 3, "folder_structure"},
 		{"没有证据时默认一", SourceObservation{RelativePath: "A/01.flac", DiscNumber: 1, InferredFields: map[string]bool{"disc_number": true}, FieldSources: map[string]string{"disc_number": "default_fallback"}}, 1, "default_fallback"},
@@ -754,10 +743,14 @@ func TestOrganizeDiscNumberEvidencePriority(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := OrganizeObservations([]SourceObservation{tc.observation})
-			if len(got) != 1 || len(got[0].Mediums[tc.want]) != 1 {
-				t.Fatalf("expected disc %d: %#v", tc.want, got)
+			placement := tc.want
+			if tc.observation.RelativePath == "A/CD3/01.flac" {
+				placement = 3
 			}
-			track := got[0].Mediums[tc.want][0].Observation
+			if len(got) != 1 || len(got[0].Mediums[placement]) != 1 {
+				t.Fatalf("结构碟号应为 %d: %#v", placement, got)
+			}
+			track := got[0].Mediums[placement][0].Observation
 			if track.DiscNumber != tc.want || track.FieldSources["disc_number"] != tc.source {
 				t.Fatalf("disc evidence=%d/%q want=%d/%q", track.DiscNumber, track.FieldSources["disc_number"], tc.want, tc.source)
 			}
@@ -934,21 +927,21 @@ func TestOrganizeSameDirectoryFilenameDecisionTable(t *testing.T) {
 		{"04_跨格式不重号", concat(tagged("flac", 1, 5, "Album"), tagged("mp3", 6, 10, "Album")), CandidateOrdinary, []int{10}, nil, false},
 		{"05_两格式长度不同仍各自连续", concat(tagged("flac", 1, 10, "Album"), tagged("mp3", 1, 7, "Album")), CandidateFormatSplit, []int{7, 10}, nil, false},
 		{"06_一个格式缺号不切", concat(tagged("flac", 1, 10, "Album"), concat(tagged("mp3", 1, 1, "Album"), concat(tagged("mp3", 3, 3, "Album"), tagged("mp3", 5, 5, "Album")))), CandidateOrdinary, []int{13}, nil, false},
-		{"07_标签平票且曲号连续仍按专辑拆分", concat(tagged("flac", 1, 5, "A"), tagged("flac", 6, 10, "B")), CandidateSameDirSplit, []int{5, 5}, nil, true},
+		{"07_标签平票但曲号连续合为一张", concat(tagged("flac", 1, 5, "A"), tagged("flac", 6, 10, "B")), CandidateOrdinary, []int{10}, nil, true},
 		{"08_标签平票且重号仍拆", duplicateTags, CandidateSameDirSplit, []int{5, 5}, nil, false},
-		{"09_连续文件中无标签曲目跟随稳定多数", partialAlbums, CandidateSameDirSplit, []int{5, 7}, nil, true},
+		{"09_连续文件中无标签曲目跟随稳定多数", partialAlbums, CandidateOrdinary, []int{12}, nil, true},
 		{"10_无标签纯数字文件名", untagged("1.flac", "2.flac", "10.flac"), CandidateOrdinary, []int{3}, map[string]positionEvidence{
 			"1.flac": {1, "filename_fallback", true}, "2.flac": {2, "filename_fallback", true}, "10.flac": {10, "filename_fallback", true},
 		}, false},
 		{"11_末尾数字与自然序混合", untagged("a.flac", "b10.flac", "b2.flac"), CandidateOrdinary, []int{3}, map[string]positionEvidence{
-			"a.flac": {1, "path_order_fallback", true}, "b2.flac": {2, "filename_fallback", true}, "b10.flac": {10, "filename_fallback", true},
+			"a.flac": {0, "default_fallback", true}, "b2.flac": {2, "filename_fallback", true}, "b10.flac": {10, "filename_fallback", true},
 		}, false},
 		{"12_交响曲标签编号优先", symphonies, CandidateOrdinary, []int{2}, map[string]positionEvidence{
 			"Symphony No. 5.flac": {5, "", false}, "Symphony No. 9.flac": {9, "", false},
 		}, false},
-		// 末尾数字不跳过括号后缀；Live 版本按自然序补最小未占用号。
+		// 末尾数字不跳过括号后缀；Live 版本只按自然序排列。
 		{"13_Live后缀不匹配末尾数字并补位", untagged("Symphony No. 5.flac", "Symphony No. 5 (Live).flac"), CandidateOrdinary, []int{2}, map[string]positionEvidence{
-			"Symphony No. 5 (Live).flac": {1, "path_order_fallback", true}, "Symphony No. 5.flac": {5, "filename_fallback", true},
+			"Symphony No. 5 (Live).flac": {0, "default_fallback", true}, "Symphony No. 5.flac": {5, "filename_fallback", true},
 		}, false},
 	}
 	for _, tc := range cases {
@@ -987,19 +980,8 @@ func TestOrganizeSameDirectoryFilenameDecisionTable(t *testing.T) {
 					}
 				}
 				counts = append(counts, count)
-				if tc.splitAlbums {
-					for _, tracks := range candidate.Mediums {
-						for _, track := range tracks {
-							o := track.Observation
-							if o.InferredFields["album"] {
-								if candidate.Title != "A" {
-									t.Errorf("无标签曲目应跟随平票优先的 A，得到 %q", candidate.Title)
-								}
-							} else if candidate.Title != o.Album {
-								t.Errorf("曲目标签 %q 被归到 %q", o.Album, candidate.Title)
-							}
-						}
-					}
+				if tc.splitAlbums && (candidate.Title != unknownCandidateTitle || candidate.Decisions[0].Reason != "tied_candidates") {
+					t.Fatalf("专辑标题平票应保留冲突：%#v", candidate)
 				}
 			}
 			slices.Sort(counts)
@@ -1032,14 +1014,14 @@ func TestOrganizeFilenamePositionConflictsDiscardAllFilenameNumbers(t *testing.T
 			for _, track := range candidate.Mediums[1] {
 				o := track.Observation
 				name := path.Base(o.RelativePath)
-				if track.Position != tc.positions[name] || o.TrackNumber != tc.positions[name] {
+				if track.SortPosition != tc.positions[name] || track.Position != o.TrackNumber || name != tc.tagged && track.Position != 0 {
 					t.Errorf("%q 轨位 = %d/%d，期望 %d", name, track.Position, o.TrackNumber, tc.positions[name])
 				}
 				if name == tc.tagged {
 					if o.InferredFields["track_number"] || o.FieldSources["track_number"] != "" {
 						t.Errorf("标签轨号被改写：%#v", o)
 					}
-				} else if !o.InferredFields["track_number"] || o.FieldSources["track_number"] != "path_order_fallback" {
+				} else if !o.InferredFields["track_number"] || o.TrackNumber != 0 {
 					t.Errorf("所有文件名轨号都应退回补位：%#v", o)
 				}
 			}
@@ -1109,14 +1091,14 @@ func TestOrganizeFormatSplitDiscDirectoryPrefixFallback(t *testing.T) {
 		t.Fatalf("期望无标签碟目录切为两个格式版本：%#v", got)
 	}
 	for _, candidate := range got {
-		if candidate.Anchor.Kind != CandidateFormatSplit || candidate.Anchor.Scope != "某精选 CD1" || candidate.VersionGroup != "format:某精选 CD1" || candidate.Title != "某精选" {
+		if candidate.Anchor.Kind != CandidateFormatSplit || candidate.Anchor.Scope != "" || candidate.VersionGroup != "format:" || candidate.Title != "某精选" {
 			t.Errorf("格式切分丢失碟目录前缀标题：%#v", candidate)
 		}
 		found := false
 		for _, decision := range candidate.Decisions {
 			if decision.Field == "title" {
 				found = true
-				if decision.Value != "某精选" || decision.Source != "folder_fallback" || decision.RuleID != "disc_dir_prefix_fallback_v1" || decision.Confidence != "low" || decision.Reason != "inferred_value" {
+				if decision.Value != "某精选" || decision.Source != "folder_fallback" || decision.RuleID != "multidisc_parent_fallback_v1" || decision.Confidence != "low" || decision.Reason != "inferred_value" {
 					t.Errorf("碟目录标题来源错误：%#v", decision)
 				}
 			}

@@ -123,7 +123,7 @@ function GroupingSection({ grouping, renderReviewAction }: { grouping: GroupingI
 function MissingTracksSection({ missing, renderReviewAction }: { missing: MissingTracksIssueDTO } & Pick<ReleaseIssuesDetailProps, "renderReviewAction">) {
   const columns: readonly Column<MissingTrackDTO>[] = [
     { id: "title", header: "曲目", rowHeader: true, cell: (track) => track.title },
-    { id: "position", header: "碟与曲序", cell: (track) => `第 ${track.medium_position} 张 · 第 ${track.position} 首` },
+    { id: "position", header: "碟与曲序", cell: (track) => `第 ${track.medium_position} 张 · ${track.position >= 1 ? `第 ${track.position} 首` : "曲号未知"}` },
     { id: "source", header: "文件", cell: (track) => track.source },
     { id: "seen", header: "最后一次看到", cell: (track) => formatDateTime(track.last_seen_at) },
     {

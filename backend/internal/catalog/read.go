@@ -104,7 +104,7 @@ func (s *Store) listReleasesLegacy(ctx context.Context, params ListParams) (Rele
 		return ReleasePage{}, fmt.Errorf("%w: count releases: %w", ErrQuery, err)
 	}
 	listQuery := "SELECT " + releasesql.ReleaseSummaryProjection + " FROM " + releasesql.ReleaseSource + releasesql.ReleaseSummaryArtworkJoin + whereClause +
-		" ORDER BY LOWER(releases.title),LOWER(releases.artist),releases.id LIMIT $" + strconv.Itoa(len(queryArgs)+1) +
+		" ORDER BY catalog_list_sort_key(releases.title) COLLATE \"C\",catalog_list_sort_key(releases.artist) COLLATE \"C\",releases.id LIMIT $" + strconv.Itoa(len(queryArgs)+1) +
 		" OFFSET $" + strconv.Itoa(len(queryArgs)+2)
 	listArgs := append(append([]any{}, queryArgs...), params.PageSize, (params.Page-1)*params.PageSize)
 	rows, err := s.database.QueryContext(ctx, listQuery, listArgs...)
@@ -195,7 +195,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		JOIN track_effective t ON t.medium_id=m.id AND t.source_status='present'
 		LEFT JOIN track_display_durations dd ON dd.track_id=t.id
 		WHERE m.release_id=$1::uuid
-		ORDER BY m.position,m.id,t.position,t.id
+		ORDER BY m.position,m.id,COALESCE(t.sort_position,t.position),t.id
 		LIMIT $2`, releaseID, MaxReleaseTrackRows+1)
 	if err != nil {
 		return nil, err
@@ -292,7 +292,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		JOIN tracks t ON t.id=c.track_id AND t.source_status='present'
 		JOIN media m ON m.id=t.medium_id
 		WHERE m.release_id=$1::uuid
-		ORDER BY m.position,m.id,t.position,t.id,c.position,c.role,c.name
+		ORDER BY m.position,m.id,COALESCE(t.sort_position,t.position),t.id,c.position,c.role,c.name
 		LIMIT $2`, releaseID, MaxReleaseTrackCredits+1)
 	if err != nil {
 		return nil, err

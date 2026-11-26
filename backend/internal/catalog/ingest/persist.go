@@ -34,6 +34,17 @@ func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID s
 
 // PersistCandidateWithFeedback 在同一候选事务中记录扫描变更；反馈故障不改变核心写入。
 func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scanID, rootID string, candidate OrganizedCandidate, feedback *ScanFeedback) (releaseID string, err error) {
+	return PersistCandidateAttachments(ctx, database, scanID, rootID, candidate, feedback, nil)
+}
+
+// Attachment 保存发行绑定的根内文件及其图片尺寸。
+type Attachment struct {
+	RelativePath, Kind, Format string
+	Width, Height              int
+}
+
+// PersistCandidateAttachments 在发行事务内替换本轮成功枚举的附件；nil 保留已有清单。
+func PersistCandidateAttachments(ctx context.Context, database TxBeginner, scanID, rootID string, candidate OrganizedCandidate, feedback *ScanFeedback, attachments []Attachment) (releaseID string, err error) {
 	works := AssignWorks(candidate)
 	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
@@ -66,6 +77,16 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 		return "", err
 	}
 
+	if attachments != nil {
+		if _, err = tx.ExecContext(ctx, "DELETE FROM release_attachments WHERE release_id=$1", releaseID); err != nil {
+			return "", err
+		}
+		for _, file := range attachments {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO release_attachments(release_id,relative_path,kind,image_format,width,height) VALUES($1,$2,$3,$4,$5,$6)`, releaseID, file.RelativePath, file.Kind, nullableString(file.Format), nullablePositiveInt(file.Width), nullablePositiveInt(file.Height)); err != nil {
+				return "", err
+			}
+		}
+	}
 	var mergeTargetID string
 	var hasMergeSources bool
 	err = tx.QueryRowContext(ctx, `SELECT
@@ -162,7 +183,7 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 	}
 	for _, decision := range candidate.Decisions {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO release_field_decisions(release_id,field_key,selected_value,selected_source,confidence,action,rule_id,candidates,reason,scan_run_id)
-			VALUES($1::uuid,$2,to_jsonb($3::text),$4,$5,$6,$7,to_jsonb($8::text[]),$9,$10::uuid)`, releaseID, decision.Field, decision.Value, decision.Source, decision.Confidence, decision.Action, decision.RuleID, decision.Candidates, decision.Reason, scanID); err != nil {
+			VALUES($1::uuid,$2,CASE WHEN $9='tied_candidates' THEN NULL ELSE to_jsonb($3::text) END,$4,$5,$6,$7,to_jsonb($8::text[]),$9,$10::uuid)`, releaseID, decision.Field, decision.Value, decision.Source, decision.Confidence, decision.Action, decision.RuleID, decision.Candidates, decision.Reason, scanID); err != nil {
 			return "", err
 		}
 	}
@@ -213,6 +234,13 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 // 否则新建 Release 与一个新的 ReleaseGroup（每个新 Release 一个组）。
 func persistRelease(ctx context.Context, tx *sql.Tx, rootID string, candidate OrganizedCandidate, plannedReleaseID string) (string, error) {
 	anchor := CandidateIdentity(rootID, candidate.Anchor)
+	var albumArtist any = candidate.AlbumArtist
+	for _, decision := range candidate.Decisions {
+		if decision.Field == "album_artist" && decision.Reason == "tied_candidates" {
+			albumArtist = nil
+			break
+		}
+	}
 	genres := candidate.Genres
 	if genres == nil {
 		genres = []string{}
@@ -225,11 +253,11 @@ func persistRelease(ctx context.Context, tx *sql.Tx, rootID string, candidate Or
 				return "", err
 			}
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind,album_artist,year,source_type,media_type,genres,catalog_number,edition,label,barcode,curation_confirmed,curation_changed_at)
-			VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,false,now())`, releaseID, groupID, candidate.Title, candidate.Artist, rootID, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), genres, nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode))
+		_, err := tx.ExecContext(ctx, `INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind,album_artist,year,source_type,media_type,genres,catalog_number,edition,label,barcode,scan_version_terms,curation_confirmed,curation_changed_at)
+			VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18::text[],'{}'),false,now())`, releaseID, groupID, candidate.Title, candidate.Artist, rootID, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), albumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), genres, nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode), candidate.VersionTerms)
 		return releaseID, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE releases SET title=$1,artist=$2,relative_directory=$3,candidate_anchor=$4,candidate_kind=$5,album_artist=$6,year=$7,source_type=$8,media_type=$9,genres=$10,catalog_number=$11,edition=$12,label=$13,barcode=$14 WHERE id=$15::uuid`, candidate.Title, candidate.Artist, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), genres, nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode), plannedReleaseID)
+	result, err := tx.ExecContext(ctx, `UPDATE releases SET title=$1,artist=$2,relative_directory=$3,candidate_anchor=$4,candidate_kind=$5,album_artist=$6,year=$7,source_type=$8,media_type=$9,genres=$10,catalog_number=$11,edition=$12,label=$13,barcode=$14,scan_version_terms=COALESCE($16::text[],'{}') WHERE id=$15::uuid`, candidate.Title, candidate.Artist, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), albumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), genres, nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode), plannedReleaseID, candidate.VersionTerms)
 	if err != nil {
 		return "", err
 	}
@@ -251,7 +279,12 @@ func (candidate OrganizedCandidate) orderedTracks() []OrganizedTrack {
 	var tracks []OrganizedTrack
 	for _, disc := range discs {
 		medium := append([]OrganizedTrack(nil), candidate.Mediums[disc]...)
-		sort.SliceStable(medium, func(i, j int) bool { return medium[i].Position < medium[j].Position })
+		sort.SliceStable(medium, func(i, j int) bool {
+			if medium[i].SortPosition != medium[j].SortPosition {
+				return medium[i].SortPosition < medium[j].SortPosition
+			}
+			return medium[i].Position < medium[j].Position
+		})
 		tracks = append(tracks, medium...)
 	}
 	return tracks
@@ -279,7 +312,7 @@ func (candidate OrganizedCandidate) EmbeddedArtwork() (SourceObservation, bool) 
 
 // ArtworkDirectories 返回查找文件夹封面的目录（相对注册根，已规范化并去重，空串表示注册根）：
 // 先是发行目录 Anchor.Scope，再按碟序、曲序列出各曲目所在的目录。CUE 虚拟轨的目录是 sheet 所在目录，
-// 不是由虚拟路径推出的目录。不会越过发行自己的目录：Box 叶子不查 Box 父目录，CUE 不查跨目录的音频目录。
+// 不是由虚拟路径推出的目录。CUE 使用 sheet 所在目录，保留跨目录录音来源的边界。
 func (candidate OrganizedCandidate) ArtworkDirectories() []string {
 	directories := []string{NormalizedPath(candidate.Anchor.Scope)}
 	seen := map[string]bool{directories[0]: true}

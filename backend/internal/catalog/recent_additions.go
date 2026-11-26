@@ -19,7 +19,7 @@ func releaseGroupOrder(sort ReleaseGroupSort) string {
 	if sort == ReleaseGroupSortAddedAtDesc {
 		return "ranked.added_at DESC, ranked.group_id DESC"
 	}
-	return "LOWER(releases.title),LOWER(releases.artist),releases.id"
+	return "catalog_list_sort_key(releases.title) COLLATE \"C\",catalog_list_sort_key(releases.artist) COLLATE \"C\",releases.id"
 }
 
 // ListRecentlyAddedReleaseGroups 使用完整组投影读取最近八张可见专辑，不执行总数查询。
