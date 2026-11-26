@@ -25,6 +25,7 @@ func TestApplyCompilation(t *testing.T) {
 		{"十轨仅三轨标为合辑", observations("", []string{"甲", "甲", "甲", "甲", "甲", "甲", "乙", "乙", "乙", "乙"}, 3), "甲", "", false},
 		{"真实专辑艺人优先于合辑标志", observations("周杰伦", []string{"甲", "乙"}, 2), "周杰伦", "周杰伦", false},
 		{"合辑标志为假不改变决定", observations("", []string{"甲", "甲", "乙"}, 0), "甲", "", false},
+		{"二人合作专辑各半且有客串", observations("", []string{"A", "B", "A", "B", "A feat. C", "B feat. D"}, 0), "A", "", false},
 		{"曲目艺人多数为群星", observations("", []string{"群星", "群星", "甲"}, 0), "群星", "", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

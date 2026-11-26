@@ -33,3 +33,26 @@ func foldCompilationPlaceholder(raw string) string {
 	}, raw)
 	return NormalizeValue(strings.ToLower(raw))
 }
+
+// PrimaryArtistCounts 按每首的第一位真实艺人统计合辑分布。
+type PrimaryArtistCounts map[string]int
+
+func (counts PrimaryArtistCounts) Add(credit string) {
+	names := CanonicalArtistNames(credit)
+	if len(names) == 0 || IsCompilationPlaceholder(credit) || IsCompilationPlaceholder(names[0]) || FieldAuthenticity("artist", names[0], "", false, false) != Real {
+		return
+	}
+	counts[strings.ToLower(names[0])]++
+}
+
+func (counts PrimaryArtistCounts) IsCompilation(tracks int) bool {
+	if tracks < 4 || len(counts) < 3 {
+		return false
+	}
+	for _, count := range counts {
+		if count*2 > tracks {
+			return false
+		}
+	}
+	return true
+}

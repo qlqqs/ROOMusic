@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/japanese"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/encoding/traditionalchinese"
@@ -22,7 +23,7 @@ func LegacyDecodings(raw []byte) []string {
 			break
 		}
 	}
-	if !suspect {
+	if !suspect || looksWestern(raw) {
 		return nil
 	}
 	var values []string
@@ -40,4 +41,23 @@ func LegacyDecodings(raw []byte) []string {
 		}
 	}
 	return values
+}
+
+// 含 ASCII 字母的西文标签常夹一两个重音字母或排版标点。
+func looksWestern(raw []byte) bool {
+	hasASCIILetter := false
+	highRun := 0
+	for _, b := range raw {
+		if b < utf8.RuneSelf {
+			hasASCIILetter = hasASCIILetter || unicode.IsLetter(rune(b))
+			highRun = 0
+			continue
+		}
+		highRun++
+		r := charmap.Windows1252.DecodeByte(b)
+		if highRun > 2 || !(unicode.Is(unicode.Latin, r) || unicode.IsPunct(r)) {
+			return false
+		}
+	}
+	return hasASCIILetter
 }

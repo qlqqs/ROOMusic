@@ -106,6 +106,49 @@ func TestOrganizeSameDirectoryConflictUsesMajorityOrStableSplit(t *testing.T) {
 	}
 }
 
+func TestOrganizeSameDirectoryAlbumTagVariants(t *testing.T) {
+	for _, tc := range []struct {
+		name, directory, artist, album string
+		tracks                         int
+		variants                       map[int]string
+	}{
+		{
+			name: "末尾加曲带括号后缀", directory: "X/Album", artist: "X", album: "The Album", tracks: 15,
+			variants: map[int]string{13: "The Album (Bonus Tracks)", 14: "The Album (Bonus Tracks)", 15: "The Album (Bonus Tracks)"},
+		},
+		{
+			name: "连续曲号中的一首异名", directory: "Y/GH", artist: "Y", album: "Greatest Hits", tracks: 10,
+			variants: map[int]string{7: "Greatest Hits Vol 1"},
+		},
+		{
+			name: "大小写和空白变体", directory: "Z/W", artist: "Z", album: "The Wall", tracks: 10,
+			variants: map[int]string{2: "The wall ", 4: "The wall ", 6: "The wall ", 8: "The wall ", 10: "The wall "},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			observations := make([]SourceObservation, 0, tc.tracks)
+			for position := 1; position <= tc.tracks; position++ {
+				album := tc.album
+				if variant, ok := tc.variants[position]; ok {
+					album = variant
+				}
+				observations = append(observations, SourceObservation{
+					RelativePath: fmt.Sprintf("%s/%02d.flac", tc.directory, position),
+					Directory:    tc.directory, SourceKind: "flac", Album: album, Artist: tc.artist,
+					Title: fmt.Sprintf("S%d", position), TrackNumber: position, DurationSeconds: 200,
+				})
+			}
+			candidate := organizeSingleCandidate(t, observations...)
+			if candidate.Title != tc.album {
+				t.Errorf("候选标题为 %q，期望 %q", candidate.Title, tc.album)
+			}
+			if len(candidate.Mediums) != 1 || len(candidate.Mediums[1]) != tc.tracks {
+				t.Fatalf("候选有 %d 碟，第 1 碟有 %d 首，期望 1 碟 %d 首", len(candidate.Mediums), len(candidate.Mediums[1]), tc.tracks)
+			}
+		})
+	}
+}
+
 func TestOrganizeSameDirectoryWithInferredAlbum(t *testing.T) {
 	first := SourceObservation{RelativePath: "Downloads/first.flac", Directory: "Downloads", Title: "曲目甲", Artist: "艺人", Album: "专辑甲", TrackNumber: 1}
 	second := SourceObservation{RelativePath: "Downloads/second.flac", Directory: "Downloads", Title: "曲目乙", Artist: "艺人", Album: "专辑乙", TrackNumber: 1}
