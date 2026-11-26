@@ -33,11 +33,12 @@
 4. 用并发版跑一次真实模型轮，写报告。程序轮、oracle 轮和串行部分快照沿用已有结果。
 5. 文档（原步骤 6）与收尾（原步骤 7）。
 
-### 在途状态（2026-11-26 09:00 UTC，供上下文压缩后续命）
+### 在途状态（2026-11-26 09:20 UTC 更新，供上下文压缩后续命）
 
 停止规则和后续事项以 prd.md 的“收尾停止规则”“后续事项”为准。
 
-- 最终真实模型轮（唯一一次，之后不再重跑）：
+- 第一次最终轮（`temp/real-final-jx5TQgEV/`）因冷却翻倍缺陷停住，已用 SIGQUIT 结束，不算结果。当前在修：W10，终端 `term_68ae45a1-d5f1-4772-bd0a-f8c5615bf3db`，工作目录 `.worktrees/ROOMusic/ROOMusic/live-gaps-w10`，分支 `task/live-gaps-w10`；之后派测试代理写一个定向用例，然后合入，再跑下面这一轮。
+- 最终真实模型轮（W10 合入后在 main 上重跑，唯一一次，下列定位信息届时更新）：
   - W3 子代理：Orca 终端句柄 `term_92c11118-23a8-4515-bf02-188258b30706`（Codex，gpt-6.2-astra）；
   - 工作目录：`/home/qlqq/workspace/.worktrees/ROOMusic/ROOMusic/live-gaps-w3`，分支 `task/live-gaps-w3`，基于 main `270f3691`；
   - 本轮临时目录：该工作目录下 `temp/real-final-jx5TQgEV/`（`run.log` 为进度）；
