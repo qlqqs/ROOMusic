@@ -39,6 +39,8 @@
 
 - 第一次最终轮（`temp/real-final-jx5TQgEV/`）因冷却翻倍缺陷停住，已用 SIGQUIT 结束，不算结果。当前在修：W10，终端 `term_68ae45a1-d5f1-4772-bd0a-f8c5615bf3db`，工作目录 `.worktrees/ROOMusic/ROOMusic/live-gaps-w10`，分支 `task/live-gaps-w10`；之后派测试代理写一个定向用例，然后合入，再跑下面这一轮。
 - 最终真实模型轮（W10 合入后在 main 上重跑，唯一一次，下列定位信息届时更新）：
+  - 人工上限（用户侧要求）：开跑 40 分钟未排空就取快照停止，按当时结果出报告，不等 140 分钟观察窗，不再查因重跑；届时仍在等来源重试的项按 R18 计为符合，其余未完成如实列出。
+  - 每 5 分钟看一次进度；连续两次“运行中 0 且待模型不变”即按卡住处理（取快照、停止、报告）。
   - W3 子代理：Orca 终端句柄 `term_92c11118-23a8-4515-bf02-188258b30706`（Codex，gpt-6.2-astra）；
   - 工作目录：`/home/qlqq/workspace/.worktrees/ROOMusic/ROOMusic/live-gaps-w3`，分支 `task/live-gaps-w3`，基于 main `270f3691`；
   - 本轮临时目录：该工作目录下 `temp/real-final-jx5TQgEV/`（`run.log` 为进度）；
