@@ -51,6 +51,7 @@ const titles = {
   release_claim: "撤销这次认领？",
   release_merge: "撤销这次合并？",
   release_auto_merge: "撤销这次自动合并？",
+  local_model_grouping: "撤销这次模型归组？",
   release_auto_correction: "撤销这次自动补全？",
   track_correction: "撤销这次曲目修改？",
   track_auto_correction: "撤销这次曲目的自动补全？",
