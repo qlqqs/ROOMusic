@@ -78,8 +78,9 @@ export function ArtistPortrait({ artist, image, links, media }: ArtistPortraitPr
     media !== null && webSearch !== null && webSearch.configured ? (
       <IconButton label="联网查找这位艺人的身份" icon={<SearchCheck size={15} aria-hidden="true" />} disabled={!webSearch.can_start || media.startingWebSearch} onClick={() => void media.startWebSearch()} />
     ) : null;
-  // 印章的模式：有候选待确认优先；其次是图片来源；没有图片时管理员看到网络搜索中或“指定对应”。
-  const seal = candidates.length > 0 ? "pending" : shown !== null ? "source" : searching ? "searching" : media !== null ? "link" : null;
+  // 印章的模式：有候选待确认优先；其次是联网查找中（只在点了“联网查找”或“整理艺人”后才有，点完立刻看得到进展）；再次是图片来源；
+  // 都没有时管理员看到“指定对应”。
+  const seal = candidates.length > 0 ? "pending" : searching ? "searching" : shown !== null ? "source" : media !== null ? "link" : null;
   const sealLabel =
     seal === "pending"
       ? `有 ${candidates.length} 个身份候选等你确认`
@@ -130,7 +131,8 @@ export function ArtistPortrait({ artist, image, links, media }: ArtistPortraitPr
   };
 
   const closePopover = () => setPopover(null);
-  const sealPopover = seal === "pending" ? "candidates" : seal === "source" ? "source" : "link";
+  // 点开印章：有候选时看候选；有图片时（查找中也一样）看图片来源；否则指定对应。
+  const sealPopover = seal === "pending" ? "candidates" : shown !== null && seal !== null ? "source" : "link";
 
   return (
     <div
