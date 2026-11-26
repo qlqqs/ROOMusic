@@ -12,6 +12,7 @@ import (
 )
 
 var subjects = curation.ProgramQueueSubjects[:]
+var errAlbumWaiting = errors.New("等待专辑重试")
 var errQueueUnchanged = errors.New("本轮无需写入")
 var errWaitingForPrints = errors.New("等待抽样曲目的声纹")
 
@@ -29,7 +30,7 @@ func currentAttempt(ctx context.Context) *queueAttempt {
 
 func (w *Worker) projectionMarker(ctx context.Context, now time.Time) (curation.ProgramChanges, error) {
 	marker, err := curation.LoadProgramChanges(ctx, w.db, now)
-	// 程序自己的写入在处理结束时按目标刷新。到期项直接由领取查询选取。
+	// 程序自己的写入在处理结束时按目标刷新。等待到期由领取查询选取；90 天重查到期时先投影声纹需求。
 	marker.Operation = sql.NullTime{}
 	marker.Due, marker.ReleaseDue = 0, 0
 	marker.LatestDue, marker.LatestReleaseDue = sql.NullTime{}, sql.NullTime{}
@@ -63,6 +64,10 @@ func (w *Worker) refreshChanged(ctx context.Context) error {
 func (w *Worker) Run(ctx context.Context) {
 	for ctx.Err() == nil {
 		if err := w.writer.CloseOpenBatches(ctx, "program"); err != nil {
+			w.rest(ctx, err)
+			continue
+		}
+		if err := w.restorePauses(ctx); err != nil {
 			w.rest(ctx, err)
 			continue
 		}
@@ -105,7 +110,12 @@ func (w *Worker) Run(ctx context.Context) {
 		}
 		w.state = "idle"
 		w.mu.Unlock()
-		w.wait(ctx, w.nextDelay())
+		delay, err := w.nextDelay(ctx)
+		if err != nil {
+			w.rest(ctx, err)
+			continue
+		}
+		w.wait(ctx, delay)
 	}
 }
 
@@ -131,11 +141,17 @@ func (w *Worker) drainQueues(parent context.Context, kinds []string) error {
 		if err := w.refreshChanged(ctx); err != nil {
 			return err
 		}
+		if ids := w.policy.RecoveredSources(); len(ids) > 0 {
+			if _, err := w.db.ExecContext(ctx, `UPDATE curation_work_states SET next_attempt_at=$1 WHERE subject='release' AND status='try_later'
+                AND result->'retry'->>'kind'='source' AND result->'retry'->>'source'=ANY($2::text[]) AND next_attempt_at>$1`, w.opts.Now(), ids); err != nil {
+				return err
+			}
+		}
 		for _, subject := range kinds {
 			if busy[subject] || parked[subject] {
 				continue
 			}
-			if w.cooling(subject) {
+			if subject != "release" && subject != "fingerprint" && w.cooling(subject) {
 				continue
 			}
 			item, found, err := w.nextQueueItem(ctx, subject)
@@ -157,10 +173,16 @@ func (w *Worker) drainQueues(parent context.Context, kinds []string) error {
 		if len(busy) == 0 {
 			return nil
 		}
-		poll.Reset(min(time.Until(nextPoll), w.nextDelay()))
+		delay, err := w.nextDelay(ctx)
+		if err != nil {
+			return err
+		}
+		poll.Reset(min(time.Until(nextPoll), delay))
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-w.policy.Changes():
+			continue
 		case <-poll.C:
 			if time.Now().Before(nextPoll) {
 				continue
@@ -182,6 +204,8 @@ func (w *Worker) drainQueues(parent context.Context, kinds []string) error {
 			case failureCode(err) == "source_disabled" || failureCode(err) == "not_found":
 				parked[item.Subject] = true
 				w.setQueueState(item.Subject, "paused", "source_disabled", nil)
+			case errors.Is(err, errAlbumWaiting):
+				w.setQueueState(item.Subject, "idle", "waiting_retry", nil)
 			case errors.Is(err, errWaitingForPrints):
 				w.setQueueState(item.Subject, "idle", "waiting_for_fingerprint", nil)
 			case errors.Is(err, errQueueUnchanged):
@@ -231,8 +255,13 @@ func (w *Worker) processQueueItem(ctx context.Context, item queueItem) error {
 	a := &queueAttempt{item: item, worker: w}
 	ctx = context.WithValue(ctx, attemptKey{}, a)
 	priority := sources.QueueNormal
-	if item.Subject == "release" && item.Rank == 4 {
-		priority = sources.QueueLocalComplete
+	if item.Subject == "release" || item.Subject == "fingerprint" {
+		ctx = sources.WithIdentification(ctx)
+		if item.Rank == 4 {
+			priority = sources.QueueLocalComplete
+		}
+	} else if item.Subject == "artist_media" {
+		priority = sources.QueueArtistMedia
 	}
 	ctx = w.policy.Context(ctx, priority, func(string) { w.recordQueueEvent(item.Subject, true) })
 	if err := w.ready(ctx); err != nil {
@@ -347,4 +376,22 @@ func (w *Worker) checkItemCompletion(ctx context.Context, item queueItem, previo
 func retrySnapshot(err error) bool {
 	var dbErr interface{ SQLState() string }
 	return errors.As(err, &dbErr) && (dbErr.SQLState() == "40001" || dbErr.SQLState() == "40P01")
+}
+
+func (w *Worker) restorePauses(ctx context.Context) error {
+	rows, err := w.db.QueryContext(ctx, `SELECT DISTINCT ON (result->'retry'->>'source') result->'retry'->>'source', result->'retry'->>'reason', next_attempt_at
+       FROM curation_work_states WHERE subject='release' AND status='try_later' AND result->'retry'->>'kind'='source' AND next_attempt_at>$1
+       ORDER BY result->'retry'->>'source',next_attempt_at DESC`, w.opts.Now())
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var pause sources.QueuePause
+		if err := rows.Scan(&pause.Source, &pause.Reason, &pause.RetryAt); err != nil {
+			return err
+		}
+		w.policy.RestorePause(pause)
+	}
+	return rows.Err()
 }

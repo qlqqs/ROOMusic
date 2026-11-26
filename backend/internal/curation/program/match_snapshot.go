@@ -213,12 +213,12 @@ func (d *searchDetails) read(ctx context.Context, c *Candidate) error {
 		return nil
 	}
 	d.attempted[c.ExternalID] = true
-	r, err := found(d.finder.ReleaseByID(ctx, c.ExternalID))
+	r, err := queryResult(d.finder.ReleaseByID(ctx, c.ExternalID))
 	if err != nil || r.ID == "" {
 		return err
 	}
 	if r.ID != c.ExternalID {
-		return sources.ErrUnavailable
+		return sources.ErrInvalidResponse
 	}
 	c.Release = &r
 	return nil

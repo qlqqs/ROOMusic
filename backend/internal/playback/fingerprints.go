@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
@@ -24,7 +23,6 @@ const (
 type TrackFingerprint struct {
 	Value           string
 	DurationSeconds int
-	RetryAfter      time.Duration
 }
 
 type Fingerprints struct {
@@ -104,10 +102,7 @@ func (p *Fingerprints) Fingerprint(ctx context.Context, trackID string) (TrackFi
 		return TrackFingerprint{}, FingerprintTransient, saveErr
 	}
 	if status == FingerprintTransient {
-		if src.Attempts+1 >= 3 {
-			return TrackFingerprint{}, FingerprintPermanent, nil
-		}
-		return TrackFingerprint{RetryAfter: 24 * time.Hour}, status, nil
+		return TrackFingerprint{}, status, nil
 	}
 	return TrackFingerprint{Value: result.Value, DurationSeconds: result.DurationSeconds}, status, nil
 }

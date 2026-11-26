@@ -255,6 +255,12 @@ func TestB3FingerprintReachAndFallback(t *testing.T) {
 			})}},
 		} {
 			got, err := MatchWithFingerprint(t.Context(), e, f, f, tc.step)
+			if tc.step != nil {
+				if !errors.Is(err, sources.ErrInvalidQuery) || got.Status != "" || f.searches != 0 {
+					t.Fatalf("无效指纹转成了识别结论：结果=%+v 错误=%v 搜索=%d", got, err, f.searches)
+				}
+				continue
+			}
 			if err != nil {
 				t.Fatal(err)
 			}

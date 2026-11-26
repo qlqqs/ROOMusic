@@ -19,6 +19,9 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	98: `UPDATE curation_work_states SET status='query_error',retry_count=3,next_attempt_at=NULL,
+ result=result || '{"retry":{"step":"isrc","kind":"album","source":"musicbrainz","reason":"invalid_response"}}'::jsonb
+ WHERE subject='release' AND target_id='e9800000-0000-4000-8000-000000000002';`,
 	87: `INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence)
  VALUES('e8700000-0000-4000-8000-000000000003','musicbrainz','release_group_match','e8700000-0000-4000-8000-000000000002','synthetic-group','search','certain');
  INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status,next_attempt_at) VALUES
@@ -326,6 +329,10 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			db := openMigrationTestDatabase(t)
 			// 每个候选独立建 schema，之前即使有不可回退迁移也不会妨碍后续测试。
 			rollbackApply(t, db, migrationPrefix(available, m.Version-1))
+			if m.Version == 98 {
+				rollbackExec(t, db, `INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status,result,updated_at,next_attempt_at)
+ VALUES('release','e9800000-0000-4000-8000-000000000002',104,repeat('a',64),'try_later','{"reason":"synthetic"}',now(),now());`)
+			}
 			if m.Version == 31 {
 				// 新信号引用升级前已有的发行，保证回退只需删除新版信号表。
 				rollbackExec(t, db, `INSERT INTO release_groups(id) VALUES('c1000000-0000-4000-8000-000000000001');

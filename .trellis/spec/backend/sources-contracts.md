@@ -77,17 +77,19 @@ type Declaration struct {
 | 响应读取上限 | `GetJSON` 2 MiB | `GetJSON` 8 MiB；`GetBytes` 由调用方给 |
 | 失败的进程内记忆 | 不读不写，每次都真实尝试 | 普通后台请求用尽后记 5 秒，遇到更晚的上游恢复时刻则记到该时刻；队列使用共享来源冷却 |
 
-503、429 含首次最多尝试 5 次。等待从 300 ms 起翻倍，上限 3 秒，重试总预算 10 秒。有效的 `Retry-After`（秒数或 HTTP 日期）优先，等待超出剩余预算时交回调用方。每次重发都重新取得来源许可，遵守 ctx 取消。队列连续失败从 5 秒起翻倍，最长 10 分钟，以较晚的上游恢复时刻为准，成功清零。
+503、429 含首次最多尝试 5 次。等待从 300 ms 起翻倍，上限 3 秒，重试总预算 10 秒。有效的 `Retry-After`（秒数或 HTTP 日期）优先，等待超出剩余预算时交回调用方。每次重发都重新取得来源许可，遵守 ctx 取消。队列连续失败从 5 秒起翻倍，最长 3 分钟，以较晚的上游恢复时刻为准。出站成功（包括有效空结果与 404）清零，缓存命中保留来源状态。
 
-哨兵错误：`ErrNotFound`、`ErrRateLimited`、`ErrUnavailable`、`ErrTryLater`、`ErrInvalidQuery`、`ErrInvalidKey`（B3，不重试、不缓存、不记失败记忆）。
+哨兵错误：`ErrNotFound`、`ErrRateLimited`、`ErrUnavailable`、`ErrTryLater`、`ErrInvalidQuery`、`ErrInvalidResponse`（识别收到无效响应）、`ErrInvalidKey`（B3，不重试、不缓存、不记失败记忆）。
 
-**哪些算“没匹配上”**：只有 `ErrNotFound` 与成功返回的空结果。后台调用不会得到 `ErrUnavailable`；断网、外部繁忙、响应异常一律是
+发行识别与声纹预查将 200 响应的解析或必需字段错误返回为 `ErrInvalidResponse`。AcoustID 业务错误按第 8a 节分类；无效密钥跳过声纹步骤。
+
+**哪些算“没匹配上”**：只有 `ErrNotFound` 与成功返回的空结果。后台调用不会得到 `ErrUnavailable`；断网、外部繁忙是
 `ErrTryLater`，调用方不得把它记成一次失败的尝试。ctx 取消与放行回调的拒绝原样返回，不记入任何缓存。
 
 ## 5. 限速、缓存与请求
 
 - **限速器**：默认每个源一个，按 `Declaration.ID` 取，进程内全局；同一进程里构造几个适配器实例都共用它。一个许可串行放行，
-  两次出站的间隔不小于 `MinInterval`（从发出时起算）；有对话在等时后台不取许可；重试的等待不占许可。
+  失败后仍按声明的固定间隔发送。同源许可优先级为界面交互、普通识别、本地齐全的低优先识别、艺人资料。两次出站的间隔不小于 `MinInterval`（从发出时起算）；有对话在等时后台不取许可；重试的等待不占许可。
   `sources.NewLimiter(interval, now, after)` 供测试注入时钟。
 - **缓存**：`<数据目录>/sources/cache/<源 ID>/<键的前两位>/<键>.json`，键是 `GET ` 加规范化 URL 的 SHA-256。
   文件内容 `{stored_at, expires_at, status, body}`，只存两种结果：200 且结构可用（30 天；空结果 1 天）与 404（1 天）。
@@ -196,7 +198,7 @@ type Declaration struct {
 - 请求：`PostForm` 到 `/v2/lookup`，表单恰好六项：`client`（应用密钥）、`user`（用户密钥）、`duration`（整首时长，整数秒）、`fingerprint`、
   `meta=recordings releases`、`format=json`。`Options.Keys(ctx)` 每次出站前取声明里的密钥。
 - 映射：只接受 `status=ok`；去掉没有录音的结果；录音按 ID 去重，取最高分；发行带回曲目数与碟数。
-- 错误：HTTP 429 或码 14、HTTP 503 或码 13、码 5 → 退避重试，用尽 `ErrTryLater`；码 3、8 → `ErrInvalidQuery`（空结果）；
+- 错误：HTTP 429 或码 14、HTTP 503 或码 13、码 5 → 退避重试，用尽 `ErrTryLater`；码 3、8 → `ErrInvalidQuery`（识别按该发行的错误计次）；
   码 4、17 → `InvalidKeyError{Name:"application"}`（有内置时另见上文）；码 6 → `InvalidKeyError{Name:"user"}`；其余 → `ErrTryLater`。
 - 密钥状态的回写（`unchecked`→`valid`、某一把→`invalid`）由闸门做，见[自动整理合同](./curation-contracts.md)第 16 节；缓存命中不验证密钥。
 

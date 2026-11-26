@@ -189,35 +189,18 @@ func TestPostgreSQLB3AcousticFingerprintCache(t *testing.T) {
 			}
 		})
 	}
-	t.Run("解码失败冷却与重试上限", func(t *testing.T) {
+	t.Run("解码失败由发行调度重试", func(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(app.allowedRoot, "corrupt.flac"), []byte("invalid synthetic FLAC"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		b3TrackSnapshot(t, app, corrupt, "corrupt.flac", 30)
-		assertFailure := func(attempts int, want playback.FingerprintStatus, delay time.Duration) {
-			t.Helper()
+		for attempt := 1; attempt <= 3; attempt++ {
 			got, status, err := cache.Fingerprint(t.Context(), corrupt)
-			if err != nil || status != want || got.RetryAfter != delay || countRows(t, app,
-				`SELECT count(*) FROM track_acoustic_fingerprints WHERE track_id=$1 AND attempts=$2 AND failure_category='decode_failed'`, corrupt, attempts) != 1 {
-				t.Fatalf("解码失败，结果=%+v 状态=%v 错误=%v，期望次数=%d 状态=%v 退避=%v", got, status, err, attempts, want, delay)
+			if err != nil || got.Value != "" || status != playback.FingerprintTransient || countRows(t, app,
+				`SELECT count(*) FROM track_acoustic_fingerprints WHERE track_id=$1 AND attempts=$2 AND failure_category='decode_failed'`, corrupt, attempt) != 1 {
+				t.Fatalf("第 %d 次计算，状态=%v 错误=%v", attempt, status, err)
 			}
 		}
-		expire := func() {
-			t.Helper()
-			mustExec(t, app, `UPDATE track_acoustic_fingerprints SET computed_at=now()-INTERVAL '25 hours' WHERE track_id=$1`, corrupt)
-		}
-		assertFailure(1, playback.FingerprintTransient, 24*time.Hour)
-		when := computed(corrupt)
-		assertFailure(1, playback.FingerprintPermanent, 0)
-		if !computed(corrupt).Equal(when) {
-			t.Fatal("冷却期内重算")
-		}
-		expire()
-		assertFailure(2, playback.FingerprintTransient, 24*time.Hour)
-		expire()
-		assertFailure(3, playback.FingerprintPermanent, 0)
-		expire()
-		assertFailure(3, playback.FingerprintPermanent, 0)
 	})
 	// CUE 区间与整轨时长均由真实目录快照解析。
 	source, err := catalog.NewStore(app.database).LoadFingerprintSource(t.Context(), cue, fingerprint.Version)

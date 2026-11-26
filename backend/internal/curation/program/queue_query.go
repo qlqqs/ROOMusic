@@ -13,6 +13,7 @@ import (
 type queueItem struct {
 	PatrolRevision                            int64
 	Subject, TargetID, ReleaseID, InputDigest string
+	Files                                     string
 	Rank, Generation                          int
 	ManualRequestedAt                         *time.Time
 }
@@ -20,35 +21,48 @@ type queueItem struct {
 // 发行投影保存排序依据，各媒体主题共享这些依据并独立消费自己的首次机会。
 const queueRankSQL = curation.QueueRankSQL
 
+// 只在领取发行和复核异常断点时比较文件快照，整理补图、歌词等写入不参与。
+func releaseFilesSQL(releaseID string) string {
+	return `(SELECT md5(jsonb_agg(jsonb_build_array(t.id,t.source_root_id,t.relative_path,t.source_size,
+        extract(epoch from t.source_modified_at),t.content_fingerprint,t.cue_index_frames,t.cue_end_frames)
+        ORDER BY t.id)::text) FROM tracks t JOIN media m ON m.id=t.medium_id
+        WHERE t.source_status='present' AND m.release_id=` + releaseID + `)`
+}
+
 const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (` + catalog.VisibleReleaseIDsSQL + `),
  candidates AS (
- SELECT s.target_id,s.queue_release_id,r.queue_identity,r.generation,s.manual_requested_at,s.patrol_revision,
+ SELECT work.target_id,work.queue_release_id,r.queue_identity,r.generation,work.manual_requested_at,work.patrol_revision,
  ` + queueRankSQL + ` rank,r.queue_gap,r.queue_artist_unlinked,r.queue_added_at,
- (s.queue_release_id IS NULL OR stable.id IS NOT NULL) stable,
- (s.subject<>'release' OR NOT EXISTS (SELECT FROM curation_work_states fp
+ (work.queue_release_id IS NULL OR stable.id IS NOT NULL) stable,
+ (work.needs_work OR work.next_attempt_at<=$2) due,
+ work.result->'retry'->>'source' retry_source,work.result->'retry'->>'reason' retry_reason,work.next_attempt_at,
+ (work.subject<>'release' OR NOT EXISTS (SELECT FROM curation_work_states fp
  WHERE fp.subject='fingerprint' AND fp.needs_work AND fp.queue_release_id=r.target_id
  AND fp.generation=r.generation AND fp.input_digest=r.queue_identity
  AND EXISTS (SELECT FROM tracks t JOIN media m ON m.id=t.medium_id WHERE t.id=fp.target_id
  AND t.source_status='present' AND m.release_id=r.target_id))) dependencies_ready
- FROM curation_work_states s LEFT JOIN curation_work_states r ON r.subject='release' AND r.target_id=s.queue_release_id
+ FROM curation_work_states work LEFT JOIN curation_work_states r ON r.subject='release' AND r.target_id=work.queue_release_id
+ CROSS JOIN LATERAL (SELECT
+     CASE WHEN work.subject='fingerprint' THEN r.manual_requested_at ELSE work.manual_requested_at END manual_requested_at,
+     CASE WHEN work.subject='fingerprint' THEN r.attempts ELSE work.attempts END attempts) s
  CROSS JOIN curation_settings settings
- LEFT JOIN visible v ON v.id=s.queue_release_id
- LEFT JOIN curation_stable_releases stable ON stable.id=s.queue_release_id
- WHERE s.subject=$1 AND settings.id=1
- AND (s.needs_work OR (s.queue_release_id IS NOT NULL AND s.status IN ('try_later','unlisted') AND s.next_attempt_at<=$2))
- AND (v.id IS NOT NULL OR (s.subject='artist_media' AND s.queue_release_id IS NULL))
- AND (s.subject NOT IN ('lyrics','fingerprint') OR EXISTS (SELECT FROM tracks t JOIN media m ON m.id=t.medium_id
- WHERE t.id=s.target_id AND t.source_status='present' AND m.release_id=s.queue_release_id))
- AND (s.subject<>'fingerprint' OR (s.generation=r.generation AND s.input_digest=r.queue_identity))
+ LEFT JOIN visible v ON v.id=work.queue_release_id
+ LEFT JOIN curation_stable_releases stable ON stable.id=work.queue_release_id
+ WHERE work.subject=$1 AND settings.id=1
+ AND (work.needs_work OR (work.queue_release_id IS NOT NULL AND (work.status IN ('try_later','unlisted') AND work.next_attempt_at<=$2 OR work.subject='release' AND work.status='try_later' AND work.result ? 'retry')))
+ AND (v.id IS NOT NULL OR (work.subject='artist_media' AND work.queue_release_id IS NULL))
+ AND (work.subject NOT IN ('lyrics','fingerprint') OR EXISTS (SELECT FROM tracks t JOIN media m ON m.id=t.medium_id
+ WHERE t.id=work.target_id AND t.source_status='present' AND m.release_id=work.queue_release_id))
+ AND (work.subject<>'fingerprint' OR (work.generation=r.generation AND work.input_digest=r.queue_identity))
  ) `
 
 func (w *Worker) nextQueueItem(ctx context.Context, subject string) (queueItem, bool, error) {
 	item := queueItem{Subject: subject}
 	err := w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT target_id,COALESCE(queue_release_id::text,''),
- rank,COALESCE(generation,0),COALESCE(queue_identity,''),manual_requested_at,patrol_revision FROM candidates WHERE stable AND dependencies_ready
+ rank,COALESCE(generation,0),COALESCE(queue_identity,''),manual_requested_at,patrol_revision,CASE WHEN $1 IN ('release','fingerprint') THEN COALESCE(`+releaseFilesSQL("candidates.queue_release_id")+`,'') ELSE '' END FROM candidates WHERE stable AND due AND dependencies_ready
  ORDER BY rank,CASE WHEN rank=3 THEN queue_gap END DESC,
  CASE WHEN rank=4 THEN queue_artist_unlinked END DESC NULLS LAST,queue_added_at DESC NULLS LAST,target_id LIMIT 1`,
-		subject, w.opts.Now()).Scan(&item.TargetID, &item.ReleaseID, &item.Rank, &item.Generation, &item.InputDigest, &item.ManualRequestedAt, &item.PatrolRevision)
+		subject, w.opts.Now()).Scan(&item.TargetID, &item.ReleaseID, &item.Rank, &item.Generation, &item.InputDigest, &item.ManualRequestedAt, &item.PatrolRevision, &item.Files)
 	if errors.Is(err, sql.ErrNoRows) {
 		return item, false, nil
 	}
@@ -56,13 +70,13 @@ func (w *Worker) nextQueueItem(ctx context.Context, subject string) (queueItem, 
 }
 
 func (w *Worker) queueCounts(ctx context.Context, subject string) (remaining, ready, stable int64, err error) {
-	err = w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT count(*),count(*) FILTER (WHERE stable AND dependencies_ready),count(*) FILTER (WHERE stable) FROM candidates`, subject, w.opts.Now()).Scan(&remaining, &ready, &stable)
+	err = w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT count(*),count(*) FILTER (WHERE stable AND due AND dependencies_ready),count(*) FILTER (WHERE stable) FROM candidates`, subject, w.opts.Now()).Scan(&remaining, &ready, &stable)
 	return
 }
 
 func (w *Worker) hasHigherIdentity(ctx context.Context, now time.Time) (bool, error) {
 	var high bool
-	err := w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT EXISTS (SELECT FROM candidates WHERE stable AND rank<4)`, "release", now).Scan(&high)
+	err := w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT EXISTS (SELECT FROM candidates WHERE stable AND due AND rank<4)`, "release", now).Scan(&high)
 	return high, err
 }
 

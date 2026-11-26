@@ -13,10 +13,11 @@ import (
 
 // 重查期间仍保留首次未收录的时间，来源退避后从同一模式接上。
 type releaseReviewState struct {
-	UnlistedSince *time.Time `json:"unlisted_since,omitempty"`
-	RecheckedAt   *time.Time `json:"rechecked_at,omitempty"`
-	Reason        string     `json:"reason,omitempty"`
-	BlockDigest   string     `json:"block_digest,omitempty"`
+	UnlistedSince *time.Time  `json:"unlisted_since,omitempty"`
+	RecheckedAt   *time.Time  `json:"rechecked_at,omitempty"`
+	Reason        string      `json:"reason,omitempty"`
+	Retry         *matchRetry `json:"retry,omitempty"`
+	BlockDigest   string      `json:"block_digest,omitempty"`
 }
 
 func previousReview(s curation.WorkState) (releaseReviewState, error) {
@@ -28,7 +29,7 @@ func previousReview(s curation.WorkState) (releaseReviewState, error) {
 	return r, err
 }
 
-func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationEvidence, fingerprintRequired bool) (MatchResult, error) {
+func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationEvidence, fingerprintRequired bool, cursor *matchRetry) (MatchResult, error) {
 	if err := w.sources.Check(ctx, "musicbrainz"); err != nil {
 		return MatchResult{}, err
 	}
@@ -38,16 +39,13 @@ func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationE
 		return MatchResult{}, operations.Conflict("source_disabled", "识别来源未启用")
 	}
 	a, _ := w.sources.ArtistFinder("musicbrainz")
-	var step *FingerprintStep
-	var err error
-	if !u.programOnly {
-		step, err = w.fingerprintStep(ctx)
-		if err != nil {
-			return MatchResult{}, err
-		}
-		if fingerprintRequired && step == nil {
-			return MatchResult{}, operations.Conflict("source_disabled", "识别来源未启用")
-		}
+	step, err := w.fingerprintStep(ctx)
+	if err != nil {
+		return MatchResult{}, err
+	}
+	if fingerprintRequired && step == nil {
+		// 这次领取只补先前不可用的声纹；插件又关闭时保留原结论。
+		return MatchResult{}, errQueueUnchanged
 	}
 	names := SearchNames{}
 	if w.opts.CanonicalNames != nil {
@@ -63,7 +61,15 @@ func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationE
 	if names.ArtistID == "" {
 		names.ArtistID = e.ArtistMBID
 	}
-	return matchWithOptions(ctx, e, r, f, step, MatchOptions{Artists: a, Names: names, ProgramOnly: u.programOnly})
+	review, err := previousReview(u.releaseState)
+	if err != nil {
+		return MatchResult{}, err
+	}
+	if previous := review.Retry; previous != nil && u.releaseState.MatchRuleVersion == MatchRuleVersion && u.releaseState.IdentityDigest == u.identityDigest {
+		*cursor = *previous
+		cursor.resume = previous.Step
+	}
+	return matchWithOptions(ctx, e, r, f, step, MatchOptions{Artists: a, Names: names, retry: cursor})
 }
 
 func (w *Worker) concludeMatch(ctx context.Context, u *unit, e catalog.CurationEvidence, m MatchResult) (out outcome, err error) {
@@ -106,3 +112,11 @@ func (w *Worker) concludeMatch(ctx context.Context, u *unit, e catalog.CurationE
 	out.status = out.match.Status
 	return out, nil
 }
+
+type stepFailure struct {
+	retry *matchRetry
+	err   error
+}
+
+func (e *stepFailure) Error() string { return e.err.Error() }
+func (e *stepFailure) Unwrap() error { return e.err }

@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/buildinfo"
@@ -38,6 +39,7 @@ type Options struct {
 }
 
 type Requester struct {
+	coolingPolicy atomic.Pointer[QueuePolicy]
 	wikimedia     bool
 	language      string
 	mockHost      MockHost
@@ -401,13 +403,19 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 		return res, nil
 	}
 	result, err := r.decodeResponse(ctx, spec, res, key, background, failure)
+	valid := (!result.retry && err == nil || errors.Is(err, ErrNotFound)) &&
+		(res.status >= 200 && res.status < 300 || res.status == http.StatusNotFound)
+	if valid {
+		if policy := r.coolingPolicy.Swap(nil); policy != nil && policy != queue.policy {
+			policy.recovered(source)
+		}
+	}
 	if queue.policy == nil {
 		return result, err
 	}
 	if (err == nil && !result.retry) || errors.Is(err, ErrNotFound) {
-		if res.status >= 200 && res.status < 300 || res.status == http.StatusNotFound {
+		if valid {
 			queue.policy.recovered(source)
-			r.limiter.setLevel(0)
 			if res.status != http.StatusNotFound && queue.success != nil {
 				queue.success(source)
 			}
@@ -429,8 +437,10 @@ func (r *Requester) attempt(ctx context.Context, c caller, background bool, requ
 }
 
 func (r *Requester) pauseQueue(queue queueRequest, reason string, retryAfter time.Duration, network bool) *QueuePause {
-	pause, level := queue.policy.failed(r.cache.source, reason, retryAfter, network)
-	r.limiter.setLevel(level)
+	pause := queue.policy.failed(r.cache.source, reason, retryAfter, network)
+	if pause != nil {
+		r.coolingPolicy.Store(queue.policy)
+	}
 	return pause
 }
 
@@ -463,6 +473,14 @@ func (r *Requester) decodeResponse(ctx context.Context, spec requestSpec, res re
 			}
 			res.retry = false
 			return res, nil
+		}
+		if ctx.Value(identificationKey{}) == true && !retry && (res.status == http.StatusBadRequest || res.status == http.StatusUnprocessableEntity) &&
+			(errors.Is(err, ErrUnavailable) || errors.Is(err, ErrTryLater)) {
+			return response{}, ErrInvalidQuery
+		}
+		if ctx.Value(identificationKey{}) == true && res.status == http.StatusOK && !res.retry && !retry &&
+			(errors.Is(err, ErrUnavailable) || errors.Is(err, ErrTryLater)) {
+			return response{}, ErrInvalidResponse
 		}
 		if !errors.Is(err, ErrUnavailable) && !retry {
 			return response{}, err

@@ -22,6 +22,7 @@ type ReleaseProgress struct {
 	NoMatch            int64 `json:"no_match"`
 	Unlisted           int64 `json:"unlisted"`
 	NoUsableCandidates int64 `json:"no_usable_candidates"`
+	QueryError         int64 `json:"query_error"`
 	TryLater           int64 `json:"try_later"`
 }
 type PendingProgress struct {
@@ -66,10 +67,10 @@ func (w *Writer) Progress(ctx context.Context, ruleVersion int16, status Program
  SELECT count(*),count(*) FILTER (WHERE s.status NOT IN ('pending','try_later')),
  count(*) FILTER (WHERE s.status='matched'),count(*) FILTER (WHERE s.status='uncertain'),
  count(*) FILTER (WHERE s.status='no_match'),count(*) FILTER (WHERE s.status='try_later'),count(*) FILTER (WHERE s.status='unlisted'),
- count(*) FILTER (WHERE s.status='no_usable_candidates'),
+ count(*) FILTER (WHERE s.status='no_usable_candidates'),count(*) FILTER (WHERE s.status='query_error'),
  (SELECT count(*) FROM curation_pending_items p WHERE `+PendingTargetVisibleSQL+` AND p.status IN ('waiting_model','waiting_route'))
  FROM visible v LEFT JOIN curation_work_states s ON s.subject='release' AND (COALESCE(s.match_rule_version,s.rule_version)=$1 OR s.status='matched' AND s.match_rule_version IS NOT NULL) AND s.target_id=v.id`, ruleVersion).
-		Scan(&r.Total, &r.Processed, &r.Matched, &r.Uncertain, &r.NoMatch, &r.TryLater, &r.Unlisted, &r.NoUsableCandidates, &p.Pending.WaitingModel)
+		Scan(&r.Total, &r.Processed, &r.Matched, &r.Uncertain, &r.NoMatch, &r.TryLater, &r.Unlisted, &r.NoUsableCandidates, &r.QueryError, &p.Pending.WaitingModel)
 	if err != nil {
 		return Progress{}, err
 	}

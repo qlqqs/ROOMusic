@@ -468,3 +468,38 @@ func confirmProgramRelease(t *testing.T, app *integrationTestApplication, admin 
 	mustExec(t, app, `UPDATE releases SET curation_changed_at=now()-interval '60 seconds' WHERE id=$1`, id)
 	runScan(t, app, admin)
 }
+
+func TestPostgreSQLCurationProgramScanInterval(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		override, want time.Duration
+	}{
+		{"默认", 0, 2 * time.Second},
+		{"显式覆盖", 7 * time.Second, 7 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newProgramFixture(t)
+			f.enable(t)
+			f.tagged(t)
+			f.scan.Store(true)
+			opts := f.clock.options()
+			opts.ScanInterval = tc.override
+			f.startWithOptions(t, opts)
+			requireScanWait := func(delay time.Duration) {
+				t.Helper()
+				if delay != tc.want || f.worker.State() != "waiting_for_scan" || f.source.callCount("ReleaseByID") != 0 {
+					t.Fatalf("扫描期间等待 %v，状态 %s，发行请求 %d，期望等待 %v 且不领取",
+						delay, f.worker.State(), f.source.callCount("ReleaseByID"), tc.want)
+				}
+			}
+			requireScanWait(f.clock.wait(t))
+			requireScanWait(f.clock.advance(t, tc.want))
+			f.scan.Store(false)
+			f.clock.advance(t, tc.want)
+			state := f.assertRelease(t, f.a, "matched", "tag_id")
+			if state.Attempts != 1 || f.source.callCount("ReleaseByID") != 1 {
+				t.Fatalf("扫描结束后的第一轮应领取一次，状态 %+v，发行请求 %d", state, f.source.callCount("ReleaseByID"))
+			}
+		})
+	}
+}

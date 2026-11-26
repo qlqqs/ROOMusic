@@ -16,6 +16,7 @@ type WorkState struct {
 	LocalRuleVersion, MatchRuleVersion, RequeryMatchVersion int16
 	IdentityDigest, GapDigest                               string
 	InputDigest, Status                                     string
+	RetrySource                                             string
 	Attempts, Generation, RetryCount                        int
 	NextAttemptAt, ManualRequestedAt                        *time.Time
 	Result                                                  json.RawMessage
@@ -27,7 +28,7 @@ type WorkState struct {
 type ProgramChanges struct {
 	Scan, Settings, Sources, Suppression, Operation, OtherOperation sql.NullTime
 	ArtistSettings, LatestDue, LatestReleaseDue                     sql.NullTime
-	Suppressions, Due, ReleaseDue                                   int64
+	Suppressions, Due, ReleaseDue, UnlistedDue                      int64
 }
 
 func LoadProgramChanges(ctx context.Context, q operations.Queryer, now time.Time) (ProgramChanges, error) {
@@ -44,9 +45,10 @@ func LoadProgramChanges(ctx context.Context, q operations.Queryer, now time.Time
    ORDER BY o.created_at DESC LIMIT 1),
  (SELECT count(*) FROM curation_suppressions),
  count(*),count(*) FILTER (WHERE subject IN ('release','artwork')),
+ count(*) FILTER (WHERE subject='release' AND status='unlisted'),
  max(next_attempt_at),max(next_attempt_at) FILTER (WHERE subject IN ('release','artwork'))
  FROM curation_work_states WHERE status IN ('try_later','unlisted') AND next_attempt_at <= $1`, now).
-		Scan(&c.Scan, &c.Settings, &c.ArtistSettings, &c.Sources, &c.Suppression, &c.Operation, &c.OtherOperation, &c.Suppressions, &c.Due, &c.ReleaseDue, &c.LatestDue, &c.LatestReleaseDue)
+		Scan(&c.Scan, &c.Settings, &c.ArtistSettings, &c.Sources, &c.Suppression, &c.Operation, &c.OtherOperation, &c.Suppressions, &c.Due, &c.ReleaseDue, &c.UnlistedDue, &c.LatestDue, &c.LatestReleaseDue)
 	return c, err
 }
 
@@ -56,7 +58,7 @@ type Execer interface {
 
 func LoadWorkStates(ctx context.Context, q operations.Queryer, subject string, targetIDs []string) (map[string]WorkState, error) {
 	rows, err := q.QueryContext(ctx, `SELECT subject,target_id::text,rule_version,input_digest,status,attempts,generation,retry_count,next_attempt_at,result,updated_at,
- COALESCE(local_rule_version,0),COALESCE(match_rule_version,0),COALESCE(requery_match_version,0),COALESCE(identity_digest,''),COALESCE(gap_digest,''),manual_requested_at,patrol_revision
+ COALESCE(local_rule_version,0),COALESCE(match_rule_version,0),COALESCE(requery_match_version,0),COALESCE(identity_digest,''),COALESCE(gap_digest,''),manual_requested_at,patrol_revision,COALESCE(result->'retry'->>'source','')
  FROM curation_work_states WHERE subject=$1 AND target_id=ANY($2::uuid[])`, subject, targetIDs)
 	if err != nil {
 		return nil, err
@@ -65,7 +67,7 @@ func LoadWorkStates(ctx context.Context, q operations.Queryer, subject string, t
 	states := make(map[string]WorkState)
 	for rows.Next() {
 		var s WorkState
-		if err := rows.Scan(&s.Subject, &s.TargetID, &s.RuleVersion, &s.InputDigest, &s.Status, &s.Attempts, &s.Generation, &s.RetryCount, &s.NextAttemptAt, &s.Result, &s.UpdatedAt, &s.LocalRuleVersion, &s.MatchRuleVersion, &s.RequeryMatchVersion, &s.IdentityDigest, &s.GapDigest, &s.ManualRequestedAt, &s.PatrolRevision); err != nil {
+		if err := rows.Scan(&s.Subject, &s.TargetID, &s.RuleVersion, &s.InputDigest, &s.Status, &s.Attempts, &s.Generation, &s.RetryCount, &s.NextAttemptAt, &s.Result, &s.UpdatedAt, &s.LocalRuleVersion, &s.MatchRuleVersion, &s.RequeryMatchVersion, &s.IdentityDigest, &s.GapDigest, &s.ManualRequestedAt, &s.PatrolRevision, &s.RetrySource); err != nil {
 			return nil, err
 		}
 		states[s.TargetID] = s

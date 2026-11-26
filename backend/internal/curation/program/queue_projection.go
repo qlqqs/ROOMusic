@@ -48,6 +48,10 @@ func (w *Worker) refreshQueueProjection(ctx context.Context) error {
 	}
 	if !opts.fingerprints {
 		// 关闭 AcoustID 或移除本地工具后，识别应继续使用其余分支。重新开启时重新登记需求。
+		if _, err = w.db.ExecContext(ctx, `UPDATE curation_work_states SET next_attempt_at=$1 WHERE subject='release' AND status='try_later'
+            AND result->'retry'->>'step'='acoustid' AND result->'retry'->>'source' IN ('acoustid','local_fingerprint') AND next_attempt_at>$1`, opts.now); err != nil {
+			return err
+		}
 		if _, err = w.db.ExecContext(ctx, `DELETE FROM curation_work_states WHERE subject='fingerprint' AND needs_work`); err != nil {
 			return err
 		}
@@ -131,6 +135,13 @@ func (w *Worker) projectReleasePage(ctx context.Context, page []catalog.Curation
 	if err != nil {
 		return err
 	}
+	// 文件内容变化或规则升级才重新开启终止项。只检查有断点的发行。
+	if _, err = tx.ExecContext(ctx, `UPDATE curation_work_states s SET status='pending',retry_count=0,result=result-'retry',
+       next_attempt_at=NULL,needs_work=true,input_digest='',identity_digest=NULL,generation=generation+1,updated_at=now()
+       WHERE subject='release' AND target_id=ANY($1::uuid[]) AND result ? 'retry' AND
+       (match_rule_version<>$2 OR result->'retry'->>'files' IS DISTINCT FROM COALESCE(`+releaseFilesSQL("s.target_id")+`,''))`, ids, MatchRuleVersion); err != nil {
+		return err
+	}
 	releases, err := curation.LoadWorkStates(ctx, tx, "release", ids)
 	if err != nil {
 		return err
@@ -151,6 +162,7 @@ func (w *Worker) projectReleasePage(ctx context.Context, page []catalog.Curation
 	}
 	var projected []queueProjection
 	var completed []mediaRecovery
+	var samples []string
 	for _, row := range page {
 		e, visible := entries[row.ID]
 		if !visible {
@@ -159,6 +171,11 @@ func (w *Worker) projectReleasePage(ctx context.Context, page []catalog.Curation
 		state := releases[e.ID]
 		d := releaseInputs(e)
 		need := releaseQueueNeeds(e, state, d, opts)
+		if opts.fingerprints && need && state.RetrySource == "" && canPrefetch(e) {
+			for _, t := range sampleFour(e.SortedTracks()) {
+				samples = append(samples, t.ID)
+			}
+		}
 		class := e.Classification()
 		projected = append(projected, queueProjection{
 			Subject: "release", ID: e.ID, Release: e.ID, Class: class.Class,
@@ -182,6 +199,19 @@ func (w *Worker) projectReleasePage(ctx context.Context, page []catalog.Curation
 	if err := w.saveMediaProjection(ctx, tx, projected, completed, releaseMediaBindings); err != nil {
 		return err
 	}
+	if len(samples) > 0 {
+		_, err = tx.ExecContext(ctx, `INSERT INTO curation_work_states AS s(subject,target_id,rule_version,input_digest,status,generation,queue_release_id,needs_work)
+        SELECT 'fingerprint',t.id,$2,r.queue_identity,'pending',r.generation,r.target_id,true
+        FROM tracks t JOIN media m ON m.id=t.medium_id JOIN curation_work_states r ON r.subject='release' AND r.target_id=m.release_id
+        JOIN curation_stable_releases stable ON stable.id=r.target_id
+        WHERE t.id=ANY($1::uuid[]) AND t.source_status='present' AND r.needs_work
+        ON CONFLICT(subject,target_id) DO UPDATE SET input_digest=excluded.input_digest, generation=excluded.generation,
+        queue_release_id=excluded.queue_release_id,status='pending',needs_work=true
+        WHERE (s.input_digest,s.generation,s.queue_release_id) IS DISTINCT FROM (excluded.input_digest,excluded.generation,excluded.queue_release_id)`, samples, resourceRuleVersion)
+		if err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
@@ -199,6 +229,12 @@ func (w *Worker) projectReleasePage(ctx context.Context, page []catalog.Curation
 }
 
 func releaseQueueNeeds(e catalog.CurationEvidence, state curation.WorkState, d releaseDigests, opts projectionOptions) bool {
+	if state.Status == "query_error" && state.MatchRuleVersion == MatchRuleVersion {
+		return false
+	}
+	if state.Status == "try_later" && state.RetrySource != "" && state.MatchRuleVersion == MatchRuleVersion {
+		return state.NextAttemptAt != nil && !opts.now.Before(*state.NextAttemptAt)
+	}
 	if len(e.StaleAuto) > 0 {
 		return true
 	}

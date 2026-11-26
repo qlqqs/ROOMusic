@@ -7,16 +7,14 @@ import (
 )
 
 type Limiter struct {
-	mu        sync.Mutex
-	interval  time.Duration
-	now       func() time.Time
-	after     func(time.Duration) <-chan time.Time
-	changed   chan struct{}
-	next      time.Time
-	busy      bool
-	waiting   [4]int
-	lastStart time.Time
-	level     int
+	mu       sync.Mutex
+	interval time.Duration
+	now      func() time.Time
+	after    func(time.Duration) <-chan time.Time
+	changed  chan struct{}
+	next     time.Time
+	busy     bool
+	waiting  [QueueArtistMedia + 2]int
 }
 
 func NewLimiter(interval time.Duration, now func() time.Time, after func(time.Duration) <-chan time.Time) *Limiter {
@@ -58,7 +56,7 @@ func (l *Limiter) acquire(ctx context.Context, background bool) error {
 	if background {
 		rank = 1
 		if queue, ok := ctx.Value(queueKey{}).(queueRequest); ok {
-			rank += int(min(queue.priority, QueueLocalComplete))
+			rank += int(min(queue.priority, QueueArtistMedia))
 		}
 	}
 	l.waiting[rank]++
@@ -113,26 +111,11 @@ func (l *Limiter) isNext(rank int) bool {
 	return true
 }
 
-func (l *Limiter) effectiveInterval() time.Duration {
-	if l.interval >= time.Minute {
-		return l.interval
-	}
-	return min(time.Minute, l.interval<<l.level)
-}
-
-func (l *Limiter) setLevel(level int) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.level = level
-	l.next = l.lastStart.Add(l.effectiveInterval())
-}
-
 func (l *Limiter) release(outbound bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if outbound {
-		l.lastStart = l.now()
-		l.next = l.lastStart.Add(l.effectiveInterval())
+		l.next = l.now().Add(l.interval)
 	}
 	l.busy = false
 	l.notify()
@@ -142,6 +125,5 @@ func (l *Limiter) release(outbound bool) {
 func (l *Limiter) startSerial() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.lastStart = l.now()
-	l.next = l.lastStart.Add(l.effectiveInterval())
+	l.next = l.now().Add(l.interval)
 }
