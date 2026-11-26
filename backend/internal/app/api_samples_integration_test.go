@@ -403,12 +403,107 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordDSDFormatSamples(t, application, samples, call, admin)
 	recordTrackCorrectionSamples(t, application, samples, call, admin)
 	recordReleaseMergeSamples(t, application, samples, call, admin)
+	recordLocalGroupingSample(t, application, samples, call, admin)
 
 	recordCurationSamples(t, samples)
 	recordExternalCurationSamples(t, samples)
 	recordCurationCLinkSamples(t, samples)
 	recordReleaseMatchResultSamples(t, samples)
+	recordManualArtistWebSearchSamples(t, samples)
 	samples.finish()
+}
+
+func recordManualArtistWebSearchSamples(t *testing.T, samples *apiSampleRecorder) {
+	f := newArtistWebSearchFixture(t, "", false, false, nil)
+	artist := f.addArtist(t, "联网样本艺人")
+	const base = "curation/artist-web-search/"
+	const queue = curationBase + "/artist-web-search"
+	single := "/api/v1/artists/" + artist + "/web-search"
+	record := func(name, method, path string, status int, code string) {
+		t.Helper()
+		response := f.application.request(t, method, path, nil, &f.admin, map[string]string{"X-Request-ID": sampleRequestID})
+		if code != "" {
+			requireAPIError(t, response, status, code)
+		}
+		samples.record(base+name, response, status)
+	}
+	record("artist-unconfigured", http.MethodGet, single, 200, "")
+	record("queue-idle", http.MethodGet, queue, 200, "")
+	f.stewardSettings(t, &f.admin, map[string]any{"search_source": "searxng", "searxng_url": f.endpoint + "/searxng"})
+	record("error-model-not-configured", http.MethodPost, queue, 409, "model_not_configured")
+	f.stewardSettings(t, &f.admin, map[string]any{
+		"endpoint": f.endpoint + "/openai/v1", "protocol": "responses", "model": "mock-model", "search_source": "none",
+	})
+	record("error-search-unconfigured", http.MethodPost, single, 409, "search_unconfigured")
+	f.configureMock(t)
+	f.update(t, http.MethodPut, curationBase+"/sources/web_search", map[string]bool{"enabled": false})
+	record("error-source-disabled", http.MethodPost, queue, 409, "source_disabled")
+	f.update(t, http.MethodPut, curationBase+"/sources/web_search", map[string]bool{"enabled": true})
+	record("artist-start", http.MethodPost, single, 202, "")
+	record("queue-start", http.MethodPost, queue, 202, "")
+	record("queue-stop", http.MethodDelete, queue, 200, "")
+	mustExec(t, f.application, `UPDATE curation_settings SET model_daily_token_limit=1000`)
+	requireCurationOK(t, f.writer.AddModelUsage(t.Context(), f.clock.options().Now(), 900, 100))
+	record("queue-daily-limit", http.MethodPost, queue, 202, "")
+
+	g := newArtistWebSearchFixture(t, "candidates", true, true, nil)
+	g.configureMock(t)
+	artist = g.addArtist(t, webSearchArtistName)
+	item := g.startArtist(t, artist)
+	schedulerWait(t, "生成两个接口样本候选", func() bool {
+		return countRows(t, g.application, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1 AND status='open'`, item.ID) == 2
+	})
+	state := g.status(t, artist, "waiting_human", 2)
+	recordCandidate := func(name, method, path string) {
+		t.Helper()
+		response := g.application.request(t, method, path, nil, &g.admin, map[string]string{"X-Request-ID": sampleRequestID})
+		body := bytes.ReplaceAll(response.Body.Bytes(), []byte(g.endpoint), []byte("https://mock.example"))
+		response.Body = bytes.NewBuffer(body)
+		samples.record(base+name, response, 200)
+	}
+	recordCandidate("artist-candidates", http.MethodGet, "/api/v1/artists/"+artist+"/web-search")
+	byMBID := map[string]string{}
+	for _, candidate := range state.Candidates {
+		byMBID[candidate.ExternalID] = candidate.ExceptionID
+	}
+	recordCandidate("candidate-decline", http.MethodPost, curationBase+"/exceptions/"+byMBID[webSearchSoloMBID]+"/decline")
+	recordCandidate("candidate-accept", http.MethodPost, curationBase+"/exceptions/"+byMBID[artistMediaMBID]+"/accept")
+}
+
+func recordLocalGroupingSample(t *testing.T, app *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	root := uuid.New()
+	mustExec(t, app, `INSERT INTO library_roots(id,path,status,revision) VALUES($1,$2,'active',1)`, root, filepath.Join(app.allowedRoot, "local-grouping"))
+	release, _ := insertGroupedRelease(t, app, root, groupedRelease{title: "Sample Two Sides", artist: "Sample Ensemble", tracks: []string{"present", "present"}})
+	const kind = "local_model_grouping"
+	operation := uuid.New()
+	assignments := []map[string]any{
+		{"path": "Two Sides/First/01.flac", "file": "Two Sides/First/01.flac", "album": "sample-album", "disc": 1, "track": 1, "size": 256, "modified": int64(1767225600000000), "root_id": root},
+		{"path": "Two Sides/Second/01.flac", "file": "Two Sides/Second/01.flac", "album": "sample-album", "disc": 2, "track": 1, "size": 512, "modified": int64(1767225600000000), "root_id": root},
+	}
+	dirs := []string{"Two Sides/First", "Two Sides/Second"}
+	after := map[string]any{"root_id": root, "directory_key": "sample-directory", "source_digest": "sample-sources",
+		"operation_id": operation, "directories": dirs, "assignments": assignments, "other_paths": []string{}}
+	afterJSON, err := json.Marshal(after)
+	requireCurationOK(t, err)
+	assignmentsJSON, err := json.Marshal(assignments)
+	requireCurationOK(t, err)
+	mustExec(t, app, `INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id,origin)
+		SELECT $1,id,$2,'release',$3,$4,'sample-plan',1,2,'{}',$5,jsonb_build_object('operation_id',$1::uuid),$6,
+		'{"source":"curation","mode":"local_cleanup"}' FROM users WHERE username='curator'`, operation, kind, release, uuid.New(), afterJSON, sampleRequestID)
+	mustExec(t, app, `INSERT INTO local_model_groupings(root_id,directory_key,operation_id,source_digest,directories,assignments,other_paths)
+		VALUES($1,'sample-directory',$2,'sample-sources',$3,$4,'{}')`, root, operation, dirs, assignmentsJSON)
+	response := call(http.MethodGet, "/api/v1/operations?release_id="+release, nil, admin)
+	samples.record("operations/local-model-grouping", response, http.StatusOK)
+	items := decodeJSONMap(t, response)["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("模型归组操作列表应有一条记录，实际 %s", response.Body)
+	}
+	item := items[0].(map[string]any)
+	if item["id"] != operation || item["type"] != kind || item["revertible"] != true ||
+		item["changes"].(map[string]any)["kind"] != kind {
+		t.Fatalf("模型归组记录缺少操作详情：%v", item)
+	}
 }
 
 func recordReleaseMatchResultSamples(t *testing.T, samples *apiSampleRecorder) {
@@ -417,13 +512,7 @@ func recordReleaseMatchResultSamples(t *testing.T, samples *apiSampleRecorder) {
 	samples.forbid(f.admin.token)
 	ctx := t.Context()
 	checkedAt := time.Date(2026, 1, 5, 8, 30, 0, 0, time.UTC)
-	requireCurationOK(t, curation.SaveReleaseMatchResult(ctx, f.application.database, f.a, curation.ReleaseMatchResult{
-		Source: "musicbrainz", Status: "conflict", CheckedAt: &checkedAt, Conflicts: []string{"track_count"},
-	}))
-	a := curationBase + "/releases/" + f.a
 	b := curationBase + "/releases/" + f.b
-	samples.record("curation/conflicts", f.application.request(t, http.MethodGet, curationBase+"/conflicts", nil, &f.admin, nil), http.StatusOK)
-	samples.record("curation/match-results", f.application.request(t, http.MethodGet, a+"/match-results", nil, &f.admin, nil), http.StatusOK)
 	samples.record("curation/match-results-empty", f.application.request(t, http.MethodGet, b+"/match-results", nil, &f.admin, nil), http.StatusOK)
 
 	due := checkedAt.Add(90 * 24 * time.Hour)
@@ -435,6 +524,25 @@ func recordReleaseMatchResultSamples(t *testing.T, samples *apiSampleRecorder) {
 		Source: "musicbrainz", Status: "unmatched", CheckedAt: &checkedAt,
 	}))
 	samples.recordEmpty("curation/match-recheck", f.application.request(t, http.MethodPost, b+"/recheck", nil, &f.admin, nil), http.StatusAccepted)
+	choiceFixture, matcher, choice, _ := selectionFixture(t)
+	app := choiceFixture.application
+	admin := &choiceFixture.admin
+	path := curationBase + "/releases/" + choiceFixture.a
+	samples.forbid(admin.token)
+	samples.record("curation/conflicts", app.request(t, http.MethodGet, curationBase+"/conflicts", nil, admin, nil), http.StatusOK)
+	samples.record("curation/match-results", app.request(t, http.MethodGet, path+"/match-results", nil, admin, nil), http.StatusOK)
+	key := uuid.New()
+	_, err := matcher.SelectMatch(ctx, choiceFixture.a, admin.id, key, choice)
+	requireCurationOK(t, err)
+	// 用同键重放已由合成上游核实的选择，HTTP 返回真实治理结果。
+	samples.record("curation/match-selection", app.request(t, http.MethodPost, path+"/match-selection", choice, admin, idempotencyHeader(key)), http.StatusOK)
+	names, err := catalog.NewStore(app.database).MatchNames(ctx, choiceFixture.a)
+	requireCurationOK(t, err)
+	if len(names) == 0 {
+		t.Fatal("挑选样本应包含有效 MusicBrainz 写法")
+	}
+	samples.record("releases/match-names", app.request(t, http.MethodGet, "/api/v1/releases/"+choiceFixture.a, nil, admin, nil), http.StatusOK)
+
 }
 
 func recordRootScanIntervalSamples(t *testing.T, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser, rootID string) {

@@ -1,0 +1,40 @@
+{
+  "body": {
+    "items": [
+      {
+        "candidates": [
+          {
+            "artist": "Artist A",
+            "barcode": "",
+            "catalog_numbers": null,
+            "country": "",
+            "date": "",
+            "entity": "release",
+            "external_id": "00000000-0000-4000-8000-000000000001",
+            "method": "tag_id",
+            "release_group_id": "00000000-0000-4000-8000-000000000002",
+            "source": "musicbrainz",
+            "status": "",
+            "title": "Album A",
+            "track_count": 1
+          }
+        ],
+        "checked_at": "2026-01-01T00:00:00Z",
+        "conflicts": [],
+        "reason": "ambiguous_editions",
+        "release_id": "00000000-0000-4000-8000-000000000003",
+        "selection": null,
+        "snapshot_id": "00000000-0000-4000-8000-000000000004",
+        "source": "musicbrainz",
+        "status": "conflict",
+        "title": "Album A"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 1
+    }
+  },
+  "status": 200
+}

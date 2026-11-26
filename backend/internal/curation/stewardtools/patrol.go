@@ -12,14 +12,17 @@ const localTextSchema = `{"type":"string","minLength":1,"maxLength":4096}`
 
 func (a adapter) localCleanupTool(allowed availability) tool.Definition {
 	return tool.Definition{
-		Name: "submit_local_cleanup", Description: "提交从本目录文字或字段的候选解码中提取的专辑标题、艺人或曲名，仅填写当前待整理字段。",
+		Name: "submit_local_cleanup", Description: "提交本目录可核对的文字、编码、署名拆分和归组，无法判断时说明原因。",
 		Scope: tool.ScopeShared, Revertible: true, MinRole: tool.RoleAdmin, Available: allowed,
-		Input: json.RawMessage(`{"type":"object","additionalProperties":false,"required":["item_id"],"properties":{
-			"item_id":` + idSchema + `,"title":` + localTextSchema + `,"artist":` + localTextSchema + `,
-			"tracks":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["track_id","title"],"properties":{
-				"track_id":` + idSchema + `,"title":` + localTextSchema + `}}},
-			"track_artists":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["track_id","artist"],"properties":{
-				"track_id":` + idSchema + `,"artist":` + localTextSchema + `}}}}}`),
+		Input: json.RawMessage(`{"type":"object",
+"properties":{"item_id":{"type":"string"},"decision":{"type":"string","enum":["apply","undetermined"]},"reason":{"type":"string","minLength":1,"maxLength":4096},"texts":{"type":"array","items":{"type":"object",
+"properties":{"target_id":{"type":"string"},"field":{"type":"string"},"value":{"type":"string","minLength":1,"maxLength":4096}},"required":["target_id","field","value"],"additionalProperties":false}},"encodings":{"type":"array","items":{"type":"object",
+"properties":{"release_id":{"type":"string"},"encoding":{"type":"string"}},"required":["release_id","encoding"],"additionalProperties":false}},"splits":{"type":"array","items":{"type":"object",
+"properties":{"target_id":{"type":"string"},"role":{"type":"string"},"source_ref":{"type":"string"},"parts":{"type":"array","items":{"type":"string","minLength":1,"maxLength":4096}},"joins":{"type":"array","items":{"type":"string"}}},"required":["target_id","role","source_ref","parts","joins"],"additionalProperties":false}},"grouping":{"type":"object",
+"properties":{"albums":{"type":"array","items":{"type":"object",
+"properties":{"files":{"type":"array","items":{"type":"object",
+"properties":{"file_id":{"type":"string"},"disc":{"type":"integer","minimum":1},"track":{"type":"integer","minimum":1},"tracks":{"type":"array","items":{"type":"object",
+"properties":{"track_id":{"type":"string"},"disc":{"type":"integer","minimum":1},"track":{"type":"integer","minimum":1}},"required":["track_id","disc","track"],"additionalProperties":false}}},"required":["file_id"],"additionalProperties":false}}},"required":["files"],"additionalProperties":false}}},"required":["albums"],"additionalProperties":false}},"required":["item_id","decision"],"additionalProperties":false}`),
 		Output:  json.RawMessage(`{"type":"object"}`),
 		Preview: a.submissionPreview("local_cleanup", "按本地文字整理"),
 		Handler: a.submitLocalCleanup,

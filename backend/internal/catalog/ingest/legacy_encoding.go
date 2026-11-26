@@ -80,26 +80,20 @@ func decodeCandidateLegacy(observations []SourceObservation) []SourceObservation
 			if o.FieldSources[field] != "garbled" {
 				continue
 			}
-			text := decode(o.LegacyText[field])
-			if o.ScanTags != nil && len(o.ScanTags.LegacyArtistParts[field]) > 0 {
-				var names []string
-				for _, p := range o.ScanTags.LegacyArtistParts[field] {
-					name := p.Text
-					if len(p.Raw) > 0 {
-						name = decode(p.Raw)
-						// 艺人目录从标签原文派生展示名，须使用同一次选定编码解出的原文。
-						for i, e := range o.ArtistTagEvidence {
-							if e.TagKey == p.TagKey && e.OccurrenceIndex == p.Occurrence {
-								o.ArtistTagEvidence[i].RawValue = name
-								break
-							}
-						}
-					}
-					names = append(names, name)
+			var parts []metadata.LegacyArtistPart
+			if o.ScanTags != nil {
+				parts = o.ScanTags.LegacyArtistParts[field]
+			}
+			text := metadata.DecodeLegacyField(field, o.LegacyText[field], parts, decode)
+			for _, part := range parts {
+				if len(part.Raw) == 0 {
+					continue
 				}
-				text = metadata.JoinArtistValues(names...)
-				if field == "artist" {
-					text = metadata.CanonicalTrackArtist(text)
+				for j, tag := range o.ArtistTagEvidence {
+					if tag.TagKey == part.TagKey && tag.OccurrenceIndex == part.Occurrence {
+						o.ArtistTagEvidence[j].RawValue = decode(part.Raw)
+						break
+					}
 				}
 			}
 			if text == "" {

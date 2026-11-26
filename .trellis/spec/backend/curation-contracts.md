@@ -916,16 +916,17 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ## 网络搜索与身份待定项
 
-`web_search` 默认开启，能力为 `["artist_image","artist_bio"]`。仅该来源返回 `requirements`，顺序为 `{kind:"model",ready}`、`{kind:"search",ready}`，其他来源省略字段。两项依赖都按自动整理开启者的管家设置读取。整体开关、开启者或来源开关不可用时沿用对应原因；单独缺搜索时返回 `search_unconfigured`。对话模型未就绪由模型层给出原因，程序层在两项就绪时才建项。
+迁移 0105 建立艺人联网队列，管理员显式启动查找。单人使用 `GET/POST /api/v1/artists/{id}/web-search`，全量、进度和停止使用 `GET/POST/DELETE /api/v1/admin/curation/artist-web-search`。队列按照专辑主署名、曲目主署名排序，只领取当前运行代次中尚无 MusicBrainz 对应的有效艺人。停止保留剩余项和本项次数，重新启动接续。旧自动项不领取，历史建议仍可处理。查过且输入摘要未变的艺人跳过。艺人资料补齐继续处理已有对应和按名称查询的插件。
 
-程序在 SQL 分页中筛选有 MusicBrainz 或 Wikidata 艺人对应的有效艺人，以及同时满足以下条件的有效艺人：家族无对应、有在库的发行艺人、专辑艺人或曲目艺人主署名、缺图或缺简介。无对应的候选先由已启用的艺人插件按名查询。模型只收到名字、别名、至多 8 个专辑名与年份、12 个曲目名，以及图片与简介的缺口。整理摘要纳入对应、名字与署名样本、资料等级、抑制标记和相关来源状态。摘要变化可重开搁置项。程序收尾已对应、补齐、目标并入或失去主署名的待定项，并将其 `open` 例外置为 `superseded`，由采纳流程处理 `accepting` 例外。
+`resolve_artist_identity` 接受 MusicBrainz 艺人编号、说明和本项实际取得的 1 至 5 个网页引用。程序查询候选艺人名下发行，逐版核实其署名含候选 MBID，再按 A2.3 核对逐碟曲数、曲序和时长。四首及以下还须专辑名吻合，艺人条件以发行署名中的候选 MBID 为准，本地艺名可以不同。吻合即确认艺人，唯一版本写版本及曲目对应，同组多版只认到组，跨组记发行冲突，仅写艺人对应。完全无结构吻合时留给管理员通过现有例外接口确认或否掉，否掉会抑制该对应。手动队列不走独立审查。匹配后的图片、简介由资料程序补齐。
 
-迁移 0074 使用两个互斥的目标列。发行继续使用 `target_id`；艺人项使用 `target_type=artist,artist_id,kind=artist_identity`，未结束项按艺人及种类唯一。领取、到期判断与计数共用目标可见性。后台通过 `read_pending_items` 读取已领取艺人项的 `item_id,kind,artist_id,evidence`，同一模型层每日额度覆盖主模型与审查。
+每位艺人最多执行 10 次工具调用。每次模型请求和重试前检查共享日账与本项剩余的 50000 token，按完整协议请求估算输入并限制输出。已发送请求按上游报告结算，最后一次实耗可越过余量，触线后停止发送。上游完全缺报 usage 时，本项扣除输入估算加此次输出上限，共享日账仅记录已报告用量。
 
-* `resolve_artist_identity` 提交外部来源、编号和 `basis={note,citations}`，引用为 1 至 5 个 HTTP(S) 网址。程序核验条目类型、本地与外部名字或别名、家族已有对应和抑制标记，再交独立审查。MusicBrainz 类型为空时仍可核对，只拒绝 `Other` 与 `Character`。Wikidata 要求人物或音乐团体的 P31。审查通过写模型来源的 `artist_link`，同事务结束身份项。已有对应返回 `occupied`。
-* `submit_artist_media` 提交一项或两项资料，共用 1 至 5 个 `{url,title}` 网页引用。标题 schema 使用 `maxLength: 500`。标题清理为纯文本后允许空串，长度以艺人页使用的 500 个 UTF-16 码元为上限。写库前复查引用数量、URL 形状及标题长度与编码。简介去 HTML 后为 20 至 4000 个 Unicode 字符，语言为 zh 或 en。图片所在网页须在引用中，下载限 10 秒、16 MiB，校验格式和尺寸，短边至少 200 像素。图片下载和引用公网检查使用管家联网合同的出站规则。媒体操作来源为 `model/web_search`，模型名单独记录。任一项写入即以 `resolved/model_media` 结束本次待定项。程序层按更新后的缺口和输入摘要判断是否为剩余缺口创建新项。[管家联网合同](steward-web-contracts.md)
+历史网页资料的写入与撤销合同如下。
+
+* `submit_artist_media` 提交一项或两项资料，共用 1 至 5 个 `{url,title}` 网页引用。标题 schema 使用 `maxLength: 500`。标题清理为纯文本后允许空串，长度以艺人页使用的 500 个 UTF-16 码元为上限。写库前复查引用数量、URL 形状及标题长度与编码。简介去 HTML 后为 20 至 4000 个 Unicode 字符，语言为 zh 或 en。图片所在网页须在引用中，下载限 10 秒、16 MiB，校验格式和尺寸，短边至少 200 像素。图片下载和引用公网检查使用管家联网合同的出站规则。媒体操作来源为 `model/web_search`，模型名单独记录。任一项写入即以 `resolved/model_media` 结束本次待定项。[管家联网合同](steward-web-contracts.md)
 * 写入按对应、名字或模型领取关系复查依据。有许可来源、插件、网络搜索的等级依次降低。更高等级的自动资料事务内替换家族内的低等级行，旧行保存在操作的 `replaced` 快照。撤销只删除新操作持有的行，旧图提交后按引用清理。网络搜索图片的外部标识是图片地址的 SHA-256，简介固定为 `artist`。插件沿用条目 ID。
-* 例外同时返回可空的 `release` 和 `artist`，后者形状为 `{id,name}`。同项允许多个未决身份候选。采纳时复查预览，记录确认者并写对应，仅将同项的 `open` 候选置为 `superseded`。`accepting` 候选保留原状态和确认者，后续由其采纳流程按 `occupied` 等既有判定处理。待定项的采纳收尾在没有 `open` 或 `accepting` 候选时将该项置为 `resolved`。不采纳时写 `external_link` 抑制，最后一个候选被拒后重新排队。状态接口返回 `none|queued|running|shelved|waiting_human` 与 `candidates` 数组，候选引用的标题为 `""`。
+* 例外同时返回可空的 `release` 和 `artist`，后者形状为 `{id,name}`。同项允许多个未决身份候选。采纳时复查预览，记录确认者并写对应，仅将同项的 `open` 候选置为 `superseded`。`accepting` 候选保留原状态和确认者，后续由其采纳流程按 `occupied` 等既有判定处理。待定项的采纳收尾在没有 `open` 或 `accepting` 候选时将该项置为 `resolved`。不采纳时写 `external_link` 抑制，最后一个候选被拒后本次查找结为 `no_result`。状态接口返回 `none|queued|running|shelved|waiting_human` 与 `candidates` 数组，候选引用的标题为 `""`。
 * 离线试用可为 mock 的 `-script` 选择 `backend/internal/upstreammock/testdata/artist-{identity,media,candidates}.json`。用主署名“纸屿”试验身份与同名候选，用“海岸来信”试验图片与简介。示例插件用“折纸灯乐团”试验按名补简介。
 
 工具边界验证应覆盖第六条引用、501 字标题、经管家出站放行名单登记的内网地址，以及纯文本标题写入。集成验证应覆盖单项资料写入后原待定项的结论、剩余缺口的新摘要、人工资料优先和程序收尾时的例外状态。
@@ -938,7 +939,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 | 常量（`curation/program/worker.go`） | 当前值 | 升级时 |
 | --- | --- | --- |
-| `LocalRuleVersion` | 3（第 28 节） | 只重算真实性、分类与缺口，不发外部请求 |
+| `LocalRuleVersion` | 4（第 27.3 节） | 只重算真实性、分类与缺口，不发外部请求 |
 | `MatchRuleVersion` | 105 | 对第 23.6 节指定的工作状态登记一次 requery_match_version |
 | `PatrolPromptVersion` | 1 | 不让任何工作状态到期；只作用于新巡检与手动重新巡检 |
 
@@ -1103,8 +1104,8 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 | 接口 | 约定 |
 | --- | --- |
-| `NextModelKind` | 每个空闲名额按“本地辅助 → 识别判断 → 名字和艺人核对 → 旧巡检 → 第二档 → 联网兜底”取有可领项的类别 |
-| `LookupTierReady` | 识别队列里高于“本地完整”的稳定、可见、到期项已排空且 MusicBrainz 可用，第二档才启动；退避不算排空 |
+| `NextModelKind` | 每个空闲名额按“本地辅助 → 识别判断 → 名字和艺人核对”取有可领项的类别 |
+| 手动整理艺人 | 显式启动的艺人代次单独领取，复用模型名额和共享日额度，网页工具仅供该队列 |
 | `BeforeModelItem` | 每项开始前检查共享日额度；已开始的项允许完成 |
 
 管理员通过 `GET/PUT /api/v1/admin/curation/settings` 读写整数 `model_concurrency`（迁移 0096，默认 4，范围 1–16）。保存后立即按新值分派。调低时在途项继续，运行数降到新上限以下再补位。`GET /api/v1/admin/curation/progress` 的 `model.running` 是正在处理的模型运行数，一次合批调用占一个名额。`model.concurrency` 是当前上限。
@@ -1161,10 +1162,10 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 27.3 本地整理
 
-- 只处理扫描解析后标题、艺人或曲目标题仍是占位值，或推断值里带明显杂质（年份、格式、编号、方括号内容）的专辑；扫描已能解析的“01 - 艺人 - 曲名”不进模型。
-- 按目录提供文件名、目录名与现有标签，只给 `submit_local_cleanup`（`item_id`，可选 `title`、`artist`、`tracks:[{track_id,title}]`）。
-- 后端在写入事务中复核：每个值规范化后必须出现在某个本地片段里，否则丢弃。通过的按模型来源、`writer_level=1`、`origin.mode=local_cleanup` 写自动层，标为模型推断。曲序与碟号不改。
-- 整理出的值可以作搜索输入，认定仍须时长核对（第 23.2 节）。
+- `local_cleanup` 以完整目录为一项。七种扫描结果可请求本地辅助：无名字标签、旧编码多解、含 & 或逗号的原署名、同目录按不同专辑名分开且曲号不连续、同一非根父目录下疑似同套的未识别碟目录、缺曲号或多碟迹象下缺碟号、复合专辑名。缺艺人的半个名字先补再查。匹配后确定性拆分失败由识别程序提供原署名引用。
+- 模型查看本项成员、标签、注释、原文件与目录名、编码读法、平票和编号来源。只使用 `submit_local_cleanup`。带理由的 `undetermined` 结案；`apply` 提交 `texts,encodings,splits,grouping` 的任意组合。领取、调用额度和失败处理沿用第 25 节。
+- 后台逐项核对。本地单一片段经文字归一、标点转空格后须包含提交文字。每张只能从扫描候选中选一个编码，后台解全部乱码字段。署名以段和连接词逐字重建原串。归组须完整覆盖可调整文件，确定的曲位和 CUE 边界受保护，每张每碟曲号唯一。
+- 写入采用 `origin.mode=local_cleanup`，显示为模型推断，自动字段级别 1。保留署名显示串，按有序段投影本地艺人。独立归组记录在下一次扫描消费。各项可撤销，程序核对后直接写入。已配主模型的相关发行先等本地辅助和归组确认，再用可核实的输入查询。具体版匹配可替换本地推断。
 
 ### 27.4 已知局限
 
@@ -1210,7 +1211,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 ### 28.5 扫描侧（`LocalRuleVersion` 3）
 
 细则见 `library-scan-tags.md`、`library-scan-grouping.md`。
-- 真实性新增来源 `legacy_encoding`（旧编码唯一读法，推断）与 `garbled`（多种读法，按占位处理，不进查询，可进本地整理并以各读法作本地片段）。符合西文字节特征的标签保留扫描来源。没有其它标签时读 ID3v1；唯一读法由程序写本地层，级别 1。
+- 真实性新增来源 `legacy_encoding`（旧编码唯一读法，推断）与 `garbled`（乱码按占位处理，多解可由本地辅助从整张候选编码里选择）。符合西文字节特征的标签保留扫描来源。没有其它标签时读 ID3v1；唯一读法由扫描应用并保留推断来源。
 - 中英文占位词（Unknown Artist、Track NN、未知艺术家等）判为占位；`Untitled` 不算。
 - 无 `ALBUMARTIST` 且至少 4 首、至少 3 位不同主艺人、无人担任超过半数曲目的主艺人时判为合辑，专辑艺人取推断值 Various Artists；扫描与整理按每首真实署名拆分后的第一位统计。
 - 同目录曲号分段从 1 重起时推断碟号；`A1`、`B2` 曲号按面解析，A/B 面为第 1 碟、C/D 面为第 2 碟，均标为推断。

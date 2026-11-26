@@ -72,8 +72,8 @@ func planTrackFields(e catalog.CurationEvidence, m MatchResult) []curation.Track
 				fields[name] = intent
 			}
 		}
-		add("title", value.title, t.TitlePlaceholder || t.TitleInferred)
-		add("artist", value.artist, t.ArtistPlaceholder)
+		add("title", value.title, t.TitlePlaceholder || t.TitleInferred || t.LocalTitle != "")
+		add("artist", value.artist, t.ArtistPlaceholder || t.LocalArtist != "")
 		if len(fields) > 0 {
 			requests = append(requests, curation.TrackRequest{ArtistCredit: artistCredits[id], ReleaseID: e.ID, TrackID: t.ID, OnlyEmpty: true, Fields: fields, ExpectedScan: map[string]json.RawMessage{"title": jsonValue(t.Title), "artist": jsonValue(t.Artist)}})
 		}
@@ -192,6 +192,7 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 	}
 	var match MatchResult
 	var proposals []curation.ArtistCreditProposal
+	var localRequests localCreditRequests
 	var err error
 	var saved struct {
 		releaseReviewState
@@ -255,7 +256,8 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 				proposals = nil
 			}
 			request := curation.LinkRequest{ReleaseID: e.ID, ExternalSource: "musicbrainz", Source: source}
-			splits := planCreditSplits(local, *e, match)
+			var splits []curation.CreditSplit
+			splits, localRequests = planCreditSplits(local, *e, match)
 			if err := writeCreditSplits(ctx, w.writer, request, splits, u.write); err != nil {
 				return err
 			}
@@ -296,6 +298,9 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		return errReleaseChanged
 	}
 	d := releaseInputs(entry)
+	if err := localRequests.project(ctx, tx, e.ID); err != nil {
+		return err
+	}
 	if err := curation.SaveArtistCreditProposals(ctx, tx, e.ID, d.identity, proposals); err != nil {
 		return err
 	}

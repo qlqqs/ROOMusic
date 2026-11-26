@@ -18,6 +18,9 @@ func artistSearchPage(base string) object {
 func (s script) artistCalls(base, item string, image, bio bool) []call {
 	page := base + "/searxng/artists/coast"
 	if s.ArtistScenario == "media" {
+		if !image && !bio {
+			return []call{{"shelve_pending_item", object{"item_id": item, "reason": "只查到艺人资料，没有找到 MusicBrainz 编号。"}}}
+		}
 		args := object{"item_id": item, "citations": []object{{"url": page, "title": "沿岸音乐名录"}}}
 		if image {
 			args["image"] = object{"url": base + "/searxng/artists/portrait.png", "page_url": page}
@@ -31,7 +34,7 @@ func (s script) artistCalls(base, item string, image, bio bool) []call {
 		return call{"resolve_artist_identity", object{"item_id": item, "source": source, "external_id": id, "basis": object{"note": note, "citations": []string{page}}}}
 	}
 	if s.ArtistScenario == "candidates" {
-		return []call{identity("wikidata", "Q900001", "署名与二重奏相同，还需核对。"), identity("musicbrainz", "10000000-0000-4000-8000-000000000003", "署名与独奏者相同，还需核对。")}
+		return []call{identity("musicbrainz", "10000000-0000-4000-8000-000000000001", "署名与二重奏相同，还需核对。"), identity("musicbrainz", "10000000-0000-4000-8000-000000000003", "署名与独奏者相同，还需核对。")}
 	}
-	return []call{identity("wikidata", "Q900001", "合成名录将专辑和曲目列在纸屿二重奏名下。")}
+	return []call{identity("musicbrainz", "10000000-0000-4000-8000-000000000001", "合成名录将专辑和曲目列在纸屿二重奏名下。")}
 }

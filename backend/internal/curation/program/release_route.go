@@ -33,6 +33,19 @@ func previousReview(s curation.WorkState) (releaseReviewState, error) {
 }
 
 func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationEvidence, fingerprintRequired bool) (MatchResult, error) {
+	configured, err := w.localConfigured(ctx, "release")
+	if err != nil {
+		return MatchResult{}, err
+	}
+	if configured {
+		var ready bool
+		if err := w.db.QueryRowContext(ctx, `SELECT `+localDependencySQL+` FROM (SELECT $1::uuid target_id) r`, e.ID).Scan(&ready); err != nil {
+			return MatchResult{}, err
+		}
+		if !ready {
+			return MatchResult{}, errWaitingForLocal
+		}
+	}
 	cursor := &u.matchCursor
 	step, err := w.fingerprintStep(ctx)
 	if err != nil {
@@ -107,7 +120,7 @@ func (w *Worker) concludeMatch(ctx context.Context, u *unit, e catalog.CurationE
 			}
 			out.match = m
 		}
-		out.group, out.artistLinks, out.proposals, err = w.applyMatch(ctx, u, e, m)
+		out.group, out.artistLinks, out.proposals, err = w.applyMatch(ctx, u, e, m, &out.localRequests)
 		if errors.Is(err, errArtistCreditUnconfirmed) {
 			out.match.Status, out.match.Route = "uncertain", "select"
 			out.match.Level, out.match.Rule = "", ""

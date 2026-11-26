@@ -1,10 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { describeFailure, failureOf, isOutcomeUncertain, type ApiFailure } from "../../../shared/api";
 import { newIdempotencyKey } from "../../../shared/lib/ids";
 import { useViewerScope } from "../../auth";
 import type { ArtistLinkPreviewDTO, ArtistWebSearchDTO } from "../api/decoders";
-import { decideArtistCandidate, fetchArtistWebSearch, putArtistBio, putArtistLink, rejectArtistMedia, uploadArtistImage } from "../api/endpoints";
+import { decideArtistCandidate, fetchArtistWebSearch, putArtistBio, putArtistLink, rejectArtistMedia, startArtistWebSearch, uploadArtistImage } from "../api/endpoints";
 import { artistsKeys } from "../query-keys";
 
 export type ArtistMediaField = "image" | "bio";
@@ -33,6 +33,9 @@ export type ArtistMediaControls = {
   /** 采纳一个候选，或不采纳（decline）它；“都不是”就是把全部候选都不采纳。正在处理的候选在 deciding 里。 */
   decideCandidates: (exceptionIds: readonly string[], decision: "accept" | "decline") => Promise<boolean>;
   deciding: boolean;
+  /** 联网查找这一位（只在 webSearch.configured 且 can_start 时可用）；受理后用返回的状态更新显示。 */
+  startWebSearch: () => Promise<boolean>;
+  startingWebSearch: boolean;
   /** 最近一次失败的说明（就近显示在页头下方）；新的操作开始时清掉。 */
   error: string | null;
   dismissError: () => void;
@@ -46,6 +49,9 @@ const failureMessages: Readonly<Record<string, string>> = {
   nothing_to_apply: "这项资料已经不在了。",
   revert_conflict: "这项资料刚被换过，页面已刷新，请再看一下。",
   artist_catalog_not_ready: "艺人信息正在整理，请稍后再试。",
+  model_not_configured: "还没有配好整理用的模型，到设置里配好后再查。",
+  search_unconfigured: "管家设置里还没有配网页搜索，配好后再查。",
+  source_disabled: "MusicBrainz 已关闭，联网查找要用它核对。",
 };
 
 function messageOf(failure: ApiFailure | null, fallback: string): string {
@@ -229,6 +235,23 @@ export function useArtistMedia({ artistId, revision, refresh }: { artistId: stri
     [fail, settle, scope],
   );
 
+  const queryClient = useQueryClient();
+  const [startingWebSearch, setStartingWebSearch] = useState(false);
+  const startWebSearch = useCallback(async () => {
+    setError(null);
+    setStartingWebSearch(true);
+    try {
+      const response = await startArtistWebSearch(artistId);
+      if (scope.isCurrent()) queryClient.setQueryData(artistsKeys.webSearch(generation, artistId), response);
+      return true;
+    } catch (cause) {
+      fail(cause, "没能开始联网查找，请重试。");
+      return false;
+    } finally {
+      if (scope.isCurrent()) setStartingWebSearch(false);
+    }
+  }, [artistId, fail, generation, queryClient, scope]);
+
   const hidden = {
     image: submitted.image || pendingReject?.field === "image",
     bio: submitted.bio || pendingReject?.field === "bio",
@@ -246,6 +269,8 @@ export function useArtistMedia({ artistId, revision, refresh }: { artistId: stri
     webSearch: webSearch.data ?? null,
     decideCandidates,
     deciding,
+    startWebSearch,
+    startingWebSearch,
     error,
     dismissError: () => setError(null),
   };

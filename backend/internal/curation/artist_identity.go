@@ -46,7 +46,7 @@ func (w *Writer) PreviewArtistIdentity(ctx context.Context, gate *Sources, item 
 	switch {
 	case source == "musicbrainz" && uuid.Valid(externalID):
 		externalID = strings.ToLower(externalID)
-	case source == "wikidata" && sources.ValidWikidataID(externalID):
+	case item.ArtistWebGeneration == nil && source == "wikidata" && sources.ValidWikidataID(externalID):
 	default:
 		return plan, operations.Invalid("invalid_input", "外部艺人编号无效")
 	}
@@ -62,8 +62,8 @@ func (w *Writer) PreviewArtistIdentity(ctx context.Context, gate *Sources, item 
 		EXISTS (SELECT FROM family f JOIN curation_suppressions s ON s.target_id=f.artist_id
 			WHERE s.target_type='artist' AND s.subject='external_link' AND s.value_hash=$2),
 		EXISTS (SELECT FROM family f JOIN external_links l ON l.object_id=f.artist_id
-			WHERE l.object_type='artist' AND l.source IN ('musicbrainz','wikidata'))
-	FROM artists a WHERE a.id=$1`, id, (externalIdentity{source, externalID}).identityHash()).Scan(&plan.revision, &suppressed, &occupied)
+			WHERE l.object_type='artist' AND l.source IN ('musicbrainz','wikidata') AND ($3 OR l.source='musicbrainz'))
+	FROM artists a WHERE a.id=$1`, id, (externalIdentity{source, externalID}).identityHash(), item.ArtistWebGeneration == nil).Scan(&plan.revision, &suppressed, &occupied)
 	if err != nil {
 		return plan, err
 	}
@@ -83,7 +83,10 @@ func (w *Writer) PreviewArtistIdentity(ctx context.Context, gate *Sources, item 
 	if !isArtistEntity(plan.Entry) {
 		return plan, operations.Invalid("not_an_artist", "条目类型不是个人或音乐团体")
 	}
-	if !plan.Entry.NameMatch {
+	if item.ArtistWebGeneration != nil {
+		plan.Entry.WikidataID = nil
+	}
+	if item.ArtistWebGeneration == nil && !plan.Entry.NameMatch {
 		return plan, operations.Invalid("identity_mismatch", "条目名字与本地艺人或别名不符")
 	}
 	return plan, nil

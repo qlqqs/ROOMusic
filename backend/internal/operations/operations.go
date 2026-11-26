@@ -217,15 +217,31 @@ func lockKey(actorID, key string) int32 {
 // 成功返回的 Response 是应写给客户端的 JSON（首次执行时是执行器响应的序列化，重放时是已存响应）。
 // 失败时返回 *Failure（分类错误，含同键异义的 idempotency_conflict），或包装了 ErrUnavailable、ErrOperationFailed 的错误。
 func Run(ctx context.Context, database *sql.DB, spec Spec, execute Executor) (Result, error) {
-	actorID, key := strings.ToLower(spec.ActorID), strings.ToLower(spec.Key)
 	// 加锁后的查询必须看到前一个持锁事务已提交的记录，所以显式要求 READ COMMITTED。
 	tx, err := database.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return Result{}, unavailable("begin", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	result, after, err := RunInTx(ctx, tx, spec, execute)
+	if err != nil {
+		return Result{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return Result{}, classify("commit", err)
+	}
+	if after != nil {
+		after()
+	}
+	return result, nil
+}
+
+// RunInTx 在调用者的事务内登记治理操作。返回的回调在成功提交后调用。
+func RunInTx(ctx context.Context, tx *sql.Tx, spec Spec, execute Executor) (Result, func(), error) {
+	actorID, key := strings.ToLower(spec.ActorID), strings.ToLower(spec.Key)
+	var err error
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1::int, $2::int)`, lockClass, lockKey(actorID, key)); err != nil {
-		return Result{}, unavailable("lock idempotency key", err)
+		return Result{}, nil, unavailable("lock idempotency key", err)
 	}
 
 	var recordedID, recordedFingerprint string
@@ -235,29 +251,29 @@ func Run(ctx context.Context, database *sql.DB, spec Spec, execute Executor) (Re
 	switch {
 	case err == nil:
 		if recordedFingerprint != spec.Fingerprint {
-			return Result{}, errIdempotencyConflict
+			return Result{}, nil, errIdempotencyConflict
 		}
-		return Result{OperationID: recordedID, Response: recordedResponse, Replayed: true}, nil
+		return Result{OperationID: recordedID, Response: recordedResponse, Replayed: true}, nil, nil
 	case !errors.Is(err, sql.ErrNoRows):
-		return Result{}, unavailable("read operation record", err)
+		return Result{}, nil, unavailable("read operation record", err)
 	}
 
 	operationID := uuid.New()
 	outcome, err := execute(context.WithValue(ctx, actorKey{}, actorID), tx, operationID)
 	if err != nil {
-		return Result{}, classify("execute", err)
+		return Result{}, nil, classify("execute", err)
 	}
 	response, err := json.Marshal(outcome.Response)
 	if err != nil {
-		return Result{}, fmt.Errorf("%w: encode response: %w", ErrOperationFailed, err)
+		return Result{}, nil, fmt.Errorf("%w: encode response: %w", ErrOperationFailed, err)
 	}
 	before, err := json.Marshal(outcome.Before)
 	if err != nil {
-		return Result{}, fmt.Errorf("%w: encode before state: %w", ErrOperationFailed, err)
+		return Result{}, nil, fmt.Errorf("%w: encode before state: %w", ErrOperationFailed, err)
 	}
 	after, err := json.Marshal(outcome.After)
 	if err != nil {
-		return Result{}, fmt.Errorf("%w: encode after state: %w", ErrOperationFailed, err)
+		return Result{}, nil, fmt.Errorf("%w: encode after state: %w", ErrOperationFailed, err)
 	}
 	var origin any
 	if spec.Origin != nil {
@@ -267,7 +283,7 @@ func Run(ctx context.Context, database *sql.DB, spec Spec, execute Executor) (Re
 		}
 		encoded, err := json.Marshal(originValue)
 		if err != nil {
-			return Result{}, err
+			return Result{}, nil, err
 		}
 		origin = string(encoded)
 	}
@@ -283,20 +299,14 @@ func Run(ctx context.Context, database *sql.DB, spec Spec, execute Executor) (Re
 	if err != nil {
 		var postgresError *pgconn.PgError
 		if errors.As(err, &postgresError) && postgresError.Code == "23505" && postgresError.ConstraintName == "operations_actor_key_uq" {
-			return Result{}, errIdempotencyConflict
+			return Result{}, nil, errIdempotencyConflict
 		}
-		return Result{}, classify("insert operation record", err)
+		return Result{}, nil, classify("insert operation record", err)
 	}
 	if err := insertOperationTargets(ctx, tx, operationID, outcome); err != nil {
-		return Result{}, classify("insert operation targets", err)
+		return Result{}, nil, classify("insert operation targets", err)
 	}
-	if err = tx.Commit(); err != nil {
-		return Result{}, classify("commit", err)
-	}
-	if outcome.AfterCommit != nil {
-		outcome.AfterCommit()
-	}
-	return Result{OperationID: operationID, Response: response}, nil
+	return Result{OperationID: operationID, Response: response}, outcome.AfterCommit, nil
 }
 
 func unavailable(step string, err error) error {

@@ -158,7 +158,9 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	}
 	for _, d := range definitions {
 		register(registry, d)
-
+		if d.Name == "web_search" || d.Name == "fetch_page" {
+			register(backgroundRegistry, d)
+		}
 	}
 	if configuration.writer != nil {
 		for _, d := range curationtools.StewardTools(configuration.writer, configuration.matcher, configuration.mockHost) {

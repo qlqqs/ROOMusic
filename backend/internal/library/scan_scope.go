@@ -157,7 +157,7 @@ func (root registeredRoot) expandDirectories(ctx context.Context, db scanExecuto
 			SELECT DISTINCT regexp_replace(cue_sheet_path,'(^|/)[^/]*$','') AS sheet,
 			regexp_replace(coalesce(cue_parent_relative_path,relative_path),'(^|/)[^/]*$','') AS parent
 			FROM tracks WHERE source_root_id=$1::uuid AND source_status='present' AND cue_sheet_path IS NOT NULL
-		) SELECT sheet FROM refs WHERE parent=ANY($2::text[]) UNION SELECT parent FROM refs WHERE sheet=ANY($2::text[])`, root.ID, batch)
+		) SELECT sheet FROM refs WHERE parent=ANY($2::text[]) UNION SELECT parent FROM refs WHERE sheet=ANY($2::text[]) UNION SELECT unnest(directories) FROM local_model_groupings WHERE root_id=$1 AND directories && $2::text[]`, root.ID, batch)
 		if err != nil {
 			return nil, err
 		}

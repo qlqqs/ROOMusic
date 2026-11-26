@@ -244,8 +244,8 @@ func TestPostgreSQLLiveGapsWebSuggestionRetry(t *testing.T) {
 
 func TestPostgreSQLLiveGapsUpgrade(t *testing.T) {
 	t.Run("版本号", func(t *testing.T) {
-		if program.MatchRuleVersion < 104 || program.LocalRuleVersion != 3 || runtime.ReviewPolicyVersion != 7 {
-			t.Fatalf("匹配、本地、审查规则为 %d/%d/%d，匹配规则至少为 104，本地和审查规则应为 3/7", program.MatchRuleVersion, program.LocalRuleVersion, runtime.ReviewPolicyVersion)
+		if program.MatchRuleVersion < 104 || program.LocalRuleVersion != 4 || runtime.ReviewPolicyVersion != 7 {
+			t.Fatalf("匹配、本地、审查规则为 %d/%d/%d，匹配规则至少为 104，本地和审查规则应为 4/7", program.MatchRuleVersion, program.LocalRuleVersion, runtime.ReviewPolicyVersion)
 		}
 	})
 	for _, kind := range []string{"unlisted", "uncertain", "track_count", "position_conflict", "artist_mismatch", "tag_text_mismatch", "matched"} {
@@ -298,7 +298,7 @@ func TestPostgreSQLLiveGapsUpgrade(t *testing.T) {
 				wantDelta = 0
 			}
 			searches := f.source.callCount("SearchReleases")
-			if kind != "matched" && (got.MatchRuleVersion != program.MatchRuleVersion || got.LocalRuleVersion != 3) {
+			if kind != "matched" && (got.MatchRuleVersion != program.MatchRuleVersion || got.LocalRuleVersion != program.LocalRuleVersion) {
 				t.Errorf("补查后的匹配和本地规则版本为 %d/%d", got.MatchRuleVersion, got.LocalRuleVersion)
 			}
 			if got.RequeryMatchVersion != 0 || got.Generation != base.Generation+wantDelta || got.Attempts != base.Attempts+wantDelta || searches-initialSearches != initialSearches*wantDelta {

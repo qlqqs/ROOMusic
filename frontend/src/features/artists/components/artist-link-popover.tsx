@@ -1,5 +1,5 @@
 import { Check, Link2, LoaderCircle, TriangleAlert, X } from "lucide-react";
-import { useEffect, useId, useState, type RefObject } from "react";
+import { useEffect, useId, useState, type ReactNode, type RefObject } from "react";
 import { describeFailure, failureOf } from "../../../shared/api";
 import { useTooltip } from "../../../shared/ui";
 import type { ArtistLinkPreviewDTO, ArtistLinksDTO } from "../api/decoders";
@@ -54,6 +54,7 @@ export function ArtistLinkPopover({
   className,
   onApply,
   onClose,
+  footer,
 }: {
   artistId: string;
   initial: string;
@@ -62,6 +63,8 @@ export function ArtistLinkPopover({
   className?: string | undefined;
   onApply: (preview: ArtistLinkPreviewDTO) => Promise<boolean>;
   onClose: () => void;
+  /** 浮层底部的另一种找身份的办法（艺人页传入“联网查找”）。 */
+  footer?: ReactNode | undefined;
 }) {
   const [text, setText] = useState(initial);
   const [result, setResult] = useState<Result | null>(null);
@@ -164,6 +167,7 @@ export function ArtistLinkPopover({
           )}
         </div>
       ) : null}
+      {footer}
     </MediaPopover>
   );
 }

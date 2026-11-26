@@ -4,7 +4,7 @@
 
 ## 1. 状态和迁移
 
-- 在 `backend/migrations/` 新增下一个连续号的 `NNNN_curation_model_judge.sql` 和 `NNNN_curation_model_judge.down.sql`。先加逐来源候选/选择、否定名字对、有效名字快照的结构，再迁移历史明确否定、清理旧待办和未采用建议。按 design 第六节保留历史和撤销关系。核对 0064 外键的 ON DELETE CASCADE 以及 0091、0092、0093 旧状态约束。用 0101 已建立的总用量。在 `backend/internal/curation/{match_results,pending_items,work_states}.go` 增加新存取，结果与状态只能更新自己的来源与代次。
+- 在 `backend/migrations/` 新增下一个连续号的 `0106_curation_model_judge.sql` 和 `0106_curation_model_judge.down.sql`。先加逐来源候选/选择、否定名字对、有效名字快照的结构，再迁移历史明确否定、清理旧待办和未采用建议。按 design 第六节保留历史和撤销关系。核对 0064 外键的 ON DELETE CASCADE 以及 0091、0092、0093 旧状态约束。用 0101 已建立的总用量。在 `backend/internal/curation/{match_results,pending_items,work_states}.go` 增加新存取，结果与状态只能更新自己的来源与代次。
 - 风险在于误删已采纳建议依赖的 pending 行，以及旧后台 plan 被恢复后重复执行。对会话、例外和真实操作逐项核对，仅清旧后台活动。保留能读历史旧枚举的结构。
 - 验证 `ROOMUSIC_TEST_RUN='^TestPostgreSQLMigrationRollbackUpgradeDowngradeAndReupgrade$' mise exec -- ./scripts/test-integration.sh`。这是迁移执行器的回退验证，业务数据保全另由末节的升级用例覆盖。
 
@@ -100,7 +100,7 @@ ROOMUSIC_CURATION_METRICS_SUITE=fixed ROOMUSIC_CURATION_METRICS_OUT=../../../tem
 | 选择候选 | 管理员同源 `POST /api/v1/admin/curation/releases/{id}/match-selection`。请求头 `Idempotency-Key` 为 UUID，请求体含 `source:"musicbrainz",snapshot_id,external_id`。200 返回已匹配的来源行，其 `selection` 含 `external_id,selected_by,selected_at,operation_ids`。同键同用户同输入可重放。陈旧或已替换的快照返回 409 `item_stale`，重验结构不符返回 409 `insufficient_corroboration`，治理阻止写入时返回对应的冲突码。来源不可用返回 503 `source_unavailable`。请求参数或 JSON 无效返回 400。 |
 | 名字与依据 | 专辑详情 `musicbrainz_names[]` 提供对应写法，管理员按依据采用。艺人对应的 `judged_by_model` 标明目前生效的模型依据。 |
 
-迁移以 `backend/migrations/NNNN_curation_model_judge.sql` 与对应的 `.down.sql` 交付。增加逐来源候选快照及挑选结果、有效 MB 名字和艺人否定对，结束旧待办并清理未采用建议。已写入曲库的操作及已采用建议保留。独立验证时，当前工作树的上一号为 0103，临时占用 0104 验证升级、回退和再升级。子任务 8、10 合入后由主代理分配下一个连续号，再用于部署。与 8 共用的原巡检、本地辅助和目录领取入口，及 10 的独立艺人队列，按设计在合入时对接。
+迁移以 `backend/migrations/0106_curation_model_judge.sql` 与对应的 `.down.sql` 交付。增加逐来源候选快照及挑选结果、有效 MB 名字和艺人否定对，结束旧待办并清理未采用建议。已写入曲库的操作及已采用建议保留。独立验证时，当前工作树的上一号为 0103，临时占用 0104 验证升级、回退和再升级。合入子任务 8、10 后正式编号为 0106。与 8 共用的原巡检、本地辅助和目录领取入口，及 10 的独立艺人队列，按设计在合入时对接。
 
 已删除八份旧建议、重巡及其错误样本，并更新现有 API 录制驱动。任务限定的命令未包含 `TestPostgreSQLAPIResponseSamples`。冲突列表、详情和进度等静态 REST 样本的重录、前端解码和页面接线留给合入阶段。新增反例和并发/恢复场景见上方测试清单。
 
@@ -147,5 +147,45 @@ ROOMUSIC_CURATION_METRICS_SUITE=fixed ROOMUSIC_CURATION_METRICS_OUT=../../../tem
 - `backend/internal/steward/httpapi/`　`background.go`
 - `backend/internal/steward/runtime/`　`run.go`
 - `backend/internal/upstreammock/`　`script.go`
-- `backend/migrations/`　`NNNN_curation_model_judge.down.sql`、`NNNN_curation_model_judge.sql`
+- `backend/migrations/`　`0106_curation_model_judge.down.sql`、`0106_curation_model_judge.sql`
 - `docs/architecture/adr/`　`0009-curation-chain-review.md`
+
+## 合入本地辅助与手动整理艺人的验证
+
+17 个文件的合并冲突已解决。后台按 local、select、verify 调用，本地辅助沿用目录级领取、新版 submit_local_cleanup、署名拆分、归组与撤销；知识线索经 B2 核对。手动整理艺人按启动者及 artist_web_generation 单独领取、限额和结算，沿用网页工具与身份候选确认。原候选接受、拒绝地址仅处理手动艺人的身份候选，真实接口覆盖了两种决定。0106 清理旧任务时保留这批次的待办、候选和关联会话。脚本同时保留子任务 8 的编码、混入艺人规则和子任务 9 的逐项 JSON。
+
+### 固定库
+
+以 28 张为分母。完整报告在 `temp/curation-fixed/merge9.json`。下表每项按本次值、相对本任务上轮、相对固定基线列出。
+
+| 模式 | 认对 | 认错 | 请求总数 | 每张请求 | 耗时（毫秒） |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 纯程序 | 16 / 0 / +4 | 0 / 0 / 0 | 65 / 0 / −7 | 2.32 / 0 / −0.25 | 65543 / +3879 / −4858 |
+| 脚本模型 | 19 / +1 / +4 | 0 / 0 / 0 | 89 / +2 / −254 | 3.18 / +0.07 / −9.07 | 74860 / +1389 / −51016 |
+
+embedded-artist 在纯程序轮仍未收录。脚本轮由本地辅助从“堤灯社 - 微雨塘”取出“微雨塘”，写入该标题并认到发行 869f1824-2acd-56a7-af07-2b9218179449、发行组及全部四个指定录音。这张共 8 次请求，含 2 次模型调用。明细的工作行仍显示 unmatched/search，评分由实际写入的指定发行、录音和字段得出。one-char 和 romanized 在脚本轮也认到指定版，分别纠正本地错字与保留罗马字标题。
+
+### 接口样本差异与前端字段
+
+下列样本以 `backend/internal/app/testdata/api-samples/` 为根，与包含 0104、0105 的 main 比较。
+
+| 样本 | 变化及用途 |
+| --- | --- |
+| curation/conflicts.json、curation/match-results.json | 列表和单张来源都返回候选、snapshot_id、selection。在 status=conflict 时取当前行的 source、snapshot_id 和被选候选的 external_id。列表包含 release_id、title 和 pagination。 |
+| curation/match-selection.json | 管理员 POST 带 UUID 类型 Idempotency-Key，正文含 source、snapshot_id、external_id。200 返回 status=matched、selection.external_id、selected_by、selected_at、operation_ids。同键可重放。409 的 item_stale 或 insufficient_corroboration 需刷新候选；来源暂不可用为 503。完整路由见前面的“冲突接口与合入”。 |
+| releases/match-names.json | 真实已选版的 musicbrainz_names 返回 target_type、target_id、field、local_value、effective_value、musicbrainz_value、external_id、basis_operation_id、revision、can_adopt。can_adopt 为真时管理员可向 adopt-name 提交 target_id、field、basis_operation_id、expected_revision，并传 UUID 幂等键。 |
+| releases/get.json、get-auto.json、get-claimed.json、get-corrected.json、get-cue.json、get-dff.json、get-dsf.json、get-single.json、get-track-corrected.json、get-work.json | 各种详情均返回 musicbrainz_names，尚无生效依据时是空数组。 |
+| artists/detail.json、detail-manual-media.json、detail-redirect.json、detail-unavailable.json、detail-web-search.json、detail-with-media.json | 有效 MB 对应由 links.judged_by_model 表明判断来源，links.operation_id 给出操作。带具体操作的样本随新增 UUID 顺延后续归一化编号。 |
+| artists/adjudication/merged-sources.json、merged-sources-empty-keys.json | 合并来源行带 judged_by_model，可与该行的 operation_id 一起显示。 |
+| curation/progress.json、diagnostics/admin.json | 识别版本与数据库版本均为 106。 |
+| curation/exception-accepted.json、exception-declined.json、exceptions-merge.json、exceptions-track.json、exceptions.json、repatrol.json、errors/exception-decided.json、errors/exception-stale.json | 八份旧建议和重巡样本已移除。手动整理艺人专用的候选接受与拒绝响应仍由 curation/artist-web-search 下的样本覆盖。 |
+
+本轮调整既有测试的地方包括本地规则版本从 3 改为 4、专用工具注册表增加手动身份工具、网页能力测试改由管理员启动整理艺人、挑选样本复用同键测试的合成版，并提供可比时长和外部曲名。轨道操作样本在录制时自行设置原展示标题，消除对已经下线的建议流程的依赖。
+
+### 合入后的命令结果
+
+- `ROOMUSIC_TEST_RUN='^TestPostgreSQLMigrationRollbackRoundTrip$/^010[456]_' mise exec -- ./scripts/test-integration.sh` 通过。0104、0105、0106 均实际执行往返，0106 夹具写入已用查询预算和艺人否定对。
+- `ROOMUSIC_UPDATE_API_SAMPLES=1 ROOMUSIC_TEST_RUN='^TestPostgreSQLAPIResponseSamples$' mise exec -- ./scripts/test-integration.sh` 实际重录 277 份。去掉更新变量后再次运行通过。另以相同的录制、比对方式运行艺人详情与身份裁定各自的专属录制器，116 和 35 份均通过。与 main 的样本差异只涉及上表列出的文件。
+- `ROOMUSIC_CURATION_METRICS_SUITE=fixed ROOMUSIC_CURATION_METRICS_OUT=../../../temp/curation-fixed/merge9.json ROOMUSIC_TEST_RUN='^TestPostgreSQLCurationMetrics$' mise exec -- ./scripts/test-integration.sh` 通过。
+- 手动艺人队列的网页开关、原生搜索、工具次数、token 上限、缺失用量和到达上限时保留候选的 PostgreSQL 定向验证通过。
+- 在 backend 运行 `mise exec -- go build ./...` 与 `mise exec -- go vet ./...` 通过。指定的整包单元测试唯一失败为既有的 `steward/web.TestC8MusicRateLimitUserAgentAndFailures`（503 被重试）；其余包通过或没有包内用例。`git diff --check` 和 `git diff --cached --check` 通过，未解决的索引项为零。合并保留在工作目录中，未提交。

@@ -1228,3 +1228,7 @@ ROOMUSIC_TEST_RUN='TestPostgreSQLStewardAPIResponseSamples' ROOMUSIC_UPDATE_API_
 | `app/steward_tokens_integration_test.go` | 真实装配的注册表经 MCP 列出与调用；令牌与 Cookie 互不通用；三份样本 |
 
 没有覆盖：`-race`（环境没有 CGO 与 gcc）；真实 MCP 客户端的连接。
+
+## 本地辅助主调用
+
+后台本地辅助使用开启者的主模型。一个完整目录作为一个领取项，首条消息只提供本地证据，仅开放 `submit_local_cleanup`。能力、额度、冷却、空答和单次预算沿用整理调度合同。文字、编码、署名或归组经程序核准后直接写入。

@@ -59,7 +59,7 @@ func TestPostgreSQLCurationModelMergeReleases(t *testing.T) {
 			dedicated = append(dedicated, tool.Name)
 		}
 		slices.Sort(dedicated)
-		if !slices.Equal(dedicated, []string{"merge_releases", "shelve_pending_item", "submit_judge", "submit_local_cleanup", "submit_verification"}) {
+		if !slices.Equal(dedicated, []string{"merge_releases", "resolve_artist_identity", "shelve_pending_item", "submit_judge", "submit_local_cleanup", "submit_verification"}) {
 			t.Fatalf("后台专用工具 %v", dedicated)
 		}
 		_, item := startReleaseMergeModel(t, f)

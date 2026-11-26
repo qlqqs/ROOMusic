@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	LocalRuleVersion int16 = 3
+	LocalRuleVersion int16 = curation.LocalRuleVersion
 	MatchRuleVersion int16 = 106
 
 	// 资料主题与并入继续使用原来的版本和幂等键。
@@ -24,6 +24,7 @@ const (
 )
 
 type Options struct {
+	LocalModelConfigured                         func(context.Context) (bool, error)
 	CachedReleaseCredits                         func(string) (*sources.Release, error)
 	Fingerprints                                 Fingerprints
 	ConfirmScan                                  func(context.Context) error

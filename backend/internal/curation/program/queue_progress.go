@@ -152,7 +152,7 @@ func (w *Worker) QueueProgress(ctx context.Context) (curation.ProgramQueues, err
 			var waitSource, waitReason string
 			var retryAt time.Time
 			err := w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT retry_source,retry_reason,next_attempt_at FROM candidates
-                WHERE stable AND NOT due AND retry_source IS NOT NULL ORDER BY next_attempt_at,target_id LIMIT 1`, subject, now).Scan(&waitSource, &waitReason, &retryAt)
+                WHERE stable AND NOT due AND retry_source IS NOT NULL ORDER BY next_attempt_at,target_id LIMIT 1`, subject, now, false).Scan(&waitSource, &waitReason, &retryAt)
 			if err == nil {
 				p.State, reason = "paused", waitReason
 				p.Source, p.RetryAt = &waitSource, &retryAt

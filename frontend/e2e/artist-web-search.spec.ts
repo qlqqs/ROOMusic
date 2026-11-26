@@ -4,6 +4,7 @@ import { decodeArtistDetail, decodeArtistWebSearch, type ArtistWebSearchDTO } fr
 import { decodeCurationSources } from "../src/features/curation/api/decoders";
 import { sampleBody } from "../src/test/api-samples";
 import { artistImage } from "../src/test/artist-media-data";
+import { artistWebSearchOf } from "../src/test/artist-web-search-data";
 import { seedException } from "../src/test/curation-data";
 import type { ApiMock } from "./support/api-mock";
 import { seedArtistMedia } from "./support/artist-media-seed";
@@ -34,7 +35,7 @@ for (const width of [390, 1440]) {
     const photo = { title: "合成演出照片", url: "https://www.photos.example.test/concert?photo=1" };
     detail.bio = bio;
     detail.image = { ...artistImage, source: "web_search", source_url: null, license: null, license_url: null, author: null, citations: [photo] };
-    await page.route(`**${statusPath}`, (route) => route.fulfill({ json: { state: "none", candidates: [] } }));
+    await page.route(`**${statusPath}`, (route) => route.fulfill({ json: artistWebSearchOf() }));
     await page.goto(url);
 
     const header = page.locator("#main header").filter({ has: page.getByRole("heading", { level: 1, name: detail.artist.name }) });
@@ -88,7 +89,7 @@ for (const width of [390, 1440]) {
       input: { artist_id: detail.artist.id, external_id: candidate.external_id, source: candidate.source },
       preview: { changes: [{ field: "external_link", before: null, after: candidate.external_id }] },
     });
-    let status: ArtistWebSearchDTO = { state: "running", candidates: [] };
+    let status: ArtistWebSearchDTO = artistWebSearchOf({ state: "running" });
     await page.route(`**${statusPath}`, (route) => route.fulfill({ json: status }));
 
     const path = `/api/v1/admin/curation/exceptions/${candidate.exception_id}/accept`;
@@ -96,7 +97,7 @@ for (const width of [390, 1440]) {
     const accept = new Promise<void>((resolve) => { finishAccept = resolve; });
     await page.route(`**${path}`, async (route) => {
       await accept;
-      status = { state: "none", candidates: [] };
+      status = artistWebSearchOf();
       detail.links.wikidata = candidate.external_id;
       detail.revision += 1;
       detail.image = artistImage;

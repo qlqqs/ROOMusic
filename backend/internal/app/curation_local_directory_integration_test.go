@@ -41,7 +41,7 @@ func TestPostgreSQL整理无标签编号目录中的专辑名与艺人(t *testin
 		before.Authenticity["title"] != metadata.Inferred || before.SelectedArtistAuth() != metadata.Inferred {
 		t.Fatalf("无标签扫描应保留目录推断的标题和艺人，实际为 %q、%q、%v", before.Title, scannedArtist, before.Authenticity)
 	}
-	endpoint.localReply = func(metricsPending) curation.LocalInput { return curation.LocalInput{Title: title, Artist: artist} }
+	endpoint.localReply = func(item metricsPending) curation.LocalInput { return metricLocalAnswer(item, title, artist) }
 	endpoint.configure(t, app, &admin, map[string]metricsModelTarget{entry.release: {SampleID: sample.ID}}, upstream)
 	setPatrolTestSource(t, app, &admin, "musicbrainz", false)
 	setPatrolTestSource(t, app, &admin, "web_search", false)
@@ -57,7 +57,7 @@ func TestPostgreSQL整理无标签编号目录中的专辑名与艺人(t *testin
 		t.Fatalf("编号目录的本地整理应调用模型一次，实际 %+v", usage)
 	}
 	b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='local_cleanup'
-		AND status='resolved' AND resolution='local_cleanup' AND evidence->'title'->>'requested'='true' AND evidence->'artist'->>'requested'='true'`, entry.release)
+		AND status='resolved' AND resolution='local_cleanup' AND (evidence->'releases'->0->'fields') ?& ARRAY['title','album_artist']`, entry.release)
 	b3RequireCount(t, app, 2, `SELECT count(*) FROM release_auto_values v JOIN operations o ON o.id=v.operation_id
 		WHERE release_id=$1 AND ((field='title' AND text_value=$2) OR (field='album_artist' AND text_value=$3))
 		AND writer_level=1 AND o.origin->>'mode'='local_cleanup'`, entry.release, title, artist)

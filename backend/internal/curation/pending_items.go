@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
@@ -11,11 +12,11 @@ import (
 )
 
 const pendingColumns = `id,target_type,coalesce(target_id::text,''),coalesce(artist_id::text,''),kind,status,rule_version,input_digest,evidence,candidates,conflicts,
- resolution,created_at,updated_at,resolved_at,coalesce(conversation_id::text,''),claimed_at,next_attempt_at,attempts,review_retries,shelved_reason,COALESCE(match_rule_version,0),COALESCE(identity_digest,''),COALESCE(route,''),item_tool_calls,item_tokens,source_retry_count,claim_source_recovery_at,empty_count,single_request`
+ resolution,created_at,updated_at,resolved_at,coalesce(conversation_id::text,''),claimed_at,next_attempt_at,attempts,review_retries,shelved_reason,COALESCE(match_rule_version,0),COALESCE(identity_digest,''),COALESCE(route,''),item_tool_calls,item_tokens,source_retry_count,claim_source_recovery_at,empty_count,single_request,artist_web_generation`
 
 func scanPending(row interface{ Scan(...any) error }) (PendingItem, error) {
 	var p PendingItem
-	err := row.Scan(&p.ID, &p.TargetType, &p.TargetID, &p.ArtistID, &p.Kind, &p.Status, &p.RuleVersion, &p.InputDigest, &p.Evidence, &p.Candidates, &p.Conflicts, &p.Resolution, &p.CreatedAt, &p.UpdatedAt, &p.ResolvedAt, &p.ConversationID, &p.ClaimedAt, &p.NextAttemptAt, &p.Attempts, &p.ReviewRetries, &p.ShelvedReason, &p.MatchRuleVersion, &p.IdentityDigest, &p.Route, &p.ItemToolCalls, &p.ItemTokens, &p.SourceRetryCount, &p.ClaimSourceRecoveryAt, &p.EmptyCount, &p.SingleRequest)
+	err := row.Scan(&p.ID, &p.TargetType, &p.TargetID, &p.ArtistID, &p.Kind, &p.Status, &p.RuleVersion, &p.InputDigest, &p.Evidence, &p.Candidates, &p.Conflicts, &p.Resolution, &p.CreatedAt, &p.UpdatedAt, &p.ResolvedAt, &p.ConversationID, &p.ClaimedAt, &p.NextAttemptAt, &p.Attempts, &p.ReviewRetries, &p.ShelvedReason, &p.MatchRuleVersion, &p.IdentityDigest, &p.Route, &p.ItemToolCalls, &p.ItemTokens, &p.SourceRetryCount, &p.ClaimSourceRecoveryAt, &p.EmptyCount, &p.SingleRequest, &p.ArtistWebGeneration)
 	return p, err
 }
 func pendingRows(rows *sql.Rows, err error) ([]PendingItem, error) {
@@ -124,7 +125,7 @@ func (w *Writer) modelKindItems(ctx context.Context, conversation string, now ti
 	prefix := "WITH visible AS (" + catalog.VisibleReleaseIDsSQL + ")"
 	group, albums := "p.kind", "0"
 	if kind == "local" {
-		// 同目录的本地整理共享一次会话。名录块已经由巡检按艺人或专辑分好。
+		// 同目录的本地辅助共享一次会话。
 		group = "CASE WHEN p.kind='local_cleanup' THEN COALESCE(p.evidence->>'directory_key',p.id::text) ELSE p.id::text END"
 	}
 	if kind == "lookup" || kind == "web" {
@@ -140,8 +141,8 @@ func (w *Writer) modelKindItems(ctx context.Context, conversation string, now ti
 	}
 	group = "CASE WHEN p.single_request THEN p.id::text ELSE " + group + " END"
 	query := prefix + `, eligible AS (
- SELECT p.id,p.target_id,p.created_at,p.kind,p.evidence->>'pair_low' pair_low,p.evidence->>'pair_high' pair_high,` + group + ` AS pack,` + albums + ` AS albums,
- CASE WHEN $4='' THEN 0 ELSE ` + QueueRankSQL + ` END AS priority` + modelQueueFromSQL + `
+ SELECT p.id,p.target_id,p.artist_id,p.created_at,p.kind,p.evidence->>'pair_low' pair_low,p.evidence->>'pair_high' pair_high,` + group + ` AS pack,` + albums + ` AS albums,
+ CASE WHEN $4='artist_web' THEN p.artist_web_priority WHEN $4='' THEN 0 ELSE ` + QueueRankSQL + ` END AS priority` + modelQueueFromSQL + `
  AND p.target_type=ANY($3::text[]) AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1)
  AND ($4='' OR ` + modelKindSQL + `=$4 OR ($4='unavailable_web' AND p.route='web'))
  AND NOT (p.id=ANY(COALESCE($6::uuid[], '{}')))`
@@ -162,13 +163,19 @@ func (w *Writer) modelKindItems(ctx context.Context, conversation string, now ti
 		query += ` AND (p.id,p.updated_at) IN (SELECT * FROM unnest($8::uuid[],$9::timestamptz[]))`
 		args = append(args, ids, versions)
 	}
+	if kind == "artist_web" {
+		args = append(args, ArtistWebActor(ctx))
+		query += fmt.Sprintf(" AND p.artist_web_actor=$%d", len(args))
+	} else if kind == "" {
+		query += " AND p.artist_web_generation IS NULL"
+	}
 	query += `), seed AS (
  SELECT pack,priority,kind FROM eligible WHERE $5='' OR target_id=NULLIF($5,'')::uuid
- ORDER BY albums DESC,priority,created_at,id LIMIT 1
+ ORDER BY albums DESC,priority,CASE WHEN $4='artist_web' THEN artist_id END,created_at,id LIMIT 1
  ), picked AS (
  SELECT p.id,e.priority,e.albums FROM eligible e JOIN curation_pending_items p ON p.id=e.id
  WHERE ($4='' OR e.pack=(SELECT pack FROM seed)) AND ($4 NOT IN ('select','verify') OR e.priority=(SELECT priority FROM seed)) AND ($4<>'verify' OR e.kind=(SELECT kind FROM seed)) AND (e.pair_low IS NULL OR NOT EXISTS(SELECT FROM eligible same_pair WHERE same_pair.pair_low=e.pair_low AND same_pair.pair_high=e.pair_high AND (same_pair.created_at,same_pair.id)<(e.created_at,e.id))) AND p.status IN ('waiting_model','waiting_route')`
-	query += ` ORDER BY (e.target_id=NULLIF($5,'')::uuid) DESC NULLS LAST,e.albums DESC,e.priority,e.created_at,e.id LIMIT CASE WHEN $4='local' THEN NULL ELSE $2::int END`
+	query += ` ORDER BY (e.target_id=NULLIF($5,'')::uuid) DESC NULLS LAST,e.albums DESC,e.priority,CASE WHEN $4='artist_web' THEN e.artist_id END,e.created_at,e.id LIMIT CASE WHEN $4='local' THEN NULL ELSE $2::int END`
 	rows := "curation_pending_items"
 	if conversation != "" {
 		query += ` FOR UPDATE OF p SKIP LOCKED
@@ -351,13 +358,17 @@ func (w *Writer) FinishModelItem(ctx context.Context, item PendingItem, conversa
 		return err
 	}
 	defer tx.Rollback()
-	if err = countModelAnswer(ctx, tx, item.ID, conversation); err != nil {
+	if err = finishModelItem(ctx, tx, item, conversation, resolution); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func finishModelItem(ctx context.Context, tx *sql.Tx, item PendingItem, conversation, resolution string) error {
+	if err := countModelAnswer(ctx, tx, item.ID, conversation); err != nil {
 		return err
 	}
 	r, err := tx.ExecContext(ctx, `UPDATE curation_pending_items SET status='resolved',resolution=$4,resolved_at=now(),updated_at=now(),claimed_at=NULL,next_attempt_at=NULL
  WHERE id=$1 AND input_digest=$2 AND conversation_id=$3 AND status='in_progress' AND COALESCE(identity_digest,'')=$5`, item.ID, item.InputDigest, conversation, resolution, item.IdentityDigest)
-	if err = requireChanged(r, err, "item_stale", "待定项已变更"); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return requireChanged(r, err, "item_stale", "待定项已变更")
 }

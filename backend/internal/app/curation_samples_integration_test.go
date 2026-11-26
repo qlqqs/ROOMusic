@@ -73,6 +73,8 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 	}
 	errSample("errors/curation-plan", conversationPath+"/plans/"+plan.ID+"/review")
 
+	// 独立设置这条曲目操作的展示标题，原样本标题曾来自已经下线的建议操作。
+	mustExec(t, f.application, `UPDATE releases SET title='合成标题甲' WHERE id=$1`, f.a)
 	var trackID string
 	if err := f.application.database.QueryRowContext(ctx, `SELECT t.id FROM track_effective t JOIN media m ON m.id=t.medium_id WHERE m.release_id=$1 ORDER BY m.position,t.position LIMIT 1`, f.a).Scan(&trackID); err != nil {
 		t.Fatal(err)

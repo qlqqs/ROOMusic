@@ -17,6 +17,13 @@ func (s *runState) executeCalls(ctx context.Context, calls []provider.ToolCall, 
 		if ctx.Err() != nil {
 			stop = EndCancelled
 		}
+		if stop == "" && s.params.RemainingItemBudget != nil {
+			end, err := backgroundEnd(s.params.OnToolCalls(ctx, 1))
+			if err != nil {
+				return messages, stop, err
+			}
+			stop = end.Reason
+		}
 		started := stop == ""
 		var output tool.Result
 		var code string

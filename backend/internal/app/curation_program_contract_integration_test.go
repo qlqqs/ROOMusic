@@ -107,12 +107,16 @@ func TestPostgreSQLProgramMatchFailedLookupKeepsLastSuccess(t *testing.T) {
 	}
 }
 
-func TestPostgreSQLProgramModelMatchSameKeyKeepsNewerConclusion(t *testing.T) {
+func selectionFixture(t *testing.T) (*programFixture, *program.ModelMatcher, curation.MatchChoice, time.Time) {
+	t.Helper()
 	f := newProgramFixture(t)
 	f.enable(t)
 	ctx := t.Context()
 	db := f.application.database
-	_, remote := f.tagged(t)
+	track, remote := f.tagged(t)
+	mustExec(t, f.application, `UPDATE tracks SET duration_seconds=100 WHERE id=$1`, track)
+	remote.Media[0].Tracks[0].Title = "合成外部曲名"
+	f.source.releases[remote.ID] = remote
 	matcher := program.NewModelMatcher(db, f.writer, f.gate)
 	local, err := f.writer.LoadCurationEvidence(ctx, []string{f.a})
 	requireCurationOK(t, err)
@@ -120,9 +124,15 @@ func TestPostgreSQLProgramModelMatchSameKeyKeepsNewerConclusion(t *testing.T) {
 	requireCurationOK(t, curation.SaveWorkState(ctx, db, curation.WorkState{Subject: "release", TargetID: f.a, Status: "conflict", InputDigest: program.ReleaseDigest(e), FileDigest: e.FileDigest, RuleVersion: program.MatchRuleVersion, MatchRuleVersion: program.MatchRuleVersion}))
 	checked := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
 	choice := curation.MatchChoice{Source: "musicbrainz", SnapshotID: uuid.New(), ExternalID: remote.ID}
-	candidates, err := json.Marshal([]program.Candidate{{Source: choice.Source, ExternalID: remote.ID, Method: "tag_id", Entity: "release"}})
+	candidates, err := json.Marshal([]program.Candidate{{Source: choice.Source, ExternalID: remote.ID, Method: "tag_id", Entity: "release", Title: remote.Title, Artist: "Artist A", ReleaseGroupID: remote.Group.ID, TrackCount: 1}})
 	requireCurationOK(t, err)
-	requireCurationOK(t, curation.SaveReleaseMatchResult(ctx, db, f.a, curation.ReleaseMatchResult{Source: choice.Source, Status: "conflict", CheckedAt: &checked, SnapshotID: choice.SnapshotID, Candidates: candidates}))
+	requireCurationOK(t, curation.SaveReleaseMatchResult(ctx, db, f.a, curation.ReleaseMatchResult{Source: choice.Source, Status: "conflict", Reason: "ambiguous_editions", CheckedAt: &checked, SnapshotID: choice.SnapshotID, Candidates: candidates}))
+	return f, matcher, choice, checked
+}
+
+func TestPostgreSQLProgramModelMatchSameKeyKeepsNewerConclusion(t *testing.T) {
+	f, matcher, choice, checked := selectionFixture(t)
+	ctx := t.Context()
 	key := uuid.New()
 	first, err := matcher.SelectMatch(ctx, f.a, f.admin.id, key, choice)
 	requireCurationOK(t, err)
@@ -136,7 +146,7 @@ func TestPostgreSQLProgramModelMatchSameKeyKeepsNewerConclusion(t *testing.T) {
 	}
 	newer := checked.Add(time.Hour)
 	next := curation.ReleaseMatchResult{Candidates: json.RawMessage("[]"), Source: "musicbrainz", Status: "conflict", CheckedAt: &newer, Conflicts: []string{"duration_mismatch"}}
-	requireCurationOK(t, curation.SaveReleaseMatchResult(ctx, db, f.a, next))
+	requireCurationOK(t, curation.SaveReleaseMatchResult(ctx, f.application.database, f.a, next))
 	mustExec(t, f.application, `UPDATE curation_work_states SET generation=generation+1,status='conflict' WHERE subject='release' AND target_id=$1`, f.a)
 	state := f.stateFor(t, "release", f.a)
 	_, err = matcher.SelectMatch(ctx, f.a, f.admin.id, key, choice)

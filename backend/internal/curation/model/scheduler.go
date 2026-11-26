@@ -48,15 +48,18 @@ type Run interface {
 }
 
 type RunParams struct {
-	Budget        int64
-	Verified      bool
-	Items         []curation.PendingItem
-	ProviderError func(time.Duration)
-	Run           curation.ModelRun
-	Text          string
-	BeforeRequest func(context.Context) error
-	BeforeStep    func(context.Context) error
-	Usage         func(context.Context, int64, int64)
+	Budget               int64
+	Verified             bool
+	Items                []curation.PendingItem
+	ProviderError        func(time.Duration)
+	Run                  curation.ModelRun
+	Text                 string
+	BeforeRequest        func(context.Context) error
+	BeforeStep           func(context.Context) error
+	Usage                func(context.Context, int64, int64)
+	RemainingItemBudget  func() (int, int64)
+	ChargeEstimatedUsage func(context.Context, int64) error
+	OnToolCalls          func(context.Context, int) error
 }
 
 type Scheduler struct {
@@ -174,7 +177,25 @@ func (s *Scheduler) Run(ctx context.Context) {
 
 // 单一领取循环按包预留目标键；候选准备、模型运行和收尾可在不同包之间并行。
 func (s *Scheduler) dispatch(ctx context.Context) (bool, error) {
+	now := s.options.Now()
+	manual, err := s.writer.ReadyArtistWebActor(ctx, now)
+	if err != nil {
+		return false, err
+	}
+	if manual != "" {
+		active, err := s.dispatchFor(curation.WithArtistWebActor(ctx, manual))
+		if err != nil || active {
+			return active, err
+		}
+	}
+	return s.dispatchFor(ctx)
+}
+
+func (s *Scheduler) dispatchFor(ctx context.Context) (bool, error) {
 	progress, actor, err := s.conditions(ctx, true)
+	if err == nil && progress.modelBusy {
+		return false, nil
+	}
 	if err == nil && progress.PauseKind != nil && *progress.PauseKind == "provider_quota" && progress.RetryAt != nil && !progress.RetryAt.After(s.options.Now()) && !progress.Today.AtLimit(progress.DailyTokenLimit) && progress.Configured && progress.State == "unavailable" {
 		err = s.probe(ctx, progress, actor, false)
 		return false, err
@@ -194,8 +215,7 @@ func (s *Scheduler) dispatch(ctx context.Context) (bool, error) {
 	}
 
 	now := s.options.Now()
-	if progress.State == "idle" {
-
+	if progress.State == "idle" && curation.ArtistWebActor(ctx) == "" {
 		if err := s.writer.MaterializeVerificationItems(ctx); err != nil {
 			return false, err
 		}
@@ -463,16 +483,85 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 	if len(items) == 1 {
 		params.Run.PendingItemID = items[0].ID
 	}
+	var failures sourceFailures
+	p := items[0]
+	calls, tokens := p.ItemToolCalls, p.ItemTokens
+	if kind == ArtistWeb {
+		params.RemainingItemBudget = func() (int, int64) { return curation.ArtistWebCallLimit - calls, curation.ArtistWebTokenLimit - tokens }
+		params.ChargeEstimatedUsage = func(ctx context.Context, n int64) error {
+			if err := s.writer.AddEstimatedItemTokens(ctx, p.ID, conversation, n); err != nil {
+				return err
+			}
+			tokens += n
+			return nil
+		}
+	}
+	if p.ClaimSourceRecoveryAt != nil {
+		failures.record(*p.ClaimSourceRecoveryAt)
+	}
+	sourceRetryAt := func(now time.Time) time.Time {
+		if kind == ArtistWeb && artistAtLimit(calls, tokens) {
+			// 当前请求可能已用完额度，还没有机会从工具取得来源错误。
+			if recovery := curation.MatchSourceRecoveryTime(ctx); recovery.After(failures.recovery) {
+				failures.record(recovery)
+			}
+			if failures.count == 0 && p.SourceRetryCount > 0 {
+				return now
+			}
+		}
+		return failures.retryAt(now, p.SourceRetryCount)
+	}
+	if kind == ArtistWeb {
+		params.Run.SourceUnavailable = func(ctx context.Context, recovery time.Time) error {
+			if recovery.IsZero() {
+				recovery = s.options.Now()
+			}
+			failures.record(recovery)
+			return s.writer.RecordClaimSourceFailure(ctx, p, conversation, recovery)
+		}
+		params.Run.DeferSuggestion = func() bool {
+			return !sourceRetryAt(s.options.Now()).IsZero()
+		}
+	}
+	if kind == ArtistWeb {
+		params.Run.Abandon = func(ctx context.Context, id, reason string) error {
+			if id != p.ID {
+				return ErrStopped
+			}
+			if err := s.checkRunConditions(ctx, actor, items); err != nil {
+				return err
+			}
+			if artistAtLimit(calls, tokens) {
+				return s.writer.ShelvePendingItem(ctx, id, conversation, "item_limit")
+			}
+			if at := sourceRetryAt(s.options.Now()); !at.IsZero() {
+				return s.writer.ReleaseModelItems(ctx, conversation, []string{id}, false, &at)
+			}
+			return s.writer.FinishModelItem(ctx, p, conversation, "no_result")
+		}
+	}
 	var usageErr error
 	firstRequest := true
 	params.BeforeRequest = func(ctx context.Context) error {
 		// 在途答案可落地，下一次实际出站前再检查全局暂停。
-		live, enabler, err := s.conditions(ctx, firstRequest)
+		live, enabler, err := s.conditions(ctx, firstRequest || kind == ArtistWeb)
 		if err != nil {
 			return err
 		}
 		if enabler != actor || live.config.Key != w.config || live.State != "idle" || live.PauseKind != nil || !live.allows(kind) {
 			return ErrStopped
+		}
+		if kind == ArtistWeb {
+			ok, err := s.writer.ArtistWebRunning(ctx, *p.ArtistWebGeneration, p.ID)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return ErrStopped
+			}
+			if artistAtLimit(calls, tokens) {
+				return ErrItemLimit
+			}
 		}
 		firstRequest = false
 		return nil
@@ -496,10 +585,32 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 		return nil
 	}
 	params.Usage = func(ctx context.Context, in, out int64) {
-		err := s.writer.RecordItemUsage(ctx, s.options.Now(), "", conversation, in, out)
+		id := ""
+		if kind == ArtistWeb {
+			id = p.ID
+			tokens += in + out
+		}
+		err := s.writer.RecordItemUsage(ctx, s.options.Now(), id, conversation, in, out)
 		if err != nil {
 			usageErr = err
 			s.logger.ErrorContext(ctx, "记录后台模型用量失败", "conversation_id", conversation, "error", err)
+		}
+	}
+	if kind == ArtistWeb {
+		params.OnToolCalls = func(ctx context.Context, n int) error {
+			if usageErr != nil {
+				return usageErr
+			}
+			if calls+n > curation.ArtistWebCallLimit {
+				return ErrItemLimit
+			}
+			if n > 0 {
+				if err := s.writer.AddItemCalls(ctx, p.ID, conversation, n); err != nil {
+					return err
+				}
+				calls += n
+			}
+			return nil
 		}
 	}
 	var providerReported atomic.Bool
@@ -520,6 +631,9 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 		reason = "provider_error"
 	}
 	now := s.options.Now()
+	if kind == ArtistWeb && artistAtLimit(calls, tokens) {
+		reason = "item_limit"
+	}
 	if !providerReported.Load() && reason == "provider_error" && failure == nil {
 		s.pauseProvider(-1)
 	} else if err == nil && reason == "completed" {
@@ -534,7 +648,21 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		var finishErr error
 		if !itemsFinished {
-			if err == nil && failure != nil {
+			if err == nil && kind == ArtistWeb && (reason == "item_limit" || !sourceRetryAt(now).IsZero()) {
+				// 最后一个回答可能已经提交候选，只处置仍属于本次领取的项。
+				current, readErr := s.writer.PendingItem(cleanup, p.ID)
+				finishErr = readErr
+				if readErr == nil && current.Status == "in_progress" && current.ConversationID == conversation {
+					if current.ModelClaimDigest() != p.ModelClaimDigest() {
+						finishErr = s.release(cleanup, conversation, false, nil)
+					} else if reason == "item_limit" {
+						finishErr = s.writer.ShelvePendingItem(cleanup, p.ID, conversation, "item_limit")
+					} else {
+						delay := sourceRetryAt(now)
+						finishErr = s.writer.ReleaseModelItems(cleanup, conversation, []string{p.ID}, false, &delay)
+					}
+				}
+			} else if err == nil && failure != nil {
 				switch failure.Class {
 				case "temporary", "provider_quota", "configuration":
 					finishErr = s.writer.SetModelFailure(cleanup, w.config, *failure, now)
@@ -559,6 +687,9 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 				}
 			} else {
 				finishErr = s.release(cleanup, conversation, false, nil)
+			}
+			if finishErr == nil && kind == ArtistWeb && (p.SourceRetryCount > 0 || failures.count > 0) {
+				finishErr = s.writer.ClearResolvedSourceFailures(cleanup, p.ID, conversation)
 			}
 			itemsFinished = finishErr == nil
 		}

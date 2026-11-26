@@ -563,24 +563,19 @@ func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, 
 		if lastTool != "" {
 			return metricsToolCall{}
 		}
-		input := curation.LocalInput{ItemID: item.ID, Title: target.Fields["title"], Artist: target.Fields["album_artist"]}
+		input := metricLocalAnswer(item, target.Fields["title"], target.Fields["album_artist"])
 		if m.localReply != nil {
 			input = m.localReply(item)
-			input.ItemID = item.ID
 		}
+		input.ItemID = item.ID
 		if evidence != nil {
-			if !evidence.ContainsText(input.Title) {
-				input.Title = ""
-			}
-			if !evidence.ContainsText(input.Artist) {
-				input.Artist = ""
-			}
-			input.Tracks = slices.DeleteFunc(input.Tracks, func(tr struct {
-				TrackID string `json:"track_id"`
-				Title   string `json:"title"`
-			}) bool {
-				return !evidence.Seen(tr.TrackID) || !evidence.ContainsText(tr.Title)
+			input.Texts = slices.DeleteFunc(input.Texts, func(v curation.LocalText) bool {
+				return (v.Target != item.ReleaseID && !evidence.Seen(v.Target)) || !evidence.ContainsText(v.Value)
 			})
+		}
+		if len(input.Texts) == 0 && len(input.Encodings) == 0 && len(input.Splits) == 0 && input.Grouping == nil {
+			input.Decision = "undetermined"
+			input.Reason = "没有可确认的本地文字"
 		}
 		return metricsToolCall{"submit_local_cleanup", input}
 	case "lookup":
@@ -872,6 +867,17 @@ func TestMetricsOracleModesUseCurrentItem(t *testing.T) {
 	}
 }
 
+func metricLocalAnswer(item metricsPending, title, artist string) curation.LocalInput {
+	input := curation.LocalInput{ItemID: item.ID, Decision: "apply"}
+	if title != "" {
+		input.Texts = append(input.Texts, curation.LocalText{Target: item.ReleaseID, Field: "title", Value: title})
+	}
+	if artist != "" {
+		input.Texts = append(input.Texts, curation.LocalText{Target: item.ReleaseID, Field: "album_artist", Value: artist})
+	}
+	return input
+}
+
 func TestMetricsOraclePatrolAndLocalValues(t *testing.T) {
 	m := metricsModel{mode: "oracle", typos: map[string]string{"砂港": "沙港"}}
 	var item metricsPending
@@ -884,11 +890,11 @@ func TestMetricsOraclePatrolAndLocalValues(t *testing.T) {
 	if len(closed.args.(legacyPatrolSubmission).Issues) != 0 || len(open.args.(legacyPatrolSubmission).Issues) != 1 {
 		t.Fatalf("巡检建议的可见性异常 %+v / %+v", closed, open)
 	}
-	requireCurationOK(t, json.Unmarshal([]byte(`{"item_id":"本项","kind":"local_cleanup","evidence":{"directories":[{"path":"03 - 桦窗册"}]}}`), &item))
+	requireCurationOK(t, json.Unmarshal([]byte(`{"item_id":"本项","kind":"local_cleanup","release_id":"发行甲","evidence":{"directories":["03 - 桦窗册"],"release_ids":["发行甲"]}}`), &item))
 	e = upstreammock.NewOracleEvidence(item.RawItem, nil)
 	out := m.nextTool(item, metricsModelTarget{Fields: map[string]string{"title": "桦窗册", "album_artist": "标注中的隐名"}}, "local_cleanup", "", "", &e, false)
 	input := out.args.(curation.LocalInput)
-	if input.Title != "桦窗册" || input.Artist != "" {
+	if len(input.Texts) != 1 || input.Texts[0].Field != "title" || input.Texts[0].Value != "桦窗册" {
 		t.Fatalf("本地整理越过可见片段 %+v", input)
 	}
 }

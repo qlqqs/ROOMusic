@@ -83,7 +83,7 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 
 图片和简介分别先取家族内的人工资料，再取家族内的自动资料。自动资料先按有许可来源、插件、网络搜索降序排列。同级优先取有效身份，再取最近并入方，同一合并时刻按艺人 ID 升序。两种外部对应各自依同样的身份顺序取值。旧 ID 的详情保留自身摘要和 `redirect_artist_id`，资料及对应解析到有效身份。艺人的全部曲目暂时缺失时仍可读取资料。
 
-`citations` 始终是数组。网络搜索资料返回 1 至 5 个 `{url,title}` 网页引用，标题为至多 500 个 UTF-16 码元的纯文本，允许空串。其他来源返回 `[]`。管理员可通过 `GET /api/v1/artists/{id}/web-search` 查看整理状态与待确认候选，候选引用保留网址并返回空字符串标题，成员请求返回 403。
+`citations` 始终是数组。网络搜索资料返回 1 至 5 个 `{url,title}` 网页引用，标题为至多 500 个 UTF-16 码元的纯文本，允许空串。其他来源返回 `[]`。管理员可通过 `GET /api/v1/artists/{id}/web-search` 查看手动查找的 `configured/can_start/can_stop`、队列位置 `queue`、本项用量 `usage` 和待确认候选。单艺人 POST 返回 202，全量队列使用 `/api/v1/admin/curation/artist-web-search`。候选用原有例外 accept/decline 处理，候选引用保留网址并返回空字符串标题，成员请求返回 403。
 
 人工图片的 `source_url`、`author`、`license`、`license_url` 均为 null，人工简介的 `source_url`、`license`、`license_url` 均为 null。自动资料带来源页面链接，署名和许可等可选字段有值时为字符串。拆分艺人时，人工和自动资料以及艺人外部对应都保留在写入时的有效身份上。
 

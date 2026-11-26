@@ -111,6 +111,15 @@ func (w *Writer) applyArtistLink(ctx context.Context, r ArtistLinkRequest, spec 
 		if err = checkArtistRevision(revision, r.ExpectedRevision); err != nil {
 			return operations.Outcome{}, err
 		}
+		if item != nil && item.ArtistWebGeneration != nil && r.ConfirmedBy == "" && SuggestionRecorded(*item) {
+			res, err := tx.ExecContext(ctx, `UPDATE curation_pending_items SET status='in_progress',resolved_at=NULL,resolution=NULL,claimed_at=now() WHERE id=$1 AND conversation_id=$2 AND input_digest=$3 AND resolution='suggestion_recorded' AND NOT EXISTS(SELECT FROM curation_model_exceptions WHERE pending_item_id=$1 AND status IN ('accepting','accepted','declined'))`, item.ID, r.ConversationID, item.InputDigest)
+			if err := requireChanged(res, err, "item_stale", "艺人候选已处理"); err != nil {
+				return operations.Outcome{}, err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE curation_model_exceptions SET status='superseded',decided_at=now() WHERE pending_item_id=$1 AND status='open'`, item.ID); err != nil {
+				return operations.Outcome{}, err
+			}
+		}
 		if spec.Origin != nil {
 			if err := checkWrite(ctx, tx, spec, r.ConfirmedBy, id, r.ExpectedRevision, revision); err != nil {
 				return operations.Outcome{}, err
@@ -123,8 +132,11 @@ func (w *Writer) applyArtistLink(ctx context.Context, r ArtistLinkRequest, spec 
 			if err = CheckMatchItem(ctx, tx, *item, r.ConversationID, r.ConfirmedBy != ""); err != nil {
 				return operations.Outcome{}, err
 			}
+			if err := CheckArtistWebInput(ctx, tx, *item); err != nil {
+				return operations.Outcome{}, err
+			}
 			var occupied bool
-			if err := tx.QueryRowContext(ctx, artistLinkFamilyCTE+` SELECT EXISTS(SELECT FROM media_links)`, id).Scan(&occupied); err != nil {
+			if err := tx.QueryRowContext(ctx, artistLinkFamilyCTE+` SELECT EXISTS(SELECT FROM media_links WHERE $2 OR source='musicbrainz')`, id, item.ArtistWebGeneration == nil).Scan(&occupied); err != nil {
 				return operations.Outcome{}, err
 			}
 			if occupied {

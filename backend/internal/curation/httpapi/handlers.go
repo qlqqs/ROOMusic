@@ -20,24 +20,28 @@ type Matcher interface {
 	SelectMatch(context.Context, string, string, string, curation.MatchChoice) (curation.ReleaseMatchResult, error)
 }
 type Handlers struct {
-	matcher  Matcher
-	model    curation.ModelScheduler
-	program  curation.ProgramStatus
-	versions curation.RuleVersions
-	sources  *curation.Sources
-	writer   *curation.Writer
-	reverter *curation.Reverter
-	guard    *identity.Guard
-	logger   *slog.Logger
+	candidates curation.ExceptionResolver
+	matcher    Matcher
+	model      curation.ModelScheduler
+	program    curation.ProgramStatus
+	versions   curation.RuleVersions
+	sources    *curation.Sources
+	writer     *curation.Writer
+	reverter   *curation.Reverter
+	guard      *identity.Guard
+	logger     *slog.Logger
 }
 
-func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, program curation.ProgramStatus, model curation.ModelScheduler, matcher Matcher, versions curation.RuleVersions, guard *identity.Guard, logger *slog.Logger) *Handlers {
-	return &Handlers{model: model, matcher: matcher, sources: sources, writer: writer, reverter: reverter, program: program, versions: versions, guard: guard, logger: logger}
+func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, program curation.ProgramStatus, model curation.ModelScheduler, matcher Matcher, candidates curation.ExceptionResolver, versions curation.RuleVersions, guard *identity.Guard, logger *slog.Logger) *Handlers {
+	return &Handlers{candidates: candidates, model: model, matcher: matcher, sources: sources, writer: writer, reverter: reverter, program: program, versions: versions, guard: guard, logger: logger}
 }
 
 func (h *Handlers) Register(mux *http.ServeMux) {
 	h.registerArtistMedia(mux)
 	const base = "/api/v1/admin/curation"
+	// 整理艺人复用原有候选决策地址，只接收手动批次的身份候选。
+	mux.HandleFunc("POST "+base+"/exceptions/{id}/accept", h.admin(h.decideArtistCandidate))
+	mux.HandleFunc("POST "+base+"/exceptions/{id}/decline", h.admin(h.decideArtistCandidate))
 	mux.HandleFunc("GET "+base+"/conflicts", h.admin(func(w http.ResponseWriter, r *http.Request, _ identity.User) {
 		page, size, err := httpserver.ParsePagination(r, 20, 100)
 		if err != nil {
@@ -82,6 +86,22 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+base+"/reverts", h.admin(h.revert))
 	mux.HandleFunc("GET "+base+"/suppressions", h.admin(h.suppressions))
 	mux.HandleFunc("DELETE "+base+"/suppressions/{id}", h.admin(h.clearSuppression))
+}
+
+func (h *Handlers) decideArtistCandidate(w http.ResponseWriter, r *http.Request, actor identity.User) {
+	id := r.PathValue("id")
+	err := h.writer.CheckArtistCandidate(r.Context(), id)
+	if err != nil {
+		h.respond(w, r, nil, err)
+		return
+	}
+	if strings.HasSuffix(r.URL.Path, "/accept") {
+		e, err := h.candidates.Accept(r.Context(), id, actor.ID, r.Header.Get("X-Request-ID"))
+		h.respond(w, r, map[string]any{"exception": e, "operation_ids": e.OperationIDs}, err)
+		return
+	}
+	e, err := h.candidates.Decline(r.Context(), id, actor.ID)
+	h.respond(w, r, map[string]any{"exception": e}, err)
 }
 
 func (h *Handlers) admin(handle func(http.ResponseWriter, *http.Request, identity.User)) http.HandlerFunc {

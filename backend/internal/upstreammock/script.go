@@ -199,19 +199,77 @@ func (s script) reply(t turn) reply {
 
 // 单项整理脚本只能引用本次领取的编号，固定 JSON 不需要保存数据库 UUID。
 func bindScriptItem(rep reply, current string) reply {
-	var items []pendingItem
-	if current == "" || json.Unmarshal([]byte(current), &items) != nil || len(items) != 1 {
+	var items []struct {
+		ID       string `json:"item_id"`
+		Evidence json.RawMessage
+	}
+	if json.Unmarshal([]byte(current), &items) != nil || len(items) != 1 {
 		return rep
 	}
-	rep.Calls = slices.Clone(rep.Calls)
-	for i, call := range rep.Calls {
-		if call.Arguments["item_id"] == "$current_item" {
-			args := maps.Clone(call.Arguments)
-			args["item_id"] = items[0].ID
-			rep.Calls[i].Arguments = args
+	refs := map[string]string{"$current_item": items[0].ID}
+	var evidence struct {
+		Releases []struct {
+			ID     string `json:"release_id"`
+			Tracks []struct {
+				ID         string `json:"track_id"`
+				SourcePath string `json:"source_path"`
+				File       string `json:"file_id"`
+				Path       string
+			}
+			Credits []struct {
+				Ref  string `json:"source_ref"`
+				Role string
+			}
 		}
 	}
+	if json.Unmarshal(items[0].Evidence, &evidence) == nil {
+		for _, r := range evidence.Releases {
+			for _, t := range r.Tracks {
+				refs["$file:"+t.Path] = t.File
+				refs["$release:"+t.Path] = r.ID
+				source := t.SourcePath
+				if source == "" {
+					source = t.Path
+				}
+				refs["$track:"+source] = t.ID
+				for _, c := range r.Credits {
+					if tag, ok := strings.CutPrefix(c.Ref, t.ID+"/"); ok {
+						refs["$source:"+source+"#"+c.Role+"#"+tag] = c.Ref
+					}
+				}
+			}
+		}
+	}
+	rep.Calls = slices.Clone(rep.Calls)
+	for i, c := range rep.Calls {
+		args := maps.Clone(c.Arguments)
+		for k, v := range args {
+			args[k] = bindLocalReference(v, refs)
+		}
+		rep.Calls[i].Arguments = args
+	}
 	return rep
+}
+func bindLocalReference(v any, refs map[string]string) any {
+	switch x := v.(type) {
+	case string:
+		if r, ok := refs[x]; ok {
+			return r
+		}
+	case []any:
+		values := slices.Clone(x)
+		for i, value := range values {
+			values[i] = bindLocalReference(value, refs)
+		}
+		return values
+	case map[string]any:
+		values := maps.Clone(x)
+		for k, value := range values {
+			values[k] = bindLocalReference(value, refs)
+		}
+		return values
+	}
+	return v
 }
 
 func localReply(t turn) reply {
@@ -229,7 +287,7 @@ func localReply(t turn) reply {
 	}
 	item := items[0]
 	if item.Kind == "local_cleanup" && slices.Contains(t.tools, "submit_local_cleanup") {
-		return reply{Calls: []call{{"submit_local_cleanup", object{"item_id": item.ID}}}}
+		return reply{Calls: []call{{"submit_local_cleanup", object{"item_id": item.ID, "decision": "undetermined", "reason": "本地材料无法确认变更。"}}}}
 	}
 	return reply{Text: "合成整理已结束。"}
 }

@@ -36,7 +36,7 @@ func StewardTools(w *curation.Writer, m *program.ModelMatcher, mockHost ...sourc
 		a.localCleanupTool(available),
 		{Name: "submit_judge", Description: "提交识别判断", Scope: tool.ScopePersonal, MinRole: tool.RoleAdmin, Available: available, Input: json.RawMessage(`{"type":"object","properties":{"item_id":{"type":"string"},"decision":{"type":"string"},"selected_id":{"type":"string"},"groups":{"type":"array","items":{"type":"object"}},"reason":{"type":"string"}},"required":["item_id","decision"]}`), Output: json.RawMessage(`{"type":"object"}`), Handler: a.submitJudge},
 		a.backgroundMergeReleases(),
-		a.verificationTool(available),
+		a.verificationTool(available), a.identityTool(available),
 		{Name: "shelve_pending_item", Description: "结束当前项并保存判断理由", Scope: tool.ScopePersonal, MinRole: tool.RoleAdmin, Available: available,
 			Input: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_id":` + idSchema + `,"reason":` + noteSchema + `},"required":["item_id","reason"]}`), Output: json.RawMessage(`{"type":"object"}`), Handler: a.shelve},
 	}
@@ -66,12 +66,22 @@ func (a adapter) claimed(ctx context.Context, c tool.Caller) (*curation.ModelRun
 	if err != nil {
 		return nil, nil, err
 	}
-	if !settings.Active || settings.EnabledBy.ID != c.User.ID {
+	if artistActor := curation.ArtistWebActor(ctx); artistActor != c.User.ID && (!settings.Active || settings.EnabledBy.ID != c.User.ID) {
 		return nil, nil, &tool.Error{Code: tool.CodePermissionDenied, Message: "当前操作者已不是自动整理开启者"}
 	}
 	items, err := a.writer.ClaimedItems(ctx, run.ConversationID)
 	if err != nil {
 		return nil, nil, err
+	}
+	// 同一模型回答可依次提交多位同名候选，第一条建议已经结清本项。
+	if len(items) == 0 && curation.ArtistWebActor(ctx) != "" && run.PendingItemID != "" {
+		p, err := a.writer.PendingItem(ctx, run.PendingItemID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if p.ArtistWebGeneration != nil && p.ConversationID == run.ConversationID && curation.SuggestionRecorded(p) {
+			items = []curation.PendingItem{p}
+		}
 	}
 	items = slices.DeleteFunc(items, func(p curation.PendingItem) bool {
 		if run.PendingItemID != "" && p.ID != run.PendingItemID {
@@ -229,7 +239,12 @@ func (a adapter) shelve(ctx context.Context, c tool.Caller, raw json.RawMessage)
 		return nil, err
 	}
 	ctx = bindItem(ctx, run, c, item)
-	if err := a.writer.FinishUndetermined(ctx, item, run.ConversationID, in.Reason); err != nil {
+	if item.ArtistWebGeneration != nil && run.Abandon != nil {
+		err = run.Abandon(ctx, item.ID, in.Reason)
+	} else {
+		err = a.writer.FinishUndetermined(ctx, item, run.ConversationID, in.Reason)
+	}
+	if err != nil {
 		return nil, toolError(err)
 	}
 	return json.Marshal(map[string]string{"item_id": item.ID, "status": "undetermined"})

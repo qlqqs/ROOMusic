@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "model_not_configured",
+      "message": "请检查管家模型和网页搜索设置"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

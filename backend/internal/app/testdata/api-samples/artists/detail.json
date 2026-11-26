@@ -17,7 +17,9 @@
     "bio": null,
     "image": null,
     "links": {
+      "judged_by_model": false,
       "musicbrainz": null,
+      "operation_id": null,
       "wikidata": null
     },
     "name_source": "auto",

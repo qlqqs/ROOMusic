@@ -38,6 +38,7 @@ type ModelProgress struct {
 }
 
 type ModelScheduler interface {
+	ArtistWebQueue(context.Context, bool) (ArtistWebQueueStatus, error)
 	Wake()
 	ModelStatus(context.Context) (ModelProgress, error)
 	RetryModel(context.Context) (ModelProgress, error)

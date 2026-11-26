@@ -13,15 +13,20 @@ import (
 
 type schedulingConditions struct {
 	curation.ModelProgress
-	sources  []string
-	config   Configuration
-	verified bool
-	budget   int64
+	sources   []string
+	config    Configuration
+	verified  bool
+	budget    int64
+	modelBusy bool
 }
 
 // 按待定项目标检查来源。没有注册网络搜索的调度器仍可处理发行项。
 func (s *Scheduler) targetSources(ctx context.Context, p *schedulingConditions) error {
-	for _, source := range []string{"musicbrainz"} {
+	sources := []string{"musicbrainz"}
+	if curation.ArtistWebActor(ctx) != "" {
+		sources = []string{"web_search"}
+	}
+	for _, source := range sources {
 		err := s.sources.Check(ctx, source)
 		if err == nil {
 			p.sources = append(p.sources, source)
@@ -64,6 +69,8 @@ func (p schedulingConditions) allows(kind TaskKind) bool {
 	switch kind {
 	case SelectCandidate:
 		return slices.Contains(p.sources, "musicbrainz")
+	case ArtistWeb:
+		return slices.Contains(p.sources, "web_search")
 	default:
 		return true
 	}
@@ -87,7 +94,8 @@ func (s *Scheduler) conditions(ctx context.Context, checkBudget bool) (p schedul
 	}
 	p.budget = settings.MaxRequestTokens
 	p.ContextHint = "使用本机模型时，请按模型服务实际加载的上下文长度设置单次最多发送。"
-	if settings.EnabledBy == nil || settings.Enabled && !settings.Active || s.launcher == nil {
+	manualActor := curation.ArtistWebActor(ctx)
+	if (manualActor == "" && (settings.EnabledBy == nil || settings.Enabled && !settings.Active)) || s.launcher == nil {
 		reason := "not_configured"
 		p.UnavailableReason = &reason
 		p.State = "disabled"
@@ -97,13 +105,39 @@ func (s *Scheduler) conditions(ctx context.Context, checkBudget bool) (p schedul
 		}
 		return p, "", nil
 	}
-	actor = settings.EnabledBy.ID
+	actor = manualActor
+	if actor == "" {
+		actor = settings.EnabledBy.ID
+	}
 	p.config, err = s.launcher.Availability(ctx, actor, settings.Model)
 	if err != nil {
 		return p, actor, err
 	}
 	p.Model = p.config.Model
-	state, err := s.writer.SyncModelConfig(ctx, p.config.Key, p.config.ModelKey)
+	state, err := s.writer.ModelState(ctx)
+	if err == nil && state.ConfigKey != p.config.Key {
+		// 单行暂停记录属于正在使用的端点。状态轮询和其他队列不能覆盖它。
+		s.mu.RLock()
+		for work := range s.active {
+			if work.config != p.config.Key {
+				p.modelBusy = true
+				break
+			}
+		}
+		s.mu.RUnlock()
+		if !p.modelBusy && manualActor == "" && state.ConfigKey != "" {
+			owner, e := s.writer.ReadyArtistWebActor(ctx, now)
+			if e != nil {
+				return p, actor, e
+			}
+			p.modelBusy = owner != "" && actor != owner
+		}
+		if !p.modelBusy && (manualActor != "" || settings.Enabled) {
+			state, err = s.writer.SyncModelConfig(ctx, p.config.Key, p.config.ModelKey)
+		} else {
+			state = curation.ModelState{}
+		}
+	}
 	if err != nil {
 		return p, actor, err
 	}
@@ -161,10 +195,10 @@ func (s *Scheduler) conditions(ctx context.Context, checkBudget bool) (p schedul
 		p.RetryAt = &retry
 		p.CanRetry = false
 	}
-	if !settings.Enabled {
+	if manualActor == "" && !settings.Enabled {
 		p.State = "disabled"
 		p.CanRetry = false
-	} else if settings.Paused {
+	} else if manualActor == "" && settings.Paused {
 		p.State = "paused"
 		p.CanRetry = false
 	} else if p.State == "idle" || p.State == "limit_reached" {
@@ -176,6 +210,10 @@ func (s *Scheduler) conditions(ctx context.Context, checkBudget bool) (p schedul
 	return p, actor, nil
 }
 
+func (s *Scheduler) ArtistWebQueue(ctx context.Context, configured bool) (curation.ArtistWebQueueStatus, error) {
+	return s.writer.ArtistWebQueue(ctx, configured, s.options.Now())
+}
+
 func (s *Scheduler) ModelStatus(ctx context.Context) (curation.ModelProgress, error) {
 	conditions, _, err := s.conditions(ctx, true)
 	p := conditions.ModelProgress
@@ -185,13 +223,13 @@ func (s *Scheduler) ModelStatus(ctx context.Context) (curation.ModelProgress, er
 	err = s.db.QueryRowContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
  SELECT count(*) FILTER (WHERE status IN ('waiting_model','waiting_route')),count(*) FILTER (WHERE status='in_progress'),
  0,count(*) FILTER (WHERE status='shelved')
- FROM curation_pending_items p WHERE `+curation.PendingTargetVisibleSQL).Scan(&p.Items.WaitingModel, &p.Items.InProgress, &p.Items.WaitingHuman, &p.Items.Shelved)
+ FROM curation_pending_items p WHERE p.artist_web_generation IS NULL AND `+curation.PendingTargetVisibleSQL).Scan(&p.Items.WaitingModel, &p.Items.InProgress, &p.Items.WaitingHuman, &p.Items.Shelved)
 	s.mu.RLock()
 	p.Running = s.running
 	if s.probing {
 		p.Running++
 	}
-	p.CanRetry = p.CanRetry && s.slotsUsed() < p.Concurrency
+	p.CanRetry = p.CanRetry && !conditions.modelBusy && s.slotsUsed() < p.Concurrency
 	s.mu.RUnlock()
 	if p.State == "idle" && p.Running > 0 {
 		p.State = "running"
@@ -203,7 +241,7 @@ func (s *Scheduler) RetryModel(ctx context.Context) (curation.ModelProgress, err
 	if err != nil {
 		return p.ModelProgress, err
 	}
-	if p.CanRetry {
+	if p.CanRetry && !p.modelBusy {
 		if err = s.probe(ctx, p, actor, true); err != nil {
 			return p.ModelProgress, err
 		}

@@ -1,0 +1,115 @@
+{
+  "body": {
+    "album_artist": "Artist A",
+    "album_artist_refs": [],
+    "artist": "Artist A",
+    "artist_refs": [],
+    "artwork": null,
+    "attention_count": 1,
+    "auto_fields": [
+      "album_artist",
+      "label",
+      "catalog_number",
+      "barcode"
+    ],
+    "barcode": "123456789012",
+    "candidate_kind": "ordinary_directory",
+    "catalog_number": "CAT-7",
+    "corrected_fields": [],
+    "credits": [
+      {
+        "artist_refs": [],
+        "detail": null,
+        "name": "Artist A",
+        "role": "album_artist"
+      }
+    ],
+    "edition": null,
+    "evidence": [
+      {
+        "action": "uncertain_apply",
+        "confidence": "medium",
+        "field": "field_0",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      }
+    ],
+    "genres": [],
+    "id": "00000000-0000-4000-8000-000000000001",
+    "label": "唱片社",
+    "media": [
+      {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "position": 1,
+        "title": "Medium",
+        "tracks": [
+          {
+            "artist": "Artist A",
+            "artist_refs": [],
+            "bit_depth": null,
+            "bitrate": null,
+            "channels": null,
+            "codec": null,
+            "credits": [],
+            "cue": null,
+            "duration_seconds": 100,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "position": 1,
+            "sample_rate": null,
+            "source": "0.flac",
+            "source_kind": "physical",
+            "title": "Album A track 1",
+            "work": null
+          }
+        ]
+      }
+    ],
+    "media_type": null,
+    "medium_count": 1,
+    "merged_releases": [],
+    "musicbrainz_names": [
+      {
+        "basis_operation_id": "00000000-0000-4000-8000-000000000004",
+        "can_adopt": false,
+        "effective_value": "Artist A",
+        "external_id": "00000000-0000-4000-8000-000000000005",
+        "field": "album_artist",
+        "local_value": "Artist A",
+        "musicbrainz_value": "Artist A",
+        "revision": 1,
+        "target_id": "00000000-0000-4000-8000-000000000001",
+        "target_type": "release"
+      },
+      {
+        "basis_operation_id": "00000000-0000-4000-8000-000000000004",
+        "can_adopt": false,
+        "effective_value": "Album A",
+        "external_id": "00000000-0000-4000-8000-000000000005",
+        "field": "title",
+        "local_value": "Album A",
+        "musicbrainz_value": "Album A",
+        "revision": 1,
+        "target_id": "00000000-0000-4000-8000-000000000001",
+        "target_type": "release"
+      },
+      {
+        "basis_operation_id": "00000000-0000-4000-8000-000000000004",
+        "can_adopt": true,
+        "effective_value": "Album A track 1",
+        "external_id": "00000000-0000-4000-8000-000000000006",
+        "field": "title",
+        "local_value": "Album A track 1",
+        "musicbrainz_value": "合成外部曲名",
+        "revision": 1,
+        "target_id": "00000000-0000-4000-8000-000000000003",
+        "target_type": "track"
+      }
+    ],
+    "revision": 1,
+    "source_type": null,
+    "title": "Album A",
+    "track_count": 1,
+    "year": 1998
+  },
+  "status": 200
+}

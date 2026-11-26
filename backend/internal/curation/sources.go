@@ -109,7 +109,10 @@ func (s *Sources) sourceState(ctx context.Context, tx *sql.Tx, r SourceRegistrat
 		return SourceSettings{}, err
 	}
 	enabler := ""
-	if overall.EnabledBy != nil {
+	manualActor := ArtistWebActor(ctx)
+	if manualActor != "" {
+		enabler = manualActor
+	} else if overall.EnabledBy != nil {
 		enabler = overall.EnabledBy.ID
 	}
 	if r.Requirements != nil {
@@ -120,9 +123,9 @@ func (s *Sources) sourceState(ctx context.Context, tx *sql.Tx, r SourceRegistrat
 	}
 	reason := ""
 	switch {
-	case !overall.Enabled:
+	case manualActor == "" && !overall.Enabled:
 		reason = "curation_disabled"
-	case !overall.Active:
+	case manualActor == "" && !overall.Active:
 		reason = "enabler_unavailable"
 	case !item.Enabled:
 		reason = "source_disabled"
@@ -242,13 +245,13 @@ func (s *Sources) Check(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if !settings.Enabled {
+	if ArtistWebActor(ctx) == "" && !settings.Enabled {
 		return operations.Conflict("curation_disabled", "自动整理开关已关闭")
 	}
-	if !settings.Active {
+	if ArtistWebActor(ctx) == "" && !settings.Active {
 		return operations.Conflict("curation_disabled", "自动整理开启者已不是启用状态的管理员")
 	}
-	if settings.Paused {
+	if ArtistWebActor(ctx) == "" && settings.Paused {
 		return operations.Conflict("curation_paused", "自动整理已暂停")
 	}
 	item, err := s.sourceState(ctx, tx, r, settings)
@@ -339,4 +342,35 @@ func (s *Sources) ScanRunning(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 	return s.scanCheck(ctx)
+}
+
+// ArtistWebConfiguration 读取点击按钮的管理员在管家中的搜索和模型配置。
+func (s *Sources) ArtistWebConfiguration(ctx context.Context, actor string) (bool, string, error) {
+	reg, ok := s.lookup("web_search")
+	if !ok {
+		return false, "search_unconfigured", nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, "", err
+	}
+	defer tx.Rollback()
+	item, err := s.sourceState(WithArtistWebActor(ctx, actor), tx, reg, Settings{})
+	if err != nil {
+		return false, "", err
+	}
+	for _, r := range item.Requirements {
+		if r.Kind == "search" && !r.Ready {
+			return false, "search_unconfigured", nil
+		}
+	}
+	for _, r := range item.Requirements {
+		if r.Kind == "model" && !r.Ready {
+			return false, "model_not_configured", nil
+		}
+	}
+	if !item.Enabled {
+		return true, "source_disabled", nil
+	}
+	return true, "", tx.Commit()
 }

@@ -3,9 +3,9 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/qlqq/roomusic/backend/internal/curation/stewardtools"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,7 +17,6 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
-	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 )
 
 const webSearchBio = "合成音乐组合长期以沿岸生活为题材，创作并演奏原创音乐。"
@@ -33,154 +32,105 @@ func webSearchMediaInput(item, imageURL, page string, bio bool) map[string]any {
 	return input
 }
 
-func TestPostgreSQL整理网页媒体校验与独立审查(t *testing.T) {
+// 历史网页资料建议仍使用现有的媒体校验和人工采纳入口。
+func TestPostgreSQLArtistWebSearchHistoricalMediaValidation(t *testing.T) {
 	f := newControlledArtistWebSearch(t, func(w http.ResponseWriter, r *http.Request) bool {
 		switch r.URL.Path {
 		case "/searxng/artists/coast":
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprintf(w, `<!doctype html><html><body><p>海岸来信。%s</p><img src="portrait.png"><img src="/test-small.gif"><img src="/test-not-image"></body></html>`, webSearchBio)
-		case "/test-small.gif":
+			fmt.Fprint(w, `<html><p>海岸来信</p><img src="portrait.png"><img src="/small.gif"><img src="/text"></html>`)
+		case "/small.gif":
 			w.Header().Set("Content-Type", "image/gif")
 			w.Write(externalArtworkRequest("").Data)
-		case "/test-not-image":
-			w.Header().Set("Content-Type", "text/plain")
-			fmt.Fprint(w, "合成非图片响应")
+		case "/text":
+			fmt.Fprint(w, "非图片")
 		default:
 			return false
 		}
 		return true
 	})
-
+	f.enable(t)
 	artist := f.addArtist(t, "海岸来信")
 	item := f.pendingArtist(t, artist, "海岸来信")
 	page := f.endpoint + "/searxng/artists/coast"
 	imageURL := f.endpoint + "/searxng/artists/portrait.png"
-	f.enable(t)
-	next := f.next(t, false)
-	conversationID := f.item(t, item.ID).ConversationID
-	for _, tc := range []struct {
-		name   string
-		change func(map[string]any)
-	}{
-		{"图片网页不在引用中", func(input map[string]any) { input["image"].(map[string]string)["page_url"] = page + "-other" }},
-		{"简介超长", func(input map[string]any) { input["bio"].(map[string]string)["text"] = strings.Repeat("字", 4001) }},
-		{"没有引用", func(input map[string]any) { input["citations"] = []any{} }},
-		{"引用超过五条", func(input map[string]any) {
-			input["citations"] = makeWebSearchCitations(page, 6, "合成引用")
-		}},
-		{"引用标题超过五百字", func(input map[string]any) {
-			input["citations"] = makeWebSearchCitations(page, 1, strings.Repeat("字", 501))
-		}},
-		{"注册表拒绝未知属性", func(input map[string]any) { input["unexpected"] = true }},
+	prepare := stewardtools.MediaConfirmationPreparer(sources.NewMockHost(f.endpoint))
+	for _, invalid := range []func(map[string]any){
+		func(m map[string]any) { m["image"].(map[string]string)["page_url"] += "-other" },
+		func(m map[string]any) { m["bio"].(map[string]string)["text"] = strings.Repeat("字", 4001) },
+		func(m map[string]any) { m["citations"] = nil },
+		func(m map[string]any) {
+			var refs []map[string]string
+			for n := 0; n < 6; n++ {
+				refs = append(refs, map[string]string{"url": page + "?n=" + strconv.Itoa(n), "title": "名录"})
+			}
+			m["citations"] = refs
+		},
+		func(m map[string]any) { m["citations"].([]map[string]string)[0]["title"] = strings.Repeat("字", 501) },
 	} {
-		input := webSearchMediaInput(item.ID, imageURL, page, true)
-		tc.change(input)
-		next.tool(t, "submit_artist_media", input)
-		next = f.next(t, false)
-		if got := next.lastToolResult(t); !strings.Contains(got, "invalid_input") && !strings.Contains(got, "validation_failed") {
-			t.Errorf("%s 未返回输入校验错误：%s", tc.name, got)
+		m := webSearchMediaInput(item.ID, imageURL, page, true)
+		invalid(m)
+		raw, err := json.Marshal(m)
+		requireCurationOK(t, err)
+		if _, err = prepare(t.Context(), raw); err == nil {
+			t.Fatal("历史建议接受了无效资料")
 		}
-		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE target_id=$1 AND target_type='artist'`, artist)
-		f.status(t, artist, "running", 0)
 	}
-	next.tool(t, "web_search", map[string]string{"q": "海岸来信"})
-	next = f.next(t, false)
-	for _, asset := range []string{"/test-small.gif", "/test-not-image"} {
-		next.tool(t, "submit_artist_media", webSearchMediaInput(item.ID, f.endpoint+asset, page, true))
-		f.next(t, true).review(t, "approved")
-		next = f.next(t, false)
-		if got := next.lastToolResult(t); !strings.Contains(got, "invalid_input") {
-			t.Fatalf("无效图片 %s 应在写入前拒绝：%s", asset, got)
+	conversation := modelConversation(t, f.curationFixture)
+	mustExec(t, f.application, `UPDATE curation_pending_items SET status='in_progress',conversation_id=$2,claimed_at=now() WHERE id=$1`, item.ID, conversation)
+	for _, asset := range []string{f.endpoint + "/small.gif", f.endpoint + "/text", imageURL} {
+		raw, err := json.Marshal(webSearchMediaInput(item.ID, asset, page, true))
+		requireCurationOK(t, err)
+		preview, err := json.Marshal(map[string]any{"changes": []map[string]string{{"field": "image", "after": asset}, {"field": "bio", "after": webSearchBio}}})
+		requireCurationOK(t, err)
+		id, err := f.writer.CreateException(t.Context(), curation.ModelException{PendingItemID: item.ID, Tool: "submit_artist_media", Input: raw, Preview: preview, Provider: "合成模型", ConversationID: &conversation, ReasonCode: "no_evidence"})
+		requireCurationOK(t, err)
+		result := f.decide(t, &f.admin, id, "accept")
+		if asset != imageURL {
+			requireAPIError(t, result, 400, "invalid_input")
+			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE target_id=$1 AND target_type='artist'`, artist)
+			continue
 		}
-		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE target_id=$1 AND target_type='artist'`, artist)
-	}
-
-	next.tool(t, "submit_artist_media", webSearchMediaInput(item.ID, imageURL, page, true))
-	review := f.next(t, true)
-	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE target_id=$1 AND target_type='artist'`, artist)
-	review.review(t, "approved")
-	f.waitArtistResolution(t, item.ID, "model_media")
-	f.requireWebSearchMedia(t, artist, "合成艺人名录")
-	conversation, err := runtime.NewStore(f.application.database).GetConversation(t.Context(), f.admin.id, conversationID)
-	requireCurationOK(t, err)
-	if len(conversation.Plans) != 3 || conversation.Plans[0].Review == nil {
-		t.Fatalf("网页媒体的审查方案 %+v", conversation.Plans)
+		readExceptionDecision(t, result, "accepted", f.admin.id)
+		detail := readArtistMedia(t, f.application, &f.admin, artist)
+		if detail.Image == nil || detail.Bio == nil || detail.Bio.Text != webSearchBio {
+			t.Fatalf("历史建议采纳后资料不全 %+v", detail)
+		}
 	}
 }
 
-func TestPostgreSQL整理未证实的媒体出处不写入(t *testing.T) {
+func TestPostgreSQLArtistWebSearchUnverifiedMediaSource(t *testing.T) {
 	f := newControlledArtistWebSearch(t, nil)
-	artist := f.addArtist(t, "海岸来信")
-	item := f.pendingArtist(t, artist, "海岸来信")
-	page := f.endpoint + "/searxng/artists/coast"
-	var privateCalls atomic.Int64
-	private := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		privateCalls.Add(1)
-		w.WriteHeader(http.StatusNoContent)
-	}))
+	var calls atomic.Int64
+	private := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1) }))
 	t.Cleanup(private.Close)
-	privateURL, err := url.Parse(private.URL)
+	artist := f.addArtist(t, "海岸来信")
+	raw, err := json.Marshal(webSearchMediaInput(uuid.New(), private.URL+"/portrait.png", f.endpoint+"/searxng/artists/coast", true))
 	requireCurationOK(t, err)
-	port, err := strconv.Atoi(privateURL.Port())
-	requireCurationOK(t, err)
-	f.update(t, http.MethodPost, "/api/v1/admin/steward/egress-allowlist", map[string]any{"host": privateURL.Hostname(), "port": port})
-	f.enable(t)
-	f.next(t, false).tool(t, "web_search", map[string]string{"q": "海岸来信"})
-	f.next(t, false).tool(t, "submit_artist_media", webSearchMediaInput(item.ID, private.URL+"/portrait.png", page, true))
-	f.next(t, true).review(t, "approved")
-	f.waitArtistResolution(t, item.ID, "suggestion_recorded")
-	if privateCalls.Load() != 0 {
-		t.Fatal("媒体提交连接了内网图片")
+	prepare := stewardtools.MediaConfirmationPreparer(sources.NewMockHost(f.endpoint))
+	if _, err = prepare(t.Context(), raw); err == nil || calls.Load() != 0 {
+		t.Fatal("未证实的图片出处通过校验或触发了私网连接")
 	}
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE target_id=$1 AND target_type='artist'`, artist)
 }
 
 func TestPostgreSQLArtistWebSearchMediaCompletesSingleField(t *testing.T) {
-	const artistName = "只查到简介的乐团"
-	f := newControlledArtistWebSearch(t, func(w http.ResponseWriter, r *http.Request) bool {
-		switch r.URL.Path {
-		case "/searxng/search":
-			w.Header().Set("Content-Type", "application/json")
-			results := make([]map[string]string, 0, 5)
-			for _, citation := range makeWebSearchCitations("http://"+r.Host+"/searxng/artists/coast", 5, "合成名录") {
-				results = append(results, map[string]string{"url": citation["url"], "title": citation["title"], "content": webSearchBio})
-			}
-			json.NewEncoder(w).Encode(map[string]any{"results": results})
-		case "/searxng/artists/coast":
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprintf(w, `<!doctype html><html><body><p>%s。%s</p></body></html>`, artistName, webSearchBio)
-		default:
-			return false
+	f := newControlledArtistWebSearch(t, nil)
+	artist := f.addArtist(t, "只查到简介的乐团")
+	item := f.startArtist(t, artist)
+	req := f.next(t, false)
+	for _, spec := range req.Tools {
+		if spec.Function.Name == "submit_artist_media" {
+			t.Fatal("手动查身份开放了写资料工具")
 		}
-		return true
-	})
-	artist := f.addArtist(t, artistName)
-	item := f.pendingArtist(t, artist, artistName)
-	f.enable(t)
-	page := f.endpoint + "/searxng/artists/coast"
-	input := webSearchMediaInput(item.ID, "", page, true)
-	title := strings.Repeat("字", 500)
-	input["citations"] = makeWebSearchCitations(page, 5, title)
-	f.next(t, false).tool(t, "web_search", map[string]string{"q": artistName})
-	f.next(t, false).tool(t, "submit_artist_media", input)
-	f.next(t, true).review(t, "approved")
-	f.waitArtistResolution(t, item.ID, "model_media")
+	}
+	req.tool(t, "submit_artist_media", webSearchMediaInput(item.ID, "", f.endpoint+"/searxng/artists/coast", true))
+	next := f.next(t, false)
+	next.tool(t, "shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "没有身份候选"})
+	f.waitArtistResolution(t, item.ID, "no_result")
 	got := readArtistMedia(t, f.application, &f.admin, artist)
-	if got.Image != nil || got.Bio == nil || got.Bio.Text != webSearchBio || len(got.Bio.Citations) != 5 || got.Bio.Citations[0].Title != title {
-		t.Fatalf("单项提交后的资料图片=%+v 简介=%+v", got.Image, got.Bio)
+	if got.Bio != nil || got.Image != nil {
+		t.Fatal("查身份写入了艺人资料")
 	}
-	f.status(t, artist, "none", 0)
-}
-
-func makeWebSearchCitations(page string, count int, title string) []map[string]string {
-	citations := make([]map[string]string, count)
-	for i := range citations {
-		citations[i] = map[string]string{"url": page, "title": title}
-		if i != 0 {
-			citations[i]["url"] += "?fixture=" + strconv.Itoa(i)
-		}
-	}
-	return citations
 }
 
 func (f *artistWebSearchFixture) rejectMedia(t *testing.T, artist, field string) {
@@ -194,64 +144,47 @@ func (f *artistWebSearchFixture) rejectMedia(t *testing.T, artist, field string)
 }
 
 func TestPostgreSQLArtistWebSearchSuppression(t *testing.T) {
-	f := newControlledArtistWebSearch(t, func(w http.ResponseWriter, r *http.Request) bool {
-		switch r.URL.Path {
-		case "/searxng/search":
-			w.Header().Set("Content-Type", "application/json")
-			page := "http://" + r.Host + "/searxng/artists/coast"
-			json.NewEncoder(w).Encode(map[string]any{"results": []map[string]string{
-				{"url": page, "title": "合成名录", "content": webSearchBio},
-				{"url": page + "?new-citation=1", "title": "合成名录", "content": webSearchBio},
-			}})
-		case "/searxng/artists/coast":
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprintf(w, `<!doctype html><html><body><p>合成资料抑制乐团。%s这次引用的网页和简介内容均已改变。</p><img src="portrait.png"><img src="portrait.png?new-image=1"></body></html>`, webSearchBio)
-		default:
-			return false
-		}
-		return true
-	})
+	f := newArtistWebSearchFixture(t, "", false, false, nil)
 	f.addRelease(t, "合成资料抑制乐团")
 	f.addRelease(t, "合成插件抑制乐团")
 	publishSearch(t, f.application)
+	f.enable(t)
+	page := f.endpoint + "/searxng/artists/coast"
 	artist := f.artistID(t, "合成资料抑制乐团")
 	item := f.pendingArtist(t, artist, "合成资料抑制乐团")
-	page := f.endpoint + "/searxng/artists/coast"
+	conversation := modelConversation(t, f.curationFixture)
+	mustExec(t, f.application, `UPDATE curation_pending_items SET status='in_progress',conversation_id=$2,claimed_at=now() WHERE id=$1`, item.ID, conversation)
+	ctx := curation.WithModelRun(t.Context(), &curation.ModelRun{ActorID: f.admin.id, Model: "合成模型", ConversationID: conversation, PendingItemID: item.ID})
+	batch := f.batch(t, "model")
+	data, err := os.ReadFile(filepath.Join("..", "upstreammock", "testdata", "artist-portrait.png"))
+	requireCurationOK(t, err)
+	refs := []catalog.Citation{{URL: page, Title: "合成名录"}}
 	imageURL := f.endpoint + "/searxng/artists/portrait.png"
-	f.enable(t)
-	f.next(t, false).tool(t, "web_search", map[string]string{"q": "合成资料抑制乐团"})
-	f.next(t, false).tool(t, "submit_artist_media", webSearchMediaInput(item.ID, imageURL, page, true))
-	f.next(t, true).review(t, "approved")
-	f.waitArtistResolution(t, item.ID, "model_media")
+	imageReq := curation.ArtistImageRequest{ArtistID: artist, Key: uuid.New(), BatchID: batch, Citations: refs, Image: sources.ArtistImage{ID: sources.ImageURLID(imageURL), Data: data, Attribution: sources.Attribution{Source: "web_search", SourceURL: page}}}
+	bioReq := curation.ArtistBioRequest{ArtistID: artist, Key: uuid.New(), BatchID: batch, Citations: refs, Bio: sources.ArtistBio{ID: "artist", Lang: "zh", Text: webSearchBio, Attribution: sources.Attribution{Source: "web_search", SourceURL: page}}}
+	image, imageErr := f.writer.ApplyArtistImage(ctx, imageReq)
+	requireExternalApply(t, image, imageErr)
+	bio, bioErr := f.writer.ApplyArtistBio(ctx, bioReq)
+	requireExternalApply(t, bio, bioErr)
 	f.rejectMedia(t, artist, "image")
 	f.rejectMedia(t, artist, "bio")
-	for _, marker := range []struct{ field, id string }{{"artist_image", sources.ImageURLID(imageURL)}, {"artist_bio", "artist"}} {
-		b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_suppressions WHERE target_type='artist' AND target_id=$1
-			AND subject=$2 AND value->>'source'='web_search' AND value->>'external_id'=$3`, artist, marker.field, marker.id)
+	for _, marker := range []struct{ field, id string }{{"artist_image", imageReq.Image.ID}, {"artist_bio", "artist"}} {
+		b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_suppressions WHERE target_type='artist' AND target_id=$1 AND subject=$2 AND value->>'source'='web_search' AND value->>'external_id'=$3`, artist, marker.field, marker.id)
 	}
-
-	item = f.pendingArtist(t, artist, "合成资料抑制乐团")
-	input := webSearchMediaInput(item.ID, imageURL, page+"?new-citation=1", true)
-	input["bio"].(map[string]string)["text"] = webSearchBio + "这次引用的网页和简介内容均已改变。"
-	f.next(t, false).tool(t, "web_search", map[string]string{"q": "合成资料抑制乐团"})
-	f.next(t, false).tool(t, "submit_artist_media", input)
-	f.next(t, true).review(t, "approved")
-	next := f.next(t, false)
-	if got := next.lastToolResult(t); strings.Count(got, "suppressed") != 2 {
-		t.Fatalf("相同图片地址与不同简介均应受抑制，返回 %s", got)
-	}
-	first := readArtistMedia(t, f.application, &f.admin, artist)
-	if first.Image != nil || first.Bio != nil {
-		t.Fatalf("抑制后资料重新出现：图片=%+v 简介=%+v", first.Image, first.Bio)
-	}
-	next.tool(t, "submit_artist_media", webSearchMediaInput(item.ID, imageURL+"?new-image=1", page, false))
-	f.next(t, true).review(t, "approved")
-	f.waitArtistResolution(t, item.ID, "model_media")
+	imageReq.Key, bioReq.Key = uuid.New(), uuid.New()
+	bioReq.Bio.Text += "这次引用的网页和简介内容均已改变。"
+	refs[0].URL += "?new-citation=1"
+	image, imageErr = f.writer.ApplyArtistImage(ctx, imageReq)
+	requireExternalError(t, image, imageErr, 409, "nothing_to_apply", "suppressed")
+	bio, bioErr = f.writer.ApplyArtistBio(ctx, bioReq)
+	requireExternalError(t, bio, bioErr, 409, "nothing_to_apply", "suppressed")
+	imageReq.Key, imageReq.Image.ID = uuid.New(), sources.ImageURLID(imageURL+"?new-image=1")
+	image, imageErr = f.writer.ApplyArtistImage(ctx, imageReq)
+	requireExternalApply(t, image, imageErr)
 	detail := readArtistMedia(t, f.application, &f.admin, artist)
 	if detail.Image == nil || detail.Bio != nil {
-		t.Fatalf("新图片地址应可写而简介应仍空：图片=%+v 简介=%+v", detail.Image, detail.Bio)
+		t.Fatal("历史网页资料抑制不符")
 	}
-
 	pluginArtist := f.artistID(t, "合成插件抑制乐团")
 	req := curation.ArtistBioRequest{ArtistID: pluginArtist, Name: "合成插件抑制乐团",
 		Bio: sources.ArtistBio{ID: "entry-a", Lang: "zh", Text: webSearchBio,
@@ -297,7 +230,8 @@ func TestPostgreSQLArtistWebSearchMediaPrecedence(t *testing.T) {
 				case "web_search":
 					f.markArtistReleasesRecognized(t, artist)
 					c := modelConversation(t, f.curationFixture)
-					item := modelClaim(t, f.curationFixture, c, f.pendingArtist(t, artist, name))
+					item := f.pendingArtist(t, artist, name)
+					mustExec(t, f.application, `UPDATE curation_pending_items SET status='in_progress',conversation_id=$2,claimed_at=now() WHERE id=$1`, item.ID, c)
 					ctx = curation.WithModelRun(ctx, &curation.ModelRun{ActorID: f.admin.id, Model: "合成模型", ConversationID: c, PendingItemID: item.ID})
 					batch := f.batch(t, "model")
 					imageReq.BatchID, bioReq.BatchID = batch, batch

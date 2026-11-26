@@ -14,6 +14,11 @@ import (
 func (h *Handlers) registerArtistMedia(mux *http.ServeMux) {
 	const base = "/api/v1/artists/{id}"
 	mux.HandleFunc("GET "+base+"/web-search", h.artistCommand(false, h.artistWebSearch))
+	mux.HandleFunc("POST "+base+"/web-search", h.artistCommand(false, h.artistWebSearch))
+	const queue = "/api/v1/admin/curation/artist-web-search"
+	for _, method := range []string{"GET", "POST", "DELETE"} {
+		mux.HandleFunc(method+" "+queue, h.admin(h.artistWebQueue))
+	}
 	mux.HandleFunc("PUT "+base+"/image", h.artistCommand(true, h.putArtistImage))
 	mux.HandleFunc("PUT "+base+"/bio", h.artistCommand(true, h.putArtistBio))
 	mux.HandleFunc("PUT "+base+"/links", h.artistCommand(true, h.putArtistLink))
@@ -96,6 +101,58 @@ func (h *Handlers) putArtistLink(w http.ResponseWriter, r *http.Request, cmd cur
 }
 
 func (h *Handlers) artistWebSearch(w http.ResponseWriter, r *http.Request, cmd curation.ArtistEditRequest) {
-	state, err := h.writer.ArtistWebSearch(r.Context(), cmd.ArtistID)
+	configured, reason, err := h.sources.ArtistWebConfiguration(r.Context(), cmd.ActorID)
+	if err == nil && r.Method == "POST" {
+		err = h.startArtistWeb(r, cmd.ActorID, cmd.ArtistID, reason)
+	}
+	if err != nil {
+		h.respond(w, r, nil, err)
+		return
+	}
+	state, err := h.writer.ArtistWebSearch(r.Context(), cmd.ArtistID, cmd.ActorID)
+	state.Configured = configured
+	state.CanStart = state.CanStart && configured && reason == ""
+	if err == nil && r.Method == "POST" {
+		httpserver.WriteJSON(w, http.StatusAccepted, state)
+		return
+	}
 	h.respond(w, r, state, err)
+}
+
+func (h *Handlers) startArtistWeb(r *http.Request, actor, artist, reason string) error {
+	if reason != "" {
+		return operations.Conflict(reason, "请检查管家模型和网页搜索设置")
+	}
+	if err := h.writer.StartArtistWeb(r.Context(), actor, artist); err != nil {
+		return err
+	}
+	if h.model != nil {
+		h.model.Wake()
+	}
+	return nil
+}
+func (h *Handlers) artistWebQueue(w http.ResponseWriter, r *http.Request, u identity.User) {
+	configured, reason, err := h.sources.ArtistWebConfiguration(r.Context(), u.ID)
+	if err == nil {
+		switch r.Method {
+		case "POST":
+			err = h.startArtistWeb(r, u.ID, "", reason)
+		case "DELETE":
+			err = h.writer.StopArtistWeb(r.Context())
+			if h.model != nil {
+				h.model.Wake()
+			}
+		}
+	}
+	if err != nil {
+		h.respond(w, r, nil, err)
+		return
+	}
+	q, err := h.model.ArtistWebQueue(r.Context(), configured)
+	q.CanStart = q.CanStart && reason == ""
+	if err == nil && r.Method == "POST" {
+		httpserver.WriteJSON(w, http.StatusAccepted, q)
+		return
+	}
+	h.respond(w, r, q, err)
 }

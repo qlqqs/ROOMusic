@@ -1,6 +1,8 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { decodeOperationPage } from "../features/governance/api/decoders";
+import { sampleBody } from "../test/api-samples";
 import { artistMediaOperations } from "../test/artist-media-operations";
 import { albumGroup } from "../test/catalog-data";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
@@ -381,6 +383,56 @@ describe("操作记录页：撤销", () => {
     await user.click(within(dialog).getByRole("button", { name: "撤销" }));
     expect(await screen.findByText("已撤销这次归组调整，这个版本回到了原来的专辑。")).toBeTruthy();
     expect(history.location.pathname).toBe("/settings/operations");
+  });
+
+  it.each([
+    { split: false, summary: "按模型的判断把 2 个文件归成一张专辑（2 碟）" },
+    { split: true, summary: "按模型的判断把 2 个文件分成 2 张专辑" },
+  ])("模型归组显示“$summary”，撤销恢复扫描归组并留下记录", async ({ split, summary }) => {
+    const { api } = setup();
+    const page = decodeOperationPage(sampleBody("operations/local-model-grouping"));
+    const [sample] = page.items;
+    if (sample?.changes?.kind !== "local_model_grouping" || sample.changes.assignments === null || sample.release === null) {
+      throw new Error("模型归组样本缺少发行或文件分配");
+    }
+    const changes = split
+      ? { ...sample.changes, assignments: sample.changes.assignments.map((row, index) => ({ ...row, album: `album-${index}`, disc: 1 })) }
+      : sample.changes;
+    const original = { ...sample, changes };
+    const revertId = "40000000-0000-4000-8000-000000000001";
+    let reverted = false;
+    api.on("GET", "/api/v1/operations", () => {
+      const items = reverted
+        ? [
+            { ...original, id: revertId, type: "revert", reverts: original.id, revertible: false, changes: { ...changes, assignments: changes.previous, previous: changes.assignments } },
+            { ...original, reverted_by: revertId, revertible: false },
+          ]
+        : [original];
+      return jsonResponse(200, { items, pagination: { ...page.pagination, total: items.length } });
+    });
+    const releaseId = sample.release.id;
+    api.on("POST", revertPath(original.id), () => {
+      reverted = true;
+      return jsonResponse(200, { operation_id: revertId, reverts_operation_id: original.id, target_type: "release", target_id: releaseId, revision: 2 });
+    });
+
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/operations" });
+    const table = within(await screen.findByRole("table", { name: "操作记录" }));
+    const row = within(table.getByRole("row", { name: /模型归组/ }));
+    expect(row.getByText("模型归组", { exact: true })).toBeTruthy();
+    expect(row.getByText(summary, { exact: true })).toBeTruthy();
+
+    await user.click(row.getByRole("button", { name: /^撤销/ }));
+    const dialog = within(await screen.findByRole("dialog", { name: "撤销这次模型归组？" }));
+    expect(dialog.getByText("恢复为扫描时的归组")).toBeTruthy();
+    await user.click(dialog.getByRole("button", { name: "撤销" }));
+
+    const revertRow = within(await table.findByRole("row", { name: /撤销模型归组/ }));
+    expect(revertRow.getByText("撤销模型归组", { exact: true })).toBeTruthy();
+    expect(revertRow.getByText("恢复为扫描时的归组")).toBeTruthy();
+    expect(table.getByText("已撤销", { exact: true })).toBeTruthy();
+    expect(api.requestsTo("POST", revertPath(original.id))).toHaveLength(1);
   });
 });
 

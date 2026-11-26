@@ -21,6 +21,8 @@ type queueItem struct {
 const queueRankSQL = `CASE WHEN s.subject IN ('release','fingerprint') AND s.manual_requested_at IS NULL
  AND r.queue_class='local_complete' AND NOT r.queue_has_id THEN 4 ELSE ` + curation.QueueRankSQL + ` END`
 
+const localDependencySQL = `NOT EXISTS(SELECT FROM curation_pending_items p WHERE p.kind='local_cleanup' AND p.status IN ('waiting_model','waiting_route','in_progress') AND (p.evidence->'release_ids') ? r.target_id::text)`
+
 const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (SELECT id FROM curation_eligible_releases),
  candidates AS (
  SELECT work.target_id,work.queue_release_id,r.queue_identity,r.generation,work.manual_requested_at,work.patrol_revision,
@@ -28,6 +30,7 @@ const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (SELECT id FROM cur
  (work.queue_release_id IS NULL OR stable.id IS NOT NULL) stable,
  (work.needs_work OR work.next_attempt_at<=$2) due,
  work.result->'retry'->>'source' retry_source,work.result->'retry'->>'reason' retry_reason,work.next_attempt_at,
+ (NOT $3::boolean OR ` + localDependencySQL + `) local_ready,
  (work.subject<>'release' OR NOT EXISTS (SELECT FROM curation_work_states fp
  WHERE fp.subject='fingerprint' AND fp.needs_work AND fp.queue_release_id=r.target_id
  AND fp.generation=r.generation AND fp.input_digest=r.queue_identity
@@ -48,13 +51,24 @@ const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (SELECT id FROM cur
  AND (work.subject<>'fingerprint' OR (work.generation=r.generation AND work.input_digest=r.queue_identity))
  ) `
 
+func (w *Worker) localConfigured(ctx context.Context, subject string) (bool, error) {
+	if subject != "release" || w.opts.LocalModelConfigured == nil {
+		return false, nil
+	}
+	return w.opts.LocalModelConfigured(ctx)
+}
+
 func (w *Worker) nextQueueItem(ctx context.Context, subject string) (queueItem, bool, error) {
 	item := queueItem{Subject: subject}
-	err := w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT target_id,COALESCE(queue_release_id::text,''),
- rank,COALESCE(generation,0),COALESCE(queue_identity,''),manual_requested_at,patrol_revision,CASE WHEN $1 IN ('release','fingerprint') THEN COALESCE(curation_release_file_digest(candidates.queue_release_id),'') ELSE '' END FROM candidates WHERE stable AND due AND dependencies_ready
+	configured, err := w.localConfigured(ctx, subject)
+	if err != nil {
+		return item, false, err
+	}
+	err = w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT target_id,COALESCE(queue_release_id::text,''),
+ rank,COALESCE(generation,0),COALESCE(queue_identity,''),manual_requested_at,patrol_revision,CASE WHEN $1 IN ('release','fingerprint') THEN COALESCE(curation_release_file_digest(candidates.queue_release_id),'') ELSE '' END FROM candidates WHERE stable AND due AND local_ready AND dependencies_ready
  ORDER BY rank,CASE WHEN rank=3 THEN queue_gap END DESC,
  CASE WHEN rank=4 THEN queue_artist_unlinked END DESC NULLS LAST,queue_added_at DESC NULLS LAST,target_id LIMIT 1`,
-		subject, w.opts.Now()).Scan(&item.TargetID, &item.ReleaseID, &item.Rank, &item.Generation, &item.InputDigest, &item.ManualRequestedAt, &item.PatrolRevision, &item.Files)
+		subject, w.opts.Now(), configured).Scan(&item.TargetID, &item.ReleaseID, &item.Rank, &item.Generation, &item.InputDigest, &item.ManualRequestedAt, &item.PatrolRevision, &item.Files)
 	if errors.Is(err, sql.ErrNoRows) {
 		return item, false, nil
 	}
@@ -62,13 +76,21 @@ func (w *Worker) nextQueueItem(ctx context.Context, subject string) (queueItem, 
 }
 
 func (w *Worker) queueCounts(ctx context.Context, subject string) (remaining, ready, stable int64, err error) {
-	err = w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT count(*),count(*) FILTER (WHERE stable AND due AND dependencies_ready),count(*) FILTER (WHERE stable) FROM candidates`, subject, w.opts.Now()).Scan(&remaining, &ready, &stable)
+	configured, err := w.localConfigured(ctx, subject)
+	if err != nil {
+		return
+	}
+	err = w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT count(*),count(*) FILTER (WHERE stable AND due AND local_ready AND dependencies_ready),count(*) FILTER (WHERE stable) FROM candidates`, subject, w.opts.Now(), configured).Scan(&remaining, &ready, &stable)
 	return
 }
 
 func (w *Worker) hasHigherIdentity(ctx context.Context, now time.Time) (bool, error) {
 	var high bool
-	err := w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT EXISTS (SELECT FROM candidates WHERE stable AND due AND rank<4)`, "release", now).Scan(&high)
+	configured, err := w.localConfigured(ctx, "release")
+	if err != nil {
+		return false, err
+	}
+	err = w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT EXISTS (SELECT FROM candidates WHERE stable AND due AND local_ready AND rank<4)`, "release", now, configured).Scan(&high)
 	return high, err
 }
 

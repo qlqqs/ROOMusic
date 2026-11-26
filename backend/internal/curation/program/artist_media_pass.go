@@ -22,7 +22,6 @@ type artistEvidence struct {
 	NoLink                             bool
 	hasCredits, waitingForRecognition  bool
 	pendingStatus                      string
-	finishedForInput                   bool
 	albumAuth, trackAuth               []metadata.Authenticity
 }
 
@@ -123,12 +122,8 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 			ON recognition.subject='release' AND recognition.target_id=c.release_id
 			WHERE c.canonical_id=p.canonical_id AND `+curation.ReleaseRecognitionPendingSQL+`),
 		COALESCE((SELECT status FROM curation_pending_items pi WHERE pi.artist_id=p.canonical_id
-			AND pi.target_type='artist' AND pi.kind='artist_identity' AND pi.status<>'resolved'),''),
-		EXISTS(SELECT FROM curation_pending_items pi JOIN curation_work_states w
-			ON w.subject='artist_media' AND w.target_id=pi.artist_id AND w.input_digest=pi.input_digest
-			WHERE pi.artist_id=p.canonical_id AND pi.kind='artist_identity' AND pi.status='resolved'
-			AND pi.resolution IN ('no_result','suggestion_recorded') AND pi.candidates='[]' AND pi.conflicts='[]'),
-        (SELECT jsonb_build_object('link_id',l.link_id,'source',l.source,'external_id',l.external_id)
+			AND pi.target_type='artist' AND pi.kind='artist_identity' AND pi.artist_web_generation IS NULL AND pi.status<>'resolved'),''),
+		(SELECT jsonb_build_object('link_id',l.link_id,'source',l.source,'external_id',l.external_id)
          FROM artist_merged_primary_links l WHERE l.artist_id=p.canonical_id AND l.artist_primary_name IS NULL)
     FROM page p JOIN artists a ON a.id=p.canonical_id LEFT JOIN artist_profiles profile ON profile.artist_id=p.canonical_id
 	ORDER BY p.canonical_id`, args...)
@@ -140,7 +135,7 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 	for rows.Next() {
 		var e artistEvidence
 		var ids, qids, markers, names, lookup []byte
-		if err := rows.Scan(&e.ID, &e.Name, &ids, &qids, &e.ImageRank, &e.BioRank, &markers, &names, &e.Albums, &e.Tracks, &e.hasCredits, &e.waitingForRecognition, &e.pendingStatus, &e.finishedForInput, &lookup); err != nil {
+		if err := rows.Scan(&e.ID, &e.Name, &ids, &qids, &e.ImageRank, &e.BioRank, &markers, &names, &e.Albums, &e.Tracks, &e.hasCredits, &e.waitingForRecognition, &e.pendingStatus, &lookup); err != nil {
 			return nil, err
 		}
 		if len(lookup) > 0 {
@@ -274,7 +269,7 @@ func (w *Worker) closeInactiveArtistItems(ctx context.Context, priority func() e
 			return err
 		}
 		page, err := artistMediaPage(ctx, w.db, `SELECT artist_id FROM curation_pending_items
-			WHERE target_type='artist' AND kind='artist_identity' AND status<>'resolved'
+			WHERE target_type='artist' AND kind='artist_identity' AND artist_web_generation IS NULL AND status<>'resolved'
 			AND artist_id>COALESCE(NULLIF($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
 			ORDER BY artist_id LIMIT $2`, after, pageSize)
 		if err != nil || len(page) == 0 {

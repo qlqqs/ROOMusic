@@ -102,7 +102,11 @@ func messagesRequest(request Request) (map[string]any, error) {
 		tools = append(tools, definition)
 	}
 	if request.NativeSearch && request.ForceTool == "" {
-		tools = append(tools, map[string]any{"type": "web_search_20250305", "name": "web_search", "max_uses": 5})
+		limit := 5
+		if request.MaxNativeSearchCalls > 0 {
+			limit = min(limit, request.MaxNativeSearchCalls)
+		}
+		tools = append(tools, map[string]any{"type": "web_search_20250305", "name": "web_search", "max_uses": limit})
 	}
 	if len(tools) > 0 {
 		body["tools"] = tools

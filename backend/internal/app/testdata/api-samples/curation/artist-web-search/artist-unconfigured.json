@@ -1,0 +1,17 @@
+{
+  "body": {
+    "can_start": false,
+    "can_stop": false,
+    "candidates": [],
+    "configured": false,
+    "queue": null,
+    "state": "none",
+    "usage": {
+      "token_limit": 50000,
+      "tokens": 0,
+      "tool_call_limit": 10,
+      "tool_calls": 0
+    }
+  },
+  "status": 200
+}

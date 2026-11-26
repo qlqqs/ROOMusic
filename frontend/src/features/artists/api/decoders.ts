@@ -226,11 +226,19 @@ const artistLinkPreviewDecoder = d.object({
   name_matches: d.boolean(),
 });
 
-// 管理员看到的网络搜索状态（自动整理的模型层在处理这位艺人时）：排队、处理中、搁置（什么都没找到，证据变了再试）、等你确认。
-// 等你确认时 candidates 是模型提出、审查转给人工的身份候选，每个对应一条例外；名字、简短说明、依据与引用都是外部的不可信文本。
+// 管理员看到的联网查找状态（ADR 0009 第 7 节，只在点了“联网查找”或“整理艺人”后才查）：排队、查找中、搁置（什么都没找到，本地变了再试）、等你确认。
+// 等你确认时 candidates 是模型找到、但没有一张专辑结构对得上的身份候选，每个对应一条例外；名字、简短说明、依据与引用都是外部的不可信文本。
 export const ARTIST_WEB_SEARCH_STATES = ["none", "queued", "running", "shelved", "waiting_human"] as const;
 const artistWebSearchDecoder = d.object({
   state: d.oneOf(ARTIST_WEB_SEARCH_STATES),
+  // 整理用的模型与管家的网页搜索都配好了才是 true，才显示“联网查找”；按钮能不能点看 can_start。
+  configured: d.boolean(),
+  can_start: d.boolean(),
+  can_stop: d.boolean(),
+  // 在“整理艺人”的队列里时：第几轮、排第几、共几位；不在队列里时为 null。
+  queue: d.nullable(d.object({ generation: d.integer({ min: 0 }), position: d.integer({ min: 0 }), total: d.integer({ min: 0 }) })),
+  // 这一位已用的工具调用与 token，以及每位的上限（10 次、5 万 token，到线就不再发）。
+  usage: d.object({ tool_calls: d.integer({ min: 0 }), tokens: d.integer({ min: 0 }), tool_call_limit: d.integer({ min: 1 }), token_limit: d.integer({ min: 1 }) }),
   candidates: d.array(
     d.object({
       exception_id: d.uuid(),

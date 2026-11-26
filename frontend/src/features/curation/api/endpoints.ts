@@ -9,6 +9,7 @@ import {
   decodeCurationExceptionDeclined,
   decodeCurationExceptionPage,
   decodeCurationModelRetry,
+  decodeArtistWebQueue,
   decodeCurationProgress,
   decodeReleaseMatchResults,
   decodeCurationSettings,
@@ -23,6 +24,7 @@ import {
   type CurationExceptionDTO,
   type CurationExceptionPageDTO,
   type CurationModelProgressDTO,
+  type ArtistWebQueueDTO,
   type CurationProgressDTO,
   type ReleaseMatchResultDTO,
   type CurationSettingsDTO,
@@ -70,6 +72,20 @@ export function setCurationSource(id: string, enabled: boolean): Promise<ApiResp
 export function setCurationSourceKey(id: string, name: string, key: string | null): Promise<ApiResponse<CurationSourceDTO>> {
   const path = `/api/v1/admin/curation/sources/${encodeURIComponent(id)}/keys/${encodeURIComponent(name)}` as const;
   return apiRequest(key === null ? { method: "DELETE", path } : { method: "PUT", path, body: { key } }, decodeCurationSource);
+}
+
+/** “整理艺人”全量队列的状态。 */
+export function fetchArtistWebQueue(signal?: AbortSignal): Promise<ApiResponse<ArtistWebQueueDTO>> {
+  return apiRequest({ method: "GET", path: "/api/v1/admin/curation/artist-web-search", signal }, decodeArtistWebQueue);
+}
+
+/** 开始或接续“整理艺人”（无请求体，202）；停止（200）。都返回最新的队列状态；没配好模型或网页搜索时 409。 */
+export function startArtistWebQueue(): Promise<ApiResponse<ArtistWebQueueDTO>> {
+  return apiRequest({ method: "POST", path: "/api/v1/admin/curation/artist-web-search" }, decodeArtistWebQueue);
+}
+
+export function stopArtistWebQueue(): Promise<ApiResponse<ArtistWebQueueDTO>> {
+  return apiRequest({ method: "DELETE", path: "/api/v1/admin/curation/artist-web-search" }, decodeArtistWebQueue);
 }
 
 /** 后台循环的状态与进度。 */

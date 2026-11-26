@@ -95,17 +95,40 @@ func (l backgroundLauncher) Start(ctx context.Context, p model.RunParams) (model
 	for _, item := range p.Items {
 		p.Run.ClaimDigests[item.ID] = item.ModelClaimDigest()
 	}
+	p.Run.EvidencePage = func(ctx context.Context, item, address string) (string, error) {
+		if item == "" || item != p.Run.PendingItemID || p.Run.TaskKind != string(model.ArtistWeb) {
+			return "", operations.Invalid("invalid_citation", "引用不属于当前联网项")
+		}
+		if err := l.sources.Check(ctx, "web_search"); err != nil {
+			return "", err
+		}
+		found, page, err := l.store.BackgroundPage(ctx, p.Run.ActorID, p.Run.ConversationID, item, address)
+		if err != nil {
+			return "", err
+		}
+		if !found {
+			return "", operations.Invalid("invalid_citation", "引用没有出现在当前项的搜索结果中")
+		}
+		if page != "" {
+			return page, nil
+		}
+		result, err := l.web.FetchCurationPage(ctx, address)
+		return result.Text, err
+	}
 	ctx = curation.WithModelRun(ctx, &p.Run)
 	ctx = provider.WithThrottleObserver(ctx, p.ProviderError)
 	if len(p.Items) > 0 {
 		ctx = context.WithValue(ctx, itemKindKey{}, p.Items[0].Kind)
 	}
+	webEnabled := func(ctx context.Context) bool {
+		return p.Run.TaskKind == string(model.ArtistWeb) && l.sources != nil && l.sources.Check(ctx, "web_search") == nil
+	}
 	params := stewardapi.BackgroundParams{
-		RequestBudget: p.Budget, Verified: p.Verified, UserID: p.Run.ActorID, ConversationID: p.Run.ConversationID, Model: p.Run.Model, Text: p.Text, ItemID: p.Run.PendingItemID, ClaimDigests: p.Run.ClaimDigests,
-
-		SystemSuffix:  backgroundPrompt(model.TaskKind(p.Run.TaskKind)),
-		BeforeRequest: func(ctx context.Context) error { return curationRunError(p.BeforeRequest(ctx)) },
-		BeforeStep:    func(ctx context.Context) error { return curationRunError(p.BeforeStep(ctx)) },
+		RemainingItemBudget: p.RemainingItemBudget, ChargeEstimatedUsage: p.ChargeEstimatedUsage, RequestBudget: p.Budget, Verified: p.Verified, UserID: p.Run.ActorID, ConversationID: p.Run.ConversationID, Model: p.Run.Model, Text: p.Text, ItemID: p.Run.PendingItemID, ClaimDigests: p.Run.ClaimDigests,
+		WebSearchEnabled: webEnabled,
+		SystemSuffix:     backgroundPrompt(model.TaskKind(p.Run.TaskKind)),
+		BeforeRequest:    func(ctx context.Context) error { return curationRunError(p.BeforeRequest(ctx)) },
+		BeforeStep:       func(ctx context.Context) error { return curationRunError(p.BeforeStep(ctx)) },
 		Usage: func(ctx context.Context, _ runtime.UsageKind, u provider.Usage) {
 			var in, out int64
 			if u.InputTokens != nil {
@@ -118,6 +141,9 @@ func (l backgroundLauncher) Start(ctx context.Context, p model.RunParams) (model
 		},
 	}
 	applyTaskPrompt(&params, p)
+	if p.OnToolCalls != nil {
+		params.OnToolCalls = func(ctx context.Context, n int) error { return curationRunError(p.OnToolCalls(ctx, n)) }
+	}
 	run, err := l.api.StartBackground(ctx, params)
 	if err != nil {
 		if f := backgroundFailure(err); f != nil {
@@ -134,7 +160,8 @@ func applyTaskPrompt(params *stewardapi.BackgroundParams, p model.RunParams) {
 		params.SystemSuffix += localCleanupPrompt
 	case model.VerifyEvidence, model.SelectCandidate:
 		params.Selection = func(reply string) ([]provider.ToolCall, error) { return selectionActions(reply, p.Items) }
-
+	case model.ArtistWeb:
+		params.StepLimit = 31
 	}
 }
 
@@ -176,6 +203,8 @@ func backgroundPrompt(kind model.TaskKind) string {
 		return base + `只输出 {"items":[{"item_id":"…","decision":"judge","selected_id":"可省略的本项候选编号","groups":[{"name":{"release":"原文标题","artist":"艺人"}}]}]}。先选候选，可同时按把握递减给零至多组线索。组字段可组合：name{release,artist,track,composer,work}、artist_id（列出的同名艺人）、identifier{kind:barcode或catalog_number,value:本地原文}、version{year,country,edition,medium}、album_type（compilation,soundtrack,live,podcast,audiobook）。明确无解用 decision=undetermined 和 reason。每项一行，不填写事实。`
 	case model.VerifyEvidence:
 		return base + `仅输出 {"items":[{"item_id":"…","verdict":"…","reason":"简短理由"}]}。名字选 typo、keep、undetermined。艺人身份选 same、different、undetermined。发行并入选 merge、keep、undetermined。`
+	case model.ArtistWeb:
+		return base + "按本项本地艺人和实际网页引用核对身份，提交可证明的 MusicBrainz 艺人编号。无法区分的同名艺人分别提交各候选；没有证据时用 shelve_pending_item 结束。"
 	default:
 		return base
 	}
@@ -299,6 +328,9 @@ func selectionActions(reply string, items []curation.PendingItem) ([]provider.To
 }
 
 func taskToolAllowed(kind model.TaskKind, name string) bool {
+	if kind == model.ArtistWeb {
+		return name == "web_search" || name == "fetch_page" || name == "resolve_artist_identity" || name == "shelve_pending_item"
+	}
 	switch name {
 	case "submit_local_cleanup":
 		return kind == model.LocalCleanup

@@ -16,6 +16,8 @@ export function artistMediaControls() {
     webSearch: null,
     decideCandidates: vi.fn(() => Promise.resolve(true)),
     deciding: false,
+    startWebSearch: vi.fn(() => Promise.resolve(true)),
+    startingWebSearch: false,
     dismissError: vi.fn(),
   } satisfies ArtistMediaControls;
 }

@@ -1,0 +1,15 @@
+{
+  "body": {
+    "can_start": false,
+    "can_stop": false,
+    "configured": false,
+    "generation": 0,
+    "processed": 0,
+    "queued": 0,
+    "retry_at": null,
+    "running": 0,
+    "state": "idle",
+    "total": 0
+  },
+  "status": 200
+}

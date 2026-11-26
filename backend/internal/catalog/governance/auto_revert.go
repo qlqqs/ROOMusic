@@ -17,6 +17,21 @@ type AutoSuppressionWriter interface {
 	SuppressReleaseValue(ctx context.Context, tx *sql.Tx, releaseID, field string, value catalog.CorrectionIntent, revertID, actorID string) error
 }
 
+// 本地拆分按段和连接词抑制，同一个显示名仍可采用别的署名结构。
+type splitSuppressionWriter interface {
+	SuppressCreditParts(ctx context.Context, tx *sql.Tx, owner, target, targetID, field, revertID, actorID string) (bool, error)
+}
+
+func suppressCreditParts(ctx context.Context, tx *sql.Tx, w any, owner, target, id, field, revertID string) (bool, error) {
+	if field != "artist" && field != "album_artist" {
+		return false, nil
+	}
+	if splits, ok := w.(splitSuppressionWriter); ok {
+		return splits.SuppressCreditParts(ctx, tx, owner, target, id, field, revertID, operations.ActorID(ctx))
+	}
+	return false, nil
+}
+
 type autoCorrectionKind struct{ suppressions AutoSuppressionWriter }
 
 // AutoCorrectionOperations 在装配时要求提供“不再提出”的写入能力。
@@ -85,6 +100,13 @@ func (k autoCorrectionKind) Revert(ctx context.Context, tx *sql.Tx, operationID 
 		return operations.Outcome{}, err
 	}
 	for name := range next {
+		handled, err := suppressCreditParts(ctx, tx, k.suppressions, original.ID, "release", locked.id, name, operationID)
+		if err != nil {
+			return operations.Outcome{}, err
+		}
+		if handled {
+			continue
+		}
 		value := locked.current[name]
 		if err := k.suppressions.SuppressReleaseValue(ctx, tx, locked.id, name, value.Intent(), operationID, operations.ActorID(ctx)); err != nil {
 			return operations.Outcome{}, err

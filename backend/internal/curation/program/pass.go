@@ -134,7 +134,9 @@ func subjectEvidence(subject string, e catalog.CurationEvidence, state curation.
 }
 
 type outcome struct {
-	keepSourceResult                                                   bool
+	keepSourceResult bool
+
+	localRequests                                                      localCreditRequests
 	checkedAt                                                          time.Time
 	status, group, trackFields, artistLinks, matchReason, releaseMerge string
 	match                                                              MatchResult
@@ -385,6 +387,11 @@ func (w *Worker) saveConclusionOnce(ctx context.Context, e *catalog.CurationEvid
 	if state.Subject == "release" {
 		releaseDigests{postDigest, postIdentity, GapDigest(fresh), fresh.FileDigest}.record(&state)
 		state.Result = releaseResult(out)
+		if out.status == "matched" {
+			if err := out.localRequests.project(ctx, tx, e.ID); err != nil {
+				return err
+			}
+		}
 		if err := curation.SaveArtistCreditProposals(ctx, tx, e.ID, postIdentity, out.proposals); err != nil {
 			return err
 		}

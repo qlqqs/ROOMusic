@@ -1,0 +1,50 @@
+{
+  "body": {
+    "can_start": false,
+    "can_stop": false,
+    "candidates": [
+      {
+        "citations": [
+          {
+            "title": "",
+            "url": "https://mock.example/searxng/artists/coast"
+          }
+        ],
+        "description": "海岸二重奏",
+        "exception_id": "00000000-0000-4000-8000-000000000001",
+        "external_id": "00000000-0000-4000-8000-000000000002",
+        "name": "纸屿",
+        "note": "署名与二重奏相同，还需核对。",
+        "source": "musicbrainz"
+      },
+      {
+        "citations": [
+          {
+            "title": "",
+            "url": "https://mock.example/searxng/artists/coast"
+          }
+        ],
+        "description": "独奏者",
+        "exception_id": "00000000-0000-4000-8000-000000000003",
+        "external_id": "00000000-0000-4000-8000-000000000004",
+        "name": "纸屿",
+        "note": "署名与独奏者相同，还需核对。",
+        "source": "musicbrainz"
+      }
+    ],
+    "configured": true,
+    "queue": {
+      "generation": 1,
+      "position": 1,
+      "total": 1
+    },
+    "state": "waiting_human",
+    "usage": {
+      "token_limit": 50000,
+      "tokens": 60,
+      "tool_call_limit": 10,
+      "tool_calls": 4
+    }
+  },
+  "status": 200
+}

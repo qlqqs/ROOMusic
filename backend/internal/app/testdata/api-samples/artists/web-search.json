@@ -1,5 +1,7 @@
 {
   "body": {
+    "can_start": false,
+    "can_stop": false,
     "candidates": [
       {
         "citations": [
@@ -16,7 +18,15 @@
         "source": "wikidata"
       }
     ],
-    "state": "waiting_human"
+    "configured": false,
+    "queue": null,
+    "state": "waiting_human",
+    "usage": {
+      "token_limit": 50000,
+      "tokens": 0,
+      "tool_call_limit": 10,
+      "tool_calls": 0
+    }
   },
   "status": 200
 }

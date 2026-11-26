@@ -90,11 +90,14 @@ func (w *Writer) RecordSuggestion(ctx context.Context, e ModelException) (string
 	err = tx.QueryRowContext(ctx, `UPDATE curation_pending_items SET status='resolved',resolution='suggestion_recorded',
  resolved_at=COALESCE(resolved_at,now()),claimed_at=NULL,next_attempt_at=NULL,updated_at=now()
  WHERE id=$1 AND conversation_id=$2 AND (status='in_progress' OR (status='resolved' AND resolution='suggestion_recorded'))
- RETURNING id,kind,input_digest,COALESCE(identity_digest,''),evidence`, e.PendingItemID, e.ConversationID).Scan(&item.ID, &item.Kind, &item.InputDigest, &item.IdentityDigest, &item.Evidence)
+ RETURNING id,kind,input_digest,COALESCE(identity_digest,''),evidence,artist_web_generation,COALESCE(artist_id::text,'')`, e.PendingItemID, e.ConversationID).Scan(&item.ID, &item.Kind, &item.InputDigest, &item.IdentityDigest, &item.Evidence, &item.ArtistWebGeneration, &item.ArtistID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", operations.Conflict("item_stale", "建议所据的待定项已变更")
 	}
 	if err != nil {
+		return "", err
+	}
+	if err = CheckArtistWebInput(ctx, tx, item); err != nil {
 		return "", err
 	}
 	if run, ok := ModelRunFrom(ctx); ok && run.ClaimDigests != nil && run.ClaimDigests[item.ID] != item.ModelClaimDigest() {

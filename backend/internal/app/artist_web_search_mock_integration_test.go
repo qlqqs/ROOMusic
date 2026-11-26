@@ -9,27 +9,29 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
-	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 )
 
 func TestPostgreSQLArtistWebSearchMockIdentity(t *testing.T) {
 	f := newArtistWebSearchFixture(t, "identity", true, true, nil)
 	f.configureMock(t)
-	artist := f.addArtist(t, webSearchArtistName)
+	release, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{title: "潮线以北", artist: webSearchArtistName, year: 2021, tracks: []string{"present", "present"}})
+	mustExec(t, f.application, `UPDATE tracks t SET duration_seconds=CASE t.position WHEN 1 THEN 180 ELSE 192 END, title=CASE t.position WHEN 1 THEN '潮汐信箱' ELSE '细雨码头' END FROM media m WHERE m.id=t.medium_id AND m.release_id=$1`, release)
+	publishSearch(t, f.application)
+	artist := f.artistID(t, webSearchArtistName)
 	for _, source := range []string{"fanarttv", "theaudiodb"} {
 		f.update(t, http.MethodPut, curationBase+"/sources/"+source, map[string]bool{"enabled": false})
 	}
 	f.status(t, artist, "none", 0)
-	f.enable(t)
-	f.clock.advance(t, time.Minute)
-	item := f.artistItem(t, artist)
+	item := f.startArtist(t, artist)
 	f.waitArtistResolution(t, item.ID, "model_linked")
-	f.requireModelArtistLink(t, artist, "wikidata", "Q900001", false)
-	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM steward_reviews r JOIN steward_plans p ON p.id=r.plan_id WHERE p.conversation_id=$1 AND r.status='completed'`, f.item(t, item.ID).ConversationID)
+	f.requireModelArtistLink(t, artist, "musicbrainz", artistMediaMBID, false)
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1 AND source='musicbrainz'`, release)
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM steward_reviews r JOIN steward_plans p ON p.id=r.plan_id WHERE p.conversation_id=$1`, f.item(t, item.ID).ConversationID)
 	if got := readArtistMedia(t, f.application, &f.admin, artist); got.Image != nil || got.Bio != nil {
 		t.Fatalf("认人当轮写入了资料：%+v", got)
 	}
 	f.requireMockArtistSearch(t)
+	f.enable(t)
 	f.clock.advance(t, time.Minute)
 	got := readArtistMedia(t, f.application, &f.admin, artist)
 	if got.Image == nil || got.Image.Source != "commons" || got.Image.License == nil ||
@@ -43,51 +45,15 @@ func TestPostgreSQLArtistWebSearchMockMediaAndUsage(t *testing.T) {
 	f := newArtistWebSearchFixture(t, "media", true, true, nil)
 	f.configureMock(t)
 	artist := f.addArtist(t, "海岸来信")
-	f.enable(t)
-	f.clock.advance(t, time.Minute)
-	item := f.artistItem(t, artist)
-	var finished curation.PendingItem
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		finished = f.item(t, item.ID)
-		if finished.Status == "resolved" && f.progress(t).State == "idle" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if finished.Status != "resolved" || finished.Resolution == nil || *finished.Resolution != "model_media" {
-		view, _ := runtime.NewStore(f.application.database).GetConversation(t.Context(), f.admin.id, finished.ConversationID)
-		t.Fatalf("mock 资料提交未完成，待定项 %+v，用量 %+v，模型请求 %+v，会话消息 %+v，后台工具 %s",
-			finished, f.progress(t).Today, f.mockCalls(t, "openai"), view.Messages, f.modelToolResults(t))
-	}
-	// 搜索、取页、提交资料与独立审查走同一会话，mock 每个模型请求记 12 个输入与 8 个输出 token。
-	calls := len(f.mockCalls(t, "openai"))
-	progress := f.progress(t)
-	usage := progress.Today
-	patrols := countRows(t, f.application, `SELECT count(*) FROM curation_pending_items WHERE kind='name_patrol' AND resolution='patrolled'`)
-	if patrols != 2 {
-		t.Fatalf("已巡检项数 %d", patrols)
-	}
-	if calls < 4 || usage.InputTokens != int64(calls*12) || usage.OutputTokens != int64(calls*8) {
-		t.Fatalf("mock 模型请求数=%d，当日用量 %+v", calls, usage)
-	}
-	limit := usage.InputTokens + usage.OutputTokens
-	f.update(t, http.MethodPut, curationBase+"/settings", map[string]any{"daily_token_limit": limit})
-	f.pendingArtist(t, artist, "海岸来信")
-	schedulerWait(t, "达到每日模型额度", func() bool { return f.progress(t).State == "limit_reached" })
-	f.status(t, artist, "queued", 0)
+	item := f.startArtist(t, artist)
+	f.waitArtistResolution(t, item.ID, "no_result")
 	f.requireMockArtistSearch(t)
-	f.requireWebSearchMedia(t, artist, "沿岸音乐名录")
-	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_type='artist' AND object_id=$1`, artist)
-	b3RequireCount(t, f.application, 2, `SELECT count(*) FROM operations WHERE target_type='artist' AND target_id=$1
-		AND origin->>'provider'='web_search' AND origin->>'provider_kind'='model' AND after_state->>'model'='mock-model'`, artist)
-	conversation, err := runtime.NewStore(f.application.database).GetConversation(t.Context(), f.admin.id, f.item(t, item.ID).ConversationID)
-	requireCurationOK(t, err)
-	if len(conversation.Plans) != 1 || conversation.Plans[0].Review == nil ||
-		conversation.Plans[0].Review.PolicyVersion != runtime.ReviewPolicyVersion || len(conversation.Plans[0].Items) != 1 ||
-		conversation.Plans[0].Items[0].Decision != "accepted" {
-		t.Fatalf("资料提案审查 %+v", conversation.Plans)
+	calls := len(f.mockCalls(t, "openai"))
+	usage := f.progress(t).Today
+	if calls == 0 || usage.InputTokens != int64(calls*12) || usage.OutputTokens != int64(calls*8) {
+		t.Fatalf("共享日账 %+v，实际请求 %d", usage, calls)
 	}
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE target_type='artist' AND target_id=$1`, artist)
 }
 
 func TestPostgreSQLArtistWebSearchMockCandidates(t *testing.T) {
@@ -96,9 +62,7 @@ func TestPostgreSQLArtistWebSearchMockCandidates(t *testing.T) {
 			f := newArtistWebSearchFixture(t, "candidates", true, true, nil)
 			f.configureMock(t)
 			artist := f.addArtist(t, webSearchArtistName)
-			f.enable(t)
-			f.clock.advance(t, time.Minute)
-			item := f.artistItem(t, artist)
+			item := f.startArtist(t, artist)
 			app := f.application
 			schedulerWait(t, "两个候选均保留为建议", func() bool {
 				return countRows(t, app, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1 AND status='open'`, item.ID) == 2
@@ -119,7 +83,7 @@ func TestPostgreSQLArtistWebSearchMockCandidates(t *testing.T) {
 			bySource := make(map[string]curation.ModelException)
 			for _, ex := range listed.Items {
 				if ex.Artist == nil || ex.Artist.ID != artist || ex.Artist.Name != webSearchArtistName || ex.Release != nil ||
-					ex.PendingItemID != item.ID || ex.Review.Decision != "needs_human_confirmation" || !ex.CanAccept || ex.ReasonCode != "review_uncertain" {
+					ex.PendingItemID != item.ID || ex.Review.ID != "" || !ex.CanAccept || ex.ReasonCode != "no_evidence" {
 					t.Fatalf("艺人建议不符 %+v", ex)
 				}
 				var in struct {
@@ -129,13 +93,12 @@ func TestPostgreSQLArtistWebSearchMockCandidates(t *testing.T) {
 				}
 				requireCurationOK(t, json.Unmarshal(ex.Input, &in))
 				if len(in.Basis.Citations) != 1 || in.Basis.Citations[0] != f.endpoint+"/searxng/artists/coast" ||
-					(in.Source == "wikidata" && in.ExternalID != "Q900001") ||
-					(in.Source == "musicbrainz" && in.ExternalID != webSearchSoloMBID) {
+					(in.Source != "musicbrainz" || in.ExternalID != artistMediaMBID && in.ExternalID != webSearchSoloMBID) {
 					t.Fatalf("候选建议字段 %s", ex.Input)
 				}
-				bySource[in.Source] = ex
+				bySource[in.ExternalID] = ex
 			}
-			duo, solo := bySource["wikidata"], bySource["musicbrainz"]
+			duo, solo := bySource[artistMediaMBID], bySource[webSearchSoloMBID]
 			if duo.ID == "" || solo.ID == "" {
 				t.Fatalf("双候选对应不符 %+v", bySource)
 			}
@@ -152,7 +115,7 @@ func TestPostgreSQLArtistWebSearchMockCandidates(t *testing.T) {
 					requireCurationOK(t, f.writer.ReopenException(t.Context(), solo.ID, other.id))
 				}
 				readExceptionDecision(t, f.decide(t, &f.admin, duo.ID, "accept"), "accepted", f.admin.id)
-				f.requireModelArtistLink(t, artist, "wikidata", "Q900001", true)
+				f.requireModelArtistLink(t, artist, "musicbrainz", artistMediaMBID, true)
 				f.waitArtistResolution(t, item.ID, "suggestion_recorded")
 				b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_model_exceptions WHERE id=$1 AND status='superseded' AND decided_at IS NOT NULL`, solo.ID)
 				f.status(t, artist, "none", 0)
@@ -160,10 +123,10 @@ func TestPostgreSQLArtistWebSearchMockCandidates(t *testing.T) {
 				readExceptionDecision(t, f.decide(t, &f.admin, duo.ID, "decline"), "declined", f.admin.id)
 				b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1 AND id=$2 AND status='open'`, item.ID, solo.ID)
 				b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_suppressions WHERE target_type='artist' AND target_id=$1
-					AND subject='external_link' AND value->>'source'='wikidata' AND value->>'external_id'=$2`, artist, "Q900001")
+					AND subject='external_link' AND value->>'source'='musicbrainz' AND value->>'external_id'=$2`, artist, artistMediaMBID)
 				f.pause(t)
 				readExceptionDecision(t, f.decide(t, &f.admin, solo.ID, "decline"), "declined", f.admin.id)
-				f.waitArtistResolution(t, item.ID, "suggestion_recorded")
+				f.waitArtistResolution(t, item.ID, "no_result")
 				b3RequireCount(t, app, 0, `SELECT count(*) FROM external_links WHERE object_type='artist' AND object_id=$1`, artist)
 			case "occupied":
 				linkArtistMedia(t, app, artist, artistMediaMBID)

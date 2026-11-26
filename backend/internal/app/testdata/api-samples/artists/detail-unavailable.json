@@ -29,7 +29,9 @@
       "source_url": "https://commons.wikimedia.org/wiki/File:Sample.png"
     },
     "links": {
+      "judged_by_model": false,
       "musicbrainz": "00000000-0000-4000-8000-000000000002",
+      "operation_id": null,
       "wikidata": null
     },
     "name_source": "auto",

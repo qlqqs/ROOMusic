@@ -19,6 +19,9 @@ func (h *Handlers) OnModelSettingsChanged(wake func()) { h.modelWake = wake }
 
 // BackgroundParams 由调度器提供本次整理批次、首条消息或待重审方案。
 type BackgroundParams struct {
+	RemainingItemBudget  func() (int, int64)
+	ChargeEstimatedUsage func(context.Context, int64) error
+
 	RequestBudget int64
 	Verified      bool
 
@@ -31,6 +34,7 @@ type BackgroundParams struct {
 	SystemSuffix     string
 	Selection        func(string) ([]provider.ToolCall, error)
 	StepLimit        int
+	OnToolCalls      func(context.Context, int) error
 	WebSearchEnabled func(context.Context) bool
 	BeforeRequest    func(context.Context) error
 	BeforeStep       func(context.Context) error
@@ -194,12 +198,25 @@ func (h *Handlers) StartBackground(ctx context.Context, p BackgroundParams) (*ru
 	if p.Model == "" {
 		p.Model = settings.Model
 	}
+	nativeSearch := nativeSearchEnabled(settings) && p.WebSearchEnabled != nil && p.WebSearchEnabled(ctx)
+	beforeStep := p.BeforeStep
+	if nativeSearch {
+		beforeStep = func(ctx context.Context) error {
+			if !p.WebSearchEnabled(ctx) {
+				return runtime.ErrRunStopped
+			}
+			if p.BeforeStep != nil {
+				return p.BeforeStep(ctx)
+			}
+			return nil
+		}
+	}
 	run, err := h.supervisor.Start(ctx, runtime.RunParams{
-		RequestBudget: p.RequestBudget, Background: true, BackgroundItemID: p.ItemID, BackgroundClaims: p.ClaimDigests, Selection: p.Selection, StepLimit: p.StepLimit, ConversationID: p.ConversationID, Text: p.Text,
+		RemainingItemBudget: p.RemainingItemBudget, ChargeEstimatedUsage: p.ChargeEstimatedUsage, RequestBudget: p.RequestBudget, Background: true, BackgroundItemID: p.ItemID, BackgroundClaims: p.ClaimDigests, Selection: p.Selection, OnToolCalls: p.OnToolCalls, StepLimit: p.StepLimit, NativeSearch: nativeSearch, ConversationID: p.ConversationID, Text: p.Text,
 		Caller:   tool.Caller{User: user, Source: tool.SourceCuration, Mode: "steward"},
 		Provider: model, Model: p.Model, Protocol: provider.Protocol(settings.Protocol),
 		Endpoint: settings.Endpoint, DisplayName: settings.DisplayName, SkipMemory: true, SystemSuffix: p.SystemSuffix,
-		BeforeRequest: p.BeforeRequest, BeforeStep: p.BeforeStep, Usage: p.Usage, Finished: closeClient,
+		BeforeRequest: p.BeforeRequest, BeforeStep: beforeStep, Usage: p.Usage, Finished: closeClient,
 		Check: func(ctx context.Context) error { return h.checkModelKey(ctx, p.UserID, settings) },
 	})
 	if err != nil {

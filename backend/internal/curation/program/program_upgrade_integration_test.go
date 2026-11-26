@@ -171,7 +171,15 @@ func TestProgramCreditSplitPlans(t *testing.T) {
 				Tracks: map[string][]catalog.CurationArtistCredit{e.Tracks[0].ID: credit}}
 			m := MatchResult{Level: "release", Release: &r, Pairs: []TrackPair{{e.Tracks[0].ID, r.Media[0].Tracks[0].RecordingID}}}
 			var roles []string
-			for _, split := range planCreditSplits(local, e, m) {
+			splits, requests := planCreditSplits(local, e, m)
+			var wantRequests localCreditRequests
+			if tc.name == "different-join" {
+				wantRequests = localCreditRequests{{"", "release_artist", tc.text}, {"", "album_artist", tc.text}, {e.Tracks[0].ID, "track_artist", tc.text}}
+			}
+			if !reflect.DeepEqual(requests, wantRequests) {
+				t.Fatalf("本地署名请求 %+v，期望 %+v", requests, wantRequests)
+			}
+			for _, split := range splits {
 				roles = append(roles, split.Role)
 				if split.LocalText != tc.text || !reflect.DeepEqual(split.Credits, artists) {
 					t.Fatalf("拆分应保留署名原文及外部位置：%+v", split)

@@ -23,7 +23,7 @@ CREATE TABLE curation_match_names (
 
 UPDATE steward_plans p SET status='superseded',updated_at=now()
 FROM steward_conversations c WHERE p.conversation_id=c.id AND c.kind='curation'
-AND p.background AND p.status='pending';
+AND p.background AND p.status='pending' AND NOT EXISTS (SELECT FROM curation_pending_items i WHERE i.conversation_id=c.id AND i.artist_web_generation IS NOT NULL);
 
 -- 保留已采纳的操作和历史结论，只撤销旧工作项的继续执行资格。
 -- 旧版不同身份的观察以明确 verdict 保存，先留住原文，再由 Go 使用同一套文本字表生成名字键。
@@ -38,19 +38,19 @@ SELECT least(a,b),greatest(a,b),reason,provider,created_at,true FROM negatives
 WHERE nullif(a,'') IS NOT NULL AND nullif(b,'') IS NOT NULL ORDER BY created_at
 ON CONFLICT DO NOTHING;
 
-DELETE FROM curation_model_exceptions WHERE status IN ('open','declined')
+DELETE FROM curation_model_exceptions WHERE NOT EXISTS (SELECT FROM curation_pending_items i WHERE i.id=curation_model_exceptions.pending_item_id AND i.artist_web_generation IS NOT NULL) AND (status IN ('open','declined')
  OR (status='accepting' AND cardinality(operation_ids)=0 AND NOT EXISTS
- (SELECT FROM operations o WHERE o.origin->>'conversation_id'=curation_model_exceptions.conversation_id::text));
+ (SELECT FROM operations o WHERE o.origin->>'conversation_id'=curation_model_exceptions.conversation_id::text)));
 
 UPDATE curation_pending_items SET status='resolved',resolution='superseded',
  claimed_at=NULL,next_attempt_at=NULL,resolved_at=now(),updated_at=now()
-WHERE status<>'resolved' AND (kind IN ('name_patrol','artist_identity') OR route IN ('web','lookup','select'));
+WHERE artist_web_generation IS NULL AND status<>'resolved' AND (kind IN ('name_patrol','artist_identity') OR route IN ('web','lookup','select'));
 
 UPDATE curation_pending_items SET status='waiting_model',claimed_at=NULL,conversation_id=NULL,
  next_attempt_at=NULL,review_retries=0
 WHERE status='in_progress' AND kind IN ('verify_name','verify_artist_credit','verify_artist_merge','release_merge');
 
 -- 删除已失去执行入口的活动项，历史已采纳操作依赖的待办继续保留。
-DELETE FROM curation_pending_items p WHERE p.resolution='superseded'
+DELETE FROM curation_pending_items p WHERE p.artist_web_generation IS NULL AND p.resolution='superseded'
  AND (p.kind IN ('name_patrol','artist_identity') OR p.route='web')
  AND NOT EXISTS(SELECT FROM curation_model_exceptions x WHERE x.pending_item_id=p.id);

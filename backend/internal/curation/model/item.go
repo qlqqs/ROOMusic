@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
@@ -21,6 +22,8 @@ func taskKind(p curation.PendingItem) TaskKind {
 	switch {
 	case p.Kind == "local_cleanup":
 		return LocalCleanup
+	case p.ArtistWebGeneration != nil:
+		return ArtistWeb
 	case p.Kind == "release_match" || p.Kind == "recording_match":
 		return SelectCandidate
 	default:
@@ -28,8 +31,15 @@ func taskKind(p curation.PendingItem) TaskKind {
 	}
 }
 
+func artistAtLimit(calls int, tokens int64) bool {
+	return calls >= curation.ArtistWebCallLimit || tokens >= curation.ArtistWebTokenLimit
+}
+
 // 准备好的证据和实际发送的候选保留在该项副本中。
 func (s *Scheduler) prepareItem(ctx context.Context, matcher *program.ModelMatcher, p *curation.PendingItem) error {
+	if p.Kind == "local_cleanup" {
+		return nil
+	}
 	items := []curation.PendingItem{*p}
 	if err := matcher.AnnotatePendingEvidence(ctx, items); err != nil {
 		return err
@@ -81,8 +91,8 @@ func firstMessage(items []curation.PendingItem) (string, error) {
 		ReleaseID       string                     `json:"release_id,omitempty"`
 		ArtistID        string                     `json:"artist_id,omitempty"`
 		Evidence        json.RawMessage            `json:"evidence"`
-		Candidates      json.RawMessage            `json:"candidates"`
-		Conflicts       json.RawMessage            `json:"conflicts"`
+		Candidates      json.RawMessage            `json:"candidates,omitempty"`
+		Conflicts       json.RawMessage            `json:"conflicts,omitempty"`
 		CanonicalTitle  string                     `json:"canonical_title,omitempty"`
 		CanonicalArtist string                     `json:"canonical_artist,omitempty"`
 		Requirements    string                     `json:"write_requirements"`
@@ -91,6 +101,24 @@ func firstMessage(items []curation.PendingItem) (string, error) {
 	}
 	rows := make([]messageItem, 0, len(items))
 	for _, p := range items {
+		if p.Kind == "local_cleanup" {
+			var source map[string]json.RawMessage
+			if err := json.Unmarshal(p.Evidence, &source); err != nil {
+				return "", err
+			}
+			evidence := map[string]json.RawMessage{}
+			for _, key := range []string{"directory_key", "release_ids", "directories", "releases", "grouping_requested"} {
+				if v, ok := source[key]; ok {
+					evidence[key] = v
+				}
+			}
+			raw, err := json.Marshal(evidence)
+			if err != nil {
+				return "", err
+			}
+			rows = append(rows, messageItem{ID: p.ID, Kind: p.Kind, Route: taskKind(p), ReleaseID: p.TargetID, Evidence: raw, Requirements: writeRequirements(p)})
+			continue
+		}
 		rows = append(rows, messageItem{
 			ID: p.ID, Kind: p.Kind, Route: taskKind(p), ReleaseID: p.TargetID, ArtistID: p.ArtistID,
 			Evidence: p.Evidence, Candidates: p.Candidates, Conflicts: p.Conflicts,
@@ -107,12 +135,14 @@ func firstMessage(items []curation.PendingItem) (string, error) {
 
 func writeRequirements(p curation.PendingItem) string {
 	switch p.Kind {
+	case "artist_identity":
+		return "核实本地署名，搜索网页并提交 MusicBrainz 艺人编号、依据和本项实际查到的引用。程序核对发行结构。"
 	case "release_match", "recording_match":
 		return "从本项候选选择，或提出名字、艺人、编号、版本、类型线索；编号必须来自本地原文。"
 	case "verify_name":
 		return "判断是否错字，保留译名、罗马字、版本后缀和风格差异。"
 	case "local_cleanup":
-		return "本地整理值须逐字出现在本项本地片段中。"
+		return "根据本项完整目录，仅提交可核对的文字、候选编码、署名分段或文件归组。"
 	case "release_merge":
 		return "发行并入须有生效的版本或录音对应与完整结构证据。"
 	default:
@@ -126,6 +156,25 @@ func itemIDs(items []curation.PendingItem) []string {
 		ids[i] = p.ID
 	}
 	return ids
+}
+
+type sourceFailures struct {
+	count    int
+	recovery time.Time
+}
+
+func (f *sourceFailures) record(recovery time.Time) {
+	f.count++
+	if recovery.After(f.recovery) {
+		f.recovery = recovery
+	}
+}
+
+func (f sourceFailures) retryAt(now time.Time, previous int) time.Time {
+	if f.count == 0 {
+		return time.Time{}
+	}
+	return curation.NextSourceRetry(now, f.recovery, previous)
 }
 
 func (s *Scheduler) itemCheckpoint(ctx context.Context, actor string, items []curation.PendingItem) error {
