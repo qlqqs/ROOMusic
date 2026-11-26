@@ -614,6 +614,209 @@ func TestPostgreSQLLocalAssistBeforeMatch(t *testing.T) {
 
 }
 
+func TestPostgreSQLLocalAssistDirectoryReleases(t *testing.T) {
+	for _, scenario := range []struct {
+		name, resolution string
+		staggered        bool
+	}{
+		{name: "同时稳定后定不了", resolution: "undetermined"},
+		{name: "同时稳定后采用", resolution: "local_cleanup"},
+		{name: "先后稳定", resolution: "undetermined", staggered: true},
+		{name: "未配置模型"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			const dir = "Shared Shelf"
+			const title = "Lantern Letters"
+			first := assistAlbum("shelf-a", dir, "Harbor Choir - "+title, "Harbor Choir",
+				assistSong("01-a.flac", "Low Tide", "1"), assistSong("02-a.flac", "North Jetty", "2"))
+			second := assistAlbum("shelf-b", dir, "Evening Signals", "Signal Quartet",
+				assistSong("01-b.flac", "Foghorn", "1"), assistSong("02-b.flac", "Last Ferry", "2"))
+			samples := []metricSample{first, second}
+			for i := range samples {
+				sample := &samples[i]
+				artist := metricArtist{ID: uuid.New(), Name: sample.Local.Artist}
+				remote := metricRelease{ID: uuid.New(), Group: uuid.New(), Title: sample.Local.Album, Artist: artist.ID}
+				for _, track := range sample.Local.Tracks {
+					remote.Tracks = append(remote.Tracks, metricRecording{
+						ID: uuid.New(), TrackID: uuid.New(), Title: track.Title, Artist: artist.ID, Length: track.Seconds * 1000,
+					})
+				}
+				if i == 0 && scenario.resolution == "local_cleanup" {
+					remote.Title = title
+				}
+				remote.GroupTitle = remote.Title
+				sample.External.Artists = []metricArtist{artist}
+				sample.External.Releases = []metricRelease{remote}
+				sample.Local.Tags = map[string]string{"MUSICBRAINZ_ALBUMID": remote.ID}
+			}
+
+			clock, endpoint := newProgramClock(), newMetricsModel(t)
+			app, mock, upstream := newCurationMockApplication(t, writeMetricCatalog(t, samples), clock, patrolModelOptions(clock))
+			admin := app.createUser(t, "admin")
+			fixedConfigure(t, app, &admin, upstream, false, false)
+			for _, sample := range samples {
+				writeMetricSample(t, app.allowedRoot, sample)
+			}
+			runScan(t, app, &admin)
+			releases := []string{
+				assistReleaseAt(t, app, dir+"/01-a.flac"),
+				assistReleaseAt(t, app, dir+"/01-b.flac"),
+			}
+			if releases[0] == releases[1] {
+				t.Fatal("同目录两套重复曲序应扫描为两张发行")
+			}
+			confirm := func(ids []string) {
+				t.Helper()
+				mustExec(t, app, `UPDATE releases SET curation_changed_at=now()-interval '60 seconds' WHERE id=ANY($1::uuid[])`, ids)
+				runScan(t, app, &admin)
+				b3RequireCount(t, app, len(ids), `SELECT count(*) FROM curation_stable_releases WHERE id=ANY($1::uuid[])`, ids)
+			}
+			releaseQueries := func() []cMatchRequest {
+				var queries []cMatchRequest
+				for _, request := range cMatchRequests(t, mock) {
+					if request.Service == "musicbrainz" && (request.Path == "/musicbrainz/ws/2/release" ||
+						strings.HasPrefix(request.Path, "/musicbrainz/ws/2/release/")) {
+						queries = append(queries, request)
+					}
+				}
+				return queries
+			}
+			const localItems = `SELECT count(*) FROM curation_pending_items WHERE kind='local_cleanup'`
+			const directoryItems = localItems + ` AND evidence->'release_ids' ?& $1::text[]`
+			requested, answer := make(chan string, 1), make(chan struct{})
+			defer closeUnlessClosed(answer)
+			if scenario.resolution != "" {
+				endpoint.localReply = func(item metricsPending) curation.LocalInput {
+					select {
+					case requested <- item.ID:
+					default:
+					}
+					select {
+					case <-answer:
+					case <-t.Context().Done():
+					}
+					if scenario.resolution == "local_cleanup" {
+						return curation.LocalInput{Decision: "apply", Texts: []curation.LocalText{
+							{Target: releases[0], Field: "title", Value: title},
+						}}
+					}
+					return curation.LocalInput{Decision: "undetermined", Reason: "本地资料不足以调整两张专辑的归组"}
+				}
+				endpoint.configure(t, app, &admin, map[string]metricsModelTarget{
+					releases[0]: {SampleID: first.ID, ReleaseID: samples[0].External.Releases[0].ID},
+					releases[1]: {SampleID: second.ID, ReleaseID: samples[1].External.Releases[0].ID},
+				}, upstream)
+			}
+			b3Enable(t, app, admin)
+			if scenario.staggered {
+				confirm(releases[:1])
+				b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_stable_releases WHERE id=$1`, releases[1])
+				clock.advance(t, time.Minute)
+				b3RequireCount(t, app, 1, directoryItems+` AND status='waiting_model' AND conversation_id IS NULL AND attempts=0`, releases)
+				writer := curation.NewWriter(app.database, app.dataDirectory, nil)
+				ready, err := writer.PeekModelKind(t.Context(), clock.options().Now(), 1, "local", []string{})
+				requireCurationOK(t, err)
+				if len(ready) != 0 {
+					t.Errorf("第二张稳定前可领取目录项：%+v", ready)
+				}
+				select {
+				case id := <-requested:
+					t.Errorf("第二张稳定前模型收到目录项 %s", id)
+				default:
+				}
+				state := b3WorkState(t, app, "release", releases[0])
+				if state.Status != "pending" {
+					t.Errorf("第二张稳定前第一张状态为 %q，结果 %s，期望 pending", state.Status, state.Result)
+				}
+				if queries := releaseQueries(); len(queries) > 0 {
+					t.Errorf("第二张稳定前已查询 MusicBrainz：%v", queries)
+				}
+				confirm(releases[1:])
+			} else {
+				confirm(releases)
+			}
+			clock.advance(t, time.Minute)
+			if scenario.resolution != "" {
+				var itemID string
+				scansBefore := countRows(t, app, `SELECT count(*) FROM scan_runs`)
+				defer func() {
+					if t.Failed() {
+						logAssistDirectoryState(t, app, releases, scansBefore)
+					}
+				}()
+				select {
+				case itemID = <-requested:
+					item := assistItem(t, app, releases[0])
+					if itemID != item.ID {
+						t.Errorf("模型收到目录项 %s，期望 %s", itemID, item.ID)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("两张发行稳定后模型未收到目录项")
+				}
+				b3RequireCount(t, app, 1, directoryItems+` AND status='in_progress'`, releases)
+				if queries := releaseQueries(); len(queries) > 0 {
+					t.Errorf("目录项结案前已查询 MusicBrainz：%v", queries)
+				}
+				close(answer)
+				schedulerWait(t, "模型交回目录项", func() bool {
+					return countRows(t, app, `SELECT count(*) FROM curation_pending_items WHERE id=$1 AND status<>'in_progress'`, itemID) == 1
+				})
+				if countRows(t, app, directoryItems+` AND id=$2 AND status='resolved' AND resolution=$3 AND attempts=1`, releases, itemID, scenario.resolution) != 1 {
+					t.Errorf("目录项 %s 应结案为 %s 且只计一次有效回答", itemID, scenario.resolution)
+				}
+				clock.advance(t, time.Minute)
+				b3RequireCount(t, app, 1, localItems)
+				calls := 0
+				for _, usage := range endpoint.usage() {
+					calls += usage["local_cleanup"].Calls
+				}
+				if calls != 1 {
+					t.Errorf("本地辅助模型请求 %d 次，期望 1 次", calls)
+				}
+			} else {
+				b3RequireCount(t, app, 0, `SELECT count(*) FROM steward_conversations WHERE kind='curation'`)
+				b3RequireCount(t, app, 0, `SELECT count(*) FROM operations WHERE origin->>'mode'='local_cleanup'`)
+				if usage := endpoint.usage(); len(usage) != 0 {
+					t.Errorf("未配置模型时收到了模型请求：%v", usage)
+				}
+			}
+			queries := releaseQueries()
+			for i, release := range releases {
+				state := b3WorkState(t, app, "release", release)
+				path := "/musicbrainz/ws/2/release/" + samples[i].External.Releases[0].ID
+				if state.Status == "" || state.Status == "pending" || !slices.ContainsFunc(queries, func(q cMatchRequest) bool {
+					return q.Path == path
+				}) {
+					t.Errorf("发行 %s 状态 %q，结果 %s，MusicBrainz 发行请求 %v，期望请求 %s 并离开 pending",
+						samples[i].ID, state.Status, state.Result, queries, path)
+				}
+			}
+		})
+	}
+}
+
+func logAssistDirectoryState(t *testing.T, app *integrationTestApplication, releases []string, scansBefore int) {
+	t.Helper()
+	items := programString(t, app, `SELECT COALESCE(jsonb_agg(jsonb_build_object(
+		'id',id,'status',status,'resolution',resolution,'attempts',attempts,'next_attempt_at',next_attempt_at,
+		'empty_count',empty_count,'conversation_id',conversation_id,'release_ids',evidence->'release_ids')
+		ORDER BY created_at)::text,'[]') FROM curation_pending_items WHERE kind='local_cleanup'`)
+	tools := programString(t, app, `SELECT COALESCE(jsonb_agg(jsonb_build_object(
+		'conversation_id',m.conversation_id,'tool',c.tool_name,'input',c.input,'status',c.status,'code',c.error_code,'output',c.output)
+		ORDER BY m.created_at,c.position)::text,'[]')
+		FROM steward_tool_calls c JOIN steward_messages m ON m.id=c.message_id
+		JOIN steward_conversations s ON s.id=m.conversation_id WHERE s.kind='curation'`)
+	scans := programString(t, app, `SELECT COALESCE(jsonb_agg(jsonb_build_object(
+		'status',status,'started_at',started_at,'finished_at',finished_at) ORDER BY started_at)::text,'[]') FROM scan_runs`)
+	groups := countRows(t, app, `SELECT count(*) FROM local_model_groupings`)
+	t.Logf("目录项 %s，模型工具调用 %s，提交前扫描数 %d，当前扫描 %s，模型归组记录数 %d", items, tools, scansBefore, scans, groups)
+	for _, release := range releases {
+		state := b3WorkState(t, app, "release", release)
+		t.Logf("发行 %s 工作状态 %q，尝试 %d 次，下次运行 %v，结果 %s",
+			release, state.Status, state.Attempts, state.NextAttemptAt, state.Result)
+	}
+}
+
 func closeUnlessClosed(ch chan struct{}) {
 	select {
 	case <-ch:
