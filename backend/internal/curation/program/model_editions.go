@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
@@ -14,22 +15,7 @@ import (
 // 模型给出的编号只是起点。先核对程序候选，尚不能确认多版时再读发行组。
 func (m *ModelMatcher) checkModelEditions(ctx context.Context, e catalog.CurationEvidence, item curation.PendingItem, match MatchResult) (MatchResult, error) {
 	if match.Rule == "partial_subset" || match.Rule == "partial_superset" {
-		var candidates []Candidate
-		if len(item.Candidates) != 0 {
-			if err := json.Unmarshal(item.Candidates, &candidates); err != nil {
-				return MatchResult{}, err
-			}
-		}
-		selected := match.Candidates[0]
-		candidates = slices.DeleteFunc(candidates, func(c Candidate) bool { return c.ExternalID == selected.ExternalID })
-		match.Candidates = append([]Candidate{selected}, candidates...)
-		// 只有模型提交的编号保证已读取详情，其余沿用本项已经取得的证据。
-		checked := partialAlbumMatch(curation.LocalSearchEvidence(e), MatchResult{Method: "model", Candidates: match.Candidates})
-		if checked.GroupID != match.GroupID {
-			return MatchResult{}, operations.Conflict("track_count", "曲数不同，现有候选也不能确认唯一的部分吻合发行组")
-		}
-		match.Credits = checked.Credits
-		return match, nil
+		return m.checkModelPartialEditions(ctx, curation.LocalSearchEvidence(e), item, match)
 	}
 	selected := match.Release
 	if selected == nil || match.Verification.Contradicted || selected.Group.ID == "" || e.ExternalID == selected.ID {
@@ -124,4 +110,58 @@ func (m *ModelMatcher) checkModelEditions(ctx context.Context, e catalog.Curatio
 		match.Release, match.Pairs = nil, nil
 	}
 	return match, nil
+}
+
+func (m *ModelMatcher) checkModelPartialEditions(ctx context.Context, e catalog.CurationEvidence, item curation.PendingItem, match MatchResult) (MatchResult, error) {
+	var candidates []Candidate
+	if len(item.Candidates) > 0 {
+		if err := json.Unmarshal(item.Candidates, &candidates); err != nil {
+			return MatchResult{}, err
+		}
+	}
+	selected := match.Candidates[0]
+	for _, candidate := range candidates {
+		if candidate.ExternalID == selected.ExternalID {
+			continue
+		}
+		if candidate.ReleaseGroupID != match.GroupID && !blockedCodes(candidate.Conflicts) && needsPartialDetail(len(e.Tracks), candidate) {
+			finder, ok := m.sources.ReleaseFinder("musicbrainz")
+			if !ok {
+				return MatchResult{}, sources.ErrUnavailable
+			}
+			detail, err := found(finder.ReleaseByID(ctx, candidate.ExternalID))
+			if err != nil {
+				return MatchResult{}, err
+			}
+			if detail.ID == "" {
+				continue
+			}
+			if !detail.Complete || !completeRelease(&detail, candidate.ExternalID) {
+				return MatchResult{}, sources.ErrUnavailable
+			}
+			candidate.Release = &detail
+		}
+		match.Candidates = append(match.Candidates, candidate)
+	}
+	checked, rows := checkPartialAlbumMatch(e, MatchResult{Method: "model", Candidates: match.Candidates})
+	if checked.GroupID != match.GroupID {
+		return MatchResult{}, partialGroupConflict(rows)
+	}
+	match.Credits = checked.Credits
+	return match, nil
+}
+
+func partialGroupConflict(rows []sources.Release) error {
+	var labels []string
+	seen := map[string]bool{}
+	for _, r := range rows {
+		if r.Group.ID != "" && !seen[r.Group.ID] {
+			seen[r.Group.ID] = true
+			labels = append(labels, r.Group.ID+"《"+r.Group.Title+"》")
+		}
+	}
+	if len(labels) > 1 {
+		return operations.Conflict("track_count", "另有发行组同样吻合，无法确定。吻合的发行组为"+strings.Join(labels, "、")+"。请勿重复提交同一编号")
+	}
+	return operations.Conflict("track_count", "曲数不同，现有候选也不能确认唯一的部分吻合发行组")
 }

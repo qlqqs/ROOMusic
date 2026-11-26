@@ -129,11 +129,28 @@ func partialAlbumRule(e catalog.CurationEvidence, r sources.Release, recordings 
 	return "partial_subset", len(remote)
 }
 
-// 只使用已经取得的详情。另一组仍有未核实的候选时不能宣告组唯一。
+// 摘要没有曲数时仍须核实。已知曲数要能支持完整吻合或部分吻合。
+func needsPartialDetail(local int, candidate Candidate) bool {
+	if candidate.Release != nil && candidate.Release.Complete && completeRelease(candidate.Release, candidate.ExternalID) {
+		return false
+	}
+	if n := candidate.Counts; n != nil && n.Total == nil && slices.Contains(n.Media, nil) {
+		return true
+	}
+	// 超集的完整前缀可以少于四曲。
+	return candidate.TrackCount <= local || possiblePartialCount(local, candidate.TrackCount)
+}
+
 func partialAlbumMatch(e catalog.CurationEvidence, result MatchResult) MatchResult {
+	checked, _ := checkPartialAlbumMatch(e, result)
+	return checked
+}
+
+// 只使用已经取得的详情。另一组仍有未核实的候选时不能宣告组唯一。
+func checkPartialAlbumMatch(e catalog.CurationEvidence, result MatchResult) (MatchResult, []sources.Release) {
 	if result.Method == "tag_id" || slices.Contains(result.Conflicts, "list_truncated") ||
 		slices.Contains(result.Conflicts, "ambiguous") || slices.Contains(result.Conflicts, "too_many") {
-		return result
+		return result, nil
 	}
 	var rows []sources.Release
 	var unknownGroups []string
@@ -144,7 +161,9 @@ func partialAlbumMatch(e catalog.CurationEvidence, result MatchResult) MatchResu
 			continue
 		}
 		if r == nil || !r.Complete {
-			unknownGroups = append(unknownGroups, candidate.ReleaseGroupID)
+			if result.Method != "model" || needsPartialDetail(len(e.Tracks), candidate) {
+				unknownGroups = append(unknownGroups, candidate.ReleaseGroupID)
+			}
 			continue
 		}
 		if result.Method == "model" && len(rows) > 0 && r.Group.ID != rows[0].Group.ID {
@@ -152,7 +171,8 @@ func partialAlbumMatch(e catalog.CurationEvidence, result MatchResult) MatchResu
 			c.compareRelease(e, "search", *r)
 			c.compareTracks(e, "search", *r)
 			if c.passes("search") && (len(e.Tracks) > 4 || c.titleMatch && c.artistMatch) {
-				return result
+				rows = append(rows, *r)
+				continue
 			}
 		}
 		if matched, _ := partialAlbumRule(e, *r, result.Snapshot.RecordingIDs); matched != "" {
@@ -165,8 +185,8 @@ func partialAlbumMatch(e catalog.CurationEvidence, result MatchResult) MatchResu
 	}
 	group := sharedGroup(rows)
 	if group == "" || slices.ContainsFunc(unknownGroups, func(id string) bool { return id != group }) {
-		return result
+		return result, rows
 	}
 	result.Route, result.Conflicts = "", nil
-	return groupMatch(result, rows, rule)
+	return groupMatch(result, rows, rule), nil
 }
