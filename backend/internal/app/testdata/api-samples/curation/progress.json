@@ -93,16 +93,14 @@
       }
     ],
     "releases": {
+      "conflict": 0,
       "matched": 0,
-      "no_match": 0,
-      "no_usable_candidates": 0,
       "processed": 0,
       "total": 2,
       "try_later": 0,
-      "uncertain": 0,
-      "unlisted": 0
+      "unmatched": 0
     },
-    "rule_version": 104,
+    "rule_version": 105,
     "state": "unavailable"
   },
   "status": 200

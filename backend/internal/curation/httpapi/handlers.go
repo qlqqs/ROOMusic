@@ -39,6 +39,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT "+base+"/sources/{id}/keys/{name}", h.admin(h.setSourceKey))
 	mux.HandleFunc("DELETE "+base+"/sources/{id}/keys/{name}", h.admin(h.clearSourceKey))
 	mux.HandleFunc("GET "+base+"/classifications", h.admin(h.classifications))
+	mux.HandleFunc("GET "+base+"/releases/{id}/match-results", h.admin(h.releaseMatchResults))
 	mux.HandleFunc("POST "+base+"/releases/{id}/recheck", h.admin(h.recheckUnlisted))
 	mux.HandleFunc("POST "+base+"/repatrol", h.admin(h.repatrol))
 	mux.HandleFunc("GET "+base+"/progress", h.admin(h.progress))
@@ -309,4 +310,9 @@ func (h *Handlers) acceptException(w http.ResponseWriter, r *http.Request, actor
 func (h *Handlers) declineException(w http.ResponseWriter, r *http.Request, actor identity.User) {
 	e, err := h.exceptions.Decline(r.Context(), r.PathValue("id"), actor.ID)
 	h.respond(w, r, map[string]any{"exception": e}, err)
+}
+
+func (h *Handlers) releaseMatchResults(w http.ResponseWriter, r *http.Request, _ identity.User) {
+	results, err := h.writer.ReleaseMatchResults(r.Context(), r.PathValue("id"))
+	h.respond(w, r, map[string]any{"results": results}, err)
 }

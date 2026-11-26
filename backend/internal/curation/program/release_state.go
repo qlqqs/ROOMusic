@@ -12,15 +12,16 @@ import (
 )
 
 type releaseDigests struct {
-	full, identity, gap string
+	full, identity, gap, file string
 }
 
 func releaseInputs(e catalog.CurationEvidence) releaseDigests {
-	return releaseDigests{ReleaseDigest(e), IdentityDigest(e), GapDigest(e)}
+	return releaseDigests{ReleaseDigest(e), IdentityDigest(e), GapDigest(e), e.FileDigest}
 }
 
 func (d releaseDigests) record(s *curation.WorkState) {
 	s.InputDigest, s.IdentityDigest, s.GapDigest = d.full, d.identity, d.gap
+	s.FileDigest = d.file
 	s.LocalRuleVersion = LocalRuleVersion
 }
 
@@ -41,11 +42,7 @@ func (w *Worker) prepareRelease(ctx context.Context, e catalog.CurationEvidence,
 		version = s.RuleVersion
 	}
 	upgrade := version != MatchRuleVersion
-	if s.IdentityDigest == "" {
-		if s.InputDigest != d.full {
-			return false, nil, nil
-		}
-	} else if s.IdentityDigest != d.identity && !(upgrade && (s.IdentityDigest == curation.ReleaseIdentityDigest101(e) || s.Status == "matched" && s.IdentityDigest == curation.ReleaseIdentityDigest102(e))) {
+	if s.FileDigest != d.file || s.InputDigest == "" {
 		return false, nil, nil
 	}
 	if !upgrade && s.InputDigest == d.full && s.IdentityDigest == d.identity && s.GapDigest == d.gap && s.LocalRuleVersion == LocalRuleVersion {
@@ -63,19 +60,13 @@ func (w *Worker) prepareRelease(ctx context.Context, e catalog.CurationEvidence,
 		}
 		d = releaseInputs(e)
 	}
-	if upgrade && s.Status != "matched" {
-		review, m, err := reviewPendingVersion(ctx, tx, e, d, *s)
-		if err != nil || review == waitForClaim {
+	if upgrade && (s.RequeryMatchVersion != 0 || recheckOnUpgrade(s.Status) || matchedUpgrade(version, s.Status, e)) {
+		var claimed bool
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM curation_pending_items
+ WHERE target_id=$1 AND kind=$2 AND status IN ('in_progress','waiting_human') FOR UPDATE)`, e.ID, matchItemKind(e)).Scan(&claimed); err != nil || claimed {
 			return true, nil, err
 		}
-		if m != nil {
-			// 只结束取证事务，后面的受治理写入与在线识别共用一个入口。
-			return false, m, tx.Commit()
-		}
-		s.RequeryMatchVersion = 0
-		if review == requery {
-			s.RequeryMatchVersion = MatchRuleVersion
-		}
+		s.RequeryMatchVersion = MatchRuleVersion
 	}
 	if err := updateReleaseProjection(ctx, tx, e, s, d, MatchRuleVersion); err != nil {
 		return false, nil, err
@@ -114,8 +105,8 @@ func updateReleaseProjection(ctx context.Context, tx *sql.Tx, e catalog.Curation
 	err := tx.QueryRowContext(ctx, `UPDATE curation_work_states SET
  local_rule_version=$2,match_rule_version=$3,input_digest=$4,identity_digest=$5,gap_digest=$6,requery_match_version=NULLIF($7::smallint,0),
  updated_at=now() WHERE subject='release' AND target_id=$1 AND generation=$8 AND input_digest=$9
- AND match_rule_version IS NOT DISTINCT FROM NULLIF($10::smallint,0) RETURNING updated_at`,
-		e.ID, LocalRuleVersion, version, d.full, d.identity, d.gap, s.RequeryMatchVersion, s.Generation, s.InputDigest, s.MatchRuleVersion).Scan(&s.UpdatedAt)
+ AND match_rule_version IS NOT DISTINCT FROM NULLIF($10::smallint,0) AND patrol_revision=$11 RETURNING updated_at`,
+		e.ID, LocalRuleVersion, version, d.full, d.identity, d.gap, s.RequeryMatchVersion, s.Generation, s.InputDigest, s.MatchRuleVersion, s.PatrolRevision).Scan(&s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errReleaseChanged
 	}
@@ -137,89 +128,33 @@ func refreshMatchItem(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidenc
 	_, err := tx.ExecContext(ctx, `UPDATE curation_pending_items SET
  match_rule_version=$3,identity_digest=$4,input_digest=$5,evidence=evidence || $6::jsonb
  WHERE target_id=$1 AND kind=$2 AND status IN ('waiting_model','waiting_route','shelved','in_progress')
- AND (identity_digest IN ($4,NULLIF($8,'')) OR (identity_digest IS NULL AND input_digest=$7))`,
-		e.ID, matchItemKind(e), version, d.identity, d.full, jsonValue(pendingMatchEvidence(e, result.Method)), previous.InputDigest, previous.IdentityDigest)
+ AND (identity_digest=$4 OR (identity_digest IS NULL AND input_digest=$7 AND input_digest=$5))`,
+		e.ID, matchItemKind(e), version, d.identity, d.full, jsonValue(pendingMatchEvidence(e, result.Method)), previous.InputDigest)
 	return err
 }
 
-type candidateReview int
+// 将来需要复核已匹配的规则在这里注明版本门槛与适用级别，105 没有此项升级。
+var matchedRecheckVersions = map[string]int16{}
 
-const (
-	requery candidateReview = iota
-	keepConclusion
-	waitForClaim
-)
+func matchedUpgrade(previous int16, status string, e catalog.CurationEvidence) bool {
+	if status != "matched" {
+		return false
+	}
+	level := "release"
+	if e.ExternalID == "" {
+		if len(e.Tracks) != 1 || e.CandidateKind != "loose_unknown" || e.Tracks[0].ExternalID == "" {
+			return false
+		}
+		level = "recording"
+	}
+	threshold := matchedRecheckVersions[level]
+	return previous < threshold && threshold <= MatchRuleVersion
+}
 
-func changedMatchConflict(code string) bool {
-	switch code {
-	case "track_count", "position_conflict", "artist_mismatch", "tag_text_mismatch":
+func recheckOnUpgrade(status string) bool {
+	switch status {
+	case "unmatched", "conflict", "query_error", "uncertain", "no_match", "unlisted", "no_usable_candidates":
 		return true
 	}
 	return false
-}
-
-func reviewPendingVersion(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidence, d releaseDigests, state curation.WorkState) (candidateReview, *MatchResult, error) {
-	var status, identity, full string
-	var rawCandidates, rawConflicts, rawEvidence []byte
-	err := tx.QueryRowContext(ctx, `SELECT status,COALESCE(identity_digest,''),input_digest,candidates,conflicts,evidence FROM curation_pending_items
- WHERE target_id=$1 AND kind=$2 AND status<>'resolved' FOR UPDATE`, e.ID, matchItemKind(e)).Scan(&status, &identity, &full, &rawCandidates, &rawConflicts, &rawEvidence)
-	if errors.Is(err, sql.ErrNoRows) {
-		var result struct{ Conflicts []string }
-		if err = json.Unmarshal(state.Result, &result); err != nil {
-			return requery, nil, err
-		}
-		if slices.Contains(result.Conflicts, "insufficient_evidence") && e.Classification().Class == catalog.Insufficient {
-			return keepConclusion, nil, nil
-		}
-		if state.Status == "unlisted" || state.Status == "uncertain" || slices.ContainsFunc(result.Conflicts, changedMatchConflict) {
-			return requery, nil, nil
-		}
-		return keepConclusion, nil, nil
-	}
-	if err != nil {
-		return requery, nil, err
-	}
-	if status == "in_progress" || status == "waiting_human" {
-		return waitForClaim, nil, nil
-	}
-	if identity == "" && full != d.full || identity != "" && identity != d.identity && identity != state.IdentityDigest {
-		return requery, nil, nil
-	}
-	var candidates []Candidate
-	var conflicts []string
-	var evidence struct {
-		Snapshot MatchSnapshot `json:"match_snapshot"`
-	}
-	if err = json.Unmarshal(rawCandidates, &candidates); err != nil {
-		return requery, nil, err
-	}
-	if err = json.Unmarshal(rawConflicts, &conflicts); err != nil {
-		return requery, nil, err
-	}
-	if err = json.Unmarshal(rawEvidence, &evidence); err != nil {
-		return requery, nil, err
-	}
-	m := replayMatch(e, candidates, conflicts, evidence.Snapshot)
-	if m.Status == "matched" || m.Status == "no_usable_candidates" {
-		return keepConclusion, &m, nil
-	}
-	// 旧待定可能同时含已撤销和仍可处理的候选。保留阻止依据，第一档只能选可用项。
-	if m.Status == "uncertain" && status != "waiting_route" {
-		usable := m.modelCandidates()
-		if len(usable) != len(m.Candidates) || len(evidence.Snapshot.Blocked) > 0 {
-			_, err = tx.ExecContext(ctx, `UPDATE curation_pending_items SET candidates=$3,conflicts=$4,
- evidence=jsonb_set(evidence,'{match_snapshot}',$5::jsonb),route=CASE WHEN $6 THEN 'lookup' ELSE 'select' END,
- status=CASE WHEN $6 AND status='waiting_model' THEN 'waiting_route' ELSE status END
- WHERE target_id=$1 AND kind=$2 AND status IN ('waiting_model','shelved')`,
-				e.ID, matchItemKind(e), jsonValue(usable), jsonValue(m.Conflicts), jsonValue(m.savedSnapshot()), len(usable) == 0)
-			if err != nil || len(usable) == 0 {
-				return requery, nil, err
-			}
-		}
-	}
-	if state.Status == "unlisted" || state.Status == "uncertain" || slices.ContainsFunc(conflicts, changedMatchConflict) {
-		return requery, nil, nil
-	}
-	// 其余历史结论保留现有路线。
-	return keepConclusion, nil, nil
 }

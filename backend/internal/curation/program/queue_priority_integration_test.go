@@ -26,11 +26,12 @@ func TestPostgreSQL整理队列五档取项与模型查询门槛(t *testing.T) {
 		gap         []int32
 	}{
 		{name: "完整且艺人已有对应", class: "local_complete", rank: 4, added: -time.Second},
+		{name: "新入库且本地齐全", class: "local_complete", rank: 4, added: time.Second},
 		{name: "完整且艺人缺对应", class: "local_complete", rank: 4, added: -8 * time.Second, unlinked: true},
 		{name: "次要缺口", class: "has_gaps", rank: 3, added: -2 * time.Second, gap: []int32{0, 4, 1, 1}},
 		{name: "身份缺口", class: "has_gaps", rank: 3, added: -9 * time.Second, gap: []int32{1, 0, 0, 0}},
 		{name: "有可检索编号", class: "has_gaps", rank: 2, added: -3 * time.Second, hasID: true, gap: []int32{0, 0, 1, 1}},
-		{name: "新入库", class: "local_complete", rank: 1, added: time.Second},
+		{name: "新入库", class: "has_gaps", rank: 1, added: time.Second},
 		{name: "手动重查", class: "local_complete", rank: 0, added: -10 * time.Second},
 	}
 	ids := make([]string, len(rows))
@@ -48,7 +49,7 @@ func TestPostgreSQL整理队列五档取项与模型查询门槛(t *testing.T) {
 			id, row.class, row.hasID, row.unlinked, gap, now.Add(row.added), MatchRuleVersion)
 	}
 	manual := ids[len(ids)-1]
-	f.exec(t, `UPDATE curation_work_states SET status='unlisted',attempts=1,needs_work=false WHERE target_id=$1`, manual)
+	f.exec(t, `UPDATE curation_work_states SET status='unmatched',attempts=1,needs_work=false WHERE target_id=$1`, manual)
 	requirePendingRefreshOK(t, f.writer.RecheckUnlisted(ctx, manual))
 
 	gate := curation.NewSources(f.db, curation.SourceRegistration{Declaration: musicbrainz.Declaration()})

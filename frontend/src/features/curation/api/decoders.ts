@@ -139,20 +139,35 @@ const progressDecoder = d.object({
   model: modelProgressDecoder,
   pending: d.object({ waiting_model: count() }),
   queues: d.array(queueDecoder, { min: PROGRAM_QUEUE_IDS.length, max: PROGRAM_QUEUE_IDS.length }),
-  // unlisted（外部库未收录）与 no_usable_candidates（候选都被撤销或已被占用）来自整理链 C。
+  // 识别结论（ADR 0009 第 4.6 节）：已匹配、未匹配（含候选已撤销）、有冲突；try_later 是等来源恢复后接着查的。
   releases: d.object({
     matched: count(),
-    no_match: count(),
+    unmatched: count(),
+    conflict: count(),
     processed: count(),
     total: count(),
     try_later: count(),
-    uncertain: count(),
-    unlisted: count(),
-    no_usable_candidates: count(),
   }),
   rule_version: d.integer({ min: 1 }),
   state: d.oneOf(PROGRAM_STATES),
 });
+
+/** 一张发行在各来源的识别结论（ADR 0009 第 4.6 节）：各来源各记各的，互不覆盖。 */
+export const MATCH_RESULT_STATUSES = ["matched", "unmatched", "conflict"] as const;
+export type MatchResultStatus = (typeof MATCH_RESULT_STATUSES)[number];
+// checked_at 是最近一次成功查询的时刻（UTC），历史记录不知道时为 null；reason 为 candidates_revoked 时表示候选都被撤销或被别的专辑占用；
+// conflicts 是冲突在哪的代码（例如 track_count、duration_mismatch）。
+const matchResultDecoder = d.object({
+  source: d.string({ min: 1, max: 100 }),
+  status: d.oneOf(MATCH_RESULT_STATUSES),
+  checked_at: d.nullable(d.timestamp()),
+  reason: d.string({ max: 200 }),
+  conflicts: d.array(d.string({ min: 1, max: 100 }), { max: 50 }),
+});
+const matchResultsDecoder = d.object({ results: d.array(matchResultDecoder, { max: 50 }) });
+/** GET /admin/curation/releases/{id}/match-results：按来源排序，没有记录时为空数组。 */
+export const decodeReleaseMatchResults = d.defineDecoder(matchResultsDecoder);
+export type ReleaseMatchResultDTO = d.Infer<typeof matchResultDecoder>;
 
 // 批次：一段连续的后台工作；closed_at 为空表示还在进行。改动数与已撤销数由后端按操作记录统计。
 const batchDecoder = d.object({

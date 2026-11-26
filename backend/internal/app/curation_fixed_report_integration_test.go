@@ -130,9 +130,7 @@ func (r *fixedRow) score(t *testing.T, app *integrationTestApplication, s fixedS
 			actual = "候选过多"
 		case len(m.Conflicts) > 0 && !slices.Contains(m.Conflicts, "insufficient_evidence"):
 			actual = "conflict"
-		case sawMB:
-			actual = "unlisted"
-		case status.Status == "unlisted" && !sawMB:
+		case status.Status == "unmatched" || sawMB:
 			actual = "unlisted"
 		default:
 			actual = "skip"

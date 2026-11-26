@@ -61,14 +61,14 @@ type RecordingSearch struct {
 
 func titleArtistTerms(titleField, title, artist, artistID string) ([]string, error) {
 	terms := field(nil, titleField, title)
-	if len(terms) == 0 {
-		return nil, nil
-	}
 	if artistID != "" {
 		if !uuid.Valid(artistID) {
 			return nil, sources.ErrInvalidQuery
 		}
 		return append(terms, "arid:"+strings.ToLower(artistID)), nil
+	}
+	if len(terms) == 0 {
+		return nil, nil
 	}
 	terms = field(terms, "artist", artist)
 	if len(terms) < 2 {

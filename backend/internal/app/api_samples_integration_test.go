@@ -22,6 +22,8 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
+	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/library"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
@@ -405,7 +407,33 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordCurationSamples(t, samples)
 	recordExternalCurationSamples(t, samples)
 	recordCurationCLinkSamples(t, samples)
+	recordReleaseMatchResultSamples(t, samples)
 	samples.finish()
+}
+
+func recordReleaseMatchResultSamples(t *testing.T, samples *apiSampleRecorder) {
+	t.Helper()
+	f := newCurationFixture(t)
+	samples.forbid(f.admin.token)
+	ctx := t.Context()
+	checkedAt := time.Date(2026, 1, 5, 8, 30, 0, 0, time.UTC)
+	requireCurationOK(t, curation.SaveReleaseMatchResult(ctx, f.application.database, f.a, curation.ReleaseMatchResult{
+		Source: "musicbrainz", Status: "conflict", CheckedAt: &checkedAt, Conflicts: []string{"track_count"},
+	}))
+	a := curationBase + "/releases/" + f.a
+	b := curationBase + "/releases/" + f.b
+	samples.record("curation/match-results", f.application.request(t, http.MethodGet, a+"/match-results", nil, &f.admin, nil), http.StatusOK)
+	samples.record("curation/match-results-empty", f.application.request(t, http.MethodGet, b+"/match-results", nil, &f.admin, nil), http.StatusOK)
+
+	due := checkedAt.Add(90 * 24 * time.Hour)
+	requireCurationOK(t, curation.SaveWorkState(ctx, f.application.database, curation.WorkState{
+		Subject: "release", TargetID: f.b, RuleVersion: program.MatchRuleVersion, InputDigest: "sample",
+		Status: "unmatched", NextAttemptAt: &due,
+	}))
+	requireCurationOK(t, curation.SaveReleaseMatchResult(ctx, f.application.database, f.b, curation.ReleaseMatchResult{
+		Source: "musicbrainz", Status: "unmatched", CheckedAt: &checkedAt,
+	}))
+	samples.recordEmpty("curation/match-recheck", f.application.request(t, http.MethodPost, b+"/recheck", nil, &f.admin, nil), http.StatusAccepted)
 }
 
 func recordRootScanIntervalSamples(t *testing.T, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser, rootID string) {

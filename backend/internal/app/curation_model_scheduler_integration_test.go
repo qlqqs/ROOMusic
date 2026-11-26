@@ -399,7 +399,7 @@ func TestPostgreSQLCurationModelUnhandledThreeTimes(t *testing.T) {
 		}
 	}
 	modelWaitResolution(t, f, item.ID, "unlisted")
-	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='unlisted' AND result->>'reason'='联网档连续三次未得到可执行的决定'`, f.b)
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='conflict' AND next_attempt_at IS NULL`, f.b)
 
 	t.Run("第二档无联网来源", func(t *testing.T) {
 		gate := &testLookupGate{}
@@ -412,7 +412,7 @@ func TestPostgreSQLCurationModelUnhandledThreeTimes(t *testing.T) {
 			f.next(t, false).complete(t)
 		}
 		modelWaitResolution(t, f, item.ID, "unlisted")
-		b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='unlisted' AND result->>'reason'='第二档连续三次未得到可执行的决定'`, f.a)
+		b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='conflict' AND next_attempt_at IS NULL`, f.a)
 	})
 }
 

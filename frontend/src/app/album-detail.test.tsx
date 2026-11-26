@@ -2,11 +2,13 @@ import { fireEvent, isInaccessible, screen, waitFor, within } from "@testing-lib
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decodeReleaseDetail, type ReleaseGroupSummaryDTO } from "../features/catalog/api/decoders";
+import type { ReleaseMatchResultDTO } from "../features/curation/api/decoders";
+import { formatDateTime } from "../shared/lib/time";
 import { sampleBody } from "../test/api-samples";
 import { albumGroup, albumGroups, groupDetailOf, mediaOf, releaseDetailOf, releaseEvidenceOf, releaseVersions } from "../test/catalog-data";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
 import { installCatalogApi } from "../test/fake-catalog";
-import { sampleResponse } from "../test/http";
+import { jsonResponse, sampleResponse } from "../test/http";
 import { renderApp } from "../test/render-app";
 
 /** 双碟三首曲目的专辑：详情按摘要合成，两张介质各 2 首与 1 首，总时长 344 秒（5:44）。 */
@@ -810,6 +812,75 @@ describe("专辑详情：不存在与失败", () => {
     catalog.groupFailure = sampleResponse("errors/unauthorized");
     const { history } = renderApp({ path: `/albums/${album.id}` });
     await waitFor(() => expect(history.location.pathname).toBe("/login"));
+  });
+});
+
+describe("专辑详情：外部识别", () => {
+  const matchPath = (releaseId: string) => `/api/v1/admin/curation/releases/${releaseId}/match-results`;
+
+  it.each(["admin", "user"] as const)("没有外部识别记录时隐藏区块，%s 的读取遵守角色权限", async (role) => {
+    const album = symphonies();
+    const { api } = setup({ role, groups: [album] });
+    const path = matchPath(album.representative.id);
+    if (role === "admin") api.on("GET", path, () => sampleResponse("curation/match-results-empty"));
+    renderApp({ path: `/albums/${album.id}` });
+    await screen.findByText("Track 1-01");
+
+    await waitFor(() => expect(api.requestsTo("GET", path)).toHaveLength(role === "admin" ? 1 : 0));
+    expect(screen.queryByText("外部识别")).toBeNull();
+    expect(api.requestsTo("POST", /^\/api\/v1\/admin\/curation\/releases\/[^/]+\/recheck$/)).toHaveLength(0);
+  });
+
+  it("折叠时显示来源摘要，展开后读出各行详情，普通未匹配可请求重查", async () => {
+    const album = symphonies();
+    const id = album.representative.id;
+    const { api } = setup({ groups: [album] });
+    const user = userEvent.setup();
+    const checkedAt = "2026-01-05T08:30:00Z";
+    const queried = { checked_at: checkedAt, reason: "", conflicts: [] };
+    const results: ReleaseMatchResultDTO[] = [
+      { ...queried, source: "musicbrainz", status: "unmatched" },
+      { ...queried, source: "acoustid", status: "unmatched", reason: "candidates_revoked" },
+      { ...queried, source: "coverartarchive", status: "matched", checked_at: null },
+      { ...queried, source: "lrclib", status: "conflict", conflicts: ["track_count"] },
+    ];
+    const recheck = `/api/v1/admin/curation/releases/${id}/recheck`;
+    api.on("GET", matchPath(id), () => jsonResponse(200, { results }));
+    api.on("POST", recheck, () => new Response(null, { status: 202, headers: { "Content-Length": "0" } }));
+
+    renderApp({ path: `/albums/${album.id}` });
+    const title = await screen.findByText("外部识别");
+    const disclosure = title.closest("details");
+    if (disclosure === null) throw new Error("外部识别缺少折叠区块");
+    const block = within(disclosure);
+    expect(block.getByText("（未匹配 · MusicBrainz；未匹配 · AcoustID；已匹配 · Cover Art Archive；有冲突 · LRCLIB）")).toBeTruthy();
+    expect(block.queryByRole("list")).toBeNull();
+    await user.click(title);
+
+    const rows = within(await block.findByRole("list")).getAllByRole("listitem");
+    expect(rows).toHaveLength(4);
+    const [musicbrainz, revoked, matched, conflict] = rows.map((row) => within(row));
+    if (musicbrainz === undefined || revoked === undefined || matched === undefined || conflict === undefined) {
+      throw new Error("外部识别缺少来源结果行");
+    }
+    expect(musicbrainz.getByText("未匹配")).toBeTruthy();
+    expect(musicbrainz.getByText("MusicBrainz")).toBeTruthy();
+    expect(musicbrainz.getByText(`，${formatDateTime(checkedAt)} 查询`).closest('[aria-hidden="true"]')).toBeNull();
+    expect(revoked.getByText("未匹配")).toBeTruthy();
+    expect(revoked.getByText("AcoustID")).toBeTruthy();
+    expect(revoked.getByText(/候选已撤销/).closest('[aria-hidden="true"]')).toBeNull();
+    expect(matched.getByText("已匹配")).toBeTruthy();
+    expect(matched.getByText("Cover Art Archive")).toBeTruthy();
+    expect(conflict.getByText("有冲突")).toBeTruthy();
+    expect(conflict.getByText("LRCLIB")).toBeTruthy();
+    expect(conflict.getByText(/曲数不同/).closest('[aria-hidden="true"]')).toBeNull();
+    for (const row of [revoked, matched, conflict]) expect(row.queryByRole("button")).toBeNull();
+
+    await user.click(musicbrainz.getByRole("button", { name: "重新查询" }));
+    expect(await musicbrainz.findByRole("button", { name: "已排上重查" })).toHaveProperty("disabled", true);
+    const requests = api.requestsTo("POST", recheck);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.body).toBeUndefined();
   });
 });
 

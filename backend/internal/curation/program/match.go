@@ -21,9 +21,10 @@ type TrackPair struct {
 }
 
 type MatchResult struct {
+	noFingerprintQuery                            bool
 	partialStructure                              bool
 	Verification                                  *MatchVerification `json:"verification,omitempty"`
-	GroupTitle                                    string
+	GroupTitle, GroupFirstReleaseDate             string
 	Level, Rule, GroupID, Route, RepresentativeID string
 	Credits                                       []sources.Credit
 	TrackTitles                                   map[string]string

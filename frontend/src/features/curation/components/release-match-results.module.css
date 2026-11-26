@@ -1,0 +1,31 @@
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+}
+
+.result {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+/* 结论用字重区分，不用颜色表示好坏；平台名是一个细线框的小标签。 */
+.status {
+  font-weight: 500;
+}
+
+.platform {
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-divider);
+  border-radius: 4px;
+  color: var(--color-neutral-600);
+  font-size: 0.875em;
+}

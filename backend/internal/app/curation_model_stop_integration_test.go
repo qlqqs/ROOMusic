@@ -107,14 +107,22 @@ func TestPostgreSQLCurationModelConcurrentProviderBackoff(t *testing.T) {
 		}
 	}
 
-	// 等每次失败释放领取后才推进时钟，由测试控制三次失败的先后顺序。
+	// 全局冷却会拦住新的短重试，先让三个请求的最后一次尝试都到达上游。
+	for i, request := range requests {
+		requests[i] = f.lastProviderAttempt(t, request)
+	}
+	// 在途的 503 依次返回，每个都把同一轮冷却延至本次失败后五秒。
 	for i, request := range requests {
 		f.clock.now.Store(start + int64(time.Duration(i)*time.Second))
-		f.lastProviderAttempt(t, request).fail <- failure
+		request.fail <- failure
 		schedulerWait(t, fmt.Sprintf("第 %d 个失败项释放且仍在冷却", i+1), func() bool {
 			p := f.progress(t)
 			return isCooling(p) && p.Running == concurrency-i-1 && p.Items.WaitingModel == int64(readyItems-concurrency+i+1)
 		})
+		wantRetry := time.Unix(0, start).Add(time.Duration(i)*time.Second + 5*time.Second)
+		if p := f.progress(t); p.RetryAt == nil || !p.RetryAt.Equal(wantRetry) {
+			t.Fatalf("第 %d 个在途请求失败后，恢复时刻为 %v，期望 %v", i+1, p.RetryAt, wantRetry)
+		}
 	}
 
 	// 通过进度接口的状态变化约束冷却截止时刻。

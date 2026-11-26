@@ -131,7 +131,7 @@ func (fp *FingerprintStep) match(ctx context.Context, mode string, e catalog.Cur
 		}
 	}
 	if len(hits) == 0 {
-		return MatchResult{}, "used", nil
+		return MatchResult{noFingerprintQuery: len(prints) == 0}, "used", nil
 	}
 	var result MatchResult
 	if mode == "single" {

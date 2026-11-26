@@ -31,7 +31,7 @@ func modelRouteFixture(t *testing.T, f *schedulerFixture, item curation.PendingI
 	requireCurationOK(t, err)
 	digest := curation.ReleaseIdentityDigest(evidence[item.TargetID])
 	requireCurationOK(t, curation.SaveWorkState(t.Context(), app.database, curation.WorkState{
-		Subject: "release", TargetID: item.TargetID, Status: "uncertain", RuleVersion: program.StoredRuleVersion,
+		Subject: "release", TargetID: item.TargetID, Status: "conflict", RuleVersion: program.StoredRuleVersion,
 		InputDigest: item.InputDigest, IdentityDigest: digest, Result: []byte(`{}`),
 	}))
 	mustExec(t, app, `UPDATE curation_pending_items SET identity_digest=$2,route=NULLIF($3,''),status=CASE WHEN $3='' THEN 'waiting_model' ELSE 'waiting_route' END WHERE id=$1`, item.ID, digest, route)
@@ -353,10 +353,8 @@ func TestPostgreSQL整理联网额度与单项额度(t *testing.T) {
 				q.tool(t, "web_search", map[string]string{"q": "合成"})
 			}
 			modelWaitResolution(t, f, first.ID, "unlisted")
-			reason := programString(t, f.application, `SELECT result->>'reason' FROM curation_work_states WHERE subject='release' AND target_id=$1`, f.a)
-			if tc.startRoute == "web" && reason != "item_limit" {
-				t.Fatalf("联网触限后的原因 %s", reason)
-			}
+			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states
+ WHERE subject='release' AND target_id=$1 AND status='conflict' AND next_attempt_at IS NULL`, f.a)
 		})
 	}
 }

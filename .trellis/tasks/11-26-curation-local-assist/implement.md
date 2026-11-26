@@ -105,9 +105,9 @@ ROOMUSIC_TEST_RUN='^TestPostgreSQLLocalAssist(SevenReasons|ModelContract|BeforeM
 
 ## 本轮实现交接
 
-已实现 B1 目录项的投影、四类回包核对、一级推断与撤销、扫描消费、主模型领取和识别前等待。提供 `curation.RequestLocalCreditSplit(ctx,tx,releaseID,trackID,role,sourceRef,raw)`。子任务 5 在确定性拼接失败的结算事务中调用；已有逐标签引用原样传入，引用采用曲目 ID、标签键与出现序。若失败针对整个采用的扫描署名，传空引用，由入口以目标和角色定位并逐字复核扫描原文。该处生产者调用待主代理合并两方代码后另派。
+已实现 B1 目录项的投影、四类回包核对、一级推断与撤销、扫描消费、主模型领取和识别前等待。提供 `curation.RequestLocalCreditSplit(ctx,tx,releaseID,trackID,role,sourceRef,raw)`。子任务 5 在确定性拼接失败的结算事务中调用；已有逐标签引用原样传入，引用采用曲目 ID、标签键与出现序。若失败针对整个采用的扫描署名，传空引用，由入口以目标和角色定位并逐字复核扫描原文。生产者在确定性拼接失败分支收集本地原署名引用，随匹配结算事务投影。
 
-本分支下一连续迁移为 `0102_curation_local_assist`，主代理合入时顺延编号。迁移增加署名段与归组表、目录成员和历史决定索引，登记新操作类型，退出现有未结旧协议项。降级恢复操作类型集合。设计 §5 记录了有历史推断数据时的回退顺序。归组保护清单 `other_paths` 保存同一目录中人工或已匹配成员的路径，供扫描区分新增文件与已有受保护文件。
+本分支下一连续迁移为 `0103_curation_local_assist`，主代理合入时顺延编号。迁移增加署名段与归组表、目录成员和历史决定索引，登记新操作类型，退出现有未结旧协议项。降级恢复操作类型集合。设计 §5 记录了有历史推断数据时的回退顺序。归组保护清单 `other_paths` 保存同一目录中人工或已匹配成员的路径，供扫描区分新增文件与已有受保护文件。
 
 实际改动文件按目录列出。
 
@@ -128,7 +128,7 @@ ROOMUSIC_TEST_RUN='^TestPostgreSQLLocalAssist(SevenReasons|ModelContract|BeforeM
 | `backend/internal/curation/stewardtools/` | `patrol.go` |
 | `backend/internal/library/` | `scan_scope.go`、`scanner.go` |
 | `backend/internal/upstreammock/` | `script.go` |
-| `backend/migrations/` | `0102_curation_local_assist.down.sql`、`0102_curation_local_assist.sql` |
+| `backend/migrations/` | `0103_curation_local_assist.down.sql`、`0103_curation_local_assist.sql` |
 
 ### 验证结果
 
@@ -149,3 +149,30 @@ ROOMUSIC_TEST_RUN='^TestPostgreSQLLocalAssist(SevenReasons|ModelContract|BeforeM
 - 测试代理按前文八组新用例补测七种入口、四类核对正反例、同艺人相邻独立专辑、配置与首次查询顺序、拆分和归组的撤销与恢复、旧库升级、动态引用。新增结构计划的实际消费与撤销、署名段的完整正反例、有数据的降级演练均在此清单中，本轮既有用例不覆盖这些场景。
 - 主代理合入时运行固定样本子集及全套回归，记录基线差值；本轮没有固定样本性能或正确率结果。
 - 前端治理记录需接 `local_model_grouping`。在 `frontend/src/features/governance/api/decoders.ts` 登记操作类型和 `changes.kind`，处理 `previous`、`assignments` 两组来源分配。没有旧分配时为 null。在 `frontend/src/features/governance/change-summary.ts` 增加“模型归组”摘要，撤销预览的 `grouping` 展示每组文件、碟号和曲号。本轮沿用现有主模型设置。
+
+## 合并程序识别后的验证
+
+`program.searchRelease` 在进入规则 105 的识别流程前检查本地依赖。无模型时直接进入该流程。保留规则 105 的七步查询、识别结论与普通未匹配 90 天重查。
+
+`program.planCreditSplits` 在编号依据、原署名齐全而姓名与连接词拼不回时，收集目标、角色和未裁剪的原文。新识别和存量匹配补办都在各自的匹配结算事务内调用本地投影。已有 `TestProgramCreditSplitPlans` 的不同连接词样例现在同时核实交回的三个角色及原文。
+
+0103 首次往返暴露了新操作类型缺回退夹具。补入模型归组和撤销记录后，带数据的 down 又发现删除旧操作产生的延迟约束检查尚待执行。已在更换操作类型约束前执行 `SET CONSTRAINTS ALL IMMEDIATE`。主代理将迁移顺延到 0104 时，留意同时顺延 `rollbackFixtures` 的 103 条目。
+
+以下验证均已通过。Go 命令从 `backend` 运行。
+
+```sh
+mise exec -- go build ./...
+mise exec -- go vet ./internal/curation/program ./internal/platform/postgres
+mise exec -- go test ./internal/app ./internal/platform/postgres -run '^(TestPackageDependencyDirections|TestEmbeddedMigrationRollbackFiles)$'
+mise exec -- go test ./internal/curation/program -run '^(TestProgramCreditSplitPlans|TestProgramRuleUpgradeStatePolicy)$'
+```
+
+集成命令从仓库根目录运行。
+
+```sh
+ROOMUSIC_TEST_RUN='^TestPostgreSQLMigrationRollbackRoundTrip$/^010[23]_' sg docker -c 'mise exec -- ./scripts/test-integration.sh'
+ROOMUSIC_TEST_RUN='^(TestPostgreSQL整理本地模型只写本地片段并保留碟号曲序|TestPostgreSQL整理无标签编号目录中的专辑名与艺人|TestPostgreSQLTrackAutoRevert)$' sg docker -c 'mise exec -- ./scripts/test-integration.sh'
+ROOMUSIC_TEST_RUN='^TestPostgreSQLCurationLocalRuleUpgradeQuiet$' sg docker -c 'mise exec -- ./scripts/test-integration.sh'
+git diff --check
+git diff --cached --check
+```

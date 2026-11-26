@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
@@ -98,17 +99,17 @@ func TestPostgreSQLCurationCProgress(t *testing.T) {
 	tryLater := newVisible("稍后重试")
 	outdated := newVisible("旧规则")
 	unprocessed := newVisible("未处理")
-	const version = 102
+	const version = program.MatchRuleVersion
 	for _, row := range []struct {
 		id, subject, status string
 		version             int16
 	}{
 		{f.a, "release", "matched", version},
-		{f.b, "release", "uncertain", version},
-		{noMatch, "release", "no_match", version},
+		{f.b, "release", "conflict", version},
+		{noMatch, "release", "unmatched", version},
 		{tryLater, "release", "try_later", version},
 		{outdated, "release", "matched", version - 1},
-		{unprocessed, "artwork", "done", version},
+		{unprocessed, "release", "done", version},
 		{f.hidden, "release", "matched", version},
 	} {
 		err := curation.SaveWorkState(t.Context(), db, curation.WorkState{
@@ -132,10 +133,26 @@ func TestPostgreSQLCurationCProgress(t *testing.T) {
 	}
 	path := curationBase + "/progress"
 	requireAPIError(t, app.request(t, "GET", path, nil, &f.ordinary, nil), 403, "forbidden")
+	response := app.request(t, "GET", path, nil, &f.admin, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("进度 HTTP %d：%s", response.Code, response.Body.String())
+	}
 	var got curation.Progress
-	getJSON(t, app, &f.admin, path, &got)
+	requireCurationOK(t, json.Unmarshal(response.Body.Bytes(), &got))
+	var wire struct{ Releases map[string]json.RawMessage }
+	requireCurationOK(t, json.Unmarshal(response.Body.Bytes(), &wire))
+	for _, key := range []string{"total", "processed", "matched", "unmatched", "conflict", "try_later"} {
+		if _, ok := wire.Releases[key]; !ok {
+			t.Errorf("进度缺少字段 %q", key)
+		}
+	}
+	for _, key := range []string{"unlisted", "uncertain", "no_match", "no_usable_candidates"} {
+		if _, ok := wire.Releases[key]; ok {
+			t.Errorf("进度仍返回旧字段 %q", key)
+		}
+	}
 	want := curation.Progress{State: "unavailable", RuleVersion: version,
-		Releases: curation.ReleaseProgress{Total: 6, Processed: 3, Matched: 1, Uncertain: 1, NoMatch: 1, TryLater: 1},
+		Releases: curation.ReleaseProgress{Total: 6, Processed: 4, Matched: 1, Conflict: 1, Unmatched: 1, TryLater: 1},
 		Pending:  curation.PendingProgress{WaitingModel: 1}}
 	for i, id := range [...]string{"release", "artwork", "lyrics", "artist_media", "fingerprint"} {
 		want.Queues[i] = curation.QueueProgress{ID: id, State: "unavailable"}

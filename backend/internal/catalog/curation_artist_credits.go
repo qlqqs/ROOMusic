@@ -3,6 +3,8 @@ package catalog
 import (
 	"context"
 	"database/sql"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/artistgraph"
 )
 
 type CurationArtistCredit struct {
@@ -133,3 +135,8 @@ const EffectiveExternalAutoCreditsSQL = `SELECT c.artist_id,c.position,c.release
 	JOIN artist_credits fact ON fact.id=c.credit_id AND fact.layer='auto'
 	JOIN tracks t ON t.id=c.track_id AND t.source_status='present' JOIN media m ON m.id=t.medium_id
 	WHERE c.artist_id=ANY($1::uuid[]) AND c.role='track_artist'`
+
+// RefreshMatchCredits 在持有目录写锁的事务内按外部署名位置重建。
+func RefreshMatchCredits(ctx context.Context, tx *sql.Tx, id string) error {
+	return artistgraph.Refresh(ctx, tx, []string{id})
+}

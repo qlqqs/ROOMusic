@@ -57,7 +57,7 @@ func planTrackFields(e catalog.CurationEvidence, m MatchResult) []curation.Track
 	for _, t := range e.Tracks {
 		id := pairs[t.ID]
 		value, ok := recordings[id]
-		if title := m.TrackTitles[t.ID]; m.Level == "release_group" && title != "" {
+		if title := m.TrackTitles[t.ID]; m.Level == "release_group" && title != "" && t.TitleInferred {
 			value = names{title: metadata.NormalizeValue(title)}
 		} else if id == "" || !ok || ambiguous[id] {
 			continue
@@ -181,13 +181,18 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 	}
 	markers := map[string]string{}
 	if merges {
-		if err := w.writer.DiscoverReleaseMerges(ctx, e.ExternalID, resourceRuleVersion); err != nil {
+		peers, err := curation.ObjectsLinkedTo(ctx, w.db, "musicbrainz", "release", e.ExternalID)
+		if err != nil {
 			return err
 		}
-		markers["release_merge"] = "done"
+		if len(peers) < 2 {
+			merges = false
+			markers["release_merge"] = "done"
+		}
 	}
 	var match MatchResult
 	var proposals []curation.ArtistCreditProposal
+	var localRequests localCreditRequests
 	var err error
 	var saved struct {
 		releaseReviewState
@@ -201,12 +206,18 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 	}
 	if saved.Level == "release_group" && saved.GroupID == e.ReleaseGroupMatchID {
 		match = MatchResult{Level: saved.Level, Rule: saved.Rule, GroupID: saved.GroupID, Credits: saved.Credits}
-	} else if tracks || artists {
+	} else if tracks || artists || merges {
 		match, err = w.linkedTracks(ctx, *e)
 		match.Rule = saved.Rule
 	}
 	switch {
 	case errors.Is(err, sources.ErrNotFound):
+		if merges {
+			if err := w.writer.DiscoverReleaseMerges(ctx, e.ExternalID, resourceRuleVersion); err != nil {
+				return err
+			}
+			markers["release_merge"] = "done"
+		}
 		if tracks {
 			markers["track_fields"] = "unavailable"
 		}
@@ -220,6 +231,18 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 	default:
 		u := unit{w: w, ruleVersion: s.RuleVersion, subject: s.Subject, id: e.ID, generation: s.Generation, fixedGeneration: true, releaseID: e.ID, inputDigest: s.InputDigest, releaseState: s}
 		source := curation.Source{WriterLevel: catalog.LevelProgramExternal, Kind: "source", Provider: "musicbrainz", Basis: "按已有 MusicBrainz 对应补全"}
+		if merges && match.Release == nil {
+			if err := w.writer.DiscoverReleaseMerges(ctx, e.ExternalID, resourceRuleVersion); err != nil {
+				return err
+			}
+			markers["release_merge"] = "done"
+		}
+		if merges && match.Release != nil {
+			if err := w.finishEditionMerge(ctx, &u, *match.Release); err != nil {
+				return err
+			}
+			markers["release_merge"] = "done"
+		}
 		if artists {
 			var links []curation.LinkIntent
 			links, proposals, err = w.identifyArtists(ctx, local, *e, match, false)
@@ -233,11 +256,16 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 				proposals = nil
 			}
 			request := curation.LinkRequest{ReleaseID: e.ID, ExternalSource: "musicbrainz", Source: source}
-			if err := writeArtistLinks(ctx, w.db, w.writer, request, links, u.write); err != nil {
+			var splits []curation.CreditSplit
+			splits, localRequests = planCreditSplits(local, *e, match)
+			if err := writeCreditSplits(ctx, w.writer, request, splits, u.write); err != nil {
+				return err
+			}
+			if err := writeArtistLinks(ctx, w.db, w.writer, request, links, splits, u.write); err != nil {
 				return err
 			}
 			markers["artist_links"] = "none"
-			if len(links) > 0 {
+			if len(links) > 0 || len(splits) > 0 {
 				markers["artist_links"] = "done"
 			}
 		}
@@ -270,6 +298,9 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		return errReleaseChanged
 	}
 	d := releaseInputs(entry)
+	if err := localRequests.project(ctx, tx, e.ID); err != nil {
+		return err
+	}
 	if err := curation.SaveArtistCreditProposals(ctx, tx, e.ID, d.identity, proposals); err != nil {
 		return err
 	}
@@ -277,11 +308,11 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 		return err
 	}
 	err = tx.QueryRowContext(ctx, `UPDATE curation_work_states SET result=result || $5::jsonb,updated_at=now(),
- local_rule_version=$7,match_rule_version=$8,identity_digest=$9,gap_digest=$10,
+ local_rule_version=$7,match_rule_version=$8,identity_digest=$9,gap_digest=$10,file_digest=$12,
  needs_work=manual_requested_at IS DISTINCT FROM $11::timestamptz,
  manual_requested_at=CASE WHEN manual_requested_at IS DISTINCT FROM $11 THEN manual_requested_at END
  WHERE subject='release' AND target_id=$1 AND status='matched' AND generation=$2 AND rule_version=$3 AND input_digest=$4 AND updated_at=$6
- RETURNING result,updated_at`, e.ID, s.Generation, s.RuleVersion, s.InputDigest, jsonValue(markers), s.UpdatedAt, LocalRuleVersion, MatchRuleVersion, d.identity, d.gap, s.ManualRequestedAt).Scan(&s.Result, &s.UpdatedAt)
+ RETURNING result,updated_at`, e.ID, s.Generation, s.RuleVersion, s.InputDigest, jsonValue(markers), s.UpdatedAt, LocalRuleVersion, MatchRuleVersion, d.identity, d.gap, s.ManualRequestedAt, d.file).Scan(&s.Result, &s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errReleaseChanged
 	}

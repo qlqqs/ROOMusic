@@ -67,3 +67,7 @@ B 的内容被整张替换后，新曲目可形成单独发行。访问已并入
 | B 的修改记录可见合并与撤销，接口样本与工具数 | `TestPostgreSQLReleaseMergeRevert`、`TestPostgreSQLAPIResponseSamples`、`TestC6RealRegistryToolCounts`、`TestPostgreSQLMCPRealRegistryProtocolsAndIsolation` |
 | 并发扫描、认领、归组和收藏下按共同锁序写入 | `TestPostgreSQLReleaseMergeConcurrent`、`TestPostgreSQLReleaseMergeConcurrentFavorites` |
 | 0067 带并入碟、操作和收藏回退再升级，碟号复原 | `TestPostgreSQLMigrationRollbackRoundTrip/0067_release_merges.sql` |
+
+## 程序识别规则 105
+
+程序取得同版的两个可见发行后，在活动对应、抑制及人工结构检查通过时，只有合并预览覆盖该外部版全部碟、各轨位置、各录音且录音无重复时才能直接并入。执行器锁内重验相同的预览。重复录音保留两份，按同一外部组已有的归组治理路径处理。其余符合并入候选条件的仅在配置模型时建项。撤销程序并入沿用 release_auto_merge。

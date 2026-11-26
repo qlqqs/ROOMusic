@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
@@ -179,4 +181,105 @@ func (k fieldCreditReverter) Revert(ctx context.Context, tx *sql.Tx, id string, 
 }
 func (k fieldCreditReverter) PreviewRevert(ctx context.Context, q operations.Queryer, r operations.Record) ([]operations.PreviewChange, error) {
 	return k.Kind.(operations.RevertPreviewer).PreviewRevert(ctx, q, r)
+}
+
+// CreditSplit 依附当前有效的版、组或录音对应，原署名文字仍由目录显示。
+type CreditSplit struct {
+	Role      string           `json:"role"`
+	TrackID   string           `json:"track_id,omitempty"`
+	LocalText string           `json:"local_text"`
+	BasisType string           `json:"basis_type"`
+	BasisID   string           `json:"basis_id"`
+	Credits   []sources.Credit `json:"credits"`
+}
+
+func (w *Writer) SplitArtistCredit(ctx context.Context, request LinkRequest, split CreditSplit) error {
+	id := request.ReleaseID
+	fp := operations.Fingerprint(split)
+	spec, err := w.sourceSpec(ctx, operations.TypeExternalLink, id, fp, request.Source, request.BatchID, request.Key, "", "", "")
+	if err != nil {
+		return err
+	}
+	_, err = operations.Run(ctx, w.db, spec, func(ctx context.Context, tx *sql.Tx, op string) (operations.Outcome, error) {
+		var empty operations.Outcome
+		release, err := governance.LockAutoRelease(ctx, tx, id)
+		if err != nil {
+			return empty, err
+		}
+		if err := checkWrite(ctx, tx, spec, "", id, 0, release.EditRevision()); err != nil {
+			return empty, err
+		}
+		basisObject := id
+		if split.TrackID != "" {
+			basisObject = split.TrackID
+		}
+		var basis string
+		err = tx.QueryRowContext(ctx, `SELECT l.id FROM external_links l WHERE l.source='musicbrainz' AND l.object_type=$1 AND l.object_id=$2 AND l.external_id=$3
+    AND NOT EXISTS(SELECT FROM release_match_credit_parts p WHERE p.release_id=$4 AND p.role=$5 AND p.track_id IS NOT DISTINCT FROM NULLIF($6,'')::uuid)
+    AND NOT EXISTS(SELECT FROM curation_suppressions WHERE target_type='release' AND target_id=$4 AND subject='split_credit' AND value_hash=$7)`, split.BasisType, basisObject, split.BasisID, id, split.Role, split.TrackID, fp).Scan(&basis)
+		if errors.Is(err, sql.ErrNoRows) {
+			return empty, operations.Conflict("nothing_to_apply", "署名没有新的拆分依据")
+		}
+		if err != nil {
+			return empty, err
+		}
+		for i, c := range split.Credits {
+			if strings.TrimSpace(c.Name) == "" || !validExternalID(c.ArtistID) || MusicBrainzSpecialArtist(c.ArtistID) {
+				return empty, operations.Conflict("nothing_to_apply", "署名没有可识别的艺人")
+			}
+			if _, err = tx.ExecContext(ctx, `INSERT INTO release_match_credit_parts(release_id,track_id,role,position,local_text,name,artist_mbid,basis_link_id,operation_id)
+       VALUES($1,NULLIF($2,'')::uuid,$3,$4,$5,$6,$7,$8,$9)`, id, split.TrackID, split.Role, i+1, split.LocalText, c.Name, c.ArtistID, basis, op); err != nil {
+				return empty, err
+			}
+		}
+		if err = catalog.RefreshMatchCredits(ctx, tx, id); err != nil {
+			return empty, err
+		}
+		rows, err := tx.QueryContext(ctx, `SELECT p.position,c.artist_id,p.artist_mbid FROM release_match_credit_parts p
+    JOIN artist_effective_credits c ON c.role=p.role AND c.position=p.position AND
+      (c.track_id=p.track_id OR p.track_id IS NULL AND c.release_id=p.release_id)
+    WHERE p.operation_id=$1 ORDER BY p.position`, op)
+		if err != nil {
+			return empty, err
+		}
+		var links []LinkIntent
+		for rows.Next() {
+			var pos int
+			l := LinkIntent{ObjectType: "artist"}
+			if err := rows.Scan(&pos, &l.ObjectID, &l.ExternalID); err != nil {
+				rows.Close()
+				return empty, err
+			}
+			links = append(links, l)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return empty, err
+		}
+		if len(links) != len(split.Credits) {
+			return empty, operations.Conflict("nothing_to_apply", "署名已变化")
+		}
+		for i, l := range links {
+			skip, err := addUnoccupiedLink(ctx, tx, Link{Source: "musicbrainz", ObjectType: "artist", ObjectID: l.ObjectID, ExternalID: l.ExternalID, Method: "split_credit", Confidence: "certain", OperationID: op})
+			if err != nil {
+				return empty, err
+			}
+			if skip == "suppressed" || skip == "occupied" {
+				return empty, operations.Conflict("nothing_to_apply", "署名对应已人工决定")
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE release_match_credit_parts p SET artist_link_id=l.id FROM external_links l WHERE p.operation_id=$1 AND p.position=$2
+    AND l.object_type='artist' AND l.source='musicbrainz' AND l.object_id=$3 AND l.external_id=$4`, op, i+1, l.ObjectID, l.ExternalID); err != nil {
+				return empty, err
+			}
+		}
+		artistIDs := make([]string, len(links))
+		for i, l := range links {
+			artistIDs[i] = l.ObjectID
+		}
+		if err := catalog.RefreshMergedArtistProfiles(ctx, tx, artistIDs); err != nil {
+			return empty, err
+		}
+		return externalOutcome(ctx, release, map[string]any{}, linkState{Source: "musicbrainz", Method: "split_credit", Confidence: "certain", Split: &split, Links: links})
+	})
+	return err
 }

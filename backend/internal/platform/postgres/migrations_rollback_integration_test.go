@@ -19,6 +19,16 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	103: `INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
+ VALUES ('d1030000-0000-4000-8000-000000000001','f1030000-0000-4000-8000-000000000001','local_model_grouping','release',
+ 'e1030000-0000-4000-8000-000000000001',gen_random_uuid(),'grouping',1,2,'{}','{}','{}','fixture');
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id,reverts_operation_id)
+ SELECT gen_random_uuid(),actor_id,'revert',target_type,target_id,gen_random_uuid(),'undo',2,3,'{}','{}','{}','fixture',id
+ FROM operations WHERE id='d1030000-0000-4000-8000-000000000001';`,
+	102: `UPDATE curation_work_states SET requery_match_version=105
+ WHERE subject='release' AND target_id='e9800000-0000-4000-8000-000000000002';
+ INSERT INTO curation_release_match_results(release_id,source,status,checked_at,conflicts)
+ VALUES('e9800000-0000-4000-8000-000000000002','synthetic','conflict','2026-01-02T00:00:00Z',ARRAY['track_count']);`,
 	87: `INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence)
  VALUES('e8700000-0000-4000-8000-000000000003','musicbrainz','release_group_match','e8700000-0000-4000-8000-000000000002','synthetic-group','search','certain');
  INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status,next_attempt_at) VALUES
@@ -554,6 +564,20 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO releases(id,group_id,title,artist) VALUES('e8700000-0000-4000-8000-000000000002',
  'e8700000-0000-4000-8000-000000000001','整理规则迁移测试发行','测试艺人');`)
 			}
+			if m.Version == 102 {
+				rollbackExec(t, db, `INSERT INTO release_groups(id) VALUES('e9800000-0000-4000-8000-000000000001');
+ INSERT INTO releases(id,group_id,title,artist)
+ SELECT id::uuid,'e9800000-0000-4000-8000-000000000001','合成发行','合成艺人'
+ FROM (VALUES ('e9800000-0000-4000-8000-000000000002'),('e9800000-0000-4000-8000-000000000003'),
+              ('e9800000-0000-4000-8000-000000000004')) AS fixture(id);
+ INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status,result)
+ VALUES ('release','e9800000-0000-4000-8000-000000000002',104,repeat('a',64),'unlisted','{}'),
+        ('release','e9800000-0000-4000-8000-000000000003',104,repeat('b',64),'no_usable_candidates','{"reason":"candidates_revoked"}'),
+        ('release','e9800000-0000-4000-8000-000000000004',104,repeat('c',64),'uncertain','{"method":"search","conflicts":["too_many"]}');`)
+			}
+			if strings.HasSuffix(m.Name, "_curation_local_assist.sql") {
+				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role) VALUES('f1030000-0000-4000-8000-000000000001','local-assist-rollback','synthetic','admin');`)
+			}
 			scanGrouping := strings.HasSuffix(m.Name, "_scan_grouping.sql")
 			if scanGrouping {
 				rollbackExec(t, db, scanGroupingLegacyRows)
@@ -561,6 +585,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
+			if m.Version == 102 {
+				assertProgramMatchMigration(t, db)
+			}
 			if scanGrouping {
 				assertScanGroupingMigrationUp(t, db)
 				checkScanGroupingAttachmentConstraints(t, db)
@@ -734,6 +761,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if m.Version == 72 {
 				assertArtistManualMediaBackfill(t, db)
 			}
+			if m.Version == 102 {
+				assertProgramMatchMigration(t, db)
+			}
 			// 再升级只比较结构和行数；种子 UUID、时间等合法非确定值不应误报。
 			countsOnly := func(snapshot postgrestest.SchemaSnapshot) postgrestest.SchemaSnapshot {
 				data := make(map[string]string, len(snapshot.Data))
@@ -747,6 +777,45 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 				t.Fatalf("再次升级结构/行数不一致：\n%s", strings.Join(diff, "\n"))
 			}
 		})
+	}
+}
+
+func assertProgramMatchMigration(t *testing.T, db *sql.DB) {
+	t.Helper()
+	rows, err := db.QueryContext(t.Context(), `SELECT s.status,q.status,q.reason,q.conflicts::text,
+ q.checked_at IS NULL,s.next_attempt_at IS NULL,s.file_digest IS NOT NULL
+ FROM curation_work_states s JOIN curation_release_match_results q ON q.release_id=s.target_id
+ WHERE s.subject='release' AND q.source='musicbrainz' ORDER BY q.release_id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	want := []struct {
+		status, reason string
+		conflicts      []string
+	}{
+		{"unmatched", "", nil},
+		{"unmatched", "candidates_revoked", nil},
+		{"conflict", "", []string{"too_many"}},
+	}
+	for _, expected := range want {
+		if !rows.Next() {
+			t.Fatalf("0102 缺少来源结论 %v：%v", expected, rows.Err())
+		}
+		var workStatus, status, reason string
+		var conflicts string
+		var unknownTime, noDue, fileDigest bool
+		if err := rows.Scan(&workStatus, &status, &reason, &conflicts, &unknownTime, &noDue, &fileDigest); err != nil {
+			t.Fatal(err)
+		}
+		if workStatus != expected.status || status != expected.status || reason != expected.reason ||
+			conflicts != "{"+strings.Join(expected.conflicts, ",")+"}" || !unknownTime || !noDue || !fileDigest {
+			t.Errorf("0102 来源结论为 %q/%q、原因 %q、冲突 %s、未知时间 %t、无到期时间 %t、有文件摘要 %t，期望 %v",
+				workStatus, status, reason, conflicts, unknownTime, noDue, fileDigest, expected)
+		}
+	}
+	if rows.Next() || rows.Err() != nil {
+		t.Fatalf("0102 来源结论多于预期或读取失败：%v", rows.Err())
 	}
 }
 

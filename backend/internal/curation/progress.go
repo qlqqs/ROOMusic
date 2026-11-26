@@ -15,14 +15,12 @@ type ProgramStatus interface {
 }
 
 type ReleaseProgress struct {
-	Total              int64 `json:"total"`
-	Processed          int64 `json:"processed"`
-	Matched            int64 `json:"matched"`
-	Uncertain          int64 `json:"uncertain"`
-	NoMatch            int64 `json:"no_match"`
-	Unlisted           int64 `json:"unlisted"`
-	NoUsableCandidates int64 `json:"no_usable_candidates"`
-	TryLater           int64 `json:"try_later"`
+	Total     int64 `json:"total"`
+	Processed int64 `json:"processed"`
+	Matched   int64 `json:"matched"`
+	Unmatched int64 `json:"unmatched"`
+	Conflict  int64 `json:"conflict"`
+	TryLater  int64 `json:"try_later"`
 }
 type PendingProgress struct {
 	WaitingModel int64 `json:"waiting_model"`
@@ -64,12 +62,11 @@ func (w *Writer) Progress(ctx context.Context, ruleVersion int16, status Program
 	r := &p.Releases
 	err := w.db.QueryRowContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
  SELECT count(*),count(*) FILTER (WHERE s.status NOT IN ('pending','try_later')),
- count(*) FILTER (WHERE s.status='matched'),count(*) FILTER (WHERE s.status='uncertain'),
- count(*) FILTER (WHERE s.status='no_match'),count(*) FILTER (WHERE s.status='try_later'),count(*) FILTER (WHERE s.status='unlisted'),
- count(*) FILTER (WHERE s.status='no_usable_candidates'),
+ count(*) FILTER (WHERE s.status='matched'),count(*) FILTER (WHERE s.status='unmatched'),
+ count(*) FILTER (WHERE s.status='conflict'),count(*) FILTER (WHERE s.status='try_later'),
  (SELECT count(*) FROM curation_pending_items p WHERE `+PendingTargetVisibleSQL+` AND p.status IN ('waiting_model','waiting_route'))
  FROM visible v LEFT JOIN curation_work_states s ON s.subject='release' AND (COALESCE(s.match_rule_version,s.rule_version)=$1 OR s.status='matched' AND s.match_rule_version IS NOT NULL) AND s.target_id=v.id`, ruleVersion).
-		Scan(&r.Total, &r.Processed, &r.Matched, &r.Uncertain, &r.NoMatch, &r.TryLater, &r.Unlisted, &r.NoUsableCandidates, &p.Pending.WaitingModel)
+		Scan(&r.Total, &r.Processed, &r.Matched, &r.Unmatched, &r.Conflict, &r.TryLater, &p.Pending.WaitingModel)
 	if err != nil {
 		return Progress{}, err
 	}

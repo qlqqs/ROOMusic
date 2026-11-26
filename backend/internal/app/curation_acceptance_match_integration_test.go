@@ -8,11 +8,10 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
-func TestPostgreSQL整理同名跨组用四个识别请求定案(t *testing.T) {
+func TestPostgreSQL整理同名跨组首查停止(t *testing.T) {
 	artist := metricArtist{ID: uuid.New(), Name: "试音艺人"}
 	s := cMatchAlbum("同名的三张专辑", artist.Name, 5, artist.ID)
 	s.External.Artists = []metricArtist{artist}
-	want := s.External.Releases[0].ID
 	for range 2 {
 		other := cMatchAlbum(s.Local.Album, artist.Name, 5, artist.ID).External.Releases[0]
 		other.Tracks[0].Length += 20000
@@ -29,29 +28,18 @@ func TestPostgreSQL整理同名跨组用四个识别请求定案(t *testing.T) {
 	entry := metricScannedEntry(t, app, s)
 	b3Enable(t, app, admin)
 	clock.advance(t, time.Minute)
-	b3RequireCount(t, app, 1, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1 AND external_id=$2`, entry.release, want)
+	b3RequireReleaseResult(t, app, entry.release, "conflict", "search", "unavailable", "different_release_groups")
+	b3RequireCount(t, app, 0, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1`, entry.release)
 	b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE kind='release_match' AND target_id=$1`, entry.release)
-
-	// 新艺人允许读取一次；其余 MusicBrainz 请求应只有一次搜索及每个候选各一次详情。
-	const prefix = "/musicbrainz/ws/2/"
 	requests := map[string]int{}
-	artistReads := 0
 	for _, req := range cMatchRequests(t, mock) {
-		if req.Service != "musicbrainz" {
-			continue
+		if req.Service == "musicbrainz" {
+			requests[req.Path]++
 		}
-		if req.Path == prefix+"artist/"+artist.ID {
-			artistReads++
-			continue
-		}
-		requests[req.Path]++
 	}
-	expected := map[string]int{prefix + "release": 1}
-	for _, release := range s.External.Releases {
-		expected[prefix+"release/"+release.ID] = 1
-	}
-	if artistReads > 1 || !reflect.DeepEqual(requests, expected) {
-		t.Fatalf("同名跨组实际请求 %v，期望 %v，另读取艺人 %d 次", requests, expected, artistReads)
+	expected := map[string]int{"/musicbrainz/ws/2/release": 1}
+	if !reflect.DeepEqual(requests, expected) {
+		t.Fatalf("同名跨组实际请求 %v，期望 %v", requests, expected)
 	}
 }
 
@@ -82,9 +70,12 @@ func TestPostgreSQL整理唯一候选撤销后不调用模型(t *testing.T) {
 	operation := programString(t, app, `SELECT operation_id FROM external_links WHERE object_type='release' AND object_id=$1 AND external_id=$2`, entry.release, remote)
 	cMatchFixture(app, admin).undo(t, operation)
 	metricDrain(t, app, &admin, clock, endpoint, entry)
-	if state := b3WorkState(t, app, "release", entry.release); state.Status != "no_usable_candidates" {
-		t.Fatalf("撤销唯一候选后的状态 %+v", state)
+	state := b3WorkState(t, app, "release", entry.release)
+	if state.Status != "unmatched" || state.NextAttemptAt != nil {
+		t.Errorf("撤销唯一候选后应为未匹配且无到期时间，实际状态 %q，代次 %d，到期 %v", state.Status, state.Generation, state.NextAttemptAt)
 	}
+	b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_release_match_results
+ WHERE release_id=$1 AND source='musicbrainz' AND status='unmatched' AND reason='candidates_revoked'`, entry.release)
 	b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE kind='release_match' AND target_id=$1`, entry.release)
 	b3RequireCount(t, app, 0, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1`, entry.release)
 	if after := endpoint.usage(); !reflect.DeepEqual(after, before) {

@@ -10,7 +10,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
-// RecheckUnlisted 将可见的未收录发行登记为到期，继续由普通程序轮处理。
+// RecheckUnlisted 将可见的未匹配发行登记为到期，继续由普通程序轮处理。
 func (w *Writer) RecheckUnlisted(ctx context.Context, releaseID string) error {
 	if !uuid.Valid(releaseID) {
 		return operations.Invalid("invalid_input", "发行编号无效")
@@ -18,7 +18,7 @@ func (w *Writer) RecheckUnlisted(ctx context.Context, releaseID string) error {
 	var visible, queued bool
 	err := w.db.QueryRowContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`), queued AS (
  UPDATE curation_work_states SET needs_work=true,manual_requested_at=clock_timestamp(),next_attempt_at=LEAST(COALESCE(next_attempt_at,now()),now()),updated_at=now()
- WHERE subject='release' AND target_id=$1 AND status='unlisted' AND EXISTS (SELECT FROM visible WHERE id=$1)
+ WHERE subject='release' AND target_id=$1 AND status='unmatched' AND COALESCE(result->>'reason','')<>'candidates_revoked' AND EXISTS (SELECT FROM visible WHERE id=$1)
  RETURNING target_id)
  SELECT EXISTS(SELECT FROM visible WHERE id=$1), EXISTS(SELECT FROM queued)`, releaseID).Scan(&visible, &queued)
 	if err != nil {
@@ -28,7 +28,7 @@ func (w *Writer) RecheckUnlisted(ctx context.Context, releaseID string) error {
 		return operations.NotFound("not_found", "发行不存在")
 	}
 	if !queued {
-		return operations.Conflict("not_unlisted", "只有未收录的发行能要求程序重查")
+		return operations.Conflict("not_unlisted", "只有未匹配的发行能要求程序重查")
 	}
 	return nil
 }
@@ -57,9 +57,8 @@ func (w *Writer) FinishUnlisted(ctx context.Context, itemID, expectedIdentity, c
 	if e, ok := entries[releaseID]; !ok || ReleaseIdentityDigest(e) != expectedIdentity {
 		return operations.Conflict("item_stale", "发行识别依据已变化")
 	}
-	r, err := tx.ExecContext(ctx, `UPDATE curation_work_states SET status='unlisted',next_attempt_at=now()+interval '90 days',
- retry_count=0,result=(result-'route') || jsonb_build_object('unlisted_since',now(),'reason',$3::text),updated_at=now()
- WHERE subject='release' AND target_id=$1 AND identity_digest=$2 AND status='uncertain'`, releaseID, expectedIdentity, reason)
+	r, err := tx.ExecContext(ctx, `UPDATE curation_work_states SET result=result-'route',updated_at=now()
+ WHERE subject='release' AND target_id=$1 AND identity_digest=$2 AND status IN ('conflict','unmatched')`, releaseID, expectedIdentity)
 	if err = requireChanged(r, err, "item_stale", "发行识别依据已变化"); err != nil {
 		return err
 	}

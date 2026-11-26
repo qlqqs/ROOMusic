@@ -9,26 +9,6 @@ import (
 // IdentityDigest 与待定项结清时使用同一份识别依据。
 func IdentityDigest(e catalog.CurationEvidence) string { return curation.ReleaseIdentityDigest(e) }
 
-// 无可用候选只在占用关系或撤销标记变化时重新检查。
-func blockedLinkDigest(e catalog.CurationEvidence) string {
-	input := struct {
-		Release, ExternalGroup, GroupMatch, Group string
-		Tracks                                    map[string]string
-		Markers                                   []catalog.CurationSuppression
-	}{Release: e.ExternalID, ExternalGroup: e.ExternalGroupID, GroupMatch: e.ReleaseGroupMatchID, Group: e.GroupExternalID, Tracks: map[string]string{}}
-	for _, t := range e.Tracks {
-		if t.ExternalID != "" {
-			input.Tracks[t.ID] = t.ExternalID
-		}
-	}
-	for _, m := range e.Suppressions {
-		if m.Subject == "external_link" {
-			input.Markers = append(input.Markers, m)
-		}
-	}
-	return digest(input)
-}
-
 // GapDigest 只记录缺口与字段占用，供本地补全使用。
 func GapDigest(e catalog.CurationEvidence) string {
 	type trackGap struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 )
 
@@ -79,13 +80,13 @@ func refreshEffective(ctx context.Context, tx *sql.Tx, ids []string) error {
  SELECT c.id,c.release_id,c.track_id,c.role,c.name_id,c.position,c.release_id AS owner_release_id
  FROM artist_credits c WHERE c.release_id=ANY($1::uuid[]) AND c.layer=CASE WHEN EXISTS(
  SELECT 1 FROM release_corrections rc WHERE rc.release_id=c.release_id AND rc.field='album_artist') THEN 'correction'
- WHEN EXISTS(SELECT 1 FROM release_auto_values a WHERE a.release_id=c.release_id AND a.field='album_artist') THEN 'auto' ELSE 'scan' END
+ WHEN EXISTS(SELECT 1 FROM release_auto_values a WHERE a.release_id=c.release_id AND a.field='album_artist') OR EXISTS(SELECT FROM release_match_credit_parts p WHERE p.release_id=c.release_id AND p.role=c.role AND p.track_id IS NULL) THEN 'auto' ELSE 'scan' END
  UNION ALL
  SELECT c.id,c.release_id,c.track_id,c.role,c.name_id,c.position,m.release_id
  FROM media m JOIN tracks t ON t.medium_id=m.id JOIN artist_credits c ON c.track_id=t.id WHERE m.release_id=ANY($1::uuid[])
  AND (c.role <> 'track_artist' OR c.layer = CASE
    WHEN EXISTS(SELECT 1 FROM track_corrections tc WHERE tc.track_id=t.id AND tc.field='artist') THEN 'correction'
-   WHEN EXISTS(SELECT 1 FROM track_auto_values ta WHERE ta.track_id=t.id AND ta.field='artist') THEN 'auto'
+   WHEN EXISTS(SELECT 1 FROM track_auto_values ta WHERE ta.track_id=t.id AND ta.field='artist') OR EXISTS(SELECT FROM release_match_credit_parts p WHERE p.track_id=t.id AND p.role=c.role) THEN 'auto'
    ELSE 'scan' END)
  ) INSERT INTO artist_effective_credits(credit_id,release_id,track_id,role,name_id,artist_id,position)
  SELECT c.id,c.release_id,c.track_id,c.role,c.name_id,COALESCE(o.redirect_artist_id,route.artist_id),c.position

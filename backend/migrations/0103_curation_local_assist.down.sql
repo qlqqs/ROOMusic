@@ -7,6 +7,7 @@ DELETE FROM operations WHERE reverts_operation_id IN (SELECT id FROM operations 
 DELETE FROM operations WHERE operation_type='local_model_grouping';
 UPDATE curation_pending_items SET status='resolved',resolution='inputs_changed',resolved_at=now(),updated_at=now()
 WHERE kind='local_cleanup' AND rule_version=4 AND status<>'resolved';
+SET CONSTRAINTS ALL IMMEDIATE;
 ALTER TABLE operations DROP CONSTRAINT operations_type_ck;
 ALTER TABLE operations ADD CONSTRAINT operations_type_ck CHECK (operation_type IN
     ('release_correction','release_auto_correction','track_correction','track_auto_correction','release_external_artwork','track_external_lyrics','external_link',

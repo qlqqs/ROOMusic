@@ -91,6 +91,7 @@ type CurationTrack struct {
 }
 
 type CurationEvidence struct {
+	FileDigest  string           `json:"-"`
 	Legacy      LegacyCandidates `json:"-"`
 	LocalTitle  string           `json:"local_title,omitempty"`
 	LocalArtist string           `json:"local_artist,omitempty"`
@@ -179,7 +180,7 @@ const curationReleaseLinkJoin = `
  jsonb_build_array(jsonb_build_object('object_type',gm.object_type,'object_id',gm.object_id,'external_id',gm.external_id))
  AND NOT EXISTS (SELECT FROM operations undo WHERE undo.reverts_operation_id=o.id))`
 
-const curationHeaderSQL = `SELECT releases.id::text,releases.group_id::text,COALESCE(releases.candidate_kind,''),
+const curationHeaderSQL = `SELECT releases.id::text,curation_release_file_digest(releases.id),releases.group_id::text,COALESCE(releases.candidate_kind,''),
  releases.artist,COALESCE(releases.media_type,''),
  ` + releasesql.ScanFieldsJSON + ` || COALESCE(c.values,'{}'::jsonb),
  COALESCE(c.present,'{}'::jsonb),
@@ -222,7 +223,7 @@ func curationHeaders(ctx context.Context, q Queryer, ids []string, artworkExists
 		var e CurationEvidence
 		var values, corrected, automatic, stale, decisions, media []byte
 		var artworkKey sql.NullString
-		if err := rows.Scan(&e.ID, &e.GroupID, &e.CandidateKind, &e.Artist, &e.MediaType, &values, &corrected,
+		if err := rows.Scan(&e.ID, &e.FileDigest, &e.GroupID, &e.CandidateKind, &e.Artist, &e.MediaType, &values, &corrected,
 			&automatic, &stale, &e.LocalTitle, &e.LocalArtist, &decisions, &media, &e.LocalArtwork, &artworkKey, &e.ExternalID, &e.ExternalGroupID, &e.ReleaseGroupMatchID,
 			&e.GroupExternalID, &e.GroupChangeSource); err != nil {
 			return nil, err

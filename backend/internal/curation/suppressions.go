@@ -117,7 +117,8 @@ func (w *Writer) ClearSuppression(ctx context.Context, id string) error {
 		return operations.Invalid("invalid_id", "标记标识无效")
 	}
 	// 按 ID 顺序锁定标记，避免同时清除一对标记的两端时互相等待。
-	result, err := w.db.ExecContext(ctx, `WITH requested AS (
+	var removed bool
+	err := w.db.QueryRowContext(ctx, `WITH requested AS (
 		SELECT id, target_type, target_id, operation_id, CASE subject
 			WHEN 'artwork' THEN 'artwork_source'
 			WHEN 'artwork_source' THEN 'artwork'
@@ -132,19 +133,19 @@ func (w *Writer) ClearSuppression(ctx context.Context, id string) error {
 		JOIN curation_suppressions paired ON paired.target_type=requested.target_type
 			AND paired.target_id=requested.target_id AND paired.subject=requested.paired_subject
 			AND paired.operation_id=requested.operation_id
-	)
+	), changed AS (
 	DELETE FROM curation_suppressions WHERE id IN (
 		SELECT marker.id FROM curation_suppressions marker JOIN matching ON matching.id=marker.id
 		ORDER BY marker.id FOR UPDATE OF marker
-	)`, id)
+	) RETURNING target_type,target_id,subject,value
+	), `+recheckSuppressedMatchSQL+` SELECT EXISTS(SELECT FROM changed)`, id).Scan(&removed)
 	if err != nil {
 		return err
 	}
-	n, err := result.RowsAffected()
-	if err == nil && n == 0 {
+	if !removed {
 		return operations.NotFound("not_found", "不再提出标记不存在")
 	}
-	return err
+	return nil
 }
 
 func hashExternalValue(value string) string {
@@ -178,13 +179,28 @@ func suppressionExists(ctx context.Context, q operations.Queryer, targetType, ta
 	return found, err
 }
 
+// 发行、组级识别和录音的对应标记影响候选。递增队列修订号，防止在途轮次确认掉新请求。
+const recheckSuppressedMatchSQL = `match_markers AS (
+ SELECT target_type,target_id FROM changed WHERE subject='external_link' AND value->>'source'='musicbrainz'
+), requeued AS (
+ UPDATE curation_work_states s SET needs_work=true,patrol_revision=patrol_revision+1,
+ requery_match_version=COALESCE(match_rule_version,rule_version),updated_at=now()
+ WHERE s.subject='release' AND s.target_id IN (
+ SELECT target_id FROM match_markers WHERE target_type IN ('release','release_group_match')
+ UNION ALL SELECT m.release_id FROM match_markers x JOIN tracks t ON t.id=x.target_id
+ JOIN media m ON m.id=t.medium_id WHERE x.target_type='track')
+)`
+
 func insertSuppression(ctx context.Context, tx *sql.Tx, targetType, targetID, subject, hash string, value any, revertID, actorID string) error {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by)
- VALUES($1,$2,$3,$4,$5,NULLIF($6,'')::uuid,$7) ON CONFLICT(target_type,target_id,subject,value_hash) DO NOTHING`, targetType, targetID, subject, hash, raw, revertID, actorID)
+	_, err = tx.ExecContext(ctx, `WITH changed AS (
+ INSERT INTO curation_suppressions(target_type,target_id,subject,value_hash,value,operation_id,created_by)
+ VALUES($1,$2,$3,$4,$5,NULLIF($6,'')::uuid,$7) ON CONFLICT(target_type,target_id,subject,value_hash) DO NOTHING
+ RETURNING target_type,target_id,subject,value
+ ), `+recheckSuppressedMatchSQL+` SELECT 1`, targetType, targetID, subject, hash, raw, revertID, actorID)
 	return err
 }
 

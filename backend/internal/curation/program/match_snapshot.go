@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
-	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
@@ -112,15 +111,18 @@ func searchShape(counts []int, total int, c Candidate) (wrong, known bool) {
 		if len(r.Media) > 0 && len(r.Media) != len(counts) {
 			return true, true
 		}
-		if !r.Complete {
-			return false, false
-		}
+		known := len(r.Media) > 0
 		for i, m := range r.Media {
-			if len(m.Tracks) != counts[i] {
+			n := max(m.TrackCount, len(m.Tracks))
+			if n == 0 && !r.Complete {
+				known = false
+				continue
+			}
+			if n != counts[i] {
 				return true, true
 			}
 		}
-		return false, len(r.Media) > 0
+		return false, known
 	}
 	v := c.Counts
 	if v.Total != nil && *v.Total != total {
@@ -190,7 +192,7 @@ func needsFullGroupCheck(e catalog.CurationEvidence) bool {
 			return true
 		}
 		seen[key] = true
-		if t.PositionInferred || len(trackISRCs(t)) > 0 || t.ExternalID != "" {
+		if len(trackISRCs(t)) > 0 || t.ExternalID != "" {
 			return true
 		}
 		for _, key := range []string{"mb_track", "mb_recording", "mb_disc"} {
@@ -202,14 +204,14 @@ func needsFullGroupCheck(e catalog.CurationEvidence) bool {
 	return false
 }
 
-// 首搜、不同写法和放宽共用三次详情读取，未找到的编号也计入预算。
+// 同一轮核对共用已读取的版本详情。
 type searchDetails struct {
 	finder    sources.ReleaseFinder
 	attempted map[string]bool
 }
 
 func (d *searchDetails) read(ctx context.Context, c *Candidate) error {
-	if c.Release.Complete || d == nil || d.attempted[c.ExternalID] || len(d.attempted) >= 3 {
+	if c.Release.Complete || d == nil || d.attempted[c.ExternalID] {
 		return nil
 	}
 	d.attempted[c.ExternalID] = true
@@ -224,12 +226,76 @@ func (d *searchDetails) read(ctx context.Context, c *Candidate) error {
 	return nil
 }
 
+func (d *searchDetails) partial(ctx context.Context, e catalog.CurationEvidence, m MatchResult, indices []int) (MatchResult, error) {
+	for _, i := range indices {
+		if err := d.read(ctx, &m.Candidates[i]); err != nil {
+			return MatchResult{}, err
+		}
+	}
+	return partialAlbumMatch(e, m), nil
+}
+
 func possiblePartialCount(local, remote int) bool {
-	return remote >= 4 && (local > remote || local >= 4 && local < remote && local*2 >= remote)
+	return remote > 0 && (local > remote || local >= 4 && local < remote && local*2 >= remote)
+}
+
+func summaryGroup(ctx context.Context, e catalog.CurationEvidence, result MatchResult, reads *searchDetails, details []int, groupRows []sources.Release, unknownGroup bool) (MatchResult, bool, error) {
+	if !e.Classical && !e.Compilation && len(e.Tracks) > 4 && len(groupRows) > 1 && !unknownGroup && sharedGroup(groupRows) == "" &&
+		!slices.ContainsFunc(groupRows, func(r sources.Release) bool { return r.Group.ID == "" }) {
+		return uncertain(result, "different_release_groups"), true, nil
+	}
+	if len(details) > 1 && len(groupRows) == len(details) && !unknownGroup && !e.Compilation && !e.Classical && len(e.Tracks) > 4 &&
+		sharedGroup(groupRows) != "" && !needsFullGroupCheck(e) {
+		consistent := true
+		for _, r := range groupRows {
+			var releaseCheck comparison
+			releaseCheck.compareRelease(e, result.Method, r)
+			if len(releaseCheck.conflicts) > 0 {
+				consistent = false
+				break
+			}
+			if !r.Complete {
+				continue
+			}
+			var c comparison
+			c.compareTracks(e, "search", r)
+			if len(c.conflicts) > 0 {
+				consistent = false
+				break
+			}
+		}
+		if consistent {
+			m := groupMatch(result, groupRows, "unique_group")
+			if !slices.ContainsFunc(e.Tracks, func(t catalog.CurationTrack) bool { return t.TitleInferred && !t.TitleCorrected && !t.TitleAutomatic }) {
+				return m, true, nil
+			}
+			i := details[0]
+			for _, j := range details[1:] {
+				if earlierEdition(*result.Candidates[j].Release, *result.Candidates[i].Release) {
+					i = j
+				}
+			}
+			candidate := &result.Candidates[i]
+			if err := reads.read(ctx, candidate); err != nil {
+				return MatchResult{}, true, err
+			}
+			if !candidate.Release.Complete {
+				return m, true, nil
+			}
+			var checked comparison
+			checked.compareTracks(e, "search", *candidate.Release)
+			if len(checked.conflicts) > 0 {
+				return uncertain(result, checked.conflicts...), true, nil
+			}
+			m.TrackTitles, m.RepresentativeID = checked.pairedTitles, candidate.ExternalID
+			return m, true, nil
+		}
+	}
+	return MatchResult{}, false, nil
 }
 
 func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result MatchResult, reads *searchDetails) (MatchResult, error) {
-	ok, relaxed := pageCoverage(result.Snapshot.Pages, "release")
+	ok, _ := pageCoverage(result.Snapshot.Pages, "release")
 	if !ok {
 		markBlocked(e, result.Mode, result.Candidates)
 		return uncertain(result, "list_truncated"), nil
@@ -237,7 +303,7 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 	discCounts := localDiscCounts(e)
 	markBlocked(e, result.Mode, result.Candidates)
 	var groupRows []sources.Release
-	var details, partialExact, partialOther []int
+	var details, partialExact []int
 	blocked := 0
 	unknownGroup := false
 	for i := range result.Candidates {
@@ -268,11 +334,10 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 		wrong, known := searchShape(discCounts, len(e.Tracks), *c)
 		if wrong {
 			if len(cmp.conflicts) == 0 && possiblePartialCount(len(e.Tracks), c.TrackCount) && !c.Release.Complete {
-				if cmp.titleMatch && cmp.artistMatch {
+				if sameAlbumNames(e, *c.Release) {
 					partialExact = append(partialExact, i)
-				} else {
-					partialOther = append(partialOther, i)
 				}
+
 			}
 			cmp.conflict("track_count")
 		}
@@ -284,7 +349,7 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 			continue
 		}
 		details = append(details, i)
-		if cmp.titleMatch && cmp.artistMatch {
+		if sameAlbumNames(e, *c.Release) {
 			if !known || unknown {
 				unknownGroup = true
 			}
@@ -295,49 +360,12 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 		result.Status, result.Route, result.Conflicts = "no_usable_candidates", "", candidateConflicts(result.Candidates)
 		return result, nil
 	}
-	groupCertain := !result.Snapshot.CountRelaxed && !relaxed && !unknownGroup && e.Authenticity["title"] == metadata.Real && e.SelectedArtistAuth() == metadata.Real && !e.Compilation && !e.Classical && len(e.Tracks) > 4 && sharedGroup(groupRows) != "" && !needsFullGroupCheck(e)
-	groupDurationsOK := func(rows []sources.Release) bool {
-		if !groupCertain {
-			return false
-		}
-		if !slices.ContainsFunc(e.Tracks, func(t catalog.CurationTrack) bool { return t.DurationSeconds > 0 }) {
-			return true
-		}
-		for _, summary := range groupRows {
-			i := slices.IndexFunc(rows, func(r sources.Release) bool { return r.ID == summary.ID })
-			if i < 0 || !rows[i].Complete {
-				return false
-			}
-			var c comparison
-			c.compareRelease(e, "search", rows[i])
-			c.compareTracks(e, "search", rows[i])
-			if !c.countEqual || !c.titleMatch || !c.artistMatch || rows[i].Group.ID != summary.Group.ID || len(c.conflicts) > 0 {
-				return false
-			}
-		}
-		return true
+	if m, decided, err := summaryGroup(ctx, e, result, reads, details, groupRows, unknownGroup); decided {
+		return m, err
 	}
-	groupVerified := groupDurationsOK(groupRows)
-	fillTitles := slices.ContainsFunc(e.Tracks, func(t catalog.CurationTrack) bool { return t.TitlePlaceholder || t.TitleInferred })
-	if groupVerified && !fillTitles {
-		return groupMatch(result, groupRows, "unique_group"), nil
-	}
-	partial := func(m MatchResult) (MatchResult, error) {
-		for _, i := range append(partialExact, partialOther...) {
-			if err := reads.read(ctx, &m.Candidates[i]); err != nil {
-				return MatchResult{}, err
-			}
-		}
-		return partialAlbumMatch(e, m), nil
-	}
+
 	if len(details) == 0 {
-		return partial(uncertain(result, candidateConflicts(result.Candidates)...))
-	}
-	if len(details) > 3 {
-		if groupVerified {
-			return groupMatch(result, groupRows, "unique_group"), nil
-		}
-		return uncertain(result, "too_many"), nil
+		return reads.partial(ctx, e, uncertain(result, candidateConflicts(result.Candidates)...), partialExact)
 	}
 	var rows []sources.Release
 	for _, i := range details {
@@ -346,9 +374,6 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 			return MatchResult{}, err
 		}
 		if !c.Release.Complete {
-			if groupVerified {
-				return groupMatch(result, groupRows, "unique_group"), nil
-			}
 			if reads == nil || !reads.attempted[c.ExternalID] {
 				return uncertain(result, "insufficient_evidence"), nil
 			}
@@ -357,24 +382,14 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 		rows = append(rows, *c.Release)
 	}
 	if len(rows) == 0 {
-		if groupVerified {
-			return groupMatch(result, groupRows, "unique_group"), nil
-		}
-		return partial(uncertain(result))
+		return reads.partial(ctx, e, uncertain(result), partialExact)
 	}
-	groupVerified = groupDurationsOK(rows)
 	decided := decideAlbum(e, "search", rows, MatchSnapshot{})
 	mergeCheckedCandidates(&decided, result.Candidates)
 	decided.Snapshot = result.Snapshot
 	decided.ArtistEvidence = result.ArtistEvidence
-	if groupVerified && (!fillTitles || decided.Status == "uncertain") && !slices.Contains(decided.Conflicts, "ambiguous") && !slices.ContainsFunc(decided.Candidates, func(c Candidate) bool {
-		return blockedCodes(c.Conflicts) || slices.Contains(c.Conflicts, "group_tag_mismatch")
-	}) {
-		result.Candidates = decided.Candidates
-		return groupMatch(result, groupRows, "unique_group"), nil
-	}
 	if decided.Status == "uncertain" {
-		return partial(decided)
+		return reads.partial(ctx, e, decided, partialExact)
 	}
 	return decided, nil
 }

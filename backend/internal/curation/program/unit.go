@@ -78,7 +78,7 @@ func (u *unit) write(ctx context.Context, step string, write func(batch, key str
 			return err
 		}
 		e, ok := entries[u.releaseID]
-		if !ok || u.identityDigest != "" && IdentityDigest(e) != u.identityDigest {
+		if !ok || u.subject == "release" && u.releaseInput != nil && e.FileDigest != u.releaseInput.FileDigest || u.identityDigest != "" && IdentityDigest(e) != u.identityDigest {
 			return errReleaseChanged
 		}
 		current := subjectDigest(u.subject, subjectEvidence(u.subject, e, u.releaseState), u.id)
