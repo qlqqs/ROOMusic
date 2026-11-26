@@ -161,7 +161,7 @@ func metricScoreNeeds(e metricEntry, s metricScore, w metricExpect) []metricNeed
 		case w.GroupMatch != "":
 			needs = append(needs, metricNeed{e.release, "group", w.GroupMatch})
 		default:
-			needs = append(needs, metricNeed{e.release, "terminal", strings.Join(w.allowedOutcomes(), " 或 ")})
+			needs = append(needs, metricNeed{e.release, "terminal", strings.Join(s.Accept, " 或 ")})
 		}
 	}
 	return needs

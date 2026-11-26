@@ -46,6 +46,42 @@ func liveGapsLocal(t *testing.T, f *schedulerFixture, s metricSample, name strin
 	return target, tracks
 }
 
+func TestPostgreSQLLiveGapsArtistFromTaggedRelease(t *testing.T) {
+	artist := metricArtist{ID: uuid.New(), Name: "青釉折尺三重奏"}
+	s := cMatchAlbum("岚桥纸谱", "", 3, artist.ID)
+	version := s.External.Releases[0].ID
+	s.Local.Tags = map[string]string{"MUSICBRAINZ_ALBUMID": version}
+	s.External.Artists = []metricArtist{artist}
+	s.Expect = metricExpect{Release: version, Artists: map[string]string{artist.Name: artist.ID}}
+	t.Setenv("ROOMUSIC_CURATION_METRICS_MODEL", "oracle")
+	app, entries, endpoint := runMetricSamples(t, []metricSample{s})
+	entry := entries[0]
+	if entry.drainIssue != "" {
+		t.Fatal(entry.drainIssue)
+	}
+	b3RequireCount(t, app, 1, `SELECT count(*) FROM external_links WHERE source='musicbrainz'
+		AND object_type='release' AND object_id=$1 AND method='tag_id' AND external_id=$2`, entry.release, version)
+	// 从补写后的有效专辑署名取得本地艺人，避免把别的同名艺人的对应算在本发行上。
+	localID := programString(t, app, `SELECT c.artist_id FROM artist_effective_credits c
+		JOIN artist_names n ON n.id=c.name_id WHERE c.release_id=$1 AND c.role='album_artist' AND n.spelling=$2`, entry.release, artist.Name)
+	links := metricStoredLinks(t, app)[metricLinkSubject{"artist", localID}]
+	var external []string
+	for _, link := range links {
+		if link.sourceID == "musicbrainz" {
+			external = append(external, link.value)
+		}
+	}
+	if len(external) != 1 || external[0] != artist.ID {
+		t.Errorf("发行已按标签对应、专辑艺人已补写为 %s，本地艺人的 MusicBrainz 对应为 %v，期望 %s", artist.Name, external, artist.ID)
+	}
+	if n := endpoint.usage()[s.ID]["web"].Calls; n != 0 {
+		t.Errorf("发行已提供艺人署名，联网档调用应为 0，实际 %d", n)
+	}
+	if n := entry.requests["searxng/search"]; n != 0 {
+		t.Errorf("网页搜索请求应为 0，实际 %d", n)
+	}
+}
+
 func TestPostgreSQLLiveGapsGroupTitle(t *testing.T) {
 	const original = "回廊衷声"
 	for _, tc := range []struct {

@@ -153,12 +153,13 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 		if !ok || r.Group.ID != e.Group {
 			t.Fatalf("生成明细与清单不同：%s", e.ID)
 		}
-		allowed := e.Expect.Accept
-		if len(allowed) == 0 {
+		want := e.Expect
+		if len(want.Accept) == 0 {
 			// 旧公开清单的评分接受正确的版本或发行组对应。
-			allowed = []string{"release", "release_group"}
+			want.Accept = []string{"release", "release_group"}
 		}
-		s.Samples = append(s.Samples, liveSampleScore{Title: e.Title, PublicID: e.ID, Accept: allowed})
+		want = want.withOutcomeRules()
+		s.Samples = append(s.Samples, liveSampleScore{Title: e.Title, PublicID: e.ID, Accept: want.Accept})
 		byDir[e.Directory] = i
 		for _, m := range r.Media {
 			for _, tr := range m.Tracks {
@@ -197,7 +198,7 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 			default:
 				score.Outcome = states[id]
 			}
-			for _, problem := range metricSuggestionIssues(t, e.Title, e.Expect, suggestions[id]) {
+			for _, problem := range metricSuggestionIssues(t, e.Title, want, suggestions[id]) {
 				issue(i, fmt.Sprintf("%s %s，期望 %s，实际 %s", problem.Kind, problem.Field, problem.Expected, problem.Actual))
 			}
 			s.Samples[i].Exact = s.Samples[i].Exact || exact

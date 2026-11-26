@@ -84,8 +84,8 @@ func metricEvaluateOutcomes(t *testing.T, app *integrationTestApplication, entri
 	history := metricHistories(t, app)
 	for i, entry := range entries {
 		s := &scores[i]
-		want := entry.sample.Expect
-		s.Accept = want.allowedOutcomes()
+		want := entry.sample.Expect.withOutcomeRules()
+		s.Accept = want.Accept
 		if entry.drainIssue != "" {
 			s.issue(metricIssue{Kind: "stalled", Target: s.ID, Expected: "整理完成", Actual: entry.drainIssue})
 		}
@@ -133,7 +133,7 @@ func metricEvaluateOutcomes(t *testing.T, app *integrationTestApplication, entri
 			case "wrong_merge", "wrong_link", "wrong_field", "open_pending", "unexpected_outcome", "missing_suggestion", "suggestion_can_accept", "source_closed", "stalled", "scan_field", "scan_structure", "route_missing":
 			case "missing_field":
 				// 新样本中的纠错和推断是该样本显式要求的行为。
-				if len(want.Accept) == 0 || s.Outcome != "release" && s.Outcome != "release_group" && s.Outcome != "local_cleanup" {
+				if len(entry.sample.Expect.Accept) == 0 || s.Outcome != "release" && s.Outcome != "release_group" && s.Outcome != "local_cleanup" {
 					continue
 				}
 			default:

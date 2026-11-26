@@ -45,17 +45,26 @@ type metricExpect struct {
 	MergeArtistWith []string `json:"merge_artist_with"`
 }
 
-func (e metricExpect) allowedOutcomes() []string {
-	if len(e.Accept) > 0 {
-		return e.Accept
+func (e metricExpect) withOutcomeRules() metricExpect {
+	if len(e.Accept) == 0 {
+		switch {
+		case e.GroupMatch != "":
+			e.Accept = []string{"release_group"}
+		case e.Release != "" || slices.ContainsFunc(e.Recordings, func(id string) bool { return id != "" }):
+			e.Accept = []string{"release"}
+		default:
+			e.Accept = []string{"no_usable_candidates", "unlisted"}
+		}
 	}
-	if e.GroupMatch != "" {
-		return []string{"release_group"}
+	// 允许放弃对应时，也接受只作记录的建议；开放建议必须逐条不可采纳。
+	if slices.Contains(e.Accept, "unlisted") || slices.Contains(e.Accept, "no_usable_candidates") {
+		if !slices.Contains(e.Accept, "suggestion") {
+			e.Accept = append(slices.Clone(e.Accept), "suggestion")
+		}
+		canAccept := false
+		e.SuggestionCanAccept = &canAccept
 	}
-	if e.Release != "" || slices.ContainsFunc(e.Recordings, func(id string) bool { return id != "" }) {
-		return []string{"release"}
-	}
-	return []string{"no_usable_candidates", "unlisted"}
+	return e
 }
 
 type metricLocal struct {
