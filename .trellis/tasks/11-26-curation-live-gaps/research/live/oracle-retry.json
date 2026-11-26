@@ -1,0 +1,33 @@
+{
+  "observed_at": "2026-11-26T07:28:08.482544+00:00",
+  "items": [
+    {
+      "kind": "release_match",
+      "route": "lookup",
+      "status": "waiting_route",
+      "attempts": 0,
+      "conflicts": [],
+      "directory": "11 - Moby - Ambient",
+      "resolution": null,
+      "item_tokens": 0,
+      "candidate_count": 0,
+      "item_tool_calls": 0,
+      "next_attempt_at": "2026-11-26T07:35:31.513664+00:00"
+    },
+    {
+      "kind": "release_match",
+      "route": "lookup",
+      "status": "waiting_route",
+      "attempts": 0,
+      "conflicts": [
+        "duration_mismatch"
+      ],
+      "directory": "27 - Portishead - Dummy",
+      "resolution": null,
+      "item_tokens": 0,
+      "candidate_count": 22,
+      "item_tool_calls": 0,
+      "next_attempt_at": "2026-11-26T07:34:42.317045+00:00"
+    }
+  ]
+}

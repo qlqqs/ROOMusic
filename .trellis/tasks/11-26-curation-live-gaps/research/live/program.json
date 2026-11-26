@@ -1,0 +1,1227 @@
+{
+  "conversations": 0,
+  "drained": true,
+  "elapsed_seconds": 184.58598996,
+  "empty_conversations": 0,
+  "endpoints": {
+    "musicbrainz/artist/search": 5,
+    "musicbrainz/release/lookup": 33,
+    "musicbrainz/release/search": 29
+  },
+  "finished_at": "2026-11-26T07:09:48.045173782Z",
+  "http_503": 4,
+  "http_count": 67,
+  "http_statuses": {
+    "200": 63,
+    "503": 4
+  },
+  "item_usage": {},
+  "loopback_fetch_requests": 0,
+  "loopback_search_requests": 0,
+  "loopback_web_mode": "",
+  "mode": "program",
+  "model_by_stage": {},
+  "model_routes": {},
+  "progress": {
+    "queues": [
+      {
+        "id": "release",
+        "state": "idle",
+        "remaining": 0,
+        "ready": 0,
+        "successful_requests_per_second": 0.3240379399466471,
+        "completed_items_per_second": 0.14401686219850982,
+        "eta_seconds": 0,
+        "pause_reason": null,
+        "source": null,
+        "retry_at": null
+      },
+      {
+        "id": "artwork",
+        "state": "paused",
+        "remaining": 18,
+        "ready": 0,
+        "successful_requests_per_second": null,
+        "completed_items_per_second": null,
+        "eta_seconds": null,
+        "pause_reason": "source_disabled",
+        "source": null,
+        "retry_at": null
+      },
+      {
+        "id": "lyrics",
+        "state": "paused",
+        "remaining": 348,
+        "ready": 0,
+        "successful_requests_per_second": null,
+        "completed_items_per_second": null,
+        "eta_seconds": null,
+        "pause_reason": "source_disabled",
+        "source": null,
+        "retry_at": null
+      },
+      {
+        "id": "artist_media",
+        "state": "idle",
+        "remaining": 0,
+        "ready": 0,
+        "successful_requests_per_second": null,
+        "completed_items_per_second": 0.26745988694008965,
+        "eta_seconds": 0,
+        "pause_reason": null,
+        "source": null,
+        "retry_at": null
+      },
+      {
+        "id": "fingerprint",
+        "state": "idle",
+        "remaining": 0,
+        "ready": 0,
+        "successful_requests_per_second": null,
+        "completed_items_per_second": null,
+        "eta_seconds": 0,
+        "pause_reason": null,
+        "source": null,
+        "retry_at": null
+      }
+    ],
+    "state": "idle",
+    "rule_version": 104,
+    "releases": {
+      "total": 28,
+      "processed": 28,
+      "matched": 18,
+      "uncertain": 4,
+      "no_match": 0,
+      "unlisted": 6,
+      "no_usable_candidates": 0,
+      "try_later": 0
+    },
+    "pending": {
+      "waiting_model": 13
+    },
+    "batch": null,
+    "last_pass_finished_at": "2026-11-26T07:09:45.751714663Z",
+    "model": {
+      "web_daily_token_limit": null,
+      "web_today": {
+        "date": "2026-11-26",
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "web_limit_reached": false,
+      "web_retry_at": null,
+      "state": "unavailable",
+      "unavailable_reason": "not_configured",
+      "model": "",
+      "today": {
+        "date": "2026-11-26",
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "daily_token_limit": 10000000,
+      "items": {
+        "waiting_model": 13,
+        "in_progress": 0,
+        "waiting_human": 0,
+        "shelved": 0
+      }
+    }
+  },
+  "public_sources": [
+    "musicbrainz"
+  ],
+  "queue_backoffs": {
+    "release/2026-11-26T07:07:11.876670554Z": {
+      "FirstObserved": "2026-11-26T07:07:09.956476519Z",
+      "Queue": "release",
+      "Source": "musicbrainz",
+      "Reason": "rate_limited",
+      "RetryAt": "2026-11-26T07:07:11.876670554Z"
+    },
+    "release/2026-11-26T07:07:16.089156831Z": {
+      "FirstObserved": "2026-11-26T07:07:12.524410332Z",
+      "Queue": "release",
+      "Source": "musicbrainz",
+      "Reason": "rate_limited",
+      "RetryAt": "2026-11-26T07:07:16.089156831Z"
+    },
+    "release/2026-11-26T07:07:24.302223724Z": {
+      "FirstObserved": "2026-11-26T07:07:16.651563499Z",
+      "Queue": "release",
+      "Source": "musicbrainz",
+      "Reason": "rate_limited",
+      "RetryAt": "2026-11-26T07:07:24.302223724Z"
+    },
+    "release/2026-11-26T07:09:14.539934038Z": {
+      "FirstObserved": "2026-11-26T07:09:12.808015499Z",
+      "Queue": "release",
+      "Source": "musicbrainz",
+      "Reason": "rate_limited",
+      "RetryAt": "2026-11-26T07:09:14.539934038Z"
+    }
+  },
+  "requests": [
+    {
+      "started_at": "2026-11-26T07:06:43.968990551Z",
+      "finished_at": "2026-11-26T07:06:57.273958271Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:06:57.487566097Z",
+      "finished_at": "2026-11-26T07:07:03.507360401Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:07:03.719892707Z",
+      "finished_at": "2026-11-26T07:07:03.9436409Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:07:04.723107452Z",
+      "finished_at": "2026-11-26T07:07:07.50153747Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:07:07.71300225Z",
+      "finished_at": "2026-11-26T07:07:08.051340485Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:07:08.716191043Z",
+      "finished_at": "2026-11-26T07:07:09.048929913Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:07:09.719860176Z",
+      "finished_at": "2026-11-26T07:07:09.876655287Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T07:07:11.93108113Z",
+      "finished_at": "2026-11-26T07:07:12.089139472Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T07:07:16.142928269Z",
+      "finished_at": "2026-11-26T07:07:16.302170602Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T07:07:24.355206205Z",
+      "finished_at": "2026-11-26T07:07:34.097925369Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:07:34.394512774Z",
+      "finished_at": "2026-11-26T07:07:34.611545852Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:07:36.397649128Z",
+      "finished_at": "2026-11-26T07:07:36.641682826Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:07:37.400948338Z",
+      "finished_at": "2026-11-26T07:07:47.903659734Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:07:48.101191218Z",
+      "finished_at": "2026-11-26T07:07:48.32163372Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:07:49.108270172Z",
+      "finished_at": "2026-11-26T07:07:59.883290332Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:07:59.893036593Z",
+      "finished_at": "2026-11-26T07:08:04.575373502Z",
+      "endpoint": "musicbrainz/artist/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:04.701802381Z",
+      "finished_at": "2026-11-26T07:08:04.881212778Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:05.705513884Z",
+      "finished_at": "2026-11-26T07:08:07.582016221Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:07.594358998Z",
+      "finished_at": "2026-11-26T07:08:08.164169252Z",
+      "endpoint": "musicbrainz/artist/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:08.597987597Z",
+      "finished_at": "2026-11-26T07:08:08.793679422Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:09.600759437Z",
+      "finished_at": "2026-11-26T07:08:09.785970736Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:10.604682942Z",
+      "finished_at": "2026-11-26T07:08:10.851396189Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:11.608267117Z",
+      "finished_at": "2026-11-26T07:08:12.170585996Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:12.614154803Z",
+      "finished_at": "2026-11-26T07:08:12.839956255Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:13.617011446Z",
+      "finished_at": "2026-11-26T07:08:14.176724195Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:14.620319026Z",
+      "finished_at": "2026-11-26T07:08:14.815646416Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:15.623357853Z",
+      "finished_at": "2026-11-26T07:08:16.290231207Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:16.626108363Z",
+      "finished_at": "2026-11-26T07:08:16.810350297Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:17.629052319Z",
+      "finished_at": "2026-11-26T07:08:17.833675358Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:18.63210137Z",
+      "finished_at": "2026-11-26T07:08:18.896696044Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:19.643371529Z",
+      "finished_at": "2026-11-26T07:08:19.875736719Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:20.654832889Z",
+      "finished_at": "2026-11-26T07:08:21.08045642Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:21.658239871Z",
+      "finished_at": "2026-11-26T07:08:26.355599521Z",
+      "endpoint": "musicbrainz/artist/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:26.364090202Z",
+      "finished_at": "2026-11-26T07:08:37.40764708Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:37.531490559Z",
+      "finished_at": "2026-11-26T07:08:37.709455485Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:38.534578771Z",
+      "finished_at": "2026-11-26T07:08:38.712108677Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:39.537991259Z",
+      "finished_at": "2026-11-26T07:08:39.726331214Z",
+      "endpoint": "musicbrainz/artist/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:40.541531472Z",
+      "finished_at": "2026-11-26T07:08:40.74180893Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:41.547759568Z",
+      "finished_at": "2026-11-26T07:08:41.734214443Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:42.551027926Z",
+      "finished_at": "2026-11-26T07:08:42.763177464Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:43.554592752Z",
+      "finished_at": "2026-11-26T07:08:43.861275491Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:44.564626182Z",
+      "finished_at": "2026-11-26T07:08:44.782158338Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:45.568096263Z",
+      "finished_at": "2026-11-26T07:08:45.755752574Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:08:46.571245748Z",
+      "finished_at": "2026-11-26T07:09:01.532886765Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:01.648980856Z",
+      "finished_at": "2026-11-26T07:09:07.894041879Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:07.901983139Z",
+      "finished_at": "2026-11-26T07:09:08.14125182Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:08.905058512Z",
+      "finished_at": "2026-11-26T07:09:09.165777332Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:09.908005781Z",
+      "finished_at": "2026-11-26T07:09:12.204040702Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:12.383151878Z",
+      "finished_at": "2026-11-26T07:09:12.539917863Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 503,
+      "retry_after": "1"
+    },
+    {
+      "started_at": "2026-11-26T07:09:14.722921674Z",
+      "finished_at": "2026-11-26T07:09:14.905665362Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:15.725608582Z",
+      "finished_at": "2026-11-26T07:09:15.984382319Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:16.728542267Z",
+      "finished_at": "2026-11-26T07:09:16.923165916Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:17.731605691Z",
+      "finished_at": "2026-11-26T07:09:17.970583711Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:18.735444573Z",
+      "finished_at": "2026-11-26T07:09:18.95651168Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:19.746999037Z",
+      "finished_at": "2026-11-26T07:09:19.960655036Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:20.750661243Z",
+      "finished_at": "2026-11-26T07:09:20.930240985Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:21.753514595Z",
+      "finished_at": "2026-11-26T07:09:22.050451035Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:22.756824157Z",
+      "finished_at": "2026-11-26T07:09:22.959384563Z",
+      "endpoint": "musicbrainz/artist/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:23.760466986Z",
+      "finished_at": "2026-11-26T07:09:24.338194928Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:24.763471857Z",
+      "finished_at": "2026-11-26T07:09:25.124165366Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:25.766652084Z",
+      "finished_at": "2026-11-26T07:09:25.948629161Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:26.770031041Z",
+      "finished_at": "2026-11-26T07:09:27.000496098Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:27.773171167Z",
+      "finished_at": "2026-11-26T07:09:27.957400575Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:28.776898356Z",
+      "finished_at": "2026-11-26T07:09:28.954130273Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:29.78052226Z",
+      "finished_at": "2026-11-26T07:09:29.958837376Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:30.784042194Z",
+      "finished_at": "2026-11-26T07:09:42.791479862Z",
+      "endpoint": "musicbrainz/release/search",
+      "status": 200
+    },
+    {
+      "started_at": "2026-11-26T07:09:42.799952866Z",
+      "finished_at": "2026-11-26T07:09:43.406832836Z",
+      "endpoint": "musicbrainz/release/lookup",
+      "status": 200
+    }
+  ],
+  "score": {
+    "accepted_samples": 15,
+    "samples": [
+      {
+        "outcome": "release_group",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": false,
+        "title": "唱遊大世界王菲香港演唱會98–99",
+        "expected_release_id": "09b6136c-80ee-4576-b157-e08c422dce1f",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "release",
+              "expected_value": "09b6136c-80ee-4576-b157-e08c422dce1f",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": false,
+        "group_only": true,
+        "scanned_tracks": 29,
+        "issues": [
+          "待定项未结：verify_name/waiting_model"
+        ]
+      },
+      {
+        "outcome": "unlisted",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": false,
+        "title": "菲主打",
+        "expected_release_id": "732119e7-64bf-4110-932f-edc24f3f3adf",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "release",
+              "expected_value": "732119e7-64bf-4110-932f-edc24f3f3adf",
+              "value_seen": false,
+              "evidence_complete": false
+            },
+            {
+              "required_evidence": "title",
+              "expected_value": "菲主打",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": false,
+        "group_only": false,
+        "scanned_tracks": 14,
+        "issues": [
+          "专辑显示名 \"菲主答\"，期望 \"菲主打\"",
+          "终态 \"unlisted\"，允许 [release release_group]",
+          "缺少清单中的发行或发行组对应"
+        ]
+      },
+      {
+        "outcome": "release",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "菲賣品",
+        "expected_release_id": "e5c9d96f-2435-45c2-860b-33ad4e299a72",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 18
+      },
+      {
+        "outcome": "release_group",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "Il canto delle pellicole",
+        "expected_release_id": "a5240127-b644-412d-a0a7-12b4f0fce68d",
+        "complete": true,
+        "exact_release": false,
+        "group_only": true,
+        "scanned_tracks": 10
+      },
+      {
+        "outcome": "release",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "Goodbye",
+        "expected_release_id": "7d3b742e-b799-4f1b-9246-11689fe1524b",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 9
+      },
+      {
+        "outcome": "unlisted",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": false,
+        "title": "Boys for Pele",
+        "expected_release_id": "4c31aef1-177e-4bba-9a56-180e21a0d043",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "release",
+              "expected_value": "4c31aef1-177e-4bba-9a56-180e21a0d043",
+              "value_seen": false,
+              "evidence_complete": false
+            },
+            {
+              "required_evidence": "title",
+              "expected_value": "Boys for Pele",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": false,
+        "group_only": false,
+        "scanned_tracks": 18,
+        "issues": [
+          "专辑显示名 \"Tori Amos - Boys for Pele\"，期望 \"Boys for Pele\"",
+          "待定项未结：local_cleanup/waiting_model",
+          "终态 \"unlisted\"，允许 [release release_group]",
+          "缺少清单中的发行或发行组对应"
+        ]
+      },
+      {
+        "outcome": "release",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "The Division Bell",
+        "expected_release_id": "65ee4ee0-2eb7-33f9-b1b3-aeb8b192a66c",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 11
+      },
+      {
+        "outcome": "release",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "Gilgamesh",
+        "expected_release_id": "c8664454-4cda-483c-9e10-90e5393a1cd6",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 24
+      },
+      {
+        "outcome": "release_group",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "The Belly of an Architect",
+        "expected_release_id": "89803205-72dc-42dd-8897-f294ff33d1b9",
+        "complete": true,
+        "exact_release": false,
+        "group_only": true,
+        "scanned_tracks": 11
+      },
+      {
+        "outcome": "release",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "Amadeus: Special Edition: The Director’s Cut",
+        "expected_release_id": "3ef22e9f-d89f-4aa3-aea5-1ad7ec297120",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 30
+      },
+      {
+        "outcome": "unlisted",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": false,
+        "title": "Ambient",
+        "expected_release_id": "dd9e8a79-e72f-3b7c-8841-6e31fddca7ef",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "release",
+              "expected_value": "dd9e8a79-e72f-3b7c-8841-6e31fddca7ef",
+              "value_seen": false,
+              "evidence_complete": false
+            },
+            {
+              "required_evidence": "title",
+              "expected_value": "Ambient",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": false,
+        "group_only": false,
+        "scanned_tracks": 12,
+        "issues": [
+          "专辑显示名 \"Ambinet\"，期望 \"Ambient\"",
+          "终态 \"unlisted\"，允许 [release release_group]",
+          "缺少清单中的发行或发行组对应"
+        ]
+      },
+      {
+        "outcome": "release_group",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "M.elle le \"Gladiator\"",
+        "expected_release_id": "4b305f41-b57e-452a-9ba5-aa8fd8d41c4c",
+        "complete": true,
+        "exact_release": false,
+        "group_only": true,
+        "scanned_tracks": 3
+      },
+      {
+        "outcome": "unlisted",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": false,
+        "title": "…I Care Because You Do",
+        "expected_release_id": "8ee20d5c-df4a-31c9-8ad2-0b01fef2c640",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "release",
+              "expected_value": "8ee20d5c-df4a-31c9-8ad2-0b01fef2c640",
+              "value_seen": false,
+              "evidence_complete": false
+            },
+            {
+              "required_evidence": "title",
+              "expected_value": "…I Care Because You Do",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": false,
+        "group_only": false,
+        "scanned_tracks": 12,
+        "issues": [
+          "专辑显示名 \"Aphex Twin - …I Care Because You Do\"，期望 \"…I Care Because You Do\"",
+          "待定项未结：local_cleanup/waiting_model",
+          "终态 \"unlisted\"，允许 [release release_group]",
+          "缺少清单中的发行或发行组对应"
+        ]
+      },
+      {
+        "outcome": "release",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "soundtrack from thirtysomething",
+        "expected_release_id": "8add377d-8c16-4fc9-99ef-c3a7f5462ae0",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 18
+      },
+      {
+        "outcome": "release",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": false,
+        "title": "Arise",
+        "expected_release_id": "49f662c8-2ddf-44c4-9d19-986bcda68416",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "release",
+              "expected_value": "49f662c8-2ddf-44c4-9d19-986bcda68416",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 9,
+        "issues": [
+          "待定项未结：verify_name/waiting_model"
+        ]
+      },
+      {
+        "outcome": "release",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "Dive Into Disney",
+        "expected_release_id": "4cea9c99-b4fb-4eb4-8c77-f9048aa49e6a",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 14
+      },
+      {
+        "outcome": "release_group",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "The Bower of Despair",
+        "expected_release_id": "51979eeb-3ef4-413b-95ea-94054b1520ab",
+        "complete": true,
+        "exact_release": false,
+        "group_only": true,
+        "scanned_tracks": 11
+      },
+      {
+        "outcome": "release",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "Powerslave",
+        "expected_release_id": "4766bf83-3b58-4584-b75a-43917627b790",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 8
+      },
+      {
+        "outcome": "release",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": false,
+        "title": "Gettin’ In Over My Head",
+        "expected_release_id": "88c69ac5-5163-48cc-a620-72f9004fac28",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "release",
+              "expected_value": "88c69ac5-5163-48cc-a620-72f9004fac28",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 13,
+        "issues": [
+          "待定项未结：verify_name/waiting_model"
+        ]
+      },
+      {
+        "outcome": "release",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "Elysian Fields",
+        "expected_release_id": "1fe4b6e8-3d91-4478-bb96-c37f012ab53c",
+        "complete": true,
+        "exact_release": true,
+        "group_only": false,
+        "scanned_tracks": 14
+      },
+      {
+        "outcome": "release_group",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "Alive 2007",
+        "expected_release_id": "def847d5-48a6-4bb6-8887-ae4f7f945e6c",
+        "complete": true,
+        "exact_release": false,
+        "group_only": true,
+        "scanned_tracks": 13
+      },
+      {
+        "outcome": "uncertain",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": false,
+        "title": "Music Has the Right to Children",
+        "expected_release_id": "df884d73-6740-43d1-bca6-7840850f6db6",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "release",
+              "expected_value": "df884d73-6740-43d1-bca6-7840850f6db6",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": false,
+        "group_only": false,
+        "scanned_tracks": 17,
+        "issues": [
+          "待定项未结：release_match/waiting_model",
+          "终态 \"uncertain\"，允许 [release release_group]",
+          "缺少清单中的发行或发行组对应"
+        ]
+      },
+      {
+        "outcome": "uncertain",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": false,
+        "title": "The Matrix",
+        "expected_release_id": "b0492de5-8bda-3f4a-91ac-a562eb1c0648",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "release",
+              "expected_value": "b0492de5-8bda-3f4a-91ac-a562eb1c0648",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": false,
+        "group_only": false,
+        "scanned_tracks": 13,
+        "issues": [
+          "待定项未结：release_match/waiting_model",
+          "终态 \"uncertain\"，允许 [release release_group]",
+          "缺少清单中的发行或发行组对应"
+        ]
+      },
+      {
+        "outcome": "release_group",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": true,
+        "title": "My Life in the Bush of Ghosts",
+        "expected_release_id": "c2404208-9e35-458b-b0b6-40f5337f7ed1",
+        "complete": true,
+        "exact_release": false,
+        "group_only": true,
+        "scanned_tracks": 12
+      },
+      {
+        "outcome": "unlisted",
+        "accept": [
+          "release",
+          "release_group"
+        ],
+        "accepted": false,
+        "title": "千のナイフ",
+        "expected_release_id": "f09ba29c-bc61-4965-aa44-e6dddbeafe1b",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "release",
+              "expected_value": "f09ba29c-bc61-4965-aa44-e6dddbeafe1b",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": false,
+        "group_only": false,
+        "scanned_tracks": 6,
+        "issues": [
+          "终态 \"unlisted\"，允许 [release release_group]",
+          "缺少清单中的发行或发行组对应"
+        ]
+      },
+      {
+        "outcome": "uncertain",
+        "accept": [
+          "release_group"
+        ],
+        "accepted": false,
+        "title": "Mezzanine",
+        "expected_release_id": "0d33ef7a-1f5d-4365-b807-b412271b99c3",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "group",
+              "expected_value": "6f9f6899-c0d3-311d-ae87-a10ae6bc53a9",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": false,
+        "group_only": false,
+        "scanned_tracks": 6,
+        "issues": [
+          "待定项未结：release_match/waiting_model",
+          "终态 \"uncertain\"，允许 [release_group]",
+          "缺少清单中的发行或发行组对应"
+        ]
+      },
+      {
+        "outcome": "uncertain",
+        "accept": [
+          "release_group"
+        ],
+        "accepted": false,
+        "title": "Dummy",
+        "expected_release_id": "1d6b086a-aca2-4511-8dfc-789b560ae3fb",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "group",
+              "expected_value": "48140466-cff6-3222-bd55-63c27e43190d",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": false,
+        "group_only": false,
+        "scanned_tracks": 12,
+        "issues": [
+          "待定项未结：release_match/waiting_model",
+          "终态 \"uncertain\"，允许 [release_group]",
+          "缺少清单中的发行或发行组对应"
+        ]
+      },
+      {
+        "outcome": "unlisted",
+        "accept": [
+          "release",
+          "release_group",
+          "local_cleanup",
+          "unlisted",
+          "suggestion"
+        ],
+        "accepted": false,
+        "title": "浮躁",
+        "expected_release_id": "45e62a56-76c8-35be-b3f3-c5ed3781e2d4",
+        "complete": false,
+        "failure_attribution": {
+          "category": "info_missing",
+          "checks": [
+            {
+              "required_evidence": "release",
+              "expected_value": "45e62a56-76c8-35be-b3f3-c5ed3781e2d4",
+              "value_seen": false,
+              "evidence_complete": false
+            },
+            {
+              "required_evidence": "title",
+              "expected_value": "浮躁",
+              "value_seen": false,
+              "evidence_complete": false
+            }
+          ]
+        },
+        "exact_release": false,
+        "group_only": false,
+        "scanned_tracks": 10,
+        "issues": [
+          "专辑显示名 \"¸¡Ôê\"，期望 \"浮躁\"",
+          "待定项未结：local_cleanup/waiting_model",
+          "缺少清单中的发行或发行组对应"
+        ]
+      }
+    ],
+    "completed_samples": 15,
+    "wrong_links": 0,
+    "wrong_merges": 0,
+    "wrong_fields": 0,
+    "open_items": 13,
+    "failure_attribution": {
+      "info_missing": 13,
+      "model_judgment": 0,
+      "source_unavailable": 0
+    },
+    "correct_release_matches_by_stage": {
+      "lookup": 0,
+      "program": 18,
+      "select": 0,
+      "web": 0
+    },
+    "model_item_outcomes": {
+      "unclaimed/local_cleanup/waiting_model/": 3,
+      "unclaimed/release_match/waiting_model/": 4,
+      "unclaimed/verify_name/waiting_model/": 6
+    }
+  },
+  "started_at": "2026-11-26T07:06:43.459183822Z",
+  "token_estimate": "请求与 SSE 响应分别按字节数除以 4 向下取整",
+  "user_agent": "ROOMusic/dev ( https://github.com/qlqqs/ROOMusic )"
+}
