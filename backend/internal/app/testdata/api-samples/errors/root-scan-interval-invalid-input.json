@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_input",
+      "message": "定时扫描间隔无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

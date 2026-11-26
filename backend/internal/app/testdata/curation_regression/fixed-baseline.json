@@ -1,0 +1,1781 @@
+{
+  "samples": [
+    {
+      "id": "editions-model-quartet",
+      "mode": "program",
+      "expected": "release_group",
+      "actual": "候选过多",
+      "program_status": [
+        "uncertain/search/too_many"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/release/search": 2
+      },
+      "elapsed_ms": 614,
+      "correct": false
+    },
+    {
+      "id": "embedded-artist",
+      "mode": "program",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 3
+      },
+      "elapsed_ms": 856,
+      "correct": false
+    },
+    {
+      "id": "one-char",
+      "mode": "program",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 3
+      },
+      "elapsed_ms": 662,
+      "correct": false
+    },
+    {
+      "id": "romanized",
+      "mode": "program",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 3
+      },
+      "elapsed_ms": 963,
+      "correct": false
+    },
+    {
+      "id": "legacy-one",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/search"
+      ],
+      "external_ids": {
+        "01.mp3/track": [
+          "4f232519-d15f-5f0a-9509-f8d6a7cd0776"
+        ],
+        "02.mp3/track": [
+          "dc49f7b0-33e8-514b-9de4-c0294ce03844"
+        ],
+        "03.mp3/track": [
+          "0d4005bb-dbd4-5cbf-b619-affb8b6529c9"
+        ],
+        "04.mp3/track": [
+          "4f562c74-0ab6-5396-81fd-9376020f603c"
+        ],
+        "Kestrel Foil Loft/artist": [
+          "c1c1c5be-511e-541e-aea5-b38e3f5e7bfb"
+        ],
+        "专辑/release": [
+          "bc264140-d4ed-50ed-96b8-8ef6bfadf623"
+        ],
+        "专辑/release_group": [
+          "3166bc1c-6b75-5474-806b-8b7b485354ad"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "Kestrel Foil Loft",
+        "专辑/label": "弦湾唱片",
+        "专辑/title": "去靛雾"
+      },
+      "scan_diff": [
+        "title 期望 去靛雾，实际 È¥µåÎí"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1
+      },
+      "elapsed_ms": 985,
+      "correct": false
+    },
+    {
+      "id": "legacy-many",
+      "mode": "program",
+      "expected": "skip",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1
+      },
+      "elapsed_ms": 662,
+      "correct": false
+    },
+    {
+      "id": "sampler-five",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/search"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "06a21021-4610-5521-90bb-acb9ccf6dd54"
+        ],
+        "02.flac/track": [
+          "5e187af8-ff81-5f0a-b098-cbcfac466aec"
+        ],
+        "03.flac/track": [
+          "2c1dc81e-78b9-52d7-bed8-fa32abac5e7a"
+        ],
+        "04.flac/track": [
+          "adac0729-98d7-5e99-96b8-b7291b453726"
+        ],
+        "05.flac/track": [
+          "c6832416-f4d0-5175-84ff-211305b7351c"
+        ],
+        "专辑/release": [
+          "0e7931f3-bd19-5976-b4b7-a69377cbe621"
+        ],
+        "专辑/release_group": [
+          "91524edd-8441-51df-9f2f-c5077af08804"
+        ],
+        "汐格1/artist": [
+          "32d39a74-95ae-54bb-9bf7-deb15e2c1a3f"
+        ],
+        "汐格2/artist": [
+          "d6d9fce3-00f3-52be-a23e-9b71af603b61"
+        ],
+        "汐格3/artist": [
+          "8891a25e-8c97-56e4-8bb8-80ed3a6973ae"
+        ],
+        "汐格4/artist": [
+          "5a5b26b3-7800-505e-9121-29e79f0148e1"
+        ],
+        "汐格5/artist": [
+          "f44a0aa3-2221-516d-a86f-94adda0c17f5"
+        ]
+      },
+      "writes": {
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1
+      },
+      "elapsed_ms": 1426,
+      "correct": true
+    },
+    {
+      "id": "disc-folders",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/search"
+      ],
+      "external_ids": {
+        "CD1/01.flac/track": [
+          "6ac798b3-beaa-5a68-a94d-622995990b42"
+        ],
+        "CD1/02.flac/track": [
+          "8f05aef9-b2d6-5eab-962d-a068974644f4"
+        ],
+        "CD2/01.flac/track": [
+          "23aa90a9-6e5e-5704-89dc-acc957f43a4b"
+        ],
+        "CD2/02.flac/track": [
+          "587538f9-ae73-5886-910c-8f922a26f5fb"
+        ],
+        "专辑/release": [
+          "4e05f319-cada-587b-8508-3b6585e2df57"
+        ],
+        "专辑/release_group": [
+          "c83973b9-6774-5530-b649-904ae01d4c3b"
+        ],
+        "砾环室/artist": [
+          "0d3808af-3d40-5f7e-86ee-0876702a1232"
+        ]
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1
+      },
+      "elapsed_ms": 783,
+      "correct": true
+    },
+    {
+      "id": "named-bonus",
+      "mode": "program",
+      "expected": "release",
+      "actual": "conflict",
+      "program_status": [
+        "uncertain/search/track_count"
+      ],
+      "scan_diff": [
+        "碟标题：Medium",
+        "预期一张，实得 3 张"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 3
+      },
+      "elapsed_ms": 1826,
+      "correct": false
+    },
+    {
+      "id": "filename-only",
+      "mode": "program",
+      "expected": "skip",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "scan_diff": [
+        "01 镜舟 - 昏灯1.flac 标题 昏灯1",
+        "02 镜舟 - 昏灯2.flac 标题 昏灯2",
+        "03 镜舟 - 昏灯3.flac 标题 昏灯3",
+        "04 镜舟 - 昏灯4.flac 标题 昏灯4"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 2
+      },
+      "elapsed_ms": 641,
+      "correct": false
+    },
+    {
+      "id": "name-only-gap",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/tag_id"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "6cdf8a71-9a0a-57b5-b375-aff226b4dcf8"
+        ],
+        "02.flac/track": [
+          "8857a6dd-f696-5070-8e7c-40d74a7129e0"
+        ],
+        "03.flac/track": [
+          "91b919c5-6b60-5059-b603-942802e81965"
+        ],
+        "04.flac/track": [
+          "04534346-590c-5815-8af1-d0c682506e79"
+        ],
+        "专辑/release": [
+          "2d7140b4-ec71-51be-9c42-72e0bad79ec3"
+        ],
+        "专辑/release_group": [
+          "df3bd5ca-6d92-5b8a-85db-8ecd8b227440"
+        ],
+        "环堤社/artist": [
+          "0d4a4c53-04d2-5084-956f-523cf2c3230f"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "环堤社",
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1
+      },
+      "elapsed_ms": 811,
+      "correct": true
+    },
+    {
+      "id": "mixed-contiguous",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/search"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "3a93d203-4ee8-5c0c-a6c0-5a33f24d41ef"
+        ],
+        "02.flac/track": [
+          "ada893b9-2ec0-5fa5-9300-0015c0f7def6"
+        ],
+        "03.flac/track": [
+          "fd2a0869-2441-58d8-98bd-dacc7df7bef7"
+        ],
+        "04.flac/track": [
+          "171b0390-0f69-58b3-bbc3-79b25a680f7f"
+        ],
+        "专辑/release": [
+          "09af8394-3825-53f6-b98d-b087fd40966f"
+        ],
+        "专辑/release_group": [
+          "57145245-d33f-5f85-9b91-15a4003f1de8"
+        ],
+        "合灯班/artist": [
+          "dc988e6a-69c6-51dd-a977-4d563cdab4bc"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "合灯班",
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1
+      },
+      "elapsed_ms": 816,
+      "correct": true
+    },
+    {
+      "id": "mixed-a",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/search"
+      ],
+      "external_ids": {
+        "01 青篷.flac/track": [
+          "ee2b9abf-b7a8-5a44-92e2-5cf0be9abe45"
+        ],
+        "02 青篷.flac/track": [
+          "04ed5cc4-95e6-5dcd-be41-2ab7a4c1ab54"
+        ],
+        "专辑/release": [
+          "c9001d04-59fb-548d-840e-db6691d1e3dd"
+        ],
+        "专辑/release_group": [
+          "8c89e1c3-28c1-51ca-8817-cfd0a14ebeeb"
+        ],
+        "沧木/artist": [
+          "eff3e28d-ae8a-5359-8f21-1ebb15fb8db9"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "沧木",
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1
+      },
+      "elapsed_ms": 875,
+      "correct": true
+    },
+    {
+      "id": "mixed-b",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/search"
+      ],
+      "external_ids": {
+        "01 赤篷.flac/track": [
+          "06184167-d9a5-510a-8ba3-ade879e54ae2"
+        ],
+        "02 赤篷.flac/track": [
+          "7b98a6c7-83cb-52f9-94bb-6587ab70136d"
+        ],
+        "专辑/release": [
+          "588aa52a-e920-5a4f-92a3-807f11148188"
+        ],
+        "专辑/release_group": [
+          "907d4e23-f9e1-5a85-b6cd-bcd108ac64e1"
+        ],
+        "槲溪/artist": [
+          "2175160f-e85e-5178-a9e6-a1b12ddea7db"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "槲溪",
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1
+      },
+      "elapsed_ms": 753,
+      "correct": true
+    },
+    {
+      "id": "amp-comma",
+      "mode": "program",
+      "expected": "release",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "scan_diff": [
+        "artist 期望 棱镜 \u0026 林, 海，实际 林 / 棱镜 / 海",
+        "署名 [林 棱镜 海]"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 2
+      },
+      "elapsed_ms": 505,
+      "correct": false
+    },
+    {
+      "id": "picard-01",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/tag_id"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "9831e73c-a53b-5f07-bd88-b6a49822597d"
+        ],
+        "02.flac/track": [
+          "48be6a68-64dc-598f-a832-66a3ade6151d"
+        ],
+        "03.flac/track": [
+          "98a3cea3-4b11-5950-9173-7266ef4d328c"
+        ],
+        "Aster Vale/artist": [
+          "1bfbb2b0-f023-519a-a530-1b6f12e505e0"
+        ],
+        "专辑/release": [
+          "30bc4a7e-5b5f-5a44-85d5-e459bf9f7ac9"
+        ],
+        "专辑/release_group": [
+          "a5ab7e7e-bf95-5889-9bd4-0cb1e28f9dd3"
+        ]
+      },
+      "writes": {
+        "专辑/label": "Fir Quay Records"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1
+      },
+      "elapsed_ms": 721,
+      "correct": true
+    },
+    {
+      "id": "cue-01",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/disc_id"
+      ],
+      "external_ids": {
+        "CUE/01/track": [
+          "87de4f3a-b320-58ae-99c1-b8cbbd8f1fea"
+        ],
+        "CUE/02/track": [
+          "5154bf08-5a33-5c96-b2d2-bcd3d801bcc1"
+        ],
+        "CUE/03/track": [
+          "3e3d337f-3f79-5a4f-b04e-5c3d50560d8b"
+        ],
+        "Pine Glass Quartet/artist": [
+          "1224a415-ebcb-5e12-9091-9374c0783b72"
+        ],
+        "专辑/release": [
+          "161c80ce-6841-5fa2-8534-9b07f16b98b3"
+        ],
+        "专辑/release_group": [
+          "4e81c50a-94be-55f9-b4ab-15e7eaad959e"
+        ]
+      },
+      "writes": {
+        "专辑/label": "Fir Quay Records",
+        "专辑/year": "2019"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/discid/lookup": 1,
+        "musicbrainz/release/search": 1
+      },
+      "elapsed_ms": 701,
+      "correct": true
+    },
+    {
+      "id": "identifier-01",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/barcode"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "e77b8074-4d9a-5572-a04e-aba8793a15bf"
+        ],
+        "02.flac/track": [
+          "740bda00-6f87-5762-86ad-b796ad0dffed"
+        ],
+        "03.flac/track": [
+          "ffd8b7e2-df9c-5fa9-84ed-6b51619b76e2"
+        ],
+        "04.flac/track": [
+          "2b758d6b-1ab0-5ece-bad3-f8473c58a171"
+        ],
+        "Marble Axis Duo/artist": [
+          "699978cb-8da5-5e02-abfb-d7ca80af8318"
+        ],
+        "专辑/release": [
+          "fd3beb0f-ea24-59e0-a1a9-ffd7220d3ae4"
+        ],
+        "专辑/release_group": [
+          "2bdcf1b9-4e69-5258-8f3c-3f74faa6f564"
+        ]
+      },
+      "writes": {
+        "专辑/catalog_number": "FQ-210",
+        "专辑/label": "Fir Quay Records"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1
+      },
+      "elapsed_ms": 764,
+      "correct": true
+    },
+    {
+      "id": "catalog-label",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/catalog_number"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "4872e91e-258b-59b2-85d6-afe085a43933"
+        ],
+        "02.flac/track": [
+          "3f00ce95-cba9-5f0e-a880-18a16de69d4e"
+        ],
+        "03.flac/track": [
+          "47e199ac-b21a-5664-98ea-de64dc84ac92"
+        ],
+        "04.flac/track": [
+          "7c5edb2d-ea3b-5c30-939d-28cf70072d48"
+        ],
+        "Olive Steeple Duo/artist": [
+          "7e8fad6d-2bd2-5142-b898-28da798ce9c7"
+        ],
+        "专辑/release": [
+          "051e31d2-e57b-5274-a196-3c16a660b225"
+        ],
+        "专辑/release_group": [
+          "c3264152-9b81-5546-a10b-f8402deb2ae6"
+        ]
+      },
+      "writes": {
+        "专辑/barcode": "8600000000013"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1
+      },
+      "elapsed_ms": 1166,
+      "correct": true
+    },
+    {
+      "id": "isrc-only",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/isrc"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "77090702-7d37-5bf7-b841-ac4b0495ad62"
+        ],
+        "02.flac/track": [
+          "9a9ce6f9-abda-5809-b742-d45236b2747a"
+        ],
+        "03.flac/track": [
+          "d8bb8990-3984-51b3-9a25-553b58bcec33"
+        ],
+        "04.flac/track": [
+          "ae779a25-c532-53e5-b807-90db700b02e7"
+        ],
+        "专辑/release": [
+          "64a81aa7-db0a-5dfe-b7f7-6927e3992f5d"
+        ],
+        "专辑/release_group": [
+          "bf146054-e0e5-5467-ab6c-942cf84c8bf8"
+        ],
+        "西桨/artist": [
+          "cd911485-867d-5db5-b44b-e423088979a9"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "西桨",
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/recording/search": 1,
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1
+      },
+      "elapsed_ms": 715,
+      "correct": true
+    },
+    {
+      "id": "fingerprint-only",
+      "mode": "program",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/acoustid"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "09a9dc6b-c54b-57a0-9799-3e2ccbbf3952"
+        ],
+        "02.flac/track": [
+          "70e2afd0-e00e-5739-b3bb-07eb0fe09840"
+        ],
+        "03.flac/track": [
+          "6de226e7-71d9-5703-a787-7d95822ed6c0"
+        ],
+        "04.flac/track": [
+          "42980841-cd72-55f4-9e9b-1adf358081dc"
+        ],
+        "专辑/release": [
+          "3ef3818b-3dca-5931-b155-8c2fe2c2fa93"
+        ],
+        "专辑/release_group": [
+          "d841e6c4-c3b2-525b-99e6-a028dc806487"
+        ]
+      },
+      "writes": {
+        "01.flac/artist": "折浪",
+        "01.flac/title": "灯序1",
+        "02.flac/artist": "折浪",
+        "02.flac/title": "灯序2",
+        "03.flac/artist": "折浪",
+        "03.flac/title": "灯序3",
+        "04.flac/artist": "折浪",
+        "04.flac/title": "灯序4",
+        "专辑/album_artist": "折浪",
+        "专辑/label": "弦湾唱片",
+        "专辑/title": "雾窗"
+      },
+      "requests_by_endpoint": {
+        "acoustid/v2/lookup": 4,
+        "musicbrainz/release/lookup": 1
+      },
+      "elapsed_ms": 1029,
+      "correct": true
+    },
+    {
+      "id": "id-conflict",
+      "mode": "program",
+      "expected": "conflict",
+      "actual": "conflict",
+      "program_status": [
+        "uncertain/tag_id/duration_mismatch/position_conflict/tag_text_mismatch"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/lookup": 1,
+        "musicbrainz/release/lookup": 1
+      },
+      "elapsed_ms": 484,
+      "correct": false
+    },
+    {
+      "id": "unlisted-01",
+      "mode": "program",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 2
+      },
+      "elapsed_ms": 496,
+      "correct": false
+    },
+    {
+      "id": "spoken-podcast",
+      "mode": "program",
+      "expected": "skip",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 2
+      },
+      "elapsed_ms": 498,
+      "correct": false
+    },
+    {
+      "id": "unknown-disc-a",
+      "mode": "program",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 2
+      },
+      "elapsed_ms": 522,
+      "correct": false
+    },
+    {
+      "id": "unknown-disc-b",
+      "mode": "program",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/release/search": 2
+      },
+      "elapsed_ms": 469,
+      "correct": false
+    },
+    {
+      "id": "missing-position",
+      "mode": "program",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "scan_diff": [
+        "叶丁.flac 碟/轨 1/3，推断=true"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 2
+      },
+      "elapsed_ms": 596,
+      "correct": false
+    },
+    {
+      "id": "field-tie",
+      "mode": "program",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "scan_diff": [
+        "打平年份被选为 2010"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 2
+      },
+      "elapsed_ms": 519,
+      "correct": false
+    },
+    {
+      "id": "editions-model-quartet",
+      "mode": "script",
+      "expected": "release_group",
+      "actual": "release_group",
+      "program_status": [
+        "matched/model"
+      ],
+      "external_ids": {
+        "专辑/release_group": [
+          "e1e5c582-562d-557e-bd48-550828a3dad7"
+        ],
+        "专辑/release_group_match": [
+          "e1e5c582-562d-557e-bd48-550828a3dad7"
+        ],
+        "沉栈木纹坊/artist": [
+          "55bee63f-6701-53f3-967f-318b67578182"
+        ]
+      },
+      "issues": [
+        "读版详情 4 次",
+        "进入模型识别"
+      ],
+      "missing": [
+        "专辑/year"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 4,
+        "musicbrainz/release/search": 2,
+        "openai/chat/v1/chat/completions": 4
+      },
+      "elapsed_ms": 1487,
+      "correct": false
+    },
+    {
+      "id": "embedded-artist",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/model"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "35373663-4988-5953-91a4-fda15f96ca73"
+        ],
+        "02.flac/track": [
+          "c47ef534-318e-5067-92fd-4bbbef494afb"
+        ],
+        "03.flac/track": [
+          "761e3a7a-37dc-5ef7-8b62-c80f7fdfdb07"
+        ],
+        "04.flac/track": [
+          "8e7aacf3-1fa9-5dbf-83ba-0c31305d552e"
+        ],
+        "专辑/release": [
+          "869f1824-2acd-56a7-af07-2b9218179449"
+        ],
+        "专辑/release_group": [
+          "ddb09500-799c-5a1b-8eb9-ca100243d1e7"
+        ],
+        "堤灯社/artist": [
+          "5f986a6f-53b6-5bc9-bebd-003e32b40e32"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "堤灯社",
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release-group/lookup": 1,
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 4,
+        "openai/chat/v1/chat/completions": 8
+      },
+      "elapsed_ms": 4761,
+      "correct": true
+    },
+    {
+      "id": "one-char",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/model"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "74253cd7-87f1-53e4-95dc-17b1c7e08d37"
+        ],
+        "02.flac/track": [
+          "2d9a0a75-7450-5bde-83d6-5e31353b1a08"
+        ],
+        "03.flac/track": [
+          "e3a7174e-720b-5e0a-97f8-67a805273420"
+        ],
+        "04.flac/track": [
+          "bc20bf2f-4c07-5ed0-a410-dee2bf1fad7c"
+        ],
+        "专辑/release": [
+          "8de13d13-2f17-5b01-a240-fad58c36e35a"
+        ],
+        "专辑/release_group": [
+          "e26ca902-d26d-5b18-bd76-50a3538ff14f"
+        ],
+        "潮芦社/artist": [
+          "a9d0ed0d-81ec-5278-92b1-011d450a2750"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "潮芦社",
+        "专辑/label": "弦湾唱片",
+        "专辑/title": "枝航谱"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release-group/lookup": 1,
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 4,
+        "openai/chat/v1/chat/completions": 9
+      },
+      "elapsed_ms": 1562,
+      "correct": true
+    },
+    {
+      "id": "romanized",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/model"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "9f9107ea-cea3-5b99-a8d0-6dcc1161c440"
+        ],
+        "02.flac/track": [
+          "79ba05ab-f956-5142-8777-6b13c948150d"
+        ],
+        "03.flac/track": [
+          "3ca6962d-28c4-5c30-8c1b-d726c50fe2f5"
+        ],
+        "04.flac/track": [
+          "3e1f4661-7205-593c-9152-bc365846856d"
+        ],
+        "Kiri Ensemble/artist": [
+          "6c199425-7110-522d-9d94-c2cb605924dc"
+        ],
+        "专辑/release": [
+          "ac07b9ab-2484-54f1-9263-e195fdf9a22f"
+        ],
+        "专辑/release_group": [
+          "95b8b043-27e5-5d46-96db-6cbce787dd88"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "Kiri Ensemble",
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release-group/lookup": 1,
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 4,
+        "openai/chat/v1/chat/completions": 8
+      },
+      "elapsed_ms": 1543,
+      "correct": true
+    },
+    {
+      "id": "legacy-one",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/search"
+      ],
+      "external_ids": {
+        "01.mp3/track": [
+          "4f232519-d15f-5f0a-9509-f8d6a7cd0776"
+        ],
+        "02.mp3/track": [
+          "dc49f7b0-33e8-514b-9de4-c0294ce03844"
+        ],
+        "03.mp3/track": [
+          "0d4005bb-dbd4-5cbf-b619-affb8b6529c9"
+        ],
+        "04.mp3/track": [
+          "4f562c74-0ab6-5396-81fd-9376020f603c"
+        ],
+        "Kestrel Foil Loft/artist": [
+          "c1c1c5be-511e-541e-aea5-b38e3f5e7bfb"
+        ],
+        "专辑/release": [
+          "bc264140-d4ed-50ed-96b8-8ef6bfadf623"
+        ],
+        "专辑/release_group": [
+          "3166bc1c-6b75-5474-806b-8b7b485354ad"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "Kestrel Foil Loft",
+        "专辑/label": "弦湾唱片",
+        "专辑/title": "去靛雾"
+      },
+      "scan_diff": [
+        "title 期望 去靛雾，实际 È¥µåÎí"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1,
+        "openai/chat/v1/chat/completions": 2
+      },
+      "elapsed_ms": 843,
+      "correct": false
+    },
+    {
+      "id": "legacy-many",
+      "mode": "script",
+      "expected": "release",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/"
+      ],
+      "scan_diff": [
+        "forbidden_query/musicbrainz/query 期望 不得包含 µåÎí，实际 µåÎí"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 1,
+        "openai/chat/v1/chat/completions": 21
+      },
+      "elapsed_ms": 3708,
+      "correct": false
+    },
+    {
+      "id": "sampler-five",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/search"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "06a21021-4610-5521-90bb-acb9ccf6dd54"
+        ],
+        "02.flac/track": [
+          "5e187af8-ff81-5f0a-b098-cbcfac466aec"
+        ],
+        "03.flac/track": [
+          "2c1dc81e-78b9-52d7-bed8-fa32abac5e7a"
+        ],
+        "04.flac/track": [
+          "adac0729-98d7-5e99-96b8-b7291b453726"
+        ],
+        "05.flac/track": [
+          "c6832416-f4d0-5175-84ff-211305b7351c"
+        ],
+        "专辑/release": [
+          "0e7931f3-bd19-5976-b4b7-a69377cbe621"
+        ],
+        "专辑/release_group": [
+          "91524edd-8441-51df-9f2f-c5077af08804"
+        ],
+        "汐格1/artist": [
+          "32d39a74-95ae-54bb-9bf7-deb15e2c1a3f"
+        ],
+        "汐格2/artist": [
+          "d6d9fce3-00f3-52be-a23e-9b71af603b61"
+        ],
+        "汐格3/artist": [
+          "8891a25e-8c97-56e4-8bb8-80ed3a6973ae"
+        ],
+        "汐格4/artist": [
+          "5a5b26b3-7800-505e-9121-29e79f0148e1"
+        ],
+        "汐格5/artist": [
+          "f44a0aa3-2221-516d-a86f-94adda0c17f5"
+        ]
+      },
+      "writes": {
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1,
+        "openai/chat/v1/chat/completions": 6
+      },
+      "elapsed_ms": 1106,
+      "correct": true
+    },
+    {
+      "id": "disc-folders",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/search"
+      ],
+      "external_ids": {
+        "CD1/01.flac/track": [
+          "6ac798b3-beaa-5a68-a94d-622995990b42"
+        ],
+        "CD1/02.flac/track": [
+          "8f05aef9-b2d6-5eab-962d-a068974644f4"
+        ],
+        "CD2/01.flac/track": [
+          "23aa90a9-6e5e-5704-89dc-acc957f43a4b"
+        ],
+        "CD2/02.flac/track": [
+          "587538f9-ae73-5886-910c-8f922a26f5fb"
+        ],
+        "专辑/release": [
+          "4e05f319-cada-587b-8508-3b6585e2df57"
+        ],
+        "专辑/release_group": [
+          "c83973b9-6774-5530-b649-904ae01d4c3b"
+        ],
+        "砾环室/artist": [
+          "0d3808af-3d40-5f7e-86ee-0876702a1232"
+        ]
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1,
+        "openai/chat/v1/chat/completions": 2
+      },
+      "elapsed_ms": 797,
+      "correct": true
+    },
+    {
+      "id": "named-bonus",
+      "mode": "script",
+      "expected": "release",
+      "actual": "conflict",
+      "program_status": [
+        "unlisted/search/track_count"
+      ],
+      "scan_diff": [
+        "碟标题：Medium",
+        "预期一张，实得 3 张"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 4,
+        "openai/chat/v1/chat/completions": 84
+      },
+      "elapsed_ms": 12389,
+      "correct": false
+    },
+    {
+      "id": "filename-only",
+      "mode": "script",
+      "expected": "skip",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "scan_diff": [
+        "01 镜舟 - 昏灯1.flac 标题 昏灯1",
+        "02 镜舟 - 昏灯2.flac 标题 昏灯2",
+        "03 镜舟 - 昏灯3.flac 标题 昏灯3",
+        "04 镜舟 - 昏灯4.flac 标题 昏灯4"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 3,
+        "openai/chat/v1/chat/completions": 9
+      },
+      "elapsed_ms": 2082,
+      "correct": false
+    },
+    {
+      "id": "name-only-gap",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/tag_id"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "6cdf8a71-9a0a-57b5-b375-aff226b4dcf8"
+        ],
+        "02.flac/track": [
+          "8857a6dd-f696-5070-8e7c-40d74a7129e0"
+        ],
+        "03.flac/track": [
+          "91b919c5-6b60-5059-b603-942802e81965"
+        ],
+        "04.flac/track": [
+          "04534346-590c-5815-8af1-d0c682506e79"
+        ],
+        "专辑/release": [
+          "2d7140b4-ec71-51be-9c42-72e0bad79ec3"
+        ],
+        "专辑/release_group": [
+          "df3bd5ca-6d92-5b8a-85db-8ecd8b227440"
+        ],
+        "环堤社/artist": [
+          "0d4a4c53-04d2-5084-956f-523cf2c3230f"
+        ]
+      },
+      "writes": {
+        "01.flac/title": "沉星",
+        "专辑/album_artist": "环堤社",
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "openai/chat/v1/chat/completions": 4
+      },
+      "elapsed_ms": 860,
+      "correct": true
+    },
+    {
+      "id": "mixed-contiguous",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/search"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "3a93d203-4ee8-5c0c-a6c0-5a33f24d41ef"
+        ],
+        "02.flac/track": [
+          "ada893b9-2ec0-5fa5-9300-0015c0f7def6"
+        ],
+        "03.flac/track": [
+          "fd2a0869-2441-58d8-98bd-dacc7df7bef7"
+        ],
+        "04.flac/track": [
+          "171b0390-0f69-58b3-bbc3-79b25a680f7f"
+        ],
+        "专辑/release": [
+          "09af8394-3825-53f6-b98d-b087fd40966f"
+        ],
+        "专辑/release_group": [
+          "57145245-d33f-5f85-9b91-15a4003f1de8"
+        ],
+        "合灯班/artist": [
+          "dc988e6a-69c6-51dd-a977-4d563cdab4bc"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "合灯班",
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1,
+        "openai/chat/v1/chat/completions": 2
+      },
+      "elapsed_ms": 877,
+      "correct": true
+    },
+    {
+      "id": "mixed-a",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/search"
+      ],
+      "external_ids": {
+        "01 青篷.flac/track": [
+          "ee2b9abf-b7a8-5a44-92e2-5cf0be9abe45"
+        ],
+        "02 青篷.flac/track": [
+          "04ed5cc4-95e6-5dcd-be41-2ab7a4c1ab54"
+        ],
+        "专辑/release": [
+          "c9001d04-59fb-548d-840e-db6691d1e3dd"
+        ],
+        "专辑/release_group": [
+          "8c89e1c3-28c1-51ca-8817-cfd0a14ebeeb"
+        ],
+        "沧木/artist": [
+          "eff3e28d-ae8a-5359-8f21-1ebb15fb8db9"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "沧木",
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1,
+        "openai/chat/v1/chat/completions": 2
+      },
+      "elapsed_ms": 2245,
+      "correct": true
+    },
+    {
+      "id": "mixed-b",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/search"
+      ],
+      "external_ids": {
+        "01 赤篷.flac/track": [
+          "06184167-d9a5-510a-8ba3-ade879e54ae2"
+        ],
+        "02 赤篷.flac/track": [
+          "7b98a6c7-83cb-52f9-94bb-6587ab70136d"
+        ],
+        "专辑/release": [
+          "588aa52a-e920-5a4f-92a3-807f11148188"
+        ],
+        "专辑/release_group": [
+          "907d4e23-f9e1-5a85-b6cd-bcd108ac64e1"
+        ],
+        "槲溪/artist": [
+          "2175160f-e85e-5178-a9e6-a1b12ddea7db"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "槲溪",
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1,
+        "openai/chat/v1/chat/completions": 2
+      },
+      "elapsed_ms": 1910,
+      "correct": true
+    },
+    {
+      "id": "amp-comma",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/model"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "627d566f-2846-5101-b5a0-44ee1f389647"
+        ],
+        "02.flac/track": [
+          "44235cd9-3fe8-5613-aa3b-390e9d434db0"
+        ],
+        "03.flac/track": [
+          "1a432f00-8c7d-53be-a919-e20696724aab"
+        ],
+        "04.flac/track": [
+          "ab2a0fea-354b-5e87-ab03-e1f663ba8150"
+        ],
+        "专辑/release": [
+          "7e82ded0-5fb5-5183-bd9f-83dfd5abf4e5"
+        ],
+        "专辑/release_group": [
+          "16903979-a76d-5f9a-b181-a4a7fc870521"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "棱镜 \u0026 林, 海",
+        "专辑/label": "弦湾唱片"
+      },
+      "scan_diff": [
+        "artist 期望 棱镜 \u0026 林, 海，实际 林 / 棱镜 / 海",
+        "署名 [林 棱镜 海]"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release-group/lookup": 1,
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 3,
+        "openai/chat/v1/chat/completions": 15
+      },
+      "elapsed_ms": 3897,
+      "correct": false
+    },
+    {
+      "id": "picard-01",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/tag_id"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "9831e73c-a53b-5f07-bd88-b6a49822597d"
+        ],
+        "02.flac/track": [
+          "48be6a68-64dc-598f-a832-66a3ade6151d"
+        ],
+        "03.flac/track": [
+          "98a3cea3-4b11-5950-9173-7266ef4d328c"
+        ],
+        "Aster Vale/artist": [
+          "1bfbb2b0-f023-519a-a530-1b6f12e505e0"
+        ],
+        "专辑/release": [
+          "30bc4a7e-5b5f-5a44-85d5-e459bf9f7ac9"
+        ],
+        "专辑/release_group": [
+          "a5ab7e7e-bf95-5889-9bd4-0cb1e28f9dd3"
+        ]
+      },
+      "writes": {
+        "专辑/label": "Fir Quay Records"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "openai/chat/v1/chat/completions": 2
+      },
+      "elapsed_ms": 869,
+      "correct": true
+    },
+    {
+      "id": "cue-01",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/disc_id"
+      ],
+      "external_ids": {
+        "CUE/01/track": [
+          "87de4f3a-b320-58ae-99c1-b8cbbd8f1fea"
+        ],
+        "CUE/02/track": [
+          "5154bf08-5a33-5c96-b2d2-bcd3d801bcc1"
+        ],
+        "CUE/03/track": [
+          "3e3d337f-3f79-5a4f-b04e-5c3d50560d8b"
+        ],
+        "Pine Glass Quartet/artist": [
+          "1224a415-ebcb-5e12-9091-9374c0783b72"
+        ],
+        "专辑/release": [
+          "161c80ce-6841-5fa2-8534-9b07f16b98b3"
+        ],
+        "专辑/release_group": [
+          "4e81c50a-94be-55f9-b4ab-15e7eaad959e"
+        ]
+      },
+      "writes": {
+        "专辑/label": "Fir Quay Records",
+        "专辑/year": "2019"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/discid/lookup": 1,
+        "musicbrainz/release/search": 1,
+        "openai/chat/v1/chat/completions": 2
+      },
+      "elapsed_ms": 1044,
+      "correct": true
+    },
+    {
+      "id": "identifier-01",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/barcode"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "e77b8074-4d9a-5572-a04e-aba8793a15bf"
+        ],
+        "02.flac/track": [
+          "740bda00-6f87-5762-86ad-b796ad0dffed"
+        ],
+        "03.flac/track": [
+          "ffd8b7e2-df9c-5fa9-84ed-6b51619b76e2"
+        ],
+        "04.flac/track": [
+          "2b758d6b-1ab0-5ece-bad3-f8473c58a171"
+        ],
+        "Marble Axis Duo/artist": [
+          "699978cb-8da5-5e02-abfb-d7ca80af8318"
+        ],
+        "专辑/release": [
+          "fd3beb0f-ea24-59e0-a1a9-ffd7220d3ae4"
+        ],
+        "专辑/release_group": [
+          "2bdcf1b9-4e69-5258-8f3c-3f74faa6f564"
+        ]
+      },
+      "writes": {
+        "专辑/catalog_number": "FQ-210",
+        "专辑/label": "Fir Quay Records"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1,
+        "openai/chat/v1/chat/completions": 2
+      },
+      "elapsed_ms": 813,
+      "correct": true
+    },
+    {
+      "id": "catalog-label",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/catalog_number"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "4872e91e-258b-59b2-85d6-afe085a43933"
+        ],
+        "02.flac/track": [
+          "3f00ce95-cba9-5f0e-a880-18a16de69d4e"
+        ],
+        "03.flac/track": [
+          "47e199ac-b21a-5664-98ea-de64dc84ac92"
+        ],
+        "04.flac/track": [
+          "7c5edb2d-ea3b-5c30-939d-28cf70072d48"
+        ],
+        "Olive Steeple Duo/artist": [
+          "7e8fad6d-2bd2-5142-b898-28da798ce9c7"
+        ],
+        "专辑/release": [
+          "051e31d2-e57b-5274-a196-3c16a660b225"
+        ],
+        "专辑/release_group": [
+          "c3264152-9b81-5546-a10b-f8402deb2ae6"
+        ]
+      },
+      "writes": {
+        "专辑/barcode": "8600000000013"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1,
+        "openai/chat/v1/chat/completions": 2
+      },
+      "elapsed_ms": 822,
+      "correct": true
+    },
+    {
+      "id": "isrc-only",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/isrc"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "77090702-7d37-5bf7-b841-ac4b0495ad62"
+        ],
+        "02.flac/track": [
+          "9a9ce6f9-abda-5809-b742-d45236b2747a"
+        ],
+        "03.flac/track": [
+          "d8bb8990-3984-51b3-9a25-553b58bcec33"
+        ],
+        "04.flac/track": [
+          "ae779a25-c532-53e5-b807-90db700b02e7"
+        ],
+        "专辑/release": [
+          "64a81aa7-db0a-5dfe-b7f7-6927e3992f5d"
+        ],
+        "专辑/release_group": [
+          "bf146054-e0e5-5467-ab6c-942cf84c8bf8"
+        ],
+        "西桨/artist": [
+          "cd911485-867d-5db5-b44b-e423088979a9"
+        ]
+      },
+      "writes": {
+        "专辑/album_artist": "西桨",
+        "专辑/label": "弦湾唱片"
+      },
+      "requests_by_endpoint": {
+        "musicbrainz/recording/search": 1,
+        "musicbrainz/release/lookup": 1,
+        "musicbrainz/release/search": 1,
+        "openai/chat/v1/chat/completions": 2
+      },
+      "elapsed_ms": 853,
+      "correct": true
+    },
+    {
+      "id": "fingerprint-only",
+      "mode": "script",
+      "expected": "release",
+      "actual": "release",
+      "program_status": [
+        "matched/acoustid"
+      ],
+      "external_ids": {
+        "01.flac/track": [
+          "09a9dc6b-c54b-57a0-9799-3e2ccbbf3952"
+        ],
+        "02.flac/track": [
+          "70e2afd0-e00e-5739-b3bb-07eb0fe09840"
+        ],
+        "03.flac/track": [
+          "6de226e7-71d9-5703-a787-7d95822ed6c0"
+        ],
+        "04.flac/track": [
+          "42980841-cd72-55f4-9e9b-1adf358081dc"
+        ],
+        "专辑/release": [
+          "3ef3818b-3dca-5931-b155-8c2fe2c2fa93"
+        ],
+        "专辑/release_group": [
+          "d841e6c4-c3b2-525b-99e6-a028dc806487"
+        ]
+      },
+      "writes": {
+        "01.flac/artist": "折浪",
+        "01.flac/title": "灯序1",
+        "02.flac/artist": "折浪",
+        "02.flac/title": "灯序2",
+        "03.flac/artist": "折浪",
+        "03.flac/title": "灯序3",
+        "04.flac/artist": "折浪",
+        "04.flac/title": "灯序4",
+        "专辑/album_artist": "折浪",
+        "专辑/label": "弦湾唱片",
+        "专辑/title": "雾窗"
+      },
+      "requests_by_endpoint": {
+        "acoustid/v2/lookup": 4,
+        "musicbrainz/release/lookup": 1,
+        "openai/chat/v1/chat/completions": 3
+      },
+      "elapsed_ms": 1214,
+      "correct": true
+    },
+    {
+      "id": "id-conflict",
+      "mode": "script",
+      "expected": "conflict",
+      "actual": "conflict",
+      "program_status": [
+        "unlisted/tag_id/duration_mismatch/position_conflict/tag_text_mismatch"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/lookup": 1,
+        "musicbrainz/release/lookup": 1,
+        "openai/chat/v1/chat/completions": 8
+      },
+      "elapsed_ms": 2442,
+      "correct": false
+    },
+    {
+      "id": "unlisted-01",
+      "mode": "script",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 2,
+        "openai/chat/v1/chat/completions": 4
+      },
+      "elapsed_ms": 1552,
+      "correct": false
+    },
+    {
+      "id": "spoken-podcast",
+      "mode": "script",
+      "expected": "skip",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 3,
+        "openai/chat/v1/chat/completions": 9
+      },
+      "elapsed_ms": 2116,
+      "correct": false
+    },
+    {
+      "id": "unknown-disc-a",
+      "mode": "script",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 3,
+        "openai/chat/v1/chat/completions": 8
+      },
+      "elapsed_ms": 1751,
+      "correct": false
+    },
+    {
+      "id": "unknown-disc-b",
+      "mode": "script",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/release/search": 3,
+        "openai/chat/v1/chat/completions": 8
+      },
+      "elapsed_ms": 1892,
+      "correct": false
+    },
+    {
+      "id": "missing-position",
+      "mode": "script",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "scan_diff": [
+        "叶丁.flac 碟/轨 1/3，推断=true"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 3,
+        "openai/chat/v1/chat/completions": 9
+      },
+      "elapsed_ms": 2080,
+      "correct": false
+    },
+    {
+      "id": "field-tie",
+      "mode": "script",
+      "expected": "unlisted",
+      "actual": "unlisted",
+      "program_status": [
+        "unlisted/search"
+      ],
+      "scan_diff": [
+        "打平年份被选为 2010"
+      ],
+      "requests_by_endpoint": {
+        "musicbrainz/artist/search": 1,
+        "musicbrainz/release/search": 3,
+        "openai/chat/v1/chat/completions": 9
+      },
+      "elapsed_ms": 2080,
+      "correct": false
+    }
+  ],
+  "totals": {
+    "program": {
+      "correct": 12,
+      "wrong": 0,
+      "requests": 72,
+      "requests_per_sample": 2.5714285714285716,
+      "elapsed_ms": 70401,
+      "outcomes": {
+        "conflict": 2,
+        "release": 13,
+        "unlisted": 12,
+        "候选过多": 1
+      },
+      "correct_negative": {
+        "conflict": 1,
+        "unlisted": 6
+      }
+    },
+    "script": {
+      "correct": 15,
+      "wrong": 0,
+      "requests": 343,
+      "requests_per_sample": 12.25,
+      "elapsed_ms": 125876,
+      "outcomes": {
+        "conflict": 2,
+        "release": 17,
+        "release_group": 1,
+        "unlisted": 8
+      },
+      "correct_negative": {
+        "conflict": 1,
+        "unlisted": 3
+      }
+    }
+  }
+}

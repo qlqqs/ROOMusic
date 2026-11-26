@@ -23,6 +23,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/identity"
+	"github.com/qlqq/roomusic/backend/internal/library"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
@@ -41,8 +42,17 @@ const (
 	sampleArchivistPassword = "archivist-sample-password"
 )
 
+// 样本等候实际监听注册，并固定安静窗口时钟，避免录制过程中改动合成文件触发额外扫描。
+type sampleDirectoryWatchClock struct{ now time.Time }
+
+func (clock sampleDirectoryWatchClock) Now() time.Time { return clock.now }
+
+func (sampleDirectoryWatchClock) NewTimer(time.Duration) library.ScanSchedulerTimer {
+	return &scheduledScanTestTimer{ticks: make(chan time.Time)}
+}
+
 func TestPostgreSQLAPIResponseSamples(t *testing.T) {
-	application := newIntegrationTestApplication(t, withTestRenderer(t))
+	application := newIntegrationTestApplication(t, withTestRenderer(t), WithDirectoryWatchClock(sampleDirectoryWatchClock{now: time.Now()}))
 	samples := newAPISampleRecorder(t, application)
 	call := func(method, path string, body any, user *integrationTestUser, extraHeaders ...map[string]string) *httptest.ResponseRecorder {
 		t.Helper()
@@ -177,6 +187,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	samples.record("errors/invalid-input-missing-idempotency-key", call(http.MethodPost, "/api/v1/library-roots", map[string]string{"path": libraryA}, admin), http.StatusBadRequest)
 	createdA := call(http.MethodPost, "/api/v1/library-roots", map[string]string{"path": libraryA}, admin, idempotency("sample-create-a"))
 	samples.record("library-roots/create", createdA, http.StatusCreated)
+	rootA := decodeJSONMap(t, createdA)["id"].(string)
 	samples.record("errors/idempotency-conflict", call(http.MethodPost, "/api/v1/library-roots", map[string]string{"path": libraryB}, admin, idempotency("sample-create-a")), http.StatusConflict)
 	createdB := call(http.MethodPost, "/api/v1/library-roots", map[string]string{"path": libraryB}, admin, idempotency("sample-create-b"))
 	if createdB.Code != http.StatusCreated {
@@ -281,7 +292,6 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	samples.record("library-roots/disable", call(http.MethodPatch, "/api/v1/library-roots/"+rootB, map[string]any{"status": "disabled", "expected_revision": 1}, admin, idempotency("sample-disable-b")), http.StatusOK)
 	samples.record("errors/revision-conflict", call(http.MethodPatch, "/api/v1/library-roots/"+rootB, map[string]any{"status": "disabled", "expected_revision": 1}, admin, idempotency("sample-disable-stale")), http.StatusConflict)
 	samples.record("library-roots/create-existing-disabled", call(http.MethodPost, "/api/v1/library-roots", map[string]string{"path": libraryB}, admin, idempotency("sample-register-disabled")), http.StatusCreated)
-	samples.record("library-roots/list", call(http.MethodGet, "/api/v1/library-roots", nil, admin), http.StatusOK)
 
 	// 第二次扫描只覆盖启用的目录，成功结束；此后才有发行组。
 	second := call(http.MethodPost, "/api/v1/scans", nil, admin)
@@ -292,6 +302,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	if status := waitForScanToFinish(t, application, secondScan); status != "succeeded" {
 		t.Fatalf("second scan should succeed, got %s", status)
 	}
+	recordRootScanIntervalSamples(t, samples, call, admin, rootA)
 	samples.record("scans/get-succeeded", call(http.MethodGet, "/api/v1/scans/"+secondScan, nil, admin), http.StatusOK)
 	samples.record("scans/diagnostics-empty", call(http.MethodGet, "/api/v1/scans/"+secondScan+"/diagnostics", nil, admin), http.StatusOK)
 	samples.record("release-groups/list-one", call(http.MethodGet, "/api/v1/release-groups?page_size=1", nil, admin), http.StatusOK)
@@ -395,6 +406,42 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordExternalCurationSamples(t, samples)
 	recordCurationCLinkSamples(t, samples)
 	samples.finish()
+}
+
+func recordRootScanIntervalSamples(t *testing.T, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser, rootID string) {
+	t.Helper()
+	const base = "/api/v1/library-roots"
+	path := base + "/" + rootID + "/scan-interval"
+	samples.record("library-roots/scan-interval-put", call(http.MethodPut, path, map[string]int{"poll_interval_minutes": 240}, admin), http.StatusOK)
+	invalid := call(http.MethodPut, path, map[string]int{"poll_interval_minutes": 30}, admin)
+	requireAPIError(t, invalid, http.StatusBadRequest, "invalid_input")
+	samples.record("errors/root-scan-interval-invalid-input", invalid, http.StatusBadRequest)
+
+	tick := time.NewTicker(5 * time.Millisecond)
+	defer tick.Stop()
+	deadline := time.NewTimer(10 * time.Second)
+	defer deadline.Stop()
+	for {
+		response := call(http.MethodGet, base, nil, admin)
+		if response.Code != http.StatusOK {
+			t.Fatalf("读取目录样本：HTTP %d %s", response.Code, response.Body)
+		}
+		var listing struct{ Items []library.RootInfo }
+		if err := json.Unmarshal(response.Body.Bytes(), &listing); err != nil {
+			t.Fatal(err)
+		}
+		for _, root := range listing.Items {
+			if root.ID == rootID && root.RootMonitoring != nil && root.ScanWatchMode != nil {
+				samples.record("library-roots/list", response, http.StatusOK)
+				return
+			}
+		}
+		select {
+		case <-tick.C:
+		case <-deadline.C:
+			t.Fatal("扫描完成后仍无目录监听模式")
+		}
+	}
 }
 
 func recordDiagnosticsSamples(t *testing.T, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
@@ -1433,6 +1480,8 @@ func TestAPISampleRecorderOwnership(t *testing.T) {
 		{"errors/backup-busy.json", false, false},
 		{"release-groups/list.json", true, false},
 		{"scans/active.json", true, false},
+		{"library-roots/scan-interval-put.json", true, false},
+		{"errors/root-scan-interval-invalid-input.json", true, false},
 		{"errors/not-found-api.json", true, false},
 		{"favorites/list.json", false, false},
 		{"ratings/track-put.json", false, false},

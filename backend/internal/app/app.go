@@ -94,15 +94,16 @@ type App struct {
 type Option func(*options)
 
 type options struct {
-	fingerprinter      *fingerprint.Fingerprinter
-	acoustid           acoustid.Options
-	diagnosticLogs     *diagnostics.LogRing
-	startedAt          time.Time
-	backups            *backup.Service
-	loginThrottle      *identity.LoginThrottle
-	analysis           *analysis.Analyzer
-	renderer           *ffmpeg.Tool
-	scanSchedulerClock library.ScanSchedulerClock
+	fingerprinter       *fingerprint.Fingerprinter
+	acoustid            acoustid.Options
+	diagnosticLogs      *diagnostics.LogRing
+	startedAt           time.Time
+	backups             *backup.Service
+	loginThrottle       *identity.LoginThrottle
+	analysis            *analysis.Analyzer
+	renderer            *ffmpeg.Tool
+	scanSchedulerClock  library.ScanSchedulerClock
+	directoryWatchClock library.ScanSchedulerClock
 	// 测试直接插入旧目录夹具时暂停后台，搜索测试再显式回填。
 	pauseCatalogMaintenance bool
 	disableProgram          bool
@@ -132,6 +133,11 @@ func WithCurationSources(music musicbrainz.Options, covers coverartarchive.Optio
 // WithScanSchedulerClock 为调度集成测试注入可控时钟与计时器。
 func WithScanSchedulerClock(clock library.ScanSchedulerClock) Option {
 	return func(settings *options) { settings.scanSchedulerClock = clock }
+}
+
+// WithDirectoryWatchClock 为目录事件和单根轮询注入时钟。
+func WithDirectoryWatchClock(clock library.ScanSchedulerClock) Option {
+	return func(settings *options) { settings.directoryWatchClock = clock }
 }
 
 // WithLoginThrottle 为测试注入带可控时钟的限速器；默认每个应用使用独立实例。
@@ -235,11 +241,17 @@ func Open(lifecycle context.Context, settings config.Server, database *sql.DB, f
 	}
 	libraryService.SetAlbumFavoriteMover(personalService.MoveAlbumFavorites)
 	libraryService.WithScanSchedulerClock(assembly.scanSchedulerClock)
+	if assembly.directoryWatchClock != nil {
+		libraryService.WithDirectoryWatchClock(assembly.directoryWatchClock)
+	}
 	scanSchedulerDone := make(chan struct{})
 	if database != nil {
 		go func() {
 			defer close(scanSchedulerDone)
+			watchDone := make(chan struct{})
+			go func() { defer close(watchDone); libraryService.RunDirectoryWatcher(lifecycle) }()
 			libraryService.RunScanScheduler(lifecycle, settings.Backup.Location)
+			<-watchDone
 		}()
 	} else {
 		close(scanSchedulerDone)

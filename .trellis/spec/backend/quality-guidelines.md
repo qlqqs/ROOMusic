@@ -19,6 +19,22 @@
 （前端契约测试逐个解码这些样本）。新增端点或错误码时，把它加进该测试的固定流程与覆盖清单。样本只用合成素材，测试断言其中
 没有绝对路径、密码、Cookie 与令牌。
 
+### 整理固定样本回归
+
+在仓库根目录运行一次即可取得纯程序和程序加脚本模型两份结果。入口使用一次性 PostgreSQL、真实扫描、固定合成音频和回环模拟上游。命令输出按样本列出预期、实际对应、自动字段、扫描差异、各接口请求次数和识别用时。
+
+```sh
+ROOMUSIC_CURATION_METRICS_SUITE=fixed ROOMUSIC_TEST_RUN='^TestPostgreSQLCurationMetrics$' mise exec -- ./scripts/test-integration.sh
+```
+
+样本和脚本在 `backend/internal/app/testdata/curation_regression/`。每种模式以全部样本为分母计算每张请求数，含零请求样本，模型调用也计入。正确识别计到指定版或组且完成该层必需写入的张数。正确未匹配、有冲突和不查可在明细中核对。缺写、待名字核对和认对张数下降分别报告。认错按样本去重，逐条用模式、样本、对象、字段和错值比对 `fixed-baseline.json`；已有错认标红并列负责子任务，新增错认使常规命令失败。全部任务合入后的验收要求认错为零。
+
+用 `ROOMUSIC_CURATION_METRICS_SAMPLES` 指定逗号分隔的样本 ID 做定向核查。选择混放目录时包含该目录的所有样本。首次基线采集使用 `ROOMUSIC_CURATION_METRICS_SUITE=fixed-capture`，将 `ROOMUSIC_CURATION_METRICS_OUT` 指到本轮临时 JSON；相对路径从 `backend/internal/app/` 起算。日常回归只读基线。独立的程序计时运行保留真实限速、60 秒成员静默、确认扫描和队列轮询，输出请求区间、定时器、扫描和队列观测。
+
+```sh
+ROOMUSIC_CURATION_METRICS_SUITE=idle ROOMUSIC_CURATION_METRICS_OUT=../../../temp/curation-fixed/idle.json ROOMUSIC_TEST_RUN='^TestPostgreSQLCurationMetrics$' mise exec -- ./scripts/test-integration.sh
+```
+
 ## Design Requirements
 
 - Keep capability policy cohesive and behind narrow, consumer-owned interfaces.

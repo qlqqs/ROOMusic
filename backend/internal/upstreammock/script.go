@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -148,7 +149,7 @@ func (s script) reply(t turn) reply {
 	for _, r := range s.Rules {
 		w := r.When
 		if (w.Model == "" || w.Model == t.model) && (w.Tool == "" || slices.Contains(t.tools, w.Tool)) && strings.Contains(t.user, w.User) && strings.Contains(t.result, w.Result) {
-			return r.Reply
+			return bindScriptItem(r.Reply, t.curation)
 		}
 	}
 	if slices.Contains(t.tools, "submit_review") {
@@ -187,6 +188,23 @@ func (s script) reply(t turn) reply {
 		}
 	}
 	return reply{Text: "这是 ROOMusic 外部接口 mock 的合成回复。"}
+}
+
+// 单项整理脚本只能引用本次领取的编号，固定 JSON 不需要保存数据库 UUID。
+func bindScriptItem(rep reply, current string) reply {
+	var items []pendingItem
+	if current == "" || json.Unmarshal([]byte(current), &items) != nil || len(items) != 1 {
+		return rep
+	}
+	rep.Calls = slices.Clone(rep.Calls)
+	for i, call := range rep.Calls {
+		if call.Arguments["item_id"] == "$current_item" {
+			args := maps.Clone(call.Arguments)
+			args["item_id"] = items[0].ID
+			rep.Calls[i].Arguments = args
+		}
+	}
+	return rep
 }
 
 func patrolLocalReply(t turn) reply {

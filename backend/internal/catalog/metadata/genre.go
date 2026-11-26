@@ -35,10 +35,7 @@ func HasClassicalGenre(genres []string) bool {
 	for _, genre := range genres {
 		key := GenreKey(genre)
 		switch key {
-		case "classical", "classic", "classique", "klassik", "clásica", "clasica", "classica", "クラシック", "클래식":
-			return true
-		}
-		if strings.Contains(key, "古典") {
+		case "classical", "classic", "classique", "klassik", "clásica", "clasica", "classica", "クラシック", "클래식", "古典", "古典音乐", "古典乐":
 			return true
 		}
 	}

@@ -52,6 +52,7 @@ func setTrackNumber(o *AudioObservation, value string) {
 }
 
 func setAudioTag(observation *AudioObservation, key, value string) error {
+	observation.collectScanTag(key, value)
 	if kind := metadata.IdentifierKindForTag(key); kind != "" {
 		observation.Identifiers = metadata.AppendIdentifierValues(observation.Identifiers, kind, value)
 	}

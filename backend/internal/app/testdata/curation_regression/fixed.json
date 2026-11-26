@@ -1,0 +1,2181 @@
+[
+  {
+    "id": "editions-model-quartet",
+    "program": "release_group",
+    "script": "release_group",
+    "source_sample": "editions-model-quartet",
+    "local": {
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "沉栈木纹之楔",
+          "seconds": 43,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02.flac",
+          "title": "沉栈木纹之绳",
+          "seconds": 50,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "03.flac",
+          "title": "沉栈木纹之铃",
+          "seconds": 57,
+          "tags": {
+            "TRACKNUMBER": "3"
+          }
+        },
+        {
+          "file": "04.flac",
+          "title": "沉栈木纹之帆",
+          "seconds": 64,
+          "tags": {
+            "TRACKNUMBER": "4"
+          }
+        },
+        {
+          "file": "05.flac",
+          "title": "沉栈木纹之影",
+          "seconds": 71,
+          "tags": {
+            "TRACKNUMBER": "5"
+          }
+        }
+      ]
+    },
+    "external": {
+      "releases": [
+        {
+          "id": "7d6a264f-e5ff-5842-93bd-46f66ed710fa",
+          "group": "e1e5c582-562d-557e-bd48-550828a3dad7",
+          "title": "沉栈木纹",
+          "grouptitle": "沉栈木纹",
+          "artist": "55bee63f-6701-53f3-967f-318b67578182",
+          "tracks": [
+            {
+              "id": "6cee329c-2710-5566-a4ce-157b99d1d113",
+              "trackid": "2c747bd3-f46b-5137-847a-81d09b748d7a",
+              "title": "沉栈木纹之楔",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 43000
+            },
+            {
+              "id": "0566b3e2-4f0a-5a19-a684-1350b291fc12",
+              "trackid": "b9563965-c370-581e-83c9-4f9441af5f6c",
+              "title": "沉栈木纹之绳",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 50000
+            },
+            {
+              "id": "b2212952-8a6e-500d-a6ec-83f30ee7c5d2",
+              "trackid": "d902301c-d5ed-55f3-8403-d8a6f462f7dc",
+              "title": "沉栈木纹之铃",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 57000
+            },
+            {
+              "id": "8e914c94-a0b6-5da7-8b9a-2a0c6fdbf071",
+              "trackid": "21f7420d-3d80-5729-9643-879f65eaed9d",
+              "title": "沉栈木纹之帆",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 64000
+            },
+            {
+              "id": "e9a0c5c6-a023-5720-8dfb-b4a6a57c202c",
+              "trackid": "434b72ee-787a-5e3f-97ee-8218f8847943",
+              "title": "沉栈木纹之影",
+              "length": 71000,
+              "artist": "55bee63f-6701-53f3-967f-318b67578182"
+            }
+          ],
+          "date": "2011-07-11",
+          "barcode": "8800100000000",
+          "label": "合成厂牌0"
+        },
+        {
+          "id": "b669b646-7eb0-551e-b7ac-515a06bd4df1",
+          "group": "e1e5c582-562d-557e-bd48-550828a3dad7",
+          "title": "沉栈木纹",
+          "grouptitle": "沉栈木纹",
+          "artist": "55bee63f-6701-53f3-967f-318b67578182",
+          "tracks": [
+            {
+              "id": "6cee329c-2710-5566-a4ce-157b99d1d113",
+              "trackid": "f5ba4359-923d-51bd-b514-01ef4947687d",
+              "title": "沉栈木纹之楔",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 43000
+            },
+            {
+              "id": "0566b3e2-4f0a-5a19-a684-1350b291fc12",
+              "trackid": "8da47b3c-c840-52b0-b671-36dfd92fd76e",
+              "title": "沉栈木纹之绳",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 50000
+            },
+            {
+              "id": "b2212952-8a6e-500d-a6ec-83f30ee7c5d2",
+              "trackid": "c0a4dd82-5369-53f2-ba28-43bee1ad667f",
+              "title": "沉栈木纹之铃",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 57000
+            },
+            {
+              "id": "8e914c94-a0b6-5da7-8b9a-2a0c6fdbf071",
+              "trackid": "cd368d3d-7134-5a77-943d-bc139997ee4a",
+              "title": "沉栈木纹之帆",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 64000
+            },
+            {
+              "id": "e9a0c5c6-a023-5720-8dfb-b4a6a57c202c",
+              "trackid": "dbe3d525-538b-5492-8d77-9ceffc05c82e",
+              "title": "沉栈木纹之影",
+              "length": 71000,
+              "artist": "55bee63f-6701-53f3-967f-318b67578182"
+            }
+          ],
+          "country": "XY",
+          "date": "2012-07-11",
+          "barcode": "8800100000001",
+          "label": "合成厂牌1"
+        },
+        {
+          "id": "c2a5c739-2f75-53e7-bf7a-80311ffa245c",
+          "group": "e1e5c582-562d-557e-bd48-550828a3dad7",
+          "title": "沉栈木纹",
+          "grouptitle": "沉栈木纹",
+          "artist": "55bee63f-6701-53f3-967f-318b67578182",
+          "tracks": [
+            {
+              "id": "6cee329c-2710-5566-a4ce-157b99d1d113",
+              "trackid": "b607d03e-6d73-564a-8970-b7b590aa0bfd",
+              "title": "沉栈木纹之楔",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 43000
+            },
+            {
+              "id": "0566b3e2-4f0a-5a19-a684-1350b291fc12",
+              "trackid": "710bb84e-7e82-5727-bb3d-cbe9a9b891f1",
+              "title": "沉栈木纹之绳",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 50000
+            },
+            {
+              "id": "b2212952-8a6e-500d-a6ec-83f30ee7c5d2",
+              "trackid": "18a71541-f9a2-5f6b-a9d2-dbaaefa0a212",
+              "title": "沉栈木纹之铃",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 57000
+            },
+            {
+              "id": "8e914c94-a0b6-5da7-8b9a-2a0c6fdbf071",
+              "trackid": "2200339a-c461-5c72-bfb3-d81d6c3e0722",
+              "title": "沉栈木纹之帆",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 64000
+            },
+            {
+              "id": "e9a0c5c6-a023-5720-8dfb-b4a6a57c202c",
+              "trackid": "8ed4f6e0-b371-5f6c-8405-a6ace5cf6cc7",
+              "title": "沉栈木纹之影",
+              "length": 71000,
+              "artist": "55bee63f-6701-53f3-967f-318b67578182"
+            }
+          ],
+          "country": "XY",
+          "date": "2013-07-11",
+          "barcode": "8800100000002",
+          "label": "合成厂牌2"
+        },
+        {
+          "id": "f8d501ea-5f7f-56fb-8792-da73378056a9",
+          "group": "e1e5c582-562d-557e-bd48-550828a3dad7",
+          "title": "沉栈木纹",
+          "grouptitle": "沉栈木纹",
+          "artist": "55bee63f-6701-53f3-967f-318b67578182",
+          "tracks": [
+            {
+              "id": "6cee329c-2710-5566-a4ce-157b99d1d113",
+              "trackid": "7644e96b-b605-57dc-af44-bfd3b59c7abd",
+              "title": "沉栈木纹之楔",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 43000
+            },
+            {
+              "id": "0566b3e2-4f0a-5a19-a684-1350b291fc12",
+              "trackid": "31e346dd-c8f2-5dee-9be3-a2bf80530ab6",
+              "title": "沉栈木纹之绳",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 50000
+            },
+            {
+              "id": "b2212952-8a6e-500d-a6ec-83f30ee7c5d2",
+              "trackid": "e557edf7-a947-539d-9299-792a899690ee",
+              "title": "沉栈木纹之铃",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 57000
+            },
+            {
+              "id": "8e914c94-a0b6-5da7-8b9a-2a0c6fdbf071",
+              "trackid": "803d3eec-2de5-5c1a-b52b-e211b9571d35",
+              "title": "沉栈木纹之帆",
+              "artist": "55bee63f-6701-53f3-967f-318b67578182",
+              "length": 64000
+            },
+            {
+              "id": "e9a0c5c6-a023-5720-8dfb-b4a6a57c202c",
+              "trackid": "78be090f-a26a-54bd-9a17-60a366c14838",
+              "title": "沉栈木纹之影",
+              "length": 71000,
+              "artist": "55bee63f-6701-53f3-967f-318b67578182"
+            }
+          ],
+          "country": "XY",
+          "date": "2014-07-11",
+          "barcode": "8800100000003",
+          "label": "合成厂牌3"
+        }
+      ]
+    },
+    "expect": {
+      "fields": {
+        "year": "2011"
+      },
+      "scan": {}
+    },
+    "no_detail": true
+  },
+  {
+    "id": "embedded-artist",
+    "program": "unlisted",
+    "script": "release",
+    "local": {
+      "directory": "embedded-artist",
+      "format": "flac",
+      "album": "堤灯社 - 微雨塘",
+      "artist": "堤灯社",
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "堤灯社 - 微雨塘·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02.flac",
+          "title": "堤灯社 - 微雨塘·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "03.flac",
+          "title": "堤灯社 - 微雨塘·3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "3"
+          }
+        },
+        {
+          "file": "04.flac",
+          "title": "堤灯社 - 微雨塘·4",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "4"
+          }
+        }
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "5f986a6f-53b6-5bc9-bebd-003e32b40e32",
+          "name": "堤灯社"
+        }
+      ],
+      "releases": [
+        {
+          "title": "微雨塘",
+          "grouptitle": "微雨塘",
+          "artist": "5f986a6f-53b6-5bc9-bebd-003e32b40e32",
+          "id": "869f1824-2acd-56a7-af07-2b9218179449",
+          "group": "ddb09500-799c-5a1b-8eb9-ca100243d1e7",
+          "tracks": [
+            {
+              "id": "35373663-4988-5953-91a4-fda15f96ca73",
+              "trackid": "234f8aa0-58da-5699-8928-adb94402bcf1",
+              "title": "堤灯社 - 微雨塘·1",
+              "length": 20000,
+              "artist": "5f986a6f-53b6-5bc9-bebd-003e32b40e32"
+            },
+            {
+              "id": "c47ef534-318e-5067-92fd-4bbbef494afb",
+              "trackid": "afe42f04-794e-5403-aa67-211ab1d1ff95",
+              "title": "堤灯社 - 微雨塘·2",
+              "length": 23000,
+              "artist": "5f986a6f-53b6-5bc9-bebd-003e32b40e32"
+            },
+            {
+              "id": "761e3a7a-37dc-5ef7-8b62-c80f7fdfdb07",
+              "trackid": "09ff5de4-57bb-5299-ab84-44040c3f777f",
+              "title": "堤灯社 - 微雨塘·3",
+              "length": 26000,
+              "artist": "5f986a6f-53b6-5bc9-bebd-003e32b40e32"
+            },
+            {
+              "id": "8e7aacf3-1fa9-5dbf-83ba-0c31305d552e",
+              "trackid": "23e82c67-428c-57af-a9c0-418bfeb22ac7",
+              "title": "堤灯社 - 微雨塘·4",
+              "length": 29000,
+              "artist": "5f986a6f-53b6-5bc9-bebd-003e32b40e32"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "869f1824-2acd-56a7-af07-2b9218179449",
+      "group": "ddb09500-799c-5a1b-8eb9-ca100243d1e7",
+      "recordings": [
+        "35373663-4988-5953-91a4-fda15f96ca73",
+        "c47ef534-318e-5067-92fd-4bbbef494afb",
+        "761e3a7a-37dc-5ef7-8b62-c80f7fdfdb07",
+        "8e7aacf3-1fa9-5dbf-83ba-0c31305d552e"
+      ],
+      "artists": {
+        "堤灯社": "5f986a6f-53b6-5bc9-bebd-003e32b40e32"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "album_artist": "堤灯社"
+      }
+    },
+    "optional_script_fields": {
+      "title": "微雨塘"
+    }
+  },
+  {
+    "id": "one-char",
+    "program": "unlisted",
+    "script": "release",
+    "local": {
+      "directory": "one-char",
+      "format": "flac",
+      "album": "枝航圃",
+      "artist": "潮芦社",
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "枝航圃·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02.flac",
+          "title": "枝航圃·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "03.flac",
+          "title": "枝航圃·3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "3"
+          }
+        },
+        {
+          "file": "04.flac",
+          "title": "枝航圃·4",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "4"
+          }
+        }
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "a9d0ed0d-81ec-5278-92b1-011d450a2750",
+          "name": "潮芦社"
+        }
+      ],
+      "releases": [
+        {
+          "title": "枝航谱",
+          "grouptitle": "枝航谱",
+          "artist": "a9d0ed0d-81ec-5278-92b1-011d450a2750",
+          "id": "8de13d13-2f17-5b01-a240-fad58c36e35a",
+          "group": "e26ca902-d26d-5b18-bd76-50a3538ff14f",
+          "tracks": [
+            {
+              "id": "74253cd7-87f1-53e4-95dc-17b1c7e08d37",
+              "trackid": "4276c03e-f0a5-504b-92bf-6966a84a0e93",
+              "title": "枝航圃·1",
+              "length": 20000,
+              "artist": "a9d0ed0d-81ec-5278-92b1-011d450a2750"
+            },
+            {
+              "id": "2d9a0a75-7450-5bde-83d6-5e31353b1a08",
+              "trackid": "e5d5900c-ddf7-52eb-9f5a-ad168e76c715",
+              "title": "枝航圃·2",
+              "length": 23000,
+              "artist": "a9d0ed0d-81ec-5278-92b1-011d450a2750"
+            },
+            {
+              "id": "e3a7174e-720b-5e0a-97f8-67a805273420",
+              "trackid": "37a19c8e-8a28-5720-bd75-d043750d50a6",
+              "title": "枝航圃·3",
+              "length": 26000,
+              "artist": "a9d0ed0d-81ec-5278-92b1-011d450a2750"
+            },
+            {
+              "id": "bc20bf2f-4c07-5ed0-a410-dee2bf1fad7c",
+              "trackid": "70699d8d-a794-5c8d-852b-6cd143f0829d",
+              "title": "枝航圃·4",
+              "length": 29000,
+              "artist": "a9d0ed0d-81ec-5278-92b1-011d450a2750"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "8de13d13-2f17-5b01-a240-fad58c36e35a",
+      "group": "e26ca902-d26d-5b18-bd76-50a3538ff14f",
+      "recordings": [
+        "74253cd7-87f1-53e4-95dc-17b1c7e08d37",
+        "2d9a0a75-7450-5bde-83d6-5e31353b1a08",
+        "e3a7174e-720b-5e0a-97f8-67a805273420",
+        "bc20bf2f-4c07-5ed0-a410-dee2bf1fad7c"
+      ],
+      "artists": {
+        "潮芦社": "a9d0ed0d-81ec-5278-92b1-011d450a2750"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "album_artist": "潮芦社"
+      }
+    },
+    "optional_script_fields": {
+      "title": "枝航谱"
+    }
+  },
+  {
+    "id": "romanized",
+    "program": "unlisted",
+    "script": "release",
+    "local": {
+      "directory": "romanized",
+      "format": "flac",
+      "album": "Hoshi no Mado",
+      "artist": "Kiri Ensemble",
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "Hoshi no Mado·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02.flac",
+          "title": "Hoshi no Mado·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "03.flac",
+          "title": "Hoshi no Mado·3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "3"
+          }
+        },
+        {
+          "file": "04.flac",
+          "title": "Hoshi no Mado·4",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "4"
+          }
+        }
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "6c199425-7110-522d-9d94-c2cb605924dc",
+          "name": "Kiri Ensemble"
+        }
+      ],
+      "releases": [
+        {
+          "title": "星の窓",
+          "grouptitle": "星の窓",
+          "artist": "6c199425-7110-522d-9d94-c2cb605924dc",
+          "id": "ac07b9ab-2484-54f1-9263-e195fdf9a22f",
+          "group": "95b8b043-27e5-5d46-96db-6cbce787dd88",
+          "tracks": [
+            {
+              "id": "9f9107ea-cea3-5b99-a8d0-6dcc1161c440",
+              "trackid": "8ba3e9d9-e3b1-5bac-88e8-39e8633e1c31",
+              "title": "Hoshi no Mado·1",
+              "length": 20000,
+              "artist": "6c199425-7110-522d-9d94-c2cb605924dc"
+            },
+            {
+              "id": "79ba05ab-f956-5142-8777-6b13c948150d",
+              "trackid": "095b2a57-387f-5d73-8bf0-ce6d026135a5",
+              "title": "Hoshi no Mado·2",
+              "length": 23000,
+              "artist": "6c199425-7110-522d-9d94-c2cb605924dc"
+            },
+            {
+              "id": "3ca6962d-28c4-5c30-8c1b-d726c50fe2f5",
+              "trackid": "9599cb34-ba85-5c1e-b3ce-d1cc1cf3eeea",
+              "title": "Hoshi no Mado·3",
+              "length": 26000,
+              "artist": "6c199425-7110-522d-9d94-c2cb605924dc"
+            },
+            {
+              "id": "3e1f4661-7205-593c-9152-bc365846856d",
+              "trackid": "b653d2e7-8d8c-5284-9786-6729b0513c99",
+              "title": "Hoshi no Mado·4",
+              "length": 29000,
+              "artist": "6c199425-7110-522d-9d94-c2cb605924dc"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "ac07b9ab-2484-54f1-9263-e195fdf9a22f",
+      "group": "95b8b043-27e5-5d46-96db-6cbce787dd88",
+      "recordings": [
+        "9f9107ea-cea3-5b99-a8d0-6dcc1161c440",
+        "79ba05ab-f956-5142-8777-6b13c948150d",
+        "3ca6962d-28c4-5c30-8c1b-d726c50fe2f5",
+        "3e1f4661-7205-593c-9152-bc365846856d"
+      ],
+      "artists": {
+        "Kiri Ensemble": "6c199425-7110-522d-9d94-c2cb605924dc"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "album_artist": "Kiri Ensemble"
+      }
+    }
+  },
+  {
+    "id": "legacy-one",
+    "program": "release",
+    "script": "release",
+    "local": {
+      "directory": "legacy-one",
+      "format": "id3v1",
+      "album": "",
+      "artist": "Kestrel Foil Loft",
+      "tracks": [
+        {
+          "file": "01.mp3",
+          "title": "Spindle 1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02.mp3",
+          "title": "Spindle 2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "03.mp3",
+          "title": "Spindle 3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "3"
+          }
+        },
+        {
+          "file": "04.mp3",
+          "title": "Spindle 4",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "4"
+          }
+        }
+      ],
+      "legacy_album_hex": "c8a5b5e5ceed"
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "c1c1c5be-511e-541e-aea5-b38e3f5e7bfb",
+          "name": "Kestrel Foil Loft"
+        }
+      ],
+      "releases": [
+        {
+          "title": "去靛雾",
+          "grouptitle": "去靛雾",
+          "artist": "c1c1c5be-511e-541e-aea5-b38e3f5e7bfb",
+          "id": "bc264140-d4ed-50ed-96b8-8ef6bfadf623",
+          "group": "3166bc1c-6b75-5474-806b-8b7b485354ad",
+          "tracks": [
+            {
+              "id": "4f232519-d15f-5f0a-9509-f8d6a7cd0776",
+              "trackid": "ead029f6-6722-552e-b0ac-53a8c831a3cc",
+              "title": "Spindle 1",
+              "length": 20000,
+              "artist": "c1c1c5be-511e-541e-aea5-b38e3f5e7bfb"
+            },
+            {
+              "id": "dc49f7b0-33e8-514b-9de4-c0294ce03844",
+              "trackid": "c4c26d49-8cdf-506b-a53a-13090471db5b",
+              "title": "Spindle 2",
+              "length": 23000,
+              "artist": "c1c1c5be-511e-541e-aea5-b38e3f5e7bfb"
+            },
+            {
+              "id": "0d4005bb-dbd4-5cbf-b619-affb8b6529c9",
+              "trackid": "ce967e98-5c1b-5d53-9da9-671392009a06",
+              "title": "Spindle 3",
+              "length": 26000,
+              "artist": "c1c1c5be-511e-541e-aea5-b38e3f5e7bfb"
+            },
+            {
+              "id": "4f562c74-0ab6-5396-81fd-9376020f603c",
+              "trackid": "5c6b0c0f-273e-5d9c-b79f-885bd6bb4b0b",
+              "title": "Spindle 4",
+              "length": 29000,
+              "artist": "c1c1c5be-511e-541e-aea5-b38e3f5e7bfb"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "bc264140-d4ed-50ed-96b8-8ef6bfadf623",
+      "group": "3166bc1c-6b75-5474-806b-8b7b485354ad",
+      "recordings": [
+        "4f232519-d15f-5f0a-9509-f8d6a7cd0776",
+        "dc49f7b0-33e8-514b-9de4-c0294ce03844",
+        "0d4005bb-dbd4-5cbf-b619-affb8b6529c9",
+        "4f562c74-0ab6-5396-81fd-9376020f603c"
+      ],
+      "artists": {
+        "Kestrel Foil Loft": "c1c1c5be-511e-541e-aea5-b38e3f5e7bfb"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "album_artist": "Kestrel Foil Loft"
+      },
+      "scan": {
+        "forbidden_query": [
+          "È¥µåÎí"
+        ],
+        "title": "去靛雾"
+      }
+    },
+    "optional_script_fields": {
+      "title": "去靛雾"
+    },
+    "optional_fields": {
+      "title": "去靛雾"
+    }
+  },
+  {
+    "id": "legacy-many",
+    "program": "skip",
+    "script": "release",
+    "local": {
+      "directory": "legacy-many",
+      "format": "latin1",
+      "album": "",
+      "artist": "Kestrel Foil Spindle",
+      "tracks": [
+        {
+          "file": "01.mp3",
+          "title": "Spindle 1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02.mp3",
+          "title": "Spindle 2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "03.mp3",
+          "title": "Spindle 3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "3"
+          }
+        },
+        {
+          "file": "04.mp3",
+          "title": "Spindle 4",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "4"
+          }
+        }
+      ],
+      "legacy_album_hex": "b5e5ceed"
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "78777705-e80f-5a5f-b352-9657acb664a2",
+          "name": "Kestrel Foil Spindle"
+        }
+      ],
+      "releases": [
+        {
+          "title": "靛雾",
+          "grouptitle": "靛雾",
+          "artist": "78777705-e80f-5a5f-b352-9657acb664a2",
+          "id": "ccee3c58-5660-567d-83fe-409da79914df",
+          "group": "229d4dce-c4f0-5ffb-a6be-a49fa3dd130e",
+          "tracks": [
+            {
+              "id": "dae25eb3-6a56-5359-ad12-07152d8a569f",
+              "trackid": "4d9e2ad9-58b4-5d2f-899b-087b030ca9bd",
+              "title": "Spindle 1",
+              "length": 20000,
+              "artist": "78777705-e80f-5a5f-b352-9657acb664a2"
+            },
+            {
+              "id": "255d996a-6d54-5ca6-b3dc-d01d5bbb0026",
+              "trackid": "5a168f3c-8df2-5678-9520-647c4c373719",
+              "title": "Spindle 2",
+              "length": 23000,
+              "artist": "78777705-e80f-5a5f-b352-9657acb664a2"
+            },
+            {
+              "id": "eaf412dc-b3d4-56a9-9f6a-6dbd1a3df510",
+              "trackid": "b912c8f5-5cf3-5c95-b3a4-b5771ebcbf98",
+              "title": "Spindle 3",
+              "length": 26000,
+              "artist": "78777705-e80f-5a5f-b352-9657acb664a2"
+            },
+            {
+              "id": "d5746832-5467-5154-bc27-e0996ca81323",
+              "trackid": "76e1b165-ef6b-59aa-9215-554f4f893757",
+              "title": "Spindle 4",
+              "length": 29000,
+              "artist": "78777705-e80f-5a5f-b352-9657acb664a2"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "ccee3c58-5660-567d-83fe-409da79914df",
+      "group": "229d4dce-c4f0-5ffb-a6be-a49fa3dd130e",
+      "recordings": [
+        "dae25eb3-6a56-5359-ad12-07152d8a569f",
+        "255d996a-6d54-5ca6-b3dc-d01d5bbb0026",
+        "eaf412dc-b3d4-56a9-9f6a-6dbd1a3df510",
+        "d5746832-5467-5154-bc27-e0996ca81323"
+      ],
+      "artists": {
+        "Kestrel Foil Spindle": "78777705-e80f-5a5f-b352-9657acb664a2"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "album_artist": "Kestrel Foil Spindle"
+      },
+      "scan": {
+        "forbidden_query": [
+          "µåÎí"
+        ],
+        "title": "µåÎí"
+      }
+    },
+    "optional_script_fields": {
+      "title": "靛雾"
+    }
+  },
+  {
+    "id": "sampler-five",
+    "program": "release",
+    "script": "release",
+    "local": {
+      "directory": "sampler-five",
+      "format": "flac",
+      "album": "汐格群声",
+      "artist": "",
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "汐格群声·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          },
+          "artist": "汐格1"
+        },
+        {
+          "file": "02.flac",
+          "title": "汐格群声·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          },
+          "artist": "汐格2"
+        },
+        {
+          "file": "03.flac",
+          "title": "汐格群声·3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "3"
+          },
+          "artist": "汐格3"
+        },
+        {
+          "file": "04.flac",
+          "title": "汐格群声·4",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "4"
+          },
+          "artist": "汐格4"
+        },
+        {
+          "file": "05.flac",
+          "title": "汐格群声·5",
+          "seconds": 32,
+          "tags": {
+            "TRACKNUMBER": "5"
+          },
+          "artist": "汐格5"
+        }
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "89ad4ac3-39f7-470e-963a-56509c546377",
+          "name": "Various Artists"
+        },
+        {
+          "id": "32d39a74-95ae-54bb-9bf7-deb15e2c1a3f",
+          "name": "汐格1"
+        },
+        {
+          "id": "d6d9fce3-00f3-52be-a23e-9b71af603b61",
+          "name": "汐格2"
+        },
+        {
+          "id": "8891a25e-8c97-56e4-8bb8-80ed3a6973ae",
+          "name": "汐格3"
+        },
+        {
+          "id": "5a5b26b3-7800-505e-9121-29e79f0148e1",
+          "name": "汐格4"
+        },
+        {
+          "id": "f44a0aa3-2221-516d-a86f-94adda0c17f5",
+          "name": "汐格5"
+        }
+      ],
+      "releases": [
+        {
+          "title": "汐格群声",
+          "grouptitle": "汐格群声",
+          "artist": "89ad4ac3-39f7-470e-963a-56509c546377",
+          "id": "0e7931f3-bd19-5976-b4b7-a69377cbe621",
+          "group": "91524edd-8441-51df-9f2f-c5077af08804",
+          "tracks": [
+            {
+              "id": "06a21021-4610-5521-90bb-acb9ccf6dd54",
+              "trackid": "31ecb3e2-4b81-578d-b8d2-92321e133457",
+              "title": "汐格群声·1",
+              "length": 20000,
+              "artist": "32d39a74-95ae-54bb-9bf7-deb15e2c1a3f"
+            },
+            {
+              "id": "5e187af8-ff81-5f0a-b098-cbcfac466aec",
+              "trackid": "453f08c7-f4e0-5a14-b758-b5712977925f",
+              "title": "汐格群声·2",
+              "length": 23000,
+              "artist": "d6d9fce3-00f3-52be-a23e-9b71af603b61"
+            },
+            {
+              "id": "2c1dc81e-78b9-52d7-bed8-fa32abac5e7a",
+              "trackid": "fa383457-3a19-5dae-8f45-5bdf29d937af",
+              "title": "汐格群声·3",
+              "length": 26000,
+              "artist": "8891a25e-8c97-56e4-8bb8-80ed3a6973ae"
+            },
+            {
+              "id": "adac0729-98d7-5e99-96b8-b7291b453726",
+              "trackid": "fd71cedd-102d-5106-ad25-ba8abc3cf63a",
+              "title": "汐格群声·4",
+              "length": 29000,
+              "artist": "5a5b26b3-7800-505e-9121-29e79f0148e1"
+            },
+            {
+              "id": "c6832416-f4d0-5175-84ff-211305b7351c",
+              "trackid": "612ff2c0-ee1e-5095-bfc4-4b0eda3cf8ee",
+              "title": "汐格群声·5",
+              "length": 32000,
+              "artist": "f44a0aa3-2221-516d-a86f-94adda0c17f5"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "0e7931f3-bd19-5976-b4b7-a69377cbe621",
+      "group": "91524edd-8441-51df-9f2f-c5077af08804",
+      "recordings": [
+        "06a21021-4610-5521-90bb-acb9ccf6dd54",
+        "5e187af8-ff81-5f0a-b098-cbcfac466aec",
+        "2c1dc81e-78b9-52d7-bed8-fa32abac5e7a",
+        "adac0729-98d7-5e99-96b8-b7291b453726",
+        "c6832416-f4d0-5175-84ff-211305b7351c"
+      ],
+      "artists": {
+        "Various Artists": "89ad4ac3-39f7-470e-963a-56509c546377",
+        "汐格1": "32d39a74-95ae-54bb-9bf7-deb15e2c1a3f",
+        "汐格2": "d6d9fce3-00f3-52be-a23e-9b71af603b61",
+        "汐格3": "8891a25e-8c97-56e4-8bb8-80ed3a6973ae",
+        "汐格4": "5a5b26b3-7800-505e-9121-29e79f0148e1",
+        "汐格5": "f44a0aa3-2221-516d-a86f-94adda0c17f5"
+      },
+      "fields": {
+        "label": "弦湾唱片"
+      },
+      "scan": {
+        "compilation": true,
+        "artist": "Various Artists"
+      }
+    }
+  },
+  {
+    "id": "disc-folders",
+    "program": "release",
+    "script": "release",
+    "source_sample": "disc-folders"
+  },
+  {
+    "id": "named-bonus",
+    "program": "release",
+    "script": "release",
+    "local": {
+      "directory": "named-bonus",
+      "format": "flac",
+      "album": "水汀三册",
+      "artist": "白梭社",
+      "tracks": [
+        {
+          "file": "CD1 - 初声/01.flac",
+          "title": "水汀三册·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "CD1 - 初声/02.flac",
+          "title": "水汀三册·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "CD2 - 夜声/01.flac",
+          "title": "水汀三册·3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "CD2 - 夜声/02.flac",
+          "title": "水汀三册·4",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "Bonus/01.flac",
+          "title": "水汀三册·5",
+          "seconds": 32,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "Bonus/02.flac",
+          "title": "水汀三册·6",
+          "seconds": 35,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        }
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "e32c024f-1f19-5efa-8074-e4ff8b39cb8d",
+          "name": "白梭社"
+        }
+      ],
+      "releases": [
+        {
+          "title": "水汀三册",
+          "grouptitle": "水汀三册",
+          "artist": "e32c024f-1f19-5efa-8074-e4ff8b39cb8d",
+          "id": "6ac22874-4c8c-5423-b6ef-e324edd766ac",
+          "group": "68151d80-914f-522e-9d22-cc0ade86a797",
+          "tracks": [
+            {
+              "id": "2bb5233f-35b3-5bf9-834e-bd8dfc40b230",
+              "trackid": "d5175efc-1bc7-579e-ab9f-023389ff7271",
+              "title": "水汀三册·1",
+              "length": 20000,
+              "artist": "e32c024f-1f19-5efa-8074-e4ff8b39cb8d",
+              "disc": 1
+            },
+            {
+              "id": "eb01d9d5-4c45-51a4-8935-c0562f29476d",
+              "trackid": "0bba44de-1ebf-5ccf-a0d4-66dbdb137926",
+              "title": "水汀三册·2",
+              "length": 23000,
+              "artist": "e32c024f-1f19-5efa-8074-e4ff8b39cb8d",
+              "disc": 1
+            },
+            {
+              "id": "ac289d8c-e702-51be-a85f-c1fbd5a8f3b8",
+              "trackid": "a6fdd23f-35d9-55c4-ae19-ac3f8804bf16",
+              "title": "水汀三册·3",
+              "length": 26000,
+              "artist": "e32c024f-1f19-5efa-8074-e4ff8b39cb8d",
+              "disc": 2
+            },
+            {
+              "id": "70c7869b-ba49-5688-8881-7e960266daf5",
+              "trackid": "c8219ae4-02fe-50d1-a8c6-499cc98f656f",
+              "title": "水汀三册·4",
+              "length": 29000,
+              "artist": "e32c024f-1f19-5efa-8074-e4ff8b39cb8d",
+              "disc": 2
+            },
+            {
+              "id": "fafd9568-ab1e-543c-ae52-329a6df82ab2",
+              "trackid": "16486c2c-a7d8-5f0d-bfd0-8f8d727ade27",
+              "title": "水汀三册·5",
+              "length": 32000,
+              "artist": "e32c024f-1f19-5efa-8074-e4ff8b39cb8d",
+              "disc": 3
+            },
+            {
+              "id": "af272a5a-1092-5be1-abe5-87e75f037bbb",
+              "trackid": "129d7f49-0d4a-5184-a6c7-0511cd461bd5",
+              "title": "水汀三册·6",
+              "length": 35000,
+              "artist": "e32c024f-1f19-5efa-8074-e4ff8b39cb8d",
+              "disc": 3
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "6ac22874-4c8c-5423-b6ef-e324edd766ac",
+      "group": "68151d80-914f-522e-9d22-cc0ade86a797",
+      "recordings": [
+        "2bb5233f-35b3-5bf9-834e-bd8dfc40b230",
+        "eb01d9d5-4c45-51a4-8935-c0562f29476d",
+        "ac289d8c-e702-51be-a85f-c1fbd5a8f3b8",
+        "70c7869b-ba49-5688-8881-7e960266daf5",
+        "fafd9568-ab1e-543c-ae52-329a6df82ab2",
+        "af272a5a-1092-5be1-abe5-87e75f037bbb"
+      ],
+      "artists": {
+        "白梭社": "e32c024f-1f19-5efa-8074-e4ff8b39cb8d"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "album_artist": "白梭社"
+      },
+      "scan": {
+        "positions": [
+          "1/1",
+          "1/2",
+          "2/1",
+          "2/2",
+          "3/1",
+          "3/2"
+        ]
+      }
+    }
+  },
+  {
+    "id": "filename-only",
+    "program": "skip",
+    "script": "skip",
+    "local": {
+      "directory": "镜河",
+      "format": "flac",
+      "album": "",
+      "artist": "",
+      "tracks": [
+        {
+          "file": "01 镜舟 - 昏灯1.flac",
+          "title": "",
+          "seconds": 20,
+          "tags": {}
+        },
+        {
+          "file": "02 镜舟 - 昏灯2.flac",
+          "title": "",
+          "seconds": 23,
+          "tags": {}
+        },
+        {
+          "file": "03 镜舟 - 昏灯3.flac",
+          "title": "",
+          "seconds": 26,
+          "tags": {}
+        },
+        {
+          "file": "04 镜舟 - 昏灯4.flac",
+          "title": "",
+          "seconds": 29,
+          "tags": {}
+        }
+      ]
+    },
+    "expected_titles": [
+      "镜舟 - 昏灯1",
+      "镜舟 - 昏灯2",
+      "镜舟 - 昏灯3",
+      "镜舟 - 昏灯4"
+    ]
+  },
+  {
+    "id": "name-only-gap",
+    "program": "release",
+    "script": "release",
+    "local": {
+      "directory": "name-only-gap",
+      "format": "flac",
+      "album": "沉星",
+      "artist": "环堤社",
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "沉心",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02.flac",
+          "title": "沉星·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "03.flac",
+          "title": "沉星·3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "3"
+          }
+        },
+        {
+          "file": "04.flac",
+          "title": "沉星·4",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "4"
+          }
+        }
+      ],
+      "tags": {
+        "MUSICBRAINZ_ALBUMID": "2d7140b4-ec71-51be-9c42-72e0bad79ec3"
+      }
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "0d4a4c53-04d2-5084-956f-523cf2c3230f",
+          "name": "环堤社"
+        }
+      ],
+      "releases": [
+        {
+          "title": "沉星",
+          "grouptitle": "沉星",
+          "artist": "0d4a4c53-04d2-5084-956f-523cf2c3230f",
+          "id": "2d7140b4-ec71-51be-9c42-72e0bad79ec3",
+          "group": "df3bd5ca-6d92-5b8a-85db-8ecd8b227440",
+          "tracks": [
+            {
+              "id": "6cdf8a71-9a0a-57b5-b375-aff226b4dcf8",
+              "trackid": "15e3a5be-9136-59e7-ad0c-96a1de660631",
+              "title": "沉星",
+              "length": 20000,
+              "artist": "0d4a4c53-04d2-5084-956f-523cf2c3230f"
+            },
+            {
+              "id": "8857a6dd-f696-5070-8e7c-40d74a7129e0",
+              "trackid": "5c73c3d2-d5c4-59e8-9349-b42dd113bb27",
+              "title": "沉星·2",
+              "length": 23000,
+              "artist": "0d4a4c53-04d2-5084-956f-523cf2c3230f"
+            },
+            {
+              "id": "91b919c5-6b60-5059-b603-942802e81965",
+              "trackid": "b1e0eadb-1482-5ba4-a236-867c1d9c9084",
+              "title": "沉星·3",
+              "length": 26000,
+              "artist": "0d4a4c53-04d2-5084-956f-523cf2c3230f"
+            },
+            {
+              "id": "04534346-590c-5815-8af1-d0c682506e79",
+              "trackid": "2866f424-c912-53cb-bda7-a2e2b198204c",
+              "title": "沉星·4",
+              "length": 29000,
+              "artist": "0d4a4c53-04d2-5084-956f-523cf2c3230f"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "2d7140b4-ec71-51be-9c42-72e0bad79ec3",
+      "group": "df3bd5ca-6d92-5b8a-85db-8ecd8b227440",
+      "recordings": [
+        "6cdf8a71-9a0a-57b5-b375-aff226b4dcf8",
+        "8857a6dd-f696-5070-8e7c-40d74a7129e0",
+        "91b919c5-6b60-5059-b603-942802e81965",
+        "04534346-590c-5815-8af1-d0c682506e79"
+      ],
+      "artists": {
+        "环堤社": "0d4a4c53-04d2-5084-956f-523cf2c3230f"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "album_artist": "环堤社"
+      }
+    },
+    "script_track_fields": [
+      {
+        "title": "沉星"
+      }
+    ]
+  },
+  {
+    "id": "mixed-contiguous",
+    "program": "release",
+    "script": "release",
+    "local": {
+      "directory": "mixed-contiguous",
+      "format": "flac",
+      "album": "春篷",
+      "artist": "合灯班",
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "春篷·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02.flac",
+          "title": "春篷·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "03.flac",
+          "title": "春篷·3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "3"
+          }
+        },
+        {
+          "file": "04.flac",
+          "title": "春篷·4",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "4",
+            "ALBUM": "异题"
+          }
+        }
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "dc988e6a-69c6-51dd-a977-4d563cdab4bc",
+          "name": "合灯班"
+        }
+      ],
+      "releases": [
+        {
+          "title": "春篷",
+          "grouptitle": "春篷",
+          "artist": "dc988e6a-69c6-51dd-a977-4d563cdab4bc",
+          "id": "09af8394-3825-53f6-b98d-b087fd40966f",
+          "group": "57145245-d33f-5f85-9b91-15a4003f1de8",
+          "tracks": [
+            {
+              "id": "3a93d203-4ee8-5c0c-a6c0-5a33f24d41ef",
+              "trackid": "810c56ef-c73b-55ca-8587-920e2de5cc59",
+              "title": "春篷·1",
+              "length": 20000,
+              "artist": "dc988e6a-69c6-51dd-a977-4d563cdab4bc"
+            },
+            {
+              "id": "ada893b9-2ec0-5fa5-9300-0015c0f7def6",
+              "trackid": "469cff37-1eec-5968-9de6-5c8ed97ffb09",
+              "title": "春篷·2",
+              "length": 23000,
+              "artist": "dc988e6a-69c6-51dd-a977-4d563cdab4bc"
+            },
+            {
+              "id": "fd2a0869-2441-58d8-98bd-dacc7df7bef7",
+              "trackid": "bb962284-793c-554f-8274-eef05abe294d",
+              "title": "春篷·3",
+              "length": 26000,
+              "artist": "dc988e6a-69c6-51dd-a977-4d563cdab4bc"
+            },
+            {
+              "id": "171b0390-0f69-58b3-bbc3-79b25a680f7f",
+              "trackid": "72d5a7c9-6b85-5622-8d4e-e50a94afe880",
+              "title": "春篷·4",
+              "length": 29000,
+              "artist": "dc988e6a-69c6-51dd-a977-4d563cdab4bc"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "09af8394-3825-53f6-b98d-b087fd40966f",
+      "group": "57145245-d33f-5f85-9b91-15a4003f1de8",
+      "recordings": [
+        "3a93d203-4ee8-5c0c-a6c0-5a33f24d41ef",
+        "ada893b9-2ec0-5fa5-9300-0015c0f7def6",
+        "fd2a0869-2441-58d8-98bd-dacc7df7bef7",
+        "171b0390-0f69-58b3-bbc3-79b25a680f7f"
+      ],
+      "artists": {
+        "合灯班": "dc988e6a-69c6-51dd-a977-4d563cdab4bc"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "album_artist": "合灯班"
+      }
+    }
+  },
+  {
+    "id": "mixed-a",
+    "program": "release",
+    "script": "release",
+    "local": {
+      "directory": "混放双册",
+      "format": "flac",
+      "album": "青篷",
+      "artist": "沧木",
+      "tracks": [
+        {
+          "file": "01 青篷.flac",
+          "title": "青篷·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02 青篷.flac",
+          "title": "青篷·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        }
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "eff3e28d-ae8a-5359-8f21-1ebb15fb8db9",
+          "name": "沧木"
+        }
+      ],
+      "releases": [
+        {
+          "title": "青篷",
+          "grouptitle": "青篷",
+          "artist": "eff3e28d-ae8a-5359-8f21-1ebb15fb8db9",
+          "id": "c9001d04-59fb-548d-840e-db6691d1e3dd",
+          "group": "8c89e1c3-28c1-51ca-8817-cfd0a14ebeeb",
+          "tracks": [
+            {
+              "id": "ee2b9abf-b7a8-5a44-92e2-5cf0be9abe45",
+              "trackid": "32312254-e747-5627-ac2c-c5541a28183e",
+              "title": "青篷·1",
+              "length": 20000,
+              "artist": "eff3e28d-ae8a-5359-8f21-1ebb15fb8db9"
+            },
+            {
+              "id": "04ed5cc4-95e6-5dcd-be41-2ab7a4c1ab54",
+              "trackid": "27a5efde-52a2-590f-a857-8f5a49544dcc",
+              "title": "青篷·2",
+              "length": 23000,
+              "artist": "eff3e28d-ae8a-5359-8f21-1ebb15fb8db9"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "c9001d04-59fb-548d-840e-db6691d1e3dd",
+      "group": "8c89e1c3-28c1-51ca-8817-cfd0a14ebeeb",
+      "recordings": [
+        "ee2b9abf-b7a8-5a44-92e2-5cf0be9abe45",
+        "04ed5cc4-95e6-5dcd-be41-2ab7a4c1ab54"
+      ],
+      "artists": {
+        "沧木": "eff3e28d-ae8a-5359-8f21-1ebb15fb8db9"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "album_artist": "沧木"
+      }
+    }
+  },
+  {
+    "id": "mixed-b",
+    "program": "release",
+    "script": "release",
+    "local": {
+      "directory": "混放双册",
+      "format": "flac",
+      "album": "赤篷",
+      "artist": "槲溪",
+      "tracks": [
+        {
+          "file": "01 赤篷.flac",
+          "title": "赤篷·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02 赤篷.flac",
+          "title": "赤篷·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        }
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "2175160f-e85e-5178-a9e6-a1b12ddea7db",
+          "name": "槲溪"
+        }
+      ],
+      "releases": [
+        {
+          "title": "赤篷",
+          "grouptitle": "赤篷",
+          "artist": "2175160f-e85e-5178-a9e6-a1b12ddea7db",
+          "id": "588aa52a-e920-5a4f-92a3-807f11148188",
+          "group": "907d4e23-f9e1-5a85-b6cd-bcd108ac64e1",
+          "tracks": [
+            {
+              "id": "06184167-d9a5-510a-8ba3-ade879e54ae2",
+              "trackid": "bedc83ce-3c5e-5ee1-ae0a-e2ced47500a6",
+              "title": "赤篷·1",
+              "length": 20000,
+              "artist": "2175160f-e85e-5178-a9e6-a1b12ddea7db"
+            },
+            {
+              "id": "7b98a6c7-83cb-52f9-94bb-6587ab70136d",
+              "trackid": "b59f77df-0e70-5c54-acdf-655bd3f0d904",
+              "title": "赤篷·2",
+              "length": 23000,
+              "artist": "2175160f-e85e-5178-a9e6-a1b12ddea7db"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "588aa52a-e920-5a4f-92a3-807f11148188",
+      "group": "907d4e23-f9e1-5a85-b6cd-bcd108ac64e1",
+      "recordings": [
+        "06184167-d9a5-510a-8ba3-ade879e54ae2",
+        "7b98a6c7-83cb-52f9-94bb-6587ab70136d"
+      ],
+      "artists": {
+        "槲溪": "2175160f-e85e-5178-a9e6-a1b12ddea7db"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "album_artist": "槲溪"
+      }
+    }
+  },
+  {
+    "id": "amp-comma",
+    "program": "release",
+    "script": "release",
+    "local": {
+      "directory": "amp-comma",
+      "format": "flac",
+      "album": "两岸",
+      "artist": "棱镜 & 林, 海",
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "两岸·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02.flac",
+          "title": "两岸·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "03.flac",
+          "title": "两岸·3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "3"
+          }
+        },
+        {
+          "file": "04.flac",
+          "title": "两岸·4",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "4"
+          }
+        }
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "13cfac1c-1da3-57a2-85ec-864e60f6c0e2",
+          "name": "棱镜 & 林, 海"
+        }
+      ],
+      "releases": [
+        {
+          "title": "两岸",
+          "grouptitle": "两岸",
+          "artist": "13cfac1c-1da3-57a2-85ec-864e60f6c0e2",
+          "id": "7e82ded0-5fb5-5183-bd9f-83dfd5abf4e5",
+          "group": "16903979-a76d-5f9a-b181-a4a7fc870521",
+          "tracks": [
+            {
+              "id": "627d566f-2846-5101-b5a0-44ee1f389647",
+              "trackid": "166961db-93cc-5503-979c-ed00847ae884",
+              "title": "两岸·1",
+              "length": 20000,
+              "artist": "13cfac1c-1da3-57a2-85ec-864e60f6c0e2"
+            },
+            {
+              "id": "44235cd9-3fe8-5613-aa3b-390e9d434db0",
+              "trackid": "1c489762-4ed7-50f5-bb6d-b30379c74536",
+              "title": "两岸·2",
+              "length": 23000,
+              "artist": "13cfac1c-1da3-57a2-85ec-864e60f6c0e2"
+            },
+            {
+              "id": "1a432f00-8c7d-53be-a919-e20696724aab",
+              "trackid": "7ccc2bef-0fe7-5413-bfbb-ecf6991e039f",
+              "title": "两岸·3",
+              "length": 26000,
+              "artist": "13cfac1c-1da3-57a2-85ec-864e60f6c0e2"
+            },
+            {
+              "id": "ab2a0fea-354b-5e87-ab03-e1f663ba8150",
+              "trackid": "812987cc-8e10-56e5-9056-ce5da82fbff1",
+              "title": "两岸·4",
+              "length": 29000,
+              "artist": "13cfac1c-1da3-57a2-85ec-864e60f6c0e2"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "7e82ded0-5fb5-5183-bd9f-83dfd5abf4e5",
+      "group": "16903979-a76d-5f9a-b181-a4a7fc870521",
+      "recordings": [
+        "627d566f-2846-5101-b5a0-44ee1f389647",
+        "44235cd9-3fe8-5613-aa3b-390e9d434db0",
+        "1a432f00-8c7d-53be-a919-e20696724aab",
+        "ab2a0fea-354b-5e87-ab03-e1f663ba8150"
+      ],
+      "artists": {
+        "棱镜 & 林, 海": "13cfac1c-1da3-57a2-85ec-864e60f6c0e2"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "album_artist": "棱镜 & 林, 海"
+      },
+      "scan": {
+        "artist": "棱镜 & 林, 海"
+      }
+    }
+  },
+  {
+    "id": "picard-01",
+    "program": "release",
+    "script": "release",
+    "source_sample": "picard-01"
+  },
+  {
+    "id": "cue-01",
+    "program": "release",
+    "script": "release",
+    "source_sample": "cue-01"
+  },
+  {
+    "id": "identifier-01",
+    "program": "release",
+    "script": "release",
+    "source_sample": "identifier-01"
+  },
+  {
+    "id": "catalog-label",
+    "program": "release",
+    "script": "release",
+    "source_sample": "identifier-04",
+    "local": {
+      "tags": {
+        "LABEL": "Fir Quay Records"
+      }
+    },
+    "expect": {
+      "fields": {
+        "barcode": "8600000000013"
+      }
+    }
+  },
+  {
+    "id": "isrc-only",
+    "program": "release",
+    "script": "release",
+    "local": {
+      "directory": "isrc-only",
+      "format": "flac",
+      "album": "桂舷",
+      "artist": "西桨",
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "桂舷·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1",
+            "ISRC": "QMFIX2600000"
+          }
+        },
+        {
+          "file": "02.flac",
+          "title": "桂舷·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2",
+            "ISRC": "QMFIX2600001"
+          }
+        },
+        {
+          "file": "03.flac",
+          "title": "桂舷·3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "3",
+            "ISRC": "QMFIX2600002"
+          }
+        },
+        {
+          "file": "04.flac",
+          "title": "桂舷·4",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "4",
+            "ISRC": "QMFIX2600003"
+          }
+        }
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "cd911485-867d-5db5-b44b-e423088979a9",
+          "name": "西桨"
+        }
+      ],
+      "releases": [
+        {
+          "title": "桂舷",
+          "grouptitle": "桂舷",
+          "artist": "cd911485-867d-5db5-b44b-e423088979a9",
+          "id": "64a81aa7-db0a-5dfe-b7f7-6927e3992f5d",
+          "group": "bf146054-e0e5-5467-ab6c-942cf84c8bf8",
+          "tracks": [
+            {
+              "id": "77090702-7d37-5bf7-b841-ac4b0495ad62",
+              "trackid": "2adc4ea1-711d-55a4-b479-7ed847d25bc5",
+              "title": "桂舷·1",
+              "length": 20000,
+              "artist": "cd911485-867d-5db5-b44b-e423088979a9",
+              "isrc": "QMFIX2600000"
+            },
+            {
+              "id": "9a9ce6f9-abda-5809-b742-d45236b2747a",
+              "trackid": "73e9be0b-c66e-59a9-8209-1b47146b3844",
+              "title": "桂舷·2",
+              "length": 23000,
+              "artist": "cd911485-867d-5db5-b44b-e423088979a9",
+              "isrc": "QMFIX2600001"
+            },
+            {
+              "id": "d8bb8990-3984-51b3-9a25-553b58bcec33",
+              "trackid": "0f42fe3e-0a08-579f-8e8d-bf23cd4072e8",
+              "title": "桂舷·3",
+              "length": 26000,
+              "artist": "cd911485-867d-5db5-b44b-e423088979a9",
+              "isrc": "QMFIX2600002"
+            },
+            {
+              "id": "ae779a25-c532-53e5-b807-90db700b02e7",
+              "trackid": "ecc16faf-3310-5857-88bb-12d2eded7f6b",
+              "title": "桂舷·4",
+              "length": 29000,
+              "artist": "cd911485-867d-5db5-b44b-e423088979a9",
+              "isrc": "QMFIX2600003"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "64a81aa7-db0a-5dfe-b7f7-6927e3992f5d",
+      "group": "bf146054-e0e5-5467-ab6c-942cf84c8bf8",
+      "recordings": [
+        "77090702-7d37-5bf7-b841-ac4b0495ad62",
+        "9a9ce6f9-abda-5809-b742-d45236b2747a",
+        "d8bb8990-3984-51b3-9a25-553b58bcec33",
+        "ae779a25-c532-53e5-b807-90db700b02e7"
+      ],
+      "artists": {
+        "西桨": "cd911485-867d-5db5-b44b-e423088979a9"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "album_artist": "西桨"
+      }
+    }
+  },
+  {
+    "id": "fingerprint-only",
+    "program": "release",
+    "script": "release",
+    "local": {
+      "directory": "无名集",
+      "format": "fingerprint",
+      "album": "Unknown Album",
+      "artist": "Unknown Artist",
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "Track 01",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02.flac",
+          "title": "Track 02",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "03.flac",
+          "title": "Track 03",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "3"
+          }
+        },
+        {
+          "file": "04.flac",
+          "title": "Track 04",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "4"
+          }
+        }
+      ]
+    },
+    "external": {
+      "artists": [
+        {
+          "id": "4e9c2787-1954-5788-b3d0-1da98cf9b58f",
+          "name": "折浪"
+        }
+      ],
+      "releases": [
+        {
+          "title": "雾窗",
+          "grouptitle": "雾窗",
+          "artist": "4e9c2787-1954-5788-b3d0-1da98cf9b58f",
+          "id": "3ef3818b-3dca-5931-b155-8c2fe2c2fa93",
+          "group": "d841e6c4-c3b2-525b-99e6-a028dc806487",
+          "tracks": [
+            {
+              "id": "09a9dc6b-c54b-57a0-9799-3e2ccbbf3952",
+              "trackid": "b03f6da8-2678-55ab-82ee-a012f0899e22",
+              "title": "灯序1",
+              "length": 20000,
+              "artist": "4e9c2787-1954-5788-b3d0-1da98cf9b58f"
+            },
+            {
+              "id": "70e2afd0-e00e-5739-b3bb-07eb0fe09840",
+              "trackid": "1e4f2bd8-0a56-582d-a231-55cc8e0d8c74",
+              "title": "灯序2",
+              "length": 23000,
+              "artist": "4e9c2787-1954-5788-b3d0-1da98cf9b58f"
+            },
+            {
+              "id": "6de226e7-71d9-5703-a787-7d95822ed6c0",
+              "trackid": "dcb6e47c-7c17-554b-977f-a67c9ace1a49",
+              "title": "灯序3",
+              "length": 26000,
+              "artist": "4e9c2787-1954-5788-b3d0-1da98cf9b58f"
+            },
+            {
+              "id": "42980841-cd72-55f4-9e9b-1adf358081dc",
+              "trackid": "b93f9730-e530-57d2-ab96-3039a87fde9d",
+              "title": "灯序4",
+              "length": 29000,
+              "artist": "4e9c2787-1954-5788-b3d0-1da98cf9b58f"
+            }
+          ],
+          "label": "弦湾唱片"
+        }
+      ]
+    },
+    "expect": {
+      "release": "3ef3818b-3dca-5931-b155-8c2fe2c2fa93",
+      "group": "d841e6c4-c3b2-525b-99e6-a028dc806487",
+      "recordings": [
+        "09a9dc6b-c54b-57a0-9799-3e2ccbbf3952",
+        "70e2afd0-e00e-5739-b3bb-07eb0fe09840",
+        "6de226e7-71d9-5703-a787-7d95822ed6c0",
+        "42980841-cd72-55f4-9e9b-1adf358081dc"
+      ],
+      "artists": {
+        "折浪": "4e9c2787-1954-5788-b3d0-1da98cf9b58f"
+      },
+      "fields": {
+        "label": "弦湾唱片",
+        "title": "雾窗",
+        "album_artist": "折浪"
+      },
+      "track_fields": [
+        {
+          "title": "灯序1",
+          "artist": "折浪"
+        },
+        {
+          "title": "灯序2",
+          "artist": "折浪"
+        },
+        {
+          "title": "灯序3",
+          "artist": "折浪"
+        },
+        {
+          "title": "灯序4",
+          "artist": "折浪"
+        }
+      ]
+    }
+  },
+  {
+    "id": "id-conflict",
+    "program": "conflict",
+    "script": "conflict",
+    "source_sample": "wrong-id-01",
+    "external": {
+      "releases": [
+        {
+          "id": "23e1ab96-396c-5f6a-9b71-3dc5f50a00d8",
+          "group": "05ee02d9-7af0-5e8e-a577-e66bd6ca515f",
+          "grouptitle": "Walnut Parade",
+          "title": "Walnut Parade",
+          "artist": "6bd67033-02dd-5746-8e94-97958d699ae7",
+          "country": "GB",
+          "date": "2019-06-14",
+          "label": "Fir Quay Records",
+          "tracks": [
+            {
+              "id": "19eea52c-2494-519c-a974-caacd226a9c3",
+              "trackid": "9099dab0-97f2-54d2-910c-f80be25afe00",
+              "title": "Wrong Reel 1",
+              "artist": "6bd67033-02dd-5746-8e94-97958d699ae7",
+              "length": 88000
+            },
+            {
+              "id": "49db9f8c-ffca-5052-ab14-0ee48ace1ff2",
+              "trackid": "a4c6e01b-7a2d-5330-9bea-b0ed8ac75cd5",
+              "title": "Wrong Reel 2",
+              "artist": "6bd67033-02dd-5746-8e94-97958d699ae7",
+              "length": 153000
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "unlisted-01",
+    "program": "unlisted",
+    "script": "unlisted",
+    "source_sample": "unlisted-01"
+  },
+  {
+    "id": "spoken-podcast",
+    "program": "skip",
+    "script": "skip",
+    "source_sample": "spoken-podcast",
+    "local": {
+      "tags": {
+        "PODCAST": "1"
+      }
+    }
+  },
+  {
+    "id": "unknown-disc-a",
+    "program": "unlisted",
+    "script": "unlisted",
+    "local": {
+      "directory": "合成双册/晨册",
+      "format": "flac",
+      "album": "晨册",
+      "artist": "谷屿",
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "晨册·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02.flac",
+          "title": "晨册·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "unknown-disc-b",
+    "program": "unlisted",
+    "script": "unlisted",
+    "local": {
+      "directory": "合成双册/暮册",
+      "format": "flac",
+      "album": "暮册",
+      "artist": "谷屿",
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "暮册·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "02.flac",
+          "title": "暮册·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "missing-position",
+    "program": "unlisted",
+    "script": "unlisted",
+    "local": {
+      "directory": "missing-position",
+      "format": "flac",
+      "album": "原野四题",
+      "artist": "墨枝",
+      "tracks": [
+        {
+          "file": "叶甲.flac",
+          "title": "原野四题·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "叶乙.flac",
+          "title": "原野四题·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2"
+          }
+        },
+        {
+          "file": "叶丙.flac",
+          "title": "原野四题·3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "1"
+          }
+        },
+        {
+          "file": "叶丁.flac",
+          "title": "原野四题·4",
+          "seconds": 29,
+          "tags": {}
+        }
+      ]
+    }
+  },
+  {
+    "id": "field-tie",
+    "program": "unlisted",
+    "script": "unlisted",
+    "local": {
+      "directory": "field-tie",
+      "format": "flac",
+      "album": "两季",
+      "artist": "棹青",
+      "tracks": [
+        {
+          "file": "01.flac",
+          "title": "两季·1",
+          "seconds": 20,
+          "tags": {
+            "TRACKNUMBER": "1",
+            "DATE": "2010"
+          }
+        },
+        {
+          "file": "02.flac",
+          "title": "两季·2",
+          "seconds": 23,
+          "tags": {
+            "TRACKNUMBER": "2",
+            "DATE": "2010"
+          }
+        },
+        {
+          "file": "03.flac",
+          "title": "两季·3",
+          "seconds": 26,
+          "tags": {
+            "TRACKNUMBER": "3",
+            "DATE": "2011"
+          }
+        },
+        {
+          "file": "04.flac",
+          "title": "两季·4",
+          "seconds": 29,
+          "tags": {
+            "TRACKNUMBER": "4",
+            "DATE": "2011"
+          }
+        }
+      ]
+    }
+  }
+]

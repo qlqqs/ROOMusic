@@ -93,5 +93,6 @@ func (service *Service) changeExclusion(ctx context.Context, operation RootOpera
 	if err := tx.Commit(); err != nil {
 		return RootOperationResult{}, &RootOperationError{Code: "database_unavailable", Message: "服务暂不可用", Err: err}
 	}
+	wakeWatch(service.watch.refresh)
 	return RootOperationResult{Response: body}, nil
 }

@@ -2,8 +2,10 @@ package ingest
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/workpool"
 )
@@ -22,6 +24,12 @@ import (
 // 不参与配对与换内容判断；返回错误表示文件内容无法完整读取。并发规划时实现必须允许并发调用。
 type Fingerprinter interface {
 	Fingerprint(ctx context.Context, relativePath string) (string, error)
+}
+
+var ErrSourceChanged = errors.New("读取期间来源已变化")
+
+type checkedFingerprinter interface {
+	FingerprintObserved(context.Context, string, int64, time.Time) (string, error)
 }
 
 // 规划诊断的种类，由调用方写入扫描诊断。
@@ -48,6 +56,7 @@ type PlanDiagnostic struct {
 
 // PlanOptions 是一个 root 的规划输入。
 type PlanOptions struct {
+	Directories []string
 	// Mode 为 full 时不借用消失来源的指纹；同来源的状态复用不受影响。
 	Mode string
 	// Concurrency 是指纹读取的并发度；小于等于零时串行计算。
@@ -60,6 +69,7 @@ type PlanOptions struct {
 
 // RootPlan 是一个 root 的规划结果：计数用于日志，诊断由调用方写入扫描诊断。
 type RootPlan struct {
+	ChangedSourceHolds   int64
 	Matched              int // 同内容匹配、沿用原曲目的观察数
 	Rebound              int // 配对重绑定、沿用原曲目的观察数（含换内容后与别处消失曲目配对的）
 	AmbiguousKeys        int // 内容相同的多个来源导致没有重绑定的指纹键数
@@ -91,7 +101,7 @@ func PlanStagedRoot(ctx context.Context, database StagingDB, scanID, rootID stri
 		return plan, err
 	}
 	if options.WalkComplete && options.Mode == "incremental" && plan.ScopeFailures == 0 {
-		if err := borrowFingerprints(ctx, database, scanID, rootID, &plan); err != nil {
+		if err := borrowFingerprints(ctx, database, scanID, rootID, options.Directories, &plan); err != nil {
 			return plan, err
 		}
 	}
@@ -110,10 +120,10 @@ func PlanStagedRoot(ctx context.Context, database StagingDB, scanID, rootID stri
 
 	// 只有遍历完整、且规划中没有失败时，本轮缺失的证据才足以判断“移动”。
 	if options.WalkComplete && plan.FingerprintFailures == 0 && plan.ScopeFailures == 0 {
-		if err := pairVanishedTracks(ctx, database, scanID, rootID, &plan); err != nil {
+		if err := pairVanishedTracks(ctx, database, scanID, rootID, options.Directories, &plan); err != nil {
 			return plan, err
 		}
-	} else if err := withholdSuspiciousScopes(ctx, database, scanID, rootID, &plan); err != nil {
+	} else if err := withholdSuspiciousScopes(ctx, database, scanID, rootID, options.Directories, &plan); err != nil {
 		return plan, err
 	}
 	if err := allocateReleases(ctx, database, scanID, rootID); err != nil {
@@ -149,45 +159,54 @@ func assignCandidateKeys(ctx context.Context, database StagingDB, scanID, rootID
 			return nil
 		}
 		for _, scope := range scopes {
-			observations, err := loadStagedScope(ctx, database, scanID, rootID, scope, false)
-			if err != nil {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				// 单个 scope 读不出来（超过上限或载荷损坏）：暂缓该 scope，不阻断其它 scope。
-				plan.ScopeFailures++
-				if _, err := database.ExecContext(ctx, `UPDATE scan_observations SET withheld=TRUE
-					WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope=$3`, scanID, rootID, scope); err != nil {
-					return err
-				}
-				continue
-			}
-			for _, candidate := range OrganizeObservations(observations) {
-				paths := make([]string, 0, len(candidate.Mediums))
-				for _, tracks := range candidate.Mediums {
-					for _, track := range tracks {
-						paths = append(paths, NormalizedPath(track.Observation.RelativePath))
-					}
-				}
-				if _, err := database.ExecContext(ctx, `UPDATE scan_observations SET candidate_key=$1
-					WHERE scan_run_id=$2::uuid AND root_id=$3::uuid AND relative_path=ANY($4::text[])`, CandidateIdentity(rootID, candidate.Anchor), scanID, rootID, paths); err != nil {
-					return err
-				}
+			if err := assignScopeCandidateKeys(ctx, database, scanID, rootID, scope, plan); err != nil {
+				return err
 			}
 		}
 		after = scopes[len(scopes)-1]
 	}
 }
 
+func assignScopeCandidateKeys(ctx context.Context, database StagingDB, scanID, rootID, scope string, plan *RootPlan) error {
+	observations, err := loadStagedScope(ctx, database, scanID, rootID, scope, false)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		// 单个 scope 读不出来（超过上限或载荷损坏）：暂缓该 scope，不阻断其它 scope。
+		plan.ScopeFailures++
+		if _, err := database.ExecContext(ctx, `UPDATE scan_observations SET withheld=TRUE
+					WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope=$3`, scanID, rootID, scope); err != nil {
+			return err
+		}
+		return nil
+	}
+	for _, candidate := range OrganizeObservations(observations) {
+		paths := make([]string, 0, len(candidate.Mediums))
+		for _, tracks := range candidate.Mediums {
+			for _, track := range tracks {
+				paths = append(paths, NormalizedPath(track.Observation.RelativePath))
+			}
+		}
+		if _, err := database.ExecContext(ctx, `UPDATE scan_observations SET candidate_key=$1
+					WHERE scan_run_id=$2::uuid AND root_id=$3::uuid AND relative_path=ANY($4::text[])`, CandidateIdentity(rootID, candidate.Anchor), scanID, rootID, paths); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // borrowFingerprints 只比较本根内两侧唯一的文件名、大小与微秒修改时间。
 // CUE 同一父文件可对应多轨，因此唯一性和计数均按文件路径，而不是曲目数。
-func borrowFingerprints(ctx context.Context, database StagingDB, scanID, rootID string, plan *RootPlan) error {
+func borrowFingerprints(ctx context.Context, database StagingDB, scanID, rootID string, directories []string, plan *RootPlan) error {
 	return database.QueryRowContext(ctx, `WITH old_files AS (
         SELECT COALESCE(t.cue_parent_relative_path,t.relative_path) AS path,
                t.source_size,t.source_modified_at,t.content_fingerprint
         FROM tracks t
         WHERE t.source_root_id=$2::uuid AND t.source_status='present'
           AND t.content_fingerprint IS NOT NULL AND t.source_size IS NOT NULL AND t.source_modified_at IS NOT NULL
+          AND ($3::text[] IS NULL OR `+trackDirectorySQL+`=ANY($3))
           AND NOT `+heldSourceMatches+`
           AND NOT EXISTS (SELECT 1 FROM scan_observations used
               WHERE used.scan_run_id=$1::uuid AND used.root_id=$2::uuid AND used.matched_track_id=t.id)
@@ -211,7 +230,7 @@ func borrowFingerprints(ctx context.Context, database StagingDB, scanID, rootID 
           AND o.matched_track_id IS NULL AND o.content_fingerprint IS NULL AND o.fingerprint_path=n.path
           AND o.source_size=n.source_size AND o.source_modified_at=n.source_modified_at
         RETURNING o.fingerprint_path
-    ) SELECT COUNT(DISTINCT fingerprint_path) FROM borrowed`, scanID, rootID).Scan(&plan.FingerprintsBorrowed)
+    ) SELECT COUNT(DISTINCT fingerprint_path) FROM borrowed`, scanID, rootID, directories).Scan(&plan.FingerprintsBorrowed)
 }
 
 // resolveFingerprints 为保留下来、还没有指纹的观察补齐指纹：文件大小与修改时间都没变的匹配观察复用已存指纹，
@@ -232,17 +251,22 @@ func resolveFingerprints(ctx context.Context, database StagingDB, scanID, rootID
 	}
 	after := ""
 	for {
-		rows, err := database.QueryContext(ctx, `SELECT DISTINCT fingerprint_path FROM scan_observations
+		rows, err := database.QueryContext(ctx, `SELECT fingerprint_path,min(source_size),min(source_modified_at) FROM scan_observations
 			WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND candidate_key IS NOT NULL AND NOT withheld
 			  AND content_fingerprint IS NULL AND fingerprint_path IS NOT NULL AND fingerprint_path>$3
-			ORDER BY fingerprint_path LIMIT $4`, scanID, rootID, after, fingerprintPathPageSize)
+			GROUP BY fingerprint_path ORDER BY fingerprint_path LIMIT $4`, scanID, rootID, after, fingerprintPathPageSize)
 		if err != nil {
 			return err
 		}
-		paths := make([]string, 0, fingerprintPathPageSize)
+		type source struct {
+			path     string
+			size     sql.NullInt64
+			modified sql.NullTime
+		}
+		paths := make([]source, 0, fingerprintPathPageSize)
 		for rows.Next() {
-			var path string
-			if err := rows.Scan(&path); err != nil {
+			var path source
+			if err := rows.Scan(&path.path, &path.size, &path.modified); err != nil {
 				rows.Close()
 				return err
 			}
@@ -256,19 +280,52 @@ func resolveFingerprints(ctx context.Context, database StagingDB, scanID, rootID
 		if len(paths) == 0 {
 			return nil
 		}
-		results, err := workpool.Map(ctx, max(options.Concurrency, 1), paths, func(ctx context.Context, path string) fingerprintResult {
-			value, err := options.Fingerprinter.Fingerprint(ctx, path)
+		results, err := workpool.Map(ctx, max(options.Concurrency, 1), paths, func(ctx context.Context, path source) fingerprintResult {
+			if reader, ok := options.Fingerprinter.(checkedFingerprinter); ok && path.modified.Valid {
+				value, err := reader.FingerprintObserved(ctx, path.path, path.size.Int64, path.modified.Time)
+				return fingerprintResult{value: value, err: err}
+			}
+			value, err := options.Fingerprinter.Fingerprint(ctx, path.path)
 			return fingerprintResult{value: value, err: err}
 		})
 		if err != nil {
 			return err
 		}
-		for index, path := range paths {
+		replan := false
+		for index, source := range paths {
+			path := source.path
+			if errors.Is(results[index].err, ErrSourceChanged) {
+				scopes, count, err := DiscardChangedFile(ctx, database, scanID, rootID, path)
+				if err != nil {
+					return err
+				}
+				plan.ChangedSourceHolds += count
+				for _, scope := range scopes {
+					if _, err := database.ExecContext(ctx, `UPDATE scan_observations SET candidate_key=NULL WHERE scan_run_id=$1 AND root_id=$2 AND organization_scope=$3`, scanID, rootID, scope); err != nil {
+						return err
+					}
+					if err := assignScopeCandidateKeys(ctx, database, scanID, rootID, scope, plan); err != nil {
+						return err
+					}
+				}
+				replan = true
+				continue
+			}
 			if err := applyFingerprint(ctx, database, scanID, rootID, path, results[index], plan); err != nil {
 				return err
 			}
 		}
-		after = paths[len(paths)-1]
+		if replan {
+			// CUE 观察撤回后，原本隐藏的物理轨可能成为候选。
+			if _, err := database.ExecContext(ctx, `UPDATE scan_observations o SET matched_track_id=t.id FROM tracks t
+ WHERE o.scan_run_id=$1 AND o.root_id=$2 AND o.candidate_key IS NOT NULL AND NOT o.withheld
+ AND o.matched_track_id IS NULL AND t.source_identity=o.source_identity`, scanID, rootID); err != nil {
+				return err
+			}
+			after = ""
+		} else {
+			after = paths[len(paths)-1].path
+		}
 	}
 }
 
@@ -310,7 +367,8 @@ const (
 		       CASE WHEN t.source_kind='cue_virtual' THEN t.cue_end_frames END AS end_frames
 		FROM tracks t
 		WHERE t.source_root_id=$2::uuid AND t.source_status='present' AND t.content_fingerprint IS NOT NULL
-		  AND NOT ` + heldSourceMatches + `
+		  AND ($3::text[] IS NULL OR ` + trackDirectorySQL + `=ANY($3))
+          AND NOT ` + heldSourceMatches + `
 		  AND NOT EXISTS (SELECT 1 FROM scan_observations used
 		                  WHERE used.scan_run_id=$1::uuid AND used.root_id=$2::uuid AND used.planned_track_id=t.id)
 	)`
@@ -327,7 +385,7 @@ const (
 // pairVanishedTracks 在遍历完整的 root 中做保守重绑定：本轮没有匹配到身份（或换了内容）的观察，与本 root 中
 // 本轮消失的曲目按指纹键配对；两侧都恰好一条才沿用原曲目。其余不重绑定，逐键记 identity_ambiguous；
 // 配对后仍为空的换内容观察写为新曲目，记 content_replaced。
-func pairVanishedTracks(ctx context.Context, database StagingDB, scanID, rootID string, plan *RootPlan) error {
+func pairVanishedTracks(ctx context.Context, database StagingDB, scanID, rootID string, directories []string, plan *RootPlan) error {
 	if _, err := database.ExecContext(ctx, `WITH `+vanishedTracksCTE+`, `+newSourcesCTE+`,
 		keyed_vanished AS (SELECT v.*, COUNT(*) OVER (PARTITION BY v.fingerprint, v.index_frames, v.end_frames) AS peers FROM vanished v),
 		keyed_new AS (SELECT n.*, COUNT(*) OVER (PARTITION BY n.fingerprint, n.index_frames, n.end_frames) AS peers FROM new_sources n)
@@ -337,7 +395,7 @@ func pairVanishedTracks(ctx context.Context, database StagingDB, scanID, rootID 
 			FROM keyed_new n JOIN keyed_vanished v ON `+sameKey+`
 			WHERE n.peers=1 AND v.peers=1
 		) pair
-		WHERE o.id=pair.observation_id`, scanID, rootID); err != nil {
+		WHERE o.id=pair.observation_id`, scanID, rootID, directories); err != nil {
 		return err
 	}
 	// 配对完成后，仍在两侧都非空的键就是歧义键。
@@ -348,7 +406,7 @@ func pairVanishedTracks(ctx context.Context, database StagingDB, scanID, rootID 
 			WHERE EXISTS (SELECT 1 FROM vanished v WHERE `+sameKey+`)
 			GROUP BY n.fingerprint, n.index_frames, n.end_frames
 		) ambiguous
-		ORDER BY first_path LIMIT `+fmt.Sprint(maxPlanDiagnosticsPerKind), scanID, rootID)
+		ORDER BY first_path LIMIT `+fmt.Sprint(maxPlanDiagnosticsPerKind), scanID, rootID, directories)
 	if err != nil {
 		return err
 	}
@@ -385,7 +443,7 @@ func pairVanishedTracks(ctx context.Context, database StagingDB, scanID, rootID 
 // withholdSuspiciousScopes 在遍历不完整时使用：不重绑定，凡含有“键落在消失集合中的未匹配观察”或“换内容观察”的
 // scope 整体暂缓写入，记 identity_deferred。以 scope 为单位，是为了不只扣掉 CUE 父子关系中的一方而改变
 // organizer 的去重结果。这样一次不完整的扫描不会把移动后的文件写成新曲目，下一次完整遍历仍能配对。
-func withholdSuspiciousScopes(ctx context.Context, database StagingDB, scanID, rootID string, plan *RootPlan) error {
+func withholdSuspiciousScopes(ctx context.Context, database StagingDB, scanID, rootID string, directories []string, plan *RootPlan) error {
 	const suspiciousCTE = `suspicious AS (
 		SELECT o.organization_scope, MIN(COALESCE(o.fingerprint_path, o.relative_path)) AS first_path
 		FROM scan_observations o
@@ -397,7 +455,7 @@ func withholdSuspiciousScopes(ctx context.Context, database StagingDB, scanID, r
 	)`
 	rows, err := database.QueryContext(ctx, `WITH `+vanishedTracksCTE+`, `+suspiciousCTE+`
 		SELECT first_path, COUNT(*) OVER () FROM suspicious
-		ORDER BY organization_scope LIMIT `+fmt.Sprint(maxPlanDiagnosticsPerKind), scanID, rootID)
+		ORDER BY organization_scope LIMIT `+fmt.Sprint(maxPlanDiagnosticsPerKind), scanID, rootID, directories)
 	if err != nil {
 		return err
 	}
@@ -415,7 +473,7 @@ func withholdSuspiciousScopes(ctx context.Context, database StagingDB, scanID, r
 	rows.Close()
 	_, err = database.ExecContext(ctx, `WITH `+vanishedTracksCTE+`, `+suspiciousCTE+`
 		UPDATE scan_observations SET withheld=TRUE
-		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope IN (SELECT organization_scope FROM suspicious)`, scanID, rootID)
+		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope IN (SELECT organization_scope FROM suspicious)`, scanID, rootID, directories)
 	return err
 }
 

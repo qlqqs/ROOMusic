@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
 	"github.com/qlqq/roomusic/backend/internal/library/parser"
@@ -17,6 +19,7 @@ type scanSlot struct {
 	relative                             string
 	audio                                []scanAudio
 	cue                                  *parser.CueDocument
+	changedCueParents                    []string
 	diagnostics                          []scanDiagnostic
 	heldKind                             string
 	processed, seen, walkError, excluded bool
@@ -51,6 +54,8 @@ type scanPipeline struct {
 	cache                      *parseCache
 	feedback                   *scanFeedback
 	pool                       *workpool.Ordered[scanSlot]
+	changed                    map[string]bool
+	heldCueParents             map[string]bool
 	pending                    map[string]bool
 	stageFailed                func(error)
 	seen                       int64
@@ -59,7 +64,7 @@ type scanPipeline struct {
 
 func newScanPipeline(ctx context.Context, service *Service, executor scanExecutor, scanID string, root registeredRoot, cache *parseCache, feedback *scanFeedback, stageFailed func(error)) *scanPipeline {
 	pipeline := &scanPipeline{ctx: ctx, service: service, executor: executor, scanID: scanID, root: root,
-		cache: cache, feedback: feedback, pending: make(map[string]bool), stageFailed: stageFailed}
+		cache: cache, feedback: feedback, changed: make(map[string]bool), pending: make(map[string]bool), stageFailed: stageFailed}
 	workers := service.scanWorkerCount()
 	pipeline.pool = workpool.NewOrdered(ctx, workers, 2*workers, pipeline.apply)
 	return pipeline
@@ -73,14 +78,21 @@ func (pipeline *scanPipeline) prepareAudio(path, relative string, info fs.FileIn
 			return scanAudio{}, err
 		}
 	}
-	observation, cached := pipeline.cache.lookupObservation(pipeline.ctx, path, relative, info)
-	return scanAudio{path: path, relative: relative, info: info, observation: observation, prepared: true, cached: cached,
-		diagnosticKind: "parse_failure", diagnosticMessage: "CUE 引用音频解析失败"}, nil
+	if pipeline.changed[relative] {
+		return scanAudio{path: path, relative: relative, info: info, err: ingest.ErrSourceChanged}, nil
+	}
+	audio := scanAudio{path: path, relative: relative, info: info, prepared: true,
+		diagnosticKind: "parse_failure", diagnosticMessage: "CUE 引用音频解析失败"}
+	audio.cached = pipeline.cache.lookupObservation(pipeline.ctx, &audio)
+	return audio, nil
 }
 
 func (pipeline *scanPipeline) prepareCueParent(path string) (scanAudio, error) {
 	if path == "" || !isWithin(pipeline.root.Path, path) {
 		return scanAudio{err: errors.New("unsafe CUE parent"), diagnosticKind: "cue_reference", diagnosticMessage: "CUE 引用无法安全读取"}, nil
+	}
+	if !isScannableAudio(strings.ToLower(filepath.Ext(path))) {
+		return scanAudio{err: parser.ErrUnknownFormat, diagnosticKind: "unsupported_format", diagnosticMessage: "不支持的 CUE 引用音频格式"}, nil
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -93,7 +105,27 @@ func (pipeline *scanPipeline) prepareCueParent(path string) (scanAudio, error) {
 }
 
 func (pipeline *scanPipeline) prepareCue(slot scanSlot, path string) (scanSlot, error) {
+	before, err := os.Stat(path)
+	if err != nil {
+		slot.diagnostics = []scanDiagnostic{{"permission_error", "无法读取 CUE 文件"}}
+		slot.heldKind = ingest.HeldCueSheet
+		return slot, nil
+	}
 	document, err := parser.ParseCueSheet(path, pipeline.root.Path)
+	if checkErr := checkReadTime(path, before); checkErr != nil {
+		slot.heldKind = ingest.HeldCueSheet
+		if errors.Is(checkErr, ingest.ErrSourceChanged) {
+			slot.changedCueParents = make([]string, 0, len(document.Files))
+			for _, reference := range document.Files {
+				if reference.Status == "present" {
+					slot.changedCueParents = append(slot.changedCueParents, safeRelativePath(pipeline.root.Path, reference.ResolvedPath))
+				}
+			}
+		} else {
+			slot.diagnostics = []scanDiagnostic{{"permission_error", "无法读取 CUE 文件"}}
+		}
+		return slot, nil
+	}
 	if err != nil {
 		slot.diagnostics = []scanDiagnostic{{"unsupported_cue", "CUE 文件无法解析"}}
 		slot.heldKind = ingest.HeldCueSheet
@@ -135,7 +167,13 @@ func (pipeline *scanPipeline) submit(slot scanSlot) error {
 			}
 			audio := &slot.audio[index]
 			if audio.prepared && !audio.cached {
-				audio.observation, audio.err = parser.ParseAudioFile(audio.path)
+				audio.info, audio.err = os.Stat(audio.path)
+				if audio.err == nil {
+					audio.observation, audio.err = parser.ParseAudioFile(audio.path)
+					if err := checkReadTime(audio.path, audio.info); err != nil {
+						audio.err = err
+					}
+				}
 			}
 		}
 		return slot
@@ -151,8 +189,25 @@ func (pipeline *scanPipeline) apply(slot scanSlot) error {
 	}
 	pipeline.walkErrorSeen = pipeline.walkErrorSeen || slot.walkError
 	pipeline.excludedHit = pipeline.excludedHit || slot.excluded
-	for _, audio := range slot.audio {
-		pipeline.cache.applyAudio(pipeline.ctx, audio)
+	for i := range slot.audio {
+		audio := &slot.audio[i]
+		if pipeline.changed[audio.relative] {
+			audio.err = ingest.ErrSourceChanged
+			audio.cached = false
+		}
+		if errors.Is(audio.err, ingest.ErrSourceChanged) && !pipeline.changed[audio.relative] {
+			_, count, err := ingest.DiscardChangedFile(pipeline.ctx, pipeline.executor, pipeline.scanID, pipeline.root.ID, audio.relative)
+			if err != nil {
+				return err
+			}
+			pipeline.changed[audio.relative] = true
+			for range count {
+				if pipeline.feedback != nil {
+					pipeline.feedback.skip(pipeline.ctx)
+				}
+			}
+		}
+		pipeline.cache.applyAudio(pipeline.ctx, *audio)
 		delete(pipeline.pending, audio.relative)
 	}
 	if slot.cue != nil {
@@ -160,13 +215,19 @@ func (pipeline *scanPipeline) apply(slot scanSlot) error {
 	}
 	if len(slot.audio) > 0 {
 		audio := slot.audio[0]
+		if errors.Is(audio.err, ingest.ErrSourceChanged) {
+			return nil
+		}
 		if audio.err != nil {
 			slot.diagnostics = []scanDiagnostic{{"parse_failure", "音频文件解析失败"}}
-			if errors.Is(audio.err, parser.ErrUnsupportedEncoding) {
+			if errors.Is(audio.err, parser.ErrUnknownFormat) || errors.Is(audio.err, parser.ErrUnsupportedEncoding) {
 				slot.diagnostics = []scanDiagnostic{{"unsupported_format", "不支持的音频格式"}}
 			}
 			slot.heldKind = ingest.HeldFile
 		} else {
+			if pipeline.heldCueParents[audio.relative] {
+				return nil
+			}
 			if audio.externalLyrics != "" {
 				parser.ApplyExternalLyrics(&audio.observation, audio.externalLyrics)
 			}
@@ -185,10 +246,46 @@ func (pipeline *scanPipeline) apply(slot scanSlot) error {
 		}
 	}
 	if slot.heldKind != "" {
+		if slot.changedCueParents != nil {
+			if err := pipeline.holdCueParents(slot.relative, slot.changedCueParents); err != nil {
+				return err
+			}
+		}
 		pipeline.feedback.observeHeld(pipeline.root.ID, slot.relative, slot.observedSize, slot.heldKind)
 		return pipeline.hold(slot.heldKind, slot.relative)
 	}
 	return slot.terminalError
+}
+
+// 变化的 sheet 可能尚未读全 FILE 声明，合并上次入库与本次安全解析出的父路径。
+// 撤回先遍历到的物理观察，同时记住后续物理条目；其他稳定 sheet 仍可使用父文件的缓存。
+func (pipeline *scanPipeline) holdCueParents(sheet string, parsed []string) error {
+	rows, err := pipeline.executor.QueryContext(pipeline.ctx, `WITH parents(path) AS (
+ SELECT unnest($4::text[]) UNION
+ SELECT cue_parent_relative_path FROM tracks WHERE source_root_id=$2 AND source_status='present'
+ AND cue_sheet_path=$3 AND cue_parent_relative_path IS NOT NULL
+ ), held AS (
+ INSERT INTO scan_held_sources(scan_run_id,root_id,kind,relative_path)
+ SELECT $1::uuid,$2::uuid,'file',path FROM parents ON CONFLICT DO NOTHING
+ ), discarded AS (
+ DELETE FROM scan_observations WHERE scan_run_id=$1 AND root_id=$2 AND relative_path=fingerprint_path
+ AND relative_path IN (SELECT path FROM parents)
+ ) SELECT path FROM parents`, pipeline.scanID, pipeline.root.ID, sheet, parsed)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if pipeline.heldCueParents == nil {
+		pipeline.heldCueParents = make(map[string]bool)
+	}
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return err
+		}
+		pipeline.heldCueParents[path] = true
+	}
+	return rows.Err()
 }
 
 func (pipeline *scanPipeline) applyCue(slot scanSlot) error {
@@ -224,8 +321,11 @@ func (pipeline *scanPipeline) applyCue(slot scanSlot) error {
 		audio := parents[reference.ResolvedPath]
 		if audio.err != nil {
 			cueFailed = true
+			if errors.Is(audio.err, ingest.ErrSourceChanged) {
+				continue
+			}
 			kind, message := audio.diagnosticKind, audio.diagnosticMessage
-			if errors.Is(audio.err, parser.ErrUnsupportedEncoding) {
+			if errors.Is(audio.err, parser.ErrUnknownFormat) || errors.Is(audio.err, parser.ErrUnsupportedEncoding) {
 				kind, message = "unsupported_format", "不支持的 CUE 引用音频格式"
 			}
 			if err := pipeline.diagnose(slot.relative, kind, message); err != nil {
@@ -268,10 +368,11 @@ func (pipeline *scanPipeline) hold(kind, relative string) error {
 	if kind == ingest.HeldFile {
 		relative = ingest.NormalizedPath(relative)
 	}
-	if err := ingest.HoldSource(pipeline.ctx, pipeline.executor, pipeline.scanID, pipeline.root.ID, kind, relative); err != nil {
+	inserted, err := ingest.HoldSourceOnce(pipeline.ctx, pipeline.executor, pipeline.scanID, pipeline.root.ID, kind, relative)
+	if err != nil {
 		return errors.Join(err, pipeline.diagnose(relative, "staging_write_failure", "无法登记保住的来源"))
 	}
-	if pipeline.feedback != nil {
+	if inserted && pipeline.feedback != nil {
 		pipeline.feedback.skip(pipeline.ctx)
 	}
 	return nil
@@ -283,4 +384,15 @@ func (pipeline *scanPipeline) stage(relative string, observation ingest.SourceOb
 		return pipeline.diagnose(relative, "staging_write_failure", message)
 	}
 	return pipeline.ctx.Err()
+}
+
+func checkReadTime(path string, before fs.FileInfo) error {
+	after, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) {
+		return ingest.ErrSourceChanged
+	}
+	return nil
 }

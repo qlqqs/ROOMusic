@@ -215,7 +215,11 @@ func AlignCueStagingScopes(ctx context.Context, database Execer, scanID, rootID 
 
 // MarkDiscParentScopes 标记父目录子树中没有其它音频 scope 或保住范围的碟目录观察；必须在 CUE scope 对齐后调用。
 // 保住来源仅在原 scope 与当前 scope 一致的碟目录本身内豁免，不包括更深层目录或 CUE 对齐带入的其它目录。
-func MarkDiscParentScopes(ctx context.Context, database Execer, scanID, rootID string) error {
+func MarkDiscParentScopes(ctx context.Context, database Execer, scanID, rootID string, scopedDirectories ...[]string) error {
+	var directories []string
+	if len(scopedDirectories) > 0 {
+		directories = scopedDirectories[0]
+	}
 	_, err := database.ExecContext(ctx, `WITH parents AS (
 		SELECT DISTINCT organization_scope AS scope, substring(organization_scope FROM 13) AS parent
 		FROM scan_observations
@@ -223,6 +227,9 @@ func MarkDiscParentScopes(ctx context.Context, database Execer, scanID, rootID s
 	), exclusive AS (
 		SELECT p.scope FROM parents p
 		WHERE NOT EXISTS (
+			SELECT 1 FROM tracks t WHERE $3::text[] IS NOT NULL AND t.source_root_id=$2::uuid AND t.source_status='present'
+			AND starts_with(t.relative_path,p.parent||'/') AND NOT (`+trackDirectorySQL+`=ANY($3)))
+		AND NOT EXISTS (
 			SELECT 1 FROM scan_observations x
 			WHERE x.scan_run_id=$1::uuid AND x.root_id=$2::uuid AND x.organization_scope<>p.scope
 			  AND left(x.relative_path, length(p.parent)+1)=p.parent || '/')
@@ -239,6 +246,6 @@ func MarkDiscParentScopes(ctx context.Context, database Execer, scanID, rootID s
 	)
 	UPDATE scan_observations o SET observation=o.observation || '{"disc_parent_exclusive":true}'::jsonb
 	FROM exclusive e
-	WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.organization_scope=e.scope`, scanID, rootID)
+	WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.organization_scope=e.scope`, scanID, rootID, directories)
 	return err
 }

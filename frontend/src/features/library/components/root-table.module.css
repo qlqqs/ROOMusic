@@ -4,10 +4,10 @@
   list-style: none;
 }
 
-/* 一行：图标 | 名称 | 状态（只有停用时有内容）| 更多；行间一条淡分隔线。 */
+/* 一行：图标 | 名称 | 监听方式 | 状态（只有停用时有内容）| 更多；行间一条淡分隔线。 */
 .row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: var(--space-3);
   min-height: 52px;
@@ -28,6 +28,7 @@
   overflow-wrap: anywhere;
 }
 
+.watch,
 .status {
   display: inline-flex;
 }
