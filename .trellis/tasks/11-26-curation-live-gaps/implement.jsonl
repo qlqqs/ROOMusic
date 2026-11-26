@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "整理链合同第 22–27 节"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量约定"}
+{"file": "docs/architecture/adr/0006-auto-curation-and-sources.md", "reason": "ADR 第 16 节"}
+{"file": ".trellis/tasks/11-26-curation-live-gaps/research/coverage-audit-2026-11-26.md", "reason": "覆盖审计与代码定位"}
+{"file": ".trellis/tasks/11-25-curation-chain/research/acceptance/acceptance-2026-11-26.md", "reason": "真实试用结论"}
+{"file": ".trellis/spec/backend/steward-review-contracts.md", "reason": "审查策略（R2 升 v7）"}
+{"file": ".trellis/spec/backend/library-scan-tags.md", "reason": "扫描标签解析（R4、R5、R8）"}
+{"file": ".trellis/spec/backend/library-scan-grouping.md", "reason": "扫描分组（R6、R7、R10）"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移约定"}
