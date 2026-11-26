@@ -7959,5 +7959,122 @@
       "group_match": "e1e5c582-562d-557e-bd48-550828a3dad7",
       "scan": {"require_match_item": true}
     }
+  },
+  {
+    "id": "subset-count-decoy",
+    "shape": "subset",
+    "local": {
+      "directory": "subset-count-decoy",
+      "album": "杉影纸钟",
+      "artist": "雾汀描图室",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "雾汀描图室"},
+      "tracks": [
+        {"file": "01.flac", "title": "枝上微雪", "seconds": 47, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "03.flac", "title": "折影换页", "seconds": 61, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "05.flac", "title": "午后白舟", "seconds": 75, "tags": {"TRACKNUMBER": "5"}},
+        {"file": "07.flac", "title": "步下北坡", "seconds": 89, "tags": {"TRACKNUMBER": "7"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "c064cc5c-dc68-5802-b003-e7cc2d274dad", "name": "雾汀描图室"}
+      ],
+      "releases": [
+        {
+          "id": "a0ccc6bc-87a1-5a62-9276-a292c048e7b0",
+          "group": "4a8c7ff9-917e-5983-ba3a-fed9f994551b",
+          "title": "杉影纸钟",
+          "grouptitle": "杉影纸钟",
+          "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad",
+          "tracks": [
+            {"id": "777e1012-39e9-5bb7-8a2e-c36c3f1f45b3", "trackid": "81070272-f3eb-5bc2-98d9-e15cff84a4f8", "title": "陶片相击", "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad", "length": 131000},
+            {"id": "bd165515-1ad0-5f2d-a6e9-e47fdf058309", "trackid": "12b7c631-a554-56d8-875a-a956b208f1a6", "title": "河砂回旋", "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad", "length": 138000},
+            {"id": "7ac1d014-736e-5a65-963a-4f07079bf39c", "trackid": "39d6e393-bc9f-5661-aa46-03261453b88e", "title": "窗格慢雨", "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad", "length": 145000},
+            {"id": "bd333968-77d0-5a27-b4ab-812f88c1f3b2", "trackid": "2c4b1853-bef6-52f0-83d9-830656d80db1", "title": "旱岸初晴", "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad", "length": 152000}
+          ]
+        },
+        {
+          "id": "c5642410-20e8-5d92-bb09-4b81bc9b24be",
+          "group": "4c020bb1-6bc0-5c69-97a6-3f2a6dc4f1b2",
+          "title": "杉影纸钟",
+          "grouptitle": "杉影纸钟",
+          "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad",
+          "tracks": [
+            {"id": "8f4d6d56-0348-5346-a0d9-4c0214ced6fd", "trackid": "8daceeaf-386d-5735-918d-06804ce1156e", "title": "枝上微雪", "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad", "length": 47000},
+            {"id": "55465260-a165-5efb-b6fa-92d89cbbda75", "trackid": "acad1bb6-a157-5dba-a43e-80e1e4221ddc", "title": "纸钟一响", "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad", "length": 54000},
+            {"id": "9bfa18d3-630e-58e4-9dfc-197c46da6575", "trackid": "e1976b6b-1b05-5a98-9e0a-25efdda76c3f", "title": "折影换页", "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad", "length": 61000},
+            {"id": "2ca61883-bddd-59c0-8df0-784ccf94c9c3", "trackid": "f0eec6c9-e296-5ba9-9f2f-5ae23314fc98", "title": "晒台空椅", "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad", "length": 68000},
+            {"id": "3ba8d748-cf3f-5576-88cd-93574b3701c5", "trackid": "9d0eb139-b517-529f-901b-5aa453121020", "title": "午后白舟", "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad", "length": 75000},
+            {"id": "2734bbec-2562-5183-83b2-8cf7a9103208", "trackid": "50901bf2-05b1-5ebe-a0a2-9db0caf94aa0", "title": "树梢背光", "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad", "length": 82000},
+            {"id": "074145cc-599f-5c23-91b3-b28f47970bdc", "trackid": "d5e6d96d-d79a-5b7f-9cdf-94e7c51edc69", "title": "步下北坡", "artist": "c064cc5c-dc68-5802-b003-e7cc2d274dad", "length": 89000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release_group"],
+      "group": "4c020bb1-6bc0-5c69-97a6-3f2a6dc4f1b2",
+      "artists": {"雾汀描图室": "c064cc5c-dc68-5802-b003-e7cc2d274dad"},
+      "group_match": "4c020bb1-6bc0-5c69-97a6-3f2a6dc4f1b2"
+    }
+  },
+  {
+    "id": "superset-count-decoy",
+    "shape": "superset",
+    "local": {
+      "directory": "superset-count-decoy",
+      "album": "盐灯织巷",
+      "artist": "栗湾短笛社",
+      "format": "flac",
+      "tags": {"ALBUMARTIST": "栗湾短笛社"},
+      "tracks": [
+        {"file": "01.flac", "title": "巷口盐灯", "seconds": 47, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02.flac", "title": "晴夜石阶", "seconds": 54, "tags": {"TRACKNUMBER": "2"}},
+        {"file": "03.flac", "title": "北窗纸船", "seconds": 61, "tags": {"TRACKNUMBER": "3"}},
+        {"file": "04.flac", "title": "星落井沿", "seconds": 68, "tags": {"TRACKNUMBER": "4"}},
+        {"file": "05.flac", "title": "井沿余响", "seconds": 91, "tags": {"TRACKNUMBER": "5"}}
+      ]
+    },
+    "external": {
+      "artists": [
+        {"id": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4", "name": "栗湾短笛社"}
+      ],
+      "releases": [
+        {
+          "id": "491cf0ef-e12b-5ffb-8a8e-3d21fee94fea",
+          "group": "f349abe5-dd25-5876-8108-f180022a1625",
+          "title": "盐灯织巷",
+          "grouptitle": "盐灯织巷",
+          "artist": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4",
+          "tracks": [
+            {"id": "4c59ed39-3d4e-58a9-96fd-e2a9d521f9b8", "trackid": "34ccf0ff-13b1-5579-9ce2-f988c0637e31", "title": "长堤苇影", "artist": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4", "length": 131000},
+            {"id": "7df42670-22bf-5b01-80d4-dd10d6f3b2e1", "trackid": "28d50a13-3917-5866-b441-7236b3702ef5", "title": "山涧短歌", "artist": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4", "length": 138000},
+            {"id": "8668bade-4595-5ca3-9e9b-9bb619020a53", "trackid": "f768a47a-83bf-5768-9e22-29f6d5acd61a", "title": "桦树敲门", "artist": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4", "length": 145000},
+            {"id": "a787b45f-f633-5723-a966-8888554d5a9d", "trackid": "509ee7d7-4360-5166-bb0b-b8c3b3e764e1", "title": "铜匙落水", "artist": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4", "length": 152000},
+            {"id": "9780d617-952e-5e9b-9c05-5e74365e5ad1", "trackid": "4e50e2e3-17b8-5eb2-b1b5-5c701cd6553f", "title": "残雪浅滩", "artist": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4", "length": 159000}
+          ]
+        },
+        {
+          "id": "9d254ebd-4203-5c4b-8082-7767c84d026d",
+          "group": "46969ff9-2a86-5986-b062-dc88a12c2d29",
+          "title": "盐灯织巷",
+          "grouptitle": "盐灯织巷",
+          "artist": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4",
+          "tracks": [
+            {"id": "8e3680a5-e6eb-51d1-8add-8f099e2df932", "trackid": "786c37b0-8c32-5911-910b-2879e3879081", "title": "巷口盐灯", "artist": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4", "length": 47000},
+            {"id": "f33723c2-1b53-5fb6-9168-48adb6f3e74e", "trackid": "d8d2ce17-02f2-5f62-a053-723236682189", "title": "晴夜石阶", "artist": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4", "length": 54000},
+            {"id": "67888cb1-a958-599c-a95a-c7b41765add1", "trackid": "f8baa562-9d10-5503-807d-fb0ddc1b2f6c", "title": "北窗纸船", "artist": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4", "length": 61000},
+            {"id": "89122475-761b-53fa-a99a-4bbd38b6be2c", "trackid": "ac0e5b74-a38f-5a35-bba3-3dc2aed889a6", "title": "星落井沿", "artist": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4", "length": 68000}
+          ]
+        }
+      ]
+    },
+    "expect": {
+      "accept": ["release_group"],
+      "group": "46969ff9-2a86-5986-b062-dc88a12c2d29",
+      "artists": {"栗湾短笛社": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4"},
+      "group_match": "46969ff9-2a86-5986-b062-dc88a12c2d29"
+    }
   }
 ]
