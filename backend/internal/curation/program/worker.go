@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	LocalRuleVersion    int16 = 2
-	MatchRuleVersion    int16 = 102
+	LocalRuleVersion    int16 = 3
+	MatchRuleVersion    int16 = 103
 	PatrolPromptVersion int16 = 1
 
 	// 资料主题与并入继续使用原来的版本和幂等键。

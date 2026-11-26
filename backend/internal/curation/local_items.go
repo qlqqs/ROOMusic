@@ -71,7 +71,7 @@ func localAlbumInput(e catalog.CurationEvidence) (localAlbum, bool) {
 	titleProtected := e.Corrected["title"] || e.Automatic["title"] && e.LocalTitle == ""
 	a := localAlbum{
 		Title:  cleanupField(e.Title, e.Authenticity["title"], titleProtected),
-		Artist: cleanupField(artist, e.SelectedArtistAuth(), e.Corrected["album_artist"] || e.Automatic["album_artist"] && e.LocalArtist == "" || e.Compilation),
+		Artist: cleanupField(artist, e.SelectedArtistAuth(), e.Corrected["album_artist"] || e.Automatic["album_artist"] && e.LocalArtist == "" || CompilationEvidence(e)),
 	}
 	compoundTitle := a.Title.Authenticity == metadata.Inferred && a.Artist.Authenticity == metadata.Inferred && strings.Contains(e.Title, " - ")
 	if compoundTitle && !titleProtected {

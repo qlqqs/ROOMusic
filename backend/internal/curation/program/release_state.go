@@ -45,7 +45,7 @@ func (w *Worker) prepareRelease(ctx context.Context, e catalog.CurationEvidence,
 		if s.InputDigest != d.full {
 			return false, nil, nil
 		}
-	} else if s.IdentityDigest != d.identity && !(upgrade && s.IdentityDigest == curation.ReleaseIdentityDigest101(e)) {
+	} else if s.IdentityDigest != d.identity && !(upgrade && (s.IdentityDigest == curation.ReleaseIdentityDigest101(e) || s.Status == "matched" && s.IdentityDigest == curation.ReleaseIdentityDigest102(e))) {
 		return false, nil, nil
 	}
 	if !upgrade && s.InputDigest == d.full && s.IdentityDigest == d.identity && s.GapDigest == d.gap && s.LocalRuleVersion == LocalRuleVersion {
@@ -120,6 +120,14 @@ const (
 	waitForClaim
 )
 
+func changedMatchConflict(code string) bool {
+	switch code {
+	case "track_count", "position_conflict", "artist_mismatch", "tag_text_mismatch":
+		return true
+	}
+	return false
+}
+
 func reviewPendingVersion(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidence, d releaseDigests, state curation.WorkState) (candidateReview, *MatchResult, error) {
 	var status, identity, full string
 	var rawCandidates, rawConflicts, rawEvidence []byte
@@ -133,7 +141,10 @@ func reviewPendingVersion(ctx context.Context, tx *sql.Tx, e catalog.CurationEvi
 		if slices.Contains(result.Conflicts, "insufficient_evidence") && e.Classification().Class == catalog.Insufficient {
 			return keepConclusion, nil, nil
 		}
-		return requery, nil, nil
+		if state.Status == "unlisted" || state.Status == "uncertain" || slices.ContainsFunc(result.Conflicts, changedMatchConflict) {
+			return requery, nil, nil
+		}
+		return keepConclusion, nil, nil
 	}
 	if err != nil {
 		return requery, nil, err
@@ -162,16 +173,8 @@ func reviewPendingVersion(ctx context.Context, tx *sql.Tx, e catalog.CurationEvi
 	if m.Status == "matched" || m.Status == "no_usable_candidates" {
 		return keepConclusion, &m, nil
 	}
-	if status == "waiting_route" {
-		return keepConclusion, nil, nil
-	}
-	truncated := slices.Contains(conflicts, "list_truncated") && (evidence.Snapshot.Version == 0 ||
-		slices.ContainsFunc(evidence.Snapshot.Pages, func(p SearchPage) bool { return p.Count != nil && *p.Count > p.Returned }))
-	if len(candidates) == 0 {
-		return requery, nil, nil
-	}
 	// 旧待定可能同时含已撤销和仍可处理的候选。保留阻止依据，第一档只能选可用项。
-	if m.Status == "uncertain" {
+	if m.Status == "uncertain" && status != "waiting_route" {
 		usable := m.modelCandidates()
 		if len(usable) != len(m.Candidates) || len(evidence.Snapshot.Blocked) > 0 {
 			_, err = tx.ExecContext(ctx, `UPDATE curation_pending_items SET candidates=$3,conflicts=$4,
@@ -184,9 +187,9 @@ func reviewPendingVersion(ctx context.Context, tx *sql.Tx, e catalog.CurationEvi
 			}
 		}
 	}
-	if truncated {
+	if state.Status == "unlisted" || state.Status == "uncertain" || slices.ContainsFunc(conflicts, changedMatchConflict) {
 		return requery, nil, nil
 	}
-	// 有候选但缺少可证实身份的资料时保留原项，避免重复请求。
+	// 其余历史结论保留现有路线。
 	return keepConclusion, nil, nil
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
-	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 )
@@ -34,21 +33,14 @@ func (c curationMusicBrainz) SearchArtistPage(ctx context.Context, name string) 
 	return curation.ArtistPage{PageInfo: curation.PageInfo(page.PageInfo), Items: page.Items}, err
 }
 
-// MusicBrainz 的关联实体读取至多包含 25 个发行；满页不能证明某一版唯一。
-func (c curationMusicBrainz) ReleaseGroupEditions(ctx context.Context, id string) ([]string, bool, error) {
-	group, err := c.Lookup(ctx, "release-group", id, []string{"releases"})
+func (c curationMusicBrainz) ReleaseGroupDetails(ctx context.Context, id string) (curation.ReleaseGroupDetails, error) {
+	group, err := c.Client.ReleaseGroupDetails(ctx, id, false)
 	if err != nil {
-		return nil, false, err
+		return curation.ReleaseGroupDetails{}, err
 	}
-	if group.ID != id || len(group.Releases) == 0 {
-		return nil, false, sources.ErrUnavailable
+	out := curation.ReleaseGroupDetails{ID: id, Title: group.Title, Complete: true}
+	for _, edition := range group.Releases {
+		out.Editions = append(out.Editions, sources.Release{ID: edition.ID, Title: edition.Title})
 	}
-	ids := make([]string, 0, len(group.Releases))
-	for _, release := range group.Releases {
-		if !uuid.Valid(release.ID) {
-			return nil, false, sources.ErrUnavailable
-		}
-		ids = append(ids, release.ID)
-	}
-	return ids, len(ids) < 25, nil
+	return out, nil
 }

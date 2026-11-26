@@ -35,23 +35,41 @@ func (s *Sources) ReleaseFinder(sourceID string) (sources.ReleaseFinder, bool) {
 	return base, true
 }
 
-// ReleaseGroupEditions 与发行详情经过同一后台来源闸门。
-func (s *Sources) ReleaseGroupEditions(ctx context.Context, sourceID, groupID string) ([]string, bool, error) {
+// ReleaseGroupDetails 与版本读取共用同一来源闸门。Complete 只对完整的版本清单为真。
+type ReleaseGroupDetails struct {
+	ID, Title string
+	Editions  []sources.Release
+	Complete  bool
+}
+
+func (s *Sources) ReleaseGroupDetails(ctx context.Context, sourceID, groupID string) (ReleaseGroupDetails, error) {
 	r, ok := s.lookup(sourceID)
 	if !ok {
-		return nil, false, sources.ErrUnavailable
+		return ReleaseGroupDetails{}, sources.ErrUnavailable
 	}
 	finder, ok := r.Releases.(interface {
-		ReleaseGroupEditions(context.Context, string) ([]string, bool, error)
+		ReleaseGroupDetails(context.Context, string) (ReleaseGroupDetails, error)
 	})
 	if !ok {
-		return nil, false, sources.ErrUnavailable
+		return ReleaseGroupDetails{}, sources.ErrUnavailable
 	}
 	ctx, err := (guardedFinders{registration: r, gate: s}).background(ctx)
 	if err != nil {
+		return ReleaseGroupDetails{}, err
+	}
+	return finder.ReleaseGroupDetails(ctx, groupID)
+}
+
+func (s *Sources) ReleaseGroupEditions(ctx context.Context, sourceID, groupID string) ([]string, bool, error) {
+	group, err := s.ReleaseGroupDetails(ctx, sourceID, groupID)
+	if err != nil {
 		return nil, false, err
 	}
-	return finder.ReleaseGroupEditions(ctx, groupID)
+	ids := make([]string, 0, len(group.Editions))
+	for _, edition := range group.Editions {
+		ids = append(ids, edition.ID)
+	}
+	return ids, group.Complete, nil
 }
 
 type guardedReleasePages struct {

@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"mime"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -53,15 +55,15 @@ func pageHeaders(req *http.Request) {
 
 // FetchPage 逐跳检查公网地址、端口与重定向次数。
 func (s *Service) FetchPage(ctx context.Context, address string) (Page, error) {
-	return s.fetchPage(ctx, address, sources.MockHost{})
+	return s.fetchPage(ctx, address, sources.MockHost{}, false)
 }
 
 // FetchCurationPage 允许后台整理读取已配置的受控来源。
 func (s *Service) FetchCurationPage(ctx context.Context, address string) (Page, error) {
-	return s.fetchPage(ctx, address, s.tavilyMockHost)
+	return s.fetchPage(ctx, address, s.tavilyMockHost, true)
 }
 
-func (s *Service) fetchPage(ctx context.Context, address string, mockHost sources.MockHost) (page Page, err error) {
+func (s *Service) fetchPage(ctx context.Context, address string, mockHost sources.MockHost, curation bool) (page Page, err error) {
 	started := time.Now()
 	defer func() {
 		count := 0
@@ -98,9 +100,12 @@ func (s *Service) fetchPage(ctx context.Context, address string, mockHost source
 	pageHeaders(req)
 	response, err := client.Do(req)
 	if err != nil {
-		return page, fetchFailure(err)
+		return page, fetchFailure(err, curation)
 	}
 	defer response.Body.Close()
+	if curation && (response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500) {
+		return page, webRetryAfter(response, &tool.Error{Code: "source_unavailable", Message: "网页来源暂不可用"})
+	}
 	switch response.StatusCode {
 	case http.StatusNotFound, http.StatusGone:
 		return page, failure("fetch_not_found")
@@ -116,7 +121,7 @@ func (s *Service) fetchPage(ctx context.Context, address string, mockHost source
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxBodyBytes+1))
 	if err != nil {
-		return page, fetchFailure(err)
+		return page, fetchFailure(err, curation)
 	}
 	truncated := len(data) > maxBodyBytes
 	if truncated {
@@ -138,7 +143,7 @@ func (s *Service) fetchPage(ctx context.Context, address string, mockHost source
 	page.Text, truncated = truncateText(page.Text, maxTextBytes)
 	page.Truncated = page.Truncated || truncated
 	if ctx.Err() != nil {
-		return Page{}, fetchFailure(ctx.Err())
+		return Page{}, fetchFailure(ctx.Err(), curation)
 	}
 	return page, nil
 }
@@ -251,7 +256,24 @@ func blockElement(name string) bool {
 	return false
 }
 
-func fetchFailure(err error) error {
+// 网页和搜索走独立的 HTTP 客户端，仍把源站的恢复时刻交给同一项的退避。
+func webRetryAfter(response *http.Response, err error) error {
+	header := strings.TrimSpace(response.Header.Get("Retry-After"))
+	if header == "" {
+		return err
+	}
+	retry, parseErr := http.ParseTime(header)
+	if parseErr != nil {
+		seconds, parseErr := strconv.ParseUint(header, 10, 64)
+		if parseErr != nil {
+			return err
+		}
+		retry = time.Now().Add(time.Duration(min(seconds, uint64(math.MaxInt64/int64(time.Second)))) * time.Second)
+	}
+	return errors.Join(err, &sources.QueuePause{Source: "web_search", Reason: "source_unavailable", RetryAt: retry})
+}
+
+func fetchFailure(err error, curation bool) error {
 	var typed *tool.Error
 	if errors.As(err, &typed) {
 		return typed
@@ -266,6 +288,9 @@ func fetchFailure(err error) error {
 	var network net.Error
 	if errors.Is(err, context.DeadlineExceeded) || errors.As(err, &network) && network.Timeout() {
 		return failure("fetch_timeout")
+	}
+	if curation && (errors.As(err, &network) || errors.Is(err, io.ErrUnexpectedEOF)) {
+		return &tool.Error{Code: "source_unavailable", Message: "网页来源暂不可用"}
 	}
 	return failure("fetch_failed")
 }

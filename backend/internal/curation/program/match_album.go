@@ -74,7 +74,7 @@ func barcodeKey(s string) string {
 
 func (c *comparison) compareRelease(e catalog.CurationEvidence, method string, r sources.Release) {
 	localTitle, title := looseKey(e.Title), looseKey(r.Title)
-	localArtist, artist := looseKey(albumArtist(e)), looseKey(credits(r.Artists))
+	localArtist, artist := artistKey(albumArtist(e)), artistKey(credits(r.Artists))
 	compareTitle := !e.TitlePlaceholder && localTitle != "" && title != ""
 	compareArtist := !e.ArtistPlaceholder && localArtist != "" && artist != ""
 	c.titleMatch = compareTitle && localTitle == title
@@ -282,13 +282,18 @@ func compareISRCs(local, remote []string) (agree, mismatch bool) {
 
 // DecideAlbum 核对已读出的完整发行集合。
 func DecideAlbum(e catalog.CurationEvidence, method string, releases []sources.Release) MatchResult {
-	return decideAlbum(e, method, releases, nil)
+	result := decideAlbum(e, method, releases, MatchSnapshot{})
+	if result.Status == "uncertain" {
+		return partialAlbumMatch(e, result)
+	}
+	return result
 }
 
-func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.Release, recordingIDs map[string]map[string]bool) MatchResult {
+func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.Release, snapshot MatchSnapshot) MatchResult {
 	result := newMatch("album", method)
 	result.Candidates = releaseCandidates(method, releases)
-	result.Snapshot = MatchSnapshot{Version: 1, Method: method, RecordingIDs: recordingIDs}
+	result.Snapshot = snapshot
+	result.Snapshot.Version, result.Snapshot.Method = 1, method
 	if method == "tag_id" && len(tags(e.Tracks, "mb_release")) > 1 {
 		return uncertain(result, "mixed_release_tags")
 	}
@@ -318,7 +323,7 @@ func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.R
 		c.compareTracks(e, method, *r)
 		if method == "acoustid" {
 			for _, pair := range c.pairs {
-				if ids := recordingIDs[pair.TrackID]; ids != nil {
+				if ids := snapshot.RecordingIDs[pair.TrackID]; ids != nil {
 					if ids[pair.RecordingID] {
 						c.acoustidAgree++
 					} else {
@@ -328,6 +333,7 @@ func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.R
 			}
 		}
 		if method == "tag_id" {
+			c.artistMatch = c.artistMatch || snapshot.TagArtist != "" && albumArtist(e) == snapshot.TagArtist && r.ID == snapshot.TagReleaseID
 			c.tagText.TitleMatch, c.tagText.ArtistMatch = c.titleMatch, c.artistMatch
 			candidate.TextEvidence = &c.tagText
 			if e.Authenticity["title"] == metadata.Real && e.SelectedArtistAuth() == metadata.Real && looseKey(r.Title) != "" && looseKey(credits(r.Artists)) != "" && !c.titleMatch && !c.artistMatch && c.tagText.Matches == 0 {
@@ -479,6 +485,7 @@ func sameCredits(a, b []sources.Credit) bool {
 
 func groupMatch(result MatchResult, rows []sources.Release, rule string) MatchResult {
 	result.Status, result.Level, result.Rule, result.GroupID = "matched", "release_group", rule, rows[0].Group.ID
+	result.GroupTitle = rows[0].Group.Title
 	result.Credits = rows[0].Artists
 	for _, r := range rows {
 		if !sameCredits(result.Credits, r.Artists) {

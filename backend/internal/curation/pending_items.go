@@ -92,7 +92,9 @@ func (w *Writer) ClaimPreparedSelection(ctx context.Context, conversation string
 		byID[p.ID] = p
 	}
 	for i, p := range claimed {
-		claimed[i].Evidence, claimed[i].Candidates = byID[p.ID].Evidence, byID[p.ID].Candidates
+		row := byID[p.ID]
+		claimed[i].Evidence, claimed[i].Candidates = row.Evidence, row.Candidates
+		claimed[i].CanonicalTitle, claimed[i].CanonicalArtist = row.CanonicalTitle, row.CanonicalArtist
 	}
 	return claimed, err
 }
@@ -179,6 +181,16 @@ func (w *Writer) ReleaseModelItems(ctx context.Context, conversation string, ids
  WHERE status='in_progress' AND conversation_id=$1 AND ($4::uuid[] IS NULL OR id=ANY($4::uuid[]))`, conversation, countAttempt, nextAttemptAt, ids)
 	return err
 }
+
+// DeferModelItem 保留该项的原路线和尝试次数，重试重新分配单项用量，已记的当日用量保留。
+func (w *Writer) DeferModelItem(ctx context.Context, item PendingItem, conversation, route string, next time.Time) error {
+	r, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET status='waiting_route',route=$4,
+ conversation_id=NULL,claimed_at=NULL,next_attempt_at=$5,review_retries=0,item_tool_calls=0,item_tokens=0,updated_at=now()
+ WHERE id=$1 AND input_digest=$2 AND conversation_id=$3 AND status='in_progress'
+ AND COALESCE(identity_digest,'')=$6 AND COALESCE(route,'')=$7`, item.ID, item.InputDigest, conversation, route, next, item.IdentityDigest, item.Route)
+	return requireChanged(r, err, "item_stale", "待定项已变更")
+}
+
 func (w *Writer) RetryClaimedReview(ctx context.Context, conversation string, next time.Time) error {
 	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET review_retries=review_retries+1,next_attempt_at=$2,updated_at=now()
  WHERE conversation_id=$1 AND status='in_progress' AND review_retries<3`, conversation, next)
@@ -233,8 +245,23 @@ func requireChanged(result sql.Result, err error, code, message string) error {
 	return err
 }
 
+type RejectedSubmission struct {
+	ItemID, Tool, Code, Reason string
+}
+
+// RecordRejectedModelTool 只收录当前领取项的提交失败，供本项后续路线读取。
+func (w *Writer) RecordRejectedModelTool(ctx context.Context, item PendingItem, conversation, route string, submission RejectedSubmission) error {
+	_, err := w.db.ExecContext(ctx, `WITH rejection AS (SELECT jsonb_build_array(jsonb_build_object(
+ 'from',$5::text,'tool',$6::text,'code',$7::text,'reason',$8::text)) AS entry)
+ UPDATE curation_pending_items SET evidence=jsonb_set(evidence,'{route_history}',COALESCE(evidence->'route_history','[]'::jsonb) || entry),
+ updated_at=now() FROM rejection WHERE id=$1 AND status='in_progress' AND conversation_id=$2 AND input_digest=$3
+ AND COALESCE(identity_digest,'')=$4 AND NOT COALESCE(evidence->'route_history','[]'::jsonb) @> entry`,
+		item.ID, conversation, item.InputDigest, item.IdentityDigest, route, submission.Tool, submission.Code, submission.Reason)
+	return err
+}
+
 // AdvanceModelItem 同时释放本档领取、登记下一档并重置单项用量。
-func (w *Writer) AdvanceModelItem(ctx context.Context, item PendingItem, conversation, route string) error {
+func (w *Writer) AdvanceModelItem(ctx context.Context, item PendingItem, conversation, from, route, reason string) error {
 	if route != "lookup" && route != "web" {
 		return operations.Invalid("invalid_input", "模型处理路线无效")
 	}
@@ -262,8 +289,10 @@ func (w *Writer) AdvanceModelItem(ctx context.Context, item PendingItem, convers
 		}
 	}
 	r, err := tx.ExecContext(ctx, `UPDATE curation_pending_items SET route=$4,status='waiting_route',identity_digest=NULLIF($6,''),
+ evidence=jsonb_set(evidence,'{route_history}',COALESCE(evidence->'route_history','[]'::jsonb) ||
+ jsonb_build_object('from',$8::text,'to',$4::text,'reason',$9::text)),
  conversation_id=NULL,claimed_at=NULL,next_attempt_at=NULL,attempts=0,review_retries=0,item_tool_calls=0,item_tokens=0,updated_at=now()
- WHERE id=$1 AND input_digest=$2 AND conversation_id=$3 AND status='in_progress' AND COALESCE(identity_digest,'')=$5 AND COALESCE(route,'')=$7`, item.ID, item.InputDigest, conversation, route, item.IdentityDigest, identity, item.Route)
+ WHERE id=$1 AND input_digest=$2 AND conversation_id=$3 AND status='in_progress' AND COALESCE(identity_digest,'')=$5 AND COALESCE(route,'')=$7`, item.ID, item.InputDigest, conversation, route, item.IdentityDigest, identity, item.Route, from, reason)
 	if err := requireChanged(r, err, "item_stale", "待定项已变更"); err != nil {
 		return err
 	}

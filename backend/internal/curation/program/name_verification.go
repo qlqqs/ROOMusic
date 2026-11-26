@@ -17,7 +17,13 @@ import (
 
 // 同一套比较从实际曲目和发行资料得出可纠正的字段。提案不能提供身份、结构或外部值。
 func structuralNameValues(e catalog.CurationEvidence, m MatchResult) []curation.VerificationCandidate {
-	if m.Status != "matched" || m.Level == "release_group" || m.Level == "artist" {
+	if m.Status != "matched" || m.Level == "artist" {
+		return nil
+	}
+	if m.Level == "release_group" {
+		if v := groupTitleCandidate(e, m.GroupID, m.GroupTitle); v != nil {
+			return []curation.VerificationCandidate{*v}
+		}
 		return nil
 	}
 	var values []curation.VerificationCandidate
@@ -32,7 +38,11 @@ func structuralNameValues(e catalog.CurationEvidence, m MatchResult) []curation.
 		var c comparison
 		c.compareRelease(e, "model", *r)
 		c.compareTracks(e, "model", *r)
-		if !c.countEqual || !c.durationsOK || len(c.conflicts) > 0 || verifyAlbum(e, *r, c).Contradicted {
+		check := m.Verification
+		if check == nil {
+			check = verifyAlbum(e, *r, c)
+		}
+		if !c.countEqual || !c.durationsOK || len(c.conflicts) > 0 || check.Contradicted {
 			return nil
 		}
 		pairs = c.pairs
@@ -70,11 +80,17 @@ func structuralNameValues(e catalog.CurationEvidence, m MatchResult) []curation.
 	return values
 }
 
-func nameSourceOperation(ctx context.Context, q operations.Queryer, v curation.VerificationCandidate) (string, error) {
-	target, id := "release", v.ReleaseID
-	if v.TrackID != "" {
-		target, id = "track", v.TrackID
+func groupTitleCandidate(e catalog.CurationEvidence, id, title string) *curation.VerificationCandidate {
+	if id == "" || id != e.ReleaseGroupMatchID || looseKey(title) == "" || sameText(e.Title, title) ||
+		e.Authenticity["title"] != metadata.Real || e.Title == "" || e.Corrected["title"] || e.Automatic["title"] {
+		return nil
 	}
+	return &curation.VerificationCandidate{ReleaseID: e.ID, Field: "title", Before: e.Title, After: title,
+		ExternalType: "release_group", ExternalID: id, ExternalValue: title, Structure: true}
+}
+
+func nameSourceOperation(ctx context.Context, q operations.Queryer, v curation.VerificationCandidate) (string, error) {
+	target, id := v.NameLinkTarget()
 	var op string
 	err := q.QueryRowContext(ctx, `SELECT operation_id::text FROM external_links WHERE source='musicbrainz' AND object_type=$1 AND object_id=$2 AND external_id=$3`, target, id, v.ExternalID).Scan(&op)
 	return op, err
@@ -129,6 +145,9 @@ func (m *ModelMatcher) VerificationPlan(ctx context.Context, item curation.Pendi
 }
 
 func (m *ModelMatcher) currentNameCandidate(ctx context.Context, e catalog.CurationEvidence, want curation.VerificationCandidate) (*curation.VerifiedName, error) {
+	if e.ReleaseGroupMatchID != "" && want.TrackID == "" && want.Field == "title" && (e.ExternalID == "" || want.ExternalType == "release_group") {
+		return m.currentGroupTitle(ctx, e, want)
+	}
 	kind, id := "release_match", e.ExternalID
 	if id == "" && len(e.Tracks) == 1 && e.Tracks[0].ID == want.TrackID {
 		kind, id = "recording_match", e.Tracks[0].ExternalID
@@ -163,6 +182,47 @@ func (m *ModelMatcher) currentNameCandidate(ctx context.Context, e catalog.Curat
 		}
 	}
 	return nil, nil
+}
+
+func (m *ModelMatcher) currentGroupTitle(ctx context.Context, e catalog.CurationEvidence, want curation.VerificationCandidate) (*curation.VerifiedName, error) {
+	group, err := found(m.sources.ReleaseGroupDetails(ctx, "musicbrainz", e.ReleaseGroupMatchID))
+	if err != nil {
+		return nil, err
+	}
+	v := groupTitleCandidate(e, group.ID, group.Title)
+	if v == nil || !sameText(want.After, group.Title) || !group.Complete || len(group.Editions) == 0 {
+		return nil, nil
+	}
+	for _, edition := range group.Editions {
+		title := edition.Title
+		if title == "" {
+			f, ok := m.sources.ReleaseFinder("musicbrainz")
+			if !ok {
+				return nil, sources.ErrUnavailable
+			}
+			detail, err := found(f.ReleaseByID(ctx, edition.ID))
+			if err != nil {
+				return nil, err
+			}
+			if detail.ID != edition.ID || detail.Group.ID != group.ID {
+				return nil, nil
+			}
+			title = detail.Title
+		}
+		if looseKey(title) == "" || sameText(e.Title, title) {
+			return nil, nil
+		}
+	}
+	v.OperationID, err = nameSourceOperation(ctx, m.db, *v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &curation.VerifiedName{VerificationCandidate: *v, Match: curation.NameMatchEvidence{
+		ReleaseGroupID: group.ID, ReleaseGroupTitle: group.Title, EditionCount: len(group.Editions), LocalTracks: len(e.Tracks),
+	}}, nil
 }
 
 // 在领取事务外读回当前外部资料，下一轮模型及独立审查都使用刷新后的输入。

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
 type ModelMatcher struct {
@@ -69,7 +71,7 @@ func (m *ModelMatcher) evidence(ctx context.Context, q operations.Queryer, id st
 	return e, nil
 }
 
-// AnnotatePendingEvidence 读取尚无真实性标记的旧项；只给完整指纹吻合的发行附上当前来源。
+// AnnotatePendingEvidence 为缺少完整本地证据的旧项补字段；只给完整指纹吻合的发行附上当前来源。
 func (m *ModelMatcher) AnnotatePendingEvidence(ctx context.Context, items []curation.PendingItem) error {
 	var ids, artistIDs []string
 	var artistIndices, indices []int
@@ -77,11 +79,14 @@ func (m *ModelMatcher) AnnotatePendingEvidence(ctx context.Context, items []cura
 		if item.Kind != "release_match" && item.Kind != "recording_match" && item.Kind != "artist_identity" {
 			continue
 		}
-		var stored struct{ Authenticity json.RawMessage }
+		var stored struct {
+			Authenticity json.RawMessage
+			Group        json.RawMessage `json:"release_group_match"`
+		}
 		if err := json.Unmarshal(item.Evidence, &stored); err != nil {
 			return err
 		}
-		if stored.Authenticity == nil {
+		if stored.Authenticity == nil || item.Kind != "artist_identity" && stored.Group == nil {
 			if item.Kind == "artist_identity" {
 				artistIDs = append(artistIDs, item.ArtistID)
 				artistIndices = append(artistIndices, i)
@@ -149,7 +154,12 @@ func (m *ModelMatcher) AnnotatePendingEvidence(ctx context.Context, items []cura
 				return err
 			}
 		}
-		item.Evidence = jsonValue(pendingMatchEvidence(e, matched.Method))
+		var stored map[string]any
+		if err := json.Unmarshal(item.Evidence, &stored); err != nil {
+			return err
+		}
+		maps.Copy(stored, pendingMatchEvidence(e, matched.Method))
+		item.Evidence = jsonValue(stored)
 	}
 	return tx.Commit()
 }
@@ -181,6 +191,9 @@ func (m *ModelMatcher) Plan(ctx context.Context, item curation.PendingItem, exte
 	if err != nil {
 		return MatchPlan{}, err
 	}
+	if conflicts := linkConflicts(e, "release", e.ID, e.ExternalID, externalID); match.Mode == "album" && len(conflicts) > 0 {
+		return MatchPlan{}, matchConflict(conflicts[0])
+	}
 	match, err = m.checkModelEditions(ctx, e, item, match)
 	if err != nil {
 		return MatchPlan{}, err
@@ -194,9 +207,7 @@ func (m *ModelMatcher) Plan(ctx context.Context, item curation.PendingItem, exte
 	if match.Mode == "single" {
 		before = e.Tracks[0].ExternalID
 	}
-	if conflicts := linkConflicts(e, "release", e.ID, e.ExternalID, externalID); match.Mode == "album" && len(conflicts) > 0 {
-		return MatchPlan{}, matchConflict(conflicts[0])
-	}
+
 	linked := 0
 	trackLinks := map[string]string{}
 	for _, t := range e.Tracks {
@@ -263,6 +274,7 @@ func matchConflict(code string) error {
 }
 
 func (m *ModelMatcher) readMatch(ctx context.Context, kind string, e catalog.CurationEvidence, id string) (MatchResult, error) {
+	e.Compilation = curation.CompilationEvidence(e)
 	switch kind {
 	case "recording_match":
 		r := newMatch("single", "model")
@@ -280,10 +292,7 @@ func (m *ModelMatcher) readMatch(ctx context.Context, kind string, e catalog.Cur
 		if rec.ID != id {
 			return r, matchConflict("external_id_mismatch")
 		}
-		if _, within := compareLength(e.Tracks[0].DurationSeconds, rec.LengthMS); within {
-			e = curation.LocalSearchEvidence(e)
-		}
-		r.Verification = verifyRecording(e, rec)
+		r.Verification = verifyModelRecording(e, rec)
 		r.Rule, r.Level = r.Verification.Method, "recording"
 		r.Status, r.Recording, r.Pairs = "matched", &rec, []TrackPair{{e.Tracks[0].ID, rec.ID}}
 		return r, nil
@@ -300,19 +309,32 @@ func (m *ModelMatcher) readMatch(ctx context.Context, kind string, e catalog.Cur
 		if release.ID != id {
 			return r, matchConflict("external_id_mismatch")
 		}
-		if len(e.DiscPositions()) != len(release.Media) {
-			return r, matchConflict("media_count_mismatch")
-		}
 		var c comparison
 		c.compareRelease(e, "model", release)
 		c.compareTracks(e, "model", release)
 		if slices.Contains(c.conflicts, "position_conflict") || slices.ContainsFunc(c.pairs, func(p TrackPair) bool { return p.RecordingID == "" }) {
 			return r, matchConflict("position_conflict")
 		}
+		if !c.countEqual {
+			if rule, n := partialAlbumRule(curation.LocalSearchEvidence(e), release, nil); rule != "" {
+				paired := min(len(e.Tracks), n)
+				r.Verification = &MatchVerification{Method: "album_structure", Direct: true, LocalTracks: len(e.Tracks), ExternalTracks: n,
+					Comparable: paired, Within: paired, ComparableTrackTitles: paired, MatchedTrackTitles: paired,
+					TitleMatch: c.titleMatch, ArtistMatch: c.artistMatch}
+				r.Candidates = releaseCandidates("model", []sources.Release{release})
+				return groupMatch(r, []sources.Release{release}, rule), nil
+			}
+		}
+		if len(e.DiscPositions()) != len(release.Media) {
+			return r, matchConflict("media_count_mismatch")
+		}
 		if !c.countEqual || len(c.pairs) == 0 {
 			return r, matchConflict("track_count")
 		}
-		r.Verification = verifyAlbum(e, release, c)
+		r.Verification, err = m.verifyAlbum(ctx, e, release, c)
+		if err != nil {
+			return r, err
+		}
 		r.Rule, r.Level = r.Verification.Method, "release"
 		r.Status, r.Release, r.Pairs = "matched", &release, c.pairs
 		return r, nil
@@ -326,16 +348,14 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 		return MatchApplied{}, operations.Invalid("invalid_input", "匹配写入参数无效")
 	}
 	proof := plan.match.Verification
-	if opt.ConfirmedBy == "" {
-		if proof.Contradicted {
-			return MatchApplied{}, matchConflict("contradictory_evidence")
+	if proof.Contradicted {
+		return MatchApplied{}, matchConflict("contradictory_evidence")
+	}
+	if opt.ConfirmedBy == "" && !proof.Direct {
+		if !uuid.Valid(opt.ApprovedReviewID) {
+			return MatchApplied{}, operations.Conflict("approval_required", "此编号需要独立审查")
 		}
-		if !proof.Direct {
-			if !uuid.Valid(opt.ApprovedReviewID) {
-				return MatchApplied{}, operations.Conflict("approval_required", "此编号需要独立审查")
-			}
-			ctx = operations.WithReviewOrigin(ctx, opt.ApprovedReviewID, "approved")
-		}
+		ctx = operations.WithReviewOrigin(ctx, opt.ApprovedReviewID, "approved")
 	}
 	conversation := opt.ConversationID
 	if conversation == "" {
@@ -346,6 +366,7 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 		opt.Source.Basis = proof.Method
 		p.links.Method = proof.Method
 	}
+	p.links.ApprovedReviewID = opt.ApprovedReviewID
 	p.links.Source, p.links.ConversationID, p.links.ConfirmedBy = opt.Source, conversation, opt.ConfirmedBy
 	// 目录锁内重读摘要；同键回放由操作日志先行处理。
 	p.links.CheckEvidence = func(ctx context.Context, tx *sql.Tx) error {
