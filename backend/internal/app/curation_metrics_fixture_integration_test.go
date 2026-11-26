@@ -88,8 +88,9 @@ type metricLocalTrack struct {
 }
 
 type metricExternal struct {
-	Artists  []metricArtist
-	Releases []metricRelease
+	Fingerprints map[string][]string
+	Artists      []metricArtist
+	Releases     []metricRelease
 }
 
 type metricArtist struct {
@@ -148,10 +149,22 @@ func writeMetricSample(t *testing.T, root string, s metricSample) {
 		writeMetricCue(t, root, s)
 		return
 	}
-	for _, track := range s.Local.Tracks {
+	for i, track := range s.Local.Tracks {
 		tags := s.fileTags(track)
 		path := filepath.Join(dir, track.File)
 		requireCurationOK(t, os.MkdirAll(filepath.Dir(path), 0755))
+		if s.Local.Format == "fingerprint" {
+			// 不同节拍和音程的合成序列供 fpcalc 计算；生成器和实际扫描读取同一份文件。
+			tone := fmt.Sprintf("aevalsrc=sin(2*PI*(160+%d*mod(floor(t*%d)\\,7))*t):s=44100:d=%d", 34+i*17, i+2, track.Seconds)
+			args := []string{"-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", tone, "-c:a", "flac"}
+			for _, tag := range tags {
+				args = append(args, "-metadata", tag)
+			}
+			if out, err := exec.CommandContext(t.Context(), b3RequireTool(t, "ROOMUSIC_TEST_FFMPEG"), append(args, path)...).CombinedOutput(); err != nil {
+				t.Fatalf("生成声纹音频：%v %s", err, out)
+			}
+			continue
+		}
 		if s.Local.Format == "flac" {
 			// 扫描器从 STREAMINFO 读取总样本数和身份。每个虚构音轨具有稳定且独立的内容指纹。
 			hash := sha256.Sum256([]byte(s.ID + "/" + track.File))
@@ -203,10 +216,17 @@ func metricLegacyMP3(t *testing.T, audio []byte, s metricSample, track metricLoc
 		copy(tag[33:63], s.Local.Artist)
 		copy(tag[63:93], album)
 		tag[126], tag[127] = 1, 255
+		if pos, err := strconv.Atoi(track.Tags["TRACKNUMBER"]); err == nil {
+			tag[126] = byte(pos)
+		}
 		return append(audio, tag...)
 	}
+	trackNumber := track.Tags["TRACKNUMBER"]
+	if trackNumber == "" {
+		trackNumber = "1"
+	}
 	var frames []byte
-	for _, pair := range [][2]string{{"TIT2", track.Title}, {"TPE1", s.Local.Artist}, {"TALB", string(album)}, {"TRCK", "1"}} {
+	for _, pair := range [][2]string{{"TIT2", track.Title}, {"TPE1", s.Local.Artist}, {"TALB", string(album)}, {"TRCK", trackNumber}} {
 		// ID3v2.3 文本帧首字节为 0，表示播放器会按 Latin-1 解释后续字节。
 		header := make([]byte, 10)
 		copy(header, pair[0])
@@ -237,9 +257,16 @@ func writeMetricCatalog(t *testing.T, samples []metricSample) string {
 	type row = map[string]any
 	var catalog struct {
 		Artists, Groups, Releases, Recordings []row
+		Fingerprints                          map[string][]string `json:"fingerprints,omitempty"`
 	}
 	artists, groups, releases, recordings := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, s := range samples {
+		if len(s.External.Fingerprints) > 0 {
+			if catalog.Fingerprints == nil {
+				catalog.Fingerprints = map[string][]string{}
+			}
+			maps.Copy(catalog.Fingerprints, s.External.Fingerprints)
+		}
 		for _, a := range s.External.Artists {
 			if artists[a.ID] {
 				continue
