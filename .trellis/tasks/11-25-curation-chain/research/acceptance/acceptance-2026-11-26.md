@@ -123,7 +123,7 @@ V7 轮较上一轮多完成 1 张，少发 4 次 MB 请求、少收 4 次 503，
 
 ## 真实模型试用与 oracle 对照
 
-以下保留 v6 之前的真实模型结果。2026-11-26 01:46:33–02:00:59 UTC，使用同一批 20 张、288 首静音文件、新隔离库、相同生产限速器和相同评分。真实端点为 `https://api.qlqq.de/v1`，协议为 OpenAI Responses，开启者的整理模型与独立审查模型均为 `gpt-6.2-sol`，密钥为 `<略>`。测试通过回环服务将应用生成的请求流转发至固定 HTTPS 目标，在进程内读取 Responses 终帧的 usage。每日上限设为 3,000,000 token，D16 使用生产设置。两轮均使用返回空结果的回环 SearXNG；真实轮还实际调用了生产的网页读取工具。MusicBrainz 请求数仅统计 MB API 客户端的实际 GET，含重试。该网络出口可能同时有其他程序访问 MB。[真实轮原始 JSON](live-real-responses.json) · [oracle 原始 JSON](live-oracle-after-v7.json)
+以下保留 v6 之前的真实模型结果。2026-11-26 01:46:33–02:00:59 UTC，使用同一批 20 张、288 首静音文件、新隔离库、相同生产限速器和相同评分。真实端点为本机 Codex 配置的 Responses 地址（`<Responses 端点>`），协议为 OpenAI Responses，开启者的整理模型与独立审查模型均为 `gpt-6.2-sol`，密钥为 `<略>`。测试通过回环服务将应用生成的请求流转发至固定 HTTPS 目标，在进程内读取 Responses 终帧的 usage。每日上限设为 3,000,000 token，D16 使用生产设置。两轮均使用返回空结果的回环 SearXNG；真实轮还实际调用了生产的网页读取工具。MusicBrainz 请求数仅统计 MB API 客户端的实际 GET，含重试。该网络出口可能同时有其他程序访问 MB。[真实轮原始 JSON](live-real-responses.json) · [oracle 原始 JSON](live-oracle-after-v7.json)
 
 | 度量 | V7 修复后 oracle | 真实模型 |
 | --- | ---: | ---: |
@@ -230,7 +230,7 @@ v6 复验沿用以下环境变量与测试入口，临时目录改为 `temp/z-re
 mkdir -p temp/z-real-responses
 sg docker -c 'export NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost TMPDIR="$PWD/temp/z-real-responses"
 export ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-compose-test-z-real-responses ROOMUSIC_TEST_RUN="^Test真实曲库队列试用$" ROOMUSIC_LIVE_MODE=real
-export ROOMUSIC_LIVE_ENDPOINT=https://api.qlqq.de/v1 ROOMUSIC_LIVE_MODEL=gpt-6.2-sol
+export ROOMUSIC_LIVE_ENDPOINT="<Responses 端点>" ROOMUSIC_LIVE_MODEL=gpt-6.2-sol
 export ROOMUSIC_LIVE_KEY_FILE="$HOME/.codex/auth.json" ROOMUSIC_LIVE_KEY_FIELD=OPENAI_API_KEY
 export ROOMUSIC_LIVE_REFERENCE="$PWD/temp/real-corpus-reference.json" ROOMUSIC_LIVE_OUT="$PWD/.trellis/tasks/11-25-curation-chain-z-acceptance/research/live-real-responses.json"
 mise exec -- ./scripts/test-integration.sh'
