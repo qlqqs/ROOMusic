@@ -196,12 +196,10 @@ func ClearStagedObservations(ctx context.Context, database Execer, scanID, rootI
 }
 
 // AlignCueStagingScopes 把 CUE 虚拟轨的显式父来源对齐到虚拟轨所在的 scope，使 organizer 能在同一 scope 内
-// 按明确的父子关系消除虚拟/物理重复；原 scope 仅保存在暂存 JSON 中，供独占判断辨别原生碟目录。
+// 按明确的父子关系消除虚拟/物理重复。
 func AlignCueStagingScopes(ctx context.Context, database Execer, scanID, rootID string) error {
 	_, err := database.ExecContext(ctx, `UPDATE scan_observations parent
-		SET organization_scope=cue.organization_scope,
-			observation=parent.observation || jsonb_build_object('original_organization_scope',
-				COALESCE(parent.observation->>'original_organization_scope', parent.organization_scope))
+		SET organization_scope=cue.organization_scope
 		FROM (
 			SELECT observation->>'cue_parent_relative_path' AS parent_path, MIN(organization_scope) AS organization_scope
 			FROM scan_observations
@@ -213,39 +211,12 @@ func AlignCueStagingScopes(ctx context.Context, database Execer, scanID, rootID 
 	return err
 }
 
-// MarkDiscParentScopes 标记父目录子树中没有其它音频 scope 或保住范围的碟目录观察；必须在 CUE scope 对齐后调用。
-// 保住来源仅在原 scope 与当前 scope 一致的碟目录本身内豁免，不包括更深层目录或 CUE 对齐带入的其它目录。
-func MarkDiscParentScopes(ctx context.Context, database Execer, scanID, rootID string, scopedDirectories ...[]string) error {
-	var directories []string
-	if len(scopedDirectories) > 0 {
-		directories = scopedDirectories[0]
-	}
+// AlignDiscStagingScopes 将正碟直放在父目录的观察与碟子目录放到同一规划范围。
+func AlignDiscStagingScopes(ctx context.Context, database Execer, scanID, rootID string) error {
 	_, err := database.ExecContext(ctx, `WITH parents AS (
-		SELECT DISTINCT organization_scope AS scope, substring(organization_scope FROM 13) AS parent
-		FROM scan_observations
-		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope LIKE 'disc-parent:_%'
-	), exclusive AS (
-		SELECT p.scope FROM parents p
-		WHERE NOT EXISTS (
-			SELECT 1 FROM tracks t WHERE $3::text[] IS NOT NULL AND t.source_root_id=$2::uuid AND t.source_status='present'
-			AND starts_with(t.relative_path,p.parent||'/') AND NOT (`+trackDirectorySQL+`=ANY($3)))
-		AND NOT EXISTS (
-			SELECT 1 FROM scan_observations x
-			WHERE x.scan_run_id=$1::uuid AND x.root_id=$2::uuid AND x.organization_scope<>p.scope
-			  AND left(x.relative_path, length(p.parent)+1)=p.parent || '/')
-		AND NOT EXISTS (
-			SELECT 1 FROM scan_held_sources h
-			WHERE h.scan_run_id=$1::uuid AND h.root_id=$2::uuid
-			  AND (h.relative_path=p.parent OR left(h.relative_path,length(p.parent)+1)=p.parent || '/')
-			  AND NOT EXISTS (
-				SELECT 1 FROM scan_observations d
-				WHERE d.scan_run_id=$1::uuid AND d.root_id=$2::uuid AND d.organization_scope=p.scope
-				  AND d.observation->>'directory'=CASE WHEN h.kind='directory' THEN h.relative_path
-					ELSE regexp_replace(h.relative_path, '/[^/]+$', '') END
-				  AND COALESCE(d.observation->>'original_organization_scope', d.organization_scope)=p.scope))
-	)
-	UPDATE scan_observations o SET observation=o.observation || '{"disc_parent_exclusive":true}'::jsonb
-	FROM exclusive e
-	WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.organization_scope=e.scope`, scanID, rootID, directories)
+        SELECT DISTINCT organization_scope, substring(organization_scope FROM 13) AS parent
+        FROM scan_observations WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope LIKE 'disc-parent:_%'
+    ) UPDATE scan_observations o SET organization_scope=p.organization_scope FROM parents p
+    WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.organization_scope='directory:'||p.parent`, scanID, rootID)
 	return err
 }

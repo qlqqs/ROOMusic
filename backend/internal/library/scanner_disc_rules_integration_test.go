@@ -15,16 +15,16 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
-// 合成标签先故意冲突，产生两个 box_leaf；仅修改标签后，两组曲目各占一半，必须新建发行。
+// 合成曲号先留缺口且专辑名不同，产生两个同目录拆分候选；仅修改标签后，两组曲目各占一半，必须新建发行。
 func TestPostgreSQLDiscFavoriteTransfer(t *testing.T) {
 	for _, otherVersion := range []bool{false, true} {
 		t.Run(fmt.Sprintf("另一个版本有曲目=%t", otherVersion), func(t *testing.T) {
 			f := newLibraryFixture(t)
 			root := insertScannerRoot(t, f, "favorite-disc-merge")
 			service := scannerTestApplication(f)
-			firstPath, secondPath := "A/CD1/01.flac", "A/CD2/01.flac"
+			firstPath, secondPath := "A/CD1/01.flac", "A/CD2/03.flac"
 			writeAudio(t, root, firstPath, audioFile{seed: 1, title: "One", album: "First", track: 1})
-			writeAudio(t, root, secondPath, audioFile{seed: 2, title: "Two", album: "Second", track: 1})
+			writeAudio(t, root, secondPath, audioFile{seed: 2, title: "Two", album: "Second", track: 3})
 			if otherVersion {
 				writeAudio(t, root, "Other/01.flac", audioFile{seed: 3, title: "Other", album: "Other", track: 1})
 			}
@@ -35,8 +35,8 @@ func TestPostgreSQLDiscFavoriteTransfer(t *testing.T) {
 				t.Fatalf("缺少合并前的两张发行: %v", oldReleases)
 			}
 			for _, r := range visibleReleases(t, f, root.ID) {
-				if r.Title != "Other" && r.Kind != string(ingest.CandidateBoxLeaf) {
-					t.Fatalf("合并前不是 box_leaf: %+v", r)
+				if r.Title != "Other" && r.Kind != string(ingest.CandidateSameDirSplit) {
+					t.Fatalf("合并前不是按名拆分: %+v", r)
 				}
 			}
 			groupOf := func(release string) string {
@@ -169,10 +169,10 @@ func TestPostgreSQLDiscParentScopesAndMediumTitle(t *testing.T) {
 		return releaseID
 	}
 	parentRelease := assertAnchor("A/CD1/01.flac", "strict_multidisc", "A", "A")
-	leafRelease := assertAnchor("艺人/某精选 CD1/01.flac", "box_leaf", "艺人/某精选 CD1", "某精选")
-	assertAnchor("B/CD1/01.flac", "box_leaf", "B/CD1", "CD1")
+	leafRelease := assertAnchor("艺人/某精选 CD1/01.flac", "strict_multidisc", "艺人", "某精选")
+	assertAnchor("B/CD1/01.flac", "strict_multidisc", "B", "B")
 	assertDatabaseCount(t, f, `SELECT COUNT(*) FROM release_artworks WHERE release_id=$1::uuid AND width=3`, 1, parentRelease)
-	assertDatabaseCount(t, f, `SELECT COUNT(*) FROM release_artworks WHERE release_id=$1::uuid`, 0, leafRelease)
+	assertDatabaseCount(t, f, `SELECT COUNT(*) FROM release_artworks WHERE release_id=$1::uuid AND width=9`, 1, leafRelease)
 	titleRelease := assertAnchor("T/Disc 1 - 夏/01.flac", "strict_multidisc", "T", "Seasons")
 	readMedia := func() string {
 		var media string
@@ -245,8 +245,8 @@ func TestPostgreSQLDiscParentHeldSiblingPreventsPromotion(t *testing.T) {
 		WHERE t.id=$1::uuid`, after[discPath]).Scan(&kind, &directory, &title, &anchor); err != nil {
 		t.Fatal(err)
 	}
-	wantAnchor := ingest.CandidateIdentity(root.ID, ingest.CandidateAnchor{Kind: ingest.CandidateBoxLeaf, Scope: "Album/CD1"})
-	if kind != string(ingest.CandidateBoxLeaf) || directory != "Album/CD1" || title != "CD1" || anchor != wantAnchor {
-		t.Fatalf("兄弟目录被保住时不能上提：种类=%q 目录=%q 标题=%q 锚点=%q，期望 box_leaf/Album/CD1/CD1/%s", kind, directory, title, anchor, wantAnchor)
+	wantAnchor := ingest.CandidateIdentity(root.ID, ingest.CandidateAnchor{Kind: ingest.CandidateMultiDisc, Scope: "Album"})
+	if kind != string(ingest.CandidateMultiDisc) || directory != "Album" || title != "Album" || anchor != wantAnchor {
+		t.Fatalf("兄弟目录保留时仍应上提：种类=%q 目录=%q 标题=%q 锚点=%q，期望 strict_multidisc/Album/Album/%s", kind, directory, title, anchor, wantAnchor)
 	}
 }

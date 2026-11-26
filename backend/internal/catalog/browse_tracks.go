@@ -124,7 +124,7 @@ func (s *Store) BrowseAlbumTracks(ctx context.Context, groupID string) (BrowseAl
 			return detail{}, ErrReleaseGroupNotFound
 		}
 		ids, err := snapshot.artistIDs(ctx, `SELECT t.id::text FROM media m JOIN tracks t ON t.medium_id=m.id
- WHERE m.release_id=$1::uuid AND t.source_status='present' ORDER BY m.position,m.id,t.position,t.id`, albums[0].Representative.ID)
+ WHERE m.release_id=$1::uuid AND t.source_status='present' ORDER BY m.position,m.id,COALESCE(t.sort_position,t.position),t.id`, albums[0].Representative.ID)
 		if err != nil {
 			return detail{}, err
 		}

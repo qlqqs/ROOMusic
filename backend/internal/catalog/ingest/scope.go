@@ -38,7 +38,7 @@ func artworkScope(observation SourceObservation) string {
 // IsDiscDirectory 供局部扫描和归组共用碟目录名规则。
 func IsDiscDirectory(name string) bool {
 	_, ok := parseDiscMarker(name)
-	return ok
+	return ok || standaloneBonusDir(name)
 }
 
 // 虚拟轨由 sheet 负责枚举，单轨 CUE 的物理轨仍由其音频目录负责。

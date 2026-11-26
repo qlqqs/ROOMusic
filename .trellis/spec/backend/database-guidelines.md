@@ -294,3 +294,8 @@ Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-
 ### 迁移 0065 的曲目有效值视图
 
 `track_effective` 按 `tracks` 的实际列序逐列投影，标题与艺人按人工、自动、扫描的顺序取值。`tracks` 增删、更名、改类型或调整列顺序时，须在同一迁移及其回退脚本中重建该视图，核对两者在 `information_schema.columns` 中的列名、类型与顺序。扫描继续写基础表。0065 回退会删除两个曲目字段层、对应操作与撤销、相关标记、例外和署名事实，回退后必须完整重扫以重建投影。
+
+
+## 扫描归组迁移
+
+`0100_scan_grouping` 归扫描发行层所有。releases.scan_version_terms 保存扫描版本词；release_attachments 以发行和根内相对路径为键。tracks.sort_position 与 track_effective 的同名列记录内部次序，tracks.position 的 0 表示未知。artist_profiles.list_sort_key 由有效展示名生成，迁移通过现有艺人投影换代刷新旧行。降级先恢复旧曲位，再删列、附属表和排序函数；需要精确恢复分组及人工归属时使用迁移前备份。合入时迁移号按当时最大号顺延。

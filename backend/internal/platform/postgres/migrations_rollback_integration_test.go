@@ -554,9 +554,20 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO releases(id,group_id,title,artist) VALUES('e8700000-0000-4000-8000-000000000002',
  'e8700000-0000-4000-8000-000000000001','整理规则迁移测试发行','测试艺人');`)
 			}
+			scanGrouping := strings.HasSuffix(m.Name, "_scan_grouping.sql")
+			if scanGrouping {
+				rollbackExec(t, db, scanGroupingLegacyRows)
+			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
+			if scanGrouping {
+				assertScanGroupingMigrationUp(t, db)
+				checkScanGroupingAttachmentConstraints(t, db)
+				// 从新版未知曲号的内部次序恢复旧曲位；已知曲号应保持原值。
+				rollbackExec(t, db, `UPDATE tracks SET position=0,sort_position=7 WHERE id='e9800000-0000-4000-8000-000000000005';
+ UPDATE tracks SET sort_position=2 WHERE id='e9800000-0000-4000-8000-000000000004'`)
+			}
 			if m.Version == 78 {
 				var enabled bool
 				err := db.QueryRowContext(t.Context(), "SELECT enabled AND NOT shared AND slimproto_enabled FROM upnp_settings WHERE id=1").Scan(&enabled)
@@ -668,6 +679,16 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			rollbackApply(t, db, migrationPrefix(available, m.Version-1))
 			s2 := rollbackSnapshot(t, db)
+			if scanGrouping {
+				var restored bool
+				err := db.QueryRowContext(t.Context(), `SELECT
+ (SELECT position=7 FROM track_effective WHERE id='e9800000-0000-4000-8000-000000000005')
+ AND (SELECT position=5 FROM track_effective WHERE id='e9800000-0000-4000-8000-000000000004')
+ AND to_regclass('release_attachments') IS NULL AND to_regprocedure('catalog_list_sort_key(text)') IS NULL`).Scan(&restored)
+				if err != nil || !restored {
+					t.Fatalf("归组迁移回退后的旧曲位、附件表、排序函数：restored=%v err=%v", restored, err)
+				}
+			}
 			if m.Version == 67 {
 				assertMergedDiscRestored(t, db)
 			}
@@ -704,6 +725,9 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s3 := rollbackSnapshot(t, db)
+			if scanGrouping {
+				assertScanGroupingMigrationUp(t, db)
+			}
 			if strings.HasSuffix(m.Name, "_instance_insights.sql") {
 				assertInsightsMigrationSeed(t, db)
 			}
@@ -875,4 +899,71 @@ func TestPostgreSQLCurationModelRulesMigrationRoundTrip(t *testing.T) {
 	requireQuery(`SELECT model_daily_token_limit=98765 AND model_concurrency=7 AND max_request_tokens=128000 FROM curation_settings WHERE id=1`)
 	checkTotals()
 	checkQueue()
+}
+
+const scanGroupingLegacyRows = `
+ INSERT INTO library_roots(id,path) VALUES('e9800000-0000-4000-8000-000000000000','/synthetic/scan-grouping');
+ INSERT INTO release_groups(id) VALUES('e9800000-0000-4000-8000-000000000001');
+ INSERT INTO releases(id,group_id,title,artist) VALUES ('e9800000-0000-4000-8000-000000000002',
+ 'e9800000-0000-4000-8000-000000000001','旧发行','合成艺人');
+ INSERT INTO media(id,release_id,position) VALUES ('e9800000-0000-4000-8000-000000000003','e9800000-0000-4000-8000-000000000002',1);
+ INSERT INTO tracks(id,medium_id,position,title,artist,source_root_id,relative_path,observed_at) VALUES
+ ('e9800000-0000-4000-8000-000000000004','e9800000-0000-4000-8000-000000000003',5,'旧曲目','合成艺人','e9800000-0000-4000-8000-000000000000','One.flac',NOW()),
+ ('e9800000-0000-4000-8000-000000000005','e9800000-0000-4000-8000-000000000003',7,'补序曲目','合成艺人','e9800000-0000-4000-8000-000000000000','Two.flac',NOW());`
+
+func assertScanGroupingMigrationUp(t *testing.T, db *sql.DB) {
+	t.Helper()
+	var tracks, versionTerms, emptyAttachments, viewColumns bool
+	err := db.QueryRowContext(t.Context(), `
+ WITH columns AS (
+  SELECT table_name, array_agg(column_name||':'||data_type ORDER BY ordinal_position) AS signature
+  FROM information_schema.columns
+  WHERE table_schema=current_schema() AND table_name IN ('track_effective','tracks') GROUP BY table_name
+ )
+ SELECT (SELECT array_agg(COALESCE(sort_position,position) ORDER BY relative_path)=ARRAY[5,7]
+                 AND bool_and(sort_position IS NULL) FROM track_effective),
+        (SELECT scan_version_terms=ARRAY[]::text[] FROM releases WHERE id='e9800000-0000-4000-8000-000000000002'),
+        NOT EXISTS (SELECT FROM release_attachments),
+        (SELECT signature FROM columns WHERE table_name='tracks')=(SELECT signature FROM columns WHERE table_name='track_effective')`).
+		Scan(&tracks, &versionTerms, &emptyAttachments, &viewColumns)
+	if err != nil || !tracks || !versionTerms || !emptyAttachments || !viewColumns {
+		t.Fatalf("归组上行后旧曲位=%v，版本词默认值=%v，附件为空=%v，视图列序和类型=%v，错误 %v",
+			tracks, versionTerms, emptyAttachments, viewColumns, err)
+	}
+}
+
+func checkScanGroupingAttachmentConstraints(t *testing.T, db *sql.DB) {
+	t.Helper()
+	const release = "e9800000-0000-4000-8000-000000000002"
+	const insert = `INSERT INTO release_attachments(release_id,relative_path,kind,image_format,width,height)
+		VALUES($1::uuid,$2,$3,$4,$5,$6)`
+	rollbackExec(t, db, insert, release, "Booklet.pdf", "document", nil, nil, nil)
+	rollbackExec(t, db, insert, release, "Scans/Page.tif", "image", "tiff", 4, 8)
+	for _, tc := range []struct {
+		name, state string
+		args        []any
+	}{
+		{"同一发行同一路径", "23505", []any{release, "Booklet.pdf", "document", nil, nil, nil}},
+		{"文档不能存图宽", "23514", []any{release, "Other.pdf", "document", nil, 1, nil}},
+		{"图片宽不能是零", "23514", []any{release, "Zero.png", "image", "png", 0, 1}},
+		{"图片高度不能缺失", "23514", []any{release, "Height.png", "image", "png", 1, nil}},
+		{"图片格式不能缺失", "23514", []any{release, "Format.png", "image", nil, 1, 1}},
+		{"附件种类受限", "23514", []any{release, "Unknown.txt", "text", nil, nil, nil}},
+		{"发行必须存在", "23503", []any{uuid.New(), "Booklet.pdf", "document", nil, nil, nil}},
+	} {
+		_, err := db.ExecContext(t.Context(), insert, tc.args...)
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != tc.state {
+			t.Errorf("%s：错误 %v，期望 SQLSTATE %s", tc.name, err, tc.state)
+		}
+	}
+	const otherRelease = "e9800000-0000-4000-8000-000000000006"
+	rollbackExec(t, db, `INSERT INTO releases(id,group_id,title,artist)
+		VALUES($1::uuid,'e9800000-0000-4000-8000-000000000001','临时发行','合成艺人')`, otherRelease)
+	rollbackExec(t, db, insert, otherRelease, "Booklet.pdf", "document", nil, nil, nil)
+	rollbackExec(t, db, `DELETE FROM releases WHERE id=$1::uuid`, otherRelease)
+	var count int
+	if err := db.QueryRowContext(t.Context(), `SELECT count(*) FROM release_attachments`).Scan(&count); err != nil || count != 2 {
+		t.Errorf("删除临时发行后附件数 = %d，期望保留原发行的两条附件，错误 %v", count, err)
+	}
 }

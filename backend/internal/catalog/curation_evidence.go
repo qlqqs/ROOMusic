@@ -381,7 +381,7 @@ const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_
  LEFT JOIN track_display_durations dd ON dd.track_id=t.id
  LEFT JOIN track_external_lyrics el ON el.track_id=t.id
  LEFT JOIN external_links tl ON tl.source='musicbrainz' AND tl.object_type='track' AND tl.object_id=t.id
- WHERE m.release_id=ANY($1::uuid[]) ORDER BY m.release_id,m.position,t.position,t.id`
+ WHERE m.release_id=ANY($1::uuid[]) ORDER BY m.release_id,m.position,COALESCE(t.sort_position,t.position),t.id`
 
 func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map[string]CurationEvidence, withDetails bool) error {
 	rows, err := q.QueryContext(ctx, curationTrackSQL, ids, withDetails)

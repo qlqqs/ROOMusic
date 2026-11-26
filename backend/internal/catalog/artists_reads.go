@@ -134,7 +134,7 @@ const artistVisiblePredicate = `EXISTS (
 
 func selectedArtistsCTE() string {
 	return `WITH selected AS (
- SELECT a.id,p.sort_key,p.initial_group FROM artists a JOIN artist_profiles p ON p.artist_id=a.id
+ SELECT a.id,p.list_sort_key AS sort_key,p.initial_group FROM artists a JOIN artist_profiles p ON p.artist_id=a.id
  LEFT JOIN artist_overrides o ON o.artist_id=a.id WHERE o.redirect_artist_id IS NULL AND ` + artistVisiblePredicate + `
  AND ($1='' OR p.sort_key LIKE '%'||$1||'%' ESCAPE '~' OR EXISTS (SELECT 1 FROM artist_search_names n WHERE n.artist_id=a.id AND n.normalized_value LIKE '%'||$1||'%' ESCAPE '~'))
  AND ($2='' OR p.initial_group=$2) AND ($3='' OR EXISTS (SELECT 1 FROM artist_effective_credits e WHERE e.artist_id=a.id AND (e.role=$3 OR ($3='album_artist' AND e.role='release_artist' AND e.release_id IS NOT NULL)) AND (

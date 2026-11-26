@@ -507,10 +507,10 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 				captureProcessingError(diagnosticError)
 			}
 		}
-		if markErr := ingest.MarkDiscParentScopes(ctx, executor, scanID, root.ID, root.directories); markErr != nil {
+		if markErr := ingest.AlignDiscStagingScopes(ctx, executor, scanID, root.ID); markErr != nil {
 			complete = false
 			captureProcessingError(markErr)
-			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法标记碟父目录独占范围"); diagnosticError != nil {
+			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法对齐碟父目录范围"); diagnosticError != nil {
 				captureProcessingError(diagnosticError)
 			}
 		}
@@ -826,6 +826,7 @@ func (service *Service) persistStagedCandidatesWithOptions(ctx context.Context, 
 				feedback.scopeDone(ctx)
 				continue
 			}
+			attachmentsByDir := map[string]attachmentDirectory{}
 			candidates := ingest.OrganizeObservations(observations)
 			versionBatches := map[string][]ingest.OrganizedCandidate{}
 			for _, candidate := range candidates {
@@ -850,7 +851,8 @@ func (service *Service) persistStagedCandidatesWithOptions(ctx context.Context, 
 					candidate.JoinGroupID = groupIDs[versionGroup]
 				}
 				feedback.checkCandidate(root, candidate)
-				signature, signatureErr := candidateSignature(root, candidate)
+				directory := candidateAttachments(root, candidate, attachmentsByDir)
+				signature, signatureErr := signatureWithAttachments(root, candidate, directory)
 				candidateKey := ingest.CandidateIdentity(root.ID, candidate.Anchor)
 				if signatureErr == nil && options.Mode == ScanModeIncremental {
 					trackIDs, unchanged, stateErr := ingest.CandidateUnchanged(ctx, executor, scanID, root.ID, candidateKey, signature)
@@ -875,7 +877,14 @@ func (service *Service) persistStagedCandidatesWithOptions(ctx context.Context, 
 						firstErr = diagnosticErr
 					}
 				}
-				releaseID, persistErr := service.persistOneCandidate(ctx, executor, scanID, root, candidate, stats, feedback)
+				attachments, attachmentErr := directory.read(root)
+				if attachmentErr != nil {
+					signatureErr = attachmentErr
+					if diagErr := service.recordDiagnosticWith(ctx, executor, scanID, candidate.Anchor.Scope, "attachment_unreadable", "无法读取专辑附属文件"); diagErr != nil && firstErr == nil {
+						firstErr = diagErr
+					}
+				}
+				releaseID, persistErr := service.persistOneCandidate(ctx, executor, scanID, root, candidate, stats, attachments, feedback)
 				if persistErr != nil && !errors.Is(persistErr, ingest.ErrSourceChanged) && firstErr == nil {
 					firstErr = persistErr
 				}
@@ -1065,13 +1074,13 @@ func observationFieldSources(observation parser.AudioObservation) map[string]str
 
 // persistOneCandidate 用 catalog 的独立短事务写入一个候选；封面在事务提交后为该 Release 绑定，
 // 封面失败以 errArtworkBinding 包装返回。曲目沿用还是新建由规划决定，见 planRootIdentities。
-func (service *Service) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate ingest.OrganizedCandidate, stats *incrementalStats, feedbacks ...*scanFeedback) (string, error) {
+func (service *Service) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate ingest.OrganizedCandidate, stats *incrementalStats, attachments []ingest.Attachment, feedbacks ...*scanFeedback) (string, error) {
 	feedback := feedbackArg(feedbacks)
 	var changes *ingest.ScanFeedback
 	if feedback != nil {
 		changes = feedback.changes
 	}
-	releaseID, err := ingest.PersistCandidateWithFeedback(ctx, executor, scanID, root.ID, candidate, changes)
+	releaseID, err := ingest.PersistCandidateAttachments(ctx, executor, scanID, root.ID, candidate, changes, attachments)
 	if err != nil {
 		return "", err
 	}
@@ -1095,7 +1104,7 @@ func isWithin(root, path string) bool {
 	return rootError == nil && pathError == nil && (pathReal == rootReal || strings.HasPrefix(pathReal, rootReal+string(filepath.Separator)))
 }
 
-// saveArtworkForRelease 依次尝试精确名、内嵌、附属图片与 Box 父目录封面。
+// saveArtworkForRelease 依次尝试精确名、内嵌与附属图片。
 // 来源全部不可读时记诊断并保留原关系；受管存储与关联失败仍向上返回。
 func (service *Service) saveArtworkForRelease(ctx context.Context, executor scanExecutor, scanID, releaseID string, root registeredRoot, candidate ingest.OrganizedCandidate, stats *incrementalStats, feedbacks ...*ingest.ScanFeedback) error {
 	data, sourceType, err := service.selectArtwork(ctx, executor, scanID, root, candidate, stats)
@@ -1231,7 +1240,7 @@ func discoverFolderArtwork(rootPath string, directories []string, filter scanFil
 // 每轮命中即返回；无效封面记下第一个错误，四轮全部找完仍没有可用封面才报错。
 func discoverFolderArtworkWithReader(rootPath string, directories []string, readFile func(string) ([]byte, error), filter scanFilter) ([]byte, string, error) {
 	var firstErr error
-	for candidate, err := range listDirectoryArtworkCandidates(rootPath, directories, filter, false) {
+	for candidate, err := range listDirectoryArtworkCandidates(rootPath, directories, filter) {
 		if err == nil {
 			var data []byte
 			var mimeType string
@@ -1255,7 +1264,6 @@ type artworkTier int
 const (
 	artworkTierExact         artworkTier = 1
 	artworkTierSupplementary artworkTier = 3
-	artworkTierBoxParent     artworkTier = 4
 )
 
 type folderArtworkCandidate struct {
@@ -1266,24 +1274,14 @@ type folderArtworkCandidate struct {
 // listFolderArtworkCandidates 按档位惰性列举候选；选择与签名共用目录归属和顺序规则。
 func listFolderArtworkCandidates(root registeredRoot, candidate ingest.OrganizedCandidate) iter.Seq2[folderArtworkCandidate, error] {
 	return func(yield func(folderArtworkCandidate, error) bool) {
+		if candidate.SharedArtworkDirectory {
+			return
+		}
 		switch candidate.Anchor.Kind {
 		case ingest.CandidateSameDirSplit, ingest.CandidateLooseAlbum, ingest.CandidateLooseUnknown:
 			return
 		}
-		for item, err := range listDirectoryArtworkCandidates(root.Path, candidate.ArtworkDirectories(), root.filter, false) {
-			if !yield(item, err) {
-				return
-			}
-		}
-		if !candidate.BoxParentArtwork {
-			return
-		}
-		parent := ingest.NormalizedPath(pathpkg.Dir(candidate.Anchor.Scope))
-		if parent == "" {
-			return
-		}
-		for item, err := range listDirectoryArtworkCandidates(root.Path, []string{parent}, root.filter, true) {
-			item.Tier = artworkTierBoxParent
+		for item, err := range listDirectoryArtworkCandidates(root.Path, candidate.ArtworkDirectories(), root.filter) {
 			if !yield(item, err) {
 				return
 			}
@@ -1292,7 +1290,7 @@ func listFolderArtworkCandidates(root registeredRoot, candidate ingest.Organized
 }
 
 // listDirectoryArtworkCandidates 每个目录只读一次，按精确名、front、附属目录的顺序产出。
-func listDirectoryArtworkCandidates(rootPath string, directories []string, filter scanFilter, exactOnly bool) iter.Seq2[folderArtworkCandidate, error] {
+func listDirectoryArtworkCandidates(rootPath string, directories []string, filter scanFilter) iter.Seq2[folderArtworkCandidate, error] {
 	return func(yield func(folderArtworkCandidate, error) bool) {
 		tier := artworkTierExact
 		type artworkDirectory struct {
@@ -1338,9 +1336,6 @@ func listDirectoryArtworkCandidates(rootPath string, directories []string, filte
 			if !list(loaded, true) {
 				return
 			}
-		}
-		if exactOnly {
-			return
 		}
 		tier = artworkTierSupplementary
 		for _, directory := range originals {
