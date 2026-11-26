@@ -52,7 +52,7 @@ var packageRules = map[string]packageRule{
 	"steward/mcp":                       {imports: []string{"platform/uuid", "identity", "platform/buildinfo", "platform/httpserver", "steward/token", "steward/tool"}, http: true},
 	"steward/memory":                    {imports: []string{"platform/uuid", "steward/tool"}},
 	"steward/runtime":                   {imports: []string{"steward/memory", "platform/uuid", "steward/provider", "steward/tool"}},
-	"upstreammock":                      {imports: []string{"catalog/textnorm", "insights/schema"}, http: true},
+	"upstreammock":                      {imports: []string{"catalog/metadata", "catalog/textnorm", "insights/schema"}, http: true},
 	"subsonic/protocol":                 {http: true},
 	"subsonic":                          {imports: []string{"catalog", "subsonic/protocol"}},
 	"subsonic/auth":                     {imports: []string{"identity", "platform/secret", "subsonic/protocol"}},
