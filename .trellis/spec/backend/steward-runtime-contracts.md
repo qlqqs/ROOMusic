@@ -977,7 +977,7 @@ JSON 错误信封只给上表的固定消息；适配器脱敏后的 `Message` �
 
 `CancelUser` 和 `CancelMembers` 跳过后台运行。端点或密钥更换时由 `CancelBackground(userID)` 取消开启者的后台运行。每 60 秒的凭据复查发现后台凭据失效时只取消该运行。应用停机取消全部运行。`Run.Wait(ctx)` 返回持久化收尾后的结束原因及错误。
 
-迁移 0064 区分 `kind=chat|curation`。整理会话归开启者、模式固定为 `steward`，单独列出。普通列表、计数和未读只统计 chat。用户在整理会话继续发消息时，该次运行走普通对话入口。修改整理会话模式返回 409 `curation_conversation`，删除仍有处理中项的会话返回 409 `conversation_busy`，通过对话接口决定或重审后台方案返回 409 `curation_plan`。调度与自动层合同见[自动整理合同第 17 节](./curation-contracts.md#17-d模型后台判断)。
+迁移 0064 区分 `kind=chat|curation`。整理会话归开启者、模式固定为 `steward`，单独列出。普通列表、计数和未读只统计 chat。用户在整理会话继续发消息时，该次运行走普通对话入口。修改整理会话模式返回 409 `curation_conversation`，删除仍有处理中项的会话返回 409 `conversation_busy`，通过对话接口决定或重审后台方案返回 409 `curation_plan`。调度与自动层合同见[自动整理合同第 5 节](./curation-contracts.md#5-模型的三件事与调用规则)。
 
 ## 8. 出站与密钥
 
