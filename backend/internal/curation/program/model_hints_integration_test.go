@@ -30,6 +30,7 @@ func TestPostgreSQLJudgeHTTPBudget(t *testing.T) {
 		name, conflict          string
 		initial, want, wantUsed int
 		shortRetry, cached      bool
+		selected                bool
 		resultOn                int
 	}{
 		{name: "新判断六次上限", want: 6, wantUsed: 6, conflict: "request_limit"},
@@ -39,6 +40,7 @@ func TestPostgreSQLJudgeHTTPBudget(t *testing.T) {
 		{name: "已用完仍可读取缓存", initial: 6, wantUsed: 6, cached: true},
 		{name: "第六次详情核实成功", want: 6, wantUsed: 6, resultOn: 5},
 		{name: "第六次搜索仍缺详情", want: 6, wantUsed: 6, resultOn: 6, conflict: "request_limit"},
+		{name: "所选候选命中后各组零出站", selected: true, want: 1, wantUsed: 1},
 		{name: "不完整列表立即停止", want: 1, wantUsed: 1, conflict: "list_truncated"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -56,27 +58,36 @@ func TestPostgreSQLJudgeHTTPBudget(t *testing.T) {
 			state := curation.WorkState{Subject: "release", TargetID: release, Status: "unmatched", RuleVersion: StoredRuleVersion, MatchRuleVersion: MatchRuleVersion, Generation: 1}
 			releaseInputs(e).record(&state)
 			requirePendingRefreshOK(t, curation.SaveWorkState(ctx, f.db, state))
+			remote := uuid.New()
+			var candidates json.RawMessage
+			if tc.selected {
+				candidates = jsonValue([]Candidate{{ExternalID: remote, Method: "tag_id"}})
+			}
 			requirePendingRefreshOK(t, curation.UpsertPendingItem(ctx, f.db, curation.PendingItem{
 				TargetID: release, Kind: "release_match", RuleVersion: StoredRuleVersion,
-				InputDigest: state.InputDigest, IdentityDigest: state.IdentityDigest, Evidence: jsonValue(PendingEvidence(e)),
+				InputDigest: state.InputDigest, IdentityDigest: state.IdentityDigest, Evidence: jsonValue(PendingEvidence(e)), Candidates: candidates,
 			}))
 			item := f.claim(t, release, "release_match")
 			answer := curation.JudgeAnswer{ItemID: item.ID, Decision: "judge"}
+			if tc.selected {
+				answer.SelectedID = remote
+			}
 			for _, cat := range []string{"CAT-A", "CAT-B", "CAT-C", "CAT-D", "CAT-E", "CAT-F", "CAT-G"} {
 				var group curation.JudgeGroup
 				group.Identifier.Kind, group.Identifier.Value = "catalog_number", cat
 				answer.Groups = append(answer.Groups, group)
 			}
 			requirePendingRefreshOK(t, f.writer.SubmitJudge(ctx, item, answer))
-			f.exec(t, `UPDATE curation_work_states SET result=jsonb_set(jsonb_set(result,'{judge,used}',to_jsonb($2::int)),'{judge,next}',to_jsonb($2::int))
+			if !tc.selected {
+				f.exec(t, `UPDATE curation_work_states SET result=jsonb_set(jsonb_set(result,'{judge,used}',to_jsonb($2::int)),'{judge,next}',to_jsonb($2::int))
 				WHERE subject='release' AND target_id=$1`, release, tc.initial)
+			}
 			var raw []byte
 			requirePendingRefreshOK(t, f.db.QueryRowContext(ctx, `SELECT result->'judge' FROM curation_work_states WHERE subject='release' AND target_id=$1`, release).Scan(&raw))
 			var cursor curation.JudgeCursor
 			requirePendingRefreshOK(t, json.Unmarshal(raw, &cursor))
 			var mu sync.Mutex
 			var queries []string
-			remote := uuid.New()
 			groupID, recA, recB := uuid.New(), uuid.New(), uuid.New()
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				mu.Lock()
@@ -135,12 +146,12 @@ func TestPostgreSQLJudgeHTTPBudget(t *testing.T) {
 			if tc.conflict != "" {
 				conflicts = []string{tc.conflict}
 			}
-			wantMatch := tc.resultOn == 5
+			wantMatch := tc.resultOn == 5 || tc.selected
 			if err != nil || (got.Status == "matched") != wantMatch || !slices.Equal(got.Conflicts, conflicts) {
 				t.Fatalf("线索的实际结论 %+v，期望匹配=%t、冲突=%v，错误=%v，游标=%+v", got, wantMatch, conflicts, err, cursor)
 			}
 			if wantMatch && (got.Release == nil || got.Release.ID != remote || len(got.Pairs) != 2) {
-				t.Fatalf("第六次详情应核实指定发行和两首录音：%+v", got)
+				t.Fatalf("发行详情应核实指定发行和两首录音：%+v", got)
 			}
 			mu.Lock()
 			calls := slices.Clone(queries)
@@ -149,9 +160,9 @@ func TestPostgreSQLJudgeHTTPBudget(t *testing.T) {
 				t.Fatalf("实际 HTTP %d 次，期望 %d：%v", len(calls), tc.want, calls)
 			}
 			for i, query := range calls {
-				if wantMatch && i == 5 {
+				if tc.selected || wantMatch && i == 5 {
 					if query != "" {
-						t.Errorf("第六次应读取发行详情，实际查询 %q", query)
+						t.Errorf("应读取发行详情，实际查询 %q", query)
 					}
 					continue
 				}

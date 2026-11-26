@@ -209,3 +209,44 @@ func TestJudgeLooseTrackUsesRecordingAndDuration(t *testing.T) {
 		})
 	}
 }
+
+func TestJudgeSameGroupEditionsContrastWithProgram(t *testing.T) {
+	e, first := b3Album(4)
+	first.Complete = true
+	first.Media[0].TrackCount = len(e.Tracks)
+	for i, track := range e.Tracks {
+		first.Media[0].Tracks[i].Title = track.Title
+	}
+	second := first
+	second.ID = "second-edition"
+	probe := &programSearchProbe{releasesFor: func(curation.ReleaseSearch) []sources.Release {
+		return []sources.Release{first, second}
+	}}
+	ordinary, err := decideSearchAlbum(t.Context(), e, albumPageResult(curation.ReleasePage{
+		Items: []sources.Release{first, second}, PageInfo: curation.PageInfo{Complete: true},
+	}, false), &searchDetails{finder: probe, attempted: map[string]bool{}})
+	if err != nil || ordinary.Status != "matched" || ordinary.Level != "release_group" || ordinary.GroupID != first.Group.ID ||
+		ordinary.Release != nil || len(ordinary.Pairs) != 0 || ordinary.Route != "" {
+		t.Fatalf("S8 同组两版应直接认组：%+v，错误=%v", ordinary, err)
+	}
+
+	hint := curation.JudgeGroup{Name: curation.JudgeName{Release: first.Title}}
+	judged, err := (&Worker{}).lookupHint(t.Context(), e, "album", hint, MatchSnapshot{}, nil, probe, probe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantMatch(t, judged, "uncertain", "ambiguous_editions")
+	if judged.Release != nil || judged.GroupID != "" || len(judged.Pairs) != 0 || judged.Route != "" {
+		t.Fatalf("B2 同组歧义留给人选：%+v", judged)
+	}
+	var ids []string
+	for _, candidate := range judged.Candidates {
+		if candidate.Release == nil || candidate.Release.Group.ID != first.Group.ID || candidate.Verification == nil {
+			t.Fatalf("人选候选应含同组版本和核对证据：%+v", candidate)
+		}
+		ids = append(ids, candidate.ExternalID)
+	}
+	if !slices.Equal(ids, []string{first.ID, second.ID}) {
+		t.Fatalf("B2 应列出两个已核实的版，实际 %v", ids)
+	}
+}

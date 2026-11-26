@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
+	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 )
 
 func TestPostgreSQLJudgeBackgroundDoesNotPatrolSearchOrReview(t *testing.T) {
@@ -418,4 +420,172 @@ func TestPostgreSQLJudgeSameArtistMergeAndRevert(t *testing.T) {
 	if len(rows.Items) != 0 {
 		t.Fatalf("撤销后应清除该合并来源：%+v", rows)
 	}
+}
+
+func TestPostgreSQLJudgeInvalidResponsesStopAfterThree(t *testing.T) {
+	f := newProgramFixture(t)
+	f.enable(t)
+	f.sourceEnabled(t, "lrclib", false)
+	f.sourceEnabled(t, "coverartarchive", false)
+	ctx := t.Context()
+	db := f.application.database
+	remote := uuid.New()
+	var lookups, other atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/release/"+remote {
+			lookups.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"缺少曲表"}`))
+			return
+		}
+		other.Add(1)
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(upstream.Close)
+	client := curationMusicBrainz{musicbrainz.New(sources.Options{
+		BaseURL: upstream.URL, NewClient: b3HTTPClient(upstream), Limiter: sources.NewLimiter(0, nil, nil),
+	})}
+	f.gate = curation.NewSources(db, curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: client, Recordings: client}).WithScanCheck(f.scanCheck)
+	f.sourceEnabled(t, "musicbrainz", true)
+
+	local, err := f.writer.LoadCurationEvidence(ctx, []string{f.a})
+	requireCurationOK(t, err)
+	e := local[f.a]
+	checked := f.clock.options().Now().Add(-time.Hour)
+	requireCurationOK(t, curation.SaveReleaseMatchResult(ctx, db, f.a, curation.ReleaseMatchResult{
+		Source: "musicbrainz", Status: "unmatched", CheckedAt: &checked,
+	}))
+	state := curation.WorkState{Subject: "release", TargetID: f.a, Status: "unmatched", RuleVersion: program.MatchRuleVersion, MatchRuleVersion: program.MatchRuleVersion,
+		LocalRuleVersion: program.LocalRuleVersion, InputDigest: program.ReleaseDigest(e), IdentityDigest: program.IdentityDigest(e), GapDigest: program.GapDigest(e), FileDigest: e.FileDigest,
+		Generation: 1}
+	requireCurationOK(t, curation.SaveWorkState(ctx, db, state))
+	raw, err := json.Marshal([]program.Candidate{{ExternalID: remote, Method: "tag_id"}})
+	requireCurationOK(t, err)
+	requireCurationOK(t, curation.UpsertPendingItem(ctx, db, curation.PendingItem{
+		TargetID: f.a, Kind: "release_match", RuleVersion: program.StoredRuleVersion, MatchRuleVersion: program.MatchRuleVersion,
+		InputDigest: state.InputDigest, IdentityDigest: state.IdentityDigest, Evidence: []byte("{}"), Candidates: raw,
+	}))
+	item, err := f.writer.PendingItem(ctx, programString(t, f.application, `SELECT id FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, f.a))
+	requireCurationOK(t, err)
+	item = modelClaim(t, f.curationFixture, modelConversation(t, f.curationFixture), item)
+	requireCurationOK(t, f.writer.SubmitJudge(ctx, item, curation.JudgeAnswer{ItemID: item.ID, Decision: "judge", SelectedID: remote}))
+
+	f.run(t)
+	for i, delay := range []time.Duration{5 * time.Second, 10 * time.Second} {
+		got := f.stateFor(t, "release", f.a)
+		if got.Status != "try_later" || got.RetryCount != i+1 || lookups.Load() != int32(i+1) ||
+			got.NextAttemptAt == nil || !got.NextAttemptAt.Equal(f.clock.options().Now().Add(delay)) {
+			t.Fatalf("第 %d 次无效响应，实际状态 %+v、详情请求 %d，期望等待 %v", i+1, got, lookups.Load(), delay)
+		}
+		f.clock.advance(t, delay)
+	}
+	stopped := f.stateFor(t, "release", f.a)
+	if stopped.Status != "query_error" || stopped.RetryCount != 3 || stopped.NextAttemptAt != nil || stopped.Generation != state.Generation {
+		t.Fatalf("第三次响应无效应在原代次停止：%+v", stopped)
+	}
+	f.assertCount(t, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND subject='release'
+		AND result->'retry'->>'step'='model_hints' AND result->'retry'->>'reason'='invalid_response'
+		AND result->'judge'->>'used'='3' AND result->'judge'->>'next'='-1'`, f.a)
+	f.clock.advance(t, 90*24*time.Hour)
+	if lookups.Load() != 3 || other.Load() != 0 {
+		t.Fatalf("三次无效详情应耗三发并停止，详情 %d 次、其它 %d 次", lookups.Load(), other.Load())
+	}
+	f.assertCount(t, 1, `SELECT count(*) FROM curation_release_match_results WHERE release_id=$1 AND source='musicbrainz' AND status='unmatched' AND checked_at=$2`, f.a, checked)
+	f.assertCount(t, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match' AND resolution='judge_submitted'`, f.a)
+	f.assertCount(t, 0, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1`, f.a)
+}
+
+func queueJudgeArtistPair(t *testing.T, f *schedulerFixture, target, digest, left, right, leftName, rightName, external string) string {
+	t.Helper()
+	tx, err := f.application.database.BeginTx(t.Context(), nil)
+	requireCurationOK(t, err)
+	defer tx.Rollback()
+	requireCurationOK(t, curation.QueueVerification(t.Context(), tx, "verify_artist_merge", digest, curation.VerificationCandidate{
+		ReleaseID: target, Before: leftName, After: rightName, ArtistA: left, ArtistB: right, ExternalID: external,
+	}))
+	requireCurationOK(t, tx.Commit())
+	return programString(t, f.application, `SELECT id FROM curation_pending_items WHERE target_id=$1 AND input_digest=$2 AND kind='verify_artist_merge'`, target, digest)
+}
+
+func replyJudgeIdentity(t *testing.T, request schedulerRequest, item, verdict string) {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{"items": []curation.VerificationInput{{ItemID: item, Verdict: verdict, Reason: "合成身份核对"}}})
+	requireCurationOK(t, err)
+	request.reply <- request.frame(t, map[string]string{"content": string(raw)}, "stop")
+}
+
+func TestPostgreSQLJudgeArtistPairConcurrentSingleDecision(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	left, right, otherLeft, otherRight, external := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	mustExec(t, f.application, `INSERT INTO artists(id,initial_name) VALUES($1,'合成甲团'),($2,'合成乙团'),($3,'合成甲团'),($4,'合成乙团')`, left, right, otherLeft, otherRight)
+	mustExec(t, f.application, `INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence)
+		VALUES(gen_random_uuid(),'musicbrainz','artist',$1,$3,'artist_credit','certain'),
+		      (gen_random_uuid(),'musicbrainz','artist',$2,$3,'artist_credit','certain')`, left, otherLeft, external)
+	first := queueJudgeArtistPair(t, f, f.a, "a", left, right, "合成甲团", "合成乙团", external)
+	second := queueJudgeArtistPair(t, f, f.b, "b", otherRight, otherLeft, "合成乙团", "合成甲团", external)
+	otherRelease, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{
+		title: "并行的独立发行", artist: "独立合成乐队", tracks: []string{"present"},
+	})
+	independent := f.pending(t, otherRelease)
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 2})
+
+	var active, parallel schedulerRequest
+	for range 2 {
+		req := f.next(t, false)
+		prompt := curationRulePrompt(t, req)
+		if strings.Contains(prompt, independent.ID) {
+			requireCurationRuleItems(t, req, independent.ID)
+			parallel = req
+			continue
+		}
+		requireCurationRuleItems(t, req, first)
+		active = req
+	}
+	if active.reply == nil || parallel.reply == nil || f.item(t, second).Status != "waiting_model" {
+		t.Fatalf("并发会话中只有同一无序名字对的首项可领取，反向项为 %+v", f.item(t, second))
+	}
+	parallel.undetermined(t, independent.ID, "独立发行的证据不足")
+	replyJudgeIdentity(t, active, first, "different")
+	modelWaitResolution(t, f, first, "different")
+	modelWaitResolution(t, f, second, "different")
+	modelWaitResolution(t, f, independent.ID, "undetermined")
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_artist_negative_pairs WHERE model='test-main' AND reason='合成身份核对'`)
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM steward_tool_calls WHERE tool_name='submit_verification' AND status='succeeded'`)
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE operation_type='artist_merge'`)
+	requireCurationRuleRequestCount(t, f, 2)
+}
+
+func TestPostgreSQLJudgeUncertainArtistPairCanAskOnNewEvidence(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	left, right, external := uuid.New(), uuid.New(), uuid.New()
+	mustExec(t, f.application, `INSERT INTO artists(id,initial_name) VALUES($1,'合成甲团'),($2,'合成乙团')`, left, right)
+	mustExec(t, f.application, `INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence)
+		VALUES(gen_random_uuid(),'musicbrainz','artist',$1,$2,'artist_credit','certain')`, left, external)
+
+	first := queueJudgeArtistPair(t, f, f.a, "原证据", left, right, "合成甲团", "合成乙团", external)
+	f.enable(t)
+	initial := f.next(t, false)
+	requireCurationRuleItems(t, initial, first)
+	replyJudgeIdentity(t, initial, first, "undetermined")
+	modelWaitResolution(t, f, first, "undetermined")
+	same := queueJudgeArtistPair(t, f, f.a, "原证据", left, right, "合成甲团", "合成乙团", external)
+	if same != first || f.item(t, same).Status != "resolved" {
+		t.Fatalf("相同输入应沿用已结案项，实际 %+v", f.item(t, same))
+	}
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_artist_negative_pairs`)
+
+	second := queueJudgeArtistPair(t, f, f.a, "新证据", left, right, "合成甲团", "合成乙团", external)
+	if first == second {
+		t.Fatal("新证据应产生可独立领取的待办")
+	}
+	retry := f.next(t, false)
+	requireCurationRuleItems(t, retry, second)
+	replyJudgeIdentity(t, retry, second, "undetermined")
+	modelWaitResolution(t, f, second, "undetermined")
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_artist_negative_pairs`)
+	b3RequireCount(t, f.application, 2, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='verify_artist_merge' AND resolution='undetermined'`, f.a)
+	b3RequireCount(t, f.application, 2, `SELECT count(*) FROM steward_tool_calls WHERE tool_name='submit_verification' AND status='succeeded'`)
+	requireCurationRuleRequestCount(t, f, 2)
 }

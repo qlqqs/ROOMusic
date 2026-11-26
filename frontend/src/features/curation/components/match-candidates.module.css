@@ -32,7 +32,3 @@
   color: var(--text-secondary);
 }
 
-.facts,
-.pending {
-  font-size: 0.875em;
-}
