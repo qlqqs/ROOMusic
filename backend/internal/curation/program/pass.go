@@ -148,11 +148,15 @@ func (w *Worker) evaluate(ctx context.Context, u *unit, e catalog.CurationEviden
 			}
 		}
 	case "release":
-		m, err := w.searchRelease(ctx, u, e, fingerprintRequired)
-		if err != nil {
-			return out, err
+		var m MatchResult
+		m, err = w.searchRelease(ctx, u, e, fingerprintRequired)
+		if err == nil {
+			out, err = w.concludeMatch(ctx, u, e, m)
 		}
-		return w.concludeMatch(ctx, u, e, m)
+		// 结论落库前补查艺人别名也属于当前步骤。
+		if err != nil && u.matchCursor.Step != "" {
+			return out, &stepFailure{&u.matchCursor, err}
+		}
 	}
 	return out, err
 }
@@ -189,6 +193,9 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 		review, err = previousReview(state)
 		if err != nil {
 			return err
+		}
+		if state.Status == "query_error" && state.FileDigest == input.FileDigest && state.MatchRuleVersion == MatchRuleVersion {
+			return nil
 		}
 		deferred, offline, err = w.prepareRelease(ctx, input, inputs, &state)
 		if err != nil {
@@ -243,8 +250,11 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	if failureCode(err) == "source_disabled" {
 		return err
 	}
-	var local *fingerprintRetry
-	if !errors.As(err, &local) && curation.IsSourceUnavailable(err) {
+	var failed *stepFailure
+	if subject == "release" && errors.As(err, &failed) {
+		return w.saveQueryFailure(ctx, state, states.releases[id], failed)
+	}
+	if curation.IsSourceUnavailable(err) {
 		return sourceFailure(ctx, u.source(), err)
 	}
 	retry := errors.Is(err, sources.ErrTryLater)
@@ -265,9 +275,6 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 			state.Result = nil
 		}
 		delay := min(24*time.Hour, 10*time.Minute<<min(state.RetryCount, 8))
-		if errors.As(err, &local) {
-			delay = max(delay, local.delay)
-		}
 		next := w.opts.Now().Add(delay)
 		state.Status, state.NextAttemptAt, state.RetryCount = "try_later", &next, state.RetryCount+1
 		if out.status == "try_later" {
@@ -571,4 +578,134 @@ func savePending(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidence, st
 	evidence["classification"] = e.Classification().Class
 	return curation.UpsertPendingItem(ctx, tx, curation.PendingItem{TargetID: e.ID, Kind: kind, Route: m.Route, RuleVersion: state.RuleVersion,
 		InputDigest: state.InputDigest, MatchRuleVersion: state.MatchRuleVersion, IdentityDigest: state.IdentityDigest, Evidence: jsonValue(evidence), Candidates: jsonValue(m.modelCandidates()), Conflicts: jsonValue(m.Conflicts)})
+}
+
+// 保存查询中断，不生成匹配结论、待定项或新的写入代次。
+func (w *Worker) saveQueryFailure(ctx context.Context, state, before curation.WorkState, failed *stepFailure) error {
+	retry := failed.retry
+	a := currentAttempt(ctx)
+	if a == nil {
+		return failed.err
+	}
+	if a.item.Generation != before.Generation || a.item.InputDigest != state.IdentityDigest {
+		return errReleaseChanged
+	}
+	state.FileDigest = a.item.Files
+	retry.Files = a.item.Files
+	source := "musicbrainz"
+	var sample *sampleFailure
+	if errors.As(failed, &sample) {
+		source = sample.source
+	}
+	retry.Source = source
+	prior, err := previousReview(before)
+	if err != nil {
+		return err
+	}
+	if prior.Retry == nil || prior.Retry.Step != retry.Step || before.IdentityDigest != state.IdentityDigest || before.MatchRuleVersion != state.MatchRuleVersion {
+		state.RetryCount = 0
+	}
+	var pause *sources.QueuePause
+	switch {
+	case errors.Is(failed, sources.ErrInvalidResponse), errors.Is(failed, sources.ErrInvalidQuery), errors.Is(failed, errLocalPrint):
+		retry.Kind, retry.Reason = "album", "invalid_response"
+		if source == "local_fingerprint" {
+			retry.Reason = "fingerprint_failed"
+		}
+		if errors.Is(failed, sources.ErrInvalidQuery) {
+			retry.Reason = "invalid_query"
+		}
+		state.RetryCount++
+		if state.RetryCount >= 3 {
+			state.Status, state.NextAttemptAt = "query_error", nil
+		} else {
+			next := w.opts.Now().Add(sources.SourceRetryDelay(state.RetryCount - 1))
+			state.Status, state.NextAttemptAt = "try_later", &next
+		}
+	case errors.As(sourceFailure(ctx, source, failed), &pause):
+		retry.Kind, retry.Source, retry.Reason = "source", pause.Source, pause.Reason
+		state.Status = "try_later"
+	default:
+		return failed.err
+	}
+	if err := w.ready(ctx); err != nil {
+		return err
+	}
+	tx, err := w.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	entries, err := catalog.LoadCurationEvidence(ctx, tx, []string{state.TargetID}, w.writer.ArtworkExists)
+	if err != nil {
+		return err
+	}
+	e, ok := entries[state.TargetID]
+	if !ok || IdentityDigest(e) != state.IdentityDigest {
+		return errReleaseChanged
+	}
+	var locked int
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM curation_work_states WHERE subject='release' AND target_id=$1 AND
+        generation=$2 AND status=$3 AND updated_at=$4 AND queue_identity=$5 AND manual_requested_at IS NOT DISTINCT FROM $6::timestamptz AND curation_release_file_digest(target_id)=$7 FOR UPDATE`,
+		state.TargetID, before.Generation, before.Status, before.UpdatedAt, state.IdentityDigest, before.ManualRequestedAt, retry.Files).Scan(&locked)
+	if errors.Is(err, sql.ErrNoRows) {
+		return errReleaseChanged
+	}
+	if err != nil {
+		return err
+	}
+	var result map[string]json.RawMessage
+	if len(state.Result) > 0 {
+		if err := json.Unmarshal(state.Result, &result); err != nil {
+			return err
+		}
+	}
+	if result == nil {
+		result = make(map[string]json.RawMessage)
+	}
+	if before.ManualRequestedAt != nil {
+		result["manual_recheck"] = jsonValue(true)
+	}
+	result["retry"] = jsonValue(retry)
+	state.Result = jsonValue(result)
+	if pause != nil {
+		if current := w.policy.Pause(pause.Source); current != nil {
+			state.NextAttemptAt = &current.RetryAt
+		} else {
+			now := w.opts.Now()
+			state.NextAttemptAt = &now
+		}
+	}
+	if err := curation.SaveWorkState(ctx, tx, state); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	w.dropPrints(state.TargetID)
+	if pause != nil {
+		// 提交期间来源可能已恢复，也可能进入了新的暂停窗口。
+		current := w.policy.Pause(pause.Source)
+		next := *state.NextAttemptAt
+		if current != nil {
+			next = current.RetryAt
+		} else if now := w.opts.Now(); now.Before(next) {
+			next = now
+		}
+		if !next.Equal(*state.NextAttemptAt) {
+			_, err := w.db.ExecContext(ctx, `UPDATE curation_work_states SET next_attempt_at=$1 WHERE subject='release' AND target_id=$2
+              AND status='try_later' AND generation=$3 AND result->'retry'->>'source'=$4 AND next_attempt_at=$5`, next, state.TargetID, state.Generation, pause.Source, state.NextAttemptAt)
+			if err != nil {
+				return err
+			}
+		}
+		if current == nil {
+			return errAlbumWaiting
+		}
+		return current
+	}
+	if state.Status == "try_later" {
+		return errAlbumWaiting
+	}
+	return nil
 }

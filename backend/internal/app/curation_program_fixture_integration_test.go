@@ -41,10 +41,10 @@ func (c *programClock) wait(t *testing.T) time.Duration {
 		return 0
 	}
 }
-func (c *programClock) advance(t *testing.T, d time.Duration) {
+func (c *programClock) advance(t *testing.T, d time.Duration) time.Duration {
 	t.Helper()
 	c.tick <- time.Unix(0, c.now.Add(int64(d)))
-	c.wait(t)
+	return c.wait(t)
 }
 
 // 每种能力只返回夹具中显式登记的候选。计数只在闸门放行之后增加。
@@ -153,11 +153,16 @@ func newProgramFixture(t *testing.T) *programFixture {
 func (f *programFixture) scanCheck(context.Context) (bool, error) { return f.scan.Load(), nil }
 func (f *programFixture) start(t *testing.T) {
 	t.Helper()
+	f.startWithOptions(t, f.clock.options())
+}
+
+func (f *programFixture) startWithOptions(t *testing.T, opts program.Options) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	f.stop = cancel
 	f.done = done
-	f.worker = program.NewWorker(f.application.database, f.writer, f.gate, f.scanCheck, nil, f.clock.options())
+	f.worker = program.NewWorker(f.application.database, f.writer, f.gate, f.scanCheck, nil, opts)
 	go func() { defer close(done); f.worker.Run(ctx) }()
 	t.Cleanup(func() {
 		cancel()

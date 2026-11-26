@@ -2,6 +2,8 @@ package program
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"math"
 	"time"
 
@@ -51,11 +53,20 @@ func (w *Worker) cooling(subject string) bool {
 	return source != "" && w.policy.Pause(source) != nil
 }
 
-func (w *Worker) nextDelay() time.Duration {
+func (w *Worker) nextDelay(ctx context.Context) (time.Duration, error) {
+	var due sql.NullTime
+	now := w.opts.Now()
+	err := w.db.QueryRowContext(ctx, `SELECT min(next_attempt_at) FROM curation_work_states WHERE subject='release' AND next_attempt_at>$1
+        AND (status='unmatched' OR status='try_later' AND result ? 'retry')`, now).Scan(&due)
+	if err != nil {
+		return 0, err
+	}
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	delay := w.opts.PollInterval
-	now := w.opts.Now()
+	if due.Valid {
+		delay = min(delay, due.Time.Sub(now))
+	}
 	for _, m := range w.metrics {
 		if m.source != "" {
 			if pause := w.policy.Pause(m.source); pause != nil {
@@ -63,7 +74,7 @@ func (w *Worker) nextDelay() time.Duration {
 			}
 		}
 	}
-	return delay
+	return delay, nil
 }
 
 func (w *Worker) recordQueueEvent(subject string, request bool) {
@@ -103,7 +114,7 @@ func (w *Worker) queueSnapshot(subject string, now time.Time) (curation.QueuePro
 				items += b.items
 			}
 		}
-		if requests > 0 && subject != "fingerprint" {
+		if requests > 0 {
 			speed := float64(requests) / elapsed
 			p.SuccessfulRequestsPerSecond = &speed
 		}
@@ -137,6 +148,22 @@ func (w *Worker) QueueProgress(ctx context.Context) (curation.ProgramQueues, err
 				p.State, reason = "idle", ""
 			}
 		}
+		if subject == "release" && remaining > 0 && ready == 0 {
+			var waitSource, waitReason string
+			var retryAt time.Time
+			err := w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT retry_source,retry_reason,next_attempt_at FROM candidates
+                WHERE stable AND NOT due AND retry_source IS NOT NULL ORDER BY next_attempt_at,target_id LIMIT 1`, subject, now, false).Scan(&waitSource, &waitReason, &retryAt)
+			if err == nil {
+				p.State, reason = "paused", waitReason
+				p.Source, p.RetryAt = &waitSource, &retryAt
+				if active := w.policy.Pause(waitSource); active != nil {
+					p.RetryAt = &active.RetryAt
+					reason = active.Reason
+				}
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				return result, err
+			}
+		}
 		switch {
 		case global == "disabled" || global == "paused" || global == "waiting_for_scan":
 			p.State, reason = global, global
@@ -156,7 +183,9 @@ func (w *Worker) QueueProgress(ctx context.Context) (curation.ProgramQueues, err
 		}
 		if reason != "" {
 			p.PauseReason = &reason
-			p.Ready = 0
+			if subject != "release" || global == "disabled" || global == "paused" || global == "waiting_for_scan" {
+				p.Ready = 0
+			}
 		}
 		if remaining == 0 {
 			eta := int64(0)

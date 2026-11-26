@@ -9,12 +9,23 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/sources"
+	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
 )
 
 func TestPostgreSQL整理队列限流时歌词和艺人资料继续(t *testing.T) {
 	const remote = "30000000-0000-4000-8000-000000000001"
 	clock := newProgramClock()
-	app, mock, _ := newCurationMockApplication(t, "", clock)
+	immediate := func() *sources.Limiter { return sources.NewLimiter(0, nil, nil) }
+	after := func(delay time.Duration) <-chan time.Time {
+		tick := make(chan time.Time, 1)
+		tick <- clock.options().Now().Add(delay)
+		return tick
+	}
+	app, mock, _ := newCurationMockApplication(t, "", clock, WithCurationSources(
+		sources.Options{Limiter: immediate(), Now: clock.options().Now, After: after},
+		coverartarchive.Options{Limiter: immediate(), ManifestLimiter: immediate()},
+		sources.Options{Limiter: immediate()}))
 	admin := app.createUser(t, "admin")
 	root := b3Root(t, app)
 	release, _ := insertGroupedRelease(t, app, root, groupedRelease{
@@ -61,10 +72,13 @@ func TestPostgreSQL整理队列限流时歌词和艺人资料继续(t *testing.T
 			q.PauseReason == nil || *q.PauseReason != "rate_limited" || q.Source == nil || *q.Source != "musicbrainz" ||
 			q.RetryAt == nil || !q.RetryAt.Equal(clock.options().Now().Add(delay)) || q.ETASeconds != nil ||
 			q.SuccessfulRequestsPerSecond != nil || q.CompletedItemsPerSecond != nil ||
-			p.Releases.Processed != 0 || p.Releases.TryLater != 0 || mbReads() != calls {
+			p.Releases.Processed != 0 || p.Releases.TryLater != 1 || mbReads() != calls {
 			t.Fatalf("期望 MusicBrainz 第 %d 次失败后等 %v，当前 %v 次、识别 %+v、进度 %+v", calls, delay, mbReads(), q, p.Releases)
 		}
-		requireUnattemptedProgramState(t, b3WorkState(t, app, "release", release))
+		state := b3WorkState(t, app, "release", release)
+		if state.Status != "try_later" || state.RetryCount != 0 || state.Attempts != 0 || state.Generation != 0 {
+			t.Fatalf("来源等待不累计专辑失败：%+v", state)
+		}
 	}
 
 	setScenario(`{"scenario":"rate_limited","retry_after":2}`)
@@ -99,18 +113,22 @@ func TestPostgreSQL整理队列限流时歌词和艺人资料继续(t *testing.T
 		}
 	}
 	if q := p.Queues[4]; q.ID != "fingerprint" || q.SuccessfulRequestsPerSecond != nil {
-		t.Fatalf("声纹队列不计网络请求：%+v", q)
+		t.Fatalf("无声纹任务时不应记录请求：%+v", q)
 	}
 
-	clock.advance(t, 4*time.Second)
-	requireBackoff(10*time.Second, 10)
+	pending := 4 * time.Second
+	for i, seconds := range []int{10, 20, 40, 80, 160, 180, 180} {
+		clock.advance(t, pending)
+		pending = time.Duration(seconds) * time.Second
+		requireBackoff(pending, (i+2)*5)
+	}
 	setScenario(`{"scenario":"ok"}`)
-	clock.advance(t, 9*time.Second)
-	requireBackoff(time.Second, 10)
+	clock.advance(t, pending-time.Second)
+	requireBackoff(time.Second, 40)
 	clock.advance(t, time.Second)
 	s := b3WorkState(t, app, "release", release)
 	if s.Status != "matched" || s.Attempts != 1 || s.Generation != 1 || s.RetryCount != 0 ||
-		mbReads() != 11 || s.NextAttemptAt != nil {
+		mbReads() != 41 || s.NextAttemptAt != nil {
 		t.Fatalf("MusicBrainz 恢复后状态 %+v，共 %d 次发行请求", s, mbReads())
 	}
 	q := progress().Queues[0]

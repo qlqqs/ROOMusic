@@ -41,6 +41,9 @@ func TestScannerMergeFormatsFilenameInference(t *testing.T) {
 						t.Fatalf("%s 未保留文件名推断证据：%+v", field, observation)
 					}
 				}
+				if observation.FieldSources["artist"] != "display_fallback" {
+					t.Fatalf("无标签文件名不应拆出艺人，来源应为 display_fallback：%+v", observation)
+				}
 			}
 		})
 	}

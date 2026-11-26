@@ -192,6 +192,7 @@ func TestB3FingerprintSingleRules(t *testing.T) {
 			e, _ := b3Album(1)
 			e.CandidateKind = "loose_unknown"
 			track := &e.Tracks[0]
+			track.Artist = "正式艺人"
 			track.TitlePlaceholder = tc.name == "占位标题"
 			length, officialLength := int64(100000), int64(100000)
 			if tc.name == "时长不符" {
@@ -218,6 +219,13 @@ func TestB3FingerprintSingleRules(t *testing.T) {
 			var conflicts []string
 			if tc.conflict != "" {
 				conflicts = append(conflicts, tc.conflict)
+			}
+			if tc.name == "占位标题" {
+				wantMatch(t, got, "no_match", "insufficient_evidence")
+				if got.Method != "" || got.Fingerprint != "unavailable" || len(f.recordingReads) != 0 || len(got.Candidates) != 0 {
+					t.Fatalf("标题占位且没有其它线索时不应提前查询声纹：%+v，读取=%v", got, f.recordingReads)
+				}
+				return
 			}
 			wantMatch(t, got, tc.status, conflicts...)
 			var reads []string
@@ -255,6 +263,12 @@ func TestB3FingerprintReachAndFallback(t *testing.T) {
 			})}},
 		} {
 			got, err := MatchWithFingerprint(t.Context(), e, f, f, tc.step)
+			if tc.step != nil {
+				if !errors.Is(err, sources.ErrInvalidQuery) || got.Status != "" || f.searches != 0 {
+					t.Fatalf("无效指纹转成了识别结论：结果=%+v 错误=%v 搜索=%d", got, err, f.searches)
+				}
+				continue
+			}
 			if err != nil {
 				t.Fatal(err)
 			}

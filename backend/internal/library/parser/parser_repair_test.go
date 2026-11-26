@@ -778,7 +778,9 @@ func repairMP3Frames(frames map[string]string) []byte {
 		_, _ = payload.Write([]byte{0, 0, 0})
 		_, _ = payload.WriteString(value)
 	}
-	return parsertest.ID3v23(payload.Bytes())
+	size := payload.Len()
+	header := []byte{'I', 'D', '3', 3, 0, 0, byte(size>>21) & 0x7f, byte(size>>14) & 0x7f, byte(size>>7) & 0x7f, byte(size) & 0x7f}
+	return append(header, payload.Bytes()...)
 }
 
 func repairMP3BinaryFrame(frameID string, frame []byte) []byte {

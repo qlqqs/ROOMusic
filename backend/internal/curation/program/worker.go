@@ -73,7 +73,7 @@ func NewWorker(db *sql.DB, writer *curation.Writer, sourceGate *curation.Sources
 		opts.PollInterval = time.Minute
 	}
 	if opts.ScanInterval <= 0 {
-		opts.ScanInterval = 30 * time.Second
+		opts.ScanInterval = 2 * time.Second
 	}
 	if opts.FullPassInterval <= 0 {
 		opts.FullPassInterval = 6 * time.Hour
@@ -118,6 +118,7 @@ func (w *Worker) wait(ctx context.Context, delay time.Duration) {
 	select {
 	case <-ctx.Done():
 	case <-w.opts.After(delay):
+	case <-w.policy.Changes():
 	}
 }
 

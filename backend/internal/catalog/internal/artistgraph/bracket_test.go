@@ -24,6 +24,8 @@ func TestBracketAliases(t *testing.T) {
 		{"Jin (BTS)", []alias{{text: "jin", part: "outer"}, {text: "bts", part: "inner"}}},
 		{"甲 (乙 / 乙)", []alias{{text: "甲", part: "outer"}, {text: "乙 / 乙", part: "inner"}}},
 		{"甲 (AC/DC)", []alias{{text: "甲", part: "outer"}, {text: "ac/dc", part: "inner"}}},
+		// 逗号属于艺人名正文，按整理链 3.2 不拆分，括号整体仍可作为别名。
+		{"甲 (乙,丙)", []alias{{text: "甲", part: "outer"}, {text: "乙,丙", part: "inner"}}},
 		{"", nil},
 		{"甲", nil},
 		{"甲(乙", nil},
@@ -44,7 +46,6 @@ func TestBracketAliases(t *testing.T) {
 		{"甲 (乙 / 丙)", nil},
 		{"甲 (乙、丙)", nil},
 		{"甲 (乙; 丙)", nil},
-		{"甲 (乙,丙)", []alias{{"甲", "outer"}, {"乙,丙", "inner"}}},
 		{"甲 (feat. 乙)", nil},
 		{"甲 (feat乙)", nil},
 		{"甲 (ft. 乙)", nil},

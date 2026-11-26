@@ -31,9 +31,11 @@ func b3ProgramApp(t *testing.T, tool *fingerprint.Fingerprinter, server *httptes
 	t.Helper()
 	clock := newProgramClock()
 	source := func(path string) sources.Options {
-		return sources.Options{BaseURL: server.URL + path, NewClient: b3HTTPClient(server), Limiter: sources.NewLimiter(0, nil, nil)}
+		return sources.Options{BaseURL: server.URL + path, NewClient: b3HTTPClient(server), Limiter: sources.NewLimiter(0, nil, nil), Now: clock.options().Now}
 	}
-	app := newIntegrationTestApplication(t, WithCurationProgram(true, clock.options()), WithFingerprinter(tool), WithAcoustID(b3AcoustOptions(server)),
+	acoust := b3AcoustOptions(server)
+	acoust.Now = clock.options().Now
+	app := newIntegrationTestApplication(t, WithCurationProgram(true, clock.options()), WithFingerprinter(tool), WithAcoustID(acoust),
 		WithCurationSources(source("/mb"), coverartarchive.Options{BaseURL: server.URL + "/covers", NewClient: b3HTTPClient(server), Limiter: sources.NewLimiter(0, nil, nil), ManifestLimiter: sources.NewLimiter(0, nil, nil)}, source("/lyrics")))
 	t.Cleanup(func() {
 		app.shutdown()
@@ -221,6 +223,7 @@ func TestPostgreSQLB3AcoustIDProgram(t *testing.T) {
 						t.Errorf("%s 状态=%s，期望 %s", key.Name, key.Status, want)
 					}
 				}
+				b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_work_states WHERE subject='fingerprint' AND queue_release_id=$1 AND needs_work`, release)
 				if lookups != 1 || searches != 1 {
 					t.Errorf("AcoustID 请求=%d，搜索请求=%d，均期望 1", lookups, searches)
 				}

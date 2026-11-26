@@ -96,6 +96,7 @@
       "conflict": 0,
       "matched": 0,
       "processed": 0,
+      "query_error": 0,
       "total": 2,
       "try_later": 0,
       "unmatched": 0

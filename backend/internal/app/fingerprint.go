@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
@@ -41,12 +40,7 @@ func WithAcoustID(opts acoustid.Options) Option {
 type programFingerprints struct{ prints *playback.Fingerprints }
 
 func (p programFingerprints) Fingerprint(ctx context.Context, trackID string) (program.TrackFingerprint, program.FingerprintStatus, error) {
-	result, status, _, err := p.FingerprintWithRetry(ctx, trackID)
-	return result, status, err
-}
-
-func (p programFingerprints) FingerprintWithRetry(ctx context.Context, trackID string) (program.TrackFingerprint, program.FingerprintStatus, time.Duration, error) {
 	result, status, err := p.prints.Fingerprint(ctx, trackID)
 	print := program.TrackFingerprint{Value: result.Value, DurationSeconds: result.DurationSeconds}
-	return print, program.FingerprintStatus(status), result.RetryAfter, err
+	return print, program.FingerprintStatus(status), err
 }

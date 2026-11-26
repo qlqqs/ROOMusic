@@ -22,7 +22,7 @@ func TestScanProgressWeightedBoundaries(t *testing.T) {
 	}
 }
 func TestScanProgressCandidateDefinition(t *testing.T) {
-	for _, name := range []string{"A.FLAC", "a.CUE", "a.ape", "a.wav", "a.mka", "a.m4a", "no_extension"} {
+	for _, name := range []string{"A.FLAC", "a.CUE", "a.ape", "a.wav", "a.mka", "a.m4a"} {
 		if !isScanCandidate(name) {
 			t.Errorf("candidate %s", name)
 		}
@@ -31,6 +31,10 @@ func TestScanProgressCandidateDefinition(t *testing.T) {
 		if isScanCandidate(name) {
 			t.Errorf("attachment %s", name)
 		}
+	}
+	// 空扩展名仍进入音频候选判定，最终格式由文件头读取决定。
+	if !isScanCandidate("no_extension") {
+		t.Error("无扩展名文件应进入音频候选")
 	}
 }
 func TestScanProgressDriftCancellationAndOverflow(t *testing.T) {

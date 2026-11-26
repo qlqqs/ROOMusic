@@ -107,7 +107,7 @@ ROOMUSIC_TEST_RUN='^TestPostgreSQLLocalAssist(SevenReasons|ModelContract|BeforeM
 
 已实现 B1 目录项的投影、四类回包核对、一级推断与撤销、扫描消费、主模型领取和识别前等待。提供 `curation.RequestLocalCreditSplit(ctx,tx,releaseID,trackID,role,sourceRef,raw)`。子任务 5 在确定性拼接失败的结算事务中调用；已有逐标签引用原样传入，引用采用曲目 ID、标签键与出现序。若失败针对整个采用的扫描署名，传空引用，由入口以目标和角色定位并逐字复核扫描原文。生产者在确定性拼接失败分支收集本地原署名引用，随匹配结算事务投影。
 
-本分支下一连续迁移为 `0103_curation_local_assist`，主代理合入时顺延编号。迁移增加署名段与归组表、目录成员和历史决定索引，登记新操作类型，退出现有未结旧协议项。降级恢复操作类型集合。设计 §5 记录了有历史推断数据时的回退顺序。归组保护清单 `other_paths` 保存同一目录中人工或已匹配成员的路径，供扫描区分新增文件与已有受保护文件。
+本地辅助迁移已顺延为 `0104_curation_local_assist`。迁移增加署名段与归组表、目录成员和历史决定索引，登记新操作类型，退出现有未结旧协议项。降级恢复操作类型集合。设计 §5 记录了有历史推断数据时的回退顺序。归组保护清单 `other_paths` 保存同一目录中人工或已匹配成员的路径，供扫描区分新增文件与已有受保护文件。
 
 实际改动文件按目录列出。
 
@@ -128,7 +128,7 @@ ROOMUSIC_TEST_RUN='^TestPostgreSQLLocalAssist(SevenReasons|ModelContract|BeforeM
 | `backend/internal/curation/stewardtools/` | `patrol.go` |
 | `backend/internal/library/` | `scan_scope.go`、`scanner.go` |
 | `backend/internal/upstreammock/` | `script.go` |
-| `backend/migrations/` | `0103_curation_local_assist.down.sql`、`0103_curation_local_assist.sql` |
+| `backend/migrations/` | `0104_curation_local_assist.down.sql`、`0104_curation_local_assist.sql` |
 
 ### 验证结果
 
@@ -156,7 +156,7 @@ ROOMUSIC_TEST_RUN='^TestPostgreSQLLocalAssist(SevenReasons|ModelContract|BeforeM
 
 `program.planCreditSplits` 在编号依据、原署名齐全而姓名与连接词拼不回时，收集目标、角色和未裁剪的原文。新识别和存量匹配补办都在各自的匹配结算事务内调用本地投影。已有 `TestProgramCreditSplitPlans` 的不同连接词样例现在同时核实交回的三个角色及原文。
 
-0103 首次往返暴露了新操作类型缺回退夹具。补入模型归组和撤销记录后，带数据的 down 又发现删除旧操作产生的延迟约束检查尚待执行。已在更换操作类型约束前执行 `SET CONSTRAINTS ALL IMMEDIATE`。主代理将迁移顺延到 0104 时，留意同时顺延 `rollbackFixtures` 的 103 条目。
+0103 首次往返暴露了新操作类型缺回退夹具。补入模型归组和撤销记录后，带数据的 down 又发现删除旧操作产生的延迟约束检查尚待执行。已在更换操作类型约束前执行 `SET CONSTRAINTS ALL IMMEDIATE`。本地辅助迁移和对应的 `rollbackFixtures` 条目现已顺延至 0104。
 
 以下验证均已通过。Go 命令从 `backend` 运行。
 
@@ -173,6 +173,25 @@ mise exec -- go test ./internal/curation/program -run '^(TestProgramCreditSplitP
 ROOMUSIC_TEST_RUN='^TestPostgreSQLMigrationRollbackRoundTrip$/^010[23]_' sg docker -c 'mise exec -- ./scripts/test-integration.sh'
 ROOMUSIC_TEST_RUN='^(TestPostgreSQL整理本地模型只写本地片段并保留碟号曲序|TestPostgreSQL整理无标签编号目录中的专辑名与艺人|TestPostgreSQLTrackAutoRevert)$' sg docker -c 'mise exec -- ./scripts/test-integration.sh'
 ROOMUSIC_TEST_RUN='^TestPostgreSQLCurationLocalRuleUpgradeQuiet$' sg docker -c 'mise exec -- ./scripts/test-integration.sh'
+git diff --check
+git diff --cached --check
+```
+
+## 合并查询重试后的验证
+
+队列取项同时检查本地辅助、查询重试到期时间和指纹依赖。查询等待保留断点和恢复唤醒，本地辅助仍在首次出站查询前结算。迁移回退夹具 103 验证查询重试，104 验证本地辅助。
+
+署名投影先用来源引用和标签原始字节定位已核准的分段，再按标签顺序重建艺人。双空格原文“林舟  & 周雁”在发行和曲目都投影为“林舟”“周雁”。该用例首次运行时显示名的空白未对齐，修正整组显示名比较后，重扫、撤销和重投影均通过。
+
+以下命令均已通过。Go 命令从 `backend` 运行，其余命令从仓库根目录运行。
+
+```sh
+mise exec -- go build ./...
+mise exec -- go vet ./internal/catalog/internal/artistgraph ./internal/curation/program ./internal/platform/postgres
+mise exec -- go test ./internal/app ./internal/platform/postgres -run '^(TestPackageDependencyDirections|TestEmbeddedMigrationRollbackFiles)$'
+ROOMUSIC_TEST_RUN='^TestPostgreSQLLocalAssistCreditParts$' sg docker -c 'mise exec -- ./scripts/test-integration.sh'
+ROOMUSIC_TEST_RUN='^TestPostgreSQL(QueueProgressMixesReadyWaitingAndQueryError|QueueRecoveryRacesFailureCommit|CurationProgramAlbumQueryErrorStopsAfterThree|LocalAssistBeforeMatch|B3FingerprintSourceWaitAndSwitch|整理队列五档取项与模型查询门槛)$' sg docker -c 'mise exec -- ./scripts/test-integration.sh'
+ROOMUSIC_TEST_RUN='^TestPostgreSQLMigrationRollbackRoundTrip$/^010[34]_' sg docker -c 'mise exec -- ./scripts/test-integration.sh'
 git diff --check
 git diff --cached --check
 ```
