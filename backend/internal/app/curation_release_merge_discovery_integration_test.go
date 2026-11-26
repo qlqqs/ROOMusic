@@ -88,6 +88,7 @@ func TestPostgreSQLCurationReleaseMergeProposed(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				f := newCurationFixture(t)
 				f.enable(t)
+				mustExec(t, f.application, `UPDATE curation_settings SET model='synthetic' WHERE id=1`)
 				a := max(f.a, f.b)
 				b := min(f.a, f.b)
 				for _, r := range []struct {
@@ -120,6 +121,7 @@ func TestPostgreSQLCurationReleaseMergeProposed(t *testing.T) {
 		t.Run(method, func(t *testing.T) {
 			f := newProgramFixture(t)
 			f.enable(t)
+			mustExec(t, f.application, `UPDATE curation_settings SET model='synthetic' WHERE id=1`)
 			mustExec(t, f.application, `UPDATE tracks SET source_status='present',disc_number=2 WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, f.b)
 			remote := programAlbum("Album A", "Artist A")
 			f.source.releases[remote.ID] = remote
@@ -148,6 +150,7 @@ func TestPostgreSQLCurationReleaseMergeProposed(t *testing.T) {
 	t.Run("存量回填", func(t *testing.T) {
 		f := newProgramFixture(t)
 		f.enable(t)
+		mustExec(t, f.application, `UPDATE curation_settings SET model='synthetic' WHERE id=1`)
 		f.sourceEnabled(t, "lrclib", false)
 		mustExec(t, f.application, `UPDATE tracks SET source_status='present',disc_number=2 WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, f.b)
 		external := uuid.New()
@@ -174,7 +177,7 @@ func TestPostgreSQLCurationReleaseMergeProposed(t *testing.T) {
 		}
 		f.clock.advance(t, 7*time.Hour)
 		again := requireReleaseMergeItem(t, f.curationFixture, f.a, f.b, external, false)
-		if !reflect.DeepEqual(after, f.stateFor(t, "release", f.a)) || first.ID != again.ID || f.source.calls["ReleaseByID"] != 0 || f.source.calls["SearchReleases"] != 0 {
+		if !reflect.DeepEqual(after, f.stateFor(t, "release", f.a)) || first.ID != again.ID || f.source.calls["ReleaseByID"] != 2 || f.source.calls["SearchReleases"] != 0 {
 			t.Fatalf("重复回填或外部请求，待定项 %s → %s，调用 %v", first.ID, again.ID, f.source.calls)
 		}
 	})
@@ -182,6 +185,7 @@ func TestPostgreSQLCurationReleaseMergeProposed(t *testing.T) {
 	t.Run("三张发行在同一目标排队", func(t *testing.T) {
 		f := newCurationFixture(t)
 		f.enable(t)
+		mustExec(t, f.application, `UPDATE curation_settings SET model='synthetic' WHERE id=1`)
 		third, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{title: "第三碟", artist: "Artist A", tracks: []string{"present"}})
 		external := uuid.New()
 		for i, release := range []string{f.a, f.b, third} {

@@ -18,7 +18,7 @@
 
 ## 2. 发行错误状态与 S8 续查
 
-在 `backend/migrations/` 增加设计中的 `NNNN_curation_query_retry.sql`、`NNNN_curation_query_retry.down.sql`，与同批其他任务依次编号。改 `backend/internal/curation/work_states.go` 和 `backend/internal/curation/program/{match_search,match_lookup,release_route,pass,release_state}.go`。将步骤标识、错误种类、真实来源和已完成页摘要带回发行边界，保留已有 `result` 中的重查字段。同一次领取只保存一次等待或查询出错；保存时检查代次、输入和原状态。失效/成功时清除断点，重入步骤时用原查询键读缓存。普通结论和规则版本的变更接子任务 5 的实现。
+在 `backend/migrations/` 增加设计中的 `0103_curation_query_retry.sql`、`0103_curation_query_retry.down.sql`，承接 0102 的状态集合。改 `backend/internal/curation/work_states.go` 和 `backend/internal/curation/program/{match_search,match_lookup,release_route,pass,release_state}.go`。将步骤标识、错误种类、真实来源和已完成页摘要带回发行边界，保留已有 `result` 中的重查字段。同一次领取只保存一次等待或查询出错；保存时检查代次、输入和原状态。失效/成功时清除断点，重入步骤时用原查询键读缓存。普通结论和规则版本的变更接子任务 5 的实现。
 
 验证：
 
@@ -102,19 +102,19 @@ git diff --check
 
 ## 实施记录
 
-采用现有队列与来源缓存。原分支仍把部分标识和名字装入同一页查询，因此暂用 `release_search` 保存该入口和前面步骤的候选依据；与子任务 5 合并时，把这些入口接到最终 S8 顺序。声纹队列把一张发行的多个样本错误合成一次，识别消费时在发行事务持久化。两个工作者交接前若中断，该步下轮通过已有的本地指纹和 HTTP 响应缓存重做。
+采用现有队列与来源缓存。断点已接到文件编号、光盘、条码、目录号、ISRC、声纹、名字七个入口。每步重入时沿用来源缓存和步前页摘要。声纹队列把一张发行的多个样本错误合成一次，识别消费时在发行事务持久化。两个工作者交接前若中断，该步下轮通过已有的本地指纹和 HTTP 响应缓存重做。
 
 已按授权修改的既有用例如下。
 
 - `backend/internal/curation/program/b3_fingerprint_test.go`：无效指纹查询返回错误，断言没有结论且没有发名字请求。
 - `backend/internal/app/curation_queue_sources_integration_test.go`：限流时有一张发行等待，重试次数、结论次数、代次均为零。
 - `backend/internal/app/curation_b3_fingerprint_integration_test.go`：连续三次实际解码，每次都能从曲目记录看到尝试次数增加；移除原先 24 小时冷却与曲目永久失败的预期。
-- `backend/internal/platform/postgres/migrations_rollback_integration_test.go`：为 0098 登记旧版等待行和新版 `query_error` 夹具，沿用既有结构、整行快照与再升级门禁。
-接口进度样本增加 `query_error` 并校正到分支实际版本 104，诊断样本迁移号改为 98，合入时随最终编号调整。
+- `backend/internal/platform/postgres/migrations_rollback_integration_test.go`：为 0103 登记旧版等待行和新版 `query_error` 夹具，沿用既有结构、整行快照与再升级门禁。
+接口进度样本增加 `query_error` ，与 matched、unmatched、conflict、try_later 一同输出。规则版本为 105，诊断迁移号为 103。
 
-生产整理器默认每 2 秒复查进行中的扫描。`backend/internal/app/curation_program_fixture_integration_test.go` 的假时钟使用原有的 30 秒显式配置。默认间隔及覆盖值的断言、重启后仍等待原来源期限的例外均已交接给测试代理。除本次确认的扫描复查样本及该例外，测试代理的清单沿用上表。合并后的识别准入、最终步骤名和状态约束由主代理与子任务 5 对齐；固定样本数量及耗时差值留到合入后实测。
+生产整理器默认每 2 秒复查进行中的扫描。`backend/internal/app/curation_program_fixture_integration_test.go` 的假时钟使用原有的 30 秒显式配置。默认间隔及覆盖值的断言、重启后仍等待原来源期限的例外均已交接给测试代理。除本次确认的扫描复查样本及该例外，测试代理的清单沿用上表。合并后的识别准入与七步沿用子任务 5，迁移约束接续 0102。固定样本数量及耗时差值留到合入后实测。
 
-### 已运行的验证
+### 合并前已运行的验证
 
 下列 Go 筛选从 `backend` 运行，使用 `mise exec -- go test <包> -run '<筛选>'`。本次结果均通过。
 
@@ -142,3 +142,55 @@ git diff --check
 曾失败：API 样本用例发现诊断样本迁移版本和进度样本规则版本落后；更新两处后通过。声纹单曲用例发现 AcoustID 旧录音编号与 MusicBrainz 正式编号可以不同；保留正式编号处理后通过。
 
 未运行：上表“测试代理补充清单”的新增场景，以及合入后子任务 1 的固定样本基线对照，当前无认对、认错、请求数和用时差值。
+
+
+## 与规则 105 的合并记录
+
+| 冲突文件 | 合入结果 |
+| --- | --- |
+| `.trellis/spec/backend/curation-contracts.md` | 第 15、23、25 节使用 0102 的结论、0103 的失败状态及同源竞争顺序。 |
+| `backend/internal/app/testdata/api-samples/curation/progress.json` | 进度的发行计数合并 matched、unmatched、conflict、try_later、query_error，rule_version 为 105。 |
+| `backend/internal/app/testdata/api-samples/diagnostics/admin.json` | migration_version 为 103。 |
+| `backend/internal/curation/program/match_lookup.go` | 编号命中即判、散曲多录音标签判冲突。适用步骤独立标记，查无记录才算空。 |
+| `backend/internal/curation/program/match_search.go` | 按七步分别记录步前页摘要与断点。第六步暂停时等待，重新入步时检查开关，只有到达第七步才搜索名字。 |
+| `backend/internal/curation/program/pass.go` | 按当前识别步骤保存等待与专辑错误，提交时核对物理文件摘要与最新来源期限，保留手动重查的范围。有效结论、结论次数和代次沿用规则 105。 |
+| `backend/internal/curation/program/queue_projection.go` | 准入与识别共用。前五步没有标识才提前登记声纹，文件或规则变化清断点，按可见和稳定条件领取。 |
+| `backend/internal/curation/program/queue_query.go` | 领取沿用 0102 的可识别发行视图及文件摘要函数。发行和它的声纹共享排名，未来等待只进剩余数，到期的普通未匹配可重新领取。 |
+| `backend/internal/curation/program/release_route.go` | 保留已对应发行或单曲的定向核对，重试沿用同一编号。第七步的普通核对失败记未匹配，已知不同组保留冲突。 |
+| `backend/internal/curation/progress.go` | 从同一份可见发行统计读取三个结论、等待和查询出错。 |
+| `backend/internal/curation/work_states.go` | 同时读取 file_digest、断点来源和未匹配到期时间。 |
+| `backend/internal/platform/postgres/migrations_rollback_integration_test.go` | 保留 102 的夹具，103 验证等待和查询出错的整行回退。 |
+
+`backend/migrations/0103_curation_query_retry.sql` 在 0102 的取值集合上增加 query_error。反向迁移保留来源结论，对发行的等待或查询出错行删除断点、恢复到 0102 可读的等待状态。配套调整包括 `backend/internal/curation/program/{fingerprint,queue_fingerprint}.go` 的声纹查询标记、`queue_progress.go` 的 90 天到期时间和 `unit.go` 的当前步骤。`backend/internal/app/curation_program_worker_integration_test.go` 的既有 TestPostgreSQLCurationProgramRetry 调整等待断言，检查 try_later、MusicBrainz 和期限，同时检查结论次数、失败次数与代次为零。
+
+### 合并后的验证结果
+
+以下 Go 命令从 `backend` 运行。编译、静态检查和以下 13 个单元用例通过。
+
+```sh
+mise exec -- go build ./internal/app ./internal/platform/postgres ./internal/curation/... ./internal/sources/...
+mise exec -- go vet ./internal/app ./internal/platform/postgres ./internal/curation/... ./internal/sources/...
+mise exec -- go test ./internal/app ./internal/platform/postgres ./internal/curation/... ./internal/sources/... -run '^(TestPackageDependencyDirections|TestEmbeddedMigrationRollbackFiles|TestProgramRuleUpgradeStatePolicy|TestProgramUnmatchedRecheckSchedule|TestB3FingerprintAlbumRules|TestB3FingerprintReachAndFallback|TestProgramIdentifierSearchOrder|TestProgramNameSearchOrder|TestProgramSimpleFinderBoundary|TestProgramReleaseAdmission|TestLookupBounds|TestFirstHitStopsLookup|TestProgramPartialAlbumNamesOnlineAndReplay)$'
+```
+
+初次 vet 和测试编译发现规则升级用例仍调用原签名的 `searchRelease`。把本轮断点放在工作单元中后，原调用和生产入口均可编译。初次迁移命令的两个数据库子用例已通过，但脚本因上述编译错误退出失败。初次功能批次在发现同一编译错误后中止，采用修正后的二进制重新执行。
+
+单元筛选最初另含 `TestB3FingerprintSingleRules`、`TestB3MatchWithoutFingerprint`、`TestB3FingerprintNeedsWork`，整次返回失败。对合并结果和导出的 `main` 基线 `7af059de` 各运行以下命令，两边的失败子用例名单完全相同。第一处的单曲夹具只有曲名、无曲目艺人，第二处的期望未设置放宽快照标记，第三处的旧工作行只设置 input_digest，规则 105 判断文件变化使用 file_digest。保留基线断言供主代理与子任务 5 核对。
+
+```sh
+mise exec -- go test ./internal/curation/program -run '^(TestB3FingerprintSingleRules|TestB3MatchWithoutFingerprint|TestB3FingerprintNeedsWork)$'
+```
+
+集成测试均在独占的合成 PostgreSQL 实例运行。迁移 0102、0103 的升降再升均通过。功能批次运行 21 个顶层用例，首次完整批次 17 个通过、4 个失败。单独更新早期 `TestPostgreSQLCurationProgramRetry` 的等待期望后复跑通过。最终结果为 18 个通过，3 个仍包含旧状态断言。
+
+```sh
+ROOMUSIC_TEST_RUN='^TestPostgreSQLMigrationRollbackRoundTrip$/^010[23]_' mise exec -- ./scripts/test-integration.sh
+ROOMUSIC_TEST_RUN='^TestPostgreSQL(APIResponseSamples|B3FingerprintSourceWaitAndSwitch|B3AcoustIDProgram|B3LocalFingerprintRetriesRealAudio|QueueRecoveryRacesFailureCommit|FingerprintProjectionRejectsLateGeneration|FingerprintControlsDoNotCountAlbumFailure|QueueProgressMixesReadyWaitingAndQueryError|整理队列五档取项与模型查询门槛|整理队列限流时歌词和艺人资料继续|整理重启复用响应及已提交写入|整理重启后界面成功仍按原期限探测|ProgramMatchResultsAPI|ProgramMatchFailedLookupKeepsLastSuccess|ProgramRuleUpgradeUsesExistingID|ProgramFileDigestChanges|ProgramPeriodicRecheckCallsAcoustID|ProgramAdmissionPreservesLyrics|整理同名跨组首查停止|CurationProgramRetry|整理名字核对按新依据重排一次)$' mise exec -- ./scripts/test-integration.sh
+ROOMUSIC_TEST_RUN='^TestPostgreSQLCurationProgramRetry$' mise exec -- ./scripts/test-integration.sh
+```
+
+- `TestPostgreSQLB3AcoustIDProgram` 的两种无效密钥均通过，各一次 AcoustID 查询、一次名字查询；`TestPostgreSQLB3FingerprintSourceWaitAndSwitch` 的 AcoustID 恢复和 MusicBrainz 详情恢复两个子用例均通过。AcoustID 等待前名字查询为零，等待期关闭后识别记录 unavailable。
+- 测试代理第一阶段共有四个旧结论断言仍失败。`backend/internal/app/curation_b3_query_wait_integration_test.go` 的“已关闭”和“等待期间关闭”，以及 `backend/internal/curation/program/queue_fingerprint_integration_test.go` 的旧代结果晚到和“计算途中停用来源”，均期望 unlisted，实际为 unmatched。旧代晚到样本实测共四次计算，新一代完成一次识别。测试代理的用例保留原状。
+- 进度样本、混合就绪与等待、排队优先级、重启续查、已有来源结论保留、90 天重查、文件摘要变化和等待提交竞态均通过。`git ls-files -u` 为空，`git diff --check` 和 `git diff --cached --check` 通过。
+
+第二阶段的测试清单增加以上四处旧状态断言对齐，保留禁用时 unavailable、等待期间零名字请求和密钥无效时一次名字请求的断言。按最终七步验证跨步骤跳过、步骤内页或详情缓存、同源请求优先级，以及提前查声纹与 MusicBrainz 出站的实际重叠。固定样本耗时差值和第二阶段新增用例本次未运行。

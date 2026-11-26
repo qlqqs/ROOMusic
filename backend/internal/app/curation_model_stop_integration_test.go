@@ -3,10 +3,13 @@ package app
 import (
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/curation/model"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 )
@@ -43,7 +46,7 @@ func TestPostgreSQLCurationModelConcurrentProviderCooldown(t *testing.T) {
 			}
 
 			second.selectCandidate(t, active.ID, "")
-			schedulerWait(t, "在途发行正常升级第二档", func() bool { return f.item(t, active.ID).Route == "lookup" })
+			modelWaitResolution(t, f, active.ID, "undetermined")
 			f.clock.now.Add(int64(tc.cooldown - time.Second))
 			select {
 			case <-f.requests:
@@ -68,7 +71,9 @@ func TestPostgreSQLCurationModelConcurrentProviderCooldown(t *testing.T) {
 }
 
 func TestPostgreSQLCurationModelConcurrentProviderBackoff(t *testing.T) {
-	f := newSchedulerFixture(t)
+	clock := newProgramClock()
+	f := newSchedulerFixture(t, WithCurationModel(true, model.Options{Now: clock.options().Now, PollInterval: 20 * time.Millisecond, BatchSize: 1}))
+	f.clock = clock
 	f.configure(t, &f.admin)
 	const concurrency, readyItems = 3, 4
 	for i := range readyItems {
@@ -180,7 +185,7 @@ func TestPostgreSQLCurationModelProviderCooldownResetsAfterSuccess(t *testing.T)
 	if reason := schedulerEnd(t, sub); reason != runtime.EndCompleted {
 		t.Fatalf("恢复运行的结束原因 %s，期望 %s", reason, runtime.EndCompleted)
 	}
-	schedulerWait(t, "恢复运行将发行升级到第二档", func() bool { return f.item(t, item.ID).Route == "lookup" })
+	modelWaitResolution(t, f, item.ID, "undetermined")
 
 	nextItem := f.pending(t, f.b)
 	exhaustRetries(f.next(t, false), nextItem.ID)
@@ -336,8 +341,8 @@ func TestPostgreSQLCurationModelStopConditions(t *testing.T) {
 				f.pause(t)
 				resumed.complete(t)
 			case "logout", "limit":
-				if got := f.item(t, item.ID); got.Status != "waiting_route" || got.Route != "lookup" {
-					t.Fatalf("%s 后本项未能升级：%+v", tc.name, got)
+				if got := f.item(t, item.ID); got.Resolution == nil || *got.Resolution != "undetermined" {
+					t.Fatalf("%s 后本项未能结案：%+v", tc.name, got)
 				}
 			default:
 				schedulerWait(t, "释放领取", func() bool { return f.item(t, item.ID).Status == "waiting_model" })
@@ -353,4 +358,193 @@ func TestPostgreSQLCurationModelStopConditions(t *testing.T) {
 			}
 		})
 	}
+}
+
+func requireCurationRulePause(t *testing.T, f *schedulerFixture, kind string, retry *time.Time) curation.ModelProgress {
+	t.Helper()
+	var p curation.ModelProgress
+	schedulerWait(t, "模型进入 "+kind, func() bool {
+		p = f.progress(t)
+		return p.PauseKind != nil && *p.PauseKind == kind && p.Running == 0
+	})
+	if retry == nil && p.RetryAt != nil || retry != nil && (p.RetryAt == nil || !p.RetryAt.Equal(*retry)) {
+		t.Fatalf("%s 的恢复时间，期望 %v，实际 %+v", kind, retry, p)
+	}
+	return p
+}
+
+func requireCurationRuleRequestCount(t *testing.T, f *schedulerFixture, want int32) {
+	t.Helper()
+	if got := f.requestCount.Load(); got != want {
+		t.Fatalf("模型请求数=%d，期望 %d", got, want)
+	}
+}
+
+func TestPostgreSQLCurationModelRulesUpstreamRetryAfter600(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	item := f.pending(t, f.a)
+	f.enable(t)
+	f.next(t, false).fail <- schedulerHTTPFailure{status: 503, retryAfter: "600"}
+	deadline := f.clock.options().Now().Add(600 * time.Second)
+	requireCurationRulePause(t, f, "temporary", &deadline)
+	f.clock.now.Add(int64(599 * time.Second))
+	requireCurationRulePause(t, f, "temporary", &deadline)
+	requireCurationRuleRequestCount(t, f, 1)
+	if got := f.item(t, item.ID); got.Attempts != 0 || got.ConversationID != "" {
+		t.Fatalf("截止前应释放原项且不计回答：%+v", got)
+	}
+
+	f.clock.now.Add(int64(time.Second))
+	f.next(t, false).selectCandidate(t, item.ID, "")
+	modelWaitResolution(t, f, item.ID, "undetermined")
+	schedulerWait(t, "到点请求已结案", func() bool { return f.progress(t).Running == 0 })
+	requireCurationRuleRequestCount(t, f, 2)
+}
+
+func TestPostgreSQLCurationModelRulesTemporaryBackoffCap(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	item := f.pending(t, f.a)
+	f.enable(t)
+	for _, seconds := range []int{5, 10, 20, 40, 80, 160, 180, 180} {
+		f.lastProviderAttempt(t, f.next(t, false)).fail <- schedulerHTTPFailure{status: 503, retryAfter: "invalid"}
+		deadline := f.clock.options().Now().Add(time.Duration(seconds) * time.Second)
+		requireCurationRulePause(t, f, "temporary", &deadline)
+		f.clock.now.Store(deadline.UnixNano())
+	}
+	f.next(t, false).selectCandidate(t, item.ID, "")
+	modelWaitResolution(t, f, item.ID, "undetermined")
+	f.pending(t, f.b)
+	f.lastProviderAttempt(t, f.next(t, false)).fail <- schedulerHTTPFailure{status: 503}
+	deadline := f.clock.options().Now().Add(5 * time.Second)
+	requireCurationRulePause(t, f, "temporary", &deadline)
+}
+
+func TestPostgreSQLCurationModelRulesQuotaProbe(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	item := f.pending(t, f.a)
+	f.enable(t)
+	quota := schedulerHTTPFailure{status: 402, code: "insufficient_balance", message: "余额不足"}
+	f.next(t, false).fail <- quota
+
+	firstProbeAt := f.clock.options().Now().Add(time.Hour)
+	p := requireCurationRulePause(t, f, "provider_quota", &firstProbeAt)
+	if !p.CanRetry || p.ReasonDetail == nil || !strings.Contains(*p.ReasonDetail, "余额不足") {
+		t.Fatalf("应返回欠费原因和手动入口：%+v", p)
+	}
+	f.clock.now.Add(int64(59 * time.Minute))
+	requireCurationRulePause(t, f, "provider_quota", &firstProbeAt)
+	requireCurationRuleRequestCount(t, f, 1)
+	f.clock.now.Add(int64(time.Minute))
+	probe := f.next(t, false)
+	if len(probe.Messages) != 1 || len(probe.Tools) != 0 || probe.outputLimit() != 16 {
+		t.Fatalf("第 60 分钟应该只发送一次小探测：%+v", probe)
+	}
+	// 定时探测挂起时，管理员请求复用同一个探测名额。
+	f.update(t, "POST", curationBase+"/model/retry", nil)
+	requireCurationRuleRequestCount(t, f, 2)
+	probe.fail <- quota
+	secondProbeAt := firstProbeAt.Add(time.Hour)
+	requireCurationRulePause(t, f, "provider_quota", &secondProbeAt)
+	if got := f.item(t, item.ID); got.Status != "waiting_model" || got.Attempts != 0 || got.SingleRequest {
+		t.Fatalf("欠费期间应保留原项：%+v", got)
+	}
+	f.clock.now.Store(secondProbeAt.UnixNano())
+	f.next(t, false).complete(t)
+	f.next(t, false).selectCandidate(t, item.ID, "")
+	modelWaitResolution(t, f, item.ID, "undetermined")
+	requireCurationRuleRequestCount(t, f, 4)
+}
+
+func TestPostgreSQLCurationModelRulesConfigurationUnlock(t *testing.T) {
+	for _, change := range []string{"继承模型改变", "手动工具测试"} {
+		t.Run(change, func(t *testing.T) {
+			f := newSchedulerFixture(t)
+			f.configure(t, &f.admin)
+			item := f.pending(t, f.a)
+			f.enable(t)
+			f.next(t, false).fail <- schedulerHTTPFailure{status: 401, code: "invalid_api_key", message: "合成认证拒绝"}
+			p := requireCurationRulePause(t, f, "configuration", nil)
+			if p.ReasonDetail == nil || !strings.Contains(*p.ReasonDetail, "合成认证拒绝") || !p.CanRetry {
+				t.Fatalf("应显示配置错误原因并允许测试：%+v", p)
+			}
+			f.configure(t, &f.admin)
+			f.update(t, "PUT", curationBase+"/settings", map[string]int{"model_concurrency": 1})
+			f.clock.now.Add(int64(2 * time.Hour))
+			requireCurationRulePause(t, f, "configuration", nil)
+			requireCurationRuleRequestCount(t, f, 1)
+
+			var resumed schedulerRequest
+			if change == "继承模型改变" {
+				f.update(t, "PUT", stewardBase+"/settings", map[string]string{"model": "new-inherited-model"})
+				resumed = f.nextModel(t, "new-inherited-model", false)
+			} else {
+				done := make(chan *httptest.ResponseRecorder, 1)
+				go func() {
+					done <- f.application.request(t, "POST", curationBase+"/model/retry", nil, &f.admin, nil)
+				}()
+				probe := f.next(t, false)
+				if len(probe.Tools) != 1 || probe.Tools[0].Function.Name != "roomusic_probe" {
+					t.Fatalf("手动解锁应探测工具调用：%+v", probe)
+				}
+				probe.complete(t)
+				select {
+				case response := <-done:
+					if response.Code != 200 {
+						t.Fatalf("手动测试 HTTP %d：%s", response.Code, response.Body)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("手动测试请求未返回")
+				}
+				// 单纯文字不证明支持工具。
+				requireCurationRulePause(t, f, "configuration", nil)
+				go func() {
+					done <- f.application.request(t, "POST", curationBase+"/model/retry", nil, &f.admin, nil)
+				}()
+				f.next(t, false).tool(t, "roomusic_probe", map[string]string{})
+				select {
+				case response := <-done:
+					if response.Code != 200 {
+						t.Fatalf("手动测试 HTTP %d：%s", response.Code, response.Body)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("手动测试请求未返回")
+				}
+				resumed = f.next(t, false)
+			}
+			resumed.selectCandidate(t, item.ID, "")
+			modelWaitResolution(t, f, item.ID, "undetermined")
+		})
+	}
+}
+
+func TestPostgreSQLCurationModelRulesInFlightReplyWhilePaused(t *testing.T) {
+	clock := newProgramClock()
+	f := newSchedulerFixture(t, WithCurationModel(true, model.Options{Now: clock.options().Now, PollInterval: 20 * time.Millisecond, BatchSize: 1}))
+	f.clock = clock
+	f.configure(t, &f.admin)
+	failed, active := f.pending(t, f.a), f.pending(t, f.b)
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 2})
+	first, second := f.next(t, false), f.next(t, false)
+	if strings.Contains(curationRulePrompt(t, first), active.ID) {
+		first, second = second, first
+	}
+	requireCurationRuleItems(t, first, failed.ID)
+	requireCurationRuleItems(t, second, active.ID)
+	third := curationRulePending(t, f, "暂停期间的排队项")
+	first.fail <- schedulerHTTPFailure{status: 401, code: "invalid_api_key", message: "合成认证失败"}
+	schedulerWait(t, "旧请求仍在途且配置暂停已生效", func() bool {
+		p := f.progress(t)
+		return p.Running == 1 && p.PauseKind != nil && *p.PauseKind == "configuration"
+	})
+	second.undetermined(t, active.ID, "允许在途回复结案")
+	modelWaitResolution(t, f, active.ID, "undetermined")
+	p := requireCurationRulePause(t, f, "configuration", nil)
+	if p.Today.InputTokens != 13 || p.Today.OutputTokens != 7 || f.item(t, active.ID).Attempts != 1 {
+		t.Fatalf("在途有效回答应计次并完整入账：%+v", p)
+	}
+	b3RequireCount(t, f.application, 2, `SELECT count(*) FROM curation_pending_items WHERE id IN ($1,$2) AND status='waiting_model' AND conversation_id IS NULL AND attempts=0`, failed.ID, third.ID)
+	requireCurationRuleRequestCount(t, f, 2)
 }

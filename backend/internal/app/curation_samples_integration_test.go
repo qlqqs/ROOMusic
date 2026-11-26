@@ -50,7 +50,7 @@ func recordCurationSamples(t *testing.T, samples *apiSampleRecorder) {
 	record("curation/suppressions", "GET", curationBase+"/suppressions?release_id="+f.b, nil)
 	record("curation/batches", "GET", curationBase+"/batches", nil)
 	record("curation/batch", "GET", curationBase+"/batches/"+batch, nil)
-	record("curation/settings-paused", "PUT", curationBase+"/settings", map[string]any{"paused": true, "web_daily_token_limit": 240000})
+	record("curation/settings-paused", "PUT", curationBase+"/settings", map[string]any{"paused": true, "max_request_tokens": 240000})
 	record("curation/progress", "GET", curationBase+"/progress", nil)
 	samples.recordEmpty("curation/repatrol", f.application.request(t, http.MethodPost, curationBase+"/repatrol", nil, &f.admin, nil), http.StatusAccepted)
 

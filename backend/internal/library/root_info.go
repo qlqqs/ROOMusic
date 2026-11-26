@@ -9,6 +9,8 @@ import (
 
 // RootInfo 是目录列表与排除操作共用的安全投影；Path 只含目录名。
 type RootInfo struct {
+	*RootMonitoring
+	interval      int
 	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	Path          string    `json:"path"`
@@ -19,8 +21,14 @@ type RootInfo struct {
 	ExcludedPaths []string  `json:"excluded_paths"`
 }
 
+// RootMonitoring 仅出现在目录列表，已持久化的操作收据保持原字段。
+type RootMonitoring struct {
+	ScanWatchMode       *string `json:"scan_watch_mode"`
+	PollIntervalMinutes int     `json:"poll_interval_minutes"`
+}
+
 // 数组先转 JSON 再解码，避免 database/sql 把 PostgreSQL text[] 当作原生切片扫描。
-const rootResponseQuery = `SELECT r.id::text,r.path,r.status,r.revision,r.created_at,r.updated_at,
+const rootResponseQuery = `SELECT r.id::text,r.path,r.status,r.revision,r.created_at,r.updated_at,r.poll_interval_minutes,
 	COALESCE(to_json(array_agg(e.relative_path ORDER BY e.relative_path COLLATE "C")
 		FILTER (WHERE e.relative_path IS NOT NULL)), '[]'::json)
 	FROM library_roots r LEFT JOIN library_root_exclusions e ON e.root_id=r.id`
@@ -29,7 +37,7 @@ func scanRootResponse(row interface{ Scan(...any) error }) (RootInfo, error) {
 	var root RootInfo
 	var path string
 	var exclusions []byte
-	if err := row.Scan(&root.ID, &path, &root.Status, &root.Revision, &root.CreatedAt, &root.UpdatedAt, &exclusions); err != nil {
+	if err := row.Scan(&root.ID, &path, &root.Status, &root.Revision, &root.CreatedAt, &root.UpdatedAt, &root.interval, &exclusions); err != nil {
 		return RootInfo{}, err
 	}
 	if err := json.Unmarshal(exclusions, &root.ExcludedPaths); err != nil {
@@ -53,6 +61,7 @@ func (service *Service) ListRoots(ctx context.Context) ([]RootInfo, error) {
 		if scanErr != nil {
 			return nil, &RootOperationError{Code: "database_unavailable", Message: "服务暂不可用", Err: scanErr}
 		}
+		root.RootMonitoring = &RootMonitoring{PollIntervalMinutes: root.interval, ScanWatchMode: service.watchMode(root.ID, root.Revision)}
 		roots = append(roots, root)
 	}
 	if rowsErr := rows.Err(); rowsErr != nil {

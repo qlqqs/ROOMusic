@@ -105,6 +105,10 @@ export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> =
   });
   // 概览的最近新增默认没有记录；具体场景可覆盖。匿名会话仍被拒绝，不用 404 伪装空列表。
   api.on("GET", "/api/v1/release-groups/recently-added", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("scan-feedback/recent-empty"));
+  // 专辑详情的“外部识别”只给管理员；默认这张专辑还没有任何来源的识别记录，具体场景可覆盖。
+  api.on("GET", /^\/api\/v1\/admin\/curation\/releases\/[^/]+\/match-results$/, () =>
+    viewer()?.role === "admin" ? jsonResponse(200, { results: [] }) : sampleResponse("errors/unauthorized"),
+  );
   // 报告只给管理员；未登记的扫描返回 404，不能以默认成功掩盖遗漏的场景或错误的扫描 ID。
   api.on("GET", /^\/api\/v1\/scans\/[^/]+\/report$/, () => {
     const current = viewer();

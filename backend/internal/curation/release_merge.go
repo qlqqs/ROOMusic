@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
 type ReleaseAutoMerge struct {
@@ -125,4 +127,39 @@ func (w *Writer) MergeReleases(ctx context.Context, r ReleaseAutoMerge) (Release
 	}
 	err = json.Unmarshal(result.Response, &applied)
 	return applied, err
+}
+
+// MergeProgramEdition 只接受能逐碟逐轨证实的同版互补发行。
+func (w *Writer) MergeProgramEdition(ctx context.Context, edition sources.Release, preview governance.ReleaseMergePreview, source Source, batch, key string) error {
+	if source.Kind != "source" || source.Provider != "musicbrainz" || !uuid.Valid(batch) {
+		return operations.Invalid("invalid_input", "程序并入需要 MusicBrainz 来源与程序批次")
+	}
+	request := governance.ReleaseMergeRequest{TargetID: preview.Target.ID, SourceID: preview.Source.ID, Token: preview.Token}
+	spec, err := w.sourceSpec(ctx, operations.TypeReleaseAutoMerge, request.TargetID, operations.Fingerprint(request), source, batch, key, "", "", "")
+	if err != nil {
+		return err
+	}
+	_, err = operations.Run(ctx, w.db, spec, governance.CurationReleaseMergeExecutor(request, func(ctx context.Context, tx *sql.Tx, current governance.ReleaseMergePreview) error {
+		if err := checkWrite(ctx, tx, spec, "", request.TargetID, 0, 0); err != nil {
+			return err
+		}
+		ids := []string{request.TargetID, request.SourceID}
+		entries, err := catalog.LoadCurationEvidence(ctx, tx, ids, w.ArtworkExists)
+		if err != nil {
+			return err
+		}
+		members, err := releaseMergeMembers(ctx, tx, ids, entries)
+		if err != nil {
+			return err
+		}
+		pair := mergePair(members[ids[0]], members[ids[1]])
+		if err := pair.check(ctx, tx); err != nil {
+			return err
+		}
+		if pair.Target.ExternalID != edition.ID || !coversEdition(edition, current, entries) {
+			return operations.Conflict("item_stale", "发行的曲目对应或碟序已变化")
+		}
+		return nil
+	}))
+	return err
 }

@@ -101,6 +101,12 @@ func (c *comparison) compareRelease(e catalog.CurationEvidence, method string, r
 		hasNumber = hasNumber || n != ""
 		matchedNumber = matchedNumber || cat == n
 	}
+	if method == "catalog_number" && cat != "" && e.Label != "" && len(r.Labels) > 0 &&
+		!slices.ContainsFunc(r.Labels, func(l sources.Label) bool {
+			return textnorm.CatalogNumber(l.CatalogNumber) == cat && sameText(e.Label, l.Name)
+		}) {
+		c.conflict("catalog_mismatch")
+	}
 	if cat != "" && hasNumber && !matchedNumber {
 		c.conflict("catalog_mismatch")
 	}
@@ -305,13 +311,6 @@ func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.R
 		return uncertain(result, "list_truncated")
 	}
 	result.Snapshot.CandidateSetComplete = true
-	if len(releases) > 3 {
-		if markBlocked(e, result.Mode, result.Candidates) == len(result.Candidates) {
-			result.Status, result.Conflicts = "no_usable_candidates", candidateConflicts(result.Candidates)
-			return result
-		}
-		return uncertain(result, "too_many")
-	}
 	var passed []verifiedEdition
 	freq := map[string]int{}
 	blocked := 0
@@ -410,7 +409,7 @@ func matchedEditions(result MatchResult, passed []verifiedEdition) MatchResult {
 		}
 	}
 	if sharedGroup(rows) == "" {
-		return uncertain(result, "ambiguous")
+		return uncertain(result, "different_release_groups")
 	}
 	result = groupMatch(result, rows, "structure")
 	result.Release, result.Pairs = nil, nil
@@ -486,9 +485,15 @@ func sameCredits(a, b []sources.Credit) bool {
 func groupMatch(result MatchResult, rows []sources.Release, rule string) MatchResult {
 	result.Status, result.Level, result.Rule, result.GroupID = "matched", "release_group", rule, rows[0].Group.ID
 	result.GroupTitle = rows[0].Group.Title
+	for _, r := range rows {
+		if r.Group.FirstReleaseDate != "" {
+			result.GroupFirstReleaseDate = r.Group.FirstReleaseDate
+			break
+		}
+	}
 	result.Credits = rows[0].Artists
 	for _, r := range rows {
-		if !sameCredits(result.Credits, r.Artists) {
+		if !sameCredits(result.Credits, r.Artists) || credits(result.Credits) != credits(r.Artists) {
 			result.Credits = nil
 			break
 		}
@@ -507,4 +512,10 @@ const variousArtistsID = "89ad4ac3-39f7-470e-963a-56509c546377"
 
 func creditID(cs []sources.Credit, id string) bool {
 	return id != "" && len(cs) == 1 && cs[0].ArtistID == id
+}
+
+func sameAlbumNames(e catalog.CurationEvidence, r sources.Release) bool {
+	title, artist := textnorm.MergeKey(e.Title), textnorm.MergeKey(albumArtist(e))
+	return !e.TitlePlaceholder && !e.ArtistPlaceholder && title != "" && artist != "" &&
+		title == textnorm.MergeKey(r.Title) && artist == textnorm.MergeKey(credits(r.Artists))
 }

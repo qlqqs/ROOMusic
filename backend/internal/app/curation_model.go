@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -20,14 +21,49 @@ import (
 )
 
 type backgroundLauncher struct {
+	runner  *runtime.Runner
 	api     *stewardapi.Handlers
 	sources *curation.Sources
 	store   *runtime.Store
 	web     *web.Service
 }
 
-func (l backgroundLauncher) Availability(ctx context.Context, actor string) (string, string, error) {
-	return l.api.BackgroundAvailability(ctx, actor)
+func (l backgroundLauncher) Availability(ctx context.Context, actor, override string) (model.Configuration, error) {
+	var c model.Configuration
+	var err error
+	c.Model, c.Key, c.ModelKey, c.Reason, err = l.api.BackgroundModelIdentity(ctx, actor, override)
+	return c, err
+}
+func (l backgroundLauncher) OnSettingsChanged(wake func()) { l.api.OnModelSettingsChanged(wake) }
+func (l backgroundLauncher) Probe(ctx context.Context, actor, name string, tools bool) (int64, int64, *curation.ModelFailure, error) {
+	u, err := l.api.ProbeCurationModel(ctx, actor, name, tools)
+	var in, out int64
+	if u.InputTokens != nil {
+		in = *u.InputTokens
+	}
+	if u.OutputTokens != nil {
+		out = *u.OutputTokens
+	}
+	f := backgroundFailure(err)
+	if f != nil {
+		return in, out, f, nil
+	}
+	return in, out, nil, err
+}
+func backgroundFailure(err error) *curation.ModelFailure {
+	var pe *provider.Error
+	if errors.As(err, &pe) {
+		message := pe.Message
+		if message == "" && pe.StatusCode != 0 {
+			message = fmt.Sprintf("模型端点返回 HTTP %d", pe.StatusCode)
+		}
+		return &curation.ModelFailure{Class: pe.BackgroundClass(), Code: pe.Code, Status: pe.StatusCode, Message: message, Delay: pe.RetryDelay}
+	}
+	var unavailable *stewardapi.ModelUnavailable
+	if errors.As(err, &unavailable) {
+		return &curation.ModelFailure{Class: "configuration", Code: unavailable.Reason, Message: unavailable.Reason}
+	}
+	return nil
 }
 func (l backgroundLauncher) CreateConversation(ctx context.Context, actor, title, model string) (string, error) {
 	c, err := l.store.CreateCurationConversation(ctx, actor, title, model)
@@ -116,9 +152,13 @@ func (l backgroundLauncher) RejectedSubmissions(ctx context.Context, actor, conv
 
 type backgroundRun struct{ run *runtime.Run }
 
-func (r backgroundRun) Wait(ctx context.Context) (string, error) {
+func (r backgroundRun) Wait(ctx context.Context) (model.RunResult, error) {
 	end, err := r.run.Wait(ctx)
-	return string(end.Reason), err
+	result := model.RunResult{Reason: string(end.Reason)}
+	if end.ProviderFailure != nil {
+		result.Failure = backgroundFailure(end.ProviderFailure)
+	}
+	return result, err
 }
 
 type itemKindKey struct{}
@@ -165,9 +205,10 @@ func (l backgroundLauncher) Start(ctx context.Context, p model.RunParams) (model
 		return p.Run.TaskKind == string(model.WebFallback) && l.sources != nil && l.sources.Check(ctx, "web_search") == nil
 	}
 	params := stewardapi.BackgroundParams{
-		UserID: p.Run.ActorID, ConversationID: p.Run.ConversationID, Model: p.Run.Model, Text: p.Text, ReviewPlanID: p.ReviewPlanID, ItemID: p.Run.PendingItemID, ClaimDigests: p.Run.ClaimDigests,
+		RequestBudget: p.Budget, Verified: p.Verified, UserID: p.Run.ActorID, ConversationID: p.Run.ConversationID, Model: p.Run.Model, Text: p.Text, ReviewPlanID: p.ReviewPlanID, ItemID: p.Run.PendingItemID, ClaimDigests: p.Run.ClaimDigests,
 		WebSearchEnabled: webEnabled,
 		SystemSuffix:     backgroundPrompt(model.TaskKind(p.Run.TaskKind)),
+		BeforeRequest:    func(ctx context.Context) error { return curationRunError(p.BeforeRequest(ctx)) },
 		BeforeStep:       func(ctx context.Context) error { return curationRunError(p.BeforeStep(ctx)) },
 		Usage: func(ctx context.Context, _ runtime.UsageKind, u provider.Usage) {
 			var in, out int64
@@ -193,6 +234,21 @@ func (l backgroundLauncher) Start(ctx context.Context, p model.RunParams) (model
 			return p.Escalate(ctx, curation.ModelException{Tool: item.Tool, Input: item.Input, PlanItemID: item.ID, Preview: preview, Evidence: item.Preview.Verification, Review: r})
 		},
 	}
+	applyTaskPrompt(&params, p)
+	if p.OnToolCalls != nil {
+		params.OnToolCalls = func(ctx context.Context, n int) error { return curationRunError(p.OnToolCalls(ctx, n)) }
+	}
+	run, err := l.api.StartBackground(ctx, params)
+	if err != nil {
+		if f := backgroundFailure(err); f != nil {
+			return nil, f
+		}
+		return nil, err
+	}
+	return backgroundRun{run}, nil
+}
+
+func applyTaskPrompt(params *stewardapi.BackgroundParams, p model.RunParams) {
 	switch model.TaskKind(p.Run.TaskKind) {
 	case model.PatrolAndLocal:
 		if p.Items[0].Kind == "local_cleanup" {
@@ -205,14 +261,14 @@ func (l backgroundLauncher) Start(ctx context.Context, p model.RunParams) (model
 	case model.WebFallback:
 		params.StepLimit = 31
 	}
-	if p.OnToolCalls != nil {
-		params.OnToolCalls = func(ctx context.Context, n int) error { return curationRunError(p.OnToolCalls(ctx, n)) }
-	}
-	run, err := l.api.StartBackground(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	return backgroundRun{run}, nil
+}
+
+func (l backgroundLauncher) Estimate(ctx context.Context, p model.RunParams) (int64, error) {
+	ctx = curation.WithModelRun(ctx, &p.Run)
+	ctx = context.WithValue(ctx, itemKindKey{}, p.Items[0].Kind)
+	params := stewardapi.BackgroundParams{UserID: p.Run.ActorID, Model: p.Run.Model, Text: p.Text, RequestBudget: p.Budget, Verified: p.Verified, SystemSuffix: backgroundPrompt(model.TaskKind(p.Run.TaskKind))}
+	applyTaskPrompt(&params, p)
+	return l.api.EstimateCuration(ctx, l.runner, params)
 }
 
 // 两个入口的同名工具各自保留严格的参数合同，共用 Supervisor 的名额与取消机制。
@@ -243,7 +299,7 @@ func backgroundPrompt(kind model.TaskKind) string {
 	const matching = "同组多版结构吻合而无法区分版本时，提交任一吻合版本，后端按规则只建发行组级对应。来源暂不可用时会自动重试，不必放弃。"
 	switch kind {
 	case model.SelectCandidate:
-		return base + `逐项比较完整曲序、曲名、艺人和时长，仅输出一个 JSON 对象 {"items":[{"item_id":"…","decision":"select","external_id":"…"},{"item_id":"…","decision":"upgrade"}]}。每项恰好一个决定。无法确定或正确答案不在候选里就升级。`
+		return base + `逐项比较完整曲序、曲名、艺人和时长，仅输出一个 JSON 对象 {"items":[{"item_id":"…","decision":"select","external_id":"…"},{"item_id":"…","decision":"undetermined","reason":"无法确定的依据"}]}。每项恰好一个决定。`
 	case model.LookupCandidate:
 		return base + matching + "使用 MusicBrainz 查询、读取工具，必要时改用原文、别名或不同查询。可以提交候选之外的发行或录音编号。没有可核对的结果就用 shelve_pending_item 放弃本档。年份、厂牌、目录号、条码有具体建议但缺少开放库字段依据时，用该工具的 fact 提交字段与值；后端先转联网求证，仍无外部值时只留建议。"
 	case model.VerifyEvidence:
@@ -301,12 +357,13 @@ func selectionActions(reply string, items []curation.PendingItem) ([]provider.To
 		if row == nil || httpserver.UniqueJSONObject(row) != nil {
 			continue
 		}
-		const schema = `{"type":"object","additionalProperties":false,"required":["item_id","decision"],"properties":{"item_id":{"type":"string"},"decision":{"type":"string","enum":["select","upgrade"]},"external_id":{"type":"string"}}}`
+		const schema = `{"type":"object","additionalProperties":false,"required":["item_id","decision"],"properties":{"item_id":{"type":"string"},"decision":{"type":"string","enum":["select","undetermined","upgrade"]},"external_id":{"type":"string"},"reason":{"type":"string"}}}`
 		if tool.ValidateInput(json.RawMessage(schema), row) != nil {
 			continue
 		}
 		var choice struct {
 			Decision   string  `json:"decision"`
+			Reason     string  `json:"reason"`
 			ExternalID *string `json:"external_id"`
 		}
 		if err := json.Unmarshal(row, &choice); err != nil {
@@ -337,12 +394,18 @@ func selectionActions(reply string, items []curation.PendingItem) ([]provider.To
 			}
 			action.Name = "resolve_release_match"
 			input = map[string]any{"item_id": item.ID, "external_id": *choice.ExternalID, "basis": map[string]string{"note": "从本项完整候选中选定"}}
-		case "upgrade":
+		case "upgrade", "undetermined":
+			if choice.Decision == "undetermined" && strings.TrimSpace(choice.Reason) == "" {
+				continue
+			}
+			if choice.Reason == "" {
+				choice.Reason = "当前候选无法确定"
+			}
 			if choice.ExternalID != nil {
 				continue
 			}
 			action.Name = "shelve_pending_item"
-			input = map[string]string{"item_id": item.ID, "reason": "当前候选无法确定，升级到自主查询"}
+			input = map[string]string{"item_id": item.ID, "reason": choice.Reason}
 		}
 		action.Arguments, err = json.Marshal(input)
 		if err != nil {

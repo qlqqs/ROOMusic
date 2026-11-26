@@ -9,6 +9,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
 // DiscoverReleaseMerges 与扫描、并入事务共用目录写锁，避免并发匹配把两个方向分别入队。
@@ -111,6 +112,13 @@ func (w *Writer) discoverReleaseMerges(ctx context.Context, tx *sql.Tx, external
 	if len(pairs) == 0 {
 		return nil
 	}
+	configured, err := MatchModelConfigured(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if !configured {
+		return nil
+	}
 	item, err := scanPending(tx.QueryRowContext(ctx, `SELECT `+pendingColumns+` FROM curation_pending_items WHERE kind='release_merge' AND target_id=$1 AND status<>'resolved' FOR UPDATE`, target))
 	existing := err == nil
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -177,4 +185,71 @@ func (w *Writer) AdvanceReleaseMergeQueues(ctx context.Context, version int16) e
 		}
 	}
 	return nil
+}
+
+type EditionAction struct {
+	Merge                  *governance.ReleaseMergePreview
+	JoinRelease, JoinGroup string
+}
+
+// ProgramMergePreview 取两个仍生效的版本对应，先核对目录预览，再交写入事务复核。
+func (w *Writer) ProgramMergePreview(ctx context.Context, release sources.Release) (*EditionAction, error) {
+	tx, err := w.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	ids, err := ObjectsLinkedTo(ctx, tx, "musicbrainz", "release", release.ID)
+	if err != nil || len(ids) < 2 {
+		return nil, err
+	}
+	ids, err = orderedMergeReleases(ctx, tx, ids)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := catalog.LoadCurationEvidence(ctx, tx, ids, w.ArtworkExists)
+	if err != nil {
+		return nil, err
+	}
+	members, err := releaseMergeMembers(ctx, tx, ids, entries)
+	if err != nil {
+		return nil, err
+	}
+	for i, a := range ids {
+		for _, b := range ids[i+1:] {
+			pair := mergePair(members[a], members[b])
+			if pair.RecordingsOverlap && pair.Target.OperationID != "" && pair.Source.OperationID != "" && entries[a].GroupID != entries[b].GroupID {
+				if err := pair.checkStructure(ctx, tx); err != nil {
+					if skipMergePair(err) {
+						continue
+					}
+					return nil, err
+				}
+				for _, sides := range [][2]string{{a, b}, {b, a}} {
+					to, from := entries[sides[0]], entries[sides[1]]
+					if release.Group.ID != "" && to.GroupExternalID == release.Group.ID && from.ExternalGroupID == release.Group.ID {
+						return &EditionAction{JoinRelease: from.ID, JoinGroup: to.GroupID}, tx.Commit()
+					}
+				}
+				continue
+			}
+			if err := pair.check(ctx, tx); err != nil {
+				if skipMergePair(err) {
+					continue
+				}
+				return nil, err
+			}
+			preview, err := governance.NewStore(tx).PreviewReleaseMerge(ctx, a, b)
+			if skipMergePair(err) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if coversEdition(release, preview, entries) {
+				return &EditionAction{Merge: &preview}, tx.Commit()
+			}
+		}
+	}
+	return nil, tx.Commit()
 }

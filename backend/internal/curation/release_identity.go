@@ -25,8 +25,8 @@ type identityTrack struct {
 	Cue                      *cueInput
 }
 
-// 升级现有工作状态时仍用 101 的格式核对基线。
-func ReleaseIdentityDigest101(e catalog.CurationEvidence) string {
+// 结构与对应仅用于写入前复核。
+func structureDigest(e catalog.CurationEvidence) string {
 	type releaseInput struct {
 		Kind, ExternalID                                        string
 		Title, Artist, Barcode, CatalogNumber, Label, MediaType identityField
@@ -78,11 +78,6 @@ func ReleaseIdentityDigest101(e catalog.CurationEvidence) string {
 // ReleaseIdentityDigest 覆盖文字、作品和当前外部对应等实际识别依据。
 func ReleaseIdentityDigest(e catalog.CurationEvidence) string {
 	e.Compilation = CompilationEvidence(e)
-	return ReleaseIdentityDigest102(e)
-}
-
-// ReleaseIdentityDigest102 保留旧版合辑判别，以核对升级前已保存的识别摘要。
-func ReleaseIdentityDigest102(e catalog.CurationEvidence) string {
 	e = LocalSearchEvidence(e)
 	type trackText struct {
 		Title, Artist identityField
@@ -93,7 +88,7 @@ func ReleaseIdentityDigest102(e catalog.CurationEvidence) string {
 		Classical, Compilation           bool
 		Tracks                           []trackText
 		Markers                          []catalog.CurationSuppression
-	}{Previous: ReleaseIdentityDigest101(e), GroupMatch: e.ReleaseGroupMatchID, ArtistMBID: e.ArtistMBID, Classical: e.Classical, Compilation: e.Compilation}
+	}{Previous: structureDigest(e), GroupMatch: e.ReleaseGroupMatchID, ArtistMBID: e.ArtistMBID, Classical: e.Classical, Compilation: e.Compilation}
 	for _, t := range e.Tracks {
 		input.Tracks = append(input.Tracks, trackText{
 			Title:  identityField{t.Title, t.TitleObservation.Source, t.TitleObservation.Inferred, t.TitleCorrected},

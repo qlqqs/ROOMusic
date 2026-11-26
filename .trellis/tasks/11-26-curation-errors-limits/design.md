@@ -9,7 +9,7 @@
 | 位置 | 涉及文件及职责 |
 | --- | --- |
 | `backend/internal/sources/` | `queue.go` 管来源暂停与恢复通知，`limiter.go` 管固定发送间隔和竞争许可，`request.go`、`sources.go`、`acoustid/client.go` 区分上游故障、请求响应无效和密钥错误。复用 `cache.go` 的键、有效期和日志 |
-| `backend/internal/curation/program/` | `match_search.go`、`match_lookup.go`、`release_route.go` 接入 S8 步骤和错误，`match_snapshot.go` 只接入名字查询详情的错误出口；`pass.go`、`release_state.go` 接入发行等待、终止和失效；`queue_projection.go`、`queue_query.go`、`queue_worker.go`、`worker.go`、`queue_progress.go` 管领取、按来源唤醒与进度；`queue_fingerprint.go`、`fingerprint.go` 管抽样、预查和消费。优先级沿用 `model_queue.go` 已有调用入口 |
+| `backend/internal/curation/program/` | `match_search.go`、`match_lookup.go`、`release_route.go` 接入 S8 步骤和错误，`match_snapshot.go` 只接入名字查询详情的错误出口；`unit.go` 保存本次识别的步骤，`pass.go`、`release_state.go` 接入发行等待、终止和失效；`queue_projection.go`、`queue_query.go`、`queue_worker.go`、`worker.go`、`queue_progress.go` 管领取、按来源唤醒与进度；`queue_fingerprint.go`、`fingerprint.go` 管抽样、预查和消费。优先级沿用 `model_queue.go` 已有调用入口 |
 | `backend/internal/curation/` | `work_states.go` 读写工作状态，`progress.go` 汇总等待和查询出错。沿用 `model_queue.go` 的 `QueueRankSQL`，`source_finders.go` 的来源闸门及密钥状态回写 |
 | 本地声纹 | `backend/internal/playback/fingerprints.go`、`backend/internal/catalog/track_fingerprint.go`、`backend/internal/app/fingerprint.go` 移交技术失败的重试期限；保留文件快照校验、CUE 区间和成功指纹 |
 | 表、接口样本、规范 | `backend/migrations/` 一对正反迁移；`backend/internal/platform/postgres/migrations_rollback_integration_test.go` 为既有回退用例登记新约束取值；`backend/internal/app/testdata/api-samples/curation/progress.json`；`backend/internal/app/testdata/api-samples/diagnostics/admin.json` 的迁移号；`.trellis/spec/backend/sources-contracts.md`、`.trellis/spec/backend/curation-contracts.md`。具体测试入口见同目录 `implement.md` |
@@ -24,7 +24,7 @@
 | AcoustID 被关闭、未注册、密钥被拒 | 复用 `fingerprintStep`、`ErrInvalidKey` 与密钥闸门，声纹步骤返回 `unavailable`，释放其依赖，继续 S8 |
 | 整理暂停、扫描开始、取消、数据库失败 | 原样返回相应控制流；不更新本轮计数 |
 
-在发行识别和声纹工作的队列上下文里携带查询用途，`Requester` 在仍能区分 HTTP 状态和解码结果时标注“响应无效”。已建立连接但读取中途断开按网络故障处理；收到完整响应后解析失败才归该发行。该标记要穿过 `decodeResponse`、`sourceFailure`、`found`，优先于 `IsSourceUnavailable` 判断；对话、封面、歌词和模型调用沿用各自错误映射。现有 `found` 将 `ErrInvalidQuery` 也变为空，识别链只折算真正的查无。AcoustID 的 200 业务错误 5、13、14 仍按临时来源错误处理，4、17、6 仍走密钥分支。任一步出错直接返回，跳过弱线索、匹配写入、未匹配标记和模型分流。短重试中的多个 HTTP 尝试只产生一次步骤结果。
+在发行识别和声纹工作的队列上下文里携带查询用途，`Requester` 在仍能区分 HTTP 状态和解码结果时标注“响应无效”。已建立连接但读取中途断开按网络故障处理；收到完整响应后解析失败才归该发行。该标记要穿过 `decodeResponse`、`sourceFailure`、`queryResult`，优先于 `IsSourceUnavailable` 判断；对话、封面、歌词和模型调用沿用各自错误映射。现有 `found` 将 `ErrInvalidQuery` 也变为空，识别链只折算真正的查无。AcoustID 的 200 业务错误 5、13、14 仍按临时来源错误处理，4、17、6 仍走密钥分支。任一步出错直接返回，跳过弱线索、匹配写入、未匹配标记和模型分流。短重试中的多个 HTTP 尝试只产生一次步骤结果。
 
 沿用请求内短重试、取消和放行检查；429/503 含首次最多 5 次、总预算 10 秒，超出预算的有效 Retry-After 交给来源。队列原有首次网络错误放行一次的处理保留。耗尽后 `QueuePolicy.failed` 以来源 ID 计连续级别，按 5、10、20、40、80、160、180 秒递增，此后保持 180 秒。最终恢复时刻取本地暂停期限和上游指定时刻的较晚者，支持秒数与 HTTP 日期；已在暂停时读取该状态不能再次升级。真正出站得到有效响应（包括正常空结果、404）后清零；磁盘命中不能证明来源恢复。去掉 `Limiter.level`、`setLevel`、`effectiveInterval` 及请求层两处等级联动。沿用按实际发送时间算的 `MinInterval`、串行许可及每次重试重新领取许可。下调队列上限时注意 `SourceRetryDelay` 也供模型项级 `NextSourceRetry` 使用，在来源策略处封顶，避免顺带改变模型重试。
 
@@ -34,8 +34,9 @@
 
 | 字段 | 用途 |
 | --- | --- |
-| `step` | 出错的 S8 步骤，使用稳定名字 `tag_id`、`disc_id`、`barcode`、`catalog_number`、`isrc`、`acoustid`、`name`。名字步骤内按子任务 5 的同一顺序重入 |
+| `step` | 出错的 S8 步骤，使用稳定名字 `tag_id`、`disc_id`、`barcode`、`catalog_number`、`isrc`、`acoustid`、`name`。已有对应的定向复核单用 `existing_link`；名字步骤内依次重读原始、放宽及艺人编号搜索的缓存。候选未通过核对记 `unmatched`，同名候选分属不同已知组记 `conflict` |
 | `kind`、`source` | `source` 表示来源暂停；`album` 表示只与本张有关。来源取 `musicbrainz`、`acoustid` 或 `local_fingerprint` |
+| `files`、`fingerprint` | 0102 的物理文件摘要限定本轮输入。到达名字步骤后保留前一步已完成的声纹状态。重新进入声纹步骤时按当前开关判断可用性 |
 | `reason`、`pages` | 固定原因码供进度/诊断；如后续判定需要前面步骤的查询依据，沿用 `SearchPage` 保存已完成步骤的页摘要。完整 HTTP 正文只存在来源缓存 |
 
 领取时读发行行，同一文件输入、代次、识别版本才可使用断点；用子任务 5 的本地文件变化判据。有变化或升级则从首步开始，清断点和计数。只有先前步骤确实查空或无适用线索才能抵达后续步骤；恢复直接进入记录的步骤。步骤内多次读取（例如名字搜索、随后读候选详情）重新用同一个 finder 和相同参数构造请求。GET 缓存键是方法及规范化 URL 的哈希，AcoustID POST 还包含时长与声纹。有效返回 30 天、404 和有效空结果 24 小时，先检查来源开关再读缓存，命中不占许可。中断的请求没有有效缓存，重新出站；同一步已取回的详情或搜索页在有效期内直接命中。即使前面整步的缓存已过期，断点以前的步骤仍不重发。结项清理 `retry`，沿用原写入路径保存最终证据。
@@ -59,8 +60,8 @@
 
 ## 五、升级、兼容与回滚
 
-- 使用已有表及 `result.retry`，只需在 `backend/migrations/` 新建 `NNNN_curation_query_retry.sql` 及同名 `.down.sql`（NNNN 取集成顺序中的下一号，当前基线末号 0097）。正向扩展 `curation_work_states_status_check` 允许 `query_error`，本分支只增加 query_error，主代理在合入时与子任务 5 合并最终允许的状态集合。
-- 旧发行 `try_later` 无断点且次数混用。正向将这些行的 `retry_count` 归零、旧期限截到升级后最多 3 分钟，第一次到期从 S8 首步开始。保留原查询时间、重查上下文和其他主题。旧指纹行按既有快照键读。规则版本沿用子任务 5 的一次识别升级（基线 `MatchRuleVersion=104`，合并目标 105）；子任务 6 不另升识别、本地或资源版本。已匹配的升级路径归子任务 5。
+- 使用已有表及 `result.retry`，迁移为 `backend/migrations/0103_curation_query_retry.sql` 及同名 `.down.sql`。正向只在 0102 的状态集合上加 `query_error`，回退恢复 0102 全部取值，包括 `unmatched` 和 `conflict`。两次迁移共同保留各来源最近一次有效结论。
+- 旧发行 `try_later` 无断点且次数混用。正向将这些行的 `retry_count` 归零、旧期限截到升级后最多 3 分钟，第一次到期从 S8 首步开始。保留原查询时间、重查上下文和其他主题。旧指纹行按既有快照键读。规则版本沿用子任务 5 的一次识别升级（`MatchRuleVersion=105`）；子任务 6 不另升识别、本地或资源版本。已匹配的升级路径归子任务 5。
 - 回退时用配套 down 先把新终态映射到旧版可读的 `try_later`、到期可领；对本任务断点行清 `retry`，重置项级错误次数，保留结果其他键。已记录的未来来源期限应遵守到时，旧版随后从头读缓存。旧版声纹工作者会按原流程取用本地指纹，已提前取得的 AcoustID 响应仍按其原键命中。恢复上一版状态约束，使用与数据库版本配套的程序。回退丢失断点和新的终止语义；外部对应、人工层、曲库文件和有效响应缓存无需回滚。只在迁移隔离库验证。
 
 ## 六、范围核对

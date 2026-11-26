@@ -34,6 +34,7 @@ const (
 
 // RunParams 是入口已取得的调用者身份、会话及模型配置，不包含端点密钥。
 type RunParams struct {
+	RequestBudget    int64
 	BackgroundClaims map[string]string
 	// Selection 把一次无工具选择的文本答复转换为后端操作，操作单独留档。
 	Selection        func(string) ([]provider.ToolCall, error)
@@ -41,6 +42,7 @@ type RunParams struct {
 	StepLimit        int
 	BackgroundItemID string
 	Background       bool
+	BeforeRequest    func(context.Context) error
 	BeforeStep       func(context.Context) error
 	Usage            func(context.Context, UsageKind, provider.Usage)
 	SkipMemory       bool
@@ -123,6 +125,7 @@ const (
 
 // RunEnd 是运行结果，模型错误只携带可展示的信息。
 type RunEnd struct {
+	ProviderFailure *provider.Error `json:"-"`
 	// StatusCode 是模型端点返回的 HTTP 状态，无响应时为零。
 	StatusCode int `json:"status_code,omitempty"`
 	// Reason 是结束原因。

@@ -334,29 +334,31 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 		}
 		if definitions == nil || s.params.Background {
 			clear(s.definitions)
-			definitions = definitions[:0]
-			for _, definition := range s.registry.ListContext(ctx, s.params.Caller) {
-				s.definitions[definition.Name] = definition
-				if definition.Scope == tool.ScopeRead || definition.Scope == tool.ScopePersonal || definition.Scope == tool.ScopeShared {
-					definitions = append(definitions, provider.ToolDefinition{Name: definition.Name,
-						Description: definition.Description, InputSchema: definition.Input})
-				}
+			listed := s.registry.ListContext(ctx, s.params.Caller)
+			for _, d := range listed {
+				s.definitions[d.Name] = d
 			}
+			definitions = modelTools(listed)
 		}
 		s.step++
-		modelTools := definitions
-		if s.params.Selection != nil {
-			modelTools = nil
+		request := mainRequest(s.params, s.conversation.Mode, s.memoryBlock, messages, definitions)
+		if budget := s.params.RequestBudget; budget > 0 {
+			size, err := provider.RequestTokens(s.params.Protocol, s.params.Endpoint, request)
+			if err != nil {
+				return RunEnd{}, err
+			}
+			if size > budget {
+				return RunEnd{Reason: EndProviderError, ProviderFailure: &provider.Error{Class: "content_too_long", Message: "内容太长"}}, nil
+			}
 		}
-		prompt := systemPromptWithMode(s.params.DisplayName, s.conversation.Mode)
-		if s.params.Background {
-			prompt = systemPromptWithName(s.params.DisplayName)
-		}
-		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: prompt + s.params.SystemSuffix + s.memoryBlock,
-			Messages: messages, Tools: modelTools, MaxOutputTokens: maxOutputTokens, NativeSearch: s.params.NativeSearch})
+		step, err := s.readStep(ctx, request)
 		s.recordUsage(ctx, UsageMain, step.usage)
+		var check *requestCheckError
+		if errors.As(err, &check) {
+			return backgroundEnd(check.error)
+		}
 		var itemEnd RunEnd
-		if s.params.OnToolCalls != nil {
+		if s.params.OnToolCalls != nil && (err == nil || s.params.RequestBudget == 0) {
 			var countErr error
 			itemEnd, countErr = backgroundEnd(s.params.OnToolCalls(ctx, len(step.calls)+nativeSearchCount(step.content.Searches)))
 			if countErr != nil {
@@ -487,6 +489,92 @@ type modelStep struct {
 	finish  provider.Finish
 }
 
+func modelTools(listed []tool.Definition) []provider.ToolDefinition {
+	var tools []provider.ToolDefinition
+	for _, d := range listed {
+		if d.Scope == tool.ScopeRead || d.Scope == tool.ScopePersonal || d.Scope == tool.ScopeShared {
+			tools = append(tools, provider.ToolDefinition{Name: d.Name, Description: d.Description, InputSchema: d.Input})
+		}
+	}
+	return tools
+}
+
+func mainRequest(p RunParams, mode, memory string, messages []provider.Message, tools []provider.ToolDefinition) provider.Request {
+	prompt := systemPromptWithMode(p.DisplayName, mode)
+	if p.Background {
+		prompt = systemPromptWithName(p.DisplayName)
+	}
+	if p.Selection != nil {
+		tools = nil
+	}
+	output := maxOutputTokens
+	if p.RequestBudget > 0 {
+		output = int(min(maxOutputTokens, max(1, p.RequestBudget/8)))
+	}
+	return provider.Request{Model: p.Model, System: prompt + p.SystemSuffix + memory, Messages: messages, Tools: tools, MaxOutputTokens: output, NativeSearch: p.NativeSearch}
+}
+
+// EstimateBackground 与新会话首步共用提示、工具、协议编码和输出预留。
+func (r *Runner) EstimateBackground(ctx context.Context, p RunParams) (int64, error) {
+	p.Background = true
+	tools := modelTools(r.registry.ListContext(ctx, p.Caller))
+	messages := []provider.Message{textMessage(provider.RoleUser, p.Text).Message}
+	return provider.RequestTokens(p.Protocol, p.Endpoint, mainRequest(p, "steward", "", messages, tools))
+}
+
+type requestCheckError struct{ error }
+
+func (s *runState) readStep(ctx context.Context, request provider.Request) (modelStep, error) {
+	if s.params.RequestBudget == 0 {
+		return s.readModel(ctx, request)
+	}
+	ctx = provider.SingleAttempt(ctx)
+	checkRequest := func() error {
+		if s.params.BeforeRequest != nil {
+			return s.params.BeforeRequest(ctx)
+		}
+		return nil
+	}
+	if err := checkRequest(); err != nil {
+		return modelStep{}, &requestCheckError{err}
+	}
+	started := time.Now()
+	for attempt := 1; ; attempt++ {
+		var events []Event
+		sink := s.sink
+		s.sink = func(e Event) { events = append(events, e) }
+		step, err := s.readModel(ctx, request)
+		s.sink = sink
+		if err == nil {
+			for _, e := range events {
+				sink(e)
+			}
+			return step, nil
+		}
+		delay, retry := provider.BackgroundRetry(err, attempt, started)
+		if !retry || ctx.Err() != nil {
+			return step, err
+		}
+		select {
+		case <-ctx.Done():
+			return step, ctx.Err()
+		case <-time.After(delay):
+		}
+		if s.params.Check != nil {
+			if checkErr := s.params.Check(ctx); checkErr != nil {
+				return step, &requestCheckError{checkErr}
+			}
+		}
+		if checkErr := checkRequest(); checkErr != nil {
+			return step, &requestCheckError{checkErr}
+		}
+		if time.Since(started) >= 10*time.Second {
+			return step, err
+		}
+		s.recordUsage(ctx, UsageMain, step.usage)
+	}
+}
+
 func (s *runState) readModel(ctx context.Context, request provider.Request) (step modelStep, err error) {
 	step.content.Role = provider.RoleAssistant
 	step.content.Origin = providerOrigin{Protocol: s.params.Protocol, Endpoint: s.params.Endpoint, Model: s.params.Model}
@@ -598,7 +686,7 @@ func modelFailure(ctx context.Context, err error) RunEnd {
 	}
 	var failure *provider.Error
 	if errors.As(err, &failure) {
-		return RunEnd{Reason: EndProviderError, ErrorKind: failure.Kind, Message: failure.Message, StatusCode: failure.StatusCode}
+		return RunEnd{ProviderFailure: failure, Reason: EndProviderError, ErrorKind: failure.Kind, Message: failure.Message, StatusCode: failure.StatusCode}
 	}
 	return RunEnd{Reason: EndProviderError, ErrorKind: provider.ErrorOther, Message: "模型调用失败"}
 }

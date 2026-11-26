@@ -92,23 +92,23 @@ func TestCandidateMetadataSignatureIdentifiers(t *testing.T) {
 		}
 		return got
 	}
-	// 此摘要按 B1 增加 Identifiers 之前的候选 JSON 计算，包含编码器写入的末尾换行。
-	const beforeB1 = "2f2849d700d4b1542432ec1cde61be14c87bb9875a93b96c15deaac64162ca38"
+	// 版本 8 的无标识候选摘要包含编码器写入的末尾换行。
+	const withoutIdentifiers = "c8bacd2d81684110bd8e947815e545ae598c647b7ee7d0f22e70e6b9f5732ce7"
 	observation := &candidate.Mediums[1][0].Observation
-	if got := signature(); got != beforeB1 {
-		t.Errorf("nil 标识的签名 = %s，期望旧签名 %s", got, beforeB1)
+	if got := signature(); got != withoutIdentifiers {
+		t.Errorf("nil 标识的签名 = %s，期望旧签名 %s", got, withoutIdentifiers)
 	}
 	observation.Identifiers = []metadata.Identifier{}
-	if got := signature(); got != beforeB1 {
-		t.Errorf("空标识切片的签名 = %s，期望旧签名 %s", got, beforeB1)
+	if got := signature(); got != withoutIdentifiers {
+		t.Errorf("空标识切片的签名 = %s，期望旧签名 %s", got, withoutIdentifiers)
 	}
 	observation.Identifiers = []metadata.Identifier{{Kind: "isrc", Value: "USX1Z2500001"}}
 	first := signature()
-	if first == beforeB1 {
+	if first == withoutIdentifiers {
 		t.Error("加入标识后签名未变")
 	}
 	observation.Identifiers[0].Value = "USX1Z2500002"
-	if got := signature(); got == first || got == beforeB1 {
+	if got := signature(); got == first || got == withoutIdentifiers {
 		t.Errorf("仅更换标识值后签名 = %s，期望新的签名", got)
 	}
 }

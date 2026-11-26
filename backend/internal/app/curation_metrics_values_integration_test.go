@@ -59,6 +59,29 @@ func metricStoredFields(t *testing.T, app *integrationTestApplication) map[strin
 	return fields
 }
 
+// metricEffectiveFields 用有效值视图读取一个评分对象的必需字段，保留 SQL NULL。
+func metricEffectiveFields(t *testing.T, app *integrationTestApplication, subject metricObject, fields []string) map[string]sql.NullString {
+	t.Helper()
+	view := "release_effective"
+	if subject.kind == "track" {
+		view = "track_effective"
+	}
+	rows, err := app.database.QueryContext(t.Context(), `
+		SELECT field,to_jsonb(e)->>(CASE field WHEN 'genre' THEN 'genres' ELSE field END)
+		FROM `+view+` e CROSS JOIN unnest($2::text[]) AS f(field) WHERE e.id=$1::uuid`, subject.id, fields)
+	requireCurationOK(t, err)
+	defer rows.Close()
+	values := make(map[string]sql.NullString, len(fields))
+	for rows.Next() {
+		var field string
+		var value sql.NullString
+		requireCurationOK(t, rows.Scan(&field, &value))
+		values[field] = value
+	}
+	requireCurationOK(t, rows.Err())
+	return values
+}
+
 func metricScoreValues(t *testing.T, app *integrationTestApplication, entries []metricEntry, scores []metricScore, artists []map[string]string, groupIDs, canonical map[string]string) {
 	t.Helper()
 	links := metricStoredLinks(t, app)

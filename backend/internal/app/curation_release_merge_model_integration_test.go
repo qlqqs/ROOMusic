@@ -19,6 +19,7 @@ const releaseMergeProposalTool = "merge_releases"
 func seedReleaseMergePair(t *testing.T, f *curationFixture) (string, curation.PendingItem) {
 	t.Helper()
 	external := uuid.New()
+	mustExec(t, f.application, `UPDATE curation_settings SET model='test-main' WHERE id=1 AND model=''`)
 	mustExec(t, f.application, `UPDATE tracks SET disc_number=2 WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, f.b)
 	seedReleaseMergeLink(t, f, f.a, external, uuid.New(), 2, 2)
 	seedReleaseMergeLink(t, f, f.b, external, uuid.New(), 0, 0)

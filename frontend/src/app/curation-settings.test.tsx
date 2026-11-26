@@ -113,25 +113,6 @@ describe("总开关与暂停", () => {
     await waitFor(() => expect(screen.queryByRole("switch", { name: "暂停" })).toBeNull());
   });
 
-  it("联网每日上限单独保存；今天写出其中联网的用量，联网到上限时说明其它判断照常", async () => {
-    const { api, curation } = setup();
-    enableCuration(curation);
-    curation.web = { today: { input_tokens: 300, output_tokens: 200 }, limitReached: true, retryAt: "2026-01-06T00:00:00Z" };
-    const user = userEvent.setup();
-    renderApp({ path: "/settings/curation" });
-    const model = await group("模型判断");
-    expect(await within(model).findByText(/其中联网 500/)).toBeTruthy();
-    expect(within(model).getByText(/^联网到了上限，其它判断照常，.+ 恢复联网。$/)).toBeTruthy();
-    const webLimit = within(model).getByRole("group", { name: "联网每日上限" });
-    expect(within(model).getByText("不限：联网兜底只受每日上限约束。")).toBeTruthy();
-    await user.click(within(webLimit).getByRole("checkbox", { name: "不限" }));
-    const input = within(webLimit).getByRole("spinbutton", { name: "联网每日上限" });
-    await user.clear(input);
-    await user.type(input, "200");
-    await user.tab();
-    await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings").at(-1)?.body).toEqual({ web_daily_token_limit: 2_000_000 }));
-  });
-
   it("同时运行：越界提示，合法值离开时保存；状态写出同时在跑的项数", async () => {
     const { api, curation } = setup();
     enableCuration(curation);
@@ -182,7 +163,7 @@ describe("总开关与暂停", () => {
 describe("进度", () => {
   it("从未打开过时收成一行；打开后写出状态与计数", async () => {
     const { curation } = setup();
-    curation.releases = { total: 12, processed: 4, matched: 3, uncertain: 1, no_match: 0, try_later: 0, unlisted: 0, no_usable_candidates: 0 };
+    curation.releases = { total: 12, processed: 4, matched: 3, unmatched: 0, conflict: 1, try_later: 0 };
     renderApp({ path: "/settings/curation" });
     const progress = await group("进度");
     expect(await within(progress).findByText("未打开 · 曲库共 12 个发行")).toBeTruthy();
@@ -194,13 +175,13 @@ describe("进度", () => {
     seedBatch(curation, { id: BATCH, openedAt: "2026-01-05T00:00:00Z", closedAt: null });
     seedAutoOperation(governance, { type: "external_link", releaseId: releaseOf(albumA()), changes: linkChanges("Sample Symphonies"), provider: "musicbrainz", batchId: BATCH });
     curation.state = "running";
-    curation.releases = { total: 10, processed: 4, matched: 3, uncertain: 1, no_match: 0, try_later: 2, unlisted: 0, no_usable_candidates: 0 };
+    curation.releases = { total: 10, processed: 4, matched: 3, unmatched: 0, conflict: 1, try_later: 2 };
     curation.model.items = { ...curation.model.items, waiting_model: 1 };
     renderApp({ path: "/settings/curation" });
     const progress = await group("进度");
     expect(await within(progress).findByText("正在整理")).toBeTruthy();
     expect(within(progress).getByRole("progressbar", { name: "已处理的发行" }).getAttribute("aria-valuenow")).toBe("4");
-    expect(within(progress).getByText("对上 3 · 拿不准 1 · 没对上 0 · 稍后再试 2")).toBeTruthy();
+    expect(within(progress).getByText("结果").parentElement?.parentElement?.textContent).toBe("结果已匹配 3 · 未匹配 0 · 有冲突 1 · 等待重试 2");
     expect(within(await group("模型判断")).getByText("等模型 1 · 处理中 0 · 搁置 0")).toBeTruthy();
     expect(within(progress).getByRole("link", { name: "查看改动" }).getAttribute("href")).toBe(`/settings/operations?batch=${BATCH}`);
   });
@@ -240,14 +221,14 @@ describe("进度：队列、分类与佐证来源（整理链 G）", () => {
     expect(within(progress).getByLabelText("声纹队列：等文件拷完 · 剩 4")).toBeTruthy();
   });
 
-  it("结果写出未收录与无可用候选；本地分类写四类计数", async () => {
+  it("结果写出已匹配、未匹配与有冲突；本地分类写四类计数", async () => {
     const { curation } = setup();
     enableCuration(curation);
-    curation.releases = { total: 10, processed: 10, matched: 6, uncertain: 0, no_match: 0, try_later: 0, unlisted: 3, no_usable_candidates: 1 };
+    curation.releases = { total: 10, processed: 10, matched: 6, unmatched: 4, conflict: 0, try_later: 0 };
     curation.classifications = { total: 10, tagged_id: 2, has_gaps: 5, local_complete: 2, insufficient: 1 };
     renderApp({ path: "/settings/curation" });
     const progress = await group("进度");
-    expect(await within(progress).findByText("对上 6 · 拿不准 0 · 没对上 0 · 外部库未收录 3 · 无可用候选 1")).toBeTruthy();
+    expect((await within(progress).findByText("结果")).parentElement?.parentElement?.textContent).toBe("结果已匹配 6 · 未匹配 4 · 有冲突 0");
     expect(await within(progress).findByText("带编号 2 · 有缺口 5 · 本地完整 2 · 信息不足 1")).toBeTruthy();
   });
 
@@ -521,7 +502,7 @@ describe("操作记录的自动整理筛选", () => {
 describe("概览", () => {
   it("曲库里有发行而从未打开过：管理员看到提示，不再提示之后不再出现", async () => {
     const { curation } = setup();
-    curation.releases = { total: 3, processed: 0, matched: 0, uncertain: 0, no_match: 0, try_later: 0, unlisted: 0, no_usable_candidates: 0 };
+    curation.releases = { total: 3, processed: 0, matched: 0, unmatched: 0, conflict: 0, try_later: 0 };
     const user = userEvent.setup();
     renderApp({ path: "/" });
     expect(await screen.findByText("曲库扫描好了")).toBeTruthy();
@@ -533,7 +514,7 @@ describe("概览", () => {
 
   it("打开过之后不提示；成员不提示也不请求", async () => {
     const { curation } = setup();
-    curation.releases = { total: 3, processed: 0, matched: 0, uncertain: 0, no_match: 0, try_later: 0, unlisted: 0, no_usable_candidates: 0 };
+    curation.releases = { total: 3, processed: 0, matched: 0, unmatched: 0, conflict: 0, try_later: 0 };
     enableCuration(curation);
     renderApp({ path: "/" });
     expect(await screen.findByRole("heading", { level: 1, name: "概览" })).toBeTruthy();
@@ -579,12 +560,127 @@ describe("模型判断（E2）", () => {
     renderApp({ path: "/settings/curation" });
     const model = await group("模型判断");
     expect(await within(model).findByText(/暂时不能判断：你还没有配置管家的模型接口。/)).toBeTruthy();
+    expect(within(model).queryByRole("button", { name: "测试模型连接" })).toBeNull();
     expect(within(model).getByRole("link", { name: "去 Agent 设置" }).getAttribute("href")).toBe("/settings/agent");
     const meter = within(model).getByRole("progressbar", { name: "今天的用量" });
     expect(meter.getAttribute("aria-valuenow")).toBe("2000000");
     expect(meter.getAttribute("aria-valuemax")).toBe("10000000");
     expect(within(model).getByText("等模型 3 · 处理中 2 · 搁置 1")).toBeTruthy();
     expect((await within(model).findByRole("link", { name: "自动整理 01-05 08:00" })).getAttribute("href")).toBe("/steward/00000000-0000-4000-9000-000000000099");
+  });
+
+  const retryAt = new Date(2026, 0, 5, 8, 30).toISOString();
+
+  it.each([
+    {
+      kind: "configuration",
+      detail: "合成密钥已失效",
+      retryAt: null,
+      reason: "模型接口拒绝了请求（合成密钥已失效），改好配置或测试连接成功后继续",
+    },
+    {
+      kind: "provider_quota",
+      detail: null,
+      retryAt,
+      reason: "服务商的额度或余额不足，2026-01-05 08:30 自动再试一次",
+    },
+    {
+      kind: "temporary",
+      detail: null,
+      retryAt,
+      reason: "服务商暂时出错，2026-01-05 08:30 再试",
+    },
+    {
+      kind: "empty_replies",
+      detail: "建议换一个模型",
+      retryAt: null,
+      reason: "模型连续没有给出回答（建议换一个模型），测试连接成功后继续",
+    },
+  ] as const)("按 $kind 显示模型暂停的原因与恢复方式", async ({ reason, ...pause }) => {
+    const { curation } = setup();
+    enableCuration(curation);
+    curation.model.state = "unavailable";
+    curation.model.unavailableReason = "provider_error";
+    curation.model.pause = pause;
+    curation.model.canRetry = false;
+    renderApp({ path: "/settings/curation" });
+    const model = within(await group("模型判断"));
+    expect(await model.findByText(`暂时不能判断：${reason}。`)).toBeTruthy();
+    expect(model.queryByText(/模型接口最近出错了/)).toBeNull();
+    expect(model.queryByRole("button", { name: "测试模型连接" })).toBeNull();
+  });
+
+  it("达到本地日限时在状态行只显示一句用量上限提示", async () => {
+    const { curation } = setup();
+    enableCuration(curation);
+    curation.model.state = "limit_reached";
+    curation.model.pause = { kind: "daily_limit", detail: null, retryAt };
+    curation.model.today = { input_tokens: 9_000_000, output_tokens: 1_000_000 };
+    renderApp({ path: "/settings/curation" });
+    const model = within(await group("模型判断"));
+    expect(await model.findByText("今天的用量到了上限，明天继续")).toBeTruthy();
+    expect(model.queryByText(/到了每日上限/)).toBeNull();
+  });
+
+  it("测试模型连接发出无请求体的 POST，成功后收起按钮和暂停原因", async () => {
+    const { api, curation } = setup();
+    enableCuration(curation);
+    curation.model.state = "unavailable";
+    curation.model.pause = { kind: "configuration", detail: "合成接口拒绝认证", retryAt: null };
+    curation.model.canRetry = true;
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const model = within(await group("模型判断"));
+    const pause = /合成接口拒绝认证/;
+    expect(await model.findByText(pause)).toBeTruthy();
+    await user.click(model.getByRole("button", { name: "测试模型连接" }));
+    await waitFor(() => expect(model.queryByRole("button", { name: "测试模型连接" })).toBeNull());
+    expect(model.queryByText(pause)).toBeNull();
+    const requests = api.requestsTo("POST", "/api/v1/admin/curation/model/retry");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.init.body).toBeUndefined();
+    expect(curation.model.retries).toBe(1);
+  });
+
+  it("单次最多发送显示默认值和本机提示，拒绝零、超过上限和小数", async () => {
+    const { api, curation } = setup();
+    enableCuration(curation);
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const model = within(await group("模型判断"));
+    const input = await model.findByRole("spinbutton", {
+      name: "单次最多发送",
+      description: /使用本机模型时，请按模型服务实际加载的上下文长度设置单次最多发送。/,
+    });
+    expect((input as HTMLInputElement).value).toBe("128000");
+    for (const invalid of ["0", "1000000000001", "1.5"]) {
+      await user.clear(input);
+      await user.type(input, invalid);
+      expect((input as HTMLInputElement).value).toBe(invalid);
+      await user.tab();
+      expect(model.getByText("填 1 到 1,000,000,000,000 之间的整数。")).toBeTruthy();
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+    }
+    expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings")).toHaveLength(0);
+  });
+
+  it.each([
+    { action: "离开", tokens: 1, press: "{Tab}" },
+    { action: "回车", tokens: 1_000_000_000_000, press: "{Enter}" },
+  ])("单次最多发送在$action时保存合法值 $tokens", async ({ tokens, press }) => {
+    const { api, curation } = setup();
+    enableCuration(curation);
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const model = within(await group("模型判断"));
+    const input = await model.findByRole("spinbutton", { name: "单次最多发送" });
+    await user.clear(input);
+    await user.type(input, String(tokens));
+    expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings")).toHaveLength(0);
+    await user.keyboard(press);
+    expect(await model.findByText("已保存。")).toBeTruthy();
+    expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings").map((request) => request.body)).toEqual([{ max_request_tokens: tokens }]);
+    expect((input as HTMLInputElement).value).toBe(String(tokens));
   });
 
   it("整理用的模型与每日上限即改即存：回车保存模型，填万 token 离开时保存，勾“不限”立即保存；超出范围提示", async () => {
@@ -594,6 +690,8 @@ describe("模型判断（E2）", () => {
     renderApp({ path: "/settings/curation" });
     const model = await group("模型判断");
     const name = await within(model).findByRole("textbox", { name: "整理用的模型" });
+    expect(within(model).getByText("整理与艺人联网每天共用 1,000 万 token，达到后当天不再发起新的请求。")).toBeTruthy();
+    expect(within(model).queryByText("联网每日上限")).toBeNull();
     await user.type(name, "  curation-model  {Enter}");
     await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings").at(-1)?.body).toEqual({ model: "curation-model" }));
     expect(await within(model).findByText("已保存。")).toBeTruthy();
@@ -608,11 +706,11 @@ describe("模型判断（E2）", () => {
     await user.type(limit, "500");
     await user.tab();
     await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings").at(-1)?.body).toEqual({ daily_token_limit: 5_000_000 }));
-    expect(await within(model).findByText("每天 500 万 token，达到后当天不再启动新的判断。")).toBeTruthy();
+    expect(await within(model).findByText("整理与艺人联网每天共用 500 万 token，达到后当天不再发起新的请求。")).toBeTruthy();
 
     await user.click(within(within(model).getByRole("group", { name: "每日上限" })).getByRole("checkbox", { name: "不限" }));
     await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings").at(-1)?.body).toEqual({ daily_token_limit: null }));
-    expect(await within(model).findByText("不限：后台整理不按天停下。")).toBeTruthy();
+    expect(await within(model).findByText("不限：整理与艺人联网不按天停下。")).toBeTruthy();
     expect(within(model).queryByRole("progressbar", { name: "今天的用量" })).toBeNull();
   });
 

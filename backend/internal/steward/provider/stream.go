@@ -95,7 +95,9 @@ func (s *eventStream) Next() (Event, error) {
 			var typed *Error
 			if errors.As(err, &typed) {
 				// 解析失败只返回固定说明，不能把加密内容块或搜索正文拼进公开错误。
-				return Event{}, failure(typed.Kind, s.status, typed.Message, s.key)
+				clean := failure(typed.Kind, s.status, typed.Message, s.key)
+				clean.Code, clean.Class, clean.RetryDelay = safeErrorCode(typed.Code, s.key), typed.Class, typed.RetryDelay
+				return Event{}, clean
 			}
 			return Event{}, failure(ErrorStreamInterrupted, s.status, "流在协议结束标志前中断", "")
 		}

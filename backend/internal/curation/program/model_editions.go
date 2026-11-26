@@ -124,7 +124,7 @@ func (m *ModelMatcher) checkModelPartialEditions(ctx context.Context, e catalog.
 		if candidate.ExternalID == selected.ExternalID {
 			continue
 		}
-		if candidate.ReleaseGroupID != match.GroupID && !blockedCodes(candidate.Conflicts) && needsPartialDetail(len(e.Tracks), candidate) {
+		if candidate.ReleaseGroupID != match.GroupID && !blockedCodes(candidate.Conflicts) && needsPartialDetail(e, candidate) {
 			finder, ok := m.sources.ReleaseFinder("musicbrainz")
 			if !ok {
 				return MatchResult{}, sources.ErrUnavailable

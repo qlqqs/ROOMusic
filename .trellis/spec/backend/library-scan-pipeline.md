@@ -4,13 +4,13 @@
 
 ### 扫描完整性、暂存、身份、CUE 与封面
 
-- 支持扩展名为 `.flac .mp3 .ogg .opus .wav .m4a .ape .wv .aif .aiff`；扩展名只决定尝试，解析器仍核对魔数与结构。
+- 支持 FLAC、MP3、Ogg Vorbis、Opus、WAV、M4A、APE、WavPack、AIFF/AIFF-C、DSF 和 DFF。缓存未命中时以文件头识别真实格式，带 ID3 前缀时检查负载。完整 ID3v2 恰好到文件尾可作空负载 MP3 读取。
   APE 为 `ape_apev2/ape`；WavPack 为 `wavpack_apev2`，编码区分 `wavpack`、`wavpack_hybrid`、`wavpack_float`、`wavpack_dsd`；
   AIFF/AIFF-C 为 `aiff_id3`，整数 PCM 为 `aiff`，浮点为 `aiff_float`，其他压缩为 `aifc_<压缩类型小写去空白>`。
   扫描保留这些音频参数和标签，不在此拒绝浮点、DSD 或特殊位深；播放白名单与位深关卡另行决定能否交付。
   `wavpack_dsd` 的位深记 1，采样率记原生 DSD 采样率（基础率 × `0x0e` 子块的倍率 × 8），时长为头部总样本数（每个计数打包 8 个 DSD 位）× 8 ÷ 原生采样率；仍只入库、浏览，不播放。
   WavPack 总样本数已知时只读取取得参数所需的首个声道组，有声道信息子块则首块即可停止；未知时才遍历全部块头累计样本数。
-- `.aac .dsf .dff .wma .mka .tak` 只进入不支持格式诊断，不解析、不入库；TAK 不再静默忽略。
+- 支持格式的扩展名、`.aac .wma .mka .tak` 和无扩展名均可进入探测。读出支持的格式即按真实格式解析；无可识别的文件头记 unsupported_format，已识别后结构损坏记 parse_failure。
   扩展名表统一由 `library/scan_filter.go` 维护；不支持格式按下表诊断、计跳过并保住旧来源，不令 root 不完整。
 - APE/WavPack 共用 APEv2 页脚标签（可位于 ID3v1 之前），文本多值逐个交给 `setAudioTag`，`TRACK`/`DISC` 映射到位置键；
   前封面只接收 JPEG/PNG，畸形标签整段忽略。AIFF 读取 ID3 块，`NAME`/`AUTH` 只补缺失值；WAV 读取 `id3 `/`ID3 ` 块（与 AIFF 共用 `parseID3Chunk`），ID3 为准，`LIST/INFO` 在全部块读完后只补缺失字段与未出现的署名角色，块顺序不影响结果；
@@ -26,10 +26,11 @@
 | 候选断链或越界链接 | `broken_or_escaped_link` | 1，file（CUE 为 cue_sheet） | 完整 |
 | 候选 Stat 失败 / 非普通文件 | `permission_error` / `non_regular_file` | 1，file（CUE 为 cue_sheet） | 完整 |
 | 不支持格式 / 音频解析失败 | `unsupported_format` / `parse_failure` | 1，file | 完整 |
+| 音频、CUE 读取前后修改时间变化 | 跳过变化来源 | 每个文件或 sheet 一次，撤回本轮相关暂存与缓存，保住已有物理及虚拟来源 | 完整 |
 | 子目录读不了 | `walk_error` / “文件夹读不了” | 每目录 1，directory | 完整 |
 | CUE 语法或编码失败 | `unsupported_cue` | 每 sheet 1，cue_sheet | 完整 |
 | CUE unsafe/unchecked 引用 | `cue_reference` | 每 sheet 1，cue_sheet | 完整 |
-| CUE 父音频解析或 Stat 失败 | `parse_failure` / `permission_error` | 每 sheet 1，cue_sheet | 完整 |
+| CUE 父音频格式未知、解析或 Stat 失败 | `unsupported_format` / `parse_failure` / `permission_error` | 每 sheet 1，cue_sheet | 完整 |
 | CUE 缺目标、缺 INDEX 01、宽松匹配歧义 | `cue_reference` | 不计、不保住 | 完整 |
 | 文件夹封面源文件不安全、为空、超限、格式无效或读不了 | `artwork_unreadable` | 不计、不保住，保留旧封面关系 | 完整 |
 | 根不可用或根本身读不了 | `root_unavailable` | 不计 | 不完整 |
@@ -39,7 +40,7 @@
 
 - 同一文件或失败 CUE 只登记、计跳过一次，数量不受诊断最多 100 条影响。`scan_runs.skipped_files` 为非负 JS 安全整数或 null，随进度刷新与终态写入；历史 null，不伪造为零。
 - 空根保护：遍历未取消，候选数（含不支持格式与 CUE）为零，未遇子目录读取错误、未命中用户排除项，且本根尚有 present 曲目，则记 `root_empty` / “目录是空的，可能还没挂载”，不规划、不保存、不对账。新根空目录不触发；排除了唯一子目录不触发，旧曲目应 missing。
-- CUE FILE 精确路径不存在时，先在同目录做 NFC + `strings.EqualFold` 文件名匹配；恰好一普通文件才采用，多匹配为 missing 并记歧义诊断。零匹配再按 `.flac`、`.mp3`、`.ogg`、`.opus`、`.wav`、`.m4a`、`.ape`、`.wv`、`.aif`、`.aiff` 次序（原有顺序不变），以同一比较函数匹配 stem 和扩展名，每扩展名同样要求唯一；遇歧义即停止。目录部分必须逐字节存在，采用后照常做 containment/symlink 检查并改成实际文件名，扫描来源身份不做 Unicode/大小写归一化。
+- CUE FILE 精确路径不存在时，先在同目录做 NFC + `strings.EqualFold` 文件名匹配；恰好一普通文件才采用，多匹配为 missing 并记歧义诊断。零匹配再按 `.flac`、`.mp3`、`.ogg`、`.opus`、`.wav`、`.m4a`、`.ape`、`.wv`、`.aif`、`.aiff`、`.dsf`、`.dff` 次序，以同一比较函数匹配 stem 和扩展名，每扩展名同样要求唯一；遇歧义即停止。目录部分必须逐字节存在，采用后照常做 containment/symlink 检查并改成实际文件名，扫描来源身份不做 Unicode/大小写归一化。
 - 缺少 INDEX 01 或确定不存在的父来源只跳过虚拟轨，不伪造父来源或零偏移；失败 sheet 的已有虚拟轨原样保留。
 - `0011_scan_staging_and_identity.sql` 增加有界暂存、候选锚点、物理/CUE 身份、音频/CUE 列、字段/归组证据、署名及元数据。
   0010 旧来源身份不兼容（见下方规则）；0032 的列表整理见[多流派合同](./genre-contracts.md)。

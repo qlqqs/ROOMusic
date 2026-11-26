@@ -15,6 +15,10 @@ import (
 // 来源大小、修改时间与内容指纹写入暂存专用列，不进入 JSON；CUE 使用父音频状态。
 // CUE 事实只保存安全的相对引用；虚拟轨没有歌词。ArtworkRelativePath 保留封面原音频来源。
 type SourceObservation struct {
+	// 归组副本中的结构碟号，保留原始标签碟号供证据读取。
+	structureDisc         int
+	Format                string                       `json:"format,omitempty"`
+	ScanTags              *metadata.ScanTags           `json:"scan_tags,omitempty"`
 	Album                 string                       `json:"album,omitempty"`
 	AlbumArtist           string                       `json:"album_artist,omitempty"`
 	Artist                string                       `json:"artist,omitempty"`
@@ -43,34 +47,32 @@ type SourceObservation struct {
 	CueSheetPath          string                       `json:"cue_sheet_path,omitempty"`
 	Directory             string                       `json:"directory"`
 	DiscNumber            int                          `json:"disc_number,omitempty"`
-	// DiscParentExclusive 由暂存层在 CUE scope 对齐之后标记。
-	DiscParentExclusive bool                  `json:"disc_parent_exclusive,omitempty"`
-	DurationSeconds     float64               `json:"duration_seconds,omitempty"`
-	Edition             string                `json:"edition,omitempty"`
-	FieldSources        map[string]string     `json:"field_sources,omitempty"`
-	Genres              []string              `json:"genres,omitempty"`
-	Identifiers         []metadata.Identifier `json:"identifiers,omitempty"`
-	InferredFields      map[string]bool       `json:"inferred_fields,omitempty"`
-	Label               string                `json:"label,omitempty"`
-	Lyrics              string                `json:"lyrics,omitempty"`
-	LyricsSource        string                `json:"lyrics_source,omitempty"`
-	MediaType           string                `json:"media_type,omitempty"`
-	MovementName        string                `json:"movement_name,omitempty"`
-	MovementNumber      int                   `json:"movement_number,omitempty"`
-	ParserVersion       string                `json:"parser_version,omitempty"`
-	RelatedSourceRefs   []string              `json:"related_source_refs,omitempty"`
-	RelativePath        string                `json:"relative_path"`
-	SampleRate          int                   `json:"sample_rate,omitempty"`
-	SourceKind          string                `json:"source_kind"`
-	SourceModifiedAt    time.Time             `json:"-"`
-	SourceSize          int64                 `json:"-"`
-	SourceType          string                `json:"source_type,omitempty"`
-	Title               string                `json:"title,omitempty"`
-	VinylSide           int                   `json:"vinyl_side,omitempty"`
-	LegacyText          map[string][]byte     `json:"legacy_text,omitempty"`
-	TrackNumber         int                   `json:"track_number,omitempty"`
-	Work                string                `json:"work,omitempty"`
-	Year                int                   `json:"year,omitempty"`
+	DurationSeconds       float64                      `json:"duration_seconds,omitempty"`
+	Edition               string                       `json:"edition,omitempty"`
+	FieldSources          map[string]string            `json:"field_sources,omitempty"`
+	Genres                []string                     `json:"genres,omitempty"`
+	Identifiers           []metadata.Identifier        `json:"identifiers,omitempty"`
+	InferredFields        map[string]bool              `json:"inferred_fields,omitempty"`
+	Label                 string                       `json:"label,omitempty"`
+	Lyrics                string                       `json:"lyrics,omitempty"`
+	LyricsSource          string                       `json:"lyrics_source,omitempty"`
+	MediaType             string                       `json:"media_type,omitempty"`
+	MovementName          string                       `json:"movement_name,omitempty"`
+	MovementNumber        int                          `json:"movement_number,omitempty"`
+	ParserVersion         string                       `json:"parser_version,omitempty"`
+	RelatedSourceRefs     []string                     `json:"related_source_refs,omitempty"`
+	RelativePath          string                       `json:"relative_path"`
+	SampleRate            int                          `json:"sample_rate,omitempty"`
+	SourceKind            string                       `json:"source_kind"`
+	SourceModifiedAt      time.Time                    `json:"-"`
+	SourceSize            int64                        `json:"-"`
+	SourceType            string                       `json:"source_type,omitempty"`
+	Title                 string                       `json:"title,omitempty"`
+	VinylSide             int                          `json:"vinyl_side,omitempty"`
+	LegacyText            map[string][]byte            `json:"legacy_text,omitempty"`
+	TrackNumber           int                          `json:"track_number,omitempty"`
+	Work                  string                       `json:"work,omitempty"`
+	Year                  int                          `json:"year,omitempty"`
 }
 
 func (o SourceObservation) fieldObservations() []fieldObservation {
@@ -79,8 +81,12 @@ func (o SourceObservation) fieldObservations() []fieldObservation {
 		{Name: "artist", Value: o.Artist},
 		{Name: "album", Value: o.Album},
 		{Name: "album_artist", Value: o.AlbumArtist},
-		{Name: "track_number", Value: strconv.Itoa(o.TrackNumber)},
-		{Name: "disc_number", Value: strconv.Itoa(o.DiscNumber)},
+	}
+	if o.DiscNumber > 0 && (!o.InferredFields["disc_number"] || o.FieldSources["disc_number"] != "" && o.FieldSources["disc_number"] != "default_fallback") {
+		fields = append(fields, fieldObservation{Name: "disc_number", Value: strconv.Itoa(o.DiscNumber)})
+	}
+	if o.TrackNumber > 0 {
+		fields = append(fields, fieldObservation{Name: "track_number", Value: strconv.Itoa(o.TrackNumber)})
 	}
 	if o.Year > 0 {
 		fields = append(fields, fieldObservation{Name: "year", Value: strconv.Itoa(o.Year)})
@@ -105,7 +111,7 @@ func (o SourceObservation) fieldObservations() []fieldObservation {
 		}
 	}
 	for _, name := range []string{"title", "artist", "album", "album_artist"} {
-		if raw := o.LegacyText[name]; len(raw) > 0 && o.FieldSources[name] == "garbled" {
+		if raw := o.LegacyText[name]; len(raw) > 0 && (o.FieldSources[name] == "garbled" || o.FieldSources[name] == "legacy_encoding") {
 			fields = append(fields, fieldObservation{Name: "legacy_bytes_" + name, Value: base64.StdEncoding.EncodeToString(raw), SourceKind: "garbled"})
 		}
 	}

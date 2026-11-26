@@ -67,7 +67,7 @@ func (s *Store) ListBrowseAlbums(ctx context.Context, p BrowseAlbumParams) ([]Br
 }
 
 func (s *Store) browseAlbumIDs(ctx context.Context, p BrowseAlbumParams) ([]string, error) {
-	order := `lower(r.title) COLLATE "C",r.group_id`
+	order := `catalog_list_sort_key(r.title) COLLATE "C",r.group_id`
 	filter, joins := "", ""
 	args := []any{p.Limit, p.Offset}
 	switch p.Sort {
@@ -93,10 +93,10 @@ func (s *Store) browseAlbumIDs(ctx context.Context, p BrowseAlbumParams) ([]stri
 		filter = " WHERE r.year BETWEEN $3 AND $4"
 		args = append(args, min(from, to), max(from, to))
 	case BrowseAlbumSortArtist:
-		joins = ` LEFT JOIN LATERAL (SELECT p.sort_key FROM artist_effective_credits c
+		joins = ` LEFT JOIN LATERAL (SELECT p.list_sort_key FROM artist_effective_credits c
  JOIN artist_profiles p ON p.artist_id=c.artist_id WHERE c.release_id=r.id AND c.role IN ('album_artist','release_artist')
  AND ` + releasesql.ArtistRefsReady + ` ORDER BY (c.role='album_artist') DESC,c.position,c.artist_id LIMIT 1) a ON true`
-		order = `COALESCE(a.sort_key,lower(r.artist)) COLLATE "C",` + order
+		order = `COALESCE(a.list_sort_key,catalog_list_sort_key(r.artist)) COLLATE "C",` + order
 	default:
 		return nil, fmt.Errorf("unsupported album sort")
 	}

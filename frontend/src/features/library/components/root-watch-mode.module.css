@@ -1,0 +1,23 @@
+.realtime,
+.scheduled {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 只是状态，不可点：颜色与行首的文件夹图标一致，宽度与图标按钮对齐。 */
+.realtime {
+  justify-content: center;
+  min-width: 32px;
+  color: var(--color-neutral-600);
+}
+
+.failed {
+  color: var(--color-warning);
+}
+
+/* 不是当前间隔的位置留一个与勾同宽的空白，文字对齐。 */
+.blank {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+}

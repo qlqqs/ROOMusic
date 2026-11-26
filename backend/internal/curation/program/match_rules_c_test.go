@@ -17,7 +17,7 @@ func Test发行组唯一的条件与结构判定(t *testing.T) {
 		tracks, reads                       int
 		change                              func(*catalog.CurationEvidence, *curation.ReleasePage, *b3MatchFinder)
 	}{
-		{"真实完整同组", "matched", "release_group", "unique_group", "", 5, 1, nil},
+		{"唯一版本", "matched", "release", "structure", "", 5, 1, nil},
 		{"推断标题只走结构", "matched", "release", "structure", "", 5, 1, func(e *catalog.CurationEvidence, _ *curation.ReleasePage, _ *b3MatchFinder) {
 			e.Authenticity["title"] = metadata.Inferred
 		}},
@@ -39,7 +39,7 @@ func Test发行组唯一的条件与结构判定(t *testing.T) {
 			left, right := 2, 3
 			p.Counts[p.Items[0].ID] = curation.ReleaseCounts{Total: p.Counts[p.Items[0].ID].Total, Media: []*int{&left, &right}}
 		}},
-		{"结构吻合但跨组", "uncertain", "", "", "ambiguous", 5, 2, func(_ *catalog.CurationEvidence, p *curation.ReleasePage, f *b3MatchFinder) {
+		{"结构吻合但跨组", "uncertain", "", "", "different_release_groups", 5, 0, func(_ *catalog.CurationEvidence, p *curation.ReleasePage, f *b3MatchFinder) {
 			addAlbumCandidate(p, f, "另一组")
 		}},
 		{"同组多版都通过结构", "matched", "release_group", "structure", "", 4, 2, func(_ *catalog.CurationEvidence, p *curation.ReleasePage, f *b3MatchFinder) {

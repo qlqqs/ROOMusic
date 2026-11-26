@@ -10,6 +10,7 @@ import (
 type TaskKind string
 
 const (
+	localQueue      TaskKind = "local"
 	PatrolAndLocal  TaskKind = "patrol_local"
 	SelectCandidate TaskKind = "select"
 	VerifyEvidence  TaskKind = "verify"
@@ -23,7 +24,7 @@ type QueueOrder struct {
 }
 
 func (q QueueOrder) NextModelKind(ctx context.Context, now time.Time) (TaskKind, error) {
-	for _, kind := range []TaskKind{PatrolAndLocal, SelectCandidate, VerifyEvidence, LookupCandidate, WebFallback} {
+	for _, kind := range []TaskKind{localQueue, SelectCandidate, VerifyEvidence, PatrolAndLocal, LookupCandidate, WebFallback} {
 		ready, err := q.Ready(ctx, kind, now)
 		if err != nil {
 			return "", err
@@ -45,15 +46,9 @@ func (s *Scheduler) nextKind(ctx context.Context, now time.Time, conditions sche
 	if err != nil {
 		return "", "", err
 	}
-	// 第一档准备缺失明细时可能等待来源；其余名额可继续领取无需该来源的任务。
-	s.mu.RLock()
-	if s.preparingSelection {
-		delete(kinds, string(SelectCandidate))
-	}
-	s.mu.RUnlock()
 	var releaseID string
 	order := QueueOrder{Ready: func(ctx context.Context, kind TaskKind, now time.Time) (bool, error) {
-		if !kinds[string(kind)] || !conditions.allows(kind) || (kind == WebFallback && conditions.WebLimitReached) {
+		if !kinds[string(kind)] || !conditions.allows(kind) {
 			return false, nil
 		}
 		if kind != LookupCandidate {
@@ -84,12 +79,12 @@ func (s *Scheduler) nextKind(ctx context.Context, now time.Time, conditions sche
 
 // 到期的重审优先；只要包内有一项目标已被占用，就继续寻找其他会话。
 func (s *Scheduler) nextWork(ctx context.Context, actor string, progress schedulingConditions, now time.Time, excluded []string) (*modelWork, error) {
-	w := &modelWork{actor: actor, model: progress.Model}
+	w := &modelWork{actor: actor, model: progress.Model, config: progress.config.Key, budget: progress.budget, verified: progress.verified}
 	err := s.db.QueryRowContext(ctx, `SELECT conversation_id,review_retries FROM curation_pending_items p
  WHERE status='in_progress' AND next_attempt_at<=$1 AND $3
- AND (NOT $4 OR (p.route IS DISTINCT FROM 'web' AND p.kind<>'artist_identity')) AND NOT EXISTS (
+ AND NOT EXISTS (
  SELECT FROM curation_pending_items q WHERE q.conversation_id=p.conversation_id AND q.id=ANY($2::uuid[]))
- ORDER BY next_attempt_at,created_at,id LIMIT 1`, now, excluded, progress.State == "idle", progress.WebLimitReached).Scan(&w.conversation, &w.retries)
+ ORDER BY next_attempt_at,created_at,id LIMIT 1`, now, excluded, progress.State == "idle").Scan(&w.conversation, &w.retries)
 	if err == nil {
 		w.plan, err = s.launcher.PendingPlan(ctx, actor, w.conversation)
 		if err != nil {
@@ -110,20 +105,21 @@ func (s *Scheduler) nextWork(ctx context.Context, actor string, progress schedul
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
+	if progress.State == "limit_reached" {
+		return nil, nil
+	}
 	if !progress.allows(WebFallback) {
 		if err := s.finishDisabledWeb(ctx, actor, progress.Model, now, excluded); err != nil {
 			return nil, err
 		}
 	}
-	if progress.State == "limit_reached" {
-		return nil, nil
-	}
 	kind, releaseID, err := s.nextKind(ctx, now, progress, excluded)
 	if err != nil || kind == "" {
 		return nil, err
 	}
-	if kind == SelectCandidate {
-		w.items, err = s.writer.SelectionItems(ctx, now, s.options.BatchSize, excluded)
+	if kind == SelectCandidate || kind == localQueue || kind == VerifyEvidence {
+		w.queueKind = string(kind)
+		w.items, err = s.writer.PeekModelKind(ctx, now, s.options.BatchSize, string(kind), excluded)
 		if err != nil || len(w.items) == 0 {
 			return nil, err
 		}
@@ -133,12 +129,7 @@ func (s *Scheduler) nextWork(ctx context.Context, actor string, progress schedul
 	if err != nil {
 		return nil, err
 	}
-	batchSize := s.options.BatchSize
-	if kind == VerifyEvidence {
-		// 核对逐项调用，互不相关的判断可占用不同的并发名额。
-		batchSize = 1
-	}
-	w.items, err = s.writer.ClaimModelKind(ctx, w.conversation, now, batchSize, []string{"release", "artist"}, string(kind), releaseID, excluded...)
+	w.items, err = s.writer.ClaimModelKind(ctx, w.conversation, now, s.options.BatchSize, []string{"release", "artist"}, string(kind), releaseID, excluded...)
 	if err != nil || len(w.items) == 0 {
 		return nil, errors.Join(err, s.launcher.DeleteConversation(ctx, actor, w.conversation))
 	}

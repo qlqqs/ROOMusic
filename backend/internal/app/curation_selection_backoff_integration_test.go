@@ -39,6 +39,7 @@ func TestPostgreSQL整理第一档连续限流只推迟缺详情的项(t *testin
 			}
 		}
 		if n <= 2 {
+			w.Header().Set("Retry-After", fmt.Sprint(12*n))
 			http.Error(w, "来源正在限流", http.StatusServiceUnavailable)
 			return
 		}
@@ -83,13 +84,15 @@ func TestPostgreSQL整理第一档连续限流只推迟缺详情的项(t *testin
 		deadline := clock.options().Now().Add(delay)
 		schedulerWait(t, "第一档待定项按 MusicBrainz 的来源恢复时刻重试", func() bool {
 			item := f.item(t, blocked.ID)
-			return item.NextAttemptAt != nil && item.NextAttemptAt.Equal(deadline)
+			return item.NextAttemptAt != nil && !item.NextAttemptAt.After(deadline) && item.NextAttemptAt.After(deadline.Add(-time.Second))
 		})
 		item := f.item(t, blocked.ID)
 		if item.Status != "waiting_model" || item.Route != blocked.Route || item.Kind != "release_match" || item.Attempts != 0 || item.ConversationID != "" || item.ClaimedAt != nil || reads.Load() != hits {
 			t.Fatalf("来源退避应保留初始状态，详情请求 %d，待定项 %+v", reads.Load(), item)
 		}
 		b3RequireCount(t, f.application, conversations, `SELECT count(*) FROM selection_conversation_creations`)
+		// 每张已完成的发行只有一次判断和一次独立审查。
+		requireCurationRuleRequestCount(t, f, int32(conversations)*2)
 	}
 	f.enable(t)
 	select {
@@ -98,8 +101,9 @@ func TestPostgreSQL整理第一档连续限流只推迟缺详情的项(t *testin
 		t.Fatal("未收到缺详情项的首次来源请求")
 	}
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM selection_conversation_creations`)
+	requireCurationRuleRequestCount(t, f, 0)
 	close(proceed)
-	// 来源和模型时钟冻结。另一项在第一档完成落库，失败项的两秒期限仍在未来。
+	// 来源和模型时钟冻结。另一项在第一档完成落库，失败项的来源恢复时刻仍在未来。
 	peer := f.next(t, false)
 	if !strings.Contains(string(peer.Messages[len(peer.Messages)-1].Content), ready.ID) || strings.Contains(string(peer.Messages[len(peer.Messages)-1].Content), blocked.ID) {
 		t.Fatal("冷却期间发给模型的消息应只含已备齐候选的同批项")
@@ -108,13 +112,13 @@ func TestPostgreSQL整理第一档连续限流只推迟缺详情的项(t *testin
 	f.next(t, true).review(t, "approved")
 	modelWaitResolution(t, f, ready.ID, "model_matched")
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1 AND external_id=$2`, readyTarget, f.remote.ID)
-	waitRetry(2*time.Second, 1, 1)
-	advance(time.Second)
+	waitRetry(12*time.Second, 1, 1)
+	advance(11 * time.Second)
 	waitRetry(time.Second, 1, 1)
 
 	advance(time.Second)
-	waitRetry(4*time.Second, 2, 1)
-	advance(4 * time.Second)
+	waitRetry(24*time.Second, 2, 1)
+	advance(24 * time.Second)
 	request := f.next(t, false)
 	var content string
 	requireCurationOK(t, json.Unmarshal(request.Messages[len(request.Messages)-1].Content, &content))
@@ -129,6 +133,7 @@ func TestPostgreSQL整理第一档连续限流只推迟缺详情的项(t *testin
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1 AND external_id=$2`, target, remote.ID)
 	b3RequireCount(t, f.application, 2, `SELECT count(*) FROM selection_conversation_creations`)
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM steward_conversations c WHERE c.kind='curation' AND NOT EXISTS (SELECT FROM steward_messages m WHERE m.conversation_id=c.id)`)
+	requireCurationRuleRequestCount(t, f, 4)
 	if hits := reads.Load(); hits != 3 {
 		t.Fatalf("前两次 503 和恢复后的 200 应共三次请求，实际 %d", hits)
 	}

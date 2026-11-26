@@ -49,3 +49,31 @@ func Test整理第一档选择严格限定已发送的候选(t *testing.T) {
 		})
 	}
 }
+
+func TestCurationModelRulesUndeterminedRequiresReason(t *testing.T) {
+	item := curation.PendingItem{ID: "synthetic-item", Candidates: json.RawMessage(`[]`)}
+	for _, tc := range []struct{ name, reply, reason string }{
+		{"明确理由", `{"items":[{"item_id":"synthetic-item","decision":"undetermined","reason":"曲序证据不足"}]}`, "曲序证据不足"},
+		{"缺理由", `{"items":[{"item_id":"synthetic-item","decision":"undetermined"}]}`, ""},
+		{"空白理由", `{"items":[{"item_id":"synthetic-item","decision":"undetermined","reason":"  "}]}`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			actions, err := selectionActions(tc.reply, []curation.PendingItem{item})
+			if tc.reason == "" {
+				if err == nil || len(actions) != 0 {
+					t.Fatalf("缺少明确理由不能产生结案动作，实际 %+v，错误 %v", actions, err)
+				}
+				return
+			}
+			requireCurationOK(t, err)
+			if len(actions) != 1 || actions[0].ID != item.ID || actions[0].Name != "shelve_pending_item" {
+				t.Fatalf("明确的定不了应产生一个结案动作：%+v", actions)
+			}
+			var payload map[string]string
+			requireCurationOK(t, json.Unmarshal(actions[0].Arguments, &payload))
+			if payload["reason"] != tc.reason {
+				t.Fatalf("结案理由=%q，期望 %q", payload["reason"], tc.reason)
+			}
+		})
+	}
+}

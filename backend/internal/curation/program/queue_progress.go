@@ -57,7 +57,7 @@ func (w *Worker) nextDelay(ctx context.Context) (time.Duration, error) {
 	var due sql.NullTime
 	now := w.opts.Now()
 	err := w.db.QueryRowContext(ctx, `SELECT min(next_attempt_at) FROM curation_work_states WHERE subject='release' AND next_attempt_at>$1
-        AND (status='unlisted' OR status='try_later' AND result ? 'retry')`, now).Scan(&due)
+        AND (status='unmatched' OR status='try_later' AND result ? 'retry')`, now).Scan(&due)
 	if err != nil {
 		return 0, err
 	}

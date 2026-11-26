@@ -377,6 +377,9 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 		if err != nil {
 			return err
 		}
+		if e.FileDigest != p.evidence.FileDigest {
+			return staleItem()
+		}
 		if ReleaseDigest(e) != plan.item.InputDigest {
 			if !allMatchLinks(e, p.links.Links) {
 				return staleItem()
@@ -418,6 +421,20 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 	if err != nil {
 		return MatchApplied{}, err
 	}
+	// 同版已具备程序归组或并入证据时，由程序队列在保存结论后处理。
+	mergeDone := ""
+	if edition := plan.match.Release; edition != nil {
+		action, err := m.writer.ProgramMergePreview(ctx, *edition)
+		if err != nil {
+			return MatchApplied{}, err
+		}
+		if action == nil {
+			if err := m.writer.DiscoverReleaseMerges(ctx, edition.ID, resourceRuleVersion); err != nil {
+				return MatchApplied{}, err
+			}
+			mergeDone = "done"
+		}
+	}
 	if len(out.OperationIDs) > 0 {
 		out.OperationID = out.OperationIDs[0]
 	}
@@ -426,13 +443,28 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 		return MatchApplied{}, err
 	}
 	defer tx.Rollback()
+	if err := curation.CheckMatchItem(ctx, tx, plan.item, conversation, opt.ConfirmedBy != ""); err != nil {
+		if opt.ConfirmedBy == "" && failureCode(err) == "item_stale" {
+			// 同会话同键的治理操作已经回放；原项已成功结清时直接返回原操作，保留其后的新结论。
+			var completed bool
+			if lookupErr := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM curation_pending_items p JOIN operations o
+ ON o.target_id=p.target_id AND o.idempotency_key=$3 AND o.origin->>'conversation_id'=$2
+ WHERE p.id=$1 AND p.status='resolved' AND p.resolution='model_matched' AND p.conversation_id::text=$2)`, plan.item.ID, conversation, opt.Key).Scan(&completed); lookupErr != nil {
+				return MatchApplied{}, lookupErr
+			}
+			if completed {
+				return out, nil
+			}
+		}
+		return MatchApplied{}, err
+	}
 	fresh, err := m.evidence(ctx, tx, p.evidence.ID)
 	if err != nil {
 		return MatchApplied{}, err
 	}
-	conclusion := outcome{status: "matched", group: group, match: plan.match}
+	conclusion := outcome{status: "matched", group: group, match: plan.match, releaseMerge: mergeDone}
 	digest := ReleaseDigest(fresh)
-	if !allMatchLinks(fresh, p.links.Links) || ReleaseDigest(afterMatch(p.evidence, fresh, conclusion)) != digest {
+	if fresh.FileDigest != p.evidence.FileDigest || !allMatchLinks(fresh, p.links.Links) || ReleaseDigest(afterMatch(p.evidence, fresh, conclusion)) != digest {
 		return MatchApplied{}, staleItem()
 	}
 	states, err := curation.LoadWorkStates(ctx, tx, "release", []string{fresh.ID})
@@ -449,6 +481,9 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 	state.MatchRuleVersion, state.RequeryMatchVersion = MatchRuleVersion, 0
 	state.Status, state.InputDigest, state.Result = "matched", digest, releaseResult(conclusion)
 	state.RetryCount, state.NextAttemptAt = 0, nil
+	if err := curation.SaveReleaseMatchResult(ctx, tx, fresh.ID, curation.ReleaseMatchResult{Source: "musicbrainz", Status: "matched"}); err != nil {
+		return MatchApplied{}, err
+	}
 	if err := curation.SaveWorkState(ctx, tx, state); err != nil {
 		return MatchApplied{}, err
 	}

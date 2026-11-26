@@ -80,13 +80,15 @@ type fingerprintHit struct {
 func (fp *FingerprintStep) match(ctx context.Context, mode string, e catalog.CurationEvidence, f sources.ReleaseFinder, rf sources.RecordingFinder) (MatchResult, string, error) {
 	tracks := sampleFour(e.SortedTracks())
 	var hits []fingerprintHit
+	var queried bool
 	var err error
 	if a := currentAttempt(ctx); a != nil {
-		hits, err = a.worker.queuedHits(ctx, a.item, tracks)
+		hits, queried, err = a.worker.queuedHits(ctx, a.item, tracks)
 	} else {
 		var prints []sampledFingerprint
 		prints, err = fp.sample(ctx, tracks)
 		if err == nil {
+			queried = len(prints) > 0
 			for _, sample := range prints {
 				var hit fingerprintHit
 				hit, err = fp.lookup(ctx, sample.trackID, sample.print)
@@ -106,7 +108,7 @@ func (fp *FingerprintStep) match(ctx context.Context, mode string, e catalog.Cur
 		return MatchResult{}, "used", err
 	}
 	if len(hits) == 0 {
-		return MatchResult{}, "used", nil
+		return MatchResult{noFingerprintQuery: !queried}, "used", nil
 	}
 	var result MatchResult
 	if mode == "single" {

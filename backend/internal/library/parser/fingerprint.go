@@ -12,7 +12,6 @@ import (
 	"hash"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -41,10 +40,6 @@ const (
 // 文件读入内存。文件无法完整读取时返回错误；没有任何音频负载
 // （例如没有帧的 FLAC、没有 mdat 的 M4A）的退化文件没有可识别的内容，返回空串，不与其他文件比较。
 func ContentFingerprint(ctx context.Context, path string) (string, error) {
-	compute := fingerprintFunc(filepath.Ext(path))
-	if compute == nil {
-		return "", fmt.Errorf("unsupported format")
-	}
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -57,19 +52,19 @@ func ContentFingerprint(ctx context.Context, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return compute(ctx, file, info.Size())
+	return ContentFingerprintOf(ctx, "", file, info.Size())
 }
 
-// ContentFingerprintOf 与 ContentFingerprint 计算同一个指纹，对象是调用方已经打开的文件：extension 是带点的扩展名
-// （如 ".m4a"，不区分大小写），size 是文件大小。播放用它对已打开的句柄重新取证，不再按路径访问。
-func ContentFingerprintOf(ctx context.Context, extension string, reader io.ReaderAt, size int64) (string, error) {
-	compute := fingerprintFunc(extension)
-	if compute == nil {
-		return "", fmt.Errorf("unsupported format")
-	}
+// ContentFingerprintOf 读取已打开文件的容器头并计算该格式的内容指纹；保留扩展名参数以兼容调用方。
+func ContentFingerprintOf(ctx context.Context, _ string, reader io.ReaderAt, size int64) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	format, err := detectFormat(reader, size)
+	if err != nil {
+		return "", err
+	}
+	compute := fingerprintFunc(format)
 	return compute(ctx, reader, size)
 }
 

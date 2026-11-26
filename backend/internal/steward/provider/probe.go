@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // ToolSupport 是通过实际流式请求取得的工具能力结论。
@@ -222,34 +223,57 @@ func (a *adapter) listModels(ctx context.Context) ([]Model, error) {
 }
 
 func (a *adapter) probeTools(ctx context.Context, model string) (ToolSupport, error) {
-	const name = "roomusic_probe"
-	// 1024 沿用调研中的最小示例，并非已验证的所有模型最低值；达到上限仍为未确认。
-	stream, err := a.Stream(ctx, Request{
-		Model: model, MaxOutputTokens: 1024,
-		Messages: []Message{{Role: RoleUser, Content: []ContentBlock{{Type: BlockText, Text: "请立即调用给定的 roomusic_probe 工具一次，参数使用空对象 {}。不要用文本回答。"}}}},
-		Tools:    []ToolDefinition{{Name: name, Description: "确认当前端点支持客户端工具调用，不执行任何操作。", InputSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}},
-	})
+	support, _, err := ProbeModel(ctx, a, model, true)
 	if err != nil {
 		return toolFailure(err)
 	}
+	return support, nil
+}
+
+// ProbeModel 只测试已选模型和协议，不建管家会话。
+func ProbeModel(ctx context.Context, p Provider, model string, tools bool) (ToolSupport, Usage, error) {
+	const name = "roomusic_probe"
+	// 1024 沿用调研中的最小示例，并非已验证的所有模型最低值；达到上限仍为未确认。
+	req := Request{
+		Model: model, MaxOutputTokens: 1024,
+		Messages: []Message{{Role: RoleUser, Content: []ContentBlock{{Type: BlockText, Text: "请立即调用给定的 roomusic_probe 工具一次，参数使用空对象 {}。不要用文本回答。"}}}},
+		Tools:    []ToolDefinition{{Name: name, Description: "确认当前端点支持客户端工具调用，不执行任何操作。", InputSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}},
+	}
+	if !tools {
+		req.MaxOutputTokens = 16
+		req.Tools = nil
+		req.Messages[0].Content[0].Text = "回复 OK"
+	}
+	var usage Usage
+	stream, err := p.Stream(ctx, req)
+	if err != nil {
+		return ToolSupportUnconfirmed, usage, err
+	}
 	defer stream.Close()
-	called := false
+	called, hasText := false, false
 	for {
 		event, err := stream.Next()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return ToolSupportUnconfirmed, failure(ErrorOther, 0, "探测流没有工具调用结束事件", "")
+				return ToolSupportUnconfirmed, usage, failure(ErrorOther, 0, "探测流没有工具调用结束事件", "")
 			}
-			return toolFailure(err)
+			support, err := toolFailure(err)
+			return support, usage, err
+		}
+		if event.Type == EventUsage && event.Usage != nil {
+			usage = *event.Usage
+		}
+		if event.Type == EventText && strings.TrimSpace(event.Text) != "" {
+			hasText = true
 		}
 		if event.Type == EventToolCall && event.ToolCall.Name == name {
 			called = true
 		}
 		if event.Type == EventDone {
-			if called && event.Finish.Reason == FinishToolCalls {
-				return ToolSupportSupported, nil
+			if called && event.Finish.Reason == FinishToolCalls || !tools && hasText && event.Finish.Reason == FinishNormal {
+				return ToolSupportSupported, usage, nil
 			}
-			return ToolSupportUnconfirmed, nil
+			return ToolSupportUnconfirmed, usage, nil
 		}
 	}
 }

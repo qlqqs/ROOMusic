@@ -1,10 +1,13 @@
 import { correctionFieldLabels, displayValue, sourceName, trackFieldLabels, type CorrectableField } from "../governance";
 import { formatCount } from "../../shared/lib/number";
+import { formatDateTime } from "../../shared/lib/time";
 import type {
   CurationExceptionDTO,
   CurationQueueDTO,
   CurationSourceDTO,
   JsonValue,
+  MatchResultStatus,
+  ModelPauseKind,
   ModelState,
   ModelUnavailableReason,
   ProgramState,
@@ -254,6 +257,27 @@ export function modelUnavailableText(reason: ModelUnavailableReason, mine: boole
   }
 }
 
+/**
+ * 模型暂停的具体原因与恢复方式（ADR 0009 第 6.5 节）。detail 是已脱敏的上游说明或本地说明，retryAt 是自动再试或恢复的时刻。
+ * 本地每日上限由状态本身（limit_reached）说明，调用方不再重复。
+ */
+export function modelPauseText(kind: ModelPauseKind, detail: string | null, retryAt: string | null): string {
+  const because = detail === null || detail === "" ? "" : `（${detail}）`;
+  const at = retryAt === null ? null : formatDateTime(retryAt);
+  switch (kind) {
+    case "configuration":
+      return `模型接口拒绝了请求${because}，改好配置或测试连接成功后继续`;
+    case "provider_quota":
+      return `服务商的额度或余额不足${because}${at === null ? "" : `，${at} 自动再试一次`}`;
+    case "temporary":
+      return `服务商暂时出错${because}${at === null ? "" : `，${at} 再试`}`;
+    case "empty_replies":
+      return `模型连续没有给出回答${because}，测试连接成功后继续`;
+    case "daily_limit":
+      return `到了每日上限${at === null ? "" : `，${at} 继续`}`;
+  }
+}
+
 /** 需要开启者去 Agent 设置里处理的原因。 */
 export function needsAgentSettings(reason: ModelUnavailableReason | null): boolean {
   return reason === "not_configured" || reason === "key_needs_reentry" || reason === "tool_unsupported";
@@ -385,3 +409,27 @@ export const EXCEPTION_MESSAGES: Readonly<Record<string, string>> = {
   nothing_to_apply: "要写的内容都已经在了，或被标记为不再提出。",
   source_unavailable: "外部资料暂时取不到，没有完成。可以稍后在这里重试，已写入的部分会接着做完。",
 };
+
+/** 一个来源的识别结论（ADR 0009 第 4.6 节）。 */
+export const matchStatusText: Record<MatchResultStatus, string> = { matched: "已匹配", unmatched: "未匹配", conflict: "有冲突" };
+
+const matchConflictTexts: Record<string, string> = {
+  track_count: "曲数不同",
+  duration_mismatch: "时长对不上",
+  duration_missing: "缺少时长",
+  title_mismatch: "标题对不上",
+  title_artist_mismatch: "标题或艺人对不上",
+  barcode_mismatch: "条码对不上",
+  catalog_mismatch: "目录号对不上",
+  isrc_mismatch: "ISRC 对不上",
+  isrc_spread: "ISRC 分属不同发行",
+  different_release_groups: "同名专辑不在同一组",
+  too_many: "候选太多",
+  list_truncated: "候选列表不完整",
+  ambiguous: "几个候选分不出",
+};
+
+/** 冲突在哪：已知的代码写成短语，其余写“其他差异”。 */
+export function matchConflictText(code: string): string {
+  return matchConflictTexts[code] ?? "其他差异";
+}

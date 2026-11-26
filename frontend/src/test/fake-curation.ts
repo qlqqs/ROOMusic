@@ -1,4 +1,4 @@
-import { curationDataOf, respondToAcceptException, respondToClearSuppression, respondToCurationConversations, respondToCurationExceptions, respondToDeclineException, respondToCurationBatch, respondToCurationBatches, respondToCurationClassifications, respondToCurationProgress, respondToRepatrol, respondToCurationSettings, respondToCurationSources, respondToScopeRevert, respondToSetCurationSource, respondToSetCurationSourceKey, respondToSuppressions, respondToUpdateCurationSettings, type CurationData } from "./curation-data";
+import { curationDataOf, respondToAcceptException, respondToClearSuppression, respondToCurationConversations, respondToCurationExceptions, respondToDeclineException, respondToCurationBatch, respondToCurationBatches, respondToCurationClassifications, respondToCurationProgress, respondToRepatrol, respondToRetryCurationModel, respondToCurationSettings, respondToCurationSources, respondToScopeRevert, respondToSetCurationSource, respondToSetCurationSourceKey, respondToSuppressions, respondToUpdateCurationSettings, type CurationData } from "./curation-data";
 import { failure } from "./catalog-data";
 import type { FakeApi } from "./fake-api";
 import type { GovernanceData } from "./governance-data";
@@ -31,6 +31,7 @@ export function installCurationApi(api: FakeApi, governance: GovernanceData | nu
   api.on("GET", `${base}/progress`, () => answer(respondToCurationProgress(data)));
   api.on("GET", `${base}/classifications`, () => answer(respondToCurationClassifications(data)));
   api.on("POST", `${base}/repatrol`, () => answer(respondToRepatrol(data)));
+  api.on("POST", `${base}/model/retry`, () => answer(respondToRetryCurationModel(data)));
   api.on("GET", `${base}/batches`, (request) => answer(respondToCurationBatches(data, searchOf(request.path))));
   api.on("GET", /^\/api\/v1\/admin\/curation\/batches\/[^/]+$/, (request) => answer(respondToCurationBatch(data, idFrom(request.path, /\/batches\/([^/]+)$/))));
   api.on("POST", `${base}/reverts`, (request) => answer(respondToScopeRevert(data, request.headers.get("Idempotency-Key"), request.body)));

@@ -80,10 +80,8 @@ function ProgressRows({ progress, refresh }: { progress: CurationProgressDTO; re
       </SettingRow>
       <SettingRow label="结果" plainLabel>
         <span className={styles.value}>
-          对上 {formatCount(releases.matched)} · 拿不准 {formatCount(releases.uncertain)} · 没对上 {formatCount(releases.no_match)}
-          {releases.unlisted > 0 ? ` · 外部库未收录 ${formatCount(releases.unlisted)}` : ""}
-          {releases.no_usable_candidates > 0 ? ` · 无可用候选 ${formatCount(releases.no_usable_candidates)}` : ""}
-          {releases.try_later > 0 ? ` · 稍后再试 ${formatCount(releases.try_later)}` : ""}
+          已匹配 {formatCount(releases.matched)} · 未匹配 {formatCount(releases.unmatched)} · 有冲突 {formatCount(releases.conflict)}
+          {releases.try_later > 0 ? ` · 等待重试 ${formatCount(releases.try_later)}` : ""}
         </span>
       </SettingRow>
       {progress.state === "unavailable"

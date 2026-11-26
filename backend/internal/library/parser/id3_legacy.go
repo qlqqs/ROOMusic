@@ -3,7 +3,6 @@ package parser
 import (
 	"bytes"
 	"io"
-	"sort"
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
@@ -12,7 +11,7 @@ import (
 // rememberID3Text 在有界展示值去除控制字符之前保存疑似旧编码的原字节。
 func rememberID3Text(o *AudioObservation, field string, raw []byte) {
 	delete(o.LegacyText, field)
-	if len(raw) > metadata.MaxTextBytes || len(metadata.LegacyDecodings(raw)) == 0 {
+	if len(raw) > metadata.MaxTextBytes || !metadata.SuspectLegacyText(raw) {
 		return
 	}
 	if o.LegacyText == nil {
@@ -52,11 +51,14 @@ func readID3v1(reader io.ReaderAt, size int64, o *AudioObservation) error {
 		return metadata.BoundedText(value.String())
 	}
 	o.Title = text("title", tag[3:33])
-	if err := captureArtistTag(o, "ARTIST", text("artist", tag[33:63])); err != nil {
+	artist := text("artist", tag[33:63])
+	o.markLatinArtist("ARTIST", artist)
+	if err := captureArtistTag(o, "ARTIST", artist); err != nil {
 		return err
 	}
 	o.Album = text("album", tag[63:93])
 	o.Year = ParseYear(string(tag[93:97]))
+	o.collectScanTag("YEAR", string(tag[93:97]))
 	if tag[125] == 0 {
 		o.TrackNumber = int(tag[126])
 	}
@@ -80,13 +82,13 @@ var id3v1Genres = []string{
 
 func (o *AudioObservation) markLatinArtist(key, raw string) {
 	role := artistTagRole(key)
-	if role != "track_artist" && role != "album_artist" {
+	if raw == "" || (role != "track_artist" && role != "album_artist") {
 		return
 	}
 	if o.latinArtistTags == nil {
-		o.latinArtistTags = map[[2]string]bool{}
+		o.latinArtistTags = map[int]bool{}
 	}
-	o.latinArtistTags[[2]string{key, raw}] = true
+	o.latinArtistTags[len(o.ArtistTagEvidence)] = true
 }
 
 // 同一展示字段可由多条署名组成；只采用实际选中的标签及其编码。
@@ -104,28 +106,44 @@ func (o *AudioObservation) collectLegacyArtists() {
 				}
 			}
 		}
-		var parts []string
-		eligible := true
-		for _, e := range o.ArtistTagEvidence {
+		var parts []metadata.LegacyArtistPart
+		var combined []string
+		hasLegacy := false
+		allLatin := true
+		for i, e := range o.ArtistTagEvidence {
 			if e.Role != role || field == "album_artist" && albumArtistTagPriority(e.TagKey) != priority {
 				continue
 			}
-			if !o.latinArtistTags[[2]string{e.TagKey, e.RawValue}] && strings.IndexFunc(e.RawValue, func(r rune) bool { return r >= 128 }) >= 0 {
-				eligible = false
-				break
+			part := metadata.LegacyArtistPart{Text: e.RawValue}
+			if o.latinArtistTags[i] {
+				raw := latinBytes(e.RawValue)
+				if metadata.SuspectLegacyText(raw) {
+					part = metadata.LegacyArtistPart{Raw: raw, TagKey: e.TagKey, Occurrence: e.OccurrenceIndex}
+					hasLegacy = true
+				}
+			} else if strings.IndexFunc(e.RawValue, func(r rune) bool { return r >= 128 }) >= 0 {
+				allLatin = false
 			}
-			parts = append(parts, e.RawValue)
+			parts = append(parts, part)
+			combined = append(combined, e.RawValue)
 		}
-		if !eligible {
-			continue
+		if hasLegacy {
+			tags := o.fileTags()
+			if tags.LegacyArtistParts == nil {
+				tags.LegacyArtistParts = map[string][]metadata.LegacyArtistPart{}
+			}
+			tags.LegacyArtistParts[field] = parts
+			if allLatin {
+				rememberID3Text(o, field, latinBytes(strings.Join(combined, " / ")))
+			}
 		}
-		if field == "artist" {
-			sort.Strings(parts)
-		}
-		var raw []byte
-		for _, r := range strings.Join(parts, " / ") {
-			raw = append(raw, byte(r))
-		}
-		rememberID3Text(o, field, raw)
 	}
+}
+
+func latinBytes(value string) []byte {
+	raw := make([]byte, 0, len(value))
+	for _, r := range value {
+		raw = append(raw, byte(r))
+	}
+	return raw
 }

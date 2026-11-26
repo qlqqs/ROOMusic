@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
-	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
@@ -74,7 +73,7 @@ func curationQueryFailure(err error) bool {
 	return errors.As(err, &pause) || errors.Is(err, sources.ErrInvalidQuery) || errors.Is(err, sources.ErrInvalidResponse)
 }
 
-func (w *Worker) queuedHits(ctx context.Context, item queueItem, tracks []catalog.CurationTrack) ([]fingerprintHit, error) {
+func (w *Worker) queuedHits(ctx context.Context, item queueItem, tracks []catalog.CurationTrack) ([]fingerprintHit, bool, error) {
 	var missing []string
 	var hits []fingerprintHit
 	var computed int
@@ -87,7 +86,7 @@ func (w *Worker) queuedHits(ctx context.Context, item queueItem, tracks []catalo
 		}
 		if p.failure != nil {
 			w.printMu.Unlock()
-			return nil, p.failure
+			return nil, false, p.failure
 		}
 		if p.status == FingerprintOK {
 			computed++
@@ -99,29 +98,12 @@ func (w *Worker) queuedHits(ctx context.Context, item queueItem, tracks []catalo
 	w.printMu.Unlock()
 	if len(missing) > 0 {
 		if err := w.queueFingerprints(ctx, item, missing); err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return nil, errWaitingForPrints
+		return nil, false, errWaitingForPrints
 	}
 	if 2*computed < len(tracks) {
-		return nil, nil
+		return nil, false, nil
 	}
-	return hits, nil
-}
-
-func canPrefetch(e catalog.CurationEvidence) bool {
-	if e.ExternalID != "" || e.ReleaseGroupMatchID != "" || len(e.Tracks) == 0 || e.CandidateKind == "loose_unknown" && len(e.Tracks) != 1 {
-		return false
-	}
-	if len(tags(e.Tracks, "mb_release")) > 0 || len(tags(e.Tracks, "mb_recording")) > 0 || len(tags(e.Tracks, "mb_disc")) > 0 ||
-		len(DiscTOCs(e)) > 0 || len(e.SearchBarcodes()) > 0 || e.Authenticity["catalog_number"].SearchValue(e.CatalogNumber) != "" || len(sampleISRCTracks(e)) > 0 {
-		return false
-	}
-	mode := "album"
-	if e.CandidateKind == "loose_unknown" {
-		mode = "single"
-	}
-	names := localNames(curation.LocalSearchEvidence(e), mode)
-	hasArtist := names.Artist != "" || names.ArtistID != "" || curation.CompilationEvidence(e)
-	return (names.Title != "") == hasArtist
+	return hits, computed > 0, nil
 }

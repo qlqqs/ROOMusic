@@ -3,6 +3,7 @@ import { Info, MoreHorizontal, PencilLine } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { AlbumDetailView, type AlbumSearch, type ReleaseActionsContext, type ReleaseDetailDTO, type ReleaseTrackDTO } from "../../features/catalog";
 import { EditTrackDialog, ReleaseHistory, useReleaseAdminActions, useReleaseCommands, type ReleaseCommands } from "../../features/governance";
+import { ReleaseMatchResults } from "../../features/curation";
 import { AddToPlaylistButton, FavoriteButton, FavoriteStatusScope, RatingControl, RatingStatusScope } from "../../features/personal";
 import { playerTrackOf, playerTracksOf, TrackLoudness, useAlbumPlayback, useCurrentTrackMarker } from "../../features/player";
 import { useViewerScope } from "../../features/auth";
@@ -162,7 +163,10 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
   );
   const renderAdminSections = useCallback(
     ({ release, groupId: currentGroupId }: { release: ReleaseDetailDTO; groupId: string }) => (
-      <ReleaseHistory key={`history-${release.id}`} release={{ id: release.id, title: release.title }} groupId={currentGroupId} commands={historyCommands} />
+      <>
+        <ReleaseMatchResults key={`match-${release.id}`} releaseId={release.id} />
+        <ReleaseHistory key={`history-${release.id}`} release={{ id: release.id, title: release.title }} groupId={currentGroupId} commands={historyCommands} />
+      </>
     ),
     [historyCommands],
   );

@@ -200,6 +200,9 @@ func TestPostgreSQLB3AcoustIDProgram(t *testing.T) {
 			}
 			b3SetHTTPKey(t, app, &admin, "application", b3AppKey)
 			b3SetHTTPKey(t, app, &admin, "user", b3UserKey)
+			if tc.ambiguous {
+				mustExec(t, app, `UPDATE curation_settings SET model='synthetic' WHERE id=1`)
+			}
 			b3Enable(t, app, admin)
 			clock.advance(t, time.Minute)
 
@@ -209,7 +212,7 @@ func TestPostgreSQLB3AcoustIDProgram(t *testing.T) {
 			item := b3SourceList(t, app, &admin)["acoustid"]
 			switch {
 			case tc.code != 0:
-				b3RequireReleaseResult(t, app, release, "uncertain", "search", "unavailable", "list_truncated")
+				b3RequireReleaseResult(t, app, release, "unmatched", "search", "unavailable", "")
 				b3Reason(t, item, "key_invalid")
 				for _, key := range item.Keys {
 					want := "unchecked"
@@ -225,7 +228,7 @@ func TestPostgreSQLB3AcoustIDProgram(t *testing.T) {
 					t.Errorf("AcoustID 请求=%d，搜索请求=%d，均期望 1", lookups, searches)
 				}
 			case tc.ambiguous:
-				b3RequireReleaseResult(t, app, release, "uncertain", "acoustid", "used", "ambiguous")
+				b3RequireReleaseResult(t, app, release, "conflict", "acoustid", "used", "ambiguous")
 				raw := programString(t, app, `SELECT candidates FROM curation_pending_items WHERE target_id=$1 AND kind='release_match' AND status='waiting_model'`, release)
 				var candidates []program.Candidate
 				if err := json.Unmarshal([]byte(raw), &candidates); err != nil || len(candidates) != 2 {
@@ -403,6 +406,7 @@ func TestPostgreSQLB3LegacyWorkReopenedOnce(t *testing.T) {
 		if subject == "release" {
 			// 保留旧的无指纹结果，隔离当前规则版本，不让版本迁移先触发全量补查。
 			state.RuleVersion, state.MatchRuleVersion = program.MatchRuleVersion, program.MatchRuleVersion
+			state.FileDigest = evidence.FileDigest
 			state.LocalRuleVersion, state.IdentityDigest, state.GapDigest = program.LocalRuleVersion, program.IdentityDigest(evidence), program.GapDigest(evidence)
 		}
 		if err := curation.SaveWorkState(t.Context(), app.database, state); err != nil {
@@ -455,9 +459,9 @@ func TestPostgreSQLB3LegacyWorkReopenedOnce(t *testing.T) {
 				if err := json.Unmarshal(before.Result, &oldResult); err != nil {
 					t.Fatal(err)
 				}
-				status, method := "unlisted", "search"
+				status, method := "unmatched", "search"
 				if slices.Contains(oldResult.Conflicts, "insufficient_evidence") {
-					status, method, conflict = "no_match", "", "insufficient_evidence"
+					status, method, conflict = "unmatched", "", ""
 					b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, before.TargetID)
 				}
 				b3RequireReleaseResult(t, app, before.TargetID, status, method, "used", conflict)
@@ -505,7 +509,7 @@ func TestPostgreSQLB3FingerprintGatePauseAndScan(t *testing.T) {
 			// 旧摘要使发行进入本轮候选，闸门应原样保留这条记录。
 			if err := curation.SaveWorkState(t.Context(), f.application.database, curation.WorkState{
 				Subject: "release", TargetID: f.a, RuleVersion: program.StoredRuleVersion, InputDigest: "before-change",
-				Status: "no_match", Generation: 8, Result: json.RawMessage(`{"method":"search","fingerprint":"used"}`),
+				Status: "unmatched", Generation: 8, Result: json.RawMessage(`{"method":"search","fingerprint":"used"}`),
 			}); err != nil {
 				t.Fatal(err)
 			}

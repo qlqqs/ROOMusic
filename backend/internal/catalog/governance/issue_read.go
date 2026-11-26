@@ -468,12 +468,12 @@ func (s *Store) loadMissingTracksIssue(ctx context.Context, result *ReleaseIssue
 	rows, err := s.database.QueryContext(ctx, `SELECT issue.id, issue.title, issue.medium_position, issue.position, issue.relative_path, issue.observed_at,
 			issue.reviewed, COUNT(*) OVER ()
 		FROM releases JOIN LATERAL (
-			SELECT missing_track.id::text AS id, missing_track.title, missing_medium.position AS medium_position, missing_track.position,
+			SELECT missing_track.id::text AS id, missing_track.title, missing_medium.position AS medium_position, missing_track.position, COALESCE(missing_track.sort_position,missing_track.position) AS sort_position,
 				missing_track.relative_path, missing_track.observed_at, `+releasesql.MissingTrackReviewValid+` AS reviewed
 			`+releasesql.MissingTrackRows+`
 		) issue ON TRUE
 		WHERE releases.id = $1::uuid
-		ORDER BY issue.medium_position, issue.position, issue.id
+		ORDER BY issue.medium_position, issue.sort_position, issue.id
 		LIMIT $2`, result.ReleaseID, maxIssueMissingTracks)
 	if err != nil {
 		return fmt.Errorf("%w: load missing tracks: %w", catalog.ErrQuery, err)

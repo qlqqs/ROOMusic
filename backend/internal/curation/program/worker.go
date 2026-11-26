@@ -16,7 +16,7 @@ import (
 
 const (
 	LocalRuleVersion    int16 = 3
-	MatchRuleVersion    int16 = 104
+	MatchRuleVersion    int16 = 105
 	PatrolPromptVersion int16 = 1
 
 	// 资料主题与并入继续使用原来的版本和幂等键。
@@ -26,7 +26,6 @@ const (
 
 type Options struct {
 	CachedReleaseCredits                         func(string) (*sources.Release, error)
-	CanonicalNames                               func(ctx context.Context, releaseID, trackID string) (SearchNames, error)
 	Fingerprints                                 Fingerprints
 	ConfirmScan                                  func(context.Context) error
 	NamesPatrolled                               func(context.Context, string) (bool, error)
@@ -60,16 +59,8 @@ type Worker struct {
 }
 
 func NewWorker(db *sql.DB, writer *curation.Writer, sourceGate *curation.Sources, scanRunning func(context.Context) (bool, error), logger *slog.Logger, opts Options) *Worker {
-	if writer != nil {
-		if opts.NamesPatrolled == nil {
-			opts.NamesPatrolled = writer.NamesPatrolled
-		}
-		if opts.CanonicalNames == nil {
-			opts.CanonicalNames = func(ctx context.Context, releaseID, trackID string) (SearchNames, error) {
-				title, artist, err := writer.CanonicalPatrolNames(ctx, releaseID, trackID)
-				return SearchNames{Title: title, Artist: artist}, err
-			}
-		}
+	if writer != nil && opts.NamesPatrolled == nil {
+		opts.NamesPatrolled = writer.NamesPatrolled
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now

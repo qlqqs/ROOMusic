@@ -79,7 +79,7 @@ func TestB3FingerprintAlbumRules(t *testing.T) {
 		{"上游稍后再试", "", "", "", nil},
 		{"只有一首命中", "uncertain", "acoustid_sparse", "acoustid", nil},
 		{"交集为空", "uncertain", "acoustid_spread", "acoustid", nil},
-		{"多于三个版本", "uncertain", "too_many", "acoustid", nil},
+		{"多于三个版本", "matched", "", "acoustid", []string{"fourth", "remote", "second", "third"}},
 		{"过滤曲目数和碟数不符的版本", "matched", "", "acoustid", []string{"remote"}},
 		{"配对录音不符", "uncertain", "acoustid_mismatch", "acoustid", []string{"remote"}},
 		{"标题艺人不符", "uncertain", "title_artist_mismatch", "acoustid", []string{"remote"}},
@@ -165,7 +165,7 @@ func TestB3FingerprintAlbumRules(t *testing.T) {
 			if tc.method == "search" && (len(lookups) != 0 || f.searches != 1) {
 				t.Fatalf("抽样不足时查指纹=%v 搜索=%d", lookups, f.searches)
 			}
-			if tc.name == "两个版本都通过" {
+			if tc.name == "两个版本都通过" || tc.name == "多于三个版本" {
 				if got.Level != "release_group" || got.GroupID != r.Group.ID || got.Release != nil || len(got.Pairs) != 0 {
 					t.Fatalf("仅能确定同一发行组：%+v", got)
 				}
@@ -264,7 +264,11 @@ func TestB3FingerprintReachAndFallback(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wantMatch(t, got, "no_match", "insufficient_evidence")
+			if tc.step == nil {
+				wantMatch(t, got, "no_match", "insufficient_evidence")
+			} else {
+				wantMatch(t, got, "no_match")
+			}
 			if got.Fingerprint != tc.state || f.searches != 0 || len(got.Candidates) != 0 {
 				t.Fatalf("结果=%+v 搜索=%d，指纹字段期望 %s", got, f.searches, tc.state)
 			}

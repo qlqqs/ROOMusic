@@ -333,6 +333,7 @@ type StartOptions struct {
 	Mode          string
 	Trigger       string
 	scheduledSlot time.Time
+	prepare       prepareScan
 }
 
 // StartResult 是 StartScan 的结果：Started 为 true 表示新建了扫描；false 表示已有扫描在运行或定时时段已扫描。
@@ -387,7 +388,7 @@ func (service *Service) StartScan(ctx context.Context, options ...StartOptions) 
 	// 取得锁后再次检查，关闭调度快照到获取锁之间其他实例已完成扫描的窗口。
 	if trigger == ScanTriggerScheduled && !scheduledSlot.IsZero() {
 		scan, queryErr := scanRow(execution.connection.QueryRowContext(ctx,
-			"SELECT "+scanSelectColumns+" FROM scan_runs WHERE started_at >= $1 ORDER BY started_at DESC,id DESC LIMIT 1", scheduledSlot))
+			"SELECT "+scanSelectColumns+" FROM scan_runs WHERE whole_library AND started_at >= $1 ORDER BY started_at DESC,id DESC LIMIT 1", scheduledSlot))
 		if !errors.Is(queryErr, sql.ErrNoRows) {
 			if queryErr == nil {
 				scan.Diagnostics, queryErr = loadScanDiagnosticsSummary(ctx, execution.connection, scan.ID)
@@ -410,8 +411,17 @@ func (service *Service) StartScan(ctx context.Context, options ...StartOptions) 
 		_ = execution.close(context.Background())
 		return StartResult{}, fmt.Errorf("%w: %v", ErrStartFailed, err)
 	}
+	var targets scanTargets
+	if len(options) == 1 && options[0].prepare != nil {
+		targets, err = options[0].prepare(ctx, transaction)
+		if err != nil || len(targets) == 0 {
+			_ = transaction.Rollback()
+			_ = execution.close(context.Background())
+			return StartResult{}, err
+		}
+	}
 	scanID := uuid.New()
-	if _, err := transaction.ExecContext(ctx, `INSERT INTO scan_runs(id,status,started_at,feedback_version,phase,progress_bp,phase_completed,phase_total,progress_updated_at,progress_seq,files_counted,files_processed,count_complete,files_changed,roots_total,report_state,skipped_files,scan_mode,trigger_kind) VALUES($1::uuid,'running',NOW(),1,'counting',0,0,0,NOW(),0,0,0,false,false,0,'pending',0,$2,$3)`, scanID, mode, trigger); err != nil {
+	if _, err := transaction.ExecContext(ctx, `INSERT INTO scan_runs(id,status,started_at,feedback_version,phase,progress_bp,phase_completed,phase_total,progress_updated_at,progress_seq,files_counted,files_processed,count_complete,files_changed,roots_total,report_state,skipped_files,scan_mode,trigger_kind,whole_library) VALUES($1::uuid,'running',NOW(),1,'counting',0,0,0,NOW(),0,0,0,false,false,0,'pending',0,$2,$3,$4)`, scanID, mode, trigger, targets == nil); err != nil {
 		_ = transaction.Rollback()
 		_ = execution.close(context.Background())
 		return StartResult{}, fmt.Errorf("%w: %v", ErrStartFailed, err)
@@ -425,7 +435,7 @@ func (service *Service) StartScan(ctx context.Context, options ...StartOptions) 
 	service.scanWorkers.Add(1)
 	go func() {
 		defer service.scanWorkers.Done()
-		service.runScan(scanID, execution, mode)
+		service.runScan(scanID, execution, mode, targets)
 	}()
 	scan, err := service.GetScan(ctx, scanID)
 	if err != nil {

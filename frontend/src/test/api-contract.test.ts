@@ -1,4 +1,4 @@
-import { decodeCurationBatch, decodeCurationBatchPage, decodeCurationConversationPage, decodeCurationExceptionAccepted, decodeCurationExceptionDeclined, decodeCurationExceptionPage, decodeCurationProgress, decodeCurationSettings, decodeCurationSource, decodeCurationSources, decodeScopeRevert, decodeSuppressionPage } from "../features/curation/api/decoders";
+import { decodeCurationBatch, decodeCurationBatchPage, decodeCurationConversationPage, decodeCurationExceptionAccepted, decodeCurationExceptionDeclined, decodeCurationExceptionPage, decodeCurationProgress, decodeCurationSettings, decodeCurationSource, decodeCurationSources, decodeReleaseMatchResults, decodeScopeRevert, decodeSuppressionPage } from "../features/curation/api/decoders";
 import {
   decodeAllowlist,
   decodeAllowlistEntry,
@@ -58,6 +58,7 @@ import {
   decodeRootChanged,
   decodeRootCreated,
   decodeRootList,
+  decodeRootScanInterval,
   decodeRootOperationList,
   decodeScan,
   decodeScanPage,
@@ -503,6 +504,7 @@ const successContracts: Record<string, Contract> = {
   "library-folders/child": { status: 200, decode: decodeFolderListing },
   "library-roots/list-empty": { status: 200, decode: decodeRootList },
   "library-roots/list": { status: 200, decode: decodeRootList },
+  "library-roots/scan-interval-put": { status: 200, decode: decodeRootScanInterval },
   "library-roots/create": { status: 201, decode: decodeRootCreated },
   "library-roots/create-existing-disabled": { status: 201, decode: decodeRootCreated },
   "library-roots/disable": { status: 200, decode: decodeRootChanged },
@@ -571,6 +573,8 @@ const successContracts: Record<string, Contract> = {
   "curation/source-key-set": { status: 200, decode: decodeCurationSource },
   "curation/source-key-cleared": { status: 200, decode: decodeCurationSource },
   "curation/progress": { status: 200, decode: decodeCurationProgress },
+  "curation/match-results": { status: 200, decode: decodeReleaseMatchResults },
+  "curation/match-results-empty": { status: 200, decode: decodeReleaseMatchResults },
   "curation/batches": { status: 200, decode: decodeCurationBatchPage },
   "curation/batch": { status: 200, decode: decodeCurationBatch },
   "curation/scope-reverted": { status: 200, decode: decodeScopeRevert },
@@ -797,6 +801,7 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "playback-zones/responses/errors/volume-fixed": { status: 409, code: "volume_fixed" },
   "playback-zones/responses/errors/zone-offline": { status: 409, code: "zone_offline" },
   "errors/backup-deletions-invalid": { status: 400, code: "invalid_input" },
+  "errors/root-scan-interval-invalid-input": { status: 400, code: "invalid_input" },
   "errors/backup-retention-invalid": { status: 400, code: "invalid_input" },
   "errors/curation-key-not-supported": { status: 400, code: "key_not_supported" },
   "errors/exception-stale": { status: 409, code: "exception_stale" },
@@ -962,6 +967,7 @@ const errorContracts: Record<string, { status: number; code: string }> = {
 // 空响应没有 JSON 响应体，样本只核对 HTTP 状态和空体。
 const emptyResponseContracts: Record<string, { status: number }> = {
   "curation/repatrol": { status: 202 },
+  "curation/match-recheck": { status: 202 },
   "dsp/responses/preset-delete": { status: 204 },
   "steward/tokens/revoked": { status: 204 },
   "upnp/manual-removed": { status: 204 },

@@ -94,7 +94,7 @@ func (s *Store) BrowseArtistAlbums(ctx context.Context, id string) (BrowseArtist
 		}
 		ids, err := snapshot.artistIDs(ctx, "WITH "+artistParticipationCTE+", "+browseReleases+`
  SELECT r.group_id::text FROM representatives r WHERE r.group_id IN (SELECT group_id FROM artist_participation WHERE present)
- ORDER BY lower(r.title) COLLATE "C",r.group_id`, []string{canonical})
+ ORDER BY catalog_list_sort_key(r.title) COLLATE "C",r.group_id`, []string{canonical})
 		if err != nil {
 			return BrowseArtistDetail{}, err
 		}

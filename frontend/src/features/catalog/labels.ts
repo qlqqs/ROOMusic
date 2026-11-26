@@ -108,6 +108,8 @@ export const reasonCodeLabel = labeller({
   inconsistent_candidates: "候选值互相不一致",
   inferred_value: "取值由推断得到",
   same_directory_conflict: "同一目录里的内容无法确定归属",
+  // 同一字段几首不一致、又没有明确多数时不填（ADR 0009 第 3.3 节）。
+  tied_candidates: "有冲突：几首的取值票数相同，没有填",
 });
 
 /** 归组方式：整理时怎样把一批音频文件判定为同一个发行版本。 */

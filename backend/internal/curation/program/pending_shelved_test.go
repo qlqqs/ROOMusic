@@ -50,6 +50,7 @@ func newShelvedPendingFixture(t *testing.T, kind string) shelvedPendingFixture {
 	f := newPendingRefreshFixture(t)
 	_, err := f.writer.SetSettings(t.Context(), f.adminID, true)
 	requirePendingRefreshOK(t, err)
+	f.exec(t, `UPDATE curation_settings SET model='synthetic' WHERE id=1`)
 	_, remote := b3Album(2)
 	remote.ID, remote.Group.ID, remote.Artists[0].ArtistID = uuid.New(), uuid.New(), uuid.New()
 	for i := range remote.Media[0].Tracks {
@@ -171,9 +172,9 @@ func RunShelvedPendingCases(t *testing.T, decline func(context.Context, *sql.DB,
 
 			// 识别输入真正改变后，即使候选集合相同也应重新开放。
 			if kind == "release_match" {
-				f.exec(t, "UPDATE releases SET title='新专辑标题' WHERE id=$1", f.releaseID)
+				f.exec(t, "UPDATE releases SET title='新专辑标题',curation_member_signature=decode(repeat('01',32),'hex') WHERE id=$1", f.releaseID)
 			} else {
-				f.exec(t, "UPDATE tracks SET title='新录音标题' WHERE source_status='present' AND medium_id IN (SELECT id FROM media WHERE release_id=$1)", f.releaseID)
+				f.exec(t, "UPDATE tracks SET title='新录音标题',source_modified_at=now() WHERE source_status='present' AND medium_id IN (SELECT id FROM media WHERE release_id=$1)", f.releaseID)
 			}
 			requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
 			updated := f.pending(t)
@@ -218,7 +219,7 @@ func RunShelvedPendingCases(t *testing.T, decline func(context.Context, *sql.DB,
 		requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
 		states, err := curation.LoadWorkStates(ctx, f.db, "release", []string{f.releaseID})
 		requirePendingRefreshOK(t, err)
-		if state := states[f.releaseID]; state.Status != "no_usable_candidates" {
+		if state := states[f.releaseID]; state.Status != "unmatched" {
 			t.Fatalf("唯一候选已被拒绝，工作状态为 %+v", state)
 		}
 		items, err := f.writer.ClaimPendingItems(ctx, item.ConversationID, f.worker.opts.Now(), 10)

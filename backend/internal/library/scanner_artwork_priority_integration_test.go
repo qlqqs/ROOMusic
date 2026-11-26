@@ -118,7 +118,7 @@ func TestPostgreSQLArtworkPriority同目录多专辑不串图(t *testing.T) {
 	}
 }
 
-// AC5 第一条：共享整理范围的 Box 叶子各保留自己的内嵌图，父目录图片只用于最后兜底。
+// 两个碟目录上提后，父目录的精确名封面优先于内嵌图。
 func TestPostgreSQLArtworkPriorityBox叶子各用内嵌封面(t *testing.T) {
 	fixture := newLibraryFixture(t)
 	root := insertScannerRoot(t, fixture, "artwork-priority-box")
@@ -128,14 +128,14 @@ func TestPostgreSQLArtworkPriorityBox叶子各用内嵌封面(t *testing.T) {
 	writeArtworkPriorityFLAC(t, root, "Box/Disc 3/01.flac", "专辑乙", 3, 2, second)
 	writeScanFixtureFile(t, root, "Box/cover.jpg", jpegArtworkOfWidth(12))
 	runIncrementalTestScan(t, service, logs, root)
-	firstID := assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 1/01.flac", "box_leaf", "embedded", first)
-	secondID := assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 3/01.flac", "box_leaf", "embedded", second)
-	if firstID == secondID {
-		t.Fatal("专辑标签冲突的 Box 叶子不应合并")
+	firstID := assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 1/01.flac", "strict_multidisc", "folder", jpegArtworkOfWidth(12))
+	secondID := assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 3/01.flac", "strict_multidisc", "folder", jpegArtworkOfWidth(12))
+	if firstID != secondID {
+		t.Fatal("每碟曲号连续应合成同一发行")
 	}
 }
 
-// Box 父目录自身有音频时，即使存在精确名封面，碟目录叶子也不能继承。
+// 直属音频引入重号，按名拆分后各发行只使用自己的内嵌图。
 func TestPostgreSQLArtworkPriorityBox父目录直接音频阻止兜底(t *testing.T) {
 	fixture := newLibraryFixture(t)
 	root := insertScannerRoot(t, fixture, "artwork-priority-box-direct")
@@ -146,12 +146,12 @@ func TestPostgreSQLArtworkPriorityBox父目录直接音频阻止兜底(t *testin
 	writeArtworkPriorityFLAC(t, root, "Box/direct.flac", "父目录专辑", 1, 3, nil)
 	writeScanFixtureFile(t, root, "Box/cover.jpg", cover)
 	runIncrementalTestScan(t, service, logs, root)
-	assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 1/first.flac", "box_leaf", "", nil)
-	assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 3/second.flac", "box_leaf", "", nil)
-	assertArtworkPriorityBinding(t, fixture, service, root, "Box/direct.flac", "ordinary_directory", "folder", cover)
+	assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 1/first.flac", "same_dir_split", "", nil)
+	assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 3/second.flac", "same_dir_split", "", nil)
+	assertArtworkPriorityBinding(t, fixture, service, root, "Box/direct.flac", "same_dir_split", "", nil)
 }
 
-// 碟目录音频缓存命中时仍按本轮全根布局重算独占性，移除或恢复既有父目录封面。
+// 增删普通兄弟目录不改变多碟发行与其父目录的封面。
 func TestPostgreSQLArtworkPriorityBox父目录独占变化重选封面(t *testing.T) {
 	fixture := newLibraryFixture(t)
 	root := insertScannerRoot(t, fixture, "artwork-priority-box-exclusive")
@@ -163,7 +163,7 @@ func TestPostgreSQLArtworkPriorityBox父目录独占变化重选封面(t *testin
 	runIncrementalTestScan(t, service, logs, root)
 	leaves := map[string]string{}
 	for _, relative := range []string{"Box/Disc 1/first.flac", "Box/Disc 3/second.flac"} {
-		leaves[relative] = assertArtworkPriorityBinding(t, fixture, service, root, relative, "box_leaf", "folder", cover)
+		leaves[relative] = assertArtworkPriorityBinding(t, fixture, service, root, relative, "strict_multidisc", "folder", cover)
 	}
 
 	writeArtworkPriorityFLAC(t, root, "Box/普通专辑/other.flac", "普通专辑", 1, 3, nil)
@@ -173,7 +173,7 @@ func TestPostgreSQLArtworkPriorityBox父目录独占变化重选封面(t *testin
 	}
 	assertArtworkPriorityBinding(t, fixture, service, root, "Box/普通专辑/other.flac", "ordinary_directory", "", nil)
 	for relative, releaseID := range leaves {
-		if got := assertArtworkPriorityBinding(t, fixture, service, root, relative, "box_leaf", "", nil); got != releaseID {
+		if got := assertArtworkPriorityBinding(t, fixture, service, root, relative, "strict_multidisc", "folder", cover); got != releaseID {
 			t.Errorf("新增兄弟专辑改变叶子发行身份：%s：前=%s，后=%s", relative, releaseID, got)
 		}
 	}
@@ -186,7 +186,7 @@ func TestPostgreSQLArtworkPriorityBox父目录独占变化重选封面(t *testin
 		t.Fatalf("删除兄弟专辑后两个叶子仍应命中缓存：%+v", removed)
 	}
 	for relative, releaseID := range leaves {
-		if got := assertArtworkPriorityBinding(t, fixture, service, root, relative, "box_leaf", "folder", cover); got != releaseID {
+		if got := assertArtworkPriorityBinding(t, fixture, service, root, relative, "strict_multidisc", "folder", cover); got != releaseID {
 			t.Errorf("删除兄弟专辑改变叶子发行身份：%s：前=%s，后=%s", relative, releaseID, got)
 		}
 	}

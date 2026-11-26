@@ -1,7 +1,11 @@
 package library
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,13 +17,19 @@ import (
 
 // pngArtworkOfWidth 与 jpegArtworkOfWidth 生成只在宽度上不同的最小图片，测试用宽度区分绑定的是哪一张封面。
 func pngArtworkOfWidth(width byte) []byte {
-	data := minimalPNGArtwork()
-	data[19] = width
-	return data
+	var out bytes.Buffer
+	if err := png.Encode(&out, image.NewGray(image.Rect(0, 0, int(width), 1))); err != nil {
+		panic(err)
+	}
+	return out.Bytes()
 }
 
 func jpegArtworkOfWidth(width byte) []byte {
-	return []byte{0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 1, 0, width, 3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11, 0, 0xff, 0xd9}
+	var out bytes.Buffer
+	if err := jpeg.Encode(&out, image.NewGray(image.Rect(0, 0, int(width), 1)), nil); err != nil {
+		panic(err)
+	}
+	return out.Bytes()
 }
 
 func writeScanFixtureFile(t *testing.T, root registeredRoot, relativePath string, data []byte) {
@@ -145,15 +155,15 @@ func TestPostgreSQLStrictMultiDiscFallsBackToDiscFolderArtwork(t *testing.T) {
 func TestPostgreSQLBoxLeafFallsBackToBoxParentArtwork(t *testing.T) {
 	fixture := newLibraryFixture(t)
 	root := insertScannerRoot(t, fixture, "box-leaf-artwork")
-	// 专辑标签冲突使两碟保持独立的 Box 叶子，不按带缺口碟号合并；Box 目录里的封面作为缺少自身封面的叶子的最后兜底。
+	// 两碟曲号连续，统一使用逻辑父目录的精确名封面。
 	writeScanFixtureFile(t, root, "Box/Disc 1/01.flac", taggedTrack(t, 1, 1, "Set"))
 	writeScanFixtureFile(t, root, "Box/Disc 3/01.flac", taggedTrack(t, 3, 3, "Other Set"))
 	writeScanFixtureFile(t, root, "Box/cover.png", pngArtworkOfWidth(7))
 	writeScanFixtureFile(t, root, "Box/Disc 1/cover.png", pngArtworkOfWidth(8))
 
 	scanFixtureRoot(t, fixture, root)
-	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid`, 2, root.ID)
-	assertArtworks(t, fixture, root, "folder:image/png:7", "folder:image/png:8")
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid`, 1, root.ID)
+	assertArtworks(t, fixture, root, "folder:image/png:7")
 }
 
 func TestPostgreSQLExactFolderArtworkOutranksEmbeddedArtwork(t *testing.T) {

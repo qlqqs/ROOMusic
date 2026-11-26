@@ -18,6 +18,7 @@ import (
 
 // Handlers 持有管家接口依赖及本进程内按用户隔离的运行取消登记。
 type Handlers struct {
+	modelWake        func()
 	memories         *memory.Store
 	web              *web.Service
 	guard            *identity.Guard

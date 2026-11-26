@@ -65,7 +65,7 @@ func TestStripAlbumDiscMarker(t *testing.T) {
 		{"X (Disc 1 of 2)", "X", 1, true},
 		{"X (CD 1/2)", "X", 1, true},
 		{"X (Deluxe) [CD2]", "X (Deluxe)", 2, true},
-		{"X CD2 Live", "X", 2, true},
+		{"X CD2 Live", "X Live", 2, true},
 		{"Disc 2: Y", "Y", 2, true},
 		{"CD1", "CD1", 0, false},
 		{"Discovery", "Discovery", 0, false},

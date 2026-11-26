@@ -92,7 +92,7 @@ var packageRules = map[string]packageRule{
 	"catalog/testsupport":               {imports: []string{"catalog/internal/artistgraph", "catalog/internal/searchindex", "catalog/textnorm"}},
 	"catalog/maintenance":               {imports: []string{"catalog/internal/artistgraph", "catalog/textnorm", "catalog/internal/searchindex", "catalog/internal/writegate"}},
 	"catalog/artwork":                   {},
-	"catalog/ingest":                    {imports: []string{"catalog/classical", "catalog/internal/artistgraph", "catalog/metadata", "platform/uuid", "platform/workpool", "catalog/internal/searchindex", "catalog/internal/writegate"}},
+	"catalog/ingest":                    {imports: []string{"catalog/classical", "catalog/textnorm", "catalog/internal/artistgraph", "catalog/metadata", "platform/uuid", "platform/workpool", "catalog/internal/searchindex", "catalog/internal/writegate"}},
 	"catalog":                           {imports: []string{"catalog/internal/artistgraph", "catalog/internal/writegate", "catalog/internal/releasesql", "platform/uuid", "catalog/metadata", "catalog/textnorm", "catalog/internal/searchindex"}},
 	"catalog/governance":                {imports: []string{"catalog/ingest", "personal/albumfavorites", "catalog/textnorm", "catalog/internal/artistgraph", "catalog", "catalog/internal/releasesql", "catalog/metadata", "operations", "platform/uuid", "catalog/internal/searchindex", "catalog/internal/writegate"}},
 	"curation":                          {imports: []string{"sources", "operations", "identity", "catalog", "catalog/artwork", "catalog/metadata", "catalog/governance", "catalog/textnorm", "platform/uuid"}},

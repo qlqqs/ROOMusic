@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -102,6 +103,14 @@ func missingFields(e catalog.CurationEvidence, m sources.Release) map[string]cat
 	return fields
 }
 
+func groupYearField(e catalog.CurationEvidence, date string) map[string]catalog.CorrectionIntent {
+	fields := missingFields(e, sources.Release{Date: date})
+	if year, ok := fields["year"]; ok {
+		return map[string]catalog.CorrectionIntent{"year": year}
+	}
+	return nil
+}
+
 type groupPlan struct {
 	result, joinID string
 	link           bool
@@ -192,6 +201,7 @@ func (w *Worker) applyMatch(ctx context.Context, u *unit, e catalog.CurationEvid
 	local, err := catalog.LoadCurationArtistCredits(ctx, w.db, e.ID)
 	switch {
 	case err == nil:
+		p.splits = planCreditSplits(local, e, m)
 		p.artists, proposals, err = w.identifyArtists(ctx, local, e, m, u.offline)
 		if err != nil {
 			return "", "", nil, err
@@ -231,6 +241,13 @@ func afterGroupMatch(before, after catalog.CurationEvidence, out outcome) catalo
 	if m.Level != "release_group" || m.GroupID == "" {
 		return before
 	}
+	if len(groupYearField(before, m.GroupFirstReleaseDate)) != 0 && after.Automatic["year"] {
+		before.Automatic = maps.Clone(before.Automatic)
+		if before.Automatic == nil {
+			before.Automatic = map[string]bool{}
+		}
+		before.Automatic["year"] = true
+	}
 	if after.ReleaseGroupMatchID == m.GroupID {
 		before.ReleaseGroupMatchID = after.ReleaseGroupMatchID
 		before.ExternalGroupID = after.ExternalGroupID
@@ -245,6 +262,7 @@ func afterGroupMatch(before, after catalog.CurationEvidence, out outcome) catalo
 }
 
 type matchWritePlan struct {
+	splits           []curation.CreditSplit
 	albumCredit      *curation.ReleaseArtistCredit
 	trackTitleSource string
 	artists          []curation.LinkIntent
@@ -282,6 +300,7 @@ func planMatch(ctx context.Context, db operations.Queryer, e catalog.CurationEvi
 		request.Links = append(request.Links, curation.LinkIntent{ObjectType: "release", ObjectID: e.ID, ExternalID: r.ID, ExternalGroupID: r.Group.ID})
 		fields = missingFields(e, *r)
 	} else if m.Level == "release_group" {
+		fields = groupYearField(e, m.GroupFirstReleaseDate)
 		request.External = curation.ExternalSummary{Title: summaryText(e.Title), Artist: summaryText(credits(m.Credits)), DiscCount: len(e.DiscPositions()), TrackCount: len(e.Tracks)}
 		request.Links = append(request.Links, curation.LinkIntent{ObjectType: "release_group_match", ObjectID: e.ID, ExternalID: m.GroupID})
 		basis = fmt.Sprintf("MusicBrainz 发行组 %s，依据%s", m.GroupID, methodNames[m.Method])
@@ -345,7 +364,10 @@ func writeMatch(ctx context.Context, db operations.Queryer, writer *curation.Wri
 			plan.result = "linked"
 		}
 	}
-	if err := writeArtistLinks(ctx, db, writer, request, p.artists, write); err != nil {
+	if err := writeCreditSplits(ctx, writer, request, p.splits, write); err != nil {
+		return "", err
+	}
+	if err := writeArtistLinks(ctx, db, writer, request, p.artists, p.splits, write); err != nil {
 		return "", err
 	}
 	if len(fields) > 0 {
@@ -365,16 +387,7 @@ func writeMatch(ctx context.Context, db operations.Queryer, writer *curation.Wri
 	if err := writeTrackFields(ctx, writer, p.tracks, trackOrigin, write, record); err != nil {
 		return "", err
 	}
-	group, err := writeMatchGroup(ctx, writer, e, plan, request, write, record)
-	if err != nil {
-		return "", err
-	}
-	for _, link := range request.Links {
-		if link.ObjectType == "release" {
-			return group, writer.DiscoverReleaseMerges(ctx, link.ExternalID, resourceRuleVersion)
-		}
-	}
-	return group, nil
+	return writeMatchGroup(ctx, writer, e, plan, request, write, record)
 }
 
 func writeMatchGroup(ctx context.Context, writer *curation.Writer, e catalog.CurationEvidence, plan groupPlan, request curation.LinkRequest, write matchStep, record func(string)) (string, error) {
@@ -403,4 +416,36 @@ func writeMatchGroup(ctx context.Context, writer *curation.Writer, e catalog.Cur
 		}
 	}
 	return group, err
+}
+
+func (w *Worker) finishEditionMerge(ctx context.Context, u *unit, edition sources.Release) error {
+	action, err := w.writer.ProgramMergePreview(ctx, edition)
+	if err != nil {
+		return err
+	}
+	if action != nil && action.JoinRelease != "" {
+		source := curation.Source{WriterLevel: catalog.LevelProgramExternal, Kind: "source", Provider: "musicbrainz", Basis: "同版发行含相同录音，保留两份并归入同组"}
+		err = u.writeInBatch(ctx, "duplicate_group/"+action.JoinRelease+"/"+action.JoinGroup, func(batch, key string) error {
+			_, err := w.writer.JoinGroup(ctx, curation.JoinRequest{ReleaseID: action.JoinRelease, GroupID: action.JoinGroup, ExternalSource: "musicbrainz", Source: source, BatchID: batch, Key: key})
+			return err
+		})
+		switch failureCode(err) {
+		case "manual_structure", "same_group", "no_strong_evidence", "group_not_found":
+		default:
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if action != nil && action.Merge != nil {
+		preview := action.Merge
+		source := curation.Source{WriterLevel: catalog.LevelProgramExternal, Kind: "source", Provider: "musicbrainz", Basis: "两个发行的整碟录音对应完整覆盖同一 MusicBrainz 版本"}
+		err = u.writeInBatch(ctx, "release_merge/"+preview.Target.ID+"/"+preview.Source.ID, func(batch, key string) error {
+			return w.writer.MergeProgramEdition(ctx, edition, *preview, source, batch, key)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return w.writer.DiscoverReleaseMerges(ctx, edition.ID, resourceRuleVersion)
 }

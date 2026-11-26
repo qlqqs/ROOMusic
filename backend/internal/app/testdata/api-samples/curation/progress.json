@@ -3,7 +3,10 @@
     "batch": null,
     "last_pass_finished_at": null,
     "model": {
+      "can_retry": false,
       "concurrency": 4,
+      "configured": false,
+      "context_hint": "使用本机模型时，请按模型服务实际加载的上下文长度设置单次最多发送。",
       "daily_token_limit": 10000000,
       "items": {
         "in_progress": 0,
@@ -12,6 +15,9 @@
         "waiting_model": 0
       },
       "model": "",
+      "pause_kind": null,
+      "reason_detail": null,
+      "retry_at": null,
       "running": 0,
       "state": "paused",
       "today": {
@@ -19,15 +25,7 @@
         "input_tokens": 0,
         "output_tokens": 0
       },
-      "unavailable_reason": null,
-      "web_daily_token_limit": 240000,
-      "web_limit_reached": false,
-      "web_retry_at": null,
-      "web_today": {
-        "date": "2026-01-02",
-        "input_tokens": 0,
-        "output_tokens": 0
-      }
+      "unavailable_reason": "not_configured"
     },
     "pending": {
       "waiting_model": 0
@@ -95,17 +93,15 @@
       }
     ],
     "releases": {
+      "conflict": 0,
       "matched": 0,
-      "no_match": 0,
-      "no_usable_candidates": 0,
       "processed": 0,
       "query_error": 0,
       "total": 2,
       "try_later": 0,
-      "uncertain": 0,
-      "unlisted": 0
+      "unmatched": 0
     },
-    "rule_version": 104,
+    "rule_version": 105,
     "state": "unavailable"
   },
   "status": 200

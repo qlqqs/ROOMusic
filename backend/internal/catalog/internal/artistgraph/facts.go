@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
-	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"sort"
 	"strings"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
 type creditFact struct {
@@ -198,6 +199,36 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 		return nil, err
 	}
 
+	// 扫描全文或字段层变化即撤下旧依据；保留原扫描事实以便恢复。
+	if _, err = tx.ExecContext(ctx, `DELETE FROM release_match_credit_parts p USING releases r
+ WHERE r.id=p.release_id AND r.id=ANY($1::uuid[]) AND
+ CASE WHEN p.track_id IS NULL THEN
+    EXISTS(SELECT FROM release_corrections c WHERE c.release_id=r.id AND c.field='album_artist')
+    OR EXISTS(SELECT FROM release_auto_values a WHERE a.release_id=r.id AND a.field='album_artist')
+    OR p.local_text<>btrim(CASE p.role WHEN 'release_artist' THEN r.artist ELSE coalesce(r.album_artist,'') END)
+ ELSE NOT EXISTS(SELECT FROM tracks t JOIN media m ON m.id=t.medium_id
+    WHERE t.id=p.track_id AND m.release_id=p.release_id AND t.source_status='present' AND btrim(t.artist)=p.local_text
+    AND NOT EXISTS(SELECT FROM track_corrections c WHERE c.track_id=t.id AND c.field='artist')
+    AND NOT EXISTS(SELECT FROM track_auto_values a WHERE a.track_id=t.id AND a.field='artist')) END`, ids); err != nil {
+		return nil, err
+	}
+	rows, err = tx.QueryContext(ctx, `SELECT CASE WHEN track_id IS NULL THEN release_id::text END,track_id::text,role,name,position
+ FROM release_match_credit_parts WHERE release_id=ANY($1::uuid[]) ORDER BY release_id,track_id,role,position`, ids)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		f := creditFact{Layer: "auto"}
+		if err := rows.Scan(&f.ReleaseID, &f.TrackID, &f.Role, &f.Name, &f.Position); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		facts = append(facts, f)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	names := make([]string, 0, len(facts))
 	for _, f := range facts {
 		names = append(names, f.Name)

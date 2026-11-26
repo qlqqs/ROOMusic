@@ -109,6 +109,18 @@ func (e CurationEvidence) Classification() CurationClassification {
 	return c
 }
 
+// 可检索的两项名字决定文字准入；两项都缺时只允许声纹。
+func (e CurationEvidence) CanMatch(title, artist string, hasID, fingerprints bool) bool {
+	if hasID {
+		return true
+	}
+	if e.CandidateKind == "loose_unknown" && len(e.Tracks) != 1 {
+		return false
+	}
+	hasArtist := artist != "" || e.Compilation && e.CandidateKind != "loose_unknown"
+	return title != "" && hasArtist || title == "" && !hasArtist && fingerprints
+}
+
 type CurationClassCounts struct {
 	Total         int `json:"total"`
 	TaggedID      int `json:"tagged_id"`

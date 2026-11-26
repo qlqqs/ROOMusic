@@ -22,7 +22,7 @@ type CurationCursor struct {
 }
 
 func PageCurationReleases(ctx context.Context, q Queryer, after *CurationCursor, limit int) ([]CurationCursor, error) {
-	query := "SELECT releases.id::text,releases.created_at FROM releases WHERE " + releasesql.ReleaseVisiblePredicate
+	query := "SELECT releases.id::text,releases.created_at FROM releases JOIN curation_eligible_releases USING(id) WHERE true"
 	args := []any{limit}
 	if after != nil {
 		query += " AND (releases.created_at,releases.id)<($2::timestamptz,$3::uuid)"
@@ -91,6 +91,7 @@ type CurationTrack struct {
 }
 
 type CurationEvidence struct {
+	FileDigest  string           `json:"-"`
 	Legacy      LegacyCandidates `json:"-"`
 	LocalTitle  string           `json:"local_title,omitempty"`
 	LocalArtist string           `json:"local_artist,omitempty"`
@@ -179,7 +180,7 @@ const curationReleaseLinkJoin = `
  jsonb_build_array(jsonb_build_object('object_type',gm.object_type,'object_id',gm.object_id,'external_id',gm.external_id))
  AND NOT EXISTS (SELECT FROM operations undo WHERE undo.reverts_operation_id=o.id))`
 
-const curationHeaderSQL = `SELECT releases.id::text,releases.group_id::text,COALESCE(releases.candidate_kind,''),
+const curationHeaderSQL = `SELECT releases.id::text,curation_release_file_digest(releases.id),releases.group_id::text,COALESCE(releases.candidate_kind,''),
  releases.artist,COALESCE(releases.media_type,''),
  ` + releasesql.ScanFieldsJSON + ` || COALESCE(c.values,'{}'::jsonb),
  COALESCE(c.present,'{}'::jsonb),
@@ -222,7 +223,7 @@ func curationHeaders(ctx context.Context, q Queryer, ids []string, artworkExists
 		var e CurationEvidence
 		var values, corrected, automatic, stale, decisions, media []byte
 		var artworkKey sql.NullString
-		if err := rows.Scan(&e.ID, &e.GroupID, &e.CandidateKind, &e.Artist, &e.MediaType, &values, &corrected,
+		if err := rows.Scan(&e.ID, &e.FileDigest, &e.GroupID, &e.CandidateKind, &e.Artist, &e.MediaType, &values, &corrected,
 			&automatic, &stale, &e.LocalTitle, &e.LocalArtist, &decisions, &media, &e.LocalArtwork, &artworkKey, &e.ExternalID, &e.ExternalGroupID, &e.ReleaseGroupMatchID,
 			&e.GroupExternalID, &e.GroupChangeSource); err != nil {
 			return nil, err
@@ -381,7 +382,7 @@ const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_
  LEFT JOIN track_display_durations dd ON dd.track_id=t.id
  LEFT JOIN track_external_lyrics el ON el.track_id=t.id
  LEFT JOIN external_links tl ON tl.source='musicbrainz' AND tl.object_type='track' AND tl.object_id=t.id
- WHERE m.release_id=ANY($1::uuid[]) ORDER BY m.release_id,m.position,t.position,t.id`
+ WHERE m.release_id=ANY($1::uuid[]) ORDER BY m.release_id,m.position,COALESCE(t.sort_position,t.position),t.id`
 
 func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map[string]CurationEvidence, withDetails bool) error {
 	rows, err := q.QueryContext(ctx, curationTrackSQL, ids, withDetails)
@@ -409,6 +410,9 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 		}
 		t.TitleObservation = observed["title"].CurationObservation
 		t.ArtistObservation = observed["artist"].CurationObservation
+		if t.ArtistObservation.Source == "garbled" {
+			t.FirstArtistCredit = ""
+		}
 		t.PositionObservation = observed["track_number"].CurationObservation
 		auth := func(name, value string, corrected bool) metadata.Authenticity {
 			o := observed[name]

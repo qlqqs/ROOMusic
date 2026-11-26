@@ -117,7 +117,7 @@ function findTrack(release: ReleaseDetailDTO, trackId: string | null): { track: 
   for (const [mediumIndex, medium] of release.media.entries()) {
     const index = medium.tracks.findIndex((track) => track.id === trackId);
     const track = medium.tracks[index];
-    if (track !== undefined) return { track, place: { disc: release.media.length > 1 ? mediumIndex + 1 : null, number: track.position >= 1 ? track.position : index + 1 } };
+    if (track !== undefined) return { track, place: { disc: release.media.length > 1 ? mediumIndex + 1 : null, number: track.position >= 1 ? track.position : null } };
   }
   return null;
 }

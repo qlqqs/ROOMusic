@@ -33,6 +33,11 @@ func (c curationMusicBrainz) SearchArtistPage(ctx context.Context, name string) 
 	return curation.ArtistPage{PageInfo: curation.PageInfo(page.PageInfo), Items: page.Items}, err
 }
 
+func (c curationMusicBrainz) GroupFirstReleaseDate(ctx context.Context, id string) (string, error) {
+	group, err := c.Client.Lookup(ctx, "release-group", id, nil)
+	return group.FirstReleaseDate, err
+}
+
 func (c curationMusicBrainz) ReleaseGroupDetails(ctx context.Context, id string) (curation.ReleaseGroupDetails, error) {
 	group, err := c.Client.ReleaseGroupDetails(ctx, id, false)
 	if err != nil {
