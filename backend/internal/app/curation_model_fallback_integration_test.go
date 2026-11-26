@@ -66,11 +66,11 @@ func TestPostgreSQL整理迁移旧待办为可采纳建议(t *testing.T) {
 		requireCurationOK(t, err)
 		mustExec(t, f.application, string(raw))
 	}
-	runMigration("0098_curation_model_rules.down.sql")
+	runMigration("0101_curation_model_rules.down.sql")
 	runMigration("0091_curation_model_fallback.down.sql")
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_pending_items WHERE id=$1 AND status='waiting_human'`, item.ID)
 	runMigration("0091_curation_model_fallback.sql")
-	runMigration("0098_curation_model_rules.sql")
+	runMigration("0101_curation_model_rules.sql")
 	modelWaitResolution(t, f, item.ID, "suggestion_recorded")
 	suggestion, err := f.writer.Exception(ctx, id)
 	requireCurationOK(t, err)

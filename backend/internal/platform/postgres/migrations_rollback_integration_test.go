@@ -824,14 +824,14 @@ func TestEmbeddedMigrationRollbackFiles(t *testing.T) {
 }
 
 func TestPostgreSQLCurationModelRulesMigrationRoundTrip(t *testing.T) {
-	const version = 98
+	const version = 101
 	available, err := loadMigrations(migrations.Files)
 	if err != nil {
 		t.Fatal(err)
 	}
 	db := openMigrationTestDatabase(t)
 	before, after := migrationPrefix(available, version-1), migrationPrefix(available, version)
-	if _, ok := after["0098_curation_model_rules.sql"]; !ok {
+	if _, ok := after["0101_curation_model_rules.sql"]; !ok {
 		t.Fatal("缺少模型规则迁移")
 	}
 	rollbackApply(t, db, before)

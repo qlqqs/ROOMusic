@@ -657,7 +657,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 迁移 0064 给自动整理设置增加 `model`、`model_daily_token_limit` 和独立的 `model_updated_at`。只改模型设置时，程序层的变化标记 `updated_at` 保持原值。按服务器本地日期在 `curation_model_usage` 原子累加输入与输出 token。主模型、独立审查与会话摘要均计入，缺少的计数字段作零。
 
-待定项保存领取、有效回答次数、空答次数、重审次数、下次尝试时间和搁置原因。迁移 0098 起，因模型请求被拒或连续空答搁置的项在本地文件变更或有效模型变化时重开；因内容过长搁置的项也可在调高单次上限后重开。以下候选变化规则适用于旧的搁置项。程序重判时，搁置项的输入摘要 `input_digest`、候选 `candidates` 或冲突 `conflicts` 任一项与保存值不同，就回到 `waiting_model`，清零未处理次数并清空搁置原因。候选与冲突按 `jsonb` 值用 `IS DISTINCT FROM` 比较。三项相同则继续搁置。重判保留 `waiting_human` 项的原有内容。`resolved` 项保留原处理结果，并排除在未结束项的冲突索引之外。
+待定项保存领取、有效回答次数、空答次数、重审次数、下次尝试时间和搁置原因。迁移 0101 起，因模型请求被拒或连续空答搁置的项在本地文件变更或有效模型变化时重开；因内容过长搁置的项也可在调高单次上限后重开。以下候选变化规则适用于旧的搁置项。程序重判时，搁置项的输入摘要 `input_digest`、候选 `candidates` 或冲突 `conflicts` 任一项与保存值不同，就回到 `waiting_model`，清零未处理次数并清空搁置原因。候选与冲突按 `jsonb` 值用 `IS DISTINCT FROM` 比较。三项相同则继续搁置。重判保留 `waiting_human` 项的原有内容。`resolved` 项保留原处理结果，并排除在未结束项的冲突索引之外。
 
 程序重判时，领取中（`in_progress`）的项也刷新摘要、规则版本、证据、候选与冲突，领取关系、会话与各计数不变；否则工作状态记下新摘要后不会再重判，模型每次都得到 `item_stale`（V12 发现：建项后同轮补歌词即触发）。`curation_model_exceptions` 以方案项 ID 唯一，保存待定项、工具输入、预览、模型写入者、审查决定与理由、会话和人工决定。删除会话会清空例外的会话引用，例外仍可读取。0064 回退会删除整理会话、例外和按日用量。
 
@@ -1115,7 +1115,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 调度器在内存中为会话包预留发行和艺人键，跨类别和重审跳过与在途包冲突的项。同艺人包内的多步任务逐项运行，同类核对可在一个请求中逐项作答。关闭时等待在途项收尾，重启按 17.2 回收遗留领取。
 
-整理主模型的五类结果在迁移 0098 对应的调度合同第 1 版中生效。配置及当前连续段保存在单行 `curation_model_state`，项级重试保存在 `curation_pending_items`。已发请求按实耗记账。
+整理主模型的五类结果在迁移 0101 对应的调度合同第 1 版中生效。配置及当前连续段保存在单行 `curation_model_state`，项级重试保存在 `curation_pending_items`。已发请求按实耗记账。
 
 | 结果 | 后续行为 |
 | --- | --- |
