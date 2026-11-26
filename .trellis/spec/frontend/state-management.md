@@ -58,8 +58,12 @@ request.
 - 自动整理的进度（M7 E1）：后台工作或等扫描时每 10 秒；设置与进度还没对上（后台最长一分钟才发现开关变化）时也 10 秒直到对上；开着且已处理完时 60 秒；
   未打开、已暂停且停下、没有运行时不轮询（`progressRefetchInterval`）。改总开关或暂停之后写回设置并让外部源与进度失效；改一个源的开关或密钥时，把返回的那一项写回外部源列表（`useSetCurationSource`、`useSetCurationSourceKey` 共用写回）；范围撤销完成后让 curation 与 governance 全部失效并调 app 的刷新。
   批次与“不再提出”列表 `staleTime: 0`（单条撤销可能发生在操作记录页）。
-  模型层（M7 E2）：进度里模型 `running` 或 `waiting_review` 时也 10 秒轮询；改整理用的模型或上限复用 `useUpdateCurationSettings`（写回设置、失效进度）。
-  例外与最近的后台会话 `staleTime: 0`；采纳、不采纳之后让 curation 与 governance 全部失效（采纳另调 app 的刷新），但采纳遇到 503 `source_unavailable` 时不刷新（例外可能停在“正在采纳”、列表只列待处理的），留给同一个人在确认框里重试。
+  模型层（M7 E2）：进度里模型 `running` 或 `waiting_review` 时也 10 秒轮询；改整理用的模型、同时运行、单次最多发送或每日上限复用 `useUpdateCurationSettings`（写回设置、失效进度）；
+  “测试模型连接”成功后把返回的模型层写进进度缓存，再让进度失效。
+  有冲突的专辑与最近的后台会话 `staleTime: 0`。挑选候选（`useSelectMatchCandidate`）同一次挑选一个幂等键（按快照与候选记住，失败后点同一张重试仍用它），
+  成功后调 app 的刷新，并让有冲突的专辑、这一张的识别结论（`curationKeys.matchResults`）与进度失效；专辑详情的“重新查询”受理后让这一张的识别结论与进度失效；
+  采用 MusicBrainz 写法成功后只调 app 的刷新（专辑详情重读后自然不再列出）。
+  “整理艺人”队列（`curationKeys.artistWebQueue`）在查时每 10 秒轮询，其余时候不轮询；开始与停止把返回的队列状态写进缓存，失败时缓存不动。
 - 轮询只发生在有意义的时候：扫描详情运行中（含取消请求中）每 2 秒一次，到终态即停止并让活动扫描与扫描记录查询失效；活动扫描只在
   确有扫描时每 5 秒刷新，没有活动扫描时不轮询。页面不可见时暂停（沿用 Query 默认的 `refetchIntervalInBackground: false`），
   重新可见时立即刷新。诊断在运行中只手动刷新，到终态时自动刷新一次。进度随这两个轮询一起到达，不另加轮询器、SSE 或 WebSocket。
