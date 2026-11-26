@@ -78,6 +78,16 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 			}
 		}
 	}
+	for _, album := range entries {
+		if album.Tags == "romanized" {
+			name := metadata.NormalizeValue(album.LocalArtist)
+			for _, credit := range ref[album.ID].Artists {
+				if metadata.NormalizeValue(credit.Name) == metadata.NormalizeValue(album.Artist) {
+					artistIDs[name] = append(artistIDs[name], credit.ArtistID)
+				}
+			}
+		}
+	}
 	links := metricStoredLinks(t, app)
 	fields := metricStoredFields(t, app)
 	suggestions := metricSuggestions(t, app)
@@ -161,10 +171,23 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 		want = want.withOutcomeRules()
 		s.Samples = append(s.Samples, liveSampleScore{Title: e.Title, PublicID: e.ID, Accept: want.Accept})
 		byDir[e.Directory] = i
+		publicTracks := map[[2]int]sources.Track{}
 		for _, m := range r.Media {
 			for _, tr := range m.Tracks {
-				wantTracks[fmt.Sprintf("%s/%02d-%02d", e.Directory, m.Position, tr.Position)] = tr
+				publicTracks[[2]int{m.Position, tr.Position}] = tr
+				if e.GeneratedTracks == nil {
+					wantTracks[fmt.Sprintf("%s/%02d-%02d", e.Directory, m.Position, tr.Position)] = tr
+				}
 			}
+		}
+		for _, file := range e.GeneratedTracks {
+			tr, exists := publicTracks[[2]int{file.Disc, file.Position}]
+			if file.Synthetic {
+				tr = sources.Track{Title: file.Title, Artists: r.Artists}
+			} else if !exists {
+				t.Fatalf("生成的 %s 无法按碟序和曲序对应公开参考", file.File)
+			}
+			wantTracks[path.Join(e.Directory, file.File)] = tr
 		}
 		if len(e.ReleaseIDs) != 1 {
 			issue(i, fmt.Sprintf("同一输入目录扫出 %d 个发行", len(e.ReleaseIDs)))
@@ -177,6 +200,13 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 			expected["label"] = append(expected["label"], l.Name)
 			expected["catalog_number"] = append(expected["catalog_number"], l.CatalogNumber)
 		}
+		partial := e.Tags == "subset" || e.Tags == "superset"
+		if partial {
+			// 组级部分吻合不给版本字段提供写入依据，即使碰巧与参考版本同值。
+			for _, field := range []string{"year", "label", "barcode", "catalog_number"} {
+				delete(expected, field)
+			}
+		}
 		for _, id := range e.ReleaseIDs {
 			own(id, i)
 			var group, title string
@@ -186,6 +216,10 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 			directGroup := checkLinks(i, "release_group_match", id, e.Title, []string{e.Group})
 			checkLinks(i, "release_group", group, e.Title, []string{e.Group})
 			score := &s.Samples[i]
+			if exact && partial {
+				s.WrongLinks++
+				issue(i, "部分曲序只允许组级对应，实际写入了版本对应")
+			}
 			switch {
 			case len(links[metricLinkSubject{"release", id}]) > 0:
 				score.Outcome = "release"
@@ -206,10 +240,14 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 			if exact || directGroup {
 				matchStage[id] = "program"
 			} else {
-				need(i, id, "release", e.ID)
+				if partial {
+					need(i, id, "group", e.Group)
+				} else {
+					need(i, id, "release", e.ID)
+				}
 				s.Samples[i].Reasons = append(s.Samples[i].Reasons, "缺少清单中的发行或发行组对应")
 			}
-			if metadata.NormalizeValue(title) != metadata.NormalizeValue(r.Title) {
+			if metadata.NormalizeValue(title) != metadata.NormalizeValue(r.Title) && !(e.Tags == "romanized" && metadata.NormalizeValue(title) == metadata.NormalizeValue(e.LocalTitle)) {
 				need(i, id, "title", r.Title)
 				issue(i, fmt.Sprintf("专辑显示名 %q，期望 %q", title, r.Title))
 			}
@@ -221,8 +259,11 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 		requireCurationOK(t, rows.Scan(&id, &file, &release))
 		dir := path.Dir(file)
 		i, ok := byDir[dir]
-		key, _, _ := strings.Cut(path.Base(file), " - ")
-		key = dir + "/" + key
+		key := file
+		if ok && entries[i].GeneratedTracks == nil {
+			prefix, _, _ := strings.Cut(path.Base(file), " - ")
+			key = path.Join(dir, prefix)
+		}
 		tr, known := wantTracks[key]
 		if !ok || !known {
 			t.Fatalf("扫描得到不在生成清单中的曲目或重复曲目：%s", file)
@@ -230,7 +271,11 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 		delete(wantTracks, key)
 		own(id, i)
 		s.Samples[i].Tracks++
-		found := checkLinks(i, "track", id, file, []string{tr.RecordingID})
+		var recordings []string
+		if tr.RecordingID != "" && entries[i].Tags != "subset" && entries[i].Tags != "superset" {
+			recordings = []string{tr.RecordingID}
+		}
+		found := checkLinks(i, "track", id, file, recordings)
 		if s.Samples[i].Exact && !found {
 			need(i, release, "recording", tr.RecordingID)
 			s.Samples[i].Reasons = append(s.Samples[i].Reasons, "已对到发行但缺少录音对应："+file)

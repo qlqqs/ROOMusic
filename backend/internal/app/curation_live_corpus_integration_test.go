@@ -8,19 +8,18 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/curation/model"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
+	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
@@ -30,8 +29,16 @@ type liveAlbum struct {
 	Expect                         metricExpect `json:"expect"`
 	ID, Group, Artist, Title, Tags string
 	LocalTitle                     string `json:"local_title"`
+	LocalArtist                    string `json:"local_artist"`
 	Directory                      string
 	ReleaseIDs                     []string
+	GeneratedTracks                []liveGeneratedTrack
+}
+
+type liveGeneratedTrack struct {
+	File, Title    string
+	Disc, Position int
+	Synthetic      bool
 }
 
 type liveRequest struct {
@@ -43,13 +50,28 @@ type liveRequest struct {
 }
 
 type liveTransport struct {
+	webHost  sources.MockHost
 	mu       sync.Mutex
 	requests []liveRequest
 }
 
-func (r *liveTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (r *liveTransport) musicRequest(req *http.Request) (*http.Request, error) {
+	if r.webHost.Matches(req.URL) && req.URL.Scheme == "http" && strings.HasPrefix(req.URL.Path, "/musicbrainz/ws/2/") {
+		// 网页回环借用应用的受控主机设置，音乐读取仍使用同一限速器、缓存和公开源。
+		req = req.Clone(req.Context())
+		req.URL.Scheme, req.URL.Host, req.Host = "https", "musicbrainz.org", "musicbrainz.org"
+		req.URL.Path, req.URL.RawPath = strings.TrimPrefix(req.URL.Path, "/musicbrainz"), ""
+	}
 	if req.Method != "GET" || req.URL.Scheme != "https" || req.URL.Host != "musicbrainz.org" || !strings.HasPrefix(req.URL.Path, "/ws/2/") || req.Header.Get("User-Agent") != sources.UserAgent() {
 		return nil, fmt.Errorf("真实试用只接受带程序标识的公开 MusicBrainz 读取")
+	}
+	return req, nil
+}
+
+func (r *liveTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req, err := r.musicRequest(req)
+	if err != nil {
+		return nil, err
 	}
 	path := strings.Trim(strings.TrimPrefix(req.URL.Path, "/ws/2/"), "/")
 	entity, _, lookup := strings.Cut(path, "/")
@@ -90,24 +112,74 @@ func liveScan(t *testing.T, app *integrationTestApplication, admin *integrationT
 	raw, err := os.ReadFile("../../cmd/roomusic-curation-bench/corpus.json")
 	requireCurationOK(t, err)
 	requireCurationOK(t, json.Unmarshal(raw, &corpus))
-	const root = "../../../temp/real-corpus"
+	root := os.Getenv("ROOMUSIC_LIVE_CORPUS")
+	if root == "" {
+		root = "../../../temp/real-corpus"
+	}
+	var generated []struct {
+		ID        string
+		Directory string
+		Tracks    []liveGeneratedTrack
+	}
+	trackMap := os.Getenv("ROOMUSIC_LIVE_TRACK_MAP")
+	if trackMap == "" {
+		trackMap = filepath.Clean(root) + "-tracks.json"
+	}
+	raw, err = os.ReadFile(trackMap)
+	if err == nil {
+		requireCurationOK(t, json.Unmarshal(raw, &generated))
+	} else if !os.IsNotExist(err) || os.Getenv("ROOMUSIC_LIVE_TRACK_MAP") != "" {
+		t.Fatal(err)
+	}
 	dirs, err := os.ReadDir(root)
 	requireCurationOK(t, err)
-	if len(dirs) != len(corpus.Releases) {
+	selected := map[string]bool{}
+	if ids := os.Getenv("ROOMUSIC_LIVE_RELEASES"); ids != "" {
+		for _, id := range strings.Split(ids, ",") {
+			selected[strings.TrimSpace(id)] = true
+		}
+	} else if len(dirs) != len(corpus.Releases) {
 		t.Fatalf("生成的专辑目录数 %d，清单 %d", len(dirs), len(corpus.Releases))
 	}
-	for i, dir := range dirs {
-		if !dir.IsDir() || !strings.HasPrefix(dir.Name(), fmt.Sprintf("%02d - ", i+1)) {
-			t.Fatalf("曲库目录无法对应清单：%s", dir.Name())
+	var albums []liveAlbum
+	for i, album := range corpus.Releases {
+		if len(selected) != 0 && !selected[album.ID] {
+			continue
 		}
-		corpus.Releases[i].Directory = dir.Name()
+		prefix := fmt.Sprintf("%02d - ", i+1)
+		for _, d := range dirs {
+			if d.IsDir() && strings.HasPrefix(d.Name(), prefix) {
+				if album.Directory != "" {
+					t.Fatalf("清单编号 %s 对应多个目录", prefix)
+				}
+				album.Directory = d.Name()
+			}
+		}
+		if album.Directory == "" {
+			t.Fatalf("找不到 %s 的生成目录 %s", album.Title, prefix)
+		}
+		if generated != nil {
+			for _, g := range generated {
+				if g.ID == album.ID && g.Directory == album.Directory {
+					album.GeneratedTracks = g.Tracks
+					break
+				}
+			}
+		}
+		if len(album.GeneratedTracks) == 0 && (generated != nil || album.Tags == "subset" || album.Tags == "superset") {
+			t.Fatalf("生成轨图 %s 缺少 %s", trackMap, album.Directory)
+		}
+		requireCurationOK(t, os.CopyFS(filepath.Join(app.allowedRoot, album.Directory), os.DirFS(filepath.Join(root, album.Directory))))
+		albums = append(albums, album)
 	}
-	requireCurationOK(t, os.CopyFS(app.allowedRoot, os.DirFS(root)))
+	if len(selected) != 0 && len(albums) != len(selected) {
+		t.Fatalf("指定 %d 个发行编号，只在清单中找到 %d 个", len(selected), len(albums))
+	}
 	b3Root(t, app)
 	publishSearch(t, app)
 	scanAndConfirmCuration(t, app, admin)
-	for i := range corpus.Releases {
-		a := &corpus.Releases[i]
+	for i := range albums {
+		a := &albums[i]
 		rows, err := app.database.QueryContext(t.Context(), `SELECT DISTINCT m.release_id FROM tracks t JOIN media m ON m.id=t.medium_id WHERE t.source_status='present' AND starts_with(t.relative_path,$1) ORDER BY 1`, a.Directory+"/")
 		requireCurationOK(t, err)
 		for rows.Next() {
@@ -121,7 +193,7 @@ func liveScan(t *testing.T, app *integrationTestApplication, admin *integrationT
 			t.Fatalf("%s 未扫出发行", a.Directory)
 		}
 	}
-	return corpus.Releases
+	return albums
 }
 
 func liveOracle(t *testing.T, app *integrationTestApplication, admin *integrationTestUser, albums []liveAlbum, search string) *metricsModel {
@@ -132,11 +204,15 @@ func liveOracle(t *testing.T, app *integrationTestApplication, admin *integratio
 	known := map[string]liveAlbum{}
 	for _, a := range albums {
 		m.canonical[a.Artist] = a.Artist + " | "
-		if a.LocalTitle != "" {
+		if a.Tags == "typo" && a.LocalTitle != "" {
 			m.typos[a.LocalTitle] = a.Title
 		}
 		for _, id := range a.ReleaseIDs {
-			targets[id] = metricsModelTarget{SampleID: a.ID, ReleaseID: a.ID, GroupID: a.Group, SearchTitle: a.Title, Fields: map[string]string{"title": a.Title}}
+			target := metricsModelTarget{SampleID: a.ID, ReleaseID: a.ID, GroupID: a.Group, SearchTitle: a.Title, Fields: map[string]string{"title": a.Title}}
+			if slices.Contains(a.Expect.Accept, "release_group") && !slices.Contains(a.Expect.Accept, "release") {
+				target.GroupMatch = a.Group
+			}
+			targets[id] = target
 			known[id] = a
 		}
 	}
@@ -153,21 +229,6 @@ func liveOracle(t *testing.T, app *integrationTestApplication, admin *integratio
 	}
 	m.configure(t, app, admin, targets, search)
 	return m
-}
-
-func liveSearch(t *testing.T, searches *atomic.Int64) string {
-	t.Helper()
-	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if req.URL.Path != "/searxng/search" {
-			http.NotFound(w, req)
-			return
-		}
-		searches.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"results":[]}`)
-	}))
-	t.Cleanup(search.Close)
-	return search.URL
 }
 
 func liveUsage(m *metricsModel) (map[string]metricsModelUsage, map[string]map[string]map[string]int, map[string][]string) {
@@ -213,16 +274,24 @@ func Test真实曲库队列试用(t *testing.T) {
 		t.Fatal("请指定原始 JSON 的 ROOMUSIC_LIVE_OUT")
 	}
 	transport := new(liveTransport)
+	var fixture liveWebFixture
+	if mode != "program" {
+		fixture.prepare(t, os.Getenv("ROOMUSIC_LIVE_WEB"))
+		transport.webHost = sources.NewMockHost(fixture.base)
+	}
 	var logOutput io.Writer = os.Stderr
 	if mode == "real" {
 		logOutput = io.Discard
 	}
-	app := newIntegrationTestApplicationWithLogger(t, slog.New(slog.NewTextHandler(logOutput, &slog.HandlerOptions{Level: slog.LevelError})),
+	app := newConfiguredIntegrationTestApplication(t, slog.New(slog.NewTextHandler(logOutput, &slog.HandlerOptions{Level: slog.LevelError})), config.Server{UpstreamMockURL: fixture.base},
 		WithCurationProgram(true, program.Options{PollInterval: 2 * time.Second, FullPassInterval: 30 * time.Second}),
 		WithCurationModel(true, model.Options{PollInterval: 250 * time.Millisecond, BatchSize: 1}),
 		WithCurationSources(sources.Options{NewClient: transport.client}, coverartarchive.Options{}, sources.Options{}))
 	admin := app.createUser(t, "admin")
 	albums := liveScan(t, app, &admin)
+	if mode != "program" {
+		fixture.start(albums)
+	}
 	var all struct{ Items []curation.SourceSettings }
 	getJSON(t, app, &admin, curationBase+"/sources", &all)
 	for _, s := range all.Items {
@@ -236,16 +305,15 @@ func Test真实曲库队列试用(t *testing.T) {
 		}
 	}
 	var oracle *metricsModel
-	var searches atomic.Int64
 	var key string
 	var meter *liveResponseMeter
 	limit := 22 * time.Minute
 	switch mode {
 	case "oracle", "oracle_open":
-		oracle = liveOracle(t, app, &admin, albums, liveSearch(t, &searches))
+		oracle = liveOracle(t, app, &admin, albums, fixture.base)
 	case "real":
 		meter = new(liveResponseMeter)
-		key = liveRealProvider(t, app, &admin, liveSearch(t, &searches), meter)
+		key = liveRealProvider(t, app, &admin, fixture.base, meter)
 		liveStartItemUsage(t, app)
 		limit = 2 * time.Hour
 	}
@@ -314,7 +382,9 @@ func Test真实曲库队列试用(t *testing.T) {
 		"public_sources": []string{"musicbrainz"}, "user_agent": sources.UserAgent(),
 		"http_count": len(events), "http_503": statuses[503], "http_statuses": statuses,
 		"endpoints": endpoints, "requests": events, "queue_backoffs": pauses,
-		"loopback_search_requests": searches.Load(),
+		"loopback_search_requests": fixture.searches.Load(),
+		"loopback_fetch_requests":  fixture.pages.Load(),
+		"loopback_web_mode":        fixture.mode,
 		"conversations":            conversations, "empty_conversations": empty,
 		"model_by_stage": usage, "item_usage": items, "model_routes": routes,
 		"token_estimate": "请求与 SSE 响应分别按字节数除以 4 向下取整",

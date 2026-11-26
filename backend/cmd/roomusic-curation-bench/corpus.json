@@ -170,6 +170,136 @@
       "artist": "Minus 8",
       "category": "电子",
       "tags": "picard"
+    },
+    {
+      "id": "def847d5-48a6-4bb6-8887-ae4f7f945e6c",
+      "group": "4bac3d70-deea-3d80-85c4-8be9f90558e6",
+      "title": "Alive 2007",
+      "artist": "Daft Punk",
+      "category": "多碟",
+      "tags": "multidisc",
+      "expect": {
+        "accept": [
+          "release",
+          "release_group"
+        ]
+      },
+      "reason": "同目录二碟各从第一轨开始，检查推断的碟序。",
+      "source": "https://musicbrainz.org/release/def847d5-48a6-4bb6-8887-ae4f7f945e6c"
+    },
+    {
+      "id": "df884d73-6740-43d1-bca6-7840850f6db6",
+      "group": "17d74d52-c92b-3b8d-9f87-218ab2d1c4a0",
+      "title": "Music Has the Right to Children",
+      "artist": "Boards of Canada",
+      "category": "黑胶双 LP",
+      "tags": "double_lp",
+      "expect": {
+        "accept": [
+          "release",
+          "release_group"
+        ]
+      },
+      "reason": "两张十二英寸黑胶，原始面号为 A1 至 D4。",
+      "source": "https://musicbrainz.org/release/df884d73-6740-43d1-bca6-7840850f6db6"
+    },
+    {
+      "id": "b0492de5-8bda-3f4a-91ac-a562eb1c0648",
+      "group": "a3c0fafc-63a8-3cf5-95ac-d11292e04890",
+      "title": "The Matrix",
+      "artist": "Various Artists",
+      "category": "无专辑艺人的合辑",
+      "tags": "compilation",
+      "expect": {
+        "accept": [
+          "release",
+          "release_group"
+        ]
+      },
+      "reason": "十三首由不同艺人演出，同一艺人占比不超过一半，隐去专辑艺人。",
+      "source": "https://musicbrainz.org/release/b0492de5-8bda-3f4a-91ac-a562eb1c0648"
+    },
+    {
+      "id": "c2404208-9e35-458b-b0b6-40f5337f7ed1",
+      "group": "0dd5a352-6ae0-3e0d-bf18-bec30e27807d",
+      "title": "My Life in the Bush of Ghosts",
+      "artist": "Brian Eno—David Byrne",
+      "category": "合作署名",
+      "tags": "collaboration",
+      "expect": {
+        "accept": [
+          "release",
+          "release_group"
+        ]
+      },
+      "reason": "专辑和十二首曲目均有两位艺人的结构化署名，生成器只更换连接词。",
+      "source": "https://musicbrainz.org/release/c2404208-9e35-458b-b0b6-40f5337f7ed1"
+    },
+    {
+      "id": "f09ba29c-bc61-4965-aa44-e6dddbeafe1b",
+      "group": "e47e1a1f-5060-3ec2-9444-f93c2212ec49",
+      "title": "千のナイフ",
+      "artist": "坂本龍一",
+      "category": "罗马字标签",
+      "tags": "romanized",
+      "local_artist": "Ryūichi Sakamoto",
+      "local_title": "Sen no Naifu",
+      "expect": {
+        "accept": [
+          "release",
+          "release_group"
+        ]
+      },
+      "reason": "本地专辑标题 Sen no Naifu 为人工罗马字转写（千＝sen、の＝no、ナイフ＝naifu）。艺人使用 MusicBrainz 登记别名 Ryūichi Sakamoto，曲目与时长取自日文发行。",
+      "source": "https://musicbrainz.org/release/f09ba29c-bc61-4965-aa44-e6dddbeafe1b"
+    },
+    {
+      "id": "0d33ef7a-1f5d-4365-b807-b412271b99c3",
+      "group": "6f9f6899-c0d3-311d-ae87-a10ae6bc53a9",
+      "title": "Mezzanine",
+      "artist": "Massive Attack",
+      "category": "子集",
+      "tags": "subset",
+      "expect": {
+        "accept": [
+          "release_group"
+        ]
+      },
+      "reason": "十一首专辑截为达到合同门槛的子集，只有组级对应得到授权。",
+      "source": "https://musicbrainz.org/release/0d33ef7a-1f5d-4365-b807-b412271b99c3"
+    },
+    {
+      "id": "1d6b086a-aca2-4511-8dfc-789b560ae3fb",
+      "group": "48140466-cff6-3222-bd55-63c27e43190d",
+      "title": "Dummy",
+      "artist": "Portishead",
+      "category": "超集",
+      "tags": "superset",
+      "expect": {
+        "accept": [
+          "release_group"
+        ]
+      },
+      "reason": "保留原版十一首为连续前缀，末尾添加合成曲目，只有组级对应得到授权。",
+      "source": "https://musicbrainz.org/release/1d6b086a-aca2-4511-8dfc-789b560ae3fb"
+    },
+    {
+      "id": "45e62a56-76c8-35be-b3f3-c5ed3781e2d4",
+      "group": "91f42713-b8e0-3a7b-981c-fddd20823d74",
+      "title": "浮躁",
+      "artist": "王菲",
+      "category": "GBK 乱码",
+      "tags": "gbk",
+      "expect": {
+        "accept": [
+          "release",
+          "release_group",
+          "local_cleanup",
+          "unlisted"
+        ]
+      },
+      "reason": "专辑标题原始字节为 GBK，至少有浮躁和腹婇两种读法。查询应避开乱码；只可凭本地或可核对的结构证据补写。",
+      "source": "https://musicbrainz.org/release/45e62a56-76c8-35be-b3f3-c5ed3781e2d4"
     }
   ]
 }
