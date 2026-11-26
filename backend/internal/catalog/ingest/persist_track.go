@@ -3,6 +3,7 @@ package ingest
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
@@ -73,16 +74,28 @@ func persistTrack(ctx context.Context, tx *sql.Tx, scanID, rootID, mediumID stri
 	if err := vacateSourceIdentity(ctx, tx, scanID, rootID, identity, plan.TrackID); err != nil {
 		return "", err
 	}
+	var scanTags []byte
+	if observation.ScanTags != nil {
+		tags := *observation.ScanTags
+		if tags.DiscTotal > 0 && disc > tags.DiscTotal {
+			tags.DiscTotal = disc
+		}
+		var err error
+		scanTags, err = json.Marshal(tags)
+		if err != nil {
+			return "", err
+		}
+	}
 	trackArtist := metadata.CanonicalTrackArtist(observation.Artist)
 	if plan.TrackID == "" {
 		trackID := uuid.New()
-		_, err := tx.ExecContext(ctx, `INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity,duration_seconds,codec,sample_rate,channels,bitrate,bit_depth,cue_sheet_path,cue_parent_relative_path,cue_referenced_file,cue_index_frames,cue_end_frames,cue_isrc,content_fingerprint,source_size,source_modified_at,lyrics,lyrics_source,work_title,work_catalog,work_index,movement_number,movement_title,work_source)
-			VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,$8,'present',NOW(),$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33)`,
-			trackID, mediumID, placed.Position, observation.Title, trackArtist, disc, rootID, observation.RelativePath, observation.SourceKind, identity, observation.DurationSeconds, observation.Codec, observation.SampleRate, observation.Channels, observation.Bitrate, nullablePositiveInt(observation.BitDepth), nullableString(observation.CueSheetPath), nullableString(observation.CueParentRelativePath), nullableString(observation.CueReferencedFile), nullableCueFrame(observation.CueIndexFrames, observation.CueIndexPresent), nullableCueFrame(observation.CueEndFrames, observation.CueEndPresent), nullableString(observation.CueISRC), plan.Fingerprint, plan.Size, plan.ModifiedAt, nullableString(observation.Lyrics), nullableString(observation.LyricsSource), nullableString(work.Title), nullableString(work.Catalog), nullablePositiveInt(work.Index), nullablePositiveInt(work.MovementNumber), nullableString(work.MovementTitle), nullableString(work.Source))
+		_, err := tx.ExecContext(ctx, `INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity,duration_seconds,codec,sample_rate,channels,bitrate,bit_depth,cue_sheet_path,cue_parent_relative_path,cue_referenced_file,cue_index_frames,cue_end_frames,cue_isrc,content_fingerprint,source_size,source_modified_at,lyrics,lyrics_source,work_title,work_catalog,work_index,movement_number,movement_title,work_source,scan_tags)
+			VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,$8,'present',NOW(),$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34::jsonb)`,
+			trackID, mediumID, placed.Position, observation.Title, trackArtist, disc, rootID, observation.RelativePath, observation.SourceKind, identity, observation.DurationSeconds, observation.Codec, observation.SampleRate, observation.Channels, observation.Bitrate, nullablePositiveInt(observation.BitDepth), nullableString(observation.CueSheetPath), nullableString(observation.CueParentRelativePath), nullableString(observation.CueReferencedFile), nullableCueFrame(observation.CueIndexFrames, observation.CueIndexPresent), nullableCueFrame(observation.CueEndFrames, observation.CueEndPresent), nullableString(observation.CueISRC), plan.Fingerprint, plan.Size, plan.ModifiedAt, nullableString(observation.Lyrics), nullableString(observation.LyricsSource), nullableString(work.Title), nullableString(work.Catalog), nullablePositiveInt(work.Index), nullablePositiveInt(work.MovementNumber), nullableString(work.MovementTitle), nullableString(work.Source), scanTags)
 		return trackID, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE tracks SET medium_id=$1::uuid,position=$2,title=$3,artist=$4,disc_number=$5,relative_path=$6,source_status='present',observed_at=NOW(),source_kind=$7,source_identity=$8,duration_seconds=$9,codec=$10,sample_rate=$11,channels=$12,bitrate=$13,bit_depth=$14,cue_sheet_path=$15,cue_parent_relative_path=$16,cue_referenced_file=$17,cue_index_frames=$18,cue_end_frames=$19,cue_isrc=$20,content_fingerprint=$21,source_size=$22,source_modified_at=$23,lyrics=$24,lyrics_source=$25,work_title=$26,work_catalog=$27,work_index=$28,movement_number=$29,movement_title=$30,work_source=$31 WHERE id=$32::uuid`,
-		mediumID, placed.Position, observation.Title, trackArtist, disc, observation.RelativePath, observation.SourceKind, identity, observation.DurationSeconds, observation.Codec, observation.SampleRate, observation.Channels, observation.Bitrate, nullablePositiveInt(observation.BitDepth), nullableString(observation.CueSheetPath), nullableString(observation.CueParentRelativePath), nullableString(observation.CueReferencedFile), nullableCueFrame(observation.CueIndexFrames, observation.CueIndexPresent), nullableCueFrame(observation.CueEndFrames, observation.CueEndPresent), nullableString(observation.CueISRC), plan.Fingerprint, plan.Size, plan.ModifiedAt, nullableString(observation.Lyrics), nullableString(observation.LyricsSource), nullableString(work.Title), nullableString(work.Catalog), nullablePositiveInt(work.Index), nullablePositiveInt(work.MovementNumber), nullableString(work.MovementTitle), nullableString(work.Source), plan.TrackID)
+	result, err := tx.ExecContext(ctx, `UPDATE tracks SET medium_id=$1::uuid,position=$2,title=$3,artist=$4,disc_number=$5,relative_path=$6,source_status='present',observed_at=NOW(),source_kind=$7,source_identity=$8,duration_seconds=$9,codec=$10,sample_rate=$11,channels=$12,bitrate=$13,bit_depth=$14,cue_sheet_path=$15,cue_parent_relative_path=$16,cue_referenced_file=$17,cue_index_frames=$18,cue_end_frames=$19,cue_isrc=$20,content_fingerprint=$21,source_size=$22,source_modified_at=$23,lyrics=$24,lyrics_source=$25,work_title=$26,work_catalog=$27,work_index=$28,movement_number=$29,movement_title=$30,work_source=$31,scan_tags=$33::jsonb WHERE id=$32::uuid`,
+		mediumID, placed.Position, observation.Title, trackArtist, disc, observation.RelativePath, observation.SourceKind, identity, observation.DurationSeconds, observation.Codec, observation.SampleRate, observation.Channels, observation.Bitrate, nullablePositiveInt(observation.BitDepth), nullableString(observation.CueSheetPath), nullableString(observation.CueParentRelativePath), nullableString(observation.CueReferencedFile), nullableCueFrame(observation.CueIndexFrames, observation.CueIndexPresent), nullableCueFrame(observation.CueEndFrames, observation.CueEndPresent), nullableString(observation.CueISRC), plan.Fingerprint, plan.Size, plan.ModifiedAt, nullableString(observation.Lyrics), nullableString(observation.LyricsSource), nullableString(work.Title), nullableString(work.Catalog), nullablePositiveInt(work.Index), nullablePositiveInt(work.MovementNumber), nullableString(work.MovementTitle), nullableString(work.Source), plan.TrackID, scanTags)
 	if err != nil {
 		return "", err
 	}

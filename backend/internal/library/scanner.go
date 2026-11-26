@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"iter"
+	"maps"
 	"os"
 	pathpkg "path"
 	"path/filepath"
@@ -426,7 +427,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 			return nil
 		}
 		extension := strings.ToLower(filepath.Ext(path))
-		if extension != ".cue" && !isSupportedAudioExtension(extension) && !isAudioCandidateExtension(extension) {
+		if extension != ".cue" && !isScannableAudio(extension) {
 			return nil
 		}
 		slot.seen, slot.processed = true, true
@@ -456,9 +457,6 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 				return err
 			}
 			return pipeline.submit(slot)
-		}
-		if !isSupportedAudioExtension(extension) {
-			return held("unsupported_format", "不支持的音频格式", ingest.HeldFile)
 		}
 		audio, err := pipeline.prepareAudio(path, relative, fileInfo)
 		if err != nil {
@@ -517,7 +515,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 			}
 		}
 		// 先规划曲目身份（遍历已经结束，complete 即遍历证据是否完整）；规划失败时暂存行没有完整的规划，不能写入。
-		planned, planProblem := service.planRootIdentities(ctx, executor, scanID, root, complete, options.Mode)
+		planned, planProblem := service.planRootIdentities(ctx, executor, scanID, root, complete, options.Mode, feedback)
 		if planProblem != nil {
 			complete = false
 			captureProcessingError(planProblem)
@@ -598,7 +596,7 @@ func buildPhysicalSourceObservation(observation parser.AudioObservation, relativ
 	if sourceKind == "mp3_id3v1" {
 		sourceKind = "mp3_id3v2"
 	}
-	return ingest.SourceObservation{VinylSide: observation.VinylSide, LegacyText: observation.LegacyText, RelativePath: relativePath, Directory: ingest.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genres: append([]string(nil), observation.Genres...), Identifiers: observation.Identifiers, CatalogNumber: observation.Catalog, Work: observation.Work, MovementName: observation.MovementName, MovementNumber: observation.MovementNumber, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: sourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, Compilation: observation.Compilation, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, ArtworkRelativePath: relativePath, ParserVersion: parser.CacheVersion(filepath.Ext(relativePath)), Credits: append([]metadata.Credit(nil), observation.Credits...), ArtistTagEvidence: append([]metadata.ArtistTagEvidence(nil), observation.ArtistTagEvidence...), Lyrics: observation.Lyrics, LyricsSource: observation.LyricsSource, ContentFingerprint: observation.ContentFingerprint}
+	return ingest.SourceObservation{Format: observation.Format, ScanTags: observation.ScanTags, VinylSide: observation.VinylSide, LegacyText: observation.LegacyText, RelativePath: relativePath, Directory: ingest.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genres: append([]string(nil), observation.Genres...), Identifiers: observation.Identifiers, CatalogNumber: observation.Catalog, Work: observation.Work, MovementName: observation.MovementName, MovementNumber: observation.MovementNumber, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: sourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, Compilation: observation.Compilation, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, ArtworkRelativePath: relativePath, ParserVersion: parser.CacheVersion(observation.Format), Credits: append([]metadata.Credit(nil), observation.Credits...), ArtistTagEvidence: append([]metadata.ArtistTagEvidence(nil), observation.ArtistTagEvidence...), Lyrics: observation.Lyrics, LyricsSource: observation.LyricsSource, ContentFingerprint: observation.ContentFingerprint}
 }
 
 func buildCueVirtualObservation(parent parser.AudioObservation, document parser.CueDocument, cue parser.CueTrack, sheetRelativePath string) ingest.SourceObservation {
@@ -655,6 +653,22 @@ func buildCueVirtualObservation(parent parser.AudioObservation, document parser.
 	delete(observation.InferredFields, "track_number")
 	fieldSources["track_number"] = "cue_track"
 
+	observation.LegacyText = maps.Clone(parent.LegacyText)
+	for field := range observation.LegacyText {
+		if fieldSources[field] != "garbled" {
+			delete(observation.LegacyText, field)
+		}
+	}
+	if parent.ScanTags != nil && len(parent.ScanTags.LegacyArtistParts) > 0 {
+		tags := *parent.ScanTags
+		tags.LegacyArtistParts = maps.Clone(tags.LegacyArtistParts)
+		for field := range tags.LegacyArtistParts {
+			if fieldSources[field] != "garbled" {
+				delete(tags.LegacyArtistParts, field)
+			}
+		}
+		observation.ScanTags = &tags
+	}
 	referencedIdentity := ingest.NormalizedPath(cue.ReferencedFile)
 	parentRelative := ingest.NormalizedPath(filepath.ToSlash(filepath.Join(filepath.Dir(sheetRelativePath), referencedIdentity)))
 	virtualPath := sheetRelativePath + "#track-" + strconv.Itoa(cue.Number) + "@" + parentRelative + "#index-" + strconv.Itoa(cue.IndexFrames)
@@ -666,6 +680,7 @@ func buildCueVirtualObservation(parent parser.AudioObservation, document parser.
 		}
 	}
 	return ingest.SourceObservation{
+		Format: observation.Format, ScanTags: observation.ScanTags,
 		LegacyText:            observation.LegacyText,
 		Identifiers:           identifiers,
 		RelativePath:          virtualPath,
@@ -707,7 +722,7 @@ func buildCueVirtualObservation(parent parser.AudioObservation, document parser.
 		Artwork:               parent.Artwork,
 		ArtworkMIME:           parent.ArtworkMIME,
 		ArtworkRelativePath:   parentRelative,
-		ParserVersion:         parser.CacheVersion(filepath.Ext(parentRelative)),
+		ParserVersion:         parser.CacheVersion(parent.Format),
 		ContentFingerprint:    parent.ContentFingerprint,
 		ArtistTagEvidence:     cueArtistTagEvidence(parent, document, cue, fieldSources),
 	}
@@ -861,7 +876,7 @@ func (service *Service) persistStagedCandidatesWithOptions(ctx context.Context, 
 					}
 				}
 				releaseID, persistErr := service.persistOneCandidate(ctx, executor, scanID, root, candidate, stats, feedback)
-				if persistErr != nil && firstErr == nil {
+				if persistErr != nil && !errors.Is(persistErr, ingest.ErrSourceChanged) && firstErr == nil {
 					firstErr = persistErr
 				}
 				if persistErr == nil && signatureErr == nil {
@@ -1031,6 +1046,11 @@ func observationFieldSources(observation parser.AudioObservation) map[string]str
 			sources[field] = "default_fallback"
 		}
 	}
+	if observation.ScanTags != nil {
+		for field := range observation.ScanTags.LegacyArtistParts {
+			sources[field] = "garbled"
+		}
+	}
 	for field := range observation.LegacyText {
 		sources[field] = "garbled"
 	}
@@ -1057,7 +1077,7 @@ func (service *Service) persistOneCandidate(ctx context.Context, executor scanEx
 	}
 	stats.candidatesWritten++
 	if artworkErr := service.saveArtworkForRelease(ctx, executor, scanID, releaseID, root, candidate, stats, changes); artworkErr != nil {
-		return releaseID, fmt.Errorf("%w: %v", errArtworkBinding, artworkErr)
+		return releaseID, fmt.Errorf("%w: %w", errArtworkBinding, artworkErr)
 	}
 	return releaseID, nil
 }
@@ -1112,7 +1132,15 @@ func (service *Service) selectArtwork(ctx context.Context, executor scanExecutor
 			if observation.ArtworkDeferred {
 				stats.artworkDeferredLoads++
 				var err error
-				data, _, err = readDeferredArtwork(root, observation.ArtworkRelativePath)
+				var modified time.Time
+				err = executor.QueryRowContext(ctx, `SELECT source_modified_at FROM scan_observations WHERE scan_run_id=$1 AND root_id=$2 AND fingerprint_path=$3 LIMIT 1`, scanID, root.ID, observation.ArtworkRelativePath).Scan(&modified)
+				if err != nil {
+					return nil, err
+				}
+				data, _, err = readDeferredArtwork(root, observation.ArtworkRelativePath, modified)
+				if errors.Is(err, ingest.ErrSourceChanged) {
+					return nil, err
+				}
 				if err != nil {
 					noteError(err)
 					if err := service.recordDiagnosticWith(ctx, executor, scanID, observation.ArtworkRelativePath, "artwork_unreadable", "封面文件读不了"); err != nil {
@@ -1160,7 +1188,7 @@ func (service *Service) selectArtwork(ctx context.Context, executor scanExecutor
 }
 
 // readDeferredArtwork 重新核对根内相对路径与普通文件；封面迁移后仍读取原音频，而不是幸存曲目。
-func readDeferredArtwork(root registeredRoot, relativePath string) ([]byte, string, error) {
+func readDeferredArtwork(root registeredRoot, relativePath string, modified time.Time) ([]byte, string, error) {
 	identity, err := createTrackSourceIdentity(root.ID, relativePath)
 	if err != nil {
 		return nil, "", err
@@ -1176,7 +1204,13 @@ func readDeferredArtwork(root registeredRoot, relativePath string) ([]byte, stri
 	if !info.Mode().IsRegular() {
 		return nil, "", errors.New("artwork source is not a regular file")
 	}
+	if !info.ModTime().Truncate(time.Microsecond).Equal(modified) {
+		return nil, "", ingest.ErrSourceChanged
+	}
 	observation, err := parser.ParseAudioFile(path)
+	if checkErr := checkReadTime(path, info); checkErr != nil {
+		return nil, "", checkErr
+	}
 	if err != nil {
 		return nil, "", err
 	}

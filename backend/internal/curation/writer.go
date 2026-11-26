@@ -23,8 +23,8 @@ type Source struct {
 }
 
 type Request struct {
-	ArtistCredit                *ReleaseArtistCredit
-	legacy                      *LegacyField
+	ArtistCredit *ReleaseArtistCredit
+
 	local                       *localSubmission
 	verification                *verificationWrite
 	ExpectedRevision            int64
@@ -90,7 +90,7 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 			level = catalog.LevelProgramExternal
 		}
 	}
-	if level < catalog.LevelModelLocal || level > catalog.LevelProgramExternal || request.legacy == nil && (source.Kind == "source") != (level == catalog.LevelProgramExternal) {
+	if level < catalog.LevelModelLocal || level > catalog.LevelProgramExternal || (source.Kind == "source") != (level == catalog.LevelProgramExternal) {
 		return Applied{}, operations.Invalid("invalid_input", "写入方级别与来源不符")
 	}
 	normalize := governance.NormalizeAutoFields
@@ -131,7 +131,7 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 		Origin:      &operations.Origin{ConversationID: request.ConversationID, Source: "curation", ProviderKind: source.Kind, Provider: source.Provider, Basis: source.Basis},
 		Fingerprint: operations.Fingerprint(fingerprint),
 	}
-	if request.local != nil || request.legacy != nil {
+	if request.local != nil {
 		spec.Origin.Mode = "local_cleanup"
 	}
 	var applied Applied
@@ -156,11 +156,6 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 		}
 		if err := checkWrite(ctx, tx, spec, request.ConfirmedBy, releaseID, request.ExpectedRevision, locked.EditRevision()); err != nil {
 			return operations.Outcome{}, err
-		}
-		if request.legacy != nil {
-			if err := request.legacy.check(ctx, tx, releaseID); err != nil {
-				return operations.Outcome{}, err
-			}
 		}
 		if request.local != nil {
 			if _, err := request.local.read(ctx, tx); err != nil {

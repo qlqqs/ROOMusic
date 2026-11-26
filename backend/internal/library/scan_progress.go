@@ -219,7 +219,7 @@ func (f *scanFeedback) flush(ctx context.Context, force bool) {
 
 func isScanCandidate(path string) bool {
 	extension := strings.ToLower(filepath.Ext(path))
-	return extension == ".cue" || isSupportedAudioExtension(extension) || isAudioCandidateExtension(extension)
+	return extension == ".cue" || isScannableAudio(extension)
 }
 
 func (service *Service) countScanRoots(ctx context.Context, executor scanExecutor, scanID string, roots []registeredRoot, f *scanFeedback) bool {

@@ -116,7 +116,7 @@ func concurrentSnapshot(t *testing.T, fixture *libraryFixture, service *Service,
 		t.Fatalf("未覆盖诊断截断：%+v %+v", result.Diagnostics, report.Issues)
 	}
 	for index, d := range result.DiagnosticOrder {
-		extension, kind := "flac", "parse_failure"
+		extension, kind := "flac", "unsupported_format"
 		if index%2 == 1 {
 			extension, kind = "wma", "unsupported_format"
 		}
@@ -168,11 +168,11 @@ func TestPostgreSQLConcurrentScanMatchesSerialStagingDiagnosticsAndCache(t *test
 			service.WithScanConcurrency(workers)
 			for pass := range 2 {
 				snapshot := concurrentSnapshot(t, fixture, service, logs, root)
-				if pass == 0 && snapshot.Summary.ParseCacheWrites != 16 {
-					t.Fatalf("冷缓存没有恰好缓存 16 个成功文件：%+v", snapshot.Summary)
+				if pass == 0 && snapshot.Summary.ParseCacheWrites != 16+105 {
+					t.Fatalf("冷缓存应写入 16 个成功文件和 105 个未知格式文件：%+v", snapshot.Summary)
 				}
-				if pass == 1 && (snapshot.Summary.ParseCacheWrites != 0 || snapshot.Summary.FilesParsed != 53 || snapshot.Summary.ParseCacheHits <= 16) {
-					t.Fatalf("热缓存仍解析成功音频或漏掉 CUE 命中：%+v", snapshot.Summary)
+				if pass == 1 && (snapshot.Summary.ParseCacheWrites != 0 || snapshot.Summary.FilesParsed != 0 || snapshot.Summary.ParseCacheHits != 16+105+3) {
+					t.Fatalf("热缓存应命中全部物理文件和三次 CUE 父文件引用：%+v", snapshot.Summary)
 				}
 				if workers == 1 {
 					serial[pass] = snapshot

@@ -157,7 +157,7 @@ func TestPostgreSQLScanLifecycleParseFailurePersistsValidCandidatesAndCleansStag
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid AND source_status='present'`, 1, root.ID)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM scan_observations WHERE scan_run_id=$1::uuid`, 0, scanID)
-	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM scan_diagnostics WHERE scan_run_id=$1::uuid AND kind='parse_failure'`, 1, scanID)
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM scan_diagnostics WHERE scan_run_id=$1::uuid AND kind='unsupported_format'`, 1, scanID)
 }
 
 func TestPostgreSQLScanRootReportsTerminalStagingCleanupFailure(t *testing.T) {

@@ -463,6 +463,10 @@ func parseM4ABitrate(reader io.ReaderAt, atom m4aAtom, observation *AudioObserva
 
 func parseM4AItem(reader io.ReaderAt, atom m4aAtom, observation *AudioObservation, budget *m4aParseBudget) error {
 	itemType := atom.Type
+	switch itemType {
+	case "pcst", "PCST", "PCSp":
+		observation.collectScanTag(itemType, "")
+	}
 	// iTunes item 包含一个或多个 data 子 atom；只读取有界区域，封面也受同一预算限制。
 	children := 0
 	freeformMean := ""
@@ -537,6 +541,12 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 	if itemType == "trkn" || itemType == "disk" {
 		if len(value) >= 6 {
 			number := int(binary.BigEndian.Uint16(value[2:4]))
+			total := strconv.Itoa(int(binary.BigEndian.Uint16(value[4:6])))
+			if itemType == "trkn" {
+				observation.collectScanTag("TRACKCOUNT", total)
+			} else {
+				observation.collectScanTag("MEDIACOUNT", total)
+			}
 			if itemType == "trkn" {
 				if number > 0 {
 					observation.TrackNumber = number
@@ -552,6 +562,12 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 			collectWorkTag(observation, "©mvi", strconv.Itoa(int(binary.BigEndian.Uint16(value))))
 		}
 		return nil
+	}
+	switch itemType {
+	case "\xa9cmt":
+		observation.collectScanTag("©CMT", decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode)))
+	case "\xa9day":
+		observation.collectScanTag("DATE", decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode)))
 	}
 	if itemType == "cpil" {
 		if len(value) == 1 && value[0] != 0 {
@@ -602,8 +618,6 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 		observation.Year = ParseYear(text)
 	case "\xa9wrt", "\xa9con", "\xa9prf":
 		addTagCredits(observation, key, decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode)))
-	case "\xa9cmt":
-		// 评论仅作为 RawAtoms 证据保留，不映射到当前观察合同未拥有的业务字段。
 	}
 	return nil
 }
@@ -631,6 +645,9 @@ func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observatio
 			addTagCredits(observation, name, raw)
 		}
 		return nil
+	}
+	if name != "ORIGINALDATE" && name != "ORIGINALYEAR" {
+		observation.collectScanTag(name, decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode)))
 	}
 	if collectWorkTag(observation, name, decodeM4AText(value, binary.BigEndian.Uint32(typeCode))) {
 		return nil

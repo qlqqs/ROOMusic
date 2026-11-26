@@ -16,18 +16,37 @@ import (
 
 // LegacyDecodings 只检查带旧编码字节特征的 Latin-1 文本，保留可无损往返的不同读法。
 func LegacyDecodings(raw []byte) []string {
-	suspect := false
-	for i, b := range raw {
-		if b >= 0x80 && (b < 0xa0 || i > 0 && raw[i-1] >= 0x80) {
-			suspect = true
-			break
+	var values []string
+	for _, c := range LegacyReadings(raw) {
+		if !slices.Contains(values, c.Value) {
+			values = append(values, c.Value)
 		}
 	}
-	if !suspect || looksWestern(raw) {
+	return values
+}
+
+type LegacyReading struct{ Encoding, Value string }
+
+// SuspectLegacyText 判断是否需要旧编码复核，即使三个候选编码都无法往返也保留原字节。
+func SuspectLegacyText(raw []byte) bool {
+	for i, b := range raw {
+		if b >= 0x80 && (b < 0xa0 || i > 0 && raw[i-1] >= 0x80) {
+			return !looksWestern(raw)
+		}
+	}
+	return false
+}
+
+func LegacyReadings(raw []byte) []LegacyReading {
+	if !SuspectLegacyText(raw) {
 		return nil
 	}
-	var values []string
-	for _, enc := range []encoding.Encoding{simplifiedchinese.GBK, traditionalchinese.Big5, japanese.ShiftJIS} {
+	var values []LegacyReading
+	for _, candidate := range []struct {
+		name string
+		enc  encoding.Encoding
+	}{{"GBK", simplifiedchinese.GBK}, {"Big5", traditionalchinese.Big5}, {"Shift-JIS", japanese.ShiftJIS}} {
+		enc := candidate.enc
 		value, err := enc.NewDecoder().String(string(raw))
 		if err != nil || strings.ContainsRune(value, utf8.RuneError) || strings.IndexFunc(value, unicode.IsControl) >= 0 {
 			continue
@@ -36,8 +55,8 @@ func LegacyDecodings(raw []byte) []string {
 			continue
 		}
 		encoded, err := enc.NewEncoder().Bytes([]byte(value))
-		if err == nil && bytes.Equal(encoded, raw) && !slices.Contains(values, value) {
-			values = append(values, value)
+		if err == nil && bytes.Equal(encoded, raw) {
+			values = append(values, LegacyReading{Encoding: candidate.name, Value: value})
 		}
 	}
 	return values

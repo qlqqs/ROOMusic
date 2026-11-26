@@ -371,7 +371,7 @@ func TestPostgreSQLIdentityRebindingContinuesAfterParseFailure(t *testing.T) {
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid AND relative_path='Fresh/01.flac' AND source_status='present'`, 1, root.ID)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 4, root.ID)
 	requireNoMissingTracks(t, fixture, root.ID)
-	requireDiagnosticCount(t, fixture, scan.ID, "parse_failure", 1)
+	requireDiagnosticCount(t, fixture, scan.ID, "unsupported_format", 1)
 	requireDiagnosticCount(t, fixture, scan.ID, "identity_deferred", 0)
 }
 
@@ -737,7 +737,7 @@ func TestPostgreSQLIdentityRebindingReplacesContentAfterParseFailure(t *testing.
 	scan := runTestScan(t, fixture, service, root)
 	requireScanStatus(t, scan, "succeeded")
 	requireDiagnosticCount(t, fixture, scan.ID, "content_replaced", 1)
-	requireDiagnosticCount(t, fixture, scan.ID, "parse_failure", 1)
+	requireDiagnosticCount(t, fixture, scan.ID, "unsupported_format", 1)
 	requireDiagnosticCount(t, fixture, scan.ID, "identity_deferred", 0)
 	if newID := presentTrackIDs(t, fixture, root.ID)["Album/01.flac"]; newID == "" || newID == oldID {
 		t.Fatalf("单文件失败不阻断换内容的新曲目入库：%q（旧 %q）", newID, oldID)

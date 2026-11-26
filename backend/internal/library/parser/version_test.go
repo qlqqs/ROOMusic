@@ -22,8 +22,8 @@ func TestCacheVersionKnownExtensions(t *testing.T) {
 }
 
 func TestM4ACacheVersion(t *testing.T) {
-	if got := CacheVersion(".m4a"); got != "c5.f2" {
-		t.Errorf("CacheVersion(.m4a) = %q，期望 c5.f2", got)
+	if got := CacheVersion(".m4a"); got != "c6.f2" {
+		t.Errorf("CacheVersion(.m4a) = %q，期望 c6.f2", got)
 	}
 }
 

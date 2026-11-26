@@ -6,7 +6,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 )
 
@@ -20,7 +19,7 @@ type queueItem struct {
 // 发行投影保存排序依据，各媒体主题共享这些依据并独立消费自己的首次机会。
 const queueRankSQL = curation.QueueRankSQL
 
-const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (` + catalog.VisibleReleaseIDsSQL + `),
+const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (SELECT id FROM curation_eligible_releases),
  candidates AS (
  SELECT s.target_id,s.queue_release_id,r.queue_identity,r.generation,s.manual_requested_at,s.patrol_revision,
  ` + queueRankSQL + ` rank,r.queue_gap,r.queue_artist_unlinked,r.queue_added_at,
