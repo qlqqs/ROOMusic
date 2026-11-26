@@ -33,10 +33,10 @@ const modelQueueFromSQL = ` FROM curation_pending_items p
  AND (COALESCE(p.target_id,work.queue_release_id) IS NULL OR EXISTS (SELECT FROM curation_stable_releases stable
  WHERE stable.id=COALESCE(p.target_id,work.queue_release_id)))`
 
-func (w *Writer) ReadyModelKinds(ctx context.Context, now time.Time, targets []string) (map[string]bool, error) {
+func (w *Writer) ReadyModelKinds(ctx context.Context, now time.Time, targets []string, excluded []string) (map[string]bool, error) {
 	rows, err := w.db.QueryContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
  SELECT DISTINCT `+modelKindSQL+modelQueueFromSQL+`
- AND p.target_type=ANY($1::text[]) AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$2)`, targets, now)
+ AND p.target_type=ANY($1::text[]) AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$2) AND NOT (p.id=ANY($3::uuid[]))`, targets, now, excluded)
 	if err != nil {
 		return nil, err
 	}
@@ -53,24 +53,11 @@ func (w *Writer) ReadyModelKinds(ctx context.Context, now time.Time, targets []s
 }
 
 // LookupModelTargets 按同一队列顺序返回候选，调用方用巡检完成状态筛选。
-func (w *Writer) LookupModelTargets(ctx context.Context, now time.Time) ([]string, error) {
-	rows, err := w.db.QueryContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
+func (w *Writer) LookupModelTargets(ctx context.Context, now time.Time, excluded []string) ([]string, error) {
+	return modelStrings(w.db.QueryContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
  SELECT p.target_id::text `+modelQueueFromSQL+`
  AND p.route='lookup' AND p.target_type='release' AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1)
- ORDER BY `+QueueRankSQL+`,p.created_at,p.id`, now)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var targets []string
-	for rows.Next() {
-		var target string
-		if err := rows.Scan(&target); err != nil {
-			return nil, err
-		}
-		targets = append(targets, target)
-	}
-	return targets, rows.Err()
+ AND NOT (p.id=ANY($2::uuid[])) ORDER BY `+QueueRankSQL+`,p.created_at,p.id`, now, excluded))
 }
 
 // ModelItemCheckpoint 说明下一项是否可开始；到达日额度时携带下次可查时间。
@@ -109,9 +96,9 @@ func (w *Writer) BeforeModelKind(ctx context.Context, actor string, now time.Tim
 }
 
 // HasWaitingWebRoute 只查看明确升级到联网的任务。未启动的艺人资料仍由程序按来源重新计算。
-func (w *Writer) HasWaitingWebRoute(ctx context.Context, now time.Time) (bool, error) {
+func (w *Writer) HasWaitingWebRoute(ctx context.Context, now time.Time, excluded []string) (bool, error) {
 	var ready bool
 	err := w.db.QueryRowContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
- SELECT EXISTS(SELECT 1`+modelQueueFromSQL+` AND p.route='web' AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1))`, now).Scan(&ready)
+ SELECT EXISTS(SELECT 1`+modelQueueFromSQL+` AND p.route='web' AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1) AND NOT (p.id=ANY($2::uuid[])))`, now, excluded).Scan(&ready)
 	return ready, err
 }

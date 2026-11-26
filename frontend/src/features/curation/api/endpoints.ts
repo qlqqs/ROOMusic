@@ -38,7 +38,7 @@ export function fetchCurationSettings(signal?: AbortSignal): Promise<ApiResponse
 }
 
 /**
- * 改总开关、暂停、整理用的模型或每日 token 上限（至少一项）；总开关从关到开时服务器同时解除暂停。
+ * 改总开关、暂停、整理用的模型、同时运行数或每日 token 上限（至少一项）；总开关从关到开时服务器同时解除暂停。
  * model 为空串表示用开启者的对话模型；daily_token_limit、web_daily_token_limit（联网兜底的单独上限）为 null 表示不限。返回改后的设置。
  */
 export function updateCurationSettings(change: {
@@ -47,6 +47,7 @@ export function updateCurationSettings(change: {
   model?: string;
   daily_token_limit?: number | null;
   web_daily_token_limit?: number | null;
+  model_concurrency?: number;
 }): Promise<ApiResponse<CurationSettingsDTO>> {
   return apiRequest({ method: "PUT", path: "/api/v1/admin/curation/settings", body: change }, decodeCurationSettings);
 }

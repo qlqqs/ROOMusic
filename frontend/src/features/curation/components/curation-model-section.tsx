@@ -92,6 +92,7 @@ function ModelRows({
       <SettingRow label="状态" plainLabel>
         <span className={styles.value}>
           {modelStateText[model.state]}
+          {model.running > 0 ? ` · 同时 ${formatCount(model.running)}/${formatCount(model.concurrency)} 项` : ""}
           {model.state === "unavailable" && reason !== null ? `：${modelUnavailableText(reason, mine)}` : ""}
           {mine && needsAgentSettings(reason) ? (
             <>
@@ -102,6 +103,7 @@ function ModelRows({
         </span>
       </SettingRow>
       <ModelField settings={settings} sameReviewModel={sameReviewModel} onSaved={onSaved} />
+      <ConcurrencyField settings={settings} onSaved={onSaved} />
       <LimitField settings={settings} field="daily_token_limit" onSaved={onSaved} />
       <LimitField settings={settings} field="web_daily_token_limit" onSaved={onSaved} />
       <SettingRow label="今天" description={todayNote} plainLabel>
@@ -275,6 +277,62 @@ function LimitField({ settings, field, onSaved }: { settings: CurationSettingsDT
             </label>
           </div>
           <FieldError error={form.unlimited ? null : error} />
+          {update.isError ? <FailureNotice error={update.error} context="write" /> : null}
+        </div>
+      )}
+    </SettingRow>
+  );
+}
+
+/**
+ * 同时运行的模型任务数（1–16）：离开或回车时保存。同一艺人的项不会同时跑；用 MusicBrainz 查询的任务仍按它的限速排队。
+ */
+function ConcurrencyField({ settings, onSaved }: { settings: CurationSettingsDTO; onSaved: (text: string) => void }) {
+  const update = useUpdateCurationSettings();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const value = draft ?? String(settings.model_concurrency);
+  const reset = () => setDraft(null);
+  const commit = () => {
+    if (draft === null) return;
+    const text = draft.trim();
+    const number = /^\d+$/.test(text) ? Number(text) : Number.NaN;
+    if (!(number >= 1 && number <= 16)) {
+      setError("填 1 到 16 之间的整数。");
+      return;
+    }
+    setError(null);
+    if (number === settings.model_concurrency) return reset();
+    save(update, { model_concurrency: number }, onSaved, reset);
+  };
+  return (
+    <SettingRow label="同时运行" description="模型同时处理的项数；同一艺人的项不会同时跑。服务商限速时会自动放慢。">
+      {(ids) => (
+        <div className={styles.field}>
+          <div className={styles.limitRow}>
+            <input
+              id={ids.controlId}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={16}
+              step={1}
+              className={styles.limitInput}
+              aria-describedby={ids.descriptionId}
+              aria-invalid={error === null ? undefined : true}
+              value={value}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setError(null);
+              }}
+              onBlur={commit}
+              onKeyDown={(event) => onEnter(event, commit)}
+            />
+            <span className={styles.unit} aria-hidden="true">
+              项
+            </span>
+          </div>
+          <FieldError error={error} />
           {update.isError ? <FailureNotice error={update.error} context="write" /> : null}
         </div>
       )}

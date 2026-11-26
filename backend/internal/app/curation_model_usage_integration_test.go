@@ -26,7 +26,7 @@ func TestPostgreSQLCurationModelDailyLimit(t *testing.T) {
 	release, _, item := f.matchFixture(t)
 	const highInput = 120001
 	const limit = highInput + 7
-	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "daily_token_limit": limit})
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "daily_token_limit": limit, "model_concurrency": 1})
 	first := f.next(t, false)
 	second := f.pending(t, f.b)
 	first.inputTokens = highInput
@@ -171,5 +171,60 @@ func TestPostgreSQL整理自查的摘要计入当天总额度(t *testing.T) {
 	modelWaitResolution(t, f, item.ID, "model_matched")
 	if got := f.progress(t).Today; got.InputTokens != input+39 || got.OutputTokens != 28 {
 		t.Fatalf("自查、摘要与审查总用量 %+v", got)
+	}
+}
+
+func TestPostgreSQLCurationModelConcurrentDailyLimits(t *testing.T) {
+	for _, limit := range []string{"daily_token_limit", "web_daily_token_limit"} {
+		t.Run(limit, func(t *testing.T) {
+			f := newSchedulerFixture(t)
+			f.configure(t, &f.admin)
+			configureModelWeb(t, f)
+			first := modelRouteFixture(t, f, f.pending(t, f.a), "web")
+			second := modelRouteFixture(t, f, f.pending(t, f.b), "web")
+			f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 2, limit: 20})
+
+			a, b := f.next(t, false), f.next(t, false)
+			if strings.Contains(string(a.Messages[len(a.Messages)-1].Content), second.ID) {
+				a, b = b, a
+			}
+			if !strings.Contains(string(a.Messages[len(a.Messages)-1].Content), first.ID) ||
+				!strings.Contains(string(b.Messages[len(b.Messages)-1].Content), second.ID) {
+				t.Fatal("模型首条消息与两项领取不符")
+			}
+			if p := f.progress(t); p.Running != 2 || p.Today.InputTokens != 0 || p.Today.OutputTokens != 0 {
+				t.Fatalf("两项开始时的进度 %+v", p)
+			}
+
+			thirdRelease, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{
+				title: "第三张专辑", artist: "第三位艺人", tracks: []string{"present"},
+			})
+			third := modelRouteFixture(t, f, f.pending(t, thirdRelease), "web")
+
+			// 首项的 13 个输入、7 个输出 token 正好达到上限。
+			a.tool(t, "shelve_pending_item", map[string]string{"item_id": first.ID, "reason": "未找到发行依据"})
+			modelWaitResolution(t, f, first.ID, "unlisted")
+			schedulerWait(t, "第一项达到日额后仍有一项运行", func() bool {
+				p := f.progress(t)
+				return p.Running == 1 && p.Today.InputTokens == 13 && p.Today.OutputTokens == 7
+			})
+			if p := f.item(t, third.ID); p.Status != "waiting_route" || p.ConversationID != "" {
+				t.Fatalf("达到上限后提前领取第三项 %+v", p)
+			}
+
+			b.inputTokens = 33
+			b.tool(t, "shelve_pending_item", map[string]string{"item_id": second.ID, "reason": "已在途的发行完成核对"})
+			modelWaitResolution(t, f, second.ID, "unlisted")
+			schedulerWait(t, "在途项完成且腾出全部并发名额", func() bool { return f.progress(t).Running == 0 })
+			p := f.progress(t)
+			if p.Today.InputTokens != 46 || p.Today.OutputTokens != 14 || p.WebToday != p.Today ||
+				(limit == "web_daily_token_limit") != p.WebLimitReached || (limit == "daily_token_limit") != (p.State == "limit_reached") {
+				t.Fatalf("应只超出第二项的 40 个 token，进度 %+v", p)
+			}
+			if pending := f.item(t, third.ID); pending.Status != "waiting_route" || pending.Attempts != 0 || pending.ConversationID != "" {
+				t.Fatalf("第三项应保留原状 %+v", pending)
+			}
+			b3RequireCount(t, f.application, 2, `SELECT count(*) FROM steward_conversations WHERE kind='curation'`)
+		})
 	}
 }

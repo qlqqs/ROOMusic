@@ -18,7 +18,6 @@ const (
 )
 
 var (
-	ErrBackgroundBusy   = errors.New("已有后台整理正在运行")
 	ErrItemLimit        = errors.New("已到单项额度")
 	ErrItemCompleted    = errors.New("当前项已处理")
 	ErrRunStopped       = errors.New("已停止自动整理")
@@ -95,22 +94,17 @@ func (s *Supervisor) Start(request context.Context, params RunParams) (*Run, err
 		s.mu.Unlock()
 		return nil, ErrConversationBusy
 	}
-	count := 0
-	for _, run := range s.runs {
-		if run.finished {
-			continue
+	if !params.Background {
+		count := 0
+		for _, run := range s.runs {
+			if !run.finished && !run.background && run.userID == params.Caller.User.ID {
+				count++
+			}
 		}
-		if params.Background && run.background {
+		if count >= MaxUserRuns {
 			s.mu.Unlock()
-			return nil, ErrBackgroundBusy
+			return nil, ErrRunLimit
 		}
-		if !run.background && run.userID == params.Caller.User.ID {
-			count++
-		}
-	}
-	if !params.Background && count >= MaxUserRuns {
-		s.mu.Unlock()
-		return nil, ErrRunLimit
 	}
 	ctx, cancel := context.WithCancel(context.WithoutCancel(request))
 	stopLifecycle := context.AfterFunc(s.ctx, cancel)

@@ -145,11 +145,50 @@ func TestPostgreSQLCurationModelReviewUnavailableBackoff(t *testing.T) {
 			t.Fatalf("到期前已请求模型 %q", q.Model)
 		case <-time.After(100 * time.Millisecond):
 		}
+		if i == 0 {
+			f.update(t, "PUT", curationBase+"/settings", map[string]int{"daily_token_limit": 1})
+		}
 		f.clock.now.Add(int64(time.Second))
+		if i == 0 {
+			select {
+			case <-f.requests:
+				t.Fatal("日额用尽时启动了排队重审")
+			case <-time.After(100 * time.Millisecond):
+			}
+			got := f.item(t, item.ID)
+			if got.ConversationID != conversation || got.ReviewRetries != 1 {
+				t.Fatalf("日额用尽时应保留重审方案：%+v", got)
+			}
+			f.update(t, "PUT", curationBase+"/settings", map[string]any{"daily_token_limit": nil})
+		}
 	}
 	resumed := f.next(t, false)
 	if got := f.item(t, item.ID); got.ConversationID == conversation || got.Status != "in_progress" {
 		t.Fatalf("24 小时后重新领取 %+v", got)
+	}
+	f.pause(t)
+	resumed.complete(t)
+}
+
+func TestPostgreSQLCurationModelReviewProviderCooldown(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	_, _, item := f.matchFixture(t)
+	f.enable(t)
+	f.next(t, false).selectCandidate(t, item.ID, f.remote.ID)
+	review := f.next(t, true)
+	conversation := f.item(t, item.ID).ConversationID
+	review.fail <- schedulerHTTPFailure{status: 503, retryAfter: "90"}
+	schedulerWait(t, "审查模型冷却时释放领取", func() bool { return f.item(t, item.ID).Status == "waiting_model" })
+	got := f.item(t, item.ID)
+	if got.Attempts != 0 || got.ReviewRetries != 0 || got.NextAttemptAt != nil {
+		t.Fatalf("审查接口 503 后的待定项 %+v", got)
+	}
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM steward_plans WHERE conversation_id=$1 AND status='superseded'`, conversation)
+	f.clock.now.Add(int64(90 * time.Second))
+	resumed := f.next(t, false)
+	if f.item(t, item.ID).ConversationID == conversation {
+		t.Fatal("冷却到期后应重新领取")
 	}
 	f.pause(t)
 	resumed.complete(t)

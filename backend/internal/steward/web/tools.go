@@ -121,7 +121,12 @@ func (s *Service) StewardTools() []tool.Definition {
 		}
 		handler := definitions[i].Handler
 		definitions[i].Handler = func(ctx context.Context, caller tool.Caller, raw json.RawMessage) (json.RawMessage, error) {
-			if err := globalUserLimiter.allow(caller.User.ID, group, limit); err != nil {
+			quotaGroup := group
+			if caller.Source == tool.SourceCuration {
+				// 同一整理会话内的项与重审共用额度，并行会话各自计数。
+				quotaGroup += ":" + caller.ConversationID
+			}
+			if err := globalUserLimiter.allow(caller.User.ID, quotaGroup, limit); err != nil {
 				return nil, err
 			}
 			return handler(ctx, caller, raw)

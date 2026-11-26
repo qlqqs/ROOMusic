@@ -39,6 +39,12 @@ type schedulerRequest struct {
 	}
 	inputTokens int
 	reply       chan string
+	fail        chan schedulerHTTPFailure
+}
+
+type schedulerHTTPFailure struct {
+	status     int
+	retryAfter string
 }
 
 func (q schedulerRequest) tool(t *testing.T, name string, input any) {
@@ -136,7 +142,7 @@ func newSchedulerFixtureWithSources(t *testing.T, lookup model.LookupQueue, fake
 			}
 			return
 		}
-		q := schedulerRequest{reply: make(chan string, 1)}
+		q := schedulerRequest{reply: make(chan string, 1), fail: make(chan schedulerHTTPFailure, 1)}
 		if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
 			http.Error(w, err.Error(), 400)
 			return
@@ -152,6 +158,11 @@ func newSchedulerFixtureWithSources(t *testing.T, lookup model.LookupQueue, fake
 		case wire := <-q.reply:
 			w.Header().Set("Content-Type", "text/event-stream")
 			io.WriteString(w, wire)
+		case failure := <-q.fail:
+			if failure.retryAfter != "" {
+				w.Header().Set("Retry-After", failure.retryAfter)
+			}
+			http.Error(w, "合成模型服务暂不可用", failure.status)
 		case <-r.Context().Done():
 		case <-t.Context().Done():
 		}
@@ -376,4 +387,106 @@ func TestPostgreSQLCurationModelUnhandledThreeTimes(t *testing.T) {
 		modelWaitResolution(t, f, item.ID, "unlisted")
 		b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='unlisted' AND result->>'reason'='第二档连续三次未得到可执行的决定'`, f.a)
 	})
+}
+
+func TestPostgreSQLCurationModelConcurrency(t *testing.T) {
+	f := newSchedulerFixture(t, WithCurationModel(true, model.Options{PollInterval: time.Hour}))
+	f.configure(t, &f.admin)
+	newRelease := func(title, artist string) string {
+		id, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{title: title, artist: artist, tracks: []string{"present"}})
+		return id
+	}
+	verify := func(release string) string {
+		return queueModelVerification(t, f, "verify_name", curation.VerificationCandidate{
+			ReleaseID: release, Field: "title", Before: "原题", After: "候选标题",
+		})
+	}
+	next := func() (metricsPending, schedulerRequest) {
+		t.Helper()
+		q := f.next(t, false)
+		var prompt string
+		requireCurationOK(t, json.Unmarshal(q.Messages[len(q.Messages)-1].Content, &prompt))
+		items, _, err := metricsPendingItems(prompt)
+		requireCurationOK(t, err)
+		if len(items) != 1 {
+			t.Fatalf("期望单项模型请求，收到 %s", prompt)
+		}
+		return items[0], q
+	}
+	checkProgress := func(running, concurrency int) {
+		t.Helper()
+		p := f.progress(t)
+		if p.Running != running || p.Concurrency != concurrency || p.State != "running" {
+			t.Fatalf("期望运行 %d 项、并发数 %d，进度 %+v", running, concurrency, p)
+		}
+	}
+
+	// 只投影这张发行的巡检输入，让它实际领取后再准备冲突项。
+	ctx := t.Context()
+	tx, err := f.application.database.BeginTx(ctx, nil)
+	requireCurationOK(t, err)
+	defer tx.Rollback()
+	requireCurationOK(t, curation.ProjectPatrolInputs(ctx, tx, []string{f.a}))
+	requireCurationOK(t, tx.Commit())
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 1})
+	patrol, patrolRequest := next()
+	if patrol.Kind != "name_patrol" || patrol.ReleaseID != f.a {
+		t.Fatalf("期望先领取发行巡检，收到 %+v", patrol)
+	}
+	checkProgress(1, 1)
+
+	sameRelease := verify(f.a)
+	sameArtist := verify(newRelease("同艺人的另一张专辑", "Artist A"))
+	verifyID := verify(newRelease("待核对专辑", "核对艺人"))
+	cleanup := modelPending(t, f.curationFixture, f.b, "local_cleanup", "合成本地整理")
+	mustExec(t, f.application, `UPDATE curation_pending_items SET evidence='{"directory_key":"合成目录"}' WHERE id=$1`, cleanup.ID)
+	selection := modelRouteFixture(t, f, f.pending(t, newRelease("待选专辑", "候选艺人")), "")
+	// 第一档候选已保存完整明细，本次无需向 MusicBrainz 查询。
+	candidates, err := json.Marshal([]program.Candidate{{ExternalID: f.remote.ID, Release: &sources.Release{
+		ID: f.remote.ID, Title: "待选专辑", Complete: true, Media: []sources.Medium{{Position: 1, Tracks: []sources.Track{{Position: 1, Title: "合成曲目"}}}},
+	}}})
+	requireCurationOK(t, err)
+	mustExec(t, f.application, `UPDATE curation_pending_items SET candidates=$2 WHERE id=$1`, selection.ID, candidates)
+
+	f.update(t, "PUT", curationBase+"/settings", map[string]int{"model_concurrency": 4})
+	active := map[string]schedulerRequest{patrol.ID: patrolRequest}
+	for range 3 {
+		item, request := next()
+		active[item.ID] = request
+	}
+	for _, id := range []string{patrol.ID, cleanup.ID, selection.ID, verifyID} {
+		if _, ok := active[id]; !ok {
+			t.Fatalf("并发请求缺少项 %s，实际领取巡检、本地整理、选择、核对共 %d 项", id, len(active))
+		}
+	}
+	for _, id := range []string{sameRelease, sameArtist} {
+		if p := f.item(t, id); p.Status != "waiting_model" || p.ConversationID != "" {
+			t.Fatalf("巡检运行时已领取冲突项 %+v", p)
+		}
+	}
+	checkProgress(4, 4)
+	f.update(t, "PUT", curationBase+"/settings", map[string]int{"model_concurrency": 1})
+	checkProgress(4, 1)
+	spare := verify(newRelease("可补位专辑", "补位艺人"))
+	active[selection.ID].selectCandidate(t, selection.ID, "")
+	delete(active, selection.ID)
+	schedulerWait(t, "第一档结束，保留其余三个在途请求", func() bool {
+		return f.item(t, selection.ID).Route == "lookup" && f.progress(t).Running == 3
+	})
+	checkProgress(3, 1)
+	if p := f.item(t, spare); p.Status != "waiting_model" {
+		t.Fatalf("调低并发后提前补位 %+v", p)
+	}
+	f.update(t, "PUT", curationBase+"/settings", map[string]int{"model_concurrency": 4})
+	item, request := next()
+	if item.ID != spare {
+		t.Fatalf("期望调高后立即领取补位项 %s，实际 %+v", spare, item)
+	}
+	active[item.ID] = request
+	checkProgress(4, 4)
+	f.pause(t)
+	for _, q := range active {
+		q.complete(t)
+	}
+	schedulerWait(t, "暂停后全部在途项退出", func() bool { return f.progress(t).Running == 0 })
 }

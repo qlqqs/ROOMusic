@@ -10,6 +10,7 @@
     },
     "inactive_reason": null,
     "model": "",
+    "model_concurrency": 4,
     "paused": false,
     "web_daily_token_limit": null
   },

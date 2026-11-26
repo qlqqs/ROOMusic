@@ -6,7 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 )
@@ -16,6 +20,26 @@ type adapter struct {
 	endpoint string
 	key      string
 	protocol Protocol
+}
+
+type throttleObserverKey struct{}
+
+// WithThrottleObserver 让后台调度器在主模型或审查模型收到 429、503 时立即暂停领取。
+// 等待时长为零表示立即恢复，负值表示端点未给出可解析的 Retry-After。
+func WithThrottleObserver(ctx context.Context, observe func(time.Duration)) context.Context {
+	return context.WithValue(ctx, throttleObserverKey{}, observe)
+}
+
+func retryAfterDelay(header string, now time.Time) time.Duration {
+	header = strings.TrimSpace(header)
+	if seconds, err := strconv.ParseUint(header, 10, 64); err == nil {
+		return time.Duration(min(seconds, uint64(math.MaxInt64/int64(time.Second)))) * time.Second
+	}
+	date, err := http.ParseTime(header)
+	if err != nil {
+		return -1
+	}
+	return max(0, date.Sub(now))
 }
 
 // NewOpenAI 创建 Chat Completions 适配器，只使用传入的客户端。
@@ -120,6 +144,11 @@ func (a *adapter) do(ctx context.Context, method, address string, body []byte) (
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		defer response.Body.Close()
+		if response.StatusCode == http.StatusTooManyRequests || response.StatusCode == http.StatusServiceUnavailable {
+			if observe, _ := ctx.Value(throttleObserverKey{}).(func(time.Duration)); observe != nil {
+				observe(retryAfterDelay(response.Header.Get("Retry-After"), time.Now()))
+			}
+		}
 		data, readErr := io.ReadAll(io.LimitReader(response.Body, 64<<10))
 		if ctx.Err() != nil {
 			return nil, contextFailure(ctx.Err(), response.StatusCode)
