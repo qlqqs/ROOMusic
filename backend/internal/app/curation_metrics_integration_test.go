@@ -37,6 +37,14 @@ type metricEntry struct {
 }
 
 func TestPostgreSQLCurationMetrics(t *testing.T) {
+	switch suite := os.Getenv("ROOMUSIC_CURATION_METRICS_SUITE"); suite {
+	case "fixed", "fixed-capture", "idle":
+		fixedSuite(t, suite)
+		return
+	case "":
+	default:
+		t.Fatalf("未知度量套件 %q", suite)
+	}
 	if os.Getenv("ROOMUSIC_CURATION_METRICS_MODEL") == "" {
 		t.Setenv("ROOMUSIC_CURATION_METRICS_MODEL", "oracle")
 	}
