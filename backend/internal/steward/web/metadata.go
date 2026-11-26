@@ -4,6 +4,10 @@ import "github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 
 // Metadata 是经过裁剪的音乐实体，不包含数据源的任意字段。
 type Metadata struct {
+	Aliases          []string       `json:"aliases,omitempty"`
+	ISRCs            []string       `json:"isrcs,omitempty"`
+	TrackCount       *int           `json:"track_count,omitempty"`
+	Status           string         `json:"status,omitempty"`
 	MBID             string         `json:"mbid"`
 	Title            string         `json:"title,omitempty"`
 	Name             string         `json:"name,omitempty"`
@@ -38,15 +42,18 @@ type Label struct {
 
 // Medium 是一个唱片介质上的曲目表。
 type Medium struct {
-	Position int     `json:"position"`
-	Format   string  `json:"format,omitempty"`
-	Title    string  `json:"title,omitempty"`
-	Tracks   []Track `json:"tracks"`
+	Position   int      `json:"position"`
+	TrackCount *int     `json:"track_count,omitempty"`
+	DiscIDs    []string `json:"disc_ids,omitempty"`
+	Format     string   `json:"format,omitempty"`
+	Title      string   `json:"title,omitempty"`
+	Tracks     []Track  `json:"tracks"`
 }
 
 // Track 区分曲目 MBID 与录音 MBID，时长统一为毫秒。
 type Track struct {
 	MBID      string         `json:"mbid"`
+	Position  int            `json:"position,omitempty"`
 	Number    string         `json:"number"`
 	Title     string         `json:"title"`
 	LengthMS  *int64         `json:"length_ms,omitempty"`
@@ -71,7 +78,7 @@ func projectEntities(entities []musicbrainz.Entity) []Metadata {
 }
 
 func projectMetadata(entity musicbrainz.Entity) Metadata {
-	result := Metadata{MBID: entity.ID, Title: entity.Title, Name: entity.Name, Disambiguation: entity.Disambiguation,
+	result := Metadata{ISRCs: entity.ISRCs, TrackCount: entity.TrackCount, Status: entity.Status, MBID: entity.ID, Title: entity.Title, Name: entity.Name, Disambiguation: entity.Disambiguation,
 		Artists: projectCredits(entity.ArtistCredit), Date: entity.Date, FirstReleaseDate: entity.FirstReleaseDate,
 		Country: entity.Country, Barcode: entity.Barcode, LengthMS: entity.Length,
 		Releases: projectEntities(entity.Releases), ReleaseGroups: projectEntities(entity.ReleaseGroups), Recordings: projectEntities(entity.Recordings)}
@@ -83,9 +90,12 @@ func projectMetadata(entity musicbrainz.Entity) Metadata {
 		result.Labels = append(result.Labels, Label{label.Label.ID, label.Label.Name, label.CatalogNumber})
 	}
 	for _, medium := range entity.Media {
-		output := Medium{Position: medium.Position, Format: medium.Format, Title: medium.Title, Tracks: []Track{}}
+		output := Medium{TrackCount: medium.DeclaredTrackCount, Position: medium.Position, Format: medium.Format, Title: medium.Title, Tracks: []Track{}}
+		for _, disc := range medium.Discs {
+			output.DiscIDs = append(output.DiscIDs, disc.ID)
+		}
 		for _, track := range medium.Tracks {
-			item := Track{MBID: track.ID, Number: track.Number, Title: track.Title, LengthMS: track.Length, Artists: projectCredits(track.ArtistCredit)}
+			item := Track{Position: track.Position, MBID: track.ID, Number: track.Number, Title: track.Title, LengthMS: track.Length, Artists: projectCredits(track.ArtistCredit)}
 			if track.Recording != nil {
 				recording := projectMetadata(*track.Recording)
 				item.Recording = &recording

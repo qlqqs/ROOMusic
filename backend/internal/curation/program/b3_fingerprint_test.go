@@ -42,6 +42,17 @@ func (f *b3MatchFinder) ReleaseByID(_ context.Context, id string) (sources.Relea
 	return f.releases[id], nil
 }
 
+func (f *b3MatchFinder) ReleaseGroupDetails(_ context.Context, id string) (curation.ReleaseGroupDetails, error) {
+	group := curation.ReleaseGroupDetails{ID: id, Complete: true}
+	for _, r := range f.releases {
+		if r.Group.ID == id {
+			group.Title = r.Group.Title
+			group.Editions = append(group.Editions, r)
+		}
+	}
+	return group, nil
+}
+
 func (f *b3MatchFinder) RecordingByID(_ context.Context, id string) (sources.Recording, error) {
 	f.recordingReads = append(f.recordingReads, id)
 	return f.recordings[id], nil

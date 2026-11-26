@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/sources"
@@ -27,6 +28,10 @@ type SearchPage struct {
 	Relaxed       bool           `json:"relaxed,omitempty"`
 }
 type MatchSnapshot struct {
+	NameOnlyArtist       bool                       `json:"name_only_artist,omitempty"`
+	FormatRelaxed        bool                       `json:"format_relaxed,omitempty"`
+	TagArtist            string                     `json:"tag_artist,omitempty"`
+	TagReleaseID         string                     `json:"tag_release_id,omitempty"`
 	Unverified           bool                       `json:"unverified,omitempty"`
 	CandidateSetComplete bool                       `json:"candidate_set_complete,omitempty"`
 	Blocked              []Candidate                `json:"blocked,omitempty"`
@@ -42,6 +47,7 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 	if err := ctx.Err(); err != nil {
 		return MatchResult{}, err
 	}
+	e.Compilation = curation.CompilationEvidence(e)
 	mode := "album"
 	if e.CandidateKind == "loose_unknown" {
 		mode = "single"
@@ -99,6 +105,18 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 						return MatchResult{}, err
 					}
 					m := DecideAlbum(ev, "tag_id", []sources.Release{r})
+					if slices.Contains(m.Candidates[0].Conflicts, "tag_text_mismatch") {
+						if artists == nil {
+							artists = map[string]sources.Artist{}
+						}
+						agree, err := tagArtistNamesAgree(ctx, r, albumArtist(e), opts.Names.Artist, opts.Artists, artists)
+						if err != nil {
+							return MatchResult{}, err
+						}
+						if agree {
+							m = decideAlbum(ev, "tag_id", []sources.Release{r}, MatchSnapshot{TagArtist: albumArtist(e), TagReleaseID: r.ID})
+						}
+					}
 					m.ArtistEvidence, m.Snapshot.Artists, m.Snapshot.ArtistID = artists, artists, ev.ArtistMBID
 					return m, nil
 				}
@@ -313,8 +331,41 @@ const editionLabel = `(?:deluxe(?:\s+edition)?|single|ep|(?:[0-9]{4}\s+)?remaste
 
 var editionSuffix = regexp.MustCompile(`(?i)(?:\s*[（(\[]\s*` + editionLabel + `\s*[)）\]]|\s+(?:[-–—]\s*)?` + editionLabel + `)\s*$`)
 
+const audioFormat = `(?i:flac|mp3|alac|wav|ape|web(?:-dl)?|cd[- ]rip|[0-9]+\s*kbps|[0-9]+\s*bit(?:[ -]+[0-9]+(?:\.[0-9]+)?\s*khz)?|[0-9]+(?:\.[0-9]+)?\s*khz)`
+
+var bracketFormat = regexp.MustCompile(`\[\s*` + audioFormat + `(?:[ /,_-]+` + audioFormat + `)*\s*\]`)
+var plainFormat = regexp.MustCompile(`(?:^|\s+)(?:-\s+)?` + audioFormat + `(?:$|\s+)`)
+
+// 零候选放宽只清理独立格式标记，保留标题内部文字。
+func cleanSearchFormat(value string) string {
+	value = bracketFormat.ReplaceAllString(value, " ")
+	for plainFormat.MatchString(value) {
+		value = plainFormat.ReplaceAllString(value, " ")
+	}
+	return metadata.NormalizeValue(strings.TrimSuffix(strings.TrimSpace(value), " -"))
+}
+
 func relaxedTitle(title string) string {
-	return strings.TrimSpace(editionSuffix.ReplaceAllString(title, ""))
+	return strings.TrimSpace(editionSuffix.ReplaceAllString(cleanSearchFormat(title), ""))
+}
+
+func textSearchEvidence(e catalog.CurationEvidence, mode string, snapshot MatchSnapshot) catalog.CurationEvidence {
+	if snapshot.NameOnlyArtist {
+		e.ArtistMBID = ""
+	}
+	if !snapshot.FormatRelaxed {
+		return e
+	}
+	if mode == "single" {
+		e.Tracks = slices.Clone(e.Tracks)
+		e.Tracks[0].Title = cleanSearchFormat(e.Tracks[0].Title)
+		e.Tracks[0].Artist = cleanSearchFormat(e.Tracks[0].Artist)
+	} else {
+		e.Title = cleanSearchFormat(e.Title)
+		e.AlbumArtist = cleanSearchFormat(e.AlbumArtist)
+		e.Artist = cleanSearchFormat(e.Artist)
+	}
+	return e
 }
 
 func textSearch(ctx context.Context, e catalog.CurationEvidence, mode string, original, names SearchNames, f sources.ReleaseFinder, rf sources.RecordingFinder, opts MatchOptions, result MatchResult, prior []SearchPage) (MatchResult, error) {
@@ -348,10 +399,11 @@ func textSearch(ctx context.Context, e catalog.CurationEvidence, mode string, or
 			return nil
 		}
 		var err error
+		checked := textSearchEvidence(e, mode, result.Snapshot)
 		if mode == "single" {
-			decision = decideSearchSingle(e, result)
+			decision = decideSearchSingle(checked, result)
 		} else {
-			decision, err = decideSearchAlbum(ctx, e, result, f, false)
+			decision, err = decideSearchAlbum(ctx, checked, result, f, false)
 		}
 		// 下次查询并入新候选时，复用已经读取的发行详情。
 		result.Candidates = decision.Candidates
@@ -368,18 +420,36 @@ func textSearch(ctx context.Context, e catalog.CurationEvidence, mode string, or
 		result = appendSearch(result, m)
 		return decide()
 	}
-	if err := decide(); err != nil || finished() {
+	if err := decide(); err != nil {
 		return decision, err
 	}
-	if canonicalQuery(original, names) && !hasExactText(e, mode, result.Candidates) {
+	// 已有艺人对应可能来自同名的另一人。用原名补查时只采信结构。
+	triedName := false
+	if names.ArtistID != "" && !e.Compilation && original.Artist != "" && original.Title != "" &&
+		decision.Status != "matched" && !slices.Contains(decision.Conflicts, "ambiguous") {
+		byName := original
+		byName.ArtistID = ""
+		result.Snapshot.NameOnlyArtist = true
+		if err := try(byName, count, true); err != nil {
+			return decision, err
+		}
+		original.ArtistID = ""
+		triedName = true
+	}
+	if finished() {
+		return decision, nil
+	}
+	if !triedName && canonicalQuery(original, names) && !hasExactText(e, mode, result.Candidates) {
 		if err := try(original, count, false); err != nil || finished() {
 			return decision, err
 		}
 	}
 	if len(result.Candidates) == 0 && original.Title != "" {
 		relaxed := original
-		if shorter := relaxedTitle(original.Title); shorter != "" && shorter != original.Title {
-			relaxed.Title = shorter
+		relaxed.Title = relaxedTitle(original.Title)
+		relaxed.Artist = cleanSearchFormat(original.Artist)
+		result.Snapshot.FormatRelaxed = cleanSearchFormat(original.Title) != original.Title || relaxed.Artist != original.Artist
+		if relaxed.Title != "" && relaxed != original {
 			if err := try(relaxed, count, true); err != nil || finished() {
 				return decision, err
 			}
@@ -441,7 +511,7 @@ func hasExactText(e catalog.CurationEvidence, mode string, rows []Candidate) boo
 				continue
 			}
 		}
-		if sameText(n.Title, c.Title) && (sameText(n.Artist, c.Artist) || creditID(cs, e.ArtistMBID)) {
+		if sameText(n.Title, c.Title) && (sameArtist(n.Artist, c.Artist) || creditID(cs, e.ArtistMBID)) {
 			return true
 		}
 	}
@@ -467,7 +537,7 @@ func lookupArtist(ctx context.Context, f sources.ArtistFinder, name string) (map
 	return hits, p, !p.Complete && (len(rows) > 0 || p.Count != nil && *p.Count > 0), err
 }
 func artistNamed(a sources.Artist, name string) bool {
-	return sameText(a.Name, name) || slices.ContainsFunc(a.Aliases, func(alias sources.Alias) bool { return sameText(alias.Name, name) })
+	return sameArtist(a.Name, name) || slices.ContainsFunc(a.Aliases, func(alias sources.Alias) bool { return sameArtist(alias.Name, name) })
 }
 func checkArtistNames(ctx context.Context, e catalog.CurationEvidence, rows []sources.Release, f sources.ArtistFinder) (catalog.CurationEvidence, map[string]sources.Artist, error) {
 	if f == nil || e.Compilation || e.ArtistMBID != "" || e.ArtistPlaceholder {
@@ -484,7 +554,7 @@ func checkArtistNames(ctx context.Context, e catalog.CurationEvidence, rows []so
 		if credit.ArtistID == "" {
 			continue
 		}
-		if sameText(name, credit.Name) {
+		if sameArtist(name, credit.Name) {
 			matches[credit.ArtistID] = true
 			continue
 		}

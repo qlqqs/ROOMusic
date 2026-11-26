@@ -24,9 +24,21 @@ type VerificationCandidate struct {
 	ArtistA       string `json:"artist_a,omitempty"`
 	ArtistB       string `json:"artist_b,omitempty"`
 	ExternalID    string `json:"external_id,omitempty"`
+	ExternalType  string `json:"external_type,omitempty"`
 	ExternalValue string `json:"external_value,omitempty"`
 	OperationID   string `json:"operation_id,omitempty"`
 	Structure     bool   `json:"structure,omitempty"`
+}
+
+// NameLinkTarget 返回名字佐证在 external_links 中绑定的本地对象。
+func (v VerificationCandidate) NameLinkTarget() (subject, id string) {
+	if v.TrackID != "" {
+		return "track", v.TrackID
+	}
+	if v.ExternalType == "release_group" {
+		return "release_group_match", v.ReleaseID
+	}
+	return "release", v.ReleaseID
 }
 
 func normalizedName(name string) string { return textnorm.Loose(textnorm.Text(name)) }
@@ -87,13 +99,16 @@ type VerifiedName struct {
 }
 
 type NameMatchEvidence struct {
-	ReleaseID      string `json:"release_id,omitempty"`
-	ReleaseTitle   string `json:"release_title,omitempty"`
-	LinkMethod     string `json:"link_method"`
-	LocalTracks    int    `json:"local_tracks"`
-	ExternalTracks int    `json:"external_tracks"`
-	Comparable     int    `json:"comparable"`
-	Within         int    `json:"within"`
+	ReleaseID         string `json:"release_id,omitempty"`
+	ReleaseTitle      string `json:"release_title,omitempty"`
+	ReleaseGroupID    string `json:"release_group_id,omitempty"`
+	ReleaseGroupTitle string `json:"release_group_title,omitempty"`
+	EditionCount      int    `json:"edition_count,omitempty"`
+	LinkMethod        string `json:"link_method"`
+	LocalTracks       int    `json:"local_tracks"`
+	ExternalTracks    int    `json:"external_tracks"`
+	Comparable        int    `json:"comparable"`
+	Within            int    `json:"within"`
 }
 
 type VerificationPlan struct {
@@ -157,7 +172,7 @@ func creditCandidate(ctx context.Context, q operations.Queryer, item PendingItem
 	var raw []byte
 	err := q.QueryRowContext(ctx, `SELECT p.evidence FROM curation_artist_credit_proposals p JOIN curation_work_states s ON s.subject='release' AND s.target_id=p.release_id AND s.identity_digest=p.identity_digest
  WHERE p.id=$1 AND (p.status='open' OR ($3 AND p.status='declined')) AND p.identity_digest=$2
- AND ($3 OR p.evidence=$4::jsonb) AND `+proposalSourceExists, item.ID, item.IdentityDigest, manual, item.Evidence).Scan(&raw)
+ AND ($3 OR p.evidence=($4::jsonb-'route_history')) AND `+proposalSourceExists, item.ID, item.IdentityDigest, manual, item.Evidence).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, staleVerification()
 	}
@@ -245,10 +260,7 @@ func verificationPlan(ctx context.Context, q operations.Queryer, item PendingIte
 		if err != nil {
 			return p, err
 		}
-		subject, id := "release", v.ReleaseID
-		if v.TrackID != "" {
-			subject, id = "track", v.TrackID
-		}
+		subject, id := v.NameLinkTarget()
 		match := nameProof.Match
 		err = q.QueryRowContext(ctx, `SELECT l.method FROM external_links l JOIN operations o ON o.id=l.operation_id WHERE l.source='musicbrainz' AND l.object_type=$1 AND l.object_id=$2 AND l.external_id=$3 AND l.operation_id=NULLIF($4,'')::uuid AND NOT EXISTS(SELECT FROM operations u WHERE u.reverts_operation_id=o.id)`, subject, id, v.ExternalID, v.OperationID).Scan(&match.LinkMethod)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -261,6 +273,9 @@ func verificationPlan(ctx context.Context, q operations.Queryer, item PendingIte
 		if v.ExternalValue != "" && normalizedName(v.ExternalValue) == normalizedName(v.After) {
 			p.Method = "external_value"
 			return p, nil
+		}
+		if v.ExternalType == "release_group" {
+			return p, noEvidence()
 		}
 		majority, err := nameMajority(ctx, q, *v)
 		if err != nil {

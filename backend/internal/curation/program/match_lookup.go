@@ -315,7 +315,7 @@ func checkCandidates(ctx context.Context, f sources.ReleaseFinder, e catalog.Cur
 		rows = append(rows, *c.Release)
 	}
 	if len(rows) == 0 {
-		return uncertain(result, candidateConflicts(result.Candidates)...), nil
+		return partialAlbumMatch(e, uncertain(result, candidateConflicts(result.Candidates)...)), nil
 	}
 	if len(rows) > 3 {
 		return uncertain(result, "too_many"), nil
@@ -344,12 +344,15 @@ func checkCandidates(ctx context.Context, f sources.ReleaseFinder, e catalog.Cur
 	if err != nil {
 		return MatchResult{}, err
 	}
-	decided := decideAlbum(evidence, method, full, list.recordingIDs)
+	decided := decideAlbum(evidence, method, full, MatchSnapshot{RecordingIDs: list.recordingIDs})
 	decided.Snapshot.Pages = list.pages
 	decided.Snapshot.CandidateSetComplete = result.Snapshot.CandidateSetComplete
 	decided.ArtistEvidence, decided.Snapshot.Artists = artists, artists
 	decided.Snapshot.ArtistID = evidence.ArtistMBID
 	mergeCheckedCandidates(&decided, result.Candidates)
+	if decided.Status == "uncertain" {
+		return partialAlbumMatch(evidence, decided), nil
+	}
 	return decided, nil
 }
 

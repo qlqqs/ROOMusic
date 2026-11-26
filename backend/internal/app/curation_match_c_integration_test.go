@@ -90,11 +90,15 @@ func TestPostgreSQL整理发行组对应的封面归组和撤销(t *testing.T) {
 		b3RequireCount(t, app, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1`, e.release)
 		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, e.release)
 		b3RequireCount(t, app, 1, `SELECT count(*) FROM release_external_artworks WHERE release_id=$1`, e.release)
-		mb, artistReads, groupCover := 0, 0, 0
+		mb, detailReads, artistReads, groupCover := 0, 0, 0, 0
 		for _, req := range cMatchRequests(t, mock)[startRequests:] {
 			if req.Service == "musicbrainz" {
 				if req.Path == "/musicbrainz/ws/2/artist/"+artist.ID {
 					artistReads++
+					continue
+				}
+				if req.Path == "/musicbrainz/ws/2/release/"+s.External.Releases[0].ID {
+					detailReads++
 					continue
 				}
 				mb++
@@ -107,8 +111,8 @@ func TestPostgreSQL整理发行组对应的封面归组和撤销(t *testing.T) {
 			}
 		}
 		// 第二张复用封面清单缓存，第一张必须向独立封面服务取组清单。
-		if mb != 1 || artistReads > 1 || len(ids) == 1 && groupCover != 1 {
-			t.Errorf("%s 的识别请求为 %d，艺人读取 %d，组封面清单 %d", s.ID, mb, artistReads, groupCover)
+		if mb != 1 || detailReads != 1 || artistReads > 1 || len(ids) == 1 && groupCover != 1 {
+			t.Errorf("%s 的列表请求为 %d，版本详情 %d，艺人读取 %d，组封面清单 %d", s.ID, mb, detailReads, artistReads, groupCover)
 		}
 	}
 	aID, bID := ids[0], ids[1]

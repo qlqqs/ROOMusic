@@ -13,6 +13,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 	"golang.org/x/net/html"
 )
@@ -94,9 +95,12 @@ func (a adapter) checkImagePage(ctx context.Context, page, asset string) error {
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return operations.Conflict("source_inactive", "图片出处暂时无法读取")
+		return mediaRequestError(err)
 	}
 	defer res.Body.Close()
+	if res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500 {
+		return sources.ErrTryLater
+	}
 	if res.StatusCode != http.StatusOK {
 		return operations.Conflict("no_evidence", "未取得图片出处")
 	}
@@ -104,6 +108,9 @@ func (a adapter) checkImagePage(ctx context.Context, page, asset string) error {
 	for {
 		tt := z.Next()
 		if tt == html.ErrorToken {
+			if err := z.Err(); !errors.Is(err, io.EOF) {
+				return mediaRequestError(err)
+			}
 			break
 		}
 		if tt != html.StartTagToken && tt != html.SelfClosingTagToken {

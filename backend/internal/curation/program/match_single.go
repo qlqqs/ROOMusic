@@ -106,7 +106,7 @@ func decideRecordingText(e catalog.CurationEvidence, result MatchResult) MatchRe
 		if !sameText(t.Title, r.Title) {
 			codes = append(codes, "title_mismatch")
 		}
-		if !sameText(t.Artist, credits(r.Artists)) && !creditID(r.Artists, e.ArtistMBID) {
+		if !sameArtist(t.Artist, credits(r.Artists)) && !creditID(r.Artists, e.ArtistMBID) {
 			codes = append(codes, "artist_mismatch")
 		}
 		if known, match := compareLength(t.DurationSeconds, r.LengthMS); !known {

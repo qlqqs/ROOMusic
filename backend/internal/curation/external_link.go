@@ -39,6 +39,7 @@ type LinkRequest struct {
 	verification                *verificationWrite
 	RequireAll                  bool
 	CheckEvidence               func(context.Context, *sql.Tx) error
+	ApprovedReviewID            string
 	ExpectedRevision            int64
 	ConfirmedBy, ConversationID string
 	ExternalSource              string
@@ -90,7 +91,8 @@ func (r LinkRequest) normalizedLinks() ([]LinkIntent, error) {
 					return nil, operations.Invalid("invalid_input", "艺人对应缺少 MusicBrainz 署名依据")
 				}
 			case "release_group_match":
-				if r.Source.Kind != "model" || r.ExternalSource != "musicbrainz" || r.Method != "album_structure" || r.CheckEvidence == nil {
+				reviewed := r.Method == "independent_review" && (uuid.Valid(r.ApprovedReviewID) || r.ConfirmedBy != "")
+				if r.Source.Kind != "model" || r.ExternalSource != "musicbrainz" || r.Method != "album_structure" && !reviewed || r.CheckEvidence == nil {
 					return nil, operations.Invalid("invalid_input", "发行组级对应缺少 MusicBrainz 结构核对")
 				}
 			}

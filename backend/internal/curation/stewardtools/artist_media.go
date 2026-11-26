@@ -82,6 +82,17 @@ func (a adapter) checkPort(u *url.URL) error {
 	return nil
 }
 
+func mediaRequestError(err error) error {
+	if errors.Is(err, context.Canceled) {
+		return err
+	}
+	var rejected *operations.Failure
+	if errors.Is(err, egress.ErrDenied) || errors.As(err, &rejected) {
+		return operations.Invalid("invalid_input", "图片或出处的地址不允许访问")
+	}
+	return sources.ErrTryLater
+}
+
 // 实际连接由 egress 检查每次 DNS 解析结果；每一跳都重新检查凭据与端口。
 func (a adapter) prepareMedia(ctx context.Context, in mediaInput, download bool) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -101,7 +112,7 @@ func (a adapter) prepareMedia(ctx context.Context, in mediaInput, download bool)
 			return nil, err
 		}
 		if err = egress.CheckEndpoint(ctx, client, citation.URL); err != nil {
-			return nil, operations.Invalid("invalid_input", "引用需要可访问的公网 HTTP(S) 地址")
+			return nil, mediaRequestError(err)
 		}
 	}
 	if !download {
@@ -132,16 +143,22 @@ func (a adapter) prepareMedia(ctx context.Context, in mediaInput, download bool)
 	request.Header.Set("Accept", "image/*")
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, operations.Invalid("invalid_input", "图片下载失败或地址不允许访问")
+		return nil, mediaRequestError(err)
 	}
 	defer response.Body.Close()
+	if response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500 {
+		return nil, sources.ErrTryLater
+	}
 	if response.StatusCode != http.StatusOK {
 		return nil, operations.Invalid("invalid_input", "图片下载失败")
 	}
 	const maxBytes = 16 << 20
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxBytes+1))
-	if err != nil || len(data) > maxBytes {
-		return nil, operations.Invalid("invalid_input", "图片读取失败或超过 16 MiB")
+	if err != nil {
+		return nil, mediaRequestError(err)
+	}
+	if len(data) > maxBytes {
+		return nil, operations.Invalid("invalid_input", "图片超过 16 MiB")
 	}
 	return data, nil
 }

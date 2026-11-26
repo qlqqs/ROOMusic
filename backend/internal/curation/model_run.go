@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/operations"
@@ -19,6 +20,7 @@ type ModelRun struct {
 	ConversationID, Model  string
 	ActorID, PendingItemID string
 	TaskKind               string
+	SourceUnavailable      func(time.Time)
 	Abandon                func(context.Context, string, string) error
 	EvidencePage           func(context.Context, string, string) (string, error)
 	ToolInputDigest        string

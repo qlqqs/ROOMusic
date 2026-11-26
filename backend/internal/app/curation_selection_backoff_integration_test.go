@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -17,6 +18,11 @@ func TestPostgreSQL整理第一档连续限流只推迟缺详情的项(t *testin
 	var reads atomic.Int32
 	started, proceed := make(chan struct{}), make(chan struct{})
 	service := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/mb/release-group/"+remote.Group {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"id":%q,"title":"合成正式专辑","releases":[{"id":%q,"title":"合成正式专辑"}]}`, remote.Group, remote.ID)
+			return
+		}
 		if r.URL.Path != "/mb/release/"+remote.ID {
 			http.NotFound(w, r)
 			return

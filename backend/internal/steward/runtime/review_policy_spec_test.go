@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,9 @@ func TestReviewPolicyRulesMatchSpec(t *testing.T) {
 	raw, err := os.ReadFile(specPath)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !strings.HasPrefix(ReviewPolicyRules, fmt.Sprintf("策略版本：%d。\n", ReviewPolicyVersion)) {
+		t.Fatal("运行时策略版本与策略全文不一致")
 	}
 	for _, section := range []struct{ name, heading, value string }{
 		{"ReviewPolicyRules", "策略全文", ReviewPolicyRules},

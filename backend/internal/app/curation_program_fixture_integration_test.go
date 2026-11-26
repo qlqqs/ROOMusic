@@ -80,6 +80,16 @@ func (s *programSource) callCount(method string) int {
 func (s *programSource) ReleaseByID(_ context.Context, id string) (sources.Release, error) {
 	return s.releases[id], s.call("ReleaseByID")
 }
+func (s *programSource) ReleaseGroupDetails(_ context.Context, id string) (curation.ReleaseGroupDetails, error) {
+	group := curation.ReleaseGroupDetails{ID: id, Complete: true}
+	for _, r := range s.releases {
+		if r.Group.ID == id {
+			group.Title = r.Group.Title
+			group.Editions = append(group.Editions, r)
+		}
+	}
+	return group, s.call("ReleaseGroupDetails")
+}
 func (s *programSource) ReleasesByBarcode(_ context.Context, b string) ([]sources.Release, error) {
 	return s.barcode[b], s.call("ReleasesByBarcode")
 }

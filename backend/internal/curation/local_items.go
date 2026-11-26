@@ -78,7 +78,7 @@ func localAlbumInput(e catalog.CurationEvidence) (localAlbum, bool) {
 		artist = e.Artist
 	}
 	titleProtected := e.Corrected["title"] || e.Automatic["title"] && e.LocalTitle == ""
-	artistProtected := e.Corrected["album_artist"] || e.Automatic["album_artist"] && e.LocalArtist == "" || e.Compilation
+	artistProtected := e.Corrected["album_artist"] || e.Automatic["album_artist"] && e.LocalArtist == "" || e.Compilation || CompilationEvidence(e)
 	a := localAlbum{
 		Title:  cleanupField(e.Title, e.Authenticity["title"], titleProtected),
 		Artist: cleanupField(artist, e.SelectedArtistAuth(), artistProtected),

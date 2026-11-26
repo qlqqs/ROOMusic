@@ -118,6 +118,11 @@ func newSchedulerFixtureWithSources(t *testing.T, lookup model.LookupQueue, fake
 			http.Error(w, "合成资料源故障", http.StatusServiceUnavailable)
 			return
 		}
+		if r.URL.Path == "/mb/release-group/"+f.remote.Group {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"id":%q,"title":"合成正式专辑","releases":[{"id":%q,"title":"合成正式专辑"}]}`, f.remote.Group, f.remote.ID)
+			return
+		}
 		if r.URL.Path == "/mb/release/"+f.remote.ID {
 			w.Header().Set("Content-Type", "application/json")
 			f.remote.writeMusicBrainz(w)
@@ -307,13 +312,10 @@ func TestPostgreSQLCurationModelStartsCurationConversation(t *testing.T) {
 
 func TestPostgreSQLCurationModelShelveAndReopen(t *testing.T) {
 	f := newSchedulerFixture(t)
-	f.configure(t, &f.admin)
 	item := f.pending(t, f.a)
-	f.enable(t)
-	for range 3 {
-		f.next(t, false).complete(t)
-	}
-	schedulerWait(t, "没有有效决定的项第三次后搁置", func() bool { return f.item(t, item.ID).Status == "shelved" })
+	conversation := modelConversation(t, f.curationFixture)
+	modelClaim(t, f.curationFixture, conversation, item)
+	requireCurationOK(t, f.writer.ShelvePendingItem(t.Context(), item.ID, conversation, "历史搁置项"))
 	requireCurationOK(t, curation.UpsertPendingItem(t.Context(), f.application.database, item))
 	if got := f.item(t, item.ID); got.Status != "shelved" {
 		t.Fatalf("证据相同后 %+v", got)
@@ -326,9 +328,11 @@ func TestPostgreSQLCurationModelShelveAndReopen(t *testing.T) {
 }
 
 func TestPostgreSQLCurationModelUnhandledThreeTimes(t *testing.T) {
-	f := newSchedulerFixture(t)
+	gate := &testLookupGate{}
+	f := newSchedulerFixtureWithSources(t, gate, nil)
 	f.configure(t, &f.admin)
-	item := f.pending(t, f.a)
+	configureModelWeb(t, f)
+	item := modelRouteFixture(t, f, f.pending(t, f.a), "")
 	f.enable(t)
 	seen := map[string]bool{}
 	for i := 0; i < 3; i++ {
@@ -340,9 +344,36 @@ func TestPostgreSQLCurationModelUnhandledThreeTimes(t *testing.T) {
 		seen[got.ConversationID] = true
 		q.complete(t)
 	}
-	schedulerWait(t, "第三次未处理后搁置", func() bool { return f.item(t, item.ID).Status == "shelved" })
+	schedulerWait(t, "第三次未处理后升级", func() bool { return f.item(t, item.ID).Route == "lookup" })
 	got := f.item(t, item.ID)
-	if got.Attempts != 3 || got.ShelvedReason == nil || *got.ShelvedReason != "unhandled" {
+	if got.Status != "waiting_route" || got.Attempts != 0 || got.ShelvedReason != nil || !strings.Contains(string(got.Evidence), "第一档连续三次未得到可执行的决定") {
 		t.Fatalf("三次未处理后 %+v", got)
 	}
+	gate.ready.Store(true)
+	for _, route := range []string{"lookup", "web"} {
+		for attempt := 0; attempt < 3; attempt++ {
+			q := f.next(t, false)
+			got := f.item(t, item.ID)
+			if got.Route != route || int(got.Attempts) != attempt || got.ShelvedReason != nil {
+				t.Fatalf("期望 %s 第 %d 次领取，实际 %+v", route, attempt+1, got)
+			}
+			q.complete(t)
+		}
+	}
+	modelWaitResolution(t, f, item.ID, "unlisted")
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='unlisted' AND result->>'reason'='联网档连续三次未得到可执行的决定'`, f.a)
+
+	t.Run("第二档无联网来源", func(t *testing.T) {
+		gate := &testLookupGate{}
+		gate.ready.Store(true)
+		f := newSchedulerFixtureWithSources(t, gate, nil)
+		f.configure(t, &f.admin)
+		item := modelRouteFixture(t, f, f.pending(t, f.a), "lookup")
+		f.enable(t)
+		for range 3 {
+			f.next(t, false).complete(t)
+		}
+		modelWaitResolution(t, f, item.ID, "unlisted")
+		b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='unlisted' AND result->>'reason'='第二档连续三次未得到可执行的决定'`, f.a)
+	})
 }
