@@ -43,3 +43,42 @@ W5 的去曲数查找确实执行了。第 466 行放宽的仍是同一题名，
 - 全轮使用 28 张的长结果回环；单张回环只有当前一张，结果顺序、数目、503 和单项用量可以不同。原轮引用 `oracle.json` 的会话／工具评分投影、07:28:08 UTC 的待定项快照及排定重试。其隔离库结束时按项目清理，未保留完整会话正文。单张复现的逐次查询、读取详情、提交错误与网页题名观测单独标记。三次独立进程均自然排空，三个单张评分仍为 `unlisted`。本次没有重跑全库。[原轮待定项与单张工具明细](oracle-gaps-evidence.json)
 
 串行真实模型轮于 07:58:51 UTC 取证并按指令停止。最近进度为 1,568 秒，28 张均经程序处理。已完成 110 项，42 项等待模型或其路线重试。已落库 118 次带 usage 的模型调用，合计 488,254 token，独立审查记录为零。MB 最近进度累计 221 次请求，含 29 次 503。真实轮尚无终态评分。该轮及三次诊断的容器、网络和卷均按各自 Compose 项目标签核验。端点和密钥经定串 grep 核查，结果为零匹配。[串行真实轮部分快照](real-serial-partial.json)
+
+## 进度审查后的 R18 评分修订
+
+按主代理指定的 2576ef10 裁定复核已保存的 28 张结果。以下两行来自旧逐张评分和排队快照，原始 JSON 保留运行当时的口径。
+
+| 轮次 | 原符合 | 按裁定复核符合 | 完整达标 | 变化依据 |
+|---|---:|---:|---:|---|
+| 程序 | 15/28 | 16/28 | 15/28 | 《千のナイフ》安全结束为未收录。其余普通待领取项继续算未结。 |
+| 限信息 oracle | 23/28 | 27/28 | 23/28 | 《Ambient》《Dummy》等来源重试。《千のナイフ》《Mezzanine》安全结束为未收录。《菲主打》仍不符合。 |
+
+《Mezzanine》虽计入安全结局，原轮工具返回的跨组排除证据缺口仍见前文。《Ambient》《Dummy》的下次领取时间、原路线和零尝试见已保存的队列快照。复核时没有重新调用 MusicBrainz 或模型。[程序轮](program.json) · [oracle 轮](oracle.json) · [重试快照](oracle-retry.json)
+
+### 两套评分
+
+- 评分隔离库在每次领取时保存项编号、会话、路线、尝试次数和领取时刻。结束时核对该项仍在同一路线、尝试次数相同、下一次领取尚未到期，并且该次领取的工具调用确实记录了来源不可用或限流。合格项单列在逐样本的 `waiting_source_retry` 和汇总的 `waiting_source_retry_items`。这类样本可计符合，完整达标仍为否。错连、错并、错改、普通未结及来源不可用时结案仍分别检查。[领取对照](../../../../../backend/internal/app/curation_metrics_retry_integration_test.go#L9) · [回归评分](../../../../../backend/internal/app/curation_metrics_score_integration_test.go#L269) · [符合判定](../../../../../backend/internal/app/curation_metrics_outcomes_integration_test.go#L104) · [汇总](../../../../../backend/internal/app/curation_metrics_report_integration_test.go#L88) · [真实试用评分](../../../../../backend/internal/app/curation_live_score_integration_test.go#L376)
+- 真实试用按每张 5 分钟、至少 30 分钟观察。真实模型轮另有 2 小时下限，28 张共 140 分钟。结果记录实际上限、耗时和 `drained`。到期只余合格来源重试时如实记为到达观察上限，并单列这些项。回归使用测试时钟；真实试用使用实际时钟。集成脚本在显式启用真实试用时使用 3 小时外层测试超时。[试用观察窗](../../../../../backend/internal/app/curation_live_corpus_integration_test.go#L312) · [回归排空](../../../../../backend/internal/app/curation_metrics_integration_test.go#L259) · [脚本超时](../../../../../scripts/test-integration.sh#L75)
+- 已撤回这次对限信息 oracle 的检索策略、`value_seen` 和归因判定的修改。编写本节时工作树 HEAD 为 90c0487c。
+
+### 八张公开样本
+
+| 专辑 | 清单中的 accept | 依据 |
+|---|---|---|
+| Alive 2007 | release、release_group、unlisted | 多碟曲序可确认版本或组，结构不足时允许放弃。 |
+| Music Has the Right to Children | release、release_group、unlisted | 黑胶四面的曲号须与版本或组结构相符。 |
+| The Matrix | release、release_group、unlisted | 无 ALBUMARTIST 的合辑仍需可靠结构才能对应。 |
+| My Life in the Bush of Ghosts | release、release_group、unlisted | 合作署名的连接词可变，署名或结构证据不足时允许放弃。 |
+| 千のナイフ | release、release_group、unlisted | 罗马字本地标签可保留，无法核实原文发行时允许放弃。 |
+| Mezzanine | release_group、unlisted | 六首子集只可确认唯一的原版组。 |
+| Dummy | release_group、unlisted | 带末尾附轨的超集只可确认原版组。 |
+| 浮躁 | release、release_group、local_cleanup、unlisted | 保留原清单中有独立结构依据的正确对应，并接受本地整理或安全放弃。 |
+
+八张均由现有规则推导出 suggestion，要求每条建议都满足 `can_accept=false`。[公开清单](../../../../../backend/cmd/roomusic-curation-bench/corpus.json#L181) · [推导规则](../../../../../backend/internal/app/curation_metrics_fixture_integration_test.go#L48) · [八张清单断言](../../../../../backend/internal/app/curation_metrics_outcomes_integration_test.go#L189)
+
+### 本轮实际验证
+
+- 单测命令为 `cd backend && mise exec -- go test ./internal/app -run '^(TestMetricsSafeOutcomesAndAttribution|TestLiveCorpusSafeOutcomes|TestCurationLiveGapSampleCoverage)$' -count=1`，通过。最初编译时外层队列为定长数组，改为对切片调用判断后通过。
+- 集成使用已有的 app 包定向入口。每次通过 `sg docker -c` 在独立 TMPDIR 内执行 `mise exec -- bash temp/w3-baseline/run-integration.sh`，设置本机回环 NO_PROXY 和唯一 Compose 项目。选择器 `^(TestPostgreSQLCurationLiveAttributionScope|TestPostgreSQLLiveGapsSourceRetry)$`。lookup、web 两档各自的主动放弃与用量触限共四个 503 子用例均通过，验证了等待、到期和来源恢复。定向测试见 [四个来源重试用例](../../../../../backend/internal/app/curation_live_gaps_queue_integration_test.go#L29)。
+- 评分集成使用回归库的合成样本 spoken-book。该项同时经过回归和真实曲库评分入口，验证已有一次尝试后仍可合格等待，增加尝试次数、换路线或普通输入错误则不获豁免。扩展夹具首次模拟领取遗漏 `claimed_at`，数据库约束拒绝；补上领取和释放时间字段后，只重跑 `^TestPostgreSQLCurationLiveAttributionScope$`，5.18 秒通过。固定回归清单没有另设持续 503 的专辑；该环境情形由上述四个定向用例覆盖。[同库双评分断言](../../../../../backend/internal/app/curation_live_score_integration_test.go#L462)
+- 裁定到达前已启动的五张诊断在最后一次进度记录 162 秒后按指令中止，没有最终评分。此后没有重跑程序轮、oracle 轮或五张。按四个本次项目的 Compose 标签核对，容器、网络和卷残留均为零。

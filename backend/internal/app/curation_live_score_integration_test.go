@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -17,30 +18,32 @@ import (
 )
 
 type liveSampleScore struct {
-	Outcome     string             `json:"outcome"`
-	Accept      []string           `json:"accept"`
-	Accepted    bool               `json:"accepted"`
-	Title       string             `json:"title"`
-	PublicID    string             `json:"expected_release_id"`
-	Complete    bool               `json:"complete"`
-	Attribution *metricAttribution `json:"failure_attribution,omitempty"`
-	Exact       bool               `json:"exact_release"`
-	GroupOnly   bool               `json:"group_only"`
-	Tracks      int                `json:"scanned_tracks"`
-	Reasons     []string           `json:"issues,omitempty"`
+	SourceRetries []metricSourceRetry `json:"waiting_source_retry,omitempty"`
+	Outcome       string              `json:"outcome"`
+	Accept        []string            `json:"accept"`
+	Accepted      bool                `json:"accepted"`
+	Title         string              `json:"title"`
+	PublicID      string              `json:"expected_release_id"`
+	Complete      bool                `json:"complete"`
+	Attribution   *metricAttribution  `json:"failure_attribution,omitempty"`
+	Exact         bool                `json:"exact_release"`
+	GroupOnly     bool                `json:"group_only"`
+	Tracks        int                 `json:"scanned_tracks"`
+	Reasons       []string            `json:"issues,omitempty"`
 }
 
 type liveScores struct {
-	Accepted    int               `json:"accepted_samples"`
-	Samples     []liveSampleScore `json:"samples"`
-	Complete    int               `json:"completed_samples"`
-	WrongLinks  int               `json:"wrong_links"`
-	WrongMerges int               `json:"wrong_merges"`
-	WrongFields int               `json:"wrong_fields"`
-	Open        int               `json:"open_items"`
-	Attribution map[string]int    `json:"failure_attribution"`
-	Stages      map[string]int    `json:"correct_release_matches_by_stage"`
-	Resolutions map[string]int    `json:"model_item_outcomes"`
+	Accepted      int               `json:"accepted_samples"`
+	Samples       []liveSampleScore `json:"samples"`
+	Complete      int               `json:"completed_samples"`
+	WrongLinks    int               `json:"wrong_links"`
+	WrongMerges   int               `json:"wrong_merges"`
+	WrongFields   int               `json:"wrong_fields"`
+	SourceRetries int               `json:"waiting_source_retry_items"`
+	Open          int               `json:"open_items"`
+	Attribution   map[string]int    `json:"failure_attribution"`
+	Stages        map[string]int    `json:"correct_release_matches_by_stage"`
+	Resolutions   map[string]int    `json:"model_item_outcomes"`
 }
 
 func liveCreditText(credits []sources.Credit) string {
@@ -91,6 +94,13 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 	links := metricStoredLinks(t, app)
 	fields := metricStoredFields(t, app)
 	suggestions := metricSuggestions(t, app)
+	retries := metricSourceRetries(t, app, time.Now())
+	waitingMatch := map[string]bool{}
+	for _, retry := range retries {
+		if retry.matching() {
+			waitingMatch[retry.Target] = true
+		}
+	}
 	states := map[string]string{}
 	metricReadRows(t, app, `SELECT target_id,status FROM curation_work_states WHERE subject='release'`, func(rows *sql.Rows) {
 		var id, status string
@@ -225,6 +235,8 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 				score.Outcome = "release"
 			case len(links[metricLinkSubject{"release_group_match", id}]) > 0:
 				score.Outcome = "release_group"
+			case waitingMatch[id]:
+				score.Outcome = metricWaitingSource
 			case len(suggestions[id]) > 0:
 				score.Outcome = "suggestion"
 			case localCleanup[id]:
@@ -249,7 +261,12 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 			}
 			if metadata.NormalizeValue(title) != metadata.NormalizeValue(r.Title) && !(e.Tags == "romanized" && metadata.NormalizeValue(title) == metadata.NormalizeValue(e.LocalTitle)) {
 				need(i, id, "title", r.Title)
-				issue(i, fmt.Sprintf("专辑显示名 %q，期望 %q", title, r.Title))
+				msg := fmt.Sprintf("专辑显示名 %q，期望 %q", title, r.Title)
+				if score.Outcome == metricWaitingSource || e.Tags == "gbk" && (score.Outcome == "unlisted" || score.Outcome == "suggestion" || score.Outcome == "local_cleanup") {
+					score.Reasons = append(score.Reasons, msg)
+				} else {
+					issue(i, msg)
+				}
 			}
 			checkFields(i, id, e.Title, expected)
 		}
@@ -355,7 +372,12 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 			stage = history[len(history)-1]
 		}
 		s.Resolutions[stage+"/"+kind+"/"+status+"/"+res]++
-		if status == "waiting_model" || status == "in_progress" || status == "waiting_human" || status == "waiting_route" {
+		if retry, ok := retries[id]; ok {
+			s.SourceRetries++
+			for _, i := range owner[obj] {
+				s.Samples[i].SourceRetries = append(s.Samples[i].SourceRetries, retry)
+			}
+		} else if status == "waiting_model" || status == "in_progress" || status == "waiting_human" || status == "waiting_route" || status == "shelved" {
 			s.Open++
 			for _, i := range owner[obj] {
 				issue(i, "待定项未结："+kind+"/"+status)
@@ -381,7 +403,7 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 	}
 	for i := range s.Samples {
 		score := &s.Samples[i]
-		if !slices.Contains(score.Accept, score.Outcome) {
+		if score.Outcome != metricWaitingSource && !slices.Contains(score.Accept, score.Outcome) {
 			issue(i, fmt.Sprintf("终态 %q，允许 %v", score.Outcome, score.Accept))
 		}
 		score.Accepted = !rejected[i]
@@ -390,7 +412,7 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 		}
 		slices.Sort(score.Reasons)
 		score.Reasons = slices.Compact(score.Reasons)
-		score.Complete = len(score.Reasons) == 0
+		score.Complete = len(score.Reasons) == 0 && len(score.SourceRetries) == 0
 		if score.Complete {
 			s.Complete++
 		}
@@ -439,4 +461,45 @@ func TestPostgreSQLCurationLiveAttributionScope(t *testing.T) {
 	if incomplete.Accepted != 0 || incomplete.Attribution["info_missing"] != 1 || incomplete.Samples[0].Attribution == nil {
 		t.Fatalf("需要外部编号的试用样本缺少逐项归因：%+v", incomplete)
 	}
+	// 用同一合成发行核对两套评分。「尝试次数未增加」也允许此前已有失败尝试。
+	item := uuid.New()
+	entries[0].sample.Expect = album.Expect
+	tx, err := app.database.BeginTx(t.Context(), nil)
+	requireCurationOK(t, err)
+	defer tx.Rollback()
+	var conversation string
+	requireCurationOK(t, tx.QueryRowContext(t.Context(), `SELECT id FROM steward_conversations WHERE kind='curation' LIMIT 1`).Scan(&conversation))
+	_, err = tx.ExecContext(t.Context(), `INSERT INTO curation_pending_items(id,target_type,target_id,kind,status,route,rule_version,input_digest,evidence,attempts)
+		VALUES($1,'release',$2,'release_match','waiting_route','lookup',1,'合成重试','{}',1)`, item, entries[0].release)
+	requireCurationOK(t, err)
+	_, err = tx.ExecContext(t.Context(), `UPDATE curation_pending_items SET status='in_progress',conversation_id=$2,claimed_at=now() WHERE id=$1`, item, conversation)
+	requireCurationOK(t, err)
+	message := uuid.New()
+	_, err = tx.ExecContext(t.Context(), `INSERT INTO steward_messages(id,conversation_id,sequence,role,content,created_at)
+		SELECT $1,$2::uuid,coalesce(max(sequence),0)+1,'assistant','{"role":"assistant"}',clock_timestamp() FROM steward_messages WHERE conversation_id=$2`, message, conversation)
+	requireCurationOK(t, err)
+	_, err = tx.ExecContext(t.Context(), `INSERT INTO steward_tool_calls(id,message_id,position,tool_name,input,status,error_code)
+		VALUES($1,$2,0,'get_music_metadata','{}','failed','source_unavailable')`, uuid.New(), message)
+	requireCurationOK(t, err)
+	_, err = tx.ExecContext(t.Context(), `UPDATE curation_pending_items SET status='waiting_route',conversation_id=NULL,claimed_at=NULL,next_attempt_at=$2 WHERE id=$1`, item, entries[0].scoreTime.Add(time.Hour))
+	requireCurationOK(t, err)
+	requireCurationOK(t, tx.Commit())
+	checkRetry := func(want bool) {
+		t.Helper()
+		live := liveCorpusScore(t, app, []liveAlbum{album}, endpoint.routes)
+		regression := metricScoreEntries(t, app, entries, endpoint.routes)[0]
+		if live.Samples[0].Accepted != want || live.Samples[0].Complete || regression.Accepted != want || regression.Complete ||
+			(live.SourceRetries == 1) != want || (regression.RetryCount == 1) != want || (live.Open == 0) != want || (regression.OpenPending == 0) != want {
+			t.Fatalf("期望等来源重试=%t，真实试用 %+v，回归度量 %+v", want, live, regression)
+		}
+	}
+	checkRetry(true)
+	mustExec(t, app, `UPDATE curation_pending_items SET attempts=attempts+1 WHERE id=$1`, item)
+	checkRetry(false)
+	mustExec(t, app, `UPDATE curation_pending_items SET attempts=1,route='web' WHERE id=$1`, item)
+	checkRetry(false)
+	mustExec(t, app, `UPDATE curation_pending_items SET route='lookup' WHERE id=$1`, item)
+	mustExec(t, app, `UPDATE steward_tool_calls SET error_code='invalid_input' WHERE message_id=$1`, message)
+	checkRetry(false)
+
 }

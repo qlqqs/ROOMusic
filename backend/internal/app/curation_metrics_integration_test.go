@@ -25,6 +25,7 @@ import (
 )
 
 type metricEntry struct {
+	scoreTime  time.Time
 	drainIssue string
 	queries    []metricSourceQuery
 	sample     metricSample
@@ -79,6 +80,7 @@ func runMetricSamples(t *testing.T, samples []metricSample) (*integrationTestApp
 		WithCurationProgram(true, opts), WithCurationModel(true, model.Options{Now: opts.Now, PollInterval: 10 * time.Millisecond, BatchSize: 1}),
 		WithCurationSources(sources.Options{Limiter: immediate()}, coverartarchive.Options{Limiter: immediate(), ManifestLimiter: immediate()}, sources.Options{Limiter: immediate()}))
 	clock.wait(t)
+	metricObserveClaims(t, app)
 	admin := app.createUser(t, "admin")
 	b3Root(t, app)
 	publishSearch(t, app)
@@ -131,7 +133,7 @@ func runMetricSamples(t *testing.T, samples []metricSample) (*integrationTestApp
 		}
 		endpoint.setTargets(targets)
 		for _, e := range batch {
-			e.drainIssue = metricDrainResult(t, app, &admin, clock, endpoint, e)
+			e.drainIssue = metricDrainResult(t, app, &admin, clock, endpoint, e, true)
 			if scan := e.sample.Expect.Scan; scan != nil && (scan.ArtistRetry != "" || scan.RelaxedTitle != "" || len(scan.ForbiddenQuery) > 0) {
 				e.queries = metricQueriesSince(t, mock, started)
 			}
@@ -158,6 +160,9 @@ func runMetricSamples(t *testing.T, samples []metricSample) (*integrationTestApp
 		if i%10 == 0 {
 			t.Logf("已扫描并检查队列 %d/%d", i, len(samples))
 		}
+	}
+	for i := range entries {
+		entries[i].scoreTime = opts.Now()
 	}
 	return app, entries, endpoint
 }
@@ -246,12 +251,12 @@ type metricProgress struct {
 
 func metricDrain(t *testing.T, app *integrationTestApplication, admin *integrationTestUser, clock *programClock, endpoint *metricsModel, entry metricEntry) {
 	t.Helper()
-	if issue := metricDrainResult(t, app, admin, clock, endpoint, entry); issue != "" {
+	if issue := metricDrainResult(t, app, admin, clock, endpoint, entry, false); issue != "" {
 		t.Fatal(issue)
 	}
 }
 
-func metricDrainResult(t *testing.T, app *integrationTestApplication, admin *integrationTestUser, clock *programClock, endpoint *metricsModel, entry metricEntry) string {
+func metricDrainResult(t *testing.T, app *integrationTestApplication, admin *integrationTestUser, clock *programClock, endpoint *metricsModel, entry metricEntry, allowRetry bool) string {
 	t.Helper()
 	sample := entry.sample.ID
 	writer := curation.NewWriter(app.database, app.dataDirectory, nil)
@@ -302,9 +307,11 @@ func metricDrainResult(t *testing.T, app *integrationTestApplication, admin *int
 		}
 		patrolled, err := writer.NamesPatrolled(t.Context(), entry.release)
 		requireCurationOK(t, err)
-		if patrolled && programDrained && p.Model.Items.WaitingModel == 0 && p.LastPassFinishedAt != nil && p.LastPassFinishedAt.Equal(tick) &&
+		if patrolled && programDrained && p.LastPassFinishedAt != nil && p.LastPassFinishedAt.Equal(tick) &&
 			recognitionSettled && metricCheckpoint(t, app) == before {
-			return ""
+			if p.Model.Items.WaitingModel == 0 || allowRetry && p.Model.Items.WaitingModel == int64(len(metricSourceRetries(t, app, tick))) {
+				return ""
+			}
 		}
 	}
 	return fmt.Sprintf("%s 超过 12 个完整轮次：%+v", sample, p)

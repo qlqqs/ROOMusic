@@ -287,6 +287,7 @@ func Test真实曲库队列试用(t *testing.T) {
 		WithCurationProgram(true, program.Options{PollInterval: 2 * time.Second, FullPassInterval: 30 * time.Second}),
 		WithCurationModel(true, model.Options{PollInterval: 250 * time.Millisecond, BatchSize: 1}),
 		WithCurationSources(sources.Options{NewClient: transport.client}, coverartarchive.Options{}, sources.Options{}))
+	metricObserveClaims(t, app)
 	admin := app.createUser(t, "admin")
 	albums := liveScan(t, app, &admin)
 	if mode != "program" {
@@ -307,7 +308,8 @@ func Test真实曲库队列试用(t *testing.T) {
 	var oracle *metricsModel
 	var key string
 	var meter *liveResponseMeter
-	limit := 22 * time.Minute
+	// 给短曲库留出多次来源退避的时间，大曲库按专辑数扩展观察窗。
+	limit := max(30*time.Minute, time.Duration(len(albums))*5*time.Minute)
 	switch mode {
 	case "oracle", "oracle_open":
 		oracle = liveOracle(t, app, &admin, albums, fixture.base)
@@ -315,7 +317,7 @@ func Test真实曲库队列试用(t *testing.T) {
 		meter = new(liveResponseMeter)
 		key = liveRealProvider(t, app, &admin, fixture.base, meter)
 		liveStartItemUsage(t, app)
-		limit = 2 * time.Hour
+		limit = max(limit, 2*time.Hour)
 	}
 	start := time.Now().UTC()
 	b3Enable(t, app, admin)
@@ -378,7 +380,7 @@ func Test真实曲库队列试用(t *testing.T) {
 	) FROM steward_conversations c`).Scan(&conversations, &empty))
 	result := map[string]any{
 		"mode": mode, "started_at": start, "finished_at": end,
-		"elapsed_seconds": end.Sub(start).Seconds(), "drained": drained, "progress": p,
+		"observation_limit_seconds": limit.Seconds(), "elapsed_seconds": end.Sub(start).Seconds(), "drained": drained, "progress": p,
 		"public_sources": []string{"musicbrainz"}, "user_agent": sources.UserAgent(),
 		"http_count": len(events), "http_503": statuses[503], "http_statuses": statuses,
 		"endpoints": endpoints, "requests": events, "queue_backoffs": pauses,
@@ -410,6 +412,13 @@ func Test真实曲库队列试用(t *testing.T) {
 		t.Errorf("真实试用中 %d 个未完整达标样本缺少决策信息，见逐样本归因", score.Attribution["info_missing"])
 	}
 	if !drained {
+		// 到达观察上限仍如实报告。只余符合 R1 的未来重试时，样本评分可以正常结束。
+		if p.State == "idle" && p.Releases.Processed == p.Releases.Total && score.Open == 0 && score.SourceRetries > 0 &&
+			p.Model.Items.InProgress == 0 && p.Model.Items.WaitingModel == int64(score.SourceRetries) &&
+			!slices.ContainsFunc(p.Queues[:], func(q curation.QueueProgress) bool { return q.Ready > 0 || q.State == "running" || q.RetryAt != nil }) {
+			t.Logf("已到观察上限，%d 项等来源重试", score.SourceRetries)
+			return
+		}
 		t.Fatalf("试用超时，已处理 %d/%d，待模型 %d，运行中 %d", p.Releases.Processed, p.Releases.Total, p.Model.Items.WaitingModel, p.Model.Items.InProgress)
 	}
 }

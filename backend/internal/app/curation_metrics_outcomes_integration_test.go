@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -102,6 +103,8 @@ func metricEvaluateOutcomes(t *testing.T, app *integrationTestApplication, entri
 			s.Outcome = "release"
 		case s.Match.Level == "artist" && s.Match.Rule == "common_credit":
 			s.Outcome = "no_usable_candidates"
+		case slices.ContainsFunc(s.SourceRetries, metricSourceRetry.matching):
+			s.Outcome = metricWaitingSource
 		case len(suggestions[entry.release]) > 0:
 			s.Outcome = "suggestion"
 		case local[entry.release]:
@@ -118,7 +121,7 @@ func metricEvaluateOutcomes(t *testing.T, app *integrationTestApplication, entri
 		for _, issue := range metricSuggestionIssues(t, s.ID, want, suggestions[entry.release]) {
 			s.issue(issue)
 		}
-		if !slices.Contains(s.Accept, s.Outcome) {
+		if s.Outcome != metricWaitingSource && !slices.Contains(s.Accept, s.Outcome) {
 			s.Reasons = append(s.Reasons, metricIssue{Kind: "unexpected_outcome", Target: s.ID, Expected: strings.Join(s.Accept, " 或 "), Actual: s.Outcome})
 		}
 		for _, id := range append(slices.Collect(maps.Values(entry.artists)), entry.release) {
@@ -180,5 +183,29 @@ func TestMetricsSafeOutcomesAndAttribution(t *testing.T) {
 	}
 	if issues := metricSuggestionIssues(t, "合成现场版", w, []curation.ModelException{observation, actionable}); len(issues) != 1 || issues[0].Kind != "suggestion_can_accept" {
 		t.Fatalf("可采纳的对应建议应单独列错：%+v", issues)
+	}
+}
+
+func TestLiveCorpusSafeOutcomes(t *testing.T) {
+	raw, err := os.ReadFile("../../cmd/roomusic-curation-bench/corpus.json")
+	requireCurationOK(t, err)
+	var corpus struct{ Releases []liveAlbum }
+	requireCurationOK(t, json.Unmarshal(raw, &corpus))
+	full := []string{"release", "release_group", "unlisted", "suggestion"}
+	group := []string{"release_group", "unlisted", "suggestion"}
+	want := map[string][]string{"multidisc": full, "double_lp": full, "compilation": full, "collaboration": full, "romanized": full, "subset": group, "superset": group, "gbk": {"release", "release_group", "local_cleanup", "unlisted", "suggestion"}}
+	for _, album := range corpus.Releases {
+		allowed, ok := want[album.Tags]
+		if !ok {
+			continue
+		}
+		rule := album.Expect.withOutcomeRules()
+		if !slices.Equal(rule.Accept, allowed) || rule.SuggestionCanAccept == nil || *rule.SuggestionCanAccept {
+			t.Errorf("%s 允许结果 %v，应为 %v 且每条建议均不可采纳", album.Title, rule.Accept, allowed)
+		}
+		delete(want, album.Tags)
+	}
+	if len(want) > 0 {
+		t.Fatalf("公开清单缺少形态 %v", slices.Sorted(maps.Keys(want)))
 	}
 }

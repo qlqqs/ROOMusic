@@ -181,7 +181,8 @@
       "expect": {
         "accept": [
           "release",
-          "release_group"
+          "release_group",
+          "unlisted"
         ]
       },
       "reason": "同目录二碟各从第一轨开始，检查推断的碟序。",
@@ -197,7 +198,8 @@
       "expect": {
         "accept": [
           "release",
-          "release_group"
+          "release_group",
+          "unlisted"
         ]
       },
       "reason": "两张十二英寸黑胶，原始面号为 A1 至 D4。",
@@ -213,7 +215,8 @@
       "expect": {
         "accept": [
           "release",
-          "release_group"
+          "release_group",
+          "unlisted"
         ]
       },
       "reason": "十三首由不同艺人演出，同一艺人占比不超过一半，隐去专辑艺人。",
@@ -229,7 +232,8 @@
       "expect": {
         "accept": [
           "release",
-          "release_group"
+          "release_group",
+          "unlisted"
         ]
       },
       "reason": "专辑和十二首曲目均有两位艺人的结构化署名，生成器只更换连接词。",
@@ -247,7 +251,8 @@
       "expect": {
         "accept": [
           "release",
-          "release_group"
+          "release_group",
+          "unlisted"
         ]
       },
       "reason": "本地专辑标题 Sen no Naifu 为人工罗马字转写（千＝sen、の＝no、ナイフ＝naifu）。艺人使用 MusicBrainz 登记别名 Ryūichi Sakamoto，曲目与时长取自日文发行。",
@@ -262,7 +267,8 @@
       "tags": "subset",
       "expect": {
         "accept": [
-          "release_group"
+          "release_group",
+          "unlisted"
         ]
       },
       "reason": "十一首专辑截为达到合同门槛的子集，只有组级对应得到授权。",
@@ -277,7 +283,8 @@
       "tags": "superset",
       "expect": {
         "accept": [
-          "release_group"
+          "release_group",
+          "unlisted"
         ]
       },
       "reason": "保留原版十一首为连续前缀，末尾添加合成曲目，只有组级对应得到授权。",

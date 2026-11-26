@@ -37,6 +37,7 @@ type metricSummary struct {
 	Attribution      map[string]int               `json:"failure_attribution"`
 	Complete         int                          `json:"completed_samples"`
 	CompletionRate   float64                      `json:"completion_rate"`
+	SourceRetries    int                          `json:"waiting_source_retry_items"`
 	Pending          int                          `json:"open_pending_items"`
 	Exceptions       int                          `json:"open_exceptions"`
 	WrongLinks       int                          `json:"wrong_links"`
@@ -85,6 +86,7 @@ func (r *metricSummary) add(e metricEntry, s metricScore, model map[string]metri
 		r.DecidableEntered++
 	}
 	r.Entered += s.Entered
+	r.SourceRetries += s.RetryCount
 	r.Pending += s.OpenPending
 	r.Exceptions += s.OpenExceptions
 	r.WrongLinks += s.WrongLinks
@@ -140,7 +142,7 @@ func metricReport(t *testing.T, app *integrationTestApplication, entries []metri
 		shapes = append(shapes, groups[shape])
 	}
 	var log strings.Builder
-	log.WriteString("\n形态 | 样本 | 请求均值/最多 | MB 秒 | 进模型项/程序可定样本 | 调用/token | 完整达标 | 符合预期 | 待定/例外 | 错连/并/改\n")
+	log.WriteString("\n形态 | 样本 | 请求均值/最多 | MB 秒 | 进模型项/程序可定样本 | 调用/token | 完整达标 | 符合预期 | 待定/例外/等来源重试 | 错连/并/改\n")
 	for _, r := range append(slices.Clone(shapes), total) {
 		for key, v := range r.Endpoints {
 			v.Mean = float64(v.Count) / float64(r.Samples)
@@ -151,7 +153,7 @@ func metricReport(t *testing.T, app *integrationTestApplication, entries []metri
 			calls += u.Calls
 			tokens += u.InputTokens + u.OutputTokens
 		}
-		fmt.Fprintf(&log, "%s | %d | %.2f/%d | %d | %d/%d | %d/%d | %d/%d | %d/%d | %d/%d | %d/%d/%d\n", r.Shape, r.Samples, r.Requests.Mean, r.Requests.Max, r.MBSeconds, r.Entered, r.DecidableEntered, calls, tokens, r.Complete, r.Samples, r.Accepted, r.Samples, r.Pending, r.Exceptions, r.WrongLinks, r.WrongMerges, r.WrongFields)
+		fmt.Fprintf(&log, "%s | %d | %.2f/%d | %d | %d/%d | %d/%d | %d/%d | %d/%d | %d/%d/%d | %d/%d/%d\n", r.Shape, r.Samples, r.Requests.Mean, r.Requests.Max, r.MBSeconds, r.Entered, r.DecidableEntered, calls, tokens, r.Complete, r.Samples, r.Accepted, r.Samples, r.Pending, r.Exceptions, r.SourceRetries, r.WrongLinks, r.WrongMerges, r.WrongFields)
 	}
 	t.Log(log.String())
 	t.Logf("来源/端点汇总（请求数、均值、最多）%+v；模型分类（调用、输入与输出 token）%+v", total.Endpoints, total.Model)

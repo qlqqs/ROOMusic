@@ -72,4 +72,9 @@ trap 'exit 143' TERM
 "${COMPOSE[@]}" up -d --wait postgres
 printf '运行隔离 PostgreSQL 与 ffmpeg 集成测试：project=%s database=%s port=%s\n' "$COMPOSE_PROJECT" "$ROOMUSIC_TEST_PG_DATABASE" "$ROOMUSIC_TEST_PG_PORT" >&2
 # app 包串行约 8 分钟，全包并行共用一个库时会更慢。
-(cd "$ROOT_DIR/backend" && go test -v ./... -run "$test_run" -count=1 -timeout 25m)
+test_timeout=25m
+# 显式真实曲库试用有独立的来源退避观察窗，给 28 张的 140 分钟和评分留足时间。
+if [[ -n "${ROOMUSIC_LIVE_MODE:-}" ]]; then
+  test_timeout=3h
+fi
+(cd "$ROOT_DIR/backend" && go test -v ./... -run "$test_run" -count=1 -timeout "$test_timeout")

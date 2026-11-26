@@ -59,6 +59,7 @@ func TestPostgreSQLLiveGapsSourceRetry(t *testing.T) {
 				source.ServeHTTP(w, r)
 			})
 			f := newSchedulerFixtureWithSources(t, gate, server, func(o *options) { o.music.Now = sourceClock.options().Now })
+			metricObserveClaims(t, f.application)
 			target, _ := liveGapsLocal(t, f, s, s.Local.Album)
 			p := modelRouteFixture(t, f, f.pending(t, target), tc.route)
 			remote := s.External.Releases[0].ID
@@ -101,6 +102,12 @@ func TestPostgreSQLLiveGapsSourceRetry(t *testing.T) {
 			}
 			if got.Status != "waiting_route" || got.Route != tc.route || got.NextAttemptAt == nil || got.NextAttemptAt.Before(deadline) || !got.NextAttemptAt.After(f.clock.options().Now()) || got.Attempts != p.Attempts || after.Status == "unlisted" || after.Attempts != before.Attempts || after.Generation != before.Generation {
 				t.Fatalf("503 后待定项=%s/%s 下次=%v 尝试=%d；发行=%s 尝试 %d→%d 代次 %d→%d", got.Status, got.Route, got.NextAttemptAt, got.Attempts, after.Status, before.Attempts, after.Attempts, before.Generation, after.Generation)
+			}
+			if retry, ok := metricSourceRetries(t, f.application, f.clock.options().Now())[p.ID]; !ok || retry.Route != tc.route {
+				t.Fatalf("R18 评分没有记录等来源重试：%+v", retry)
+			}
+			if _, ok := metricSourceRetries(t, f.application, *got.NextAttemptAt)[p.ID]; ok {
+				t.Fatal("已到期的领取被计为等待来源恢复")
 			}
 			healthy.Store(true)
 			sourceClock.now.Store(got.NextAttemptAt.UnixNano())

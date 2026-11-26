@@ -11,23 +11,24 @@ import (
 
 type metricScore struct {
 	metricDetail
-	Entered, OpenPending, OpenExceptions, WrongLinks, WrongMerges, WrongFields int
+	RetryCount, Entered, OpenPending, OpenExceptions, WrongLinks, WrongMerges, WrongFields int
 }
 
 type metricDetail struct {
-	ID            string             `json:"id"`
-	Shape         string             `json:"shape"`
-	OracleInfoGap bool               `json:"oracle_information_gap,omitempty"`
-	Outcome       string             `json:"outcome"`
-	Accept        []string           `json:"accept"`
-	Accepted      bool               `json:"accepted"`
-	Rejected      []string           `json:"acceptance_issues,omitempty"`
-	Attribution   *metricAttribution `json:"failure_attribution,omitempty"`
-	Complete      bool               `json:"complete"`
-	Match         metricMatch        `json:"match"`
-	Requests      map[string]int     `json:"requests"`
-	Reasons       []metricIssue      `json:"reasons"`
-	ModelItems    []metricModelItem  `json:"model_items,omitempty"`
+	ID            string              `json:"id"`
+	Shape         string              `json:"shape"`
+	OracleInfoGap bool                `json:"oracle_information_gap,omitempty"`
+	Outcome       string              `json:"outcome"`
+	Accept        []string            `json:"accept"`
+	Accepted      bool                `json:"accepted"`
+	Rejected      []string            `json:"acceptance_issues,omitempty"`
+	Attribution   *metricAttribution  `json:"failure_attribution,omitempty"`
+	Complete      bool                `json:"complete"`
+	Match         metricMatch         `json:"match"`
+	Requests      map[string]int      `json:"requests"`
+	Reasons       []metricIssue       `json:"reasons"`
+	SourceRetries []metricSourceRetry `json:"waiting_source_retry,omitempty"`
+	ModelItems    []metricModelItem   `json:"model_items,omitempty"`
 }
 
 type metricModelItem struct {
@@ -238,6 +239,7 @@ func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries [
 		scores[b].issue(issue)
 	})
 	// 识别的进项数只统计发行和录音匹配；各类模型项均保存经过的路线和结案结果。
+	retries := metricSourceRetries(t, app, entries[0].scoreTime)
 	entered := map[metricObject]bool{}
 	metricReadRows(t, app, `SELECT coalesce(p.target_id,p.artist_id),p.id,p.kind,p.status,coalesce(p.resolution,''),
 		coalesce((SELECT o.after_state->>'method' FROM operations o WHERE o.operation_type='external_link'
@@ -264,6 +266,14 @@ func metricScoreEntries(t *testing.T, app *integrationTestApplication, entries [
 			entered[target] = true
 		}
 		open := status == "waiting_model" || status == "in_progress" || status == "waiting_human" || status == "waiting_route"
+		if retry, ok := retries[itemID]; ok {
+			open = false
+			scores[owner].RetryCount++
+			for _, i := range involved {
+				scores[i].Complete = false
+				scores[i].SourceRetries = append(scores[i].SourceRetries, retry)
+			}
+		}
 		if open {
 			scores[owner].OpenPending++
 		}
