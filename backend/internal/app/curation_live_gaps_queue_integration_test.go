@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -114,8 +115,8 @@ func TestPostgreSQLLiveGapsSourceRetry(t *testing.T) {
 
 func TestPostgreSQLLiveGapsUpgrade(t *testing.T) {
 	t.Run("版本号", func(t *testing.T) {
-		if program.MatchRuleVersion != 103 || program.LocalRuleVersion != 3 || runtime.ReviewPolicyVersion != 7 {
-			t.Fatalf("匹配、本地、审查规则为 %d/%d/%d，预期 103/3/7", program.MatchRuleVersion, program.LocalRuleVersion, runtime.ReviewPolicyVersion)
+		if program.MatchRuleVersion < 104 || program.LocalRuleVersion != 3 || runtime.ReviewPolicyVersion != 7 {
+			t.Fatalf("匹配、本地、审查规则为 %d/%d/%d，匹配规则至少为 104，本地和审查规则应为 3/7", program.MatchRuleVersion, program.LocalRuleVersion, runtime.ReviewPolicyVersion)
 		}
 	})
 	for _, kind := range []string{"unlisted", "uncertain", "track_count", "position_conflict", "artist_mismatch", "tag_text_mismatch", "matched"} {
@@ -135,13 +136,13 @@ func TestPostgreSQLLiveGapsUpgrade(t *testing.T) {
 			if kind != "matched" && initialSearches == 0 {
 				t.Fatal("夹具首次识别没有出站，无法计量补查次数")
 			}
-			// 登记和消费可能发生在同一次排空；直接记录标记从空变为 103 的次数。
+			// 登记和消费可能发生在同一次排空；直接记录标记变为当前匹配规则版本的次数。
 			mustExec(t, f.application, `CREATE TABLE gaps_requery_events (target_id uuid NOT NULL)`)
 			mustExec(t, f.application, `CREATE FUNCTION record_gaps_requery() RETURNS trigger LANGUAGE plpgsql AS $$
 				BEGIN INSERT INTO gaps_requery_events VALUES(NEW.target_id); RETURN NEW; END $$`)
-			mustExec(t, f.application, `CREATE TRIGGER gaps_requery AFTER UPDATE OF requery_match_version ON curation_work_states
-				FOR EACH ROW WHEN (NEW.subject='release' AND NEW.requery_match_version=103 AND OLD.requery_match_version IS DISTINCT FROM NEW.requery_match_version)
-				EXECUTE FUNCTION record_gaps_requery()`)
+			mustExec(t, f.application, fmt.Sprintf(`CREATE TRIGGER gaps_requery AFTER UPDATE OF requery_match_version ON curation_work_states
+				FOR EACH ROW WHEN (NEW.subject='release' AND NEW.requery_match_version=%d AND OLD.requery_match_version IS DISTINCT FROM NEW.requery_match_version)
+				EXECUTE FUNCTION record_gaps_requery()`, program.MatchRuleVersion))
 			status := kind
 			if kind != "matched" && kind != "unlisted" {
 				status = "uncertain"
@@ -168,7 +169,7 @@ func TestPostgreSQLLiveGapsUpgrade(t *testing.T) {
 				wantDelta = 0
 			}
 			searches := f.source.callCount("SearchReleases")
-			if kind != "matched" && (got.MatchRuleVersion != 103 || got.LocalRuleVersion != 3) {
+			if kind != "matched" && (got.MatchRuleVersion != program.MatchRuleVersion || got.LocalRuleVersion != 3) {
 				t.Errorf("补查后的匹配和本地规则版本为 %d/%d", got.MatchRuleVersion, got.LocalRuleVersion)
 			}
 			if got.RequeryMatchVersion != 0 || got.Generation != base.Generation+wantDelta || got.Attempts != base.Attempts+wantDelta || searches-initialSearches != initialSearches*wantDelta {
