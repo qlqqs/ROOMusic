@@ -26,7 +26,7 @@ import (
 
 type metricEntry struct {
 	drainIssue string
-	queries    []string
+	queries    []metricSourceQuery
 	sample     metricSample
 	release    string
 	tracks     []string

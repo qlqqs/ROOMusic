@@ -106,6 +106,12 @@ func metricEvaluateOutcomes(t *testing.T, app *integrationTestApplication, entri
 			s.Outcome = "suggestion"
 		case local[entry.release]:
 			s.Outcome = "local_cleanup"
+		case s.Match.Status == "no_match" && slices.Contains(s.Match.Conflicts, "insufficient_evidence") &&
+			slices.ContainsFunc(s.ModelItems, func(item metricModelItem) bool {
+				return item.Kind == "local_cleanup" && item.Status == "resolved" && item.Resolution == "local_cleanup"
+			}):
+			// 占位输入已完成本地整理但没有可靠片段可写，程序也没有外部识别依据。
+			s.Outcome = "local_cleanup"
 		default:
 			s.Outcome = s.Match.Status
 		}

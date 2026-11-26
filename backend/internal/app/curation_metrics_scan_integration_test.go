@@ -35,20 +35,39 @@ type metricScanExpect struct {
 	ForbiddenQuery    []string `json:"forbidden_query"`
 }
 
-func metricQueriesSince(t *testing.T, mock *upstreammock.Server, since time.Time) []string {
+type metricSourceQuery struct {
+	service, field, value string
+}
+
+func metricQueriesSince(t *testing.T, mock *upstreammock.Server, since time.Time) []metricSourceQuery {
 	t.Helper()
 	w := httptest.NewRecorder()
-	mock.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/_mock/requests?service=musicbrainz&limit=500", nil))
+	mock.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/_mock/requests?limit=500", nil))
 	var records []struct {
-		Time  time.Time
-		Query url.Values
+		Time    time.Time
+		Service string
+		Query   url.Values
 	}
 	requireCurationOK(t, json.Unmarshal(w.Body.Bytes(), &records))
 	slices.Reverse(records)
-	var queries []string
+	var queries []metricSourceQuery
 	for _, record := range records {
-		if q := record.Query.Get("query"); !record.Time.Before(since) && q != "" {
-			queries = append(queries, q)
+		if record.Time.Before(since) {
+			continue
+		}
+		var fields []string
+		switch record.Service {
+		case "musicbrainz":
+			fields = []string{"query"}
+		case "searxng":
+			fields = []string{"q"}
+		case "lrclib":
+			fields = []string{"album_name", "artist_name", "track_name"}
+		}
+		for _, field := range fields {
+			if value := record.Query.Get(field); value != "" {
+				queries = append(queries, metricSourceQuery{record.Service, field, value})
+			}
 		}
 	}
 	return queries
@@ -112,7 +131,11 @@ func metricFixtureIssues(t *testing.T, app *integrationTestApplication, e metric
 	}
 	if want.RelaxedTitle != "" {
 		full, clean := false, false
-		for _, query := range e.queries {
+		for _, request := range e.queries {
+			if request.service != "musicbrainz" {
+				continue
+			}
+			query := request.value
 			// 第二档也能按标题搜索；程序的放宽查询还包含艺人条件。
 			if !strings.Contains(query, " AND artist:") && !strings.Contains(query, " AND arid:") {
 				continue
@@ -128,8 +151,9 @@ func metricFixtureIssues(t *testing.T, app *integrationTestApplication, e metric
 	}
 	if want.ArtistRetry != "" {
 		byID, byName := false, false
-		for _, q := range e.queries {
-			if !strings.Contains(q, e.sample.Local.Album) {
+		for _, request := range e.queries {
+			q := request.value
+			if request.service != "musicbrainz" || !strings.Contains(q, e.sample.Local.Album) {
 				continue
 			}
 			if strings.Contains(q, "arid:") && strings.Contains(q, want.ArtistRetry) {
@@ -142,10 +166,12 @@ func metricFixtureIssues(t *testing.T, app *integrationTestApplication, e metric
 		check("arid_then_name", "true", fmt.Sprint(byName))
 	}
 	for _, value := range want.ForbiddenQuery {
-		for _, query := range e.queries {
-			if strings.Contains(strings.ToLower(query), strings.ToLower(value)) {
-				check("forbidden_query", "不得包含 "+value, query)
-				break
+		seen := map[string]bool{}
+		for _, request := range e.queries {
+			field := request.service + "/" + request.field
+			if !seen[field] && strings.Contains(strings.ToLower(request.value), strings.ToLower(value)) {
+				check("forbidden_query/"+field, "不得包含 "+value, request.value)
+				seen[field] = true
 			}
 		}
 	}

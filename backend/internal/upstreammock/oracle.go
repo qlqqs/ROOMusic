@@ -6,6 +6,8 @@ import (
 	"html"
 	"slices"
 	"strings"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
 // OracleMessage 是度量端点收到的 Chat Completions 消息。工具结果通过调用编号配对。
@@ -252,12 +254,15 @@ func (e OracleEvidence) Lookup(q OracleLookup) OracleAction {
 			var row struct {
 				Title           string `json:"canonical_title"`
 				Artist          string `json:"canonical_artist"`
-				Local, Evidence struct{ Title, Artist string }
+				Local, Evidence struct {
+					Title, Artist string
+					Authenticity  struct{ Title, Artist metadata.Authenticity }
+				}
 			}
 			if json.Unmarshal(raw, &row) == nil {
 				terms = append(terms, searchTerm{"release", "release", row.Title}, searchTerm{"release", "artist", row.Artist},
-					searchTerm{"release", "release", row.Local.Title}, searchTerm{"release", "artist", row.Local.Artist},
-					searchTerm{"release", "release", row.Evidence.Title}, searchTerm{"release", "artist", row.Evidence.Artist})
+					searchTerm{"release", "release", row.Local.Authenticity.Title.SearchValue(row.Local.Title)}, searchTerm{"release", "artist", row.Local.Authenticity.Artist.SearchValue(row.Local.Artist)},
+					searchTerm{"release", "release", row.Evidence.Authenticity.Title.SearchValue(row.Evidence.Title)}, searchTerm{"release", "artist", row.Evidence.Authenticity.Artist.SearchValue(row.Evidence.Artist)})
 			}
 		}
 		for _, barcode := range q.Barcodes {

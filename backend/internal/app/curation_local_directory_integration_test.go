@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
@@ -45,6 +46,12 @@ func TestPostgreSQL整理无标签编号目录中的专辑名与艺人(t *testin
 	setPatrolTestSource(t, app, &admin, "musicbrainz", false)
 	setPatrolTestSource(t, app, &admin, "web_search", false)
 	b3Enable(t, app, admin)
+	// 本地整理会替换艺人，下一轮程序盘点才能刷新巡检使用的署名。
+	clock.advance(t, time.Minute)
+	schedulerWait(t, "编号目录的本地整理提交完成", func() bool {
+		return countRows(t, app, `SELECT count(*) FROM curation_pending_items
+			WHERE target_id=$1 AND kind='local_cleanup' AND resolution='local_cleanup'`, entry.release) == 1
+	})
 	metricDrain(t, app, &admin, clock, endpoint, entry)
 	if usage := endpoint.usage()[sample.ID]["local_cleanup"]; usage.Calls != 1 {
 		t.Fatalf("编号目录的本地整理应调用模型一次，实际 %+v", usage)
