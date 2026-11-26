@@ -115,7 +115,7 @@ func checkWrite(ctx context.Context, tx *sql.Tx, spec operations.Spec, confirmed
 func checkClaimedTarget(ctx context.Context, tx *sql.Tx, run *ModelRun, targetID, column, kind string) error {
 	var current PendingItem
 	predicate := column + "=$2"
-	if run.TaskKind == "patrol_local" && column == "target_id" {
+	if run.TaskKind == "local" && column == "target_id" {
 		predicate = "(" + predicate + " OR (kind='local_cleanup' AND (evidence->'release_ids') ? $2::uuid::text))"
 	}
 	err := tx.QueryRowContext(ctx, `SELECT input_digest,COALESCE(identity_digest,'') FROM curation_pending_items
