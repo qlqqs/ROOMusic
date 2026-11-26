@@ -21,17 +21,12 @@ type creditPosition struct {
 }
 
 func creditPositions(local []catalog.CurationArtistCredit, external []sources.Credit, tags []string) []creditPosition {
-	if len(local) == 0 || len(local) != len(external) {
+	if !curation.ValidArtistCreditPositions(local, external) {
 		return nil
 	}
-	seenLocal, seenExternal := map[string]bool{}, map[string]bool{}
 	pairs := make([]creditPosition, 0, len(local))
 	for i, c := range local {
 		x := external[i]
-		if c.Position != i+1 || c.ArtistID == "" || x.ArtistID == "" || seenLocal[c.ArtistID] || seenExternal[x.ArtistID] || curation.MusicBrainzSpecialArtist(x.ArtistID) {
-			return nil
-		}
-		seenLocal[c.ArtistID], seenExternal[x.ArtistID] = true, true
 		pairs = append(pairs, creditPosition{c, x, len(tags) == len(local) && tags[i] == x.ArtistID})
 	}
 	return pairs

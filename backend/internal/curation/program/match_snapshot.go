@@ -202,7 +202,33 @@ func needsFullGroupCheck(e catalog.CurationEvidence) bool {
 	return false
 }
 
-func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result MatchResult, f sources.ReleaseFinder, offline bool) (MatchResult, error) {
+// 首搜、不同写法和放宽共用三次详情读取，未找到的编号也计入预算。
+type searchDetails struct {
+	finder    sources.ReleaseFinder
+	attempted map[string]bool
+}
+
+func (d *searchDetails) read(ctx context.Context, c *Candidate) error {
+	if c.Release.Complete || d == nil || d.attempted[c.ExternalID] || len(d.attempted) >= 3 {
+		return nil
+	}
+	d.attempted[c.ExternalID] = true
+	r, err := found(d.finder.ReleaseByID(ctx, c.ExternalID))
+	if err != nil || r.ID == "" {
+		return err
+	}
+	if r.ID != c.ExternalID {
+		return sources.ErrUnavailable
+	}
+	c.Release = &r
+	return nil
+}
+
+func possiblePartialCount(local, remote int) bool {
+	return remote >= 4 && (local > remote || local >= 4 && local < remote && local*2 >= remote)
+}
+
+func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result MatchResult, reads *searchDetails) (MatchResult, error) {
 	ok, relaxed := pageCoverage(result.Snapshot.Pages, "release")
 	if !ok {
 		markBlocked(e, result.Mode, result.Candidates)
@@ -211,7 +237,7 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 	discCounts := localDiscCounts(e)
 	markBlocked(e, result.Mode, result.Candidates)
 	var groupRows []sources.Release
-	var details []int
+	var details, partialExact, partialOther []int
 	blocked := 0
 	unknownGroup := false
 	for i := range result.Candidates {
@@ -241,6 +267,13 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 		}
 		wrong, known := searchShape(discCounts, len(e.Tracks), *c)
 		if wrong {
+			if len(cmp.conflicts) == 0 && possiblePartialCount(len(e.Tracks), c.TrackCount) && !c.Release.Complete {
+				if cmp.titleMatch && cmp.artistMatch {
+					partialExact = append(partialExact, i)
+				} else {
+					partialOther = append(partialOther, i)
+				}
+			}
 			cmp.conflict("track_count")
 		}
 		c.Conflicts = cmp.conflicts
@@ -262,7 +295,7 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 		result.Status, result.Route, result.Conflicts = "no_usable_candidates", "", candidateConflicts(result.Candidates)
 		return result, nil
 	}
-	groupCertain := !relaxed && !unknownGroup && e.Authenticity["title"] == metadata.Real && e.SelectedArtistAuth() == metadata.Real && !e.Compilation && !e.Classical && len(e.Tracks) > 4 && sharedGroup(groupRows) != "" && !needsFullGroupCheck(e)
+	groupCertain := !result.Snapshot.CountRelaxed && !relaxed && !unknownGroup && e.Authenticity["title"] == metadata.Real && e.SelectedArtistAuth() == metadata.Real && !e.Compilation && !e.Classical && len(e.Tracks) > 4 && sharedGroup(groupRows) != "" && !needsFullGroupCheck(e)
 	groupDurationsOK := func(rows []sources.Release) bool {
 		if !groupCertain {
 			return false
@@ -289,8 +322,16 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 	if groupVerified && !fillTitles {
 		return groupMatch(result, groupRows, "unique_group"), nil
 	}
+	partial := func(m MatchResult) (MatchResult, error) {
+		for _, i := range append(partialExact, partialOther...) {
+			if err := reads.read(ctx, &m.Candidates[i]); err != nil {
+				return MatchResult{}, err
+			}
+		}
+		return partialAlbumMatch(e, m), nil
+	}
 	if len(details) == 0 {
-		return partialAlbumMatch(e, uncertain(result, candidateConflicts(result.Candidates)...)), nil
+		return partial(uncertain(result, candidateConflicts(result.Candidates)...))
 	}
 	if len(details) > 3 {
 		if groupVerified {
@@ -301,33 +342,25 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 	var rows []sources.Release
 	for _, i := range details {
 		c := &result.Candidates[i]
-		r := *c.Release
-		if !r.Complete {
-			if offline {
-				if groupVerified {
-					return groupMatch(result, groupRows, "unique_group"), nil
-				}
+		if err := reads.read(ctx, c); err != nil {
+			return MatchResult{}, err
+		}
+		if !c.Release.Complete {
+			if groupVerified {
+				return groupMatch(result, groupRows, "unique_group"), nil
+			}
+			if reads == nil || !reads.attempted[c.ExternalID] {
 				return uncertain(result, "insufficient_evidence"), nil
 			}
-			detail, err := found(f.ReleaseByID(ctx, c.ExternalID))
-			if err != nil {
-				return MatchResult{}, err
-			}
-			if detail.ID == "" {
-				continue
-			}
-			if detail.ID != c.ExternalID {
-				return MatchResult{}, sources.ErrUnavailable
-			}
-			r = detail
+			continue
 		}
-		rows = append(rows, r)
+		rows = append(rows, *c.Release)
 	}
 	if len(rows) == 0 {
 		if groupVerified {
 			return groupMatch(result, groupRows, "unique_group"), nil
 		}
-		return uncertain(result), nil
+		return partial(uncertain(result))
 	}
 	groupVerified = groupDurationsOK(rows)
 	decided := decideAlbum(e, "search", rows, MatchSnapshot{})
@@ -341,7 +374,7 @@ func decideSearchAlbum(ctx context.Context, e catalog.CurationEvidence, result M
 		return groupMatch(result, groupRows, "unique_group"), nil
 	}
 	if decided.Status == "uncertain" {
-		return partialAlbumMatch(e, decided), nil
+		return partial(decided)
 	}
 	return decided, nil
 }
@@ -412,7 +445,7 @@ func replayMatch(e catalog.CurationEvidence, candidates []Candidate, conflicts [
 			}
 			m = decideSearchSingle(e, base)
 		} else {
-			m, _ = decideSearchAlbum(context.Background(), e, base, nil, true)
+			m, _ = decideSearchAlbum(context.Background(), e, base, nil)
 		}
 	} else {
 		// 只有标识候选来源完整、没有列表级反证时才离线重算。

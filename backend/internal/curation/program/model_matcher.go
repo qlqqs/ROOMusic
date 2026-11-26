@@ -562,6 +562,7 @@ func (m *ModelMatcher) ResumeConfirmation(ctx context.Context, item curation.Pen
 		links: curation.LinkRequest{ReleaseID: item.TargetID, ExternalSource: "musicbrainz", Method: s.Match.Method, Confidence: "certain", External: s.External, Links: s.Links}}
 	if s.Match.Release != nil {
 		write.fields = missingFields(before, *s.Match.Release)
+		write.albumCredit = &curation.ReleaseArtistCredit{ReleaseID: s.Match.Release.ID, Artists: s.Match.Release.Artists}
 	}
 	if s.Match.RepresentativeID != "" {
 		write.tracks = planTrackFields(before, s.Match)

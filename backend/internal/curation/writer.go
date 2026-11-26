@@ -23,6 +23,7 @@ type Source struct {
 }
 
 type Request struct {
+	ArtistCredit                *ReleaseArtistCredit
 	legacy                      *LegacyField
 	local                       *localSubmission
 	verification                *verificationWrite
@@ -51,6 +52,7 @@ func (w *Writer) Apply(ctx context.Context, request Request) (Applied, error) {
 }
 
 type TrackRequest struct {
+	ArtistCredit                *ReleaseArtistCredit
 	TrackID, ReleaseID          string
 	ExpectedRevision            int64
 	ConfirmedBy, ConversationID string
@@ -62,7 +64,7 @@ type TrackRequest struct {
 }
 
 func (w *Writer) ApplyTrack(ctx context.Context, r TrackRequest) (Applied, error) {
-	return w.applyFields(ctx, Request{ReleaseID: r.ReleaseID, ExpectedRevision: r.ExpectedRevision, ConfirmedBy: r.ConfirmedBy, ConversationID: r.ConversationID, OnlyEmpty: r.OnlyEmpty, ExpectedScan: r.ExpectedScan, Fields: r.Fields, Source: r.Source, BatchID: r.BatchID, Key: r.Key, RequestID: r.RequestID}, strings.ToLower(r.TrackID), true)
+	return w.applyFields(ctx, Request{ArtistCredit: r.ArtistCredit, ReleaseID: r.ReleaseID, ExpectedRevision: r.ExpectedRevision, ConfirmedBy: r.ConfirmedBy, ConversationID: r.ConversationID, OnlyEmpty: r.OnlyEmpty, ExpectedScan: r.ExpectedScan, Fields: r.Fields, Source: r.Source, BatchID: r.BatchID, Key: r.Key, RequestID: r.RequestID}, strings.ToLower(r.TrackID), true)
 }
 
 type autoFieldTarget interface {
@@ -195,6 +197,28 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 		}
 		applied.OperationID = operationID
 		out.Response = applied
+		artistField := "album_artist"
+		if track {
+			artistField = "artist"
+		}
+		if _, changed := write[artistField]; changed {
+			proof, err := fieldArtistCredit(ctx, tx, request.ArtistCredit, level, releaseID, trackID)
+			if err != nil {
+				return operations.Outcome{}, err
+			}
+			if proof != nil {
+				out.Response = struct {
+					Applied
+					ArtistCredit *fieldCreditProof `json:"artist_credit"`
+				}{applied, proof}
+				for _, link := range proof.Links {
+					out.Targets = append(out.Targets, operations.Target{Type: operations.TargetArtist, ID: link.ObjectID})
+				}
+			}
+			if err := refreshFieldArtistLinks(ctx, tx, releaseID, operationID, proof); err != nil {
+				return operations.Outcome{}, err
+			}
+		}
 		if request.verification != nil {
 			err = request.verification.finish(ctx, tx, operationID)
 		}

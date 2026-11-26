@@ -196,6 +196,10 @@ func (artistLinkKind) Revert(ctx context.Context, tx *sql.Tx, op string, r opera
 			}
 		}
 	}
+	// 人工对应占用期间，原来的自动署名或发行对应可能已经撤销。
+	if err := reconcileFieldArtistLinks(ctx, tx, []string{r.TargetID}, "", nil); err != nil {
+		return operations.Outcome{}, err
+	}
 	if err = restoreArtistMedia(ctx, tx, id, "artist_external_artworks", before.Images); err != nil {
 		return operations.Outcome{}, err
 	}

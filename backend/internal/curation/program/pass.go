@@ -172,7 +172,8 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	if subject == "release" {
 		inputs = releaseDigests{digest, IdentityDigest(input), GapDigest(input)}
 		// 旧基线与现有对应的维护一起提交，外部暂时失败时保留原状态。
-		if state.InputDigest == digest && (state.IdentityDigest == "" || state.IdentityDigest == inputs.identity && state.LocalRuleVersion != LocalRuleVersion && state.MatchRuleVersion == MatchRuleVersion) {
+		creditUpgrade := state.Status == "matched" && state.MatchRuleVersion != MatchRuleVersion && w.hasCachedCreditInput(input)
+		if !creditUpgrade && state.InputDigest == digest && (state.IdentityDigest == "" || state.IdentityDigest == inputs.identity && state.LocalRuleVersion != LocalRuleVersion && state.MatchRuleVersion == MatchRuleVersion) {
 			tracks, artists, merges := matchBackfills(state, input)
 			if tracks || artists || merges {
 				return w.backfillMatch(ctx, e, state, states, tracks, artists, merges)

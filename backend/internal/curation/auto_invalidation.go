@@ -53,6 +53,9 @@ func (w *Writer) invalidateFields(ctx context.Context, releaseID string, candida
 		if err := checkExternalWriter(ctx, tx, spec); err != nil {
 			return operations.Outcome{}, err
 		}
+		if err := refreshFieldArtistLinks(ctx, tx, releaseID, "", nil); err != nil {
+			return operations.Outcome{}, err
+		}
 		out.Response = map[string]string{"operation_id": id}
 		return out, nil
 	})

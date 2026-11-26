@@ -56,6 +56,13 @@ func (w *Worker) prepareRelease(ctx context.Context, e catalog.CurationEvidence,
 		return false, nil, err
 	}
 	defer tx.Rollback()
+	if upgrade && s.Status == "matched" && w.hasCachedCreditInput(e) {
+		e, err = w.backfillCachedCredits(ctx, tx, e)
+		if err != nil {
+			return false, nil, err
+		}
+		d = releaseInputs(e)
+	}
 	if upgrade && s.Status != "matched" {
 		review, m, err := reviewPendingVersion(ctx, tx, e, d, *s)
 		if err != nil || review == waitForClaim {
@@ -74,6 +81,29 @@ func (w *Worker) prepareRelease(ctx context.Context, e catalog.CurationEvidence,
 		return false, nil, err
 	}
 	return upgrade, nil, tx.Commit()
+}
+
+func (w *Worker) hasCachedCreditInput(e catalog.CurationEvidence) bool {
+	return w.opts.CachedReleaseCredits != nil && e.ExternalID != "" &&
+		(e.Automatic["album_artist"] || slices.ContainsFunc(e.Tracks, func(t catalog.CurationTrack) bool { return t.ArtistAutomatic }))
+}
+
+func (w *Worker) backfillCachedCredits(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidence) (catalog.CurationEvidence, error) {
+	r, err := w.opts.CachedReleaseCredits(e.ExternalID)
+	if err != nil || r == nil {
+		return e, err
+	}
+	byRecording := releaseTrackCredits(r)
+	byRecording[""] = &curation.ReleaseArtistCredit{ReleaseID: r.ID, Artists: r.Artists}
+	if err := curation.BackfillFieldArtistLinks(ctx, tx, e.ID, r.ID, byRecording); err != nil {
+		return e, err
+	}
+	// 新对应也可能属于已有的扫描署名，用事务内的最新艺人编号登记识别摘要。
+	fresh, err := catalog.LoadCurationEvidence(ctx, tx, []string{e.ID}, w.writer.ArtworkExists)
+	if err != nil {
+		return e, err
+	}
+	return fresh[e.ID], nil
 }
 
 // 本地投影与模型待定项使用同一份目录输入。模型也可并发写入匹配结论。

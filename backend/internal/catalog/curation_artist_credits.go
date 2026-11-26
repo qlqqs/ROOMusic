@@ -93,3 +93,41 @@ func CurationCanonicalArtists(ctx context.Context, q Queryer, ids []string) ([]s
 	}
 	return out, rows.Err()
 }
+
+// EffectiveAutoArtistCredits 返回本次字段写入后真正生效的有序署名，沿用目录已解析的本地身份。
+func EffectiveAutoArtistCredits(ctx context.Context, q Queryer, releaseID, trackID string) ([]CurationArtistCredit, error) {
+	predicate := "c.release_id=$1 AND c.role='album_artist'"
+	id := releaseID
+	if trackID != "" {
+		predicate = "c.track_id=$1 AND c.role='track_artist'"
+		id = trackID
+	}
+	rows, err := q.QueryContext(ctx, `SELECT c.position,c.artist_id,n.spelling FROM artist_effective_credits c
+	JOIN artist_credits fact ON fact.id=c.credit_id AND fact.layer='auto'
+	JOIN artist_names n ON n.id=c.name_id WHERE `+predicate+` ORDER BY c.position`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var group []CurationArtistCredit
+	for rows.Next() {
+		var c CurationArtistCredit
+		if err := rows.Scan(&c.Position, &c.ArtistID, &c.Name); err != nil {
+			return nil, err
+		}
+		group = append(group, c)
+	}
+	return group, rows.Err()
+}
+
+// EffectiveExternalAutoCreditsSQL 按艺人读取生效的外部自动署名位置和字段写入者。
+const EffectiveExternalAutoCreditsSQL = `SELECT c.artist_id,c.position,c.release_id,a.operation_id FROM artist_effective_credits c
+	JOIN release_auto_values a ON a.release_id=c.release_id AND a.field='album_artist' AND a.writer_level IN (3,4)
+	JOIN artist_credits fact ON fact.id=c.credit_id AND fact.layer='auto'
+	WHERE c.artist_id=ANY($1::uuid[]) AND c.role='album_artist'
+	UNION ALL
+	SELECT c.artist_id,c.position,m.release_id,a.operation_id FROM artist_effective_credits c
+	JOIN track_auto_values a ON a.track_id=c.track_id AND a.field='artist' AND a.writer_level IN (3,4)
+	JOIN artist_credits fact ON fact.id=c.credit_id AND fact.layer='auto'
+	JOIN tracks t ON t.id=c.track_id AND t.source_status='present' JOIN media m ON m.id=t.medium_id
+	WHERE c.artist_id=ANY($1::uuid[]) AND c.role='track_artist'`

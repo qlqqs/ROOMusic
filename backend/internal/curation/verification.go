@@ -94,6 +94,7 @@ type LibrarySupport struct {
 
 // VerifiedName 只在按生效对应读回外部对象并核实结构后生成。
 type VerifiedName struct {
+	ArtistCredit *ReleaseArtistCredit
 	VerificationCandidate
 	Match NameMatchEvidence
 }
@@ -521,6 +522,9 @@ func (w *Writer) applyVerification(ctx context.Context, write verificationWrite,
 		return out.OperationID, err
 	case "verify_name":
 		req := Request{verification: &write, ReleaseID: item.TargetID, ExpectedRevision: p.Revision, Fields: map[string]catalog.CorrectionIntent{v.Field: {Mode: catalog.CorrectionSet, Value: v.After}}, Source: source, BatchID: batch, Key: write.key, ConversationID: item.ConversationID}
+		if p.Method == "external_value" && p.nameProof != nil {
+			req.ArtistCredit = p.nameProof.ArtistCredit
+		}
 		out, err := w.applyFields(ctx, req, v.TrackID, v.TrackID != "")
 		return out.OperationID, err
 	case "verify_artist_merge":

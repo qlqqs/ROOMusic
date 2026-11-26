@@ -14,10 +14,28 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
+// 同一录音在发行中出现多次时，不能用录音编号唯一定位曲目署名。
+func releaseTrackCredits(r *sources.Release) map[string]*curation.ReleaseArtistCredit {
+	out := map[string]*curation.ReleaseArtistCredit{}
+	if r != nil {
+		for _, medium := range r.Media {
+			for _, t := range medium.Tracks {
+				if _, repeated := out[t.RecordingID]; repeated {
+					out[t.RecordingID] = nil
+				} else {
+					out[t.RecordingID] = &curation.ReleaseArtistCredit{ReleaseID: r.ID, RecordingID: t.RecordingID, Artists: t.Artists}
+				}
+			}
+		}
+	}
+	return out
+}
+
 func planTrackFields(e catalog.CurationEvidence, m MatchResult) []curation.TrackRequest {
 	type names struct{ title, artist string }
 	recordings := map[string]names{}
 	ambiguous := map[string]bool{}
+	artistCredits := releaseTrackCredits(m.Release)
 	if r := m.Release; r != nil {
 		for _, medium := range r.Media {
 			for _, t := range medium.Tracks {
@@ -57,7 +75,7 @@ func planTrackFields(e catalog.CurationEvidence, m MatchResult) []curation.Track
 		add("title", value.title, t.TitlePlaceholder || t.TitleInferred)
 		add("artist", value.artist, t.ArtistPlaceholder)
 		if len(fields) > 0 {
-			requests = append(requests, curation.TrackRequest{ReleaseID: e.ID, TrackID: t.ID, OnlyEmpty: true, Fields: fields, ExpectedScan: map[string]json.RawMessage{"title": jsonValue(t.Title), "artist": jsonValue(t.Artist)}})
+			requests = append(requests, curation.TrackRequest{ArtistCredit: artistCredits[id], ReleaseID: e.ID, TrackID: t.ID, OnlyEmpty: true, Fields: fields, ExpectedScan: map[string]json.RawMessage{"title": jsonValue(t.Title), "artist": jsonValue(t.Artist)}})
 		}
 	}
 	return requests
