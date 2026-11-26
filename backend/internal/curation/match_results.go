@@ -21,6 +21,33 @@ type ReleaseMatchResult struct {
 	Conflicts  []string        `json:"conflicts"`
 }
 
+// MarshalJSON 保证识别结论始终带有快照字段。没有候选快照时使用 JSON null。
+func (r ReleaseMatchResult) MarshalJSON() ([]byte, error) {
+	var snapshotID *string
+	if r.SnapshotID != "" {
+		snapshotID = &r.SnapshotID
+	}
+	return json.Marshal(struct {
+		SnapshotID *string         `json:"snapshot_id"`
+		Candidates json.RawMessage `json:"candidates"`
+		Selection  *MatchSelection `json:"selection"`
+		Source     string          `json:"source"`
+		Status     string          `json:"status"`
+		CheckedAt  *time.Time      `json:"checked_at"`
+		Reason     string          `json:"reason"`
+		Conflicts  []string        `json:"conflicts"`
+	}{
+		SnapshotID: snapshotID,
+		Candidates: r.Candidates,
+		Selection:  r.Selection,
+		Source:     r.Source,
+		Status:     r.Status,
+		CheckedAt:  r.CheckedAt,
+		Reason:     r.Reason,
+		Conflicts:  r.Conflicts,
+	})
+}
+
 // MatchModelConfigured 使用整理指定的模型，未单独指定时沿用开启者的管家模型。
 func MatchModelConfigured(ctx context.Context, q operations.Queryer) (bool, error) {
 	var configured bool
