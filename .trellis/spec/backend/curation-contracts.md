@@ -1203,7 +1203,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ## 28. 真实试用缺口与现实情形（2026-11-26，`MatchRuleVersion` 104，`LocalRuleVersion` 3，审查策略第 7 版）
 
-依据任务 `11-26-curation-live-gaps` 的 PRD（R1–R24）。第 23–27 节与本节不一致处以本节为准。
+依据任务 `11-26-curation-live-gaps` 的 PRD（R1–R29，任务已归档，归档目录不纳入 Git）。第 23–27 节与本节不一致处以本节为准。
 
 ### 28.1 来源不可用与连续无决定
 
