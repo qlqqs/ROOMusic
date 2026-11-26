@@ -176,25 +176,31 @@ func TestPostgreSQLLiveGapsSelection(t *testing.T) {
 		}
 		payload := fmt.Sprintf("{\"items\":[{\"item_id\":%q,\"decision\":\"upgrade\"},{\"item_id\":%q,\"decision\":\"select\",\"external_id\":%q}]}", good.ID, bad.ID, uuid.New())
 		q.reply <- q.frame(t, map[string]string{"content": "```json\n" + payload + "\n```"}, "stop")
+		schedulerWait(t, "缺答项排定重试", func() bool { return f.item(t, bad.ID).NextAttemptAt != nil })
+		f.clock.now.Store(f.item(t, bad.ID).NextAttemptAt.UnixNano())
 		next := f.next(t, false)
 		g, b := f.item(t, good.ID), f.item(t, bad.ID)
-		if g.Route != "lookup" || g.Status != "waiting_route" || g.Attempts != 0 || b.Attempts != 1 || strings.Contains(string(next.Messages[len(next.Messages)-1].Content), good.ID) {
-			t.Fatalf("有效项应升级且不计次，不合格项单独重试；有效项 %s/%s attempts=%d，不合格项 %s/%s attempts=%d", g.Status, g.Route, g.Attempts, b.Status, b.Route, b.Attempts)
+		if g.Resolution == nil || *g.Resolution != "undetermined" || g.Attempts != 1 || b.Attempts != 0 || b.EmptyCount != 1 || strings.Contains(string(next.Messages[len(next.Messages)-1].Content), good.ID) {
+			t.Fatalf("定不了的项应结案并计次，不合格项单独重试；有效项 %s/%s attempts=%d，不合格项 %s/%s attempts=%d", g.Status, g.Route, g.Attempts, b.Status, b.Route, b.Attempts)
 		}
 		f.pause(t)
 		next.complete(t)
 	})
-	t.Run("三次无效只升第二档", func(t *testing.T) {
+	t.Run("三次无效后搁置", func(t *testing.T) {
 		f := newSchedulerFixtureWithSources(t, &testLookupGate{}, nil)
 		p := modelRouteFixture(t, f, f.pending(t, f.a), "")
 		f.configure(t, &f.admin)
 		f.enable(t)
-		for range 3 {
+		for i := range 3 {
 			f.next(t, false).selectCandidate(t, p.ID, uuid.New())
+			if i < 2 {
+				schedulerWait(t, "无效决定延后", func() bool { return f.item(t, p.ID).NextAttemptAt != nil })
+				f.clock.now.Store(f.item(t, p.ID).NextAttemptAt.UnixNano())
+			}
 		}
 		schedulerWait(t, "第三次非法决定释放领取", func() bool { v := f.item(t, p.ID); return v.Status == "shelved" || v.Status == "waiting_route" })
 		v := f.item(t, p.ID)
-		if v.Status != "waiting_route" || v.Route != "lookup" || v.ShelvedReason != nil {
+		if v.Status != "shelved" || v.ShelvedReason == nil || *v.ShelvedReason != "模型没给出结果" {
 			t.Fatalf("第三次非法决定后得到 %s/%s，尝试 %d", v.Status, v.Route, v.Attempts)
 		}
 	})

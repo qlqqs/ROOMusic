@@ -6,7 +6,7 @@ import (
 )
 
 // CommonVersion 在观察结构或共用解析规则改变时递增，使所有格式的缓存失效。
-const CommonVersion = 5
+const CommonVersion = 6
 
 // 只改变某一格式的读取规则时递增对应版本；新增格式从 1 开始。
 var formatVersions = map[string]int{
@@ -24,7 +24,7 @@ var formatVersions = map[string]int{
 	".dff":  1,
 }
 
-// CacheVersion 返回扩展名的解析缓存版本；未支持的格式不缓存。
+// CacheVersion 返回支持格式的解析版本，未知扩展名返回空串。
 func CacheVersion(extension string) string {
 	version, ok := formatVersions[strings.ToLower(extension)]
 	if !ok {

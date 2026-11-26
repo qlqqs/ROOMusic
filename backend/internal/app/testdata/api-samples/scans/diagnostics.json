@@ -15,20 +15,20 @@
       },
       {
         "id": "3",
-        "kind": "parse_failure",
-        "message": "音频文件解析失败",
+        "kind": "unsupported_format",
+        "message": "音频格式暂不支持",
         "path": "broken.flac"
       }
     ],
     "summary": {
       "counts": [
         {
-          "count": 1,
-          "kind": "parse_failure"
-        },
-        {
           "count": 2,
           "kind": "root_unavailable"
+        },
+        {
+          "count": 1,
+          "kind": "unsupported_format"
         }
       ],
       "total": 3

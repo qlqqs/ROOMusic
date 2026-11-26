@@ -820,7 +820,7 @@ data: {"seq":42,"type":"text","step":1,"text":"回答增量"}
 
 回环 IP 写法的主机按 `localhost` 加端口匹配。预设只用于猜测协议、补前缀和 `provider_name`，不代表工具能力。
 
-对话与后台整理共用 Provider 客户端。收到 HTTP 429、503 响应头时可重发同一请求，含首次最多发送 5 次。自首次发送起，10 秒内可发起重试。有效的 `Retry-After`（秒数或 HTTP 日期）决定等待时长，否则从 300 毫秒起翻倍，上限 3 秒。所需等待超过剩余预算时立即按本次错误处理。等待遵守调用方的 context。成功响应直接交给现有流解析器，读流期间的超时、中断及错误事件按下表处理。
+交互对话与过渡期的后台审查使用原有 HTTP 重试。收到 HTTP 429、503 响应头时可重发同一请求，含首次最多发送 5 次。自首次发送起，10 秒内可发起重试。有效的 `Retry-After`（秒数或 HTTP 日期）决定等待时长，否则从 300 毫秒起翻倍，上限 3 秒。所需等待超过剩余预算时立即按本次错误处理。等待遵守调用方的 context。成功响应直接交给现有流解析器，读流期间的超时、中断及错误事件按下表处理。
 
 错误分类（`provider.Error{Kind, StatusCode, Message}`；`Message` 去掉密钥与敏感请求头后最多 500 个字符）：
 
@@ -969,6 +969,9 @@ JSON 错误信封只给上表的固定消息；适配器脱敏后的 `Message` �
 消息正文、工具输入输出以明文存库。密钥不进入消息、事件与工具输出。
 
 ### 后台整理运行
+
+整理主调用按完整协议 JSON 估算输入：ASCII 字母数字连续段每四个向上取整，其他 ASCII 每个计一，非 ASCII 字符按 UTF-8 字节数除以二向上取整。系统词、消息、工具 schema、协议包装、预留的输出均计入单次预算，实际发送同样限制输出。主调用短重试以整个读流步骤为单位，最多五次、十秒内发起。先解析供应方错误，再决定是否重发；失败尝试的已知 usage 分别入账，部分工具片段不执行。调度按整理合同 25.4 处理最终失败，独立审查沿用原收尾途径。
+
 
 `RunParams.Background` 为后台运行分配全实例唯一名额，已占用返回 `ErrBackgroundBusy`。对话继续使用每用户三个名额。调度器通过 `StartBackground` 提供 `BeforeStep`、`Usage`、`Escalate` 和 `SystemSuffix`，并启用 `SkipMemory`。后台使用开启者的模型端点与个人审查模型。网络搜索来源可用且该模型启用原生搜索时设置 `NativeSearch`。后台每步重新列出可用工具，调用时再次检查。`RunParams.BackgroundDirectTools` 只登记 `submit_artist_media`，保留 shared 的输入校验、操作幂等及提交不确定时的原键对账。`resolve_artist_identity` 走独立审查。每次主模型步骤与重审前执行 `BeforeStep`，返回 `ErrRunStopped` 时结束原因为 `curation_stopped`。用量回调区分 main、review、summary。后台转人工或拒绝时，`Escalate` 返回持久例外 ID。转人工项取舍记为 `escalated`。
 

@@ -22,7 +22,7 @@ type CurationCursor struct {
 }
 
 func PageCurationReleases(ctx context.Context, q Queryer, after *CurationCursor, limit int) ([]CurationCursor, error) {
-	query := "SELECT releases.id::text,releases.created_at FROM releases WHERE " + releasesql.ReleaseVisiblePredicate
+	query := "SELECT releases.id::text,releases.created_at FROM releases JOIN curation_eligible_releases USING(id) WHERE true"
 	args := []any{limit}
 	if after != nil {
 		query += " AND (releases.created_at,releases.id)<($2::timestamptz,$3::uuid)"
@@ -382,7 +382,7 @@ const curationTrackSQL = `SELECT m.release_id::text,t.id::text,COALESCE(ct.text_
  LEFT JOIN track_display_durations dd ON dd.track_id=t.id
  LEFT JOIN track_external_lyrics el ON el.track_id=t.id
  LEFT JOIN external_links tl ON tl.source='musicbrainz' AND tl.object_type='track' AND tl.object_id=t.id
- WHERE m.release_id=ANY($1::uuid[]) ORDER BY m.release_id,m.position,t.position,t.id`
+ WHERE m.release_id=ANY($1::uuid[]) ORDER BY m.release_id,m.position,COALESCE(t.sort_position,t.position),t.id`
 
 func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map[string]CurationEvidence, withDetails bool) error {
 	rows, err := q.QueryContext(ctx, curationTrackSQL, ids, withDetails)
@@ -410,6 +410,9 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 		}
 		t.TitleObservation = observed["title"].CurationObservation
 		t.ArtistObservation = observed["artist"].CurationObservation
+		if t.ArtistObservation.Source == "garbled" {
+			t.FirstArtistCredit = ""
+		}
 		t.PositionObservation = observed["track_number"].CurationObservation
 		auth := func(name, value string, corrected bool) metadata.Authenticity {
 			o := observed[name]

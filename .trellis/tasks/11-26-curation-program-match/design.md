@@ -35,7 +35,7 @@
 | 逐版例外 | 合辑、古典、短专辑保留逐版核对，沿用代码与用例的四首及以下边界。去掉发行路径的 `len > 3 → too_many` 和妨碍例外逐版核对的三次详情上限；保留完整页界限和单曲判定。单版通过认版，同组多版通过认组，跨组则冲突。 |
 | 部分吻合 | `program/match_partial.go` 在现有子集或超集判定前核对专辑、艺人两个非空合并键。子集仍须至少 max(4, 外部曲数的一半向上取整)、每首曲名时长一一配对；超集仍须完整前缀，仅末尾可多曲。只认唯一组，不建录音对应。不读取已知名称不符的部分候选详情。模型补读沿用同一筛选，仅在 `program/model_editions.go` 的 `checkModelPartialEditions` 调用处传本地证据，保留可能完整吻合的异组核对。 |
 
-与子任务 3 共用 `backend/internal/catalog/textnorm.MergeKey(raw string) string`，由先合入者在该包提供，主代理合并时去重。对字符串做 Unicode 规范分解、大小写折叠、去变音标记、标点和空白，再规范组合；保留符号和括号内的正文。例：`Béla – LIVE` 与 `bela live` 同键，`Live (Deluxe)` 与 `Live` 异键。不做 OpenCC 转换、合作词重写、版本词删除，不修改显示值或现有 `Text/Loose` 搜索投影版本。合并键只用于决定中点名的比较。确定性拆艺人用原署名拼接比较。
+与子任务 3 共用 `backend/internal/catalog/textnorm.MergeKey(raw string) string`，复用子任务 3 的实现。先折叠大小写，再做 Unicode 规范分解，去除组合变音标记、标点、符号和空白，再规范组合。括号内的正文保留。例：`Béla – LIVE` 与 `bela live` 同键，`Live (Deluxe)` 与 `Live` 异键。不做 OpenCC 转换、合作词重写、版本词删除，不修改显示值或现有 `Text/Loose` 搜索投影版本。合并键只用于决定中点名的比较。确定性拆艺人用原署名拼接比较。
 
 ## 结论与读接口（未匹配、重查）
 
@@ -77,7 +77,7 @@
 - 新增 `curation_work_states.file_digest` 保存最近结论所用的文件摘要。`program/release_state.go`、`release_digests.go`、`queue_projection.go`、`pass.go` 对识别排队使用相同的文件/规则比较；写入前仍以当前完整证据核对。清理 `curation/release_identity.go` 的 101/102 比较入口和按旧冲突码列举的升级规则；模型项的现行证据校验单独保留，不能把“文件未变”用作旧模型写入的授权。`program/unit.go` 的 `unit.write` 首次写前，对发行主题且有原取证的对象，在已加载的目录证据上比较文件摘要，不同时返回既有的 errReleaseChanged。来源重查结论只在同一代仍有效时提交，过期项用已有 superseded/领取检查收口。
 - 默认版本升级只让未匹配（含候选已撤销）、有冲突和子任务 6 的查询出错走 S8，利用现有 `requery_match_version` 保证只消费一次。旧 `too_many` 随未定结果排回程序。已匹配升投影版本，不搜名字、不重新判版；已有对应的独立缺口按原补建流程处理。将来修正可能认错的问题时，在该次规则变更上声明“自哪个版本起需复核已匹配”，仅对跨过该版本、持有具体版 ID 的对象走 `ReleaseByID(已对应ID)` 核对，可复用有效详情；失败记实际矛盾，不改用 S8 搜索。正常文件变化下已持有具体版的也优先复核该版。未来明确升级复核时，录音级只读原录音，组级和艺人级保留原结论，适用级别由该次升级声明。
 
-**迁移合同。** 在 `backend/migrations/` 增一对 `NNNN_curation_program_match.sql` 和 `NNNN_curation_program_match.down.sql`，基线最后为 0097，合入时与其它子任务分配连续序号。迁移包含来源结论表、拆署名明细、文件基线列和工作状态约束/到期索引。工作行的新结论值为 matched、unmatched、conflict；不准入且已处理的发行用已有 done，与其他工作主题同名但不产生 MusicBrainz 结论。到期谓词取普通 unmatched 的非空 next_attempt_at。本任务的迁移只新增 unmatched、conflict；主代理合入时合并子任务 6 的 query_error。旧迁移不改。保留现有模型、批次、操作历史，升级只映射 release 主题的识别状态。
+**迁移合同。** 在 `backend/migrations/` 增一对 `0102_curation_program_match.sql` 和 `0102_curation_program_match.down.sql`。迁移包含来源结论表、拆署名明细、文件基线列和工作状态约束/到期索引。工作行的新结论值为 matched、unmatched、conflict；不准入且已处理的发行用已有 done，与其他工作主题同名但不产生 MusicBrainz 结论。到期谓词取普通 unmatched 的非空 next_attempt_at。本任务的迁移只新增 unmatched、conflict；主代理合入时合并子任务 6 的 query_error。旧迁移不改。保留现有模型、批次、操作历史，升级只映射 release 主题的识别状态。
 
 | 旧数据 | 升级处理 |
 | --- | --- |
@@ -93,7 +93,7 @@
 
 | 改动边界 | 实施文件（相同目录下简写） |
 | --- | --- |
-| 目录证据及拆署名 | `backend/internal/catalog/{curation_classification.go,curation_evidence.go,curation_artist_credits.go}`、`internal/artistgraph/{facts.go,refresh.go}`（后两项位于 catalog 下）、`backend/internal/catalog/textnorm/textnorm.go` |
+| 目录证据及拆署名 | `backend/internal/catalog/{curation_classification.go,curation_evidence.go,curation_artist_credits.go}`、`internal/artistgraph/{facts.go,refresh.go}`（后两项位于 catalog 下）、`backend/internal/catalog/textnorm/keys.go` |
 | 查找、判定及写入 | `backend/internal/curation/program/{match.go,match_search.go,match_lookup.go,match_album.go,match_snapshot.go,match_partial.go,model_editions.go,match_single.go,fingerprint.go,enrich.go,track_fields.go,artist_links.go,release_route.go}`；`backend/internal/sources/musicbrainz/{search_page.go,release_group.go}`、`backend/internal/curation/{search_pages.go,source_finders.go}`、`backend/internal/app/curation_musicbrainz.go` |
 | 持久化、调度、治理 | 上述迁移；`backend/internal/curation/{work_states.go,unlisted.go,progress.go,release_identity.go,external_link.go,external_link_revert.go,field_artist_links.go,release_merge.go,release_merge_discovery.go,release_merge_evidence.go,model_queue.go,patrol_submit.go,httpapi/handlers.go}`；`program/{worker.go,queue_projection.go,queue_query.go,release_state.go,release_digests.go,pass.go,unit.go,model_matcher.go}`。新增来源结论读写集中在 `backend/internal/curation/match_results.go`。模型文件只接统一保存入口。 |
 | 整理规范 | `.trellis/spec/backend/curation-contracts.md` 第 15、16、18–20、22、23、25、27.2、28.2/3/6 节中受影响的规则与接口；`sources-contracts.md` 的查询输入；`artist-contracts.md` 的署名事实；`release-merge-contracts.md` 的证据和写入来源；`database-guidelines.md` 的新增迁移。局部替换旧规则，交 11 汇总。 |

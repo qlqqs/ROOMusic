@@ -1,11 +1,13 @@
 import { correctionFieldLabels, displayValue, sourceName, trackFieldLabels, type CorrectableField } from "../governance";
 import { formatCount } from "../../shared/lib/number";
+import { formatDateTime } from "../../shared/lib/time";
 import type {
   CurationExceptionDTO,
   CurationQueueDTO,
   CurationSourceDTO,
   JsonValue,
   MatchResultStatus,
+  ModelPauseKind,
   ModelState,
   ModelUnavailableReason,
   ProgramState,
@@ -252,6 +254,27 @@ export function modelUnavailableText(reason: ModelUnavailableReason, mine: boole
       return "MusicBrainz 已关闭，模型判断要用它查资料。";
     case "provider_error":
       return "模型接口最近出错了，过一会儿自动再试。";
+  }
+}
+
+/**
+ * 模型暂停的具体原因与恢复方式（ADR 0009 第 6.5 节）。detail 是已脱敏的上游说明或本地说明，retryAt 是自动再试或恢复的时刻。
+ * 本地每日上限由状态本身（limit_reached）说明，调用方不再重复。
+ */
+export function modelPauseText(kind: ModelPauseKind, detail: string | null, retryAt: string | null): string {
+  const because = detail === null || detail === "" ? "" : `（${detail}）`;
+  const at = retryAt === null ? null : formatDateTime(retryAt);
+  switch (kind) {
+    case "configuration":
+      return `模型接口拒绝了请求${because}，改好配置或测试连接成功后继续`;
+    case "provider_quota":
+      return `服务商的额度或余额不足${because}${at === null ? "" : `，${at} 自动再试一次`}`;
+    case "temporary":
+      return `服务商暂时出错${because}${at === null ? "" : `，${at} 再试`}`;
+    case "empty_replies":
+      return `模型连续没有给出回答${because}，测试连接成功后继续`;
+    case "daily_limit":
+      return `到了每日上限${at === null ? "" : `，${at} 继续`}`;
   }
 }
 

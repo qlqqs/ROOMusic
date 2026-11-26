@@ -3,6 +3,7 @@ package library
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"math/big"
@@ -43,6 +44,9 @@ type rootCount struct {
 	complete bool
 }
 type scanFeedback struct {
+	completedWholeRoots       []registeredRoot
+	coverage                  []byte
+	affectedReleases          []string
 	observedFiles             map[scanFileKey]scanFileObservation
 	progress                  ScanProgress
 	root                      RootProgress
@@ -62,7 +66,17 @@ type scanFeedback struct {
 }
 
 func newScanFeedback(service *Service, executor scanExecutor, scanID string, roots []registeredRoot) *scanFeedback {
-	return &scanFeedback{service: service, executor: executor, scanID: scanID, changes: ingest.NewScanFeedback(scanID), now: time.Now,
+	var coverage []byte
+	dirs := map[string][]string{}
+	for _, root := range roots {
+		if root.directories != nil {
+			dirs[root.ID] = root.directories
+		}
+	}
+	if len(dirs) > 0 {
+		coverage, _ = json.Marshal(dirs)
+	}
+	return &scanFeedback{coverage: coverage, service: service, executor: executor, scanID: scanID, changes: ingest.NewScanFeedback(scanID), now: time.Now,
 		progress: ScanProgress{Version: 1, Phase: "counting", Unit: "roots", Total: int64(len(roots))}, root: RootProgress{Total: len(roots)}, counts: make([]rootCount, len(roots))}
 }
 
@@ -205,7 +219,7 @@ func (f *scanFeedback) flush(ctx context.Context, force bool) {
 
 func isScanCandidate(path string) bool {
 	extension := strings.ToLower(filepath.Ext(path))
-	return extension == ".cue" || isSupportedAudioExtension(extension) || isAudioCandidateExtension(extension)
+	return extension == ".cue" || isScannableAudio(extension)
 }
 
 func (service *Service) countScanRoots(ctx context.Context, executor scanExecutor, scanID string, roots []registeredRoot, f *scanFeedback) bool {
@@ -229,7 +243,7 @@ func (service *Service) countScanRoots(ctx context.Context, executor scanExecuto
 			count.complete = false
 			_ = service.recordDiagnosticWith(ctx, executor, scanID, "", "root_unavailable", "注册目录当前不可用")
 		} else {
-			err := filepath.WalkDir(root.Path, func(path string, entry fs.DirEntry, walkErr error) error {
+			err := root.walk(func(path string, entry fs.DirEntry, walkErr error) error {
 				if err := ctx.Err(); err != nil {
 					return err
 				}

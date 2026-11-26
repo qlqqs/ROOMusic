@@ -43,10 +43,10 @@ func TestNaturalFallbackTrackPositions(t *testing.T) {
 		{Observation: filenameObservation("album/part1song.flac")},
 	}
 	assignFallbackTrackPositions(tracks)
-	for index, want := range []int{3, 2, 1} {
+	for index, want := range []int{1, 2, 3} {
 		o := tracks[index].Observation
-		if tracks[index].Position != want || o.TrackNumber != want || !o.InferredFields["track_number"] || o.FieldSources["track_number"] != "path_order_fallback" {
-			t.Errorf("%q 补位 = %#v，期望 %d/path_order_fallback/inferred", o.RelativePath, tracks[index], want)
+		if tracks[index].SortPosition != want || o.TrackNumber != 0 || tracks[index].Position != 0 || o.RelativePath != []string{"album/part1song.flac", "album/part2song.flac", "album/part10song.flac"}[index] {
+			t.Errorf("%q 曲位 = %#v，期望内部次序 %d 且曲号未知", o.RelativePath, tracks[index], want)
 		}
 	}
 }

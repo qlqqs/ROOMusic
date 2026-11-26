@@ -6,10 +6,10 @@
     "enabled_at": null,
     "enabled_by": null,
     "inactive_reason": "disabled",
+    "max_request_tokens": 128000,
     "model": "",
     "model_concurrency": 4,
-    "paused": false,
-    "web_daily_token_limit": null
+    "paused": false
   },
   "status": 200
 }

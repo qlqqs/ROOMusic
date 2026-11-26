@@ -16,23 +16,27 @@ func applyCompilation(observations []SourceObservation, artist, albumArtist *Fie
 			compilations++
 		}
 	}
-	if !taggedAlbumArtist && counts.IsCompilation(len(observations)) {
-		*albumArtist = FieldDecision{Field: "album_artist", Value: "Various Artists", Source: "artist_distribution", Confidence: "low", Action: "uncertain_apply", RuleID: "compilation_distribution_v1", Reason: "inferred_value", Candidates: []string{"Various Artists"}}
-		*artist = *albumArtist
-		artist.Field = "artist"
+	if albumArtist.Reason == "tied_candidates" {
 		return
 	}
-	if albumArtist.Value != "" && !metadata.IsCompilationPlaceholder(albumArtist.Value) {
+	if albumArtist.Value != "" && !metadata.IsCompilationPlaceholder(albumArtist.Value) && (taggedAlbumArtist || albumArtist.Source == "folder") {
 		return
 	}
-	if !metadata.IsCompilationPlaceholder(artist.Value) && compilations*2 <= len(observations) {
+	if metadata.IsCompilationPlaceholder(artist.Value) || compilations*2 > len(observations) {
+		*artist = FieldDecision{Field: "artist", Value: metadata.CompilationDisplayName, Source: "compilation", Confidence: "high", Action: "auto_apply", RuleID: "compilation_v1", Candidates: artist.Candidates}
+		*albumArtist = FieldDecision{}
 		return
 	}
-	*artist = FieldDecision{
-		Field: "artist", Value: metadata.CompilationDisplayName, Source: "compilation",
-		Confidence: "high", Action: "auto_apply", RuleID: "compilation_v1", Candidates: artist.Candidates,
+	if !taggedAlbumArtist {
+		if name := counts.ReleaseArtist(len(observations)); name != "" {
+			*albumArtist = FieldDecision{Field: "album_artist", Value: name, Source: "artist_distribution", Confidence: "low", Action: "uncertain_apply", RuleID: "artist_distribution_v2", Reason: "inferred_value", Candidates: artist.Candidates}
+			*artist = *albumArtist
+			artist.Field = "artist"
+			if metadata.IsCompilationPlaceholder(name) {
+				artist.Value = metadata.CompilationDisplayName
+			}
+		}
 	}
-	*albumArtist = FieldDecision{}
 }
 
 // 展示串已按名字排序。原始署名按出现序号和标签键取首项，与整理读取的次序一致。

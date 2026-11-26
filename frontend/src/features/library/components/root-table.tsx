@@ -1,10 +1,11 @@
 import { CirclePause, Folder, FolderMinus, FolderPen, MoreHorizontal, RotateCcw, Ban } from "lucide-react";
 import { MenuButton, StatusTag, type MenuAction } from "../../../shared/ui";
-import type { RootDTO } from "../api/decoders";
+import type { RootDTO, RootListItemDTO } from "../api/decoders";
+import { RootWatchMode } from "./root-watch-mode";
 import styles from "./root-table.module.css";
 
 type RootTableProps = {
-  roots: readonly RootDTO[];
+  roots: readonly RootListItemDTO[];
   /** 有命令在进行中：改路径、停用与恢复暂时不可选，同一时刻只有一个目录命令。 */
   busy: boolean;
   onDisable: (root: RootDTO) => void;
@@ -23,7 +24,8 @@ function RootStatusTag({ status }: { status: RootDTO["status"] }) {
 }
 
 /**
- * 音乐目录列表：每个目录一行——文件夹图标、目录名（接口只给路径的最后一段，不显示服务器路径）、停用时的状态，行尾“更多”菜单里是不扫描的文件夹、改路径与停用/恢复。
+ * 音乐目录列表：每个目录一行——文件夹图标、目录名（接口只给路径的最后一段，不显示服务器路径）、监听方式（实时监听或定时扫描及其间隔）、停用时的状态，
+ * 行尾“更多”菜单里是不扫描的文件夹、改路径与停用/恢复。
  * 停用要确认，恢复直接执行；改路径与不扫描的文件夹在对话框里设置。
  */
 export function RootTable({ roots, busy, onDisable, onRestore, onEditExclusions, onRelocate }: RootTableProps) {
@@ -41,6 +43,9 @@ export function RootTable({ roots, busy, onDisable, onRestore, onEditExclusions,
           <li key={root.id} className={styles.row}>
             <Folder className={styles.icon} size={18} aria-hidden="true" />
             <span className={styles.name}>{root.name}</span>
+            <span className={styles.watch}>
+              <RootWatchMode root={root} />
+            </span>
             <span className={styles.status}>
               <RootStatusTag status={root.status} />
             </span>

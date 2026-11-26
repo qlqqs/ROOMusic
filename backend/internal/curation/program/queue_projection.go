@@ -85,7 +85,8 @@ func (w *Worker) refreshReleaseQueue(ctx context.Context, releaseID string) erro
 		return err
 	}
 	row := catalog.CurationCursor{ID: releaseID}
-	if err := w.db.QueryRowContext(ctx, `SELECT created_at FROM releases WHERE id=$1`, releaseID).Scan(&row.AddedAt); err != nil {
+	if err := w.db.QueryRowContext(ctx, `SELECT r.created_at FROM releases r
+ JOIN curation_eligible_releases e ON e.id=r.id WHERE r.id=$1`, releaseID).Scan(&row.AddedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
@@ -190,20 +191,7 @@ func (w *Worker) projectReleasePage(ctx context.Context, page []catalog.Curation
 	if err := w.saveMediaProjection(ctx, tx, projected, completed, releaseMediaBindings); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	for _, id := range ids {
-		for _, f := range curation.LegacyFields(entries[id]) {
-			u := unit{w: w, subject: "legacy_encoding", id: id, ruleVersion: LocalRuleVersion}
-			if err := u.writeInBatch(ctx, f.Key(), func(batch, key string) error {
-				return w.writer.ApplyLegacyField(ctx, id, f, batch, key)
-			}); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return tx.Commit()
 }
 
 func releaseQueueNeeds(e catalog.CurationEvidence, state curation.WorkState, d releaseDigests, opts projectionOptions) bool {

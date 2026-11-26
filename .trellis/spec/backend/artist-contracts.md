@@ -56,7 +56,7 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 
 ### REST
 
-所有GET先鉴权与参数校验。`GET /artists`：q≤200字节，initial=A–Z/kana/#，role九项白名单（release_artist、album_artist及下列七种曲目角色），sort=name/album_count，分页1/50、最大100。只列有present参与且未重定向的身份。`role=album_artist`匹配发行级release_artist或album_artist任一；`role=release_artist`仍只匹配本身，DTO同词表。名字按首字母分组/C规范化键/ID；专辑数排序不分组。首字母采用固定Unicode17 Unihan kMandarin首音表，不扩为拼音搜索。
+所有GET先鉴权与参数校验。`GET /artists`：q≤200字节，initial=A–Z/kana/#，role九项白名单（release_artist、album_artist及下列七种曲目角色），sort=name/album_count，分页1/50、最大100。只列有present参与且未重定向的身份。`role=album_artist`匹配发行级release_artist或album_artist任一；`role=release_artist`仍只匹配本身，DTO同词表。名字按首字母分组、有效名列表键的 C 顺序、ID；专辑数排序不分组。列表键由 catalog_list_sort_key 去标点、折叠变音和大小写、压空白，并把词首英文 The 移到末尾。artist_profiles.list_sort_key 供列表与首字母使用，sort_key 仍供搜索。改名或撤销时刷新两键。首字母采用固定Unicode17 Unihan kMandarin首音表，不扩为拼音搜索。
 
 `ArtistSummary={id,name,initial_group,album_count,track_count,roles,available,image}`，数字为全角色去重可见group/present轨数，role筛选只筛身份。发行级署名的曲目参与取其全部轨。摘要读取先按身份/来源去重，再将发行级展开的present轨与轨级present轨取完整并集，按当前归组计数；九项角色分别做present存在性判断，避免先物化“角色×曲目”再重复去重。不能由去重轨集合丢弃角色，也不缓存可能过期的参与数；详情含missing参与明细仍用原完整参与关系。
 

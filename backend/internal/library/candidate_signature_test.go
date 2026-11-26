@@ -74,6 +74,7 @@ func TestCandidateSignatureAddedArtworkAndRipLog(t *testing.T) {
 		"Album/cover.jpg",
 		"Album/box - front.png",
 		"Album/Scans/cover.jpg",
+		"Album/back.png", "Album/Scans/back.png",
 		"Album/Scans/box - front.png",
 		"Album/rip.log",
 	} {
@@ -94,8 +95,6 @@ func TestCandidateSignatureAddedArtworkAndRipLog(t *testing.T) {
 func TestCandidateSignatureIgnoresUnrelatedFiles(t *testing.T) {
 	for _, relativePath := range []string{
 		"Album/notes.txt",
-		"Album/back.png",
-		"Album/Scans/back.png",
 		"Other/cover.jpg",
 		"Other/rip.log",
 	} {
@@ -186,4 +185,27 @@ func mustCandidateSignature(t *testing.T, root registeredRoot, candidate ingest.
 		t.Fatal("候选签名为空")
 	}
 	return signature
+}
+
+func TestCandidateSignatureTracksNonCoverAttachments(t *testing.T) {
+	root, candidate := candidateSignatureFixture(t)
+	before := mustCandidateSignature(t, root, candidate)
+	path := candidate.Anchor.Scope + "/Scans/liner.pdf"
+	base := time.Unix(1760000000, 0)
+	writeCandidateSignatureFile(t, root, path, "%PDF-A", base)
+	added := mustCandidateSignature(t, root, candidate)
+	if added == before || added != mustCandidateSignature(t, root, candidate) {
+		t.Fatal("新增 PDF 应改变签名，未变时签名须稳定")
+	}
+	writeCandidateSignatureFile(t, root, path, "%PDF-B", base.Add(time.Second))
+	edited := mustCandidateSignature(t, root, candidate)
+	if added == edited {
+		t.Fatal("同尺寸、mtime 改变的 PDF 未改变签名")
+	}
+	if err := os.Remove(filepath.Join(root.Path, path)); err != nil {
+		t.Fatal(err)
+	}
+	if deleted := mustCandidateSignature(t, root, candidate); deleted != before {
+		t.Fatalf("移除唯一附属文件后签名 = %s，期望 %s", deleted, before)
+	}
 }

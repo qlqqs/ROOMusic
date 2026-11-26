@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/library"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 )
@@ -104,9 +105,19 @@ func TestPostgreSQL整理进行中新专辑优先(t *testing.T) {
 func TestPostgreSQL整理安静窗口只发一次确认扫描(t *testing.T) {
 	const album = "正在拷贝的专辑"
 	clock := newProgramClock()
-	app, mock, _ := newCurationMockApplication(t, "", clock)
+	watchClock := &scheduledScanTestClock{now: time.Now(), timers: make(chan *scheduledScanTestTimer, 64)}
+	app, mock, _ := newCurationMockApplication(t, "", clock, WithDirectoryWatchClock(watchClock))
+	// 确认窗口和扫描行在同一事务中领取，事务时间可关联到该次运行。
+	mustExec(t, app, `CREATE TABLE test_confirmation_claims(release_id uuid, changed_at timestamptz, started_at timestamptz);
+	CREATE FUNCTION test_record_confirmation() RETURNS trigger LANGUAGE plpgsql AS $$
+	BEGIN
+		INSERT INTO test_confirmation_claims VALUES (NEW.id, NEW.curation_attempted_change_at, now());
+		RETURN NEW;
+	END $$;
+	CREATE TRIGGER test_record_confirmation AFTER UPDATE OF curation_attempted_change_at ON releases
+	FOR EACH ROW EXECUTE FUNCTION test_record_confirmation()`)
 	admin := app.createUser(t, "admin")
-	b3Root(t, app)
+	rootID := b3Root(t, app)
 	b3Enable(t, app, admin)
 	dir := filepath.Join(app.allowedRoot, album)
 	writeSyntheticTrack(t, filepath.Join(dir, "01.flac"), 61,
@@ -127,17 +138,22 @@ func TestPostgreSQL整理安静窗口只发一次确认扫描(t *testing.T) {
 			t.Fatalf("尚在拷贝时的识别队列 %+v，发行进度 %+v，出站 %v", q, p.Releases, metricCounters(t, mock))
 		}
 	}
-	requireScans := func(want int) {
+	requireClaims := func(want int) {
 		t.Helper()
-		b3RequireCount(t, app, want, `SELECT count(*) FROM scan_runs WHERE trigger_kind='scheduled' AND scan_mode='incremental'`)
-		b3RequireCount(t, app, want, `SELECT count(*) FROM scan_runs WHERE trigger_kind='scheduled'`)
+		b3RequireCount(t, app, want, `SELECT count(*) FROM test_confirmation_claims c JOIN releases r ON r.id=c.release_id
+			WHERE r.relative_directory=$1`, album)
+		b3RequireCount(t, app, want, `SELECT count(DISTINCT c.changed_at) FROM test_confirmation_claims c
+			JOIN releases r ON r.id=c.release_id JOIN scan_runs s ON s.started_at=c.started_at
+			WHERE r.relative_directory=$1 AND s.trigger_kind='scheduled' AND s.scan_mode='incremental' AND NOT s.whole_library`, album)
 	}
 	scanDue := func() {
 		t.Helper()
 		mustExec(t, app, `UPDATE releases SET curation_changed_at=now()-interval '60 seconds'
 			WHERE relative_directory=$1 AND NOT curation_confirmed`, album)
 		clock.advance(t, time.Minute)
-		scan := programString(t, app, `SELECT id FROM scan_runs WHERE trigger_kind='scheduled' ORDER BY started_at DESC LIMIT 1`)
+		scan := programString(t, app, `SELECT s.id FROM test_confirmation_claims c
+			JOIN releases r ON r.id=c.release_id JOIN scan_runs s ON s.started_at=c.started_at
+			WHERE r.relative_directory=$1 AND c.changed_at=r.curation_changed_at`, album)
 		if status := waitForScanToFinish(t, app, scan); status != "succeeded" {
 			t.Fatalf("确认扫描结束于 %s", status)
 		}
@@ -145,25 +161,50 @@ func TestPostgreSQL整理安静窗口只发一次确认扫描(t *testing.T) {
 	}
 
 	clock.advance(t, time.Minute)
-	requireScans(0)
+	requireClaims(0)
 	requirePending()
 	scanDue()
-	requireScans(1)
+	requireClaims(1)
 	requirePending()
 	clock.advance(t, time.Minute)
-	requireScans(1)
+	requireClaims(1)
 
 	// 完成第二首的拷贝，沿用同一份旧 mtime。成员变化需要新的静默窗口。
-	writeSyntheticTrack(t, partial, 62, "TITLE=拷贝完成的曲目", "ARTIST=合成艺人", "ALBUM="+album, "TRACKNUMBER=2")
-	requireCurationOK(t, os.Chtimes(partial, mark, mark))
-	runScan(t, app, &admin)
+	// 原子换入已写好的文件，只产生一次可见变更。由监听扫描建立新成员基线。
+	for {
+		roots, err := app.app.library.ListRoots(t.Context())
+		requireCurationOK(t, err)
+		if slices.ContainsFunc(roots, func(root library.RootInfo) bool {
+			return root.ID == rootID && root.ScanWatchMode != nil && *root.ScanWatchMode == "realtime"
+		}) {
+			break
+		}
+		watchClock.waitTimer(t)
+	}
+	staged := filepath.Join(dir, ".已完成.flac")
+	writeSyntheticTrack(t, staged, 62, "TITLE=拷贝完成的曲目", "ARTIST=合成艺人", "ALBUM="+album, "TRACKNUMBER=2")
+	requireCurationOK(t, os.Chtimes(staged, mark, mark))
+	requireCurationOK(t, os.Rename(staged, partial))
+	var watchScan string
+	for watchScan == "" {
+		timer := watchClock.waitTimer(t)
+		if timer.delay == 2*time.Second {
+			watchClock.fire(timer, watchClock.Now().Add(timer.delay))
+		}
+		watchScan = programString(t, app, `SELECT coalesce((SELECT id::text FROM scan_runs s
+			WHERE NOT whole_library AND NOT EXISTS(SELECT FROM test_confirmation_claims c WHERE c.started_at=s.started_at)
+			ORDER BY started_at DESC LIMIT 1),'')`)
+	}
+	if status := waitForScanToFinish(t, app, watchScan); status != "succeeded" {
+		t.Fatalf("监听扫描结束于 %s", status)
+	}
 	clock.advance(t, time.Minute)
-	requireScans(1)
+	requireClaims(1)
 	requirePending()
 	scanDue()
-	requireScans(2)
+	requireClaims(2)
 	clock.advance(t, time.Minute)
-	requireScans(2)
+	requireClaims(2)
 	id := programString(t, app, `SELECT r.id FROM releases r JOIN media m ON m.release_id=r.id
 		JOIN tracks t ON t.medium_id=m.id WHERE t.relative_path=$1 AND t.source_status='present'`, album+"/02.flac")
 	if s := b3WorkState(t, app, "release", id); s.Status != "unlisted" || s.Attempts != 1 {

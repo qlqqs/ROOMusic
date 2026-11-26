@@ -4,13 +4,13 @@ package parser
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
 type AudioObservation struct {
+	Format                  string             `json:",omitempty"`
+	ScanTags                *metadata.ScanTags `json:",omitempty"`
 	Title, Artist, Album    string
 	AlbumArtist             string
 	Compilation             bool
@@ -52,7 +52,8 @@ type AudioObservation struct {
 	Lyrics       string
 	LyricsSource string
 
-	latinArtistTags map[[2]string]bool
+	scanInput       scanTagInput
+	latinArtistTags map[int]bool
 	originalYears   [8]int
 	workTags        workTags
 	artworkFront    bool
@@ -77,7 +78,16 @@ const (
 const maxMP3FrameSearchBytes = 64 << 10
 
 func ParseAudioFile(path string) (AudioObservation, error) {
-	extension := strings.ToLower(filepath.Ext(path))
+	format, err := fileFormat(path)
+	if err != nil {
+		return AudioObservation{}, err
+	}
+	observation, err := parseAudioFormat(path, format)
+	observation.Format = format
+	return observation, err
+}
+
+func parseAudioFormat(path, extension string) (AudioObservation, error) {
 	switch extension {
 	case ".flac":
 		return parseFLAC(path)

@@ -18,6 +18,13 @@ import (
 // candidateSignature 只读取候选成员的暂存状态和附属文件的目录项/元信息，不读取文件内容。
 // 任一输入无法列举或取状态时返回错误，由保存流程照常写入而不尝试跳过。
 func candidateSignature(root registeredRoot, candidate ingest.OrganizedCandidate) (string, error) {
+	return signatureWithAttachments(root, candidate, candidateAttachments(root, candidate, nil))
+}
+
+func signatureWithAttachments(root registeredRoot, candidate ingest.OrganizedCandidate, d attachmentDirectory) (string, error) {
+	if d.err != nil {
+		return "", d.err
+	}
 	metadataSignature, err := ingest.CandidateMetadataSignature(candidate)
 	if err != nil {
 		return "", err
@@ -25,6 +32,9 @@ func candidateSignature(root registeredRoot, candidate ingest.OrganizedCandidate
 	hash := sha256.New()
 	fmt.Fprintf(hash, "g%d\nk%s\n", ingest.GroupingVersion, ingest.CandidateIdentity(root.ID, candidate.Anchor))
 	fmt.Fprintf(hash, "d%s\n", metadataSignature)
+	for _, file := range d.files {
+		fmt.Fprintf(hash, "f%s\x00%d\x00%s\n", file.path, file.info.Size(), signatureTime(file.info.ModTime()))
+	}
 	var members []ingest.SourceObservation
 	sheets := map[string]bool{}
 	for _, tracks := range candidate.Mediums {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -85,10 +86,37 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			}
 			continue
 		}
+		switch frameID {
+		case "PCST", "PCSp", "TDRL", "COMM", "SYLT":
+			if payload, ok := id3FramePayload(frame, major, formatFlags); ok {
+				switch frameID {
+				case "COMM":
+					if len(payload) >= 5 {
+						_, body, ok := splitID3Terminated(payload[0], payload[4:])
+						if ok {
+							if text, ok := decodeID3Lyrics(payload[0], body); ok {
+								observation.collectScanTag(frameID, text)
+							}
+						}
+					}
+				case "SYLT":
+					if len(payload) <= maxLyricsFrameTextBytes {
+						observation.scanInput.sylt = append(observation.scanInput.sylt, payload)
+					}
+				default:
+					observation.collectScanTag(frameID, decodeID3Text(payload))
+				}
+			}
+			continue
+		}
 		if frameID == "USLT" {
 			// 内容描述为空的帧优先；其余情况取第一个有效帧。
 			if payload, ok := id3FramePayload(frame, major, formatFlags); ok {
-				if emptyDescriptor, lyrics, valid := parseID3USLT(payload); valid && (observation.Lyrics == "" || emptyDescriptor && !lyricsHasEmptyDescriptor) {
+				emptyDescriptor, lyrics, valid := parseID3USLT(payload)
+				if valid {
+					observation.collectSynced(6, lyrics)
+				}
+				if valid && (observation.Lyrics == "" || emptyDescriptor && !lyricsHasEmptyDescriptor) {
 					observation.Lyrics, observation.LyricsSource = lyrics, LyricsSourceID3USLT
 					lyricsHasEmptyDescriptor = emptyDescriptor
 				}
@@ -147,7 +175,30 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 		}
 		if frameID == "TCON" {
 			if payload, ok := id3FramePayload(frame, major, formatFlags); ok {
-				observation.Genres = metadata.SplitGenres(append(observation.Genres, decodeID3ArtistValues(payload)...)...)
+				for _, raw := range decodeID3ArtistValues(payload) {
+					genre := strings.TrimSpace(raw)
+					if !observation.scanInput.firstGenreSeen {
+						observation.scanInput.firstGenreSeen = true
+						switch genre {
+						case "Podcast":
+							observation.fileTags().Podcast = true
+							continue
+						case "Literature":
+							observation.fileTags().Audiobook = true
+							continue
+						}
+					}
+					code := genre
+					if strings.HasPrefix(code, "(") && strings.HasSuffix(code, ")") {
+						code = code[1 : len(code)-1]
+					}
+					if strings.Trim(code, "0123456789") == "" {
+						if n, err := strconv.Atoi(code); err == nil && n < len(id3v1Genres) {
+							genre = id3v1Genres[n]
+						}
+					}
+					observation.Genres = metadata.SplitGenres(append(observation.Genres, genre)...)
+				}
 			}
 			continue
 		}
@@ -156,6 +207,7 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			continue
 		}
 		value := decodeID3Text(payload)
+		observation.collectScanTag(frameID, value)
 		if frameID == "TIT2" || frameID == "TALB" {
 			field := "title"
 			if frameID == "TALB" {
@@ -468,6 +520,9 @@ func decodeID3ArtistValues(frame []byte) []string {
 // parseID3TXXX 按帧编码解码描述和全部值；解码器按 UTF-16 码元识别 NUL 并保留字节序。
 func parseID3TXXX(frame []byte, observation *AudioObservation) error {
 	parts := decodeID3ArtistValues(frame)
+	if len(parts) == 1 {
+		observation.collectScanTag(parts[0], "")
+	}
 	if len(parts) < 2 {
 		return nil
 	}
@@ -490,6 +545,9 @@ func parseID3TXXX(frame []byte, observation *AudioObservation) error {
 			return setAudioTag(observation, key, strings.Join(values, "\x00"))
 		}
 		if kind != "PERSONNEL" && len(creditTagRoles(description)) == 0 {
+			for _, raw := range values {
+				observation.collectScanTag(description, raw)
+			}
 			return nil
 		}
 	}

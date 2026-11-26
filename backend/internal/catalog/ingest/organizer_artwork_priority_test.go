@@ -6,51 +6,44 @@ import (
 	"testing"
 )
 
-// 全根独占标记与原始父目录观察都满足时，Box 叶子才允许使用父目录封面。
+// 编号碟上提，普通兄弟目录仍有自己的发行边界。
 func TestArtworkPriorityBox父目录封面要求独占(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		exclusive [2]bool
-		extraPath string
-		want      bool
-	}{
-		{"仅碟目录且均有独占标记", [2]bool{true, true}, "", true},
-		{"普通兄弟目录音频阻止兜底", [2]bool{true, true}, "Box/普通专辑/other.flac", false},
-		{"父目录直接音频阻止兜底", [2]bool{true, true}, "Box/direct.flac", false},
-		{"缺少独占标记", [2]bool{false, false}, "", false},
-		{"部分观察缺少独占标记", [2]bool{true, false}, "", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			first := artworkPriorityObservation(t, "Box/Disc 1/first.flac", "专辑甲", 4, false)
-			second := artworkPriorityObservation(t, "Box/Disc 3/second.flac", "专辑乙", 8, false)
-			first.DiscNumber, second.DiscNumber = 1, 3
-			first.TrackNumber, second.TrackNumber = 1, 1
-			first.DiscParentExclusive, second.DiscParentExclusive = tc.exclusive[0], tc.exclusive[1]
-			items := []SourceObservation{first, second}
-			if tc.extraPath != "" {
-				items = append(items, artworkPriorityObservation(t, tc.extraPath, "普通专辑", 12, false))
+	for _, extra := range []string{"", "Box/普通专辑/other.flac", "Box/direct.flac"} {
+		first := artworkPriorityObservation(t, "Box/Disc 1/first.flac", "专辑甲", 4, false)
+		second := artworkPriorityObservation(t, "Box/Disc 3/second.flac", "专辑乙", 8, false)
+		first.DiscNumber, second.DiscNumber = 1, 3
+		first.TrackNumber, second.TrackNumber = 1, 1
+		items := []SourceObservation{first, second}
+		if extra != "" {
+			items = append(items, artworkPriorityObservation(t, extra, "普通专辑", 12, false))
+		}
+		got := OrganizeObservations(items)
+		switch extra {
+		case "Box/direct.flac":
+			if len(got) != 3 {
+				t.Fatalf("父目录曲号冲突应按三张专辑拆分：%+v", got)
 			}
-			got := OrganizeObservations(items)
-			if len(got) != len(items) {
-				t.Fatalf("各目录应独立形成候选：实际=%d，期望=%d", len(got), len(items))
-			}
-			leaves := 0
-			for _, candidate := range got {
-				if candidate.Anchor.Scope != first.Directory && candidate.Anchor.Scope != second.Directory {
-					if candidate.BoxParentArtwork {
-						t.Error("普通候选不应开启 Box 父目录封面兜底")
-					}
-					continue
-				}
-				leaves++
-				if candidate.Anchor.Kind != CandidateBoxLeaf || candidate.BoxParentArtwork != tc.want {
-					t.Errorf("%s：候选类型=%s，父目录兜底=%t，期望 box_leaf/%t", candidate.Anchor.Scope, candidate.Anchor.Kind, candidate.BoxParentArtwork, tc.want)
+			for _, c := range got {
+				if c.Anchor.Kind != CandidateSameDirSplit || c.Anchor.Scope != "Box" {
+					t.Fatalf("按名拆分必须使用逻辑父目录：%+v", c.Anchor)
 				}
 			}
-			if leaves != 2 {
-				t.Fatalf("应保留两个 Box 叶子，实际=%d", leaves)
+		default:
+			want := 1
+			if extra != "" {
+				want++
 			}
-		})
+			if len(got) != want {
+				t.Fatalf("目录 %q 候选数=%d，期望 %d", extra, len(got), want)
+			}
+			var parent bool
+			for _, c := range got {
+				parent = parent || c.Anchor.Kind == CandidateMultiDisc && c.Anchor.Scope == "Box" && len(c.Mediums) == 2
+			}
+			if !parent {
+				t.Fatal("缺少合并后的双碟发行")
+			}
+		}
 	}
 }
 
@@ -62,31 +55,16 @@ func TestArtworkPriority格式拆分Box叶子保留父目录封面标记(t *test
 	for i := range items {
 		items[i].TrackNumber = 1
 		items[i].DiscNumber = 1
-		items[i].DiscParentExclusive = true
 	}
 	items[2].DiscNumber = 3
 	got := OrganizeObservations(items)
-	if len(got) != 3 {
-		t.Fatalf("格式拆分叶子应形成两个版本，并保留另一个叶子，实际候选数=%d", len(got))
+	if len(got) != 2 {
+		t.Fatalf("父目录内两种格式分别连续，应有两个候选：%+v", got)
 	}
-	formats := map[string]bool{}
-	for _, candidate := range got {
-		if !candidate.BoxParentArtwork {
-			t.Errorf("%s：独占父目录封面标记丢失", candidate.Anchor.Scope)
+	for _, c := range got {
+		if c.Anchor.Kind != CandidateFormatSplit || c.Anchor.Scope != "Box" || c.OriginalKind != CandidateMultiDisc {
+			t.Errorf("格式候选应保留原多碟范围：%+v", c.Anchor)
 		}
-		if candidate.Anchor.Scope == other.Directory {
-			if candidate.Anchor.Kind != CandidateBoxLeaf {
-				t.Errorf("未拆分叶子类型=%s，期望 box_leaf", candidate.Anchor.Kind)
-			}
-			continue
-		}
-		if candidate.Anchor.Scope != flac.Directory || candidate.Anchor.Kind != CandidateFormatSplit || candidate.OriginalKind != CandidateBoxLeaf {
-			t.Errorf("格式拆分叶子锚点或原类型不符：锚点=%+v，原类型=%s", candidate.Anchor, candidate.OriginalKind)
-		}
-		formats[candidate.Anchor.Partition] = true
-	}
-	if !reflect.DeepEqual(formats, map[string]bool{"format:flac": true, "format:mp3": true}) {
-		t.Errorf("格式版本不符：%v", formats)
 	}
 }
 

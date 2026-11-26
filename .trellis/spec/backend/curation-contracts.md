@@ -657,7 +657,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 迁移 0064 给自动整理设置增加 `model`、`model_daily_token_limit` 和独立的 `model_updated_at`。只改模型设置时，程序层的变化标记 `updated_at` 保持原值。按服务器本地日期在 `curation_model_usage` 原子累加输入与输出 token。主模型、独立审查与会话摘要均计入，缺少的计数字段作零。
 
-待定项保存会话、领取时间、未处理次数、重审次数、下次尝试时间和搁置原因。程序重判时，搁置项的输入摘要 `input_digest`、候选 `candidates` 或冲突 `conflicts` 任一项与保存值不同，就回到 `waiting_model`，清零未处理次数并清空搁置原因。候选与冲突按 `jsonb` 值用 `IS DISTINCT FROM` 比较。三项相同则继续搁置。重判保留 `waiting_human` 项的原有内容。`resolved` 项保留原处理结果，并排除在未结束项的冲突索引之外。
+待定项保存领取、有效回答次数、空答次数、重审次数、下次尝试时间和搁置原因。迁移 0101 起，因模型请求被拒或连续空答搁置的项在本地文件变更或有效模型变化时重开；因内容过长搁置的项也可在调高单次上限后重开。以下候选变化规则适用于旧的搁置项。程序重判时，搁置项的输入摘要 `input_digest`、候选 `candidates` 或冲突 `conflicts` 任一项与保存值不同，就回到 `waiting_model`，清零未处理次数并清空搁置原因。候选与冲突按 `jsonb` 值用 `IS DISTINCT FROM` 比较。三项相同则继续搁置。重判保留 `waiting_human` 项的原有内容。`resolved` 项保留原处理结果，并排除在未结束项的冲突索引之外。
 
 同一代的本地投影刷新保留领取关系、会话、候选与各计数，并同步完整证据摘要。程序完成新一轮识别时，将上一代仍在领取中的识别项结为 `superseded`；仍需模型时另建项。旧会话提交须通过原项 ID 和领取检查。`curation_model_exceptions` 以方案项 ID 唯一，保存待定项、工具输入、预览、模型写入者、审查决定与理由、会话和人工决定。删除会话会清空例外的会话引用，例外仍可读取。0064 回退会删除整理会话、例外和按日用量。
 
@@ -674,10 +674,10 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 | 运行结束原因 | 遗留的处理中项 |
 | --- | --- |
-| `completed`、`step_limit`、`token_limit` | 未处理次数加一，第三次转为 `shelved/unhandled` |
+| `completed`、`step_limit`、`token_limit` | 按 25.4 对本批仍持有领取的项逐项记空答 |
 | `review_unavailable` | 保留方案，依次延迟 5 分钟、30 分钟和 2 小时重审。第三次重审仍失败则作废方案并延迟 24 小时回队 |
 | `curation_stopped`、`cancelled` | 作废方案、释放领取，保留未处理次数 |
-| `provider_error` | 作废方案、释放领取。调度器按第 25.4 节冷却，无有效 `Retry-After` 时从 5 秒起倍增，最长 10 分钟 |
+| `provider_error` | 作废方案、释放领取。调度器按第 25.4 节的五类规则处理 |
 | `internal_error`、意外的 `awaiting_confirmation` | 记录异常、作废方案、释放领取 |
 
 ### 17.3 工具、审查与写入
@@ -1083,7 +1083,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 - 扫描在候选写入时记录发行的成员签名（根、规范相对路径、字节数），新建或成员变化时记 `releases.curation_changed_at` 并清除确认。扫描中发现文件又长大或支持格式的文件解析失败，也记为变化。
 - 稳定：最近一次成功扫描的成员签名与上次一致，且距最后一次变化满 60 秒。不看文件修改时间。失败、取消或部分可读的扫描只能使确认失效，不能授予确认。升级前已有的数据视为稳定。
-- 待确认的专辑安静满 60 秒后，整理协调器调用现有 `StartScan` 发起一次普通增量扫描；有扫描在跑时让路，同一安静窗口只发一次。没有新的扫描路径。
+- 待确认的发行成员安静满 60 秒后，整理协调器经现有扫描锁只重扫这些成员所在的目录。合并发行按实际成员覆盖所有相关目录，多碟合并范围；正在写入或扫描时让路。同一发行的同一变化窗口与建行同事务领取一次；其他发行的扫描不能消费这个窗口。成功且覆盖全部成员、签名一致且无未读或增长的文件才能授予确认。拷贝中暂停超过 2 秒可使已拷完的曲目可见，整理资格仍按 60 秒规则判断。
 
 ### 25.3 来源退避
 
@@ -1096,15 +1096,27 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 | 接口 | 约定 |
 | --- | --- |
-| `NextModelKind` | 每个空闲名额按“巡检与本地整理 → 第一档 → 核对判断 → 第二档 → 联网兜底”取有可领项的类别 |
+| `NextModelKind` | 每个空闲名额按“本地辅助 → 识别判断 → 名字和艺人核对 → 旧巡检 → 第二档 → 联网兜底”取有可领项的类别 |
 | `LookupTierReady` | 识别队列里高于“本地完整”的稳定、可见、到期项已排空且 MusicBrainz 可用，第二档才启动；退避不算排空 |
-| `BeforeModelItem` | 每项开始前检查总日额度，联网项另查联网日额度；已开始的项允许完成 |
+| `BeforeModelItem` | 每项开始前检查共享日额度；已开始的项允许完成 |
 
 管理员通过 `GET/PUT /api/v1/admin/curation/settings` 读写整数 `model_concurrency`（迁移 0096，默认 4，范围 1–16）。保存后立即按新值分派。调低时在途项继续，运行数降到新上限以下再补位。`GET /api/v1/admin/curation/progress` 的 `model.running` 是正在处理的模型运行数，一次合批调用占一个名额。`model.concurrency` 是当前上限。
 
-调度器在内存中为会话包预留发行和艺人键，跨类别和重审跳过与在途包冲突的项。同艺人包内的多步任务逐项运行，独立核对逐项分派。关闭时等待在途项收尾，重启按 17.2 回收遗留领取。
+调度器在内存中为会话包预留发行和艺人键，跨类别和重审跳过与在途包冲突的项。同艺人包内的多步任务逐项运行，同类核对可在一个请求中逐项作答。关闭时等待在途项收尾，重启按 17.2 回收遗留领取。
 
-主模型或审查模型返回 HTTP 429、503 时，客户端先按管家运行时合同在请求内重试。重试成功则继续本次运行。次数或时间预算用尽，或本次等待会超过剩余预算时，客户端才通知调度器暂停新领取。有效的 `Retry-After` 指定恢复时刻（支持秒数和 HTTP 日期）。缺失或无效时从 5 秒起退避，冷却结束后再次失败才翻倍，上限 10 分钟。同一冷却期内的并发失败可以延后恢复时刻，沿用本期退避时长。一次运行成功后，下次退避从 5 秒重新开始，已生效的冷却继续至原定时刻。失败项释放领取并保留尝试次数，其他在途项可完成。
+整理主模型的五类结果在迁移 0101 对应的调度合同第 1 版中生效。配置及当前连续段保存在单行 `curation_model_state`，项级重试保存在 `curation_pending_items`。已发请求按实耗记账。
+
+| 结果 | 后续行为 |
+| --- | --- |
+| 请求被拒 | 多项普通 HTTP 400 整批交还，标记每项单发；单项拒绝按安全原因搁置，连续十个不同项同样被拒则暂停配置 |
+| 配置问题 | HTTP 401/403、明确的模型不存在或工具能力拒绝，暂停到配置修改或手动工具探测成功 |
+| 上游额度用完 | HTTP 402、400/429 或流事件明确表示余额不足，暂停并每小时只做一次小探测，可手动重试 |
+| 临时故障 | 普通 429、500/502/503/504/529、超时、无法连接或流中断，先在单步重试预算内重发，再按上游时刻等待；无提示时 5 秒起翻倍至 180 秒 |
+| 回复无效 | 只给缺失或无效项累计空答，5 秒、10 秒后重试，第三次记“模型没给出结果”；十个不同项连续空答提示换模型 |
+
+只有成功决定或明确的“定不了”增加项的回答次数，后者在 `evidence.decision_reason` 保存理由，以 `undetermined` 结案。失败与来源等待不计入回答次数。有效答案打断连续段。更换有效模型清空项级故障标记。配置、开关、扫描、每日余额和实际所需的来源在创建会话前核对；需要补资料的项按来源恢复时间推迟，已备齐证据的项可继续。
+
+`max_request_tokens` 默认 128000，范围 1–10¹²。按所选协议的完整 JSON 估算输入，并为输出留 min(8192, max(1, floor(预算/8)))。同优先级同回答合同的项按队列顺序试装，放不下的留到下批。本地辅助按完整目录发送。单项超出时仅在发送副本保留评分最高的至多三个候选并逐减；仍超限记“内容太长”，无会话和上游请求。
 
 ### 25.5 进度
 
@@ -1126,14 +1138,14 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 | 任务 | 领取 | 运行形态与上限 | 去向 |
 | --- | --- | --- | --- |
-| 第一档选择 | 有可用候选的 `release_match`、`recording_match`，发行与录音分批 | 一次主模型请求，不带工具与原生搜索；首条消息含本地真实性、逐碟曲序与时长、每个候选的完整曲目；严格 JSON：`select`（只接受发给该项的编号）或 `upgrade` | 选定的交 26.2；升级进 `waiting_route/lookup` |
+| 第一档选择 | 有可用候选的 `release_match`、`recording_match`，发行与录音分批 | 一次主模型请求，不带工具与原生搜索；首条消息含本地真实性、逐碟曲序与时长、每个候选的完整曲目；严格 JSON：`select`（只接受发给该项的编号）或带理由的 `undetermined` | 选定的交 26.2；定不了则按 25.4 结案 |
 | 第二档自己查 | `waiting_route/lookup`（第一档升级与 C 的零候选），`LookupTierReady` 为真才启动 | 管家后台运行，按艺人打包，`search_music_metadata`、`get_music_metadata`、提交任何 MB 编号、放弃；每项 20 次工具调用、15 万 token | 来源可用时放弃或触限：网络搜索可用转 `web`，否则 `FinishUnlisted` |
 | 核对判断 | `verify_artist_credit`（C 的署名提案）、`verify_artist_merge`、`verify_name`；`release_merge` 单独打包 | 只开放提交判断；身份取同一/不同/拿不准，纠正取错字/写法差异/译名差异/拿不准；沿用管家单次运行的总保护 | 写法或译名差异不改；有主张而缺证据转联网 |
-| 联网兜底 | `waiting_route/web`、第二档放弃、无外部对应的 `artist_identity`、待求证的建议；按艺人在库专辑组数降序 | `web_search` 或原生搜索、`fetch_page`、提交；每项 30 次工具调用、30 万 token；单独的每日上限 `web_daily_token_limit` | 来源可用时无结果或触限即结束；发行识别无对应调用 `FinishUnlisted` |
+| 联网兜底 | `waiting_route/web`、第二档放弃、无外部对应的 `artist_identity`、待求证的建议；按艺人在库专辑组数降序 | `web_search` 或原生搜索、`fetch_page`、提交；每项 30 次工具调用、30 万 token；计入共享日额度 | 来源可用时无结果或触限即结束；发行识别无对应调用 `FinishUnlisted` |
 
-- 每日上限（总的与联网的）在项边界检查（`BeforeModelItem`），达到上限时已开始的项可以完成，总日额度和联网日额度最多各额外消耗「并发数减一」个在途项的用量。到期重审重新占用名额时复查日额度，额度用尽则保留原方案。第二档与联网档按每次请求的实际 usage 与工具调用次数记账。相同路线的 `try_later` 跨会话累计，来源故障时达到上限按 28.1 排定复查。来源可用时沿用本档的超额处理。
+- 共享每日上限在项边界检查（`BeforeModelItem`），达到上限时已开始的项可以完成，日额度最多额外消耗「并发数减一」个在途项的用量。到期重审重新占用名额时复查日额度，额度用尽则保留原方案。第二档与联网档按每次请求的实际 usage 与工具调用次数记账。相同路线的 `try_later` 跨会话累计，来源故障时达到上限按 28.1 排定复查。来源可用时沿用本档的超额处理。
 - 自查和联网的 MusicBrainz 工具调用共用现有来源限速器。后台网页工具按开启者、工具组和整理会话计量，同一会话的各项与重审共用额度，并行会话各自计量。交互用户沿用每用户限额。
-- 联网用量同时计入总用量；`curation_model_usage` 加联网输入、输出列。
+- 联网实耗已经包含在每日总输入、输出中。0098 删除联网子项三列，保留原总量及自定义总上限；回退时按 NULL、0、0 重建联网设置和计数。
 
 ### 26.2 外部编号的写入（D4）
 
@@ -1160,8 +1172,8 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
   判断为不同身份、写法或译名差异的以 `tool=observation, can_accept=false` 留档。
 - 写建议、结清原待定项与相关提案同一事务。迁移把旧的 `waiting_human` 待定项结清为 `resolved/suggestion_recorded`，例外保持 `open` 可手动采纳。
 - 手动采纳与不采纳沿用 `POST /exceptions/{id}/accept|decline`；不采纳才写“不再提出”。进度的 `waiting_human` 固定为 0，建议不计入待办。
-- 接口：`GET/PUT /settings` 增 `web_daily_token_limit`（null 不限，PUT 缺省保留）；`GET /progress` 的 `model` 增 `web_daily_token_limit`、`web_today`、`web_limit_reached`、`web_retry_at`；
-  `GET /exceptions` 每项增上述四个字段，`review` 可空，`kind` 增三种 `verify_*`，`tool` 增 `submit_artist_media`、`submit_verification`、`observation`。
+- `GET/PUT /settings` 返回 `max_request_tokens`、`daily_token_limit`、`model_concurrency`。进度的 `model` 返回 `configured`、`pause_kind`、`reason_detail`、`retry_at`、`can_retry`、`context_hint` 和共享的 `today`。`POST /model/retry` 使用相同管理员与同源校验，返回更新后的模型进度。
+- `GET /exceptions` 每项增上述四个字段，`review` 可空，`kind` 增三种 `verify_*`，`tool` 增 `submit_artist_media`、`submit_verification`、`observation`。
 
 ## 27. 模型巡检与本地整理（整理链 D，2026-11-25）
 
@@ -1197,9 +1209,9 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 ### 28.1 来源不可用与连续无决定
 
 - 第二档与联网项在本次领取中遇到来源不可用（包括工具内部的 5xx、429 或网络错误），且没有成功写入时，放弃、结束和建议出口都走 `try_later`。保留原路线、尝试次数和代次，不调用 `FinishUnlisted`，不以 `suggestion_recorded` 结案。下次时间取来源恢复时刻与项级退避的较晚者。项级退避从 5 秒起连续翻倍，上限 10 分钟，成功后清零。
-- 工具次数与 token 保存在待定项上。本档任一累计值达到 D16 上限，且来源仍在冷却或本项有来源不可用记录时，保持原路线等待。下次时间取来源恢复时刻与本次触限后 7 天的较晚者，期间不开新会话，不记未收录。到期领取时才清零本档两项计数，再完整查一轮；当日用量继续保留。来源可用且本项没有故障记录时沿用 26.1 的触限处理。
+- 工具次数与 token 保存在待定项上。本档任一累计值达到 D16 上限，且来源仍在冷却或本项有来源不可用记录时，保持原路线等待。下次时间按来源恢复时刻与项级退避计算，期间不开新会话，不记未收录。到期领取时才清零本档两项计数，再完整查一轮；当日用量继续保留。来源可用且本项没有故障记录时沿用 26.1 的触限处理。
 - 工具错误区分 `not_found` 与 `source_unavailable`，提示说明来源不可用时不必放弃。
-- 第一档回复去掉代码块包裹后逐项校验，不合格项只给该项记一次。第一、二档与联网档同一项连续三次没有可执行的决定，走放弃路径：第一档升到 `waiting_route/lookup`；第二档在联网可用时转联网，否则未收录；联网档未收录。不再进入 `shelved`。
+- 识别答复去掉代码块包裹后逐项校验，未通过的项按 25.4 单独重试。旧第二档及联网档仍按各自的放弃路径收尾。
 - 硬反证（时长、真实文字）留下的建议 `can_accept=false`，手动采纳返回 409 `nothing_to_apply`。
 
 ### 28.2 发行组级对应的补充用途

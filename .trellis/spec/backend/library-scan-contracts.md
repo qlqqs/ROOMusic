@@ -23,7 +23,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 ## 2. 接口签名
 
 - 目录新增响应：`{ "id": string, "name": string, "status": "active" | "disabled", "revision": integer }`。
-- 目录列表项目：`id`、安全 basename `path`/`name`、`status`、`revision`、时间戳与必需的 `excluded_paths: string[]`（无排除时 `[]`，相对路径按字节升序）；
+- 目录列表项目：`id`、安全 basename `path`/`name`、`status`、`revision`、`scan_watch_mode`（realtime、scheduled 或 null）、`poll_interval_minutes`、时间戳与必需的 `excluded_paths: string[]`（无排除时 `[]`，相对路径按字节升序）；
   不返回原始绝对路径。
 - `POST /api/v1/library-roots/{id}/relocate`：同源、管理员、必需 `Idempotency-Key`；请求为
   `{"path":"/music/nas-new/Music","expected_revision":4}`，成功返回 `200`。
@@ -75,7 +75,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 - `library/scan_filter.go` 拥有 `newScanFilter(exclusions []string)`、`skipDir(relativeDir, name string)`、`skipFile(name string)` 和现有扩展名表。每根构造一次，预计数与正式遍历共用该过滤；`relativeDir` 是当前目录的根内相对路径。只看注册根之后的段，注册根自身不参与过滤。
 - 任一根内段以 `.` 开头就忽略；目录名按 `strings.EqualFold` 整段匹配 `@eaDir`、`#recycle`、`@Recycle`、`@Recently-Snapshot`、`#snapshot`、`$RECYCLE.BIN`、`System Volume Information`、`lost+found`、`__MACOSX`、`@appmeta`、`@team`。名单只作用于目录；不做子串匹配，`my.recycle`、`recycle`、`Music@eaDir2` 不命中。
 - 用户排除按 `/` 分隔的根内相对目录路径逐字节相等。命中目录用 `fs.SkipDir` 跳过整棵子树；隐藏文件直接跳过。过滤不记诊断、不计预计数或跳过数，也不登记保住；该范围旧来源在成功扫描后正常标 missing。
-- 文件按“过滤 → 候选扩展名（含 CUE）→ 链接解析与 containment → Stat/普通文件 → 解析”处理；非候选附件及其断链直接忽略。
+- 预计数和遍历共用候选预筛：隐藏与排除项先跳过，其余保留支持及仅诊断的音频后缀、无后缀文件和 CUE。通过链接 containment、Stat 和普通文件检查后，CUE 按文本读取，音频先查缓存再按头探测。图片、文本等其他附件不触发音频读取。
 
 ### 排除子文件夹
 

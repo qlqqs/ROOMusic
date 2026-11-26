@@ -235,7 +235,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		return valid, err
 	})
 	api.Register(mux)
-	return supervisor, backgroundLauncher{api: api, store: store, sources: configuration.sources, web: webService}
+	return supervisor, backgroundLauncher{runner: background, api: api, store: store, sources: configuration.sources, web: webService}
 }
 
 // withCurrentStewardUser 在预览及实际调用前重读身份，覆盖长对话、确认后执行与 MCP。

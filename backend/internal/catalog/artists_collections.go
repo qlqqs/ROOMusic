@@ -36,8 +36,7 @@ func (s *Store) ListArtistAlbums(ctx context.Context, id string, page, size int,
 		}
 		rows, err := snapshot.database.QueryContext(ctx, prefix+`
  SELECT c.group_id::text,c.credited_release_id::text,`+rolesSQL+` FROM selected c
- LEFT JOIN catalog_projection_subject_state s ON s.subject_kind='release' AND s.subject_id=c.id
- ORDER BY COALESCE(s.search_title,lower(c.title)) COLLATE "C",c.group_id LIMIT $3 OFFSET $4`, append(args, size, (page-1)*size)...)
+ ORDER BY catalog_list_sort_key(c.title) COLLATE "C",c.group_id LIMIT $3 OFFSET $4`, append(args, size, (page-1)*size)...)
 		if err != nil {
 			return result, err
 		}
@@ -112,7 +111,7 @@ func artistAlbumsSQL(participation string) (string, string) {
 	return prefix, roles
 }
 
-const artistTrackOrder = `COALESCE(s.search_title,lower(r.title)) COLLATE "C",r.id,m.position,t.position,t.id`
+const artistTrackOrder = `COALESCE(s.search_title,lower(r.title)) COLLATE "C",r.id,m.position,COALESCE(t.sort_position,t.position),t.id`
 const artistTrackOrderingJoins = ` JOIN tracks t ON t.id=c.track_id JOIN media m ON m.id=t.medium_id JOIN release_effective r ON r.id=m.release_id
  LEFT JOIN catalog_projection_subject_state s ON s.subject_kind='release' AND s.subject_id=r.id `
 

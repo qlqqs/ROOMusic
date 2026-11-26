@@ -82,6 +82,11 @@ func (w *Writer) RecordSuggestion(ctx context.Context, e ModelException) (string
 	}
 	defer tx.Rollback()
 	var item PendingItem
+	if e.ConversationID != nil {
+		if err = countModelAnswer(ctx, tx, e.PendingItemID, *e.ConversationID); err != nil {
+			return "", err
+		}
+	}
 	err = tx.QueryRowContext(ctx, `UPDATE curation_pending_items SET status='resolved',resolution='suggestion_recorded',
  resolved_at=COALESCE(resolved_at,now()),claimed_at=NULL,next_attempt_at=NULL,updated_at=now()
  WHERE id=$1 AND conversation_id=$2 AND (status='in_progress' OR (status='resolved' AND resolution='suggestion_recorded'))

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,9 +28,11 @@ const unavailableMusicBrainzID = "9634b40c-a111-493b-abae-015ce393854b"
 const stewardBase = "/api/v1/me/steward"
 
 type schedulerRequest struct {
-	Model      string
-	ToolChoice json.RawMessage `json:"tool_choice"`
-	Tools      []struct {
+	MaxCompletionTokens int `json:"max_completion_tokens"`
+	MaxTokens           int `json:"max_tokens"`
+	Model               string
+	ToolChoice          json.RawMessage `json:"tool_choice"`
+	Tools               []struct {
 		Type     string
 		Function struct{ Name string }
 	}
@@ -43,8 +46,13 @@ type schedulerRequest struct {
 }
 
 type schedulerHTTPFailure struct {
-	status     int
-	retryAfter string
+	status        int
+	retryAfter    string
+	code, message string
+}
+
+func (q schedulerRequest) outputLimit() int {
+	return max(q.MaxCompletionTokens, q.MaxTokens)
 }
 
 func (q schedulerRequest) tool(t *testing.T, name string, input any) {
@@ -104,10 +112,11 @@ func (q schedulerRequest) review(t *testing.T, decision string) {
 
 type schedulerFixture struct {
 	*curationFixture
-	clock    *programClock
-	requests chan schedulerRequest
-	endpoint string
-	remote   b3RemoteRelease
+	clock        *programClock
+	requests     chan schedulerRequest
+	requestCount atomic.Int32
+	endpoint     string
+	remote       b3RemoteRelease
 }
 
 func newSchedulerFixture(t *testing.T, opts ...Option) *schedulerFixture {
@@ -147,6 +156,7 @@ func newSchedulerFixtureWithSources(t *testing.T, lookup model.LookupQueue, fake
 			http.Error(w, err.Error(), 400)
 			return
 		}
+		f.requestCount.Add(1)
 		select {
 		case f.requests <- q:
 		case <-r.Context().Done():
@@ -162,7 +172,13 @@ func newSchedulerFixtureWithSources(t *testing.T, lookup model.LookupQueue, fake
 			if failure.retryAfter != "" {
 				w.Header().Set("Retry-After", failure.retryAfter)
 			}
-			http.Error(w, "合成模型服务暂不可用", failure.status)
+			if failure.code == "" && failure.message == "" {
+				http.Error(w, "合成模型服务暂不可用", failure.status)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(failure.status)
+			fmt.Fprintf(w, `{"error":{"code":%q,"message":%q}}`, failure.code, failure.message)
 		case <-r.Context().Done():
 		case <-t.Context().Done():
 		}
@@ -190,12 +206,17 @@ func (f *schedulerFixture) configure(t *testing.T, u *integrationTestUser) {
 
 func (f *schedulerFixture) next(t *testing.T, review bool) schedulerRequest {
 	t.Helper()
+	want := "test-main"
+	if review {
+		want = "test-review"
+	}
+	return f.nextModel(t, want, review)
+}
+
+func (f *schedulerFixture) nextModel(t *testing.T, want string, review bool) schedulerRequest {
+	t.Helper()
 	select {
 	case q := <-f.requests:
-		want := "test-main"
-		if review {
-			want = "test-review"
-		}
 		if q.Model != want || (len(q.ToolChoice) > 0) != review || len(q.Messages) == 0 {
 			t.Fatalf("请求模型=%q，tool_choice=%s，期望 %q", q.Model, q.ToolChoice, want)
 		}
@@ -349,17 +370,23 @@ func TestPostgreSQLCurationModelUnhandledThreeTimes(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		q := f.next(t, false)
 		got := f.item(t, item.ID)
-		if int(got.Attempts) != i || got.Status != "in_progress" || seen[got.ConversationID] {
+		if got.Attempts != 0 || got.EmptyCount != i || got.Status != "in_progress" || seen[got.ConversationID] {
 			t.Fatalf("第 %d 次领取 %+v", i+1, got)
 		}
 		seen[got.ConversationID] = true
 		q.complete(t)
+		if i < 2 {
+			schedulerWait(t, "空答后等待重试", func() bool { return f.item(t, item.ID).NextAttemptAt != nil })
+			f.clock.now.Store(f.item(t, item.ID).NextAttemptAt.UnixNano())
+		}
 	}
-	schedulerWait(t, "第三次未处理后升级", func() bool { return f.item(t, item.ID).Route == "lookup" })
+	schedulerWait(t, "连续三次空答后搁置", func() bool { return f.item(t, item.ID).Status == "shelved" })
 	got := f.item(t, item.ID)
-	if got.Status != "waiting_route" || got.Attempts != 0 || got.ShelvedReason != nil || !strings.Contains(string(got.Evidence), "第一档连续三次未得到可执行的决定") {
-		t.Fatalf("三次未处理后 %+v", got)
+	if got.Attempts != 0 || got.EmptyCount != 3 || got.ShelvedReason == nil || *got.ShelvedReason != "模型没给出结果" {
+		t.Fatalf("空答计次或结案原因错误：%+v", got)
 	}
+	// 单独准备过渡期的旧档位，继续验证其原有放弃规则。
+	item = modelRouteFixture(t, f, f.pending(t, f.b), "lookup")
 	gate.ready.Store(true)
 	for _, route := range []string{"lookup", "web"} {
 		for attempt := 0; attempt < 3; attempt++ {
@@ -372,7 +399,7 @@ func TestPostgreSQLCurationModelUnhandledThreeTimes(t *testing.T) {
 		}
 	}
 	modelWaitResolution(t, f, item.ID, "unlisted")
-	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='conflict' AND next_attempt_at IS NULL`, f.a)
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='conflict' AND next_attempt_at IS NULL`, f.b)
 
 	t.Run("第二档无联网来源", func(t *testing.T) {
 		gate := &testLookupGate{}
@@ -471,7 +498,7 @@ func TestPostgreSQLCurationModelConcurrency(t *testing.T) {
 	active[selection.ID].selectCandidate(t, selection.ID, "")
 	delete(active, selection.ID)
 	schedulerWait(t, "第一档结束，保留其余三个在途请求", func() bool {
-		return f.item(t, selection.ID).Route == "lookup" && f.progress(t).Running == 3
+		return f.item(t, selection.ID).Status == "resolved" && f.progress(t).Running == 3
 	})
 	checkProgress(3, 1)
 	if p := f.item(t, spare); p.Status != "waiting_model" {
@@ -489,4 +516,383 @@ func TestPostgreSQLCurationModelConcurrency(t *testing.T) {
 		q.complete(t)
 	}
 	schedulerWait(t, "暂停后全部在途项退出", func() bool { return f.progress(t).Running == 0 })
+}
+
+func curationRulePending(t *testing.T, f *schedulerFixture, label string) curation.PendingItem {
+	t.Helper()
+	target, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{
+		title: "合成标题 " + label, artist: "合成艺人 " + label, tracks: []string{"present"},
+	})
+	return f.pending(t, target)
+}
+
+func curationRulePrompt(t *testing.T, request schedulerRequest) string {
+	t.Helper()
+	var prompt string
+	requireCurationOK(t, json.Unmarshal(request.Messages[len(request.Messages)-1].Content, &prompt))
+	return prompt
+}
+
+func requireCurationRuleItems(t *testing.T, request schedulerRequest, want ...string) {
+	t.Helper()
+	prompt := curationRulePrompt(t, request)
+	items, found, err := metricsPendingItems(prompt)
+	requireCurationOK(t, err)
+	var ids []string
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	if !found || !slices.Equal(ids, want) {
+		t.Fatalf("请求项=%v，期望 %v", ids, want)
+	}
+}
+
+func (q schedulerRequest) undetermined(t *testing.T, id, reason string) {
+	t.Helper()
+	decision, err := json.Marshal(map[string]any{"items": []map[string]string{{
+		"item_id": id, "decision": "undetermined", "reason": reason,
+	}}})
+	requireCurationOK(t, err)
+	q.reply <- q.frame(t, map[string]string{"content": string(decision)}, "stop")
+}
+
+func TestPostgreSQLCurationModelRulesPartialReply(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	a, b := f.pending(t, f.a), f.pending(t, f.b)
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 1})
+	const reason = "合成曲序证据无法区分两个候选"
+	first := f.next(t, false)
+	requireCurationRuleItems(t, first, a.ID, b.ID)
+	first.undetermined(t, a.ID, reason)
+	modelWaitResolution(t, f, a.ID, "undetermined")
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_pending_items WHERE id=$1 AND evidence->>'decision_reason'=$2 AND attempts=1 AND empty_count=0`, a.ID, reason)
+
+	for i, seconds := range []int{5, 10, 0} {
+		count := i + 1
+		schedulerWait(t, "只有缺答项累加空答", func() bool { return f.item(t, b.ID).EmptyCount == count })
+		p := f.item(t, b.ID)
+		b3RequireCount(t, f.application, 1, `SELECT cardinality(streak_items) FROM curation_model_state`)
+		if p.Attempts != 0 || p.SingleRequest {
+			t.Fatalf("空答未经模型回答且不触发拆单：%+v", p)
+		}
+		if seconds == 0 {
+			if p.Status != "shelved" || p.NextAttemptAt != nil || p.ShelvedReason == nil || *p.ShelvedReason != "模型没给出结果" {
+				t.Fatalf("第三次空答应该结案：%+v", p)
+			}
+			break
+		}
+		deadline := f.clock.options().Now().Add(time.Duration(seconds) * time.Second)
+		if p.Status != "waiting_model" || p.NextAttemptAt == nil || !p.NextAttemptAt.Equal(deadline) {
+			t.Fatalf("第 %d 次空答后应在 %v 再试：%+v", count, deadline, p)
+		}
+		f.clock.now.Store(deadline.UnixNano())
+		next := f.next(t, false)
+		requireCurationRuleItems(t, next, b.ID)
+		next.complete(t)
+	}
+	requireCurationRuleRequestCount(t, f, 3)
+}
+
+func TestPostgreSQLCurationModelRulesFailureStreak(t *testing.T) {
+	for _, tc := range []struct {
+		name, pause string
+		failure     curation.ModelFailure
+	}{
+		{"相同拒绝", "configuration", curation.ModelFailure{Class: "request_rejected", Status: 400, Code: "invalid_request_error", Message: "输入  类型错误 req-123"}},
+		{"不同项首次空答", "empty_replies", curation.ModelFailure{Class: "empty_reply"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clock := newProgramClock()
+			f := newSchedulerFixture(t, WithCurationModel(false, model.Options{Now: clock.options().Now}))
+			f.configure(t, &f.admin)
+			f.enable(t)
+			if p := f.progress(t); !p.Configured || p.Model != "test-main" {
+				t.Fatalf("应从已保存设置同步配置代次：%+v", p)
+			}
+			state, err := f.writer.ModelState(t.Context())
+			requireCurationOK(t, err)
+			config := state.ConfigKey
+			requireState := func(wantSize int, wantPause string) {
+				t.Helper()
+				b3RequireCount(t, f.application, wantSize, `SELECT cardinality(streak_items) FROM curation_model_state`)
+				state, err := f.writer.ModelState(t.Context())
+				requireCurationOK(t, err)
+				if wantPause == "" && state.Pause != nil || wantPause != "" && (state.Pause == nil || *state.Pause != wantPause) {
+					t.Fatalf("连续 %d 项，期望暂停 %q，实际 %+v", wantSize, wantPause, state)
+				}
+			}
+			newClaim := func() (string, curation.PendingItem) {
+				t.Helper()
+				label := uuid.New()
+				target, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{title: "合成发行 " + label, artist: "合成艺人 " + label, tracks: []string{"present"}})
+				item := modelPending(t, f.curationFixture, target, "release_match", label)
+				conversation := modelConversation(t, f.curationFixture)
+				items, err := f.writer.ClaimPreparedSelection(t.Context(), conversation, clock.options().Now(), []curation.PendingItem{item})
+				requireCurationOK(t, err)
+				if len(items) != 1 || items[0].ID != item.ID {
+					t.Fatalf("期望领取 %s，实际 %+v", item.ID, items)
+				}
+				return conversation, items[0]
+			}
+			finish := func(failure curation.ModelFailure) {
+				t.Helper()
+				conversation, item := newClaim()
+				requireCurationOK(t, f.writer.FailModelItems(t.Context(), config, conversation, []curation.PendingItem{item}, failure, clock.options().Now()))
+			}
+			if tc.failure.Class == "request_rejected" {
+				finish(tc.failure)
+				finish(tc.failure)
+				other := tc.failure
+				other.Message = "不同原因"
+				finish(other)
+				requireState(1, "")
+			}
+			finish(tc.failure)
+			conversation, answer := newClaim()
+			answerCtx := curation.WithModelConfig(t.Context(), config)
+			requireCurationOK(t, f.writer.FinishUndetermined(answerCtx, answer, conversation, "合成结案理由"))
+			requireState(0, "")
+
+			for range 8 {
+				finish(tc.failure)
+			}
+			conversation, item := newClaim()
+			failure := tc.failure
+			if failure.Class == "request_rejected" {
+				failure.Message = "输入 类型错误 req-456"
+			}
+			results := make(chan error, 2)
+			for range 2 {
+				go func() {
+					results <- f.writer.FailModelItems(t.Context(), config, conversation, []curation.PendingItem{item}, failure, clock.options().Now())
+				}()
+			}
+			for range 2 {
+				requireCurationOK(t, <-results)
+			}
+			requireState(9, "")
+			finish(tc.failure)
+			requireState(10, tc.pause)
+			progress := requireCurationRulePause(t, f, tc.pause, nil)
+			if tc.pause == "empty_replies" && (progress.ReasonDetail == nil || !strings.Contains(*progress.ReasonDetail, "建议换一个") || !progress.CanRetry) {
+				t.Fatalf("十项首次空答应显示更换模型提示和重试入口：%+v", progress)
+			}
+			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_pending_items WHERE status <> 'resolved' AND attempts<>0`)
+			_, err = f.writer.SyncModelConfig(t.Context(), "new-config", "new-model")
+			requireCurationOK(t, err)
+			requireState(0, "")
+			requireCurationOK(t, f.writer.SetModelFailure(t.Context(), config,
+				curation.ModelFailure{Class: "configuration", Status: 401, Code: "invalid_api_key"}, clock.options().Now()))
+			requireState(0, "")
+			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_pending_items WHERE status<>'resolved' AND (status<>'waiting_model' OR empty_count<>0 OR model_stop_code IS NOT NULL)`)
+			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_pending_items WHERE id=$1 AND attempts=1 AND resolution='undetermined'`, answer.ID)
+		})
+	}
+}
+
+func TestPostgreSQLCurationModelRulesBatch400(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		failure schedulerHTTPFailure
+	}{
+		{"普通400拆单", schedulerHTTPFailure{status: 400, code: "invalid_request_error", message: "合成批请求被拒"}},
+		{"欠费400不拆", schedulerHTTPFailure{status: 400, code: "insufficient_balance", message: "余额不足"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSchedulerFixture(t)
+			f.configure(t, &f.admin)
+			a, b := f.pending(t, f.a), f.pending(t, f.b)
+			// 批拒绝时仍可判断当前名额是否已经释放。
+			f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 1})
+			first := f.next(t, false)
+			requireCurationRuleItems(t, first, a.ID, b.ID)
+			first.fail <- tc.failure
+			if tc.failure.code == "insufficient_balance" {
+				next := f.clock.options().Now().Add(time.Hour)
+				requireCurationRulePause(t, f, "provider_quota", &next)
+				requireCurationRuleRequestCount(t, f, 1)
+				b3RequireCount(t, f.application, 2, `SELECT count(*) FROM curation_pending_items WHERE id IN ($1,$2) AND NOT single_request AND attempts=0 AND status='waiting_model'`, a.ID, b.ID)
+				return
+			}
+
+			single := f.next(t, false)
+			requireCurationRuleItems(t, single, a.ID)
+			if !f.item(t, a.ID).SingleRequest || !f.item(t, b.ID).SingleRequest {
+				t.Fatal("批拒绝后的两个原项都应记录持久化的单发标记")
+			}
+			single.fail <- tc.failure
+			peer := f.next(t, false)
+			requireCurationRuleItems(t, peer, b.ID)
+			rejected := f.item(t, a.ID)
+			if rejected.Status != "shelved" || rejected.Attempts != 0 || rejected.ShelvedReason == nil || !strings.Contains(*rejected.ShelvedReason, "模型拒绝了请求") {
+				t.Fatalf("单项拒绝应终止该项且允许同批另一项继续：%+v", rejected)
+			}
+			peer.undetermined(t, b.ID, "合成候选没有足够证据")
+			modelWaitResolution(t, f, b.ID, "undetermined")
+			requireCurationRuleRequestCount(t, f, 3)
+		})
+	}
+}
+
+func curationRuleCandidates(t *testing.T, f *schedulerFixture, item curation.PendingItem, scores []int, titleSize int) []program.Candidate {
+	t.Helper()
+	candidates := make([]program.Candidate, len(scores))
+	for i, score := range scores {
+		id := uuid.New()
+		candidates[i] = program.Candidate{ExternalID: id, Score: float64(score), Release: &sources.Release{
+			ID: id, Complete: true, Title: strings.Repeat("中日한", titleSize),
+			Media: []sources.Medium{{Position: 1, Tracks: []sources.Track{{Position: 1, Title: "合成首曲"}, {Position: 2, Title: "合成次曲"}}}},
+		}}
+	}
+	raw, err := json.Marshal(candidates)
+	requireCurationOK(t, err)
+	mustExec(t, f.application, `UPDATE curation_pending_items SET candidates=$2 WHERE id=$1`, item.ID, raw)
+	return candidates
+}
+
+func TestPostgreSQLCurationModelRulesBatchPacking(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	a, long := f.pending(t, f.a), f.pending(t, f.b)
+	short := curationRulePending(t, f, "补足首批")
+	recording := curationRulePending(t, f, "录音合同")
+	mustExec(t, f.application, `UPDATE curation_pending_items SET kind='recording_match' WHERE id=$1`, recording.ID)
+	curationRuleCandidates(t, f, a, []int{1}, 900)
+	curationRuleCandidates(t, f, long, []int{1}, 3150)
+	curationRuleCandidates(t, f, short, []int{1}, 30)
+	recID := uuid.New()
+	recJSON, err := json.Marshal([]program.Candidate{{ExternalID: recID, Recording: &sources.Recording{ID: recID, Title: "合成录音"}}})
+	requireCurationOK(t, err)
+	mustExec(t, f.application, `UPDATE curation_pending_items SET candidates=$2 WHERE id=$1`, recording.ID, recJSON)
+	const budget = 27500
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 1, "max_request_tokens": budget})
+	first := f.next(t, false)
+	requireCurationRuleItems(t, first, a.ID, short.ID)
+	if first.outputLimit() != budget/8 || len(first.Tools) != 0 {
+		t.Fatalf("判断请求的实际输出上限应为 %d，工具应为空，实际 %d/%v", budget/8, first.outputLimit(), first.Tools)
+	}
+	first.undetermined(t, a.ID, "合成证据不足")
+	second := f.next(t, false)
+	requireCurationRuleItems(t, second, long.ID)
+	second.undetermined(t, long.ID, "合成长候选证据不足")
+	third := f.next(t, false)
+	requireCurationRuleItems(t, third, recording.ID)
+	third.undetermined(t, recording.ID, "合成录音证据不足")
+	modelWaitResolution(t, f, recording.ID, "undetermined")
+}
+
+func TestPostgreSQLCurationModelRulesTrimCandidates(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	item := f.pending(t, f.a)
+	candidates := curationRuleCandidates(t, f, item, []int{10, 90, 90, 70}, 900)
+	const localNote = "本地合成备注与标点：中日한"
+	mustExec(t, f.application, `UPDATE curation_pending_items SET evidence=evidence||jsonb_build_object('test_note',$2::text) WHERE id=$1`, item.ID, localNote)
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 1, "max_request_tokens": 27000})
+	q := f.next(t, false)
+	items, found, err := metricsPendingItems(curationRulePrompt(t, q))
+	requireCurationOK(t, err)
+	if !found || len(items) != 1 || items[0].ID != item.ID {
+		t.Fatalf("裁剪应只发送原项：%+v", items)
+	}
+	var got []string
+	for _, candidate := range items[0].Candidates {
+		got = append(got, candidate.ID)
+	}
+	want := []string{candidates[1].ExternalID, candidates[2].ExternalID, candidates[3].ExternalID}
+	if !slices.Equal(got, want) || !strings.Contains(string(items[0].RawEvidence), localNote) || !strings.Contains(string(items[0].RawItem), "search_only") {
+		t.Errorf("应保留最高分的三个候选、同分原次序、本地备注和冲突，实际候选 %v，期望 %v，证据 %s", got, want, items[0].RawEvidence)
+	}
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_pending_items WHERE id=$1 AND jsonb_array_length(candidates)=4`, item.ID)
+	q.selectCandidate(t, item.ID, candidates[0].ExternalID)
+	schedulerWait(t, "未发送候选的决定计空答", func() bool { return f.item(t, item.ID).EmptyCount == 1 })
+	if got := f.item(t, item.ID); got.Attempts != 0 || got.Resolution != nil {
+		t.Fatalf("未发送候选不属于有效决定：%+v", got)
+	}
+	requireCurationRuleRequestCount(t, f, 1)
+}
+
+func TestPostgreSQLCurationModelRulesLongInputReopens(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	item := f.pending(t, f.a)
+	curationRuleCandidates(t, f, item, []int{90}, 1800)
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 1, "max_request_tokens": 1500})
+	schedulerWait(t, "单项仍超长，应在建会话前搁置", func() bool { return f.item(t, item.ID).Status == "shelved" })
+	got := f.item(t, item.ID)
+	if got.ShelvedReason == nil || *got.ShelvedReason != "内容太长" || got.Attempts != 0 || got.EmptyCount != 0 {
+		t.Fatalf("单项超长状态错误：%+v", got)
+	}
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM steward_conversations WHERE kind='curation'`)
+	requireCurationRuleRequestCount(t, f, 0)
+	f.update(t, "PUT", curationBase+"/settings", map[string]int{"max_request_tokens": 128000})
+	reopened := f.next(t, false)
+	requireCurationRuleItems(t, reopened, item.ID)
+	reopened.undetermined(t, item.ID, "合成候选仍需人工判断")
+	modelWaitResolution(t, f, item.ID, "undetermined")
+}
+
+func TestPostgreSQLCurationModelRulesDirectoryAndPriority(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	f.update(t, "PUT", curationBase+"/settings", map[string]string{"model": "curation-override"})
+	match := f.pending(t, f.a)
+	verify := queueModelVerification(t, f, "verify_name", curation.VerificationCandidate{
+		ReleaseID: f.b, Field: "title", Before: "原题", After: "合成核对标题",
+	})
+	var directory []string
+	for i := range 6 {
+		label := fmt.Sprintf("同目录%d", i)
+		target, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{title: label, artist: "艺人" + label, tracks: []string{"present"}})
+		p := modelPending(t, f.curationFixture, target, "local_cleanup", label)
+		mustExec(t, f.application, `UPDATE curation_pending_items SET evidence=jsonb_build_object('directory_key','合成目录') WHERE id=$1`, p.ID)
+		directory = append(directory, p.ID)
+	}
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 1})
+	wholeDirectory := f.nextModel(t, "curation-override", false)
+	requireCurationRuleItems(t, wholeDirectory, directory...)
+	wholeDirectory.complete(t)
+	selection := f.nextModel(t, "curation-override", false)
+	requireCurationRuleItems(t, selection, match.ID)
+	selection.undetermined(t, match.ID, "合成候选证据不足")
+	verification := f.nextModel(t, "curation-override", false)
+	requireCurationRuleItems(t, verification, verify)
+	verification.complete(t)
+}
+
+func TestPostgreSQLCurationModelRulesTargetMutualExclusion(t *testing.T) {
+	clock := newProgramClock()
+	f := newSchedulerFixture(t, WithCurationModel(true, model.Options{Now: clock.options().Now, PollInterval: 20 * time.Millisecond, BatchSize: 1}))
+	f.clock = clock
+	f.configure(t, &f.admin)
+	first := f.pending(t, f.a)
+	conflicting := queueModelVerification(t, f, "verify_name", curation.VerificationCandidate{
+		ReleaseID: f.a, Field: "title", Before: "原题", After: "合成同发行核对标题",
+	})
+	peer := f.pending(t, f.b)
+	waiting := curationRulePending(t, f, "并发上限后的发行")
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 2})
+
+	a, b := f.next(t, false), f.next(t, false)
+	if strings.Contains(curationRulePrompt(t, a), peer.ID) {
+		a, b = b, a
+	}
+	requireCurationRuleItems(t, a, first.ID)
+	requireCurationRuleItems(t, b, peer.ID)
+	p := f.progress(t)
+	if p.Running != 2 || p.Concurrency != 2 || f.item(t, conflicting).Status != "waiting_model" || f.item(t, waiting.ID).Status != "waiting_model" {
+		t.Fatalf("同发行核对应等待其在途判断，并且并发最多两个：%+v", p)
+	}
+	requireCurationRuleRequestCount(t, f, 2)
+	a.undetermined(t, first.ID, "合成候选证据不足")
+	modelWaitResolution(t, f, first.ID, "undetermined")
+	third := f.next(t, false)
+	requireCurationRuleItems(t, third, waiting.ID)
+	third.undetermined(t, waiting.ID, "合成证据不足")
+	verification := f.next(t, false)
+	requireCurationRuleItems(t, verification, conflicting)
+	verification.complete(t)
+	b.undetermined(t, peer.ID, "合成证据不足")
+	modelWaitResolution(t, f, peer.ID, "undetermined")
 }

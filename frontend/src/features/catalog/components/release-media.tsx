@@ -192,7 +192,19 @@ const TrackRow = memo(function TrackRow({
       onClick={onSelect === undefined ? undefined : (event) => selectOnClick(event, track.id, onSelect)}
     >
       <span className={styles.number}>
-        <span className={styles.numberContent}>{marker === undefined ? (track.position >= 1 ? track.position : "—") : <Equalizer playing={playing} />}</span>
+        <span className={styles.numberContent}>{marker === undefined ? (
+            track.position >= 1 ? (
+              track.position
+            ) : (
+              // 曲号缺失时不按位置补号（ADR 0009 第 3.3 节）。
+              <>
+                <span aria-hidden="true">—</span>
+                <VisuallyHidden>曲号未知</VisuallyHidden>
+              </>
+            )
+          ) : (
+            <Equalizer playing={playing} />
+          )}</span>
       </span>
       <p className={styles.title} title={title}>
         <span className={styles.titleText}>{title}</span>

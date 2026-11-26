@@ -8,6 +8,7 @@ import (
 	"net"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // ErrorKind 是适配器失败的稳定分类。
@@ -38,6 +39,10 @@ const (
 
 // Error 是可用 errors.As 读取的失败，不保留密钥、请求头或原始请求。
 type Error struct {
+	Code       string         `json:"-"`
+	Class      string         `json:"-"`
+	RetryDelay *time.Duration `json:"-"`
+
 	// Kind 是稳定分类。
 	Kind ErrorKind `json:"kind"`
 	// StatusCode 是已收到的 HTTP 状态，没有响应时为零。
@@ -111,7 +116,62 @@ func responseFailure(status int, data []byte, key string) *Error {
 		// 仅采用调研核实的能力拒绝文本，不把普通 400 当成不支持工具。
 		kind = ErrorToolUnsupported
 	}
-	return failure(kind, status, message, key)
+	err := failure(kind, status, message, key)
+	if code == "" {
+		code = detail.Type
+	}
+	err.Code = safeErrorCode(code, key)
+	hasCode := func(values ...string) bool {
+		for _, v := range values {
+			if v == code || v == detail.Type {
+				return true
+			}
+		}
+		return false
+	}
+	lower := strings.ToLower(message)
+	switch {
+	case status == 401 || status == 403:
+		err.Class = "configuration"
+	case status == 402:
+		err.Class = "provider_quota"
+	case (status == 400 || status == 429 || status < 300) && (hasCode("insufficient_quota", "insufficient_balance", "billing_hard_limit_reached") || strings.Contains(lower, "insufficient balance") || strings.Contains(lower, "insufficient quota") || strings.Contains(lower, "exceeded your current quota") || strings.Contains(lower, "余额不足") || strings.Contains(lower, "额度已用完")):
+		err.Class = "provider_quota"
+	case hasCode("model_not_found", "tool_unsupported", "permission_error", "authentication_error") || strings.Contains(lower, "does not support tools"):
+		err.Class = "configuration"
+	case hasCode("overloaded_error", "server_error", "api_error", "rate_limit_exceeded", "rate_limit_error", "timeout_error"):
+		err.Class = "temporary"
+	}
+	return err
+}
+
+var stableErrorCode = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,80}$`)
+
+func safeErrorCode(code, key string) string {
+	if stableErrorCode.MatchString(code) && (key == "" || !strings.Contains(code, key)) {
+		return code
+	}
+	return ""
+}
+
+// BackgroundClass 将上游错误映射到后台调度的处置。
+func (err *Error) BackgroundClass() string {
+	if err.Class != "" {
+		return err.Class
+	}
+	switch err.Kind {
+	case ErrorTimeout, ErrorUnreachable, ErrorStreamInterrupted, ErrorRateLimit:
+		return "temporary"
+	case ErrorAuthentication, ErrorModelNotFound, ErrorToolUnsupported, ErrorEgressDenied:
+		return "configuration"
+	case ErrorInvalidResponse:
+		return "empty_reply"
+	}
+	switch err.StatusCode {
+	case 500, 502, 503, 504, 529:
+		return "temporary"
+	}
+	return "request_rejected"
 }
 
 func hasError(data []byte) bool {

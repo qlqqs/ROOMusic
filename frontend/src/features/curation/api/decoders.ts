@@ -13,12 +13,12 @@ const paginationDecoder = d.object({
 const userRefDecoder = d.object({ id: d.uuid(), username: d.string({ max: 200 }) });
 
 // 总开关：enabled 是开关本身，active 是“现在自动写入会不会被接受”；enabled_at 在从未打开过时为 null，关掉之后保留打开时的值。
-// model 是整理用的模型（空串 = 开启者的对话模型），daily_token_limit 是后台整理每天的 token 上限（null = 不限；M7 D）。
+// model 是整理用的模型（空串 = 开启者的对话模型）；daily_token_limit 是整理与艺人联网共用的每天 token 上限（null = 不限，默认 1000 万；ADR 0009 第 6 节）。
 const settingsDecoder = d.object({
   active: d.boolean(),
   daily_token_limit: d.nullable(d.integer({ min: 1 })),
-  // 联网兜底单独的每日上限（整理链 E，null = 不限；联网用量同时计入总上限）。
-  web_daily_token_limit: d.nullable(d.integer({ min: 1 })),
+  // 一次请求最多发送的 token（估算，含候选与说明），超出时分批；1 到 10¹²，默认 128000。
+  max_request_tokens: d.integer({ min: 1, max: 1_000_000_000_000 }),
   // 同时运行的模型任务数（整理缺口 R24），1–16。
   model_concurrency: d.integer({ min: 1, max: 16 }),
   model: d.string({ max: 200 }),
@@ -72,6 +72,13 @@ export const MODEL_STATES = ["idle", "running", "waiting_review", "paused", "dis
 export type ModelState = (typeof MODEL_STATES)[number];
 export const MODEL_UNAVAILABLE_REASONS = ["not_configured", "key_needs_reentry", "tool_unsupported", "enabler_unavailable", "source_disabled", "provider_error"] as const;
 export type ModelUnavailableReason = (typeof MODEL_UNAVAILABLE_REASONS)[number];
+/**
+ * 模型暂停的原因（ADR 0009 第 6.5 节）：configuration 是配置被拒（密钥、模型名、不支持工具），改配置或手动测试成功才恢复；
+ * provider_quota 是上游额度或余额不足，每小时自动探测一次；temporary 是上游临时出错，按退避或上游给的时刻再试；
+ * empty_replies 是连续空返回；daily_limit 是本地的每日上限，下个日界恢复。null 表示没有暂停。
+ */
+export const MODEL_PAUSE_KINDS = ["configuration", "provider_quota", "temporary", "empty_replies", "daily_limit"] as const;
+export type ModelPauseKind = (typeof MODEL_PAUSE_KINDS)[number];
 
 const usageDecoder = d.object({ date: d.string({ pattern: /^\d{4}-\d{2}-\d{2}$/ }), input_tokens: count(), output_tokens: count() });
 // 模型层（M7 D）：状态与不可用的原因、今天（服务器时区）的用量与上限、待定项各状态的数目（只算可见发行）。
@@ -85,11 +92,17 @@ const modelProgressDecoder = d.object({
   state: d.oneOf(MODEL_STATES),
   today: usageDecoder,
   unavailable_reason: d.nullable(d.oneOf(MODEL_UNAVAILABLE_REASONS)),
-  // 联网兜底的子额度（整理链 E）：今天的联网用量已包含在 today 里；用尽时只停联网，次日 web_retry_at 恢复。
-  web_daily_token_limit: d.nullable(d.integer({ min: 1 })),
-  web_limit_reached: d.boolean(),
-  web_retry_at: d.nullable(d.timestamp()),
-  web_today: usageDecoder,
+  // 有没有可用的模型配置（开关状态另看 state）。
+  configured: d.boolean(),
+  pause_kind: d.nullable(d.oneOf(MODEL_PAUSE_KINDS)),
+  // 暂停原因的说明（已脱敏的上游原文或本地说明），没有时为 null。
+  reason_detail: d.nullable(d.string({ max: 2000 })),
+  // 自动再试或恢复的时刻（上游额度的下次探测、退避到期、下个日界），没有时为 null。
+  retry_at: d.nullable(d.timestamp()),
+  // 现在能不能手动测试一次连接（POST /admin/curation/model/retry）。
+  can_retry: d.boolean(),
+  // 设置“单次最多发送”的提示（例如本机模型按实际加载的上下文长度设置），没有时为 null。
+  context_hint: d.nullable(d.string({ max: 2000 })),
 });
 // 五条程序队列的进度（整理链 B）：固定顺序为识别、封面、歌词、艺人资料、声纹。remaining 含在途与等待中的项，ready 是现在能领取的；
 // 速度按最近 5 分钟实测，没有样本时为 null；来源被限流或不可用时带来源与预计恢复时刻。
@@ -291,6 +304,8 @@ export const decodeCurationSettings = d.defineDecoder(settingsDecoder);
 export const decodeCurationSources = d.defineDecoder(sourcesDecoder);
 export const decodeCurationSource = d.defineDecoder(sourceDecoder);
 export const decodeCurationProgress = d.defineDecoder(progressDecoder);
+/** POST /admin/curation/model/retry：手动测试一次连接，返回更新后的模型层状态。 */
+export const decodeCurationModelRetry = d.defineDecoder(modelProgressDecoder);
 export const decodeCurationBatch = d.defineDecoder(batchDecoder);
 export const decodeCurationBatchPage = d.defineDecoder(batchPageDecoder);
 export const decodeScopeRevert = d.defineDecoder(scopeRevertDecoder);

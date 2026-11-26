@@ -41,6 +41,12 @@ export type CurationData = {
     items: CurationModelProgressDTO["items"];
     /** 同时在跑的项数；不设时为 0。 */
     running?: number;
+    /** 模型暂停（ADR 0009 第 6.5 节）；不设时没有暂停。 */
+    pause?: { kind: NonNullable<CurationModelProgressDTO["pause_kind"]>; detail: string | null; retryAt: string | null };
+    /** 能不能手动测试连接；不设时为 false。 */
+    canRetry?: boolean;
+    /** 收到的“测试模型连接”请求数。 */
+    retries?: number;
   };
   /** 例外（新的在前）与当前管理员名下的自动整理会话。 */
   exceptions: CurationExceptionDTO[];
@@ -52,8 +58,6 @@ export type CurationData = {
   repatrols: number;
   /** 五条程序队列（整理链 B）；为 null 时都空闲、已排空。 */
   queues: CurationQueueDTO[] | null;
-  /** 今天的联网用量与联网上限是否用尽（整理链 E）。 */
-  web: { today: { input_tokens: number; output_tokens: number }; limitReached: boolean; retryAt: string | null };
 };
 
 const ADMIN = { id: "00000000-0000-4000-8000-000000000002", username: "curator" };
@@ -61,7 +65,7 @@ const ADMIN = { id: "00000000-0000-4000-8000-000000000002", username: "curator" 
 export function curationDataOf(governance: GovernanceData | null = null): CurationData {
   return {
     governance,
-    settings: { active: false, enabled: false, enabled_at: null, enabled_by: null, inactive_reason: "disabled", paused: false, model: "", daily_token_limit: 10_000_000, web_daily_token_limit: null, model_concurrency: 4 },
+    settings: { active: false, enabled: false, enabled_at: null, enabled_by: null, inactive_reason: "disabled", paused: false, model: "", daily_token_limit: 10_000_000, max_request_tokens: 128_000, model_concurrency: 4 },
     sources: [
       { active: false, capabilities: ["release_lookup", "recording_lookup", "artist_lookup"], enabled: true, id: "musicbrainz", inactive_reason: "curation_disabled", name: "MusicBrainz" },
       { active: false, capabilities: ["cover_art"], enabled: true, id: "coverartarchive", inactive_reason: "curation_disabled", name: "Cover Art Archive" },
@@ -87,7 +91,6 @@ export function curationDataOf(governance: GovernanceData | null = null): Curati
     classifications: null,
     repatrols: 0,
     queues: null,
-    web: { today: { input_tokens: 0, output_tokens: 0 }, limitReached: false, retryAt: null },
     revertPageSize: 100,
     fingerprintAvailable: true,
     bundledKeyRejected: false,
@@ -129,25 +132,25 @@ export function respondToCurationSettings(data: CurationData): ApiResult {
 }
 
 export function respondToUpdateCurationSettings(data: CurationData, body: unknown): ApiResult {
-  const change = typeof body === "object" && body !== null ? (body as { enabled?: unknown; paused?: unknown; model?: unknown; daily_token_limit?: unknown; web_daily_token_limit?: unknown; model_concurrency?: unknown }) : {};
+  const change = typeof body === "object" && body !== null ? (body as { enabled?: unknown; paused?: unknown; model?: unknown; daily_token_limit?: unknown; max_request_tokens?: unknown; model_concurrency?: unknown }) : {};
   const enabled = typeof change.enabled === "boolean" ? change.enabled : undefined;
   const paused = typeof change.paused === "boolean" ? change.paused : undefined;
   const model = typeof change.model === "string" ? change.model : undefined;
   const hasLimit = "daily_token_limit" in change;
   const limit = change.daily_token_limit;
   if (hasLimit && limit !== null && !(typeof limit === "number" && Number.isInteger(limit) && limit >= 1 && limit <= 1e12)) return failure(400, "invalid_input", "每日上限无效");
-  const hasWebLimit = "web_daily_token_limit" in change;
-  const webLimit = change.web_daily_token_limit;
-  if (hasWebLimit && webLimit !== null && !(typeof webLimit === "number" && Number.isInteger(webLimit) && webLimit >= 1 && webLimit <= 1e12)) return failure(400, "invalid_input", "联网每日上限无效");
+  const hasRequestSize = "max_request_tokens" in change;
+  const requestSize = change.max_request_tokens;
+  if (hasRequestSize && !(typeof requestSize === "number" && Number.isInteger(requestSize) && requestSize >= 1 && requestSize <= 1e12)) return failure(400, "invalid_input", "单次最多发送无效");
   const hasConcurrency = "model_concurrency" in change;
   const concurrency = change.model_concurrency;
   if (hasConcurrency && !(typeof concurrency === "number" && Number.isInteger(concurrency) && concurrency >= 1 && concurrency <= 16)) return failure(400, "invalid_input", "同时运行数无效");
   if (model !== undefined && new TextEncoder().encode(model).length > 200) return failure(400, "invalid_input", "模型名太长");
-  if (enabled === undefined && paused === undefined && model === undefined && !hasLimit && !hasWebLimit && !hasConcurrency) return failure(400, "invalid_input", "至少要改一项设置");
+  if (enabled === undefined && paused === undefined && model === undefined && !hasLimit && !hasRequestSize && !hasConcurrency) return failure(400, "invalid_input", "至少要改一项设置");
   const settings = { ...data.settings };
   if (model !== undefined) settings.model = model;
   if (hasLimit) settings.daily_token_limit = limit as number | null;
-  if (hasWebLimit) settings.web_daily_token_limit = webLimit as number | null;
+  if (hasRequestSize) settings.max_request_tokens = requestSize as number;
   if (hasConcurrency) settings.model_concurrency = concurrency as number;
   if (enabled !== undefined) {
     if (enabled && !settings.enabled) {
@@ -233,6 +236,16 @@ export function respondToCurationClassifications(data: CurationData): ApiResult 
       versions: { local_rule: 2, external_match_rule: 102, patrol_prompt: 1 },
     },
   };
+}
+
+/** 测试模型连接：记一次；能测试时解除暂停，返回更新后的模型层状态。 */
+export function respondToRetryCurationModel(data: CurationData): ApiResult {
+  data.model.retries = (data.model.retries ?? 0) + 1;
+  if (data.model.canRetry === true) {
+    delete data.model.pause;
+    data.model.canRetry = false;
+  }
+  return { status: 200, body: modelProgressOf(data) };
 }
 
 /** 重新巡检：只记一次，返回 202 空体。 */
@@ -358,10 +371,12 @@ function modelProgressOf(data: CurationData): CurationModelProgressDTO {
     state,
     today: { date: "2026-01-05", ...data.model.today },
     unavailable_reason: state === "unavailable" ? data.model.unavailableReason : null,
-    web_daily_token_limit: data.settings.web_daily_token_limit,
-    web_limit_reached: data.web.limitReached,
-    web_retry_at: data.web.retryAt,
-    web_today: { date: "2026-01-05", ...data.web.today },
+    configured: !(state === "unavailable" && data.model.unavailableReason === "not_configured"),
+    pause_kind: data.model.pause?.kind ?? null,
+    reason_detail: data.model.pause?.detail ?? null,
+    retry_at: data.model.pause?.retryAt ?? null,
+    can_retry: data.model.canRetry ?? false,
+    context_hint: "使用本机模型时，请按模型服务实际加载的上下文长度设置单次最多发送。",
   };
 }
 

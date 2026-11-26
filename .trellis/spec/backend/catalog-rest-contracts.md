@@ -77,6 +77,8 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
   形式尚待批准。M1 不恢复演示队列或模拟计时器；未实现的播放动作隐藏或明确禁用，
   不以“演示模式”标记替代真实能力边界。
 
+专辑及艺人页内有序曲表按介质号、内部 sort_position、轨 ID 排列，旧行以 position 排。position 只返回曲号，0 表示未知。平票字段的 evidence 保留候选值及 tied_candidates 原因。
+
 ### 曲目显示时长（0036）
 
 发行详情、曲目列表与批量摘要、个人曲目事实的 `duration_seconds` 统一读取 `track_display_durations`，版本总时长与曲目集合统计也使用此来源。
@@ -125,7 +127,7 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
 - **搜索**：任一可见成员命中 `/releases` 的搜索条件（同一个 SQL 谓词），组即命中；只命中不可见成员的不算。
 - **attention**：`attention_count` 是全部可见成员 attention 之和（不可见成员不计）；`attention=required` 取其大于 0 的组，
   与代表版本自己的 `attention_count` 无关。
-- **无 q 的排序（以及新搜索未发布时的旧 q 回退）**：省略或 `sort=title` 取代表版本的 `LOWER(title)`、`LOWER(artist)`、ID，与 `/releases` 一致；
+- **无 q 的排序（以及新搜索未发布时的旧 q 回退）**：省略或 `sort=title` 取代表版本的有效 title、artist 的 `catalog_list_sort_key`（C 顺序）、ID，与 `/releases` 一致；
   `sort=added_at_desc` 取 `added_at DESC, group_id DESC`。空值、未知值、重复 `sort` 参数均为 `400 invalid_sort`。
   `/releases` 不增加此排序能力。新搜索已发布且带 q 时，默认/标题入口按搜索相关性排序；显式 `sort=added_at_desc` 保留加入时间倒序，匹配仍使用完整规范化搜索。
   标题浏览下没有人工归组时每组恰好一个版本，

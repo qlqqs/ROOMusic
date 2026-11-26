@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
@@ -12,7 +13,10 @@ import (
 
 type schedulingConditions struct {
 	curation.ModelProgress
-	sources []string
+	sources  []string
+	config   Configuration
+	verified bool
+	budget   int64
 }
 
 // 按待定项目标检查来源。没有注册网络搜索的调度器仍可处理发行项。
@@ -68,61 +72,109 @@ func (p schedulingConditions) allows(kind TaskKind) bool {
 }
 
 func (s *Scheduler) conditions(ctx context.Context, checkBudget bool) (p schedulingConditions, actor string, err error) {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
 	settings, err := s.writer.Settings(ctx)
 	if err != nil {
 		return p, "", err
 	}
-	p.Model, p.DailyTokenLimit, p.WebDailyTokenLimit = settings.Model, settings.DailyTokenLimit, settings.WebDailyTokenLimit
+	p.Model, p.DailyTokenLimit = settings.Model, settings.DailyTokenLimit
 	p.Concurrency = settings.ModelConcurrency
 	now := s.options.Now()
 	if checkBudget {
-		p.Today, p.WebToday, err = s.writer.DailyUsage(ctx, now)
-		p.WebLimitReached = p.WebToday.AtLimit(p.WebDailyTokenLimit)
-		if p.WebLimitReached {
-			retry := curation.NextBudgetDay(now)
-			p.WebRetryAt = &retry
-		}
+		p.Today, err = s.writer.TodayUsage(ctx, now)
 		if err != nil {
 			return p, "", err
 		}
 	}
-	unavailable := func(reason string) { p.State = "unavailable"; p.UnavailableReason = &reason }
-	switch {
-	case !settings.Enabled:
+	p.budget = settings.MaxRequestTokens
+	p.ContextHint = "使用本机模型时，请按模型服务实际加载的上下文长度设置单次最多发送。"
+	if settings.EnabledBy == nil || settings.Enabled && !settings.Active || s.launcher == nil {
+		reason := "not_configured"
+		p.UnavailableReason = &reason
 		p.State = "disabled"
-	case !settings.Active:
-		unavailable("enabler_unavailable")
-	case settings.Paused:
-		p.State = "paused"
-	default:
-		actor = settings.EnabledBy.ID
-		if err = s.targetSources(ctx, &p); err != nil || p.State != "" {
-			return p, actor, err
+		if settings.Enabled {
+			reason = "enabler_unavailable"
+			p.State = "unavailable"
 		}
-		if s.launcher == nil {
-			return p, actor, operations.ErrUnavailable
+		return p, "", nil
+	}
+	actor = settings.EnabledBy.ID
+	p.config, err = s.launcher.Availability(ctx, actor, settings.Model)
+	if err != nil {
+		return p, actor, err
+	}
+	p.Model = p.config.Model
+	state, err := s.writer.SyncModelConfig(ctx, p.config.Key, p.config.ModelKey)
+	if err != nil {
+		return p, actor, err
+	}
+	p.verified = state.Verified
+	reason := p.config.Reason
+	if reason == "tool_unsupported" && state.Verified {
+		reason = ""
+	}
+	p.Configured = reason != "not_configured"
+	if reason != "" {
+		p.UnavailableReason = &reason
+		p.State = "unavailable"
+		if p.Configured {
+			kind := "configuration"
+			p.PauseKind = &kind
+			detail := "模型不支持工具调用"
+			if reason == "key_needs_reentry" {
+				detail = "模型密钥需要重新输入"
+			}
+			p.ReasonDetail = &detail
+			p.CanRetry = reason == "tool_unsupported"
+			if state.Pause != nil {
+				p.PauseKind, p.ReasonDetail, p.RetryAt = state.Pause, state.Detail, state.RetryAt
+			}
 		}
-		model, reason, err := s.launcher.Availability(ctx, actor)
-		if err != nil {
-			return p, actor, err
-		}
-		if p.Model == "" {
-			p.Model = model
-		}
+	} else {
 		s.mu.RLock()
 		cooling := now.Before(s.providerUntil)
 		s.mu.RUnlock()
-		switch {
-		case reason != "":
-			unavailable(reason)
-		case checkBudget && cooling:
-			unavailable("provider_error")
-		case checkBudget && p.Today.AtLimit(p.DailyTokenLimit):
-			p.State = "limit_reached"
-		default:
-			p.State = "idle"
+		p.State = "idle"
+		p.CanRetry = true
+		p.PauseKind, p.ReasonDetail, p.RetryAt = state.Pause, state.Detail, state.RetryAt
+		if state.Pause != nil && *state.Pause == "temporary" && state.RetryAt != nil && !state.RetryAt.After(now) {
+			p.PauseKind, p.ReasonDetail, p.RetryAt = nil, nil, nil
+		}
+		if p.PauseKind != nil && checkBudget {
+			p.State = "unavailable"
+			r := *p.PauseKind
+			if r == "temporary" {
+				r = "provider_error"
+				p.CanRetry = false
+			}
+			p.UnavailableReason = &r
+		} else if checkBudget && cooling {
+			p.State = "unavailable"
+			r := "provider_error"
+			p.UnavailableReason = &r
 		}
 	}
+	if checkBudget && p.Today.AtLimit(p.DailyTokenLimit) {
+		p.State = "limit_reached"
+		kind := "daily_limit"
+		p.PauseKind = &kind
+		retry := curation.NextBudgetDay(now)
+		p.RetryAt = &retry
+		p.CanRetry = false
+	}
+	if !settings.Enabled {
+		p.State = "disabled"
+		p.CanRetry = false
+	} else if settings.Paused {
+		p.State = "paused"
+		p.CanRetry = false
+	} else if p.State == "idle" || p.State == "limit_reached" {
+		if err = s.targetSources(ctx, &p); err != nil {
+			return p, actor, err
+		}
+	}
+
 	return p, actor, nil
 }
 
@@ -140,8 +192,12 @@ func (s *Scheduler) ModelStatus(ctx context.Context) (curation.ModelProgress, er
  FROM curation_pending_items p WHERE `+curation.PendingTargetVisibleSQL).Scan(&p.Items.WaitingModel, &p.Items.InProgress, &p.Items.WaitingHuman, &p.Items.Shelved, &waitingReview)
 	s.mu.RLock()
 	p.Running = s.running
+	if s.probing {
+		p.Running++
+	}
+	p.CanRetry = p.CanRetry && s.slotsUsed() < p.Concurrency
 	s.mu.RUnlock()
-	if p.State == "idle" || p.State == "limit_reached" {
+	if p.State == "idle" {
 		switch {
 		case p.Running > 0:
 			p.State = "running"
@@ -150,4 +206,54 @@ func (s *Scheduler) ModelStatus(ctx context.Context) (curation.ModelProgress, er
 		}
 	}
 	return p, err
+}
+
+func (s *Scheduler) RetryModel(ctx context.Context) (curation.ModelProgress, error) {
+	p, actor, err := s.conditions(ctx, true)
+	if err != nil {
+		return p.ModelProgress, err
+	}
+	if p.CanRetry {
+		if err = s.probe(ctx, p, actor, true); err != nil {
+			return p.ModelProgress, err
+		}
+	}
+	return s.ModelStatus(ctx)
+}
+
+func (s *Scheduler) probe(ctx context.Context, p schedulingConditions, actor string, manual bool) error {
+	s.mu.Lock()
+	if s.probing || s.slotsUsed() >= p.Concurrency {
+		s.mu.Unlock()
+		return nil
+	}
+	s.probing = true
+	s.mu.Unlock()
+	defer func() { s.mu.Lock(); s.probing = false; s.mu.Unlock(); s.Wake() }()
+	now := s.options.Now()
+	if !manual {
+		ok, err := s.writer.StartQuotaProbe(ctx, p.config.Key, now)
+		if err != nil || !ok {
+			return err
+		}
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	in, out, f, err := s.launcher.Probe(probeCtx, actor, p.Model, manual)
+	if in+out > 0 {
+		if usageErr := s.writer.AddModelUsage(ctx, now, in, out); usageErr != nil {
+			return usageErr
+		}
+	}
+	if err != nil {
+		return err
+	}
+	if f != nil {
+		hardPause := p.PauseKind != nil && (*p.PauseKind == "configuration" || *p.PauseKind == "empty_replies")
+		if f.Class == "empty_reply" || f.Class == "request_rejected" || manual && hardPause && f.Class != "configuration" {
+			return s.writer.RecordProbeDetail(ctx, p.config.Key, f.Message)
+		}
+		return s.writer.SetModelFailure(ctx, p.config.Key, *f, now)
+	}
+	return s.writer.ModelProbeSucceeded(ctx, p.config.Key, manual)
 }

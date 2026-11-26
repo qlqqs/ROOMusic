@@ -66,9 +66,11 @@ func TestPostgreSQL整理迁移旧待办为可采纳建议(t *testing.T) {
 		requireCurationOK(t, err)
 		mustExec(t, f.application, string(raw))
 	}
+	runMigration("0101_curation_model_rules.down.sql")
 	runMigration("0091_curation_model_fallback.down.sql")
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_pending_items WHERE id=$1 AND status='waiting_human'`, item.ID)
 	runMigration("0091_curation_model_fallback.sql")
+	runMigration("0101_curation_model_rules.sql")
 	modelWaitResolution(t, f, item.ID, "suggestion_recorded")
 	suggestion, err := f.writer.Exception(ctx, id)
 	requireCurationOK(t, err)
@@ -134,7 +136,9 @@ func TestPostgreSQL整理第二档查到候选外编号直接写入(t *testing.T
 		t.Fatalf("第一档缺少完整候选或提前看到正确编号：%s", prompt)
 	}
 	first.selectCandidate(t, item.ID, "")
-	schedulerWait(t, "第一档升级", func() bool { return f.item(t, item.ID).Route == "lookup" })
+	modelWaitResolution(t, f, item.ID, "undetermined")
+	// 旧查询队列仍可独立处理候选以外的发行。
+	item = modelRouteFixture(t, f, f.pending(t, target), "lookup")
 	select {
 	case <-f.requests:
 		t.Fatal("第二档门槛关闭时发出了模型请求")
@@ -300,7 +304,7 @@ func TestPostgreSQL整理联网额度与单项额度(t *testing.T) {
 		limitTokens int
 		limitCalls  int
 	}{
-		{"联网日额用尽仍可离线选择", 20, "web", 13, 0},
+		{"联网用尽共享额度推迟离线选择", 20, "web", 13, 0},
 		{"第二档单项超额后转联网", 0, "lookup", 150000, 0},
 		{"联网单项超额后结束", 0, "web", 300000, 0},
 		{"第二档超出工具次数后转联网", 0, "lookup", 13, 20},
@@ -318,24 +322,20 @@ func TestPostgreSQL整理联网额度与单项额度(t *testing.T) {
 			}
 			if tc.webLimit > 0 {
 				second := modelRouteFixture(t, f, f.pending(t, f.b), "web")
-				f.update(t, "PUT", curationBase+"/settings", map[string]int{"web_daily_token_limit": tc.webLimit, "model_concurrency": 1})
+				f.update(t, "PUT", curationBase+"/settings", map[string]int{"daily_token_limit": tc.webLimit, "model_concurrency": 1})
 				f.enable(t)
 				q := f.next(t, false)
 				// 联网按在库组数及创建顺序领取，先让第一项耗完额度。
 				q.tool(t, "shelve_pending_item", map[string]string{"item_id": first.ID, "reason": "没有可信来源"})
 				modelWaitResolution(t, f, first.ID, "unlisted")
-				schedulerWait(t, "达到联网日额", func() bool { return f.progress(t).WebLimitReached })
+				schedulerWait(t, "达到联网日额", func() bool { return f.progress(t).State == "limit_reached" })
 				p := f.progress(t)
-				if p.WebToday != p.Today || p.WebRetryAt == nil || p.State == "limit_reached" || f.item(t, second.ID).Status != "waiting_route" {
+				if p.RetryAt == nil || p.State != "limit_reached" || f.item(t, second.ID).Status != "waiting_route" {
 					t.Fatalf("联网子限额 %+v，下一项 %+v", p, f.item(t, second.ID))
 				}
-				release, _, offline := f.matchFixture(t)
-				f.next(t, false).selectCandidate(t, offline.ID, f.remote.ID)
-				f.next(t, true).review(t, "approved")
-				modelWaitResolution(t, f, offline.ID, "model_matched")
-				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_id=$1`, release)
-				if f.item(t, second.ID).Status != "waiting_route" {
-					t.Fatal("离线写入时仍领取了联网项")
+				_, _, offline := f.matchFixture(t)
+				if got := f.item(t, offline.ID); got.Status != "waiting_model" || got.ConversationID != "" {
+					t.Fatalf("达到共享额度后领取了离线项 %+v", got)
 				}
 				return
 			}

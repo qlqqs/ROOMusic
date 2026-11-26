@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, isInaccessible, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decodeReleaseDetail, type ReleaseGroupSummaryDTO } from "../features/catalog/api/decoders";
@@ -351,6 +351,36 @@ describe("专辑详情：介质与曲目", () => {
 });
 
 describe("专辑详情：曲目选中与信息", () => {
+  it("按接口顺序显示曲目，缺号时列表提供读屏文字，曲目信息只显示碟号和时长", async () => {
+    const album = symphonies();
+    const { catalog } = setup({ groups: [album] });
+    catalog.releases.set(album.representative.id, releaseDetailOf(album.representative, {
+      media: mediaOf(album.representative, (medium, track) => (
+        medium === 1 ? { position: track === 1 ? 7 : 0 } : {}
+      )),
+    }));
+    renderApp({ path: `/albums/${album.id}` });
+
+    const firstDisc = within(await screen.findByRole("region", { name: /^第 1 张/ }));
+    const rows = firstDisc.getAllByRole("listitem");
+    expect(rows.map(rowFacts)).toEqual(["7Track 1-011:51", "—曲号未知Track 1-022:01"]);
+    const [knownRow, unknownRow] = rows;
+    if (knownRow === undefined || unknownRow === undefined) throw new Error("缺少曲目行");
+    const unknown = within(unknownRow);
+    expect(unknown.getByText("—").getAttribute("aria-hidden")).toBe("true");
+    expect(isInaccessible(unknown.getByText("曲号未知"))).toBe(false);
+    expect(within(knownRow).queryByText("曲号未知")).toBeNull();
+
+    await userEvent.click(unknown.getByText("Track 1-02"));
+    let info = within(screen.getByRole("region", { name: "曲目信息" }));
+    expect(info.getByText("第 1 张 · 2:01")).toBeTruthy();
+    expect(info.queryByText(/第 \d+ 首/)).toBeNull();
+
+    await userEvent.click(within(knownRow).getByText("Track 1-01"));
+    info = within(screen.getByRole("region", { name: "曲目信息" }));
+    expect(info.getByText("第 1 张 · 第 7 首 · 1:51")).toBeTruthy();
+  });
+
   it("单击行在发行信息后显示曲目信息，再次单击、Esc 或关闭按钮取消选中", async () => {
     const album = symphonies({ medium_count: 1, track_count: 2 });
     const { catalog } = setup({ groups: [album] });
@@ -617,6 +647,26 @@ describe("专辑详情：多版本", () => {
 });
 
 describe("专辑详情：返回专辑列表", () => {
+  it("专辑列表按接口顺序显示代表版本的原样标题，进入详情后返回仍保持顺序", async () => {
+    const beach = albumGroup(1, { title: "Beach Boys" });
+    const beatles = albumGroup(2, { title: "The Béa!tles" });
+    const les = albumGroup(3, { title: "Les amis" });
+    const theatre = albumGroup(4, { title: "Theatre" });
+    setup({ groups: [beach, beatles, les, theatre] });
+    renderApp({ path: "/albums" });
+
+    const cardNames = /^(Beach Boys|The Béa!tles|Les amis|Theatre)/;
+    const cardHrefs = () => screen.getAllByRole("link", { name: cardNames }).map((link) => link.getAttribute("href"));
+    const expected = [beach, beatles, les, theatre].map((group) => `/albums/${group.id}`);
+    await screen.findByRole("link", { name: /^The Béa!tles/ });
+    expect(cardHrefs()).toEqual(expected);
+    await userEvent.click(screen.getByRole("link", { name: /^The Béa!tles/ }));
+    expect(await heading("The Béa!tles")).toBeTruthy();
+    await userEvent.click(screen.getByRole("link", { name: "返回专辑列表" }));
+    await screen.findByRole("link", { name: /^The Béa!tles/ });
+    expect(cardHrefs()).toEqual(expected);
+  });
+
   it("从卡片进入：返回链接带回原来的搜索词、筛选与页码；点它回到那一页", async () => {
     // 每个组都需要关注，筛选后仍有两页，第 2 页存在。
     setup({ groups: albumGroups(120, () => ({ attention_count: 1 })) });
@@ -931,6 +981,32 @@ describe("专辑详情：来源与证据", () => {
     await userEvent.click(await screen.findByRole("button", { name: "查看完整证据" }));
     expect(await screen.findByText("证据太长，只显示了前面一部分。")).toBeTruthy();
     expect(screen.getByRole("table", { name: "字段证据" })).toBeTruthy();
+  });
+
+  it("字段证据显示平票原因、候选值和未选值", async () => {
+    const album = symphonies();
+    const { catalog } = setup({ groups: [album] });
+    catalog.evidence.set(album.representative.id, releaseEvidenceOf(album.representative, {
+      fields: [{
+        field: "label",
+        source: "tag",
+        confidence: "low",
+        action: "uncertain_apply",
+        rule_id: "majority_v1",
+        value: null,
+        candidates: ["Label A", "Label B"],
+        reason_code: "tied_candidates",
+      }],
+    }));
+    renderApp({ path: `/albums/${album.id}` });
+    await userEvent.click(await screen.findByText("来源与证据"));
+    await userEvent.click(await screen.findByRole("button", { name: "查看完整证据" }));
+
+    const fields = within(await screen.findByRole("table", { name: "字段证据" }));
+    expect(fields.getByRole("rowheader", { name: "厂牌" })).toBeTruthy();
+    expect(fields.getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
+      "—", "Label ALabel B", "有冲突：几首的取值票数相同，没有填",
+    ]);
   });
 
   it("没有归组证据、没有字段证据：各自说明", async () => {

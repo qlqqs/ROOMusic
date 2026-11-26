@@ -23,9 +23,9 @@ func TestPostgreSQLRatingScanMovesFavoritesAndRatingsAtomically(t *testing.T) {
 			f := newLibraryFixture(t)
 			root := insertScannerRoot(t, f, "rating-disc-merge")
 			scanner := scannerTestApplication(f)
-			const firstPath, secondPath = "A/CD1/01.flac", "A/CD2/01.flac"
+			const firstPath, secondPath = "A/CD1/01.flac", "A/CD2/03.flac"
 			writeAudio(t, root, firstPath, audioFile{seed: 1, title: "One", album: "First", track: 1})
-			writeAudio(t, root, secondPath, audioFile{seed: 2, title: "Two", album: "Second", track: 1})
+			writeAudio(t, root, secondPath, audioFile{seed: 2, title: "Two", album: "Second", track: 3})
 			requireScanStatus(t, runTestScan(t, f, scanner, root), "succeeded")
 			groupOf := func(title string) string {
 				t.Helper()

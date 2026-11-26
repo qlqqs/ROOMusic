@@ -47,7 +47,10 @@ func continuousTracks(pairs []discTrack, minimum int) bool {
 
 // observationDiscNumber 是非合成候选的碟号优先级，与混合连续性证据共用。
 func observationDiscNumber(o SourceObservation) int {
-	if o.DiscNumber > 0 && (!o.InferredFields["disc_number"] || o.FieldSources["disc_number"] == "album_title" || o.FieldSources["disc_number"] == "vinyl_side" || o.FieldSources["disc_number"] == "track_sequence") {
+	if o.structureDisc > 0 {
+		return o.structureDisc
+	}
+	if o.DiscNumber > 0 && (!o.InferredFields["disc_number"] || o.FieldSources["disc_number"] == "album_title" || o.FieldSources["disc_number"] == "vinyl_side" || o.FieldSources["disc_number"] == "folder_structure") {
 		return o.DiscNumber
 	}
 	if location := locateObservation(o); location.isDiscDir {
@@ -59,26 +62,48 @@ func observationDiscNumber(o SourceObservation) int {
 	return 1
 }
 
-func continuityPairs(observations []SourceObservation, filenames map[string]filenameNumbers) (mixed, filenameOnly []discTrack) {
-	for _, observation := range observations {
-		numbers := filenames[NormalizedPath(observation.RelativePath)]
-		track := observation.TrackNumber
-		if track < 1 || observation.InferredFields["track_number"] {
-			track = numbers.Track
+func continuousEvidence(observations []SourceObservation, filenames map[string]filenameNumbers, minimum int) []discTrack {
+	firstSide := vinylSideLengths(observations)
+	var modes [4][]discTrack
+	for _, o := range observations {
+		f := filenames[NormalizedPath(o.RelativePath)]
+		tag := discTrack{o.DiscNumber, vinylPosition(o, firstSide)}
+		folder := o.structureDisc > 0
+		if folder {
+			tag.Disc = o.structureDisc
 		}
-		mixed = append(mixed, discTrack{Disc: observationDiscNumber(observation), Track: track})
-		disc := numbers.Disc
-		if disc < 1 {
-			disc = locateObservation(observation).disc
+		if o.InferredFields["disc_number"] && !folder && o.VinylSide == 0 && o.FieldSources["disc_number"] != "album_title" {
+			tag.Disc = 0
 		}
-		filenameOnly = append(filenameOnly, discTrack{Disc: max(disc, 1), Track: numbers.Track})
+		if o.InferredFields["track_number"] && o.VinylSide == 0 {
+			tag.Track = 0
+		}
+		file := discTrack{f.Disc, f.Track}
+		if file.Disc == 0 && folder {
+			file.Disc = tag.Disc
+		}
+		mixed := tag
+		if mixed.Track == 0 {
+			mixed.Track = file.Track
+		}
+		if mixed.Disc == 0 {
+			mixed.Disc = file.Disc
+		}
+		for i, v := range []discTrack{tag, file, mixed, {1, f.Track}} {
+			v.Disc = max(v.Disc, 1)
+			modes[i] = append(modes[i], v)
+		}
 	}
-	return mixed, filenameOnly
+	for _, pairs := range modes {
+		if continuousTracks(pairs, minimum) {
+			return pairs
+		}
+	}
+	return nil
 }
 
 func continuousObservations(observations []SourceObservation, filenames map[string]filenameNumbers) bool {
-	mixed, filenameOnly := continuityPairs(observations, filenames)
-	return continuousAlbum(mixed) || continuousAlbum(filenameOnly)
+	return continuousEvidence(observations, filenames, 2) != nil
 }
 
 // observationFormat 返回格式拆分与内嵌封面去重共用的格式键。
@@ -92,11 +117,8 @@ func observationFormat(observation SourceObservation) string {
 
 // splitContinuousFormats 先验证各格式完整，再要求所采用的连续性证据存在跨格式重号。
 func splitContinuousFormats(observations []SourceObservation, filenames map[string]filenameNumbers) map[string][]SourceObservation {
-	formats := map[string][]SourceObservation{}
-	for _, observation := range observations {
-		format := observationFormat(observation)
-		formats[format] = append(formats[format], observation)
-	}
+	formats := groupByFormat(observations)
+
 	if len(formats) < 2 {
 		return nil
 	}
@@ -107,13 +129,9 @@ func splitContinuousFormats(observations []SourceObservation, filenames map[stri
 	sort.Strings(keys)
 	seen, duplicate := map[discTrack]bool{}, false
 	for _, format := range keys {
-		mixed, filenameOnly := continuityPairs(formats[format], filenames)
-		pairs := mixed
-		if !continuousTracks(pairs, 1) {
-			pairs = filenameOnly
-			if !continuousTracks(pairs, 1) {
-				return nil
-			}
+		pairs := continuousEvidence(formats[format], filenames, 1)
+		if pairs == nil {
+			return nil
 		}
 		for _, pair := range pairs {
 			if seen[pair] {
@@ -128,50 +146,36 @@ func splitContinuousFormats(observations []SourceObservation, filenames map[stri
 	return formats
 }
 
-// inferSequenceDiscs 的输入已按路径排序；整段都满足递增规则后才写回推断碟号。
-func inferSequenceDiscs(tracks []SourceObservation) {
-	disc, previous := 0, 0
-	for _, t := range tracks {
-		if isCueObservation(t) || locateObservation(t).isDiscDir || t.VinylSide != 0 ||
-			t.DiscNumber > 0 && (!t.InferredFields["disc_number"] || t.FieldSources["disc_number"] != "default_fallback" && t.FieldSources["disc_number"] != "") ||
-			t.InferredFields["track_number"] && t.FieldSources["track_number"] != "filename_fallback" {
-			return
-		}
-		if t.TrackNumber == 1 {
-			disc++
-		} else if disc == 0 || t.TrackNumber <= 0 || t.TrackNumber != previous+1 {
-			return
-		}
-		previous = t.TrackNumber
+func groupByFormat(observations []SourceObservation) map[string][]SourceObservation {
+	formats := map[string][]SourceObservation{}
+	for _, observation := range observations {
+		format := observationFormat(observation)
+		formats[format] = append(formats[format], observation)
 	}
-	if disc < 2 {
-		return
-	}
-	disc = 0
-	for i := range tracks {
-		t := &tracks[i]
-		if t.TrackNumber == 1 {
-			disc++
-		}
-		t.DiscNumber = disc
-		t.FieldSources = cloneStringMap(t.FieldSources)
-		t.InferredFields = cloneBoolMap(t.InferredFields)
-		t.FieldSources["disc_number"], t.InferredFields["disc_number"] = "track_sequence", true
-	}
+	return formats
 }
 
 // 后一面从前一面的最大面内曲号继续，同一碟中的曲位才可与外部曲序比较。
-func applyVinylPositions(tracks []SourceObservation) {
+func vinylSideLengths(tracks []SourceObservation) map[int]int {
 	firstSide := map[int]int{}
 	for _, t := range tracks {
 		if t.VinylSide%2 == 1 {
 			firstSide[t.VinylSide] = max(firstSide[t.VinylSide], t.TrackNumber)
 		}
 	}
+	return firstSide
+}
+
+func vinylPosition(track SourceObservation, firstSide map[int]int) int {
+	if track.VinylSide > 0 && track.VinylSide%2 == 0 {
+		return track.TrackNumber + firstSide[track.VinylSide-1]
+	}
+	return track.TrackNumber
+}
+
+func applyVinylPositions(tracks []SourceObservation) {
+	firstSide := vinylSideLengths(tracks)
 	for i := range tracks {
-		t := &tracks[i]
-		if t.VinylSide > 0 && t.VinylSide%2 == 0 {
-			t.TrackNumber += firstSide[t.VinylSide-1]
-		}
+		tracks[i].TrackNumber = vinylPosition(tracks[i], firstSide)
 	}
 }

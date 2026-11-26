@@ -89,7 +89,11 @@ func SaveWorkState(ctx context.Context, q Execer, s WorkState) error {
 }
 
 type PendingItem struct {
-	CanonicalTitle, CanonicalArtist                         string `json:"-"`
+	PreparedLocal                                           map[string]any    `json:"-"`
+	PreparedVerification                                    *VerificationPlan `json:"-"`
+	EmptyCount                                              int               `json:"-"`
+	SingleRequest                                           bool              `json:"-"`
+	CanonicalTitle, CanonicalArtist                         string            `json:"-"`
 	ConversationID                                          string
 	ClaimedAt, NextAttemptAt                                *time.Time
 	ClaimSourceRecoveryAt                                   *time.Time `json:"-"`
@@ -118,7 +122,7 @@ func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
 	target, insert := item.TargetID, `INSERT INTO curation_pending_items AS p(target_type,target_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,match_rule_version,identity_digest,route)
  SELECT 'release',$1,$2,CASE WHEN $10 IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''),NULLIF($10,'')
  WHERE NOT EXISTS (SELECT FROM curation_pending_items old WHERE old.target_type='release' AND old.target_id=$1 AND old.kind=$2
- AND old.resolution='suggestion_recorded' AND COALESCE(old.identity_digest,old.input_digest)=COALESCE(NULLIF($9,''),$4)
+ AND old.resolution IN ('undetermined','suggestion_recorded') AND COALESCE(old.identity_digest,old.input_digest)=COALESCE(NULLIF($9,''),$4)
  AND old.candidates=COALESCE($6::jsonb,'[]') AND old.conflicts=COALESCE($7::jsonb,'[]'))
  ON CONFLICT(target_type,target_id,kind) WHERE status <> 'resolved' AND kind NOT IN ('verify_artist_credit','verify_artist_merge','verify_name','name_patrol')`
 	if item.TargetType == "artist" {
@@ -137,16 +141,19 @@ func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
  route=CASE WHEN `+keepModelRouteSQL+` AND p.route IN ('lookup','web') THEN p.route ELSE excluded.route END,
  status=CASE WHEN p.status='in_progress' THEN p.status WHEN `+keepModelRouteSQL+` AND p.route IN ('lookup','web')
  THEN 'waiting_route' ELSE excluded.status END,
+ empty_count=CASE WHEN COALESCE(p.identity_digest,p.input_digest)=COALESCE(excluded.identity_digest,excluded.input_digest) THEN p.empty_count ELSE 0 END,
+ single_request=p.single_request AND COALESCE(p.identity_digest,p.input_digest)=COALESCE(excluded.identity_digest,excluded.input_digest),
+ model_stop_code=NULL,
  attempts=CASE WHEN p.status='shelved' THEN 0 ELSE p.attempts END,
  shelved_reason=CASE WHEN p.status='in_progress' THEN p.shelved_reason END,
  conversation_id=CASE WHEN p.status='in_progress' THEN p.conversation_id END,
  claimed_at=CASE WHEN p.status='in_progress' THEN p.claimed_at END,
  review_retries=CASE WHEN p.status='in_progress' THEN p.review_retries ELSE 0 END,
- next_attempt_at=CASE WHEN p.status IN ('waiting_model','in_progress') OR (p.status='waiting_route' AND `+keepModelRouteSQL+`) THEN p.next_attempt_at END
+ next_attempt_at=CASE WHEN p.empty_count>0 AND COALESCE(p.identity_digest,p.input_digest)<>COALESCE(excluded.identity_digest,excluded.input_digest) THEN NULL WHEN p.status IN ('waiting_model','in_progress') OR (p.status='waiting_route' AND `+keepModelRouteSQL+`) THEN p.next_attempt_at END
  WHERE p.status IN ('waiting_model','waiting_route','in_progress')
- OR (p.status='shelved' AND (p.candidates IS DISTINCT FROM excluded.candidates OR
+ OR (p.status='shelved' AND (COALESCE(p.identity_digest,p.input_digest)<>COALESCE(excluded.identity_digest,excluded.input_digest) OR (p.model_stop_code IS NULL AND (p.candidates IS DISTINCT FROM excluded.candidates OR
      CASE WHEN p.identity_digest IS NOT NULL AND excluded.identity_digest IS NOT NULL THEN p.identity_digest<>excluded.identity_digest
-          ELSE p.input_digest<>excluded.input_digest OR p.conflicts IS DISTINCT FROM excluded.conflicts END))`, target, item.Kind, item.RuleVersion, item.InputDigest, item.Evidence, item.Candidates, item.Conflicts, item.MatchRuleVersion, item.IdentityDigest, item.Route)
+          ELSE p.input_digest<>excluded.input_digest OR p.conflicts IS DISTINCT FROM excluded.conflicts END))))`, target, item.Kind, item.RuleVersion, item.InputDigest, item.Evidence, item.Candidates, item.Conflicts, item.MatchRuleVersion, item.IdentityDigest, item.Route)
 	return err
 }
 

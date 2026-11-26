@@ -136,6 +136,7 @@ func (service *Service) AddRoot(ctx context.Context, operation RootOperation, pa
 	if err = tx.Commit(); err != nil {
 		return RootOperationResult{}, &RootOperationError{Code: "database_unavailable", Message: "服务暂不可用", Err: err}
 	}
+	wakeWatch(service.watch.refresh)
 	return RootOperationResult{Response: body, Created: true}, nil
 }
 
@@ -184,6 +185,7 @@ func (service *Service) DisableRoot(ctx context.Context, operation RootOperation
 	if err = tx.Commit(); err != nil {
 		return RootOperationResult{}, &RootOperationError{Code: "database_unavailable", Message: "服务暂不可用", Err: err}
 	}
+	wakeWatch(service.watch.refresh)
 	return RootOperationResult{Response: body}, nil
 }
 
@@ -222,7 +224,7 @@ func (service *Service) RestoreRoot(ctx context.Context, operation RootOperation
 		return RootOperationResult{}, &RootOperationError{Code: "revision_conflict", Message: "找不到可恢复的目录状态"}
 	}
 	newRev := rev + 1
-	if _, err = tx.ExecContext(ctx, "UPDATE library_roots SET status='active',revision=$2,updated_at=NOW() WHERE id=$1::uuid", id, newRev); err != nil {
+	if _, err = tx.ExecContext(ctx, "UPDATE library_roots SET status='active',watch_baseline_at=NULL,last_poll_started_at=NULL,revision=$2,updated_at=NOW() WHERE id=$1::uuid", id, newRev); err != nil {
 		return RootOperationResult{}, &RootOperationError{Code: "operation_failed", Message: "无法恢复目录", Err: err}
 	}
 	result := map[string]any{"id": id, "path": filepathBase(path), "status": "active", "revision": newRev}
@@ -234,6 +236,7 @@ func (service *Service) RestoreRoot(ctx context.Context, operation RootOperation
 	if err = tx.Commit(); err != nil {
 		return RootOperationResult{}, &RootOperationError{Code: "database_unavailable", Message: "服务暂不可用", Err: err}
 	}
+	wakeWatch(service.watch.refresh)
 	return RootOperationResult{Response: body}, nil
 }
 
@@ -291,7 +294,7 @@ func (service *Service) RelocateRoot(ctx context.Context, operation RootOperatio
 	newRev := rev
 	if safePath != previousPath {
 		newRev++
-		_, err = tx.ExecContext(ctx, "UPDATE library_roots SET path=$2,revision=$3,updated_at=NOW() WHERE id=$1::uuid", id, safePath, newRev)
+		_, err = tx.ExecContext(ctx, "UPDATE library_roots SET path=$2,watch_baseline_at=NULL,last_poll_started_at=NULL,revision=$3,updated_at=NOW() WHERE id=$1::uuid", id, safePath, newRev)
 		if err != nil {
 			// 新增目录不持扫描锁；预查后发生的并发登记仍由路径唯一约束裁决。
 			var postgresError *pgconn.PgError
@@ -319,5 +322,6 @@ func (service *Service) RelocateRoot(ctx context.Context, operation RootOperatio
 	if err = tx.Commit(); err != nil {
 		return RootOperationResult{}, &RootOperationError{Code: "database_unavailable", Message: "服务暂不可用", Err: err}
 	}
+	wakeWatch(service.watch.refresh)
 	return RootOperationResult{Response: body}, nil
 }

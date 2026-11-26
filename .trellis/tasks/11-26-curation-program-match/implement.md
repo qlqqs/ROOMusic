@@ -4,14 +4,14 @@
 
 ## 1. 确认共用输入与比较键
 
-- 与子任务 3 统一 `backend/internal/catalog/textnorm/textnorm.go` 中的 `MergeKey(string) string`。按 design 的 Unicode 规则实现纯函数；3 先合入时直接复用。与扫描侧约定 CUE/log 文件观测和抓轨日志 TOC 的字段及交付顺序。
+- 复用子任务 3 在 `backend/internal/catalog/textnorm/keys.go` 中提供的 `MergeKey(string) string`。与扫描侧约定 CUE/log 文件观测和抓轨日志 TOC 的字段及交付顺序。
 - 在 `backend/internal/catalog/curation_evidence.go` 读取物理文件输入，与 `backend/internal/curation/release_identity.go` 约定文件摘要。先将它与现有完整事务证据摘要并列，待第 7 步切换调度。迁移基线和运行时使用完全相同的成员、序和时间精度。
 - 验证现有键的行为：`(cd backend && mise exec -- go test ./internal/catalog/textnorm -run '^Test(TextExact|TextKeepsDistinctKeys|LooseSearchKeys)$')`。新键的相等/不等样本由测试代理补，现有用例只验证旧键。
 - 风险：直接调用 `Text/Loose` 会额外合并繁简、假名或符号；按版本回退到旧全文摘要会把算法变化误当改文件。
 
 ## 2. 先落库，建立可回退的旧数据转换
 
-- 新增 `backend/migrations/NNNN_curation_program_match.sql` 和同名 `.down.sql`，按 design 建来源结论、署名明细和 `file_digest`，回填旧数据；同步 `backend/internal/curation/work_states.go` 的列、读写和到期索引谓词。序号与子任务 6 等并行迁移在集成时顺排。文件基线在重新解析前取旧扫描事实；旧时间戳只采信真正的查询字段。
+- 新增 `backend/migrations/0102_curation_program_match.sql` 和同名 `.down.sql`，按 design 建来源结论、署名明细和 `file_digest`，回填旧数据；同步 `backend/internal/curation/work_states.go` 的列、读写和到期索引谓词。文件基线在重新解析前取旧扫描事实；旧时间戳只采信真正的查询字段。
 - 在 `backend/internal/curation/match_results.go` 实现按来源读写的窄方法，调用方能传已有事务。把新状态定义为公共值供程序与 Writer 共用；6 的 `query_error` 只在升级和投影处引用，存储值由两方核对。
 - 验证文件发现：`(cd backend && mise exec -- go test ./internal/platform/postgres -run '^TestEmbeddedMigrationRollbackFiles$')`。验证 up/down：`ROOMUSIC_TEST_RUN='^TestPostgreSQLMigrationRollbackRoundTrip$/.*curation_program_match' ./scripts/test-integration.sh`。测试代理在 `backend/internal/platform/postgres/migrations_rollback_integration_test.go` 补此版本夹具，核对新状态、拆分证据、旧表及索引恢复。
 - 风险：两个迁移分别重建同一个 CHECK 时，up/down 需按实际前一版组合复原。down 在删表前重建受影响投影及清理派生对应，不能删人工对应及历史操作。
