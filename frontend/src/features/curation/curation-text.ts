@@ -5,6 +5,7 @@ import type {
   CurationQueueDTO,
   CurationSourceDTO,
   JsonValue,
+  MatchResultStatus,
   ModelState,
   ModelUnavailableReason,
   ProgramState,
@@ -385,3 +386,27 @@ export const EXCEPTION_MESSAGES: Readonly<Record<string, string>> = {
   nothing_to_apply: "要写的内容都已经在了，或被标记为不再提出。",
   source_unavailable: "外部资料暂时取不到，没有完成。可以稍后在这里重试，已写入的部分会接着做完。",
 };
+
+/** 一个来源的识别结论（ADR 0009 第 4.6 节）。 */
+export const matchStatusText: Record<MatchResultStatus, string> = { matched: "已匹配", unmatched: "未匹配", conflict: "有冲突" };
+
+const matchConflictTexts: Record<string, string> = {
+  track_count: "曲数不同",
+  duration_mismatch: "时长对不上",
+  duration_missing: "缺少时长",
+  title_mismatch: "标题对不上",
+  title_artist_mismatch: "标题或艺人对不上",
+  barcode_mismatch: "条码对不上",
+  catalog_mismatch: "目录号对不上",
+  isrc_mismatch: "ISRC 对不上",
+  isrc_spread: "ISRC 分属不同发行",
+  different_release_groups: "同名专辑不在同一组",
+  too_many: "候选太多",
+  list_truncated: "候选列表不完整",
+  ambiguous: "几个候选分不出",
+};
+
+/** 冲突在哪：已知的代码写成短语，其余写“其他差异”。 */
+export function matchConflictText(code: string): string {
+  return matchConflictTexts[code] ?? "其他差异";
+}

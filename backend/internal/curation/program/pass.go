@@ -407,7 +407,7 @@ func (w *Worker) saveConclusionOnce(ctx context.Context, e *catalog.CurationEvid
 	}
 	if state.Subject == "release" && (out.status == "matched" || out.status == "unmatched" || out.status == "conflict") {
 		checked := out.checkedAt
-		err := curation.SaveReleaseMatchResult(ctx, tx, e.ID, curation.ReleaseMatchResult{Source: "musicbrainz", Status: out.status, CheckedAt: &checked, Reason: out.matchReason, Conflicts: out.match.Conflicts})
+		err := curation.SaveReleaseMatchResult(ctx, tx, e.ID, curation.ReleaseMatchResult{Source: "musicbrainz", Status: out.status, CheckedAt: &checked, Reason: out.matchReason, Conflicts: out.resultConflicts()})
 		if err != nil {
 			return err
 		}
@@ -494,6 +494,14 @@ func afterMatch(before, after catalog.CurationEvidence, out outcome) catalog.Cur
 	return before
 }
 
+func (out outcome) resultConflicts() []string {
+	// 名字查找未通过时，详情及其核对原因留在模型待定项，来源结论记普通未匹配。
+	if out.status == "unmatched" && out.matchReason == "" {
+		return []string{}
+	}
+	return out.match.Conflicts
+}
+
 func releaseResult(out outcome) []byte {
 	type blockedCandidate struct {
 		ID        string   `json:"external_id"`
@@ -518,7 +526,7 @@ func releaseResult(out outcome) []byte {
 		ReleaseMerge    string             `json:"release_merge,omitempty"`
 		ArtistLinks     string             `json:"artist_links,omitempty"`
 		TrackFields     string             `json:"track_fields,omitempty"`
-	}{Verification: m.Verification, releaseReviewState: out.review, Level: m.Level, Rule: m.Rule, Route: m.Route, Credits: m.Credits, ExternalGroupID: m.GroupID, Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks, ReleaseMerge: out.releaseMerge}
+	}{Verification: m.Verification, releaseReviewState: out.review, Level: m.Level, Rule: m.Rule, Route: m.Route, Credits: m.Credits, ExternalGroupID: m.GroupID, Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: out.resultConflicts(), Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks, ReleaseMerge: out.releaseMerge}
 	if m.Release != nil {
 		r.ExternalID, r.ExternalGroupID = m.Release.ID, m.Release.Group.ID
 	}
@@ -549,7 +557,7 @@ func savePending(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidence, st
 	if m.Route == "" {
 		return curation.ResolvePendingItems(ctx, tx, e.ID, kind, state.Status)
 	}
-	if slices.Contains(m.Conflicts, "insufficient_evidence") {
+	if len(m.Candidates) == 0 && slices.Contains(m.Conflicts, "insufficient_evidence") {
 		return curation.ResolvePendingItems(ctx, tx, e.ID, kind, "insufficient_evidence")
 	}
 	evidence := pendingMatchEvidence(e, m.Method)

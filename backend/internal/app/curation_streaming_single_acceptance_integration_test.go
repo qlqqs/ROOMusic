@@ -107,10 +107,13 @@ func TestPostgreSQLCurationStreamingSingleEnrichment(t *testing.T) {
 			if resp.Code != http.StatusOK {
 				t.Fatal(resp.Code, resp.Body.String())
 			}
+			if sample.name == "isrc_placeholder" {
+				mustExec(t, app, `UPDATE curation_settings SET model='synthetic' WHERE id=1`)
+			}
 			b3Enable(t, app, admin)
 			clock.advance(t, time.Minute)
 			if sample.name == "isrc_placeholder" {
-				b3RequireReleaseResult(t, app, release, "uncertain", method, wantFingerprint, "")
+				b3RequireReleaseResult(t, app, release, "conflict", method, wantFingerprint, "insufficient_corroboration")
 				b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1
 					AND kind='recording_match' AND status='waiting_model' AND candidates->0->>'external_id'=$2`, release, recording)
 				b3RequireCount(t, app, 0, `SELECT count(*) FROM external_links`)

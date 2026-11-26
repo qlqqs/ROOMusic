@@ -125,7 +125,7 @@ func TestPostgreSQLLiveGapsSourceRetry(t *testing.T) {
 					}
 				}
 				deadline := f.clock.options().Now().Add(delay)
-				if failures.Load()-firstFailures != requests || got.SourceRetryCount != i+1 || got.Status != "waiting_route" || got.Route != tc.route || got.NextAttemptAt == nil || !got.NextAttemptAt.Equal(deadline) || got.Attempts != p.Attempts || got.Resolution != nil || after.Status == "unlisted" || after.Attempts != before.Attempts || after.Generation != before.Generation {
+				if failures.Load()-firstFailures != requests || got.SourceRetryCount != i+1 || got.Status != "waiting_route" || got.Route != tc.route || got.NextAttemptAt == nil || !got.NextAttemptAt.Equal(deadline) || got.Attempts != p.Attempts || got.Resolution != nil || after.Status != before.Status || after.Attempts != before.Attempts || after.Generation != before.Generation {
 					t.Fatalf("第 %d 轮 %d 次来源请求，期望 %d 次、%s 后重试；待定项 %+v，发行 %+v", i+1, failures.Load()-firstFailures, requests, delay, got, after)
 				}
 				if got.ItemToolCalls != start.ItemToolCalls+used || got.ItemTokens != start.ItemTokens+int64(20*used) {
@@ -358,7 +358,7 @@ func TestPostgreSQLLiveGapsLookupWithoutDecision(t *testing.T) {
 				if item.Route != "web" || item.ShelvedReason != nil {
 					t.Fatalf("第二档三次无决定后应转联网，实际 %s/%s，尝试 %d", item.Status, item.Route, item.Attempts)
 				}
-				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_work_states WHERE subject='release' AND target_id=$1 AND status='unlisted'`, target)
+				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_work_states WHERE subject='release' AND target_id=$1 AND status='unmatched'`, target)
 				// 联网档收到同一待定项后能接受新决定，并由后端实际读回版本明细定案。
 				web := f.next(t, false)
 				id := s.External.Releases[0].ID
@@ -370,7 +370,7 @@ func TestPostgreSQLLiveGapsLookupWithoutDecision(t *testing.T) {
 			if item.Status != "resolved" || item.Resolution == nil || *item.Resolution != "unlisted" || item.ShelvedReason != nil {
 				t.Fatalf("第二档三次无决定且无联网来源时应结案为未收录，实际 %s/%s，尝试 %d", item.Status, item.Route, item.Attempts)
 			}
-			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE subject='release' AND target_id=$1 AND status='unlisted'`, target)
+			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE subject='release' AND target_id=$1 AND status='conflict' AND next_attempt_at IS NULL`, target)
 			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_id=$1`, target)
 		})
 	}

@@ -1,0 +1,16 @@
+{
+  "body": {
+    "results": [
+      {
+        "checked_at": "2026-01-01T00:00:00Z",
+        "conflicts": [
+          "track_count"
+        ],
+        "reason": "",
+        "source": "musicbrainz",
+        "status": "conflict"
+      }
+    ]
+  },
+  "status": 200
+}

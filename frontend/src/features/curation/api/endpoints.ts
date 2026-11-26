@@ -9,6 +9,7 @@ import {
   decodeCurationExceptionDeclined,
   decodeCurationExceptionPage,
   decodeCurationProgress,
+  decodeReleaseMatchResults,
   decodeCurationSettings,
   decodeCurationSource,
   decodeCurationSources,
@@ -21,6 +22,7 @@ import {
   type CurationExceptionDTO,
   type CurationExceptionPageDTO,
   type CurationProgressDTO,
+  type ReleaseMatchResultDTO,
   type CurationSettingsDTO,
   type CurationSourceDTO,
   type CurationSourcesDTO,
@@ -71,6 +73,16 @@ export function setCurationSourceKey(id: string, name: string, key: string | nul
 /** 后台循环的状态与进度。 */
 export function fetchCurationProgress(signal?: AbortSignal): Promise<ApiResponse<CurationProgressDTO>> {
   return apiRequest({ method: "GET", path: "/api/v1/admin/curation/progress", signal }, decodeCurationProgress);
+}
+
+/** 一张发行在各来源的识别结论（管理员），按来源排序；没有记录时为空数组。 */
+export function fetchReleaseMatchResults(releaseId: string, signal?: AbortSignal): Promise<ApiResponse<{ results: ReleaseMatchResultDTO[] }>> {
+  return apiRequest({ method: "GET", path: `/api/v1/admin/curation/releases/${releaseId}/match-results`, signal }, decodeReleaseMatchResults);
+}
+
+/** 手动重查一张普通未匹配的发行（只走程序，不交模型）；服务器接受后返回 202 空体，结果由后台写回。 */
+export function recheckRelease(releaseId: string): Promise<ApiResponse<null>> {
+  return apiRequest({ method: "POST", path: `/api/v1/admin/curation/releases/${releaseId}/recheck` }, () => null);
 }
 
 /** 可见发行按本地分类的计数（每次实时计算，不轮询）。 */

@@ -159,7 +159,7 @@ func TestPostgreSQLCurationProgramRelink(t *testing.T) {
 	}
 	f.undo(t, first)
 	f.clock.advance(t, time.Minute)
-	s = f.assertRelease(t, f.a, "no_usable_candidates", "tag_id")
+	s = f.assertRelease(t, f.a, "unmatched", "tag_id")
 	if s.Generation != 2 {
 		t.Fatal(s)
 	}

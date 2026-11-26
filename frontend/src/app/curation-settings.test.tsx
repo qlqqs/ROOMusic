@@ -182,7 +182,7 @@ describe("总开关与暂停", () => {
 describe("进度", () => {
   it("从未打开过时收成一行；打开后写出状态与计数", async () => {
     const { curation } = setup();
-    curation.releases = { total: 12, processed: 4, matched: 3, uncertain: 1, no_match: 0, try_later: 0, unlisted: 0, no_usable_candidates: 0 };
+    curation.releases = { total: 12, processed: 4, matched: 3, unmatched: 0, conflict: 1, try_later: 0 };
     renderApp({ path: "/settings/curation" });
     const progress = await group("进度");
     expect(await within(progress).findByText("未打开 · 曲库共 12 个发行")).toBeTruthy();
@@ -194,13 +194,13 @@ describe("进度", () => {
     seedBatch(curation, { id: BATCH, openedAt: "2026-01-05T00:00:00Z", closedAt: null });
     seedAutoOperation(governance, { type: "external_link", releaseId: releaseOf(albumA()), changes: linkChanges("Sample Symphonies"), provider: "musicbrainz", batchId: BATCH });
     curation.state = "running";
-    curation.releases = { total: 10, processed: 4, matched: 3, uncertain: 1, no_match: 0, try_later: 2, unlisted: 0, no_usable_candidates: 0 };
+    curation.releases = { total: 10, processed: 4, matched: 3, unmatched: 0, conflict: 1, try_later: 2 };
     curation.model.items = { ...curation.model.items, waiting_model: 1 };
     renderApp({ path: "/settings/curation" });
     const progress = await group("进度");
     expect(await within(progress).findByText("正在整理")).toBeTruthy();
     expect(within(progress).getByRole("progressbar", { name: "已处理的发行" }).getAttribute("aria-valuenow")).toBe("4");
-    expect(within(progress).getByText("对上 3 · 拿不准 1 · 没对上 0 · 稍后再试 2")).toBeTruthy();
+    expect(within(progress).getByText("结果").parentElement?.parentElement?.textContent).toBe("结果已匹配 3 · 未匹配 0 · 有冲突 1 · 等待重试 2");
     expect(within(await group("模型判断")).getByText("等模型 1 · 处理中 0 · 搁置 0")).toBeTruthy();
     expect(within(progress).getByRole("link", { name: "查看改动" }).getAttribute("href")).toBe(`/settings/operations?batch=${BATCH}`);
   });
@@ -240,14 +240,14 @@ describe("进度：队列、分类与佐证来源（整理链 G）", () => {
     expect(within(progress).getByLabelText("声纹队列：等文件拷完 · 剩 4")).toBeTruthy();
   });
 
-  it("结果写出未收录与无可用候选；本地分类写四类计数", async () => {
+  it("结果写出已匹配、未匹配与有冲突；本地分类写四类计数", async () => {
     const { curation } = setup();
     enableCuration(curation);
-    curation.releases = { total: 10, processed: 10, matched: 6, uncertain: 0, no_match: 0, try_later: 0, unlisted: 3, no_usable_candidates: 1 };
+    curation.releases = { total: 10, processed: 10, matched: 6, unmatched: 4, conflict: 0, try_later: 0 };
     curation.classifications = { total: 10, tagged_id: 2, has_gaps: 5, local_complete: 2, insufficient: 1 };
     renderApp({ path: "/settings/curation" });
     const progress = await group("进度");
-    expect(await within(progress).findByText("对上 6 · 拿不准 0 · 没对上 0 · 外部库未收录 3 · 无可用候选 1")).toBeTruthy();
+    expect((await within(progress).findByText("结果")).parentElement?.parentElement?.textContent).toBe("结果已匹配 6 · 未匹配 4 · 有冲突 0");
     expect(await within(progress).findByText("带编号 2 · 有缺口 5 · 本地完整 2 · 信息不足 1")).toBeTruthy();
   });
 
@@ -521,7 +521,7 @@ describe("操作记录的自动整理筛选", () => {
 describe("概览", () => {
   it("曲库里有发行而从未打开过：管理员看到提示，不再提示之后不再出现", async () => {
     const { curation } = setup();
-    curation.releases = { total: 3, processed: 0, matched: 0, uncertain: 0, no_match: 0, try_later: 0, unlisted: 0, no_usable_candidates: 0 };
+    curation.releases = { total: 3, processed: 0, matched: 0, unmatched: 0, conflict: 0, try_later: 0 };
     const user = userEvent.setup();
     renderApp({ path: "/" });
     expect(await screen.findByText("曲库扫描好了")).toBeTruthy();
@@ -533,7 +533,7 @@ describe("概览", () => {
 
   it("打开过之后不提示；成员不提示也不请求", async () => {
     const { curation } = setup();
-    curation.releases = { total: 3, processed: 0, matched: 0, uncertain: 0, no_match: 0, try_later: 0, unlisted: 0, no_usable_candidates: 0 };
+    curation.releases = { total: 3, processed: 0, matched: 0, unmatched: 0, conflict: 0, try_later: 0 };
     enableCuration(curation);
     renderApp({ path: "/" });
     expect(await screen.findByRole("heading", { level: 1, name: "概览" })).toBeTruthy();

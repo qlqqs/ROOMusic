@@ -186,12 +186,13 @@ func TestPostgreSQLCurationModelPlanAfterClaimRefresh(t *testing.T) {
 	})
 	worker := NewWorker(f.db, f.writer, gate, func(context.Context) (bool, error) { return false, nil }, nil, Options{})
 	release, track := f.release(t, remote.Title, remote.Artists[0].Name)
+	f.exec(t, `UPDATE curation_settings SET model='synthetic' WHERE id=1`)
 
 	requirePendingRefreshOK(t, worker.walk(ctx, false, nil, false))
 	claimed := f.claim(t, release, "release_match")
 	before, err := curation.LoadWorkStates(ctx, f.db, "release", []string{release})
 	requirePendingRefreshOK(t, err)
-	if state := before[release]; state.Status != "uncertain" || state.InputDigest != claimed.InputDigest {
+	if state := before[release]; state.Status != "unmatched" || state.InputDigest != claimed.InputDigest {
 		t.Fatalf("初次判定状态为 %+v，领取的待定项为 %+v", state, claimed)
 	}
 
@@ -206,7 +207,7 @@ func TestPostgreSQLCurationModelPlanAfterClaimRefresh(t *testing.T) {
 	requirePendingRefreshOK(t, worker.walk(ctx, false, nil, false))
 	after, err := curation.LoadWorkStates(ctx, f.db, "release", []string{release})
 	requirePendingRefreshOK(t, err)
-	if state := after[release]; state.Status != "uncertain" || state.InputDigest == claimed.InputDigest ||
+	if state := after[release]; state.Status != "unmatched" || state.InputDigest == claimed.InputDigest ||
 		state.GapDigest == before[release].GapDigest || state.IdentityDigest != before[release].IdentityDigest ||
 		state.Generation != before[release].Generation || state.Attempts != before[release].Attempts || finder.searches != 1 {
 		t.Errorf("写入歌词应只刷新本地证据，刷新前 %+v，刷新后 %+v，搜索 %d 次", before[release], state, finder.searches)

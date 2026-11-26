@@ -180,3 +180,70 @@ func TestPostgreSQLCurationExternalLinkArtistRevertSuppresses(t *testing.T) {
 	req.Key, req.Links[0].ExternalID = uuid.New(), uuid.New()
 	curationCApplyLinks(t, f.curationFixture, req)
 }
+
+func TestPostgreSQLProgramSplitArtistCreditLifecycle(t *testing.T) {
+	f := newArtistProgram(t)
+	app := f.application
+	track, remote := f.tagged(t)
+	const localText = "Simon & Garfunkel"
+	remote.Artists = []sources.Credit{{Name: "Simon", ArtistID: uuid.New(), JoinPhrase: " & "}, {Name: "Garfunkel", ArtistID: uuid.New()}}
+	remote.Media[0].Tracks[0].Artists = remote.Artists
+	f.source.releases[remote.ID] = remote
+	mustExec(t, app, `UPDATE releases SET artist=$2,album_artist=$2 WHERE id=$1`, f.a, localText)
+	mustExec(t, app, `UPDATE tracks SET artist=$2 WHERE id=$1`, track, localText)
+	solo, _ := insertGroupedRelease(t, app, f.rootID, groupedRelease{title: "已有佐证", artist: "Simon", tracks: []string{"present"}})
+	publishSearch(t, app)
+	local, err := catalog.LoadCurationArtistCredits(t.Context(), app.database, f.a)
+	requireCurationOK(t, err)
+	if len(local.ReleaseArtists) != 1 || len(local.AlbumArtists) != 1 || len(local.Tracks[track]) != 1 {
+		t.Fatalf("合成局部发行与曲目须各有一位旧署名：%+v", local)
+	}
+	priorArtist := artistIDByName(t, f, "Simon")
+	prior := curationCApplyLinks(t, f.curationFixture, artistLinkRequest(solo, priorArtist, remote.Artists[0].ArtistID))
+	if len(prior.Written) != 1 {
+		t.Fatalf("独立艺人佐证未生效：%+v", prior)
+	}
+	f.run(t)
+	f.assertRelease(t, f.a, "matched", "tag_id")
+	for _, role := range []string{"album_artist", "release_artist", "track_artist"} {
+		b3RequireCount(t, app, 2, `SELECT count(*) FROM release_match_credit_parts
+ WHERE release_id=$1 AND role=$2 AND local_text=$3 AND artist_link_id IS NOT NULL`, f.a, role, localText)
+	}
+	checkText := func(album, wantTrack string) {
+		t.Helper()
+		if value := programString(t, app, `SELECT album_artist FROM release_effective WHERE id=$1`, f.a); value != album {
+			t.Errorf("显示专辑署名 %q，期望 %q", value, album)
+		}
+		if value := programString(t, app, `SELECT artist FROM track_effective WHERE id=$1`, track); value != wantTrack {
+			t.Errorf("显示曲目署名 %q，期望 %q", value, wantTrack)
+		}
+	}
+	checkText(localText, localText)
+	programFinishedScan(t, f)
+	f.clock.advance(t, time.Minute)
+	b3RequireCount(t, app, 6, `SELECT count(*) FROM release_match_credit_parts WHERE release_id=$1`, f.a)
+	trackSplit := programString(t, app, `SELECT DISTINCT operation_id FROM release_match_credit_parts WHERE track_id=$1`, track)
+	correctTrackForCuration(t, f.curationFixture, track, 1, map[string]any{"artist": setChange("人工曲目署名")})
+	b3RequireCount(t, app, 0, `SELECT count(*) FROM release_match_credit_parts WHERE track_id=$1`, track)
+	checkText(localText, "人工曲目署名")
+	b3RequireCount(t, app, 1, `SELECT count(*) FROM artist_effective_credits c JOIN artist_names n ON n.id=c.name_id
+ WHERE c.track_id=$1 AND c.role='track_artist' AND n.spelling='人工曲目署名'`, track)
+	b3RequireCount(t, app, 1, `SELECT count(*) FROM external_links WHERE object_type='artist' AND external_id=$1 AND operation_id=$2`,
+		remote.Artists[0].ArtistID, prior.OperationID)
+	// 单独撤销专辑角色仍保留其他角色及独立艺人佐证。
+	op := programString(t, app, `SELECT DISTINCT operation_id FROM release_match_credit_parts WHERE release_id=$1 AND role='album_artist'`, f.a)
+	f.undo(t, op)
+	b3RequireCount(t, app, 0, `SELECT count(*) FROM release_match_credit_parts WHERE release_id=$1 AND role='album_artist'`, f.a)
+	b3RequireCount(t, app, 2, `SELECT count(*) FROM release_match_credit_parts WHERE release_id=$1 AND role='release_artist'`, f.a)
+	b3RequireCount(t, app, 1, `SELECT count(*) FROM external_links WHERE object_type='artist' AND external_id=$1 AND operation_id=$2`,
+		remote.Artists[0].ArtistID, prior.OperationID)
+	result := f.scope(t, curation.Scope{Kind: "provider", Provider: "musicbrainz"}, "", uuid.New(), uuid.New())
+	if len(result.Skipped) != 1 || result.Skipped[0].OperationID != trackSplit || result.Skipped[0].Code != "revert_conflict" {
+		t.Errorf("人工修正已使曲目拆分失效，按来源撤销应只跳过该操作 %s，结果 %+v", trackSplit, result)
+	}
+	b3RequireCount(t, app, 2, `SELECT count(*) FROM operations o JOIN operations undo ON undo.reverts_operation_id=o.id
+ WHERE o.target_id=$1 AND o.operation_type='external_link' AND o.after_state ? 'split'`, f.a)
+	b3RequireCount(t, app, 0, `SELECT count(*) FROM release_match_credit_parts WHERE release_id=$1`, f.a)
+	b3RequireCount(t, app, 0, `SELECT count(*) FROM external_links WHERE object_type='artist' AND external_id=$1`, remote.Artists[1].ArtistID)
+	checkText(localText, "人工曲目署名")
+}

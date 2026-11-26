@@ -294,7 +294,7 @@ func TestPostgreSQL整理零候选按来源和模型分流(t *testing.T) {
 	t.Run("艺人在库但无模型", func(t *testing.T) {
 		id, _ := add(t, cMatchAlbum("未登记专辑一", known.Name, 3, known.ID))
 		state := b3WorkState(t, app, "release", id)
-		if state.Status != "unlisted" || state.NextAttemptAt == nil {
+		if state.Status != "unmatched" || state.NextAttemptAt == nil {
 			t.Fatalf("无模型应进未收录，状态 %+v", state)
 		}
 		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, id)
@@ -309,7 +309,7 @@ func TestPostgreSQL整理零候选按来源和模型分流(t *testing.T) {
 	t.Run("艺人不在库且联网关闭", func(t *testing.T) {
 		id, requests := add(t, cMatchAlbum("未登记专辑二", "外部库没有的艺人一", 3, uuid.New()))
 		state := b3WorkState(t, app, "release", id)
-		if state.Status != "unlisted" || !strings.Contains(string(state.Result), "web_unavailable") {
+		if state.Status != "unmatched" || state.NextAttemptAt == nil {
 			t.Fatalf("无联网应进未收录，状态 %+v，结果 %s", state, state.Result)
 		}
 		var paths []string
@@ -321,7 +321,7 @@ func TestPostgreSQL整理零候选按来源和模型分流(t *testing.T) {
 		if len(paths) != 3 || paths[0] != "/musicbrainz/ws/2/release" || paths[1] != paths[0] || paths[2] != "/musicbrainz/ws/2/artist" {
 			t.Errorf("无结果时应先放宽并查艺人，请求 %v", paths)
 		}
-		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, id)
+		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND status='waiting_route' AND route='lookup'`, id)
 	})
 
 	t.Run("艺人在库且巡检和程序高优先项完成后领取第二档", func(t *testing.T) {
@@ -330,7 +330,7 @@ func TestPostgreSQL整理零候选按来源和模型分流(t *testing.T) {
 		pending := programString(t, app, `SELECT id FROM curation_pending_items WHERE target_id=$1 AND status='waiting_route' AND route='lookup' AND candidates='[]'`, id)
 		conversation := modelConversation(t, f)
 		state := b3WorkState(t, app, "release", id)
-		if state.Status != "uncertain" || state.IdentityDigest == "" {
+		if state.Status != "unmatched" || state.IdentityDigest == "" {
 			t.Fatalf("第二档工作状态 %+v", state)
 		}
 
@@ -388,15 +388,15 @@ func TestPostgreSQL整理零候选按来源和模型分流(t *testing.T) {
 		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE id=$1 AND status='in_progress'`, pending)
 		requireCurationOK(t, f.writer.FinishUnlisted(t.Context(), pending, state.IdentityDigest, conversation, "仍未找到"))
 		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE id=$1 AND status='resolved' AND resolution='unlisted'`, pending)
-		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='unlisted' AND next_attempt_at=updated_at+interval '90 days'`, id)
+		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='unmatched' AND next_attempt_at=(result->>'unlisted_since')::timestamptz+interval '90 days'`, id)
 	})
-	t.Run("艺人不在库时直接登记联网路线", func(t *testing.T) {
+	t.Run("艺人不在库时先登记识别判断", func(t *testing.T) {
 		response := app.request(t, http.MethodPut, curationBase+"/sources/web_search", map[string]bool{"enabled": true}, &admin, nil)
 		if response.Code != http.StatusOK {
 			t.Fatal(response.Code, response.Body.String())
 		}
 		id, _ := add(t, cMatchAlbum("未登记专辑四", "外部库没有的艺人二", 3, uuid.New()))
-		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND status='waiting_route' AND route='web' AND candidates='[]'`, id)
+		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND status='waiting_route' AND route='lookup' AND candidates='[]'`, id)
 	})
 }
 

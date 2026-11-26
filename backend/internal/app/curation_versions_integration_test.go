@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"maps"
 	"strings"
@@ -146,17 +145,15 @@ func TestPostgreSQLCurationGapAndIdentityChanges(t *testing.T) {
 	track, _ := externalTrack(t, f.application, f.a)
 	mustExec(t, f.application, `UPDATE releases SET year=NULL WHERE id=$1`, f.a)
 	f.run(t)
-	assertUnlisted := func(t *testing.T) curation.WorkState {
+	assertUnmatched := func(t *testing.T) curation.WorkState {
 		t.Helper()
-		state := f.assertRelease(t, f.a, "unlisted", "search")
-		var result struct{ Reason string }
-		requireCurationOK(t, json.Unmarshal(state.Result, &result))
-		if result.Reason != "model_unconfigured" {
-			t.Fatalf("未收录原因 %q，期望 model_unconfigured", result.Reason)
+		state := f.assertRelease(t, f.a, "unmatched", "search")
+		if state.NextAttemptAt == nil {
+			t.Fatal("普通未匹配未安排到期重查")
 		}
 		return state
 	}
-	previous := assertUnlisted(t)
+	previous := assertUnmatched(t)
 	// 零候选时，每轮识别搜索原查询和去掉曲目数的查询。
 	const searchesPerIdentification = 2
 	searches := f.source.calls["SearchReleases"]
@@ -185,7 +182,7 @@ func TestPostgreSQLCurationGapAndIdentityChanges(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.change(t)
 			f.clock.advance(t, 6*time.Hour)
-			got := assertUnlisted(t)
+			got := assertUnmatched(t)
 			if got.IdentityDigest != previous.IdentityDigest || got.GapDigest == previous.GapDigest ||
 				got.InputDigest == previous.InputDigest || got.Generation != previous.Generation ||
 				got.Attempts != previous.Attempts || f.source.calls["SearchReleases"] != searches {
@@ -200,19 +197,25 @@ func TestPostgreSQLCurationGapAndIdentityChanges(t *testing.T) {
 		id    string
 	}{
 		{"标题", `UPDATE releases SET title='新扫描标题' WHERE id=$1`, f.a},
-		{"条码", `UPDATE releases SET barcode='123456789012' WHERE id=$1`, f.a},
+
 		{"曲目整秒时长", `UPDATE tracks SET duration_seconds=111 WHERE id=$1`, track},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mustExec(t, f.application, tc.query, tc.id)
 			f.clock.advance(t, 6*time.Hour)
-			searches += searchesPerIdentification
-			got := assertUnlisted(t)
-			if got.IdentityDigest == previous.IdentityDigest || got.Generation != previous.Generation+1 ||
-				got.Attempts != previous.Attempts+1 || f.source.calls["SearchReleases"] != searches {
-				t.Errorf("识别输入变化应触发一次识别，之前 %+v，之后 %+v，调用 %v", previous, got, f.source.calls)
+			got := assertUnmatched(t)
+			if got.IdentityDigest == previous.IdentityDigest || got.FileDigest != previous.FileDigest ||
+				got.Generation != previous.Generation || got.Attempts != previous.Attempts || f.source.calls["SearchReleases"] != searches {
+				t.Errorf("重读解析信息只刷新识别摘要，之前 %+v，之后 %+v，调用 %v", previous, got, f.source.calls)
 			}
 			previous = got
 		})
+	}
+	mustExec(t, f.application, `UPDATE tracks SET source_modified_at=now() WHERE id=$1`, track)
+	f.clock.advance(t, 6*time.Hour)
+	got := assertUnmatched(t)
+	if got.FileDigest == previous.FileDigest || got.Generation != previous.Generation+1 || got.Attempts != previous.Attempts+1 ||
+		f.source.calls["SearchReleases"] != searches+searchesPerIdentification {
+		t.Errorf("文件修改应触发一次识别，之前 %+v，之后 %+v，调用 %v", previous, got, f.source.calls)
 	}
 }

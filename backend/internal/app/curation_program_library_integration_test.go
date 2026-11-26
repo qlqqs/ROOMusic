@@ -14,6 +14,7 @@ import (
 func TestPostgreSQLCurationProgramLibrary(t *testing.T) {
 	f := newProgramFixture(t)
 	f.enable(t)
+	mustExec(t, f.application, `UPDATE curation_settings SET model='synthetic' WHERE id=1`)
 	// 用同一轮的真实工作状态、记录及对应核对各个形态。
 	type sample struct {
 		name, id, track, status, method, remote, recording string
@@ -77,12 +78,12 @@ func TestPostgreSQLCurationProgramLibrary(t *testing.T) {
 			f.source.disc = sources.DiscMatch{Exact: true, Releases: []sources.Release{{ID: r.ID}}}
 		case "chinese_search":
 			item.method = "search"
-			item.status = "uncertain"
+			item.status = "unmatched"
 			r.Title = "华语专辑"
 			r.Artists[0].Name = "乐团"
 			f.source.search[title] = []sources.Release{r}
 		case "untagged":
-			item.status = "no_match"
+			item.status = "done"
 		}
 		f.source.releases[r.ID] = r
 		cases = append(cases, item)
@@ -90,14 +91,24 @@ func TestPostgreSQLCurationProgramLibrary(t *testing.T) {
 	f.run(t)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			f.assertRelease(t, tc.id, tc.status, tc.method)
-			if tc.status != "matched" {
-				f.assertCount(t, 0, `SELECT count(*) FROM operations WHERE target_id=$1`, tc.id)
-				if tc.name == "chinese_search" {
-					f.assertCount(t, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND status='waiting_model' AND conflicts ? 'list_truncated' AND candidates->0->>'external_id'=$2`, tc.id, tc.remote)
-				} else {
-					f.assertCount(t, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, tc.id)
+			if tc.name == "untagged" {
+				if state := f.stateFor(t, "release", tc.id); state.Status != tc.status || state.Attempts != 0 {
+					t.Fatalf("无可查询证据的专辑应跳过识别，状态 %+v", state)
 				}
+				f.assertCount(t, 0, `SELECT count(*) FROM curation_release_match_results WHERE release_id=$1`, tc.id)
+				f.assertCount(t, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, tc.id)
+				f.assertCount(t, 0, `SELECT count(*) FROM operations WHERE target_id=$1`, tc.id)
+				return
+			}
+			state := f.assertRelease(t, tc.id, tc.status, tc.method)
+			if tc.name == "chinese_search" {
+				if state.NextAttemptAt == nil || !state.NextAttemptAt.Equal(f.clock.options().Now().Add(90*24*time.Hour)) {
+					t.Fatalf("名字查询未匹配应约 90 天重查，当前到期时间 %v", state.NextAttemptAt)
+				}
+				f.assertCount(t, 1, `SELECT count(*) FROM curation_release_match_results
+ WHERE release_id=$1 AND source='musicbrainz' AND status='unmatched' AND checked_at=$2 AND conflicts='{}'`, tc.id, f.clock.options().Now())
+				f.assertCount(t, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND status='waiting_model' AND conflicts ? 'list_truncated' AND candidates->0->>'external_id'=$2`, tc.id, tc.remote)
+				f.assertCount(t, 0, `SELECT count(*) FROM operations WHERE target_id=$1`, tc.id)
 				return
 			}
 			f.assertCount(t, 1, `SELECT count(*) FROM operations WHERE operation_type='external_link' AND target_id=$1`, tc.id)

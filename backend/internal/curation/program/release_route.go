@@ -110,7 +110,13 @@ func (w *Worker) concludeMatch(ctx context.Context, u *unit, e catalog.CurationE
 		out.match.Route = ""
 	case "uncertain":
 		out.status = "conflict"
-		if len(out.match.Conflicts) == 0 {
+		if m.Method == "search" {
+			if differentNamedGroups(curation.LocalSearchEvidence(e), out.match.Candidates) {
+				out.match.Conflicts = []string{"different_release_groups"}
+			} else {
+				out.status = "unmatched"
+			}
+		} else if len(out.match.Conflicts) == 0 {
 			out.match.Conflicts = []string{"insufficient_corroboration"}
 		}
 	default:
@@ -134,4 +140,19 @@ func (w *Worker) concludeMatch(ctx context.Context, u *unit, e catalog.CurationE
 		}
 	}
 	return out, nil
+}
+
+// 只有确知编号的两个发行组可以形成同名跨组冲突。
+func differentNamedGroups(e catalog.CurationEvidence, candidates []Candidate) bool {
+	var group string
+	for _, c := range candidates {
+		if c.Release == nil || c.Release.Group.ID == "" || blockedCodes(c.Conflicts) || !sameAlbumNames(e, *c.Release) {
+			continue
+		}
+		if group != "" && group != c.Release.Group.ID {
+			return true
+		}
+		group = c.Release.Group.ID
+	}
+	return false
 }

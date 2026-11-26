@@ -78,7 +78,7 @@ func TestPostgreSQLCurationFixedSelectedReport(t *testing.T) {
 							row.Writes["专辑/title"] != sample.External.Releases[0].Title {
 							t.Errorf("正确名字应触发查询、匹配预期版本并纠正标题：%+v", row)
 						}
-					} else if row.Actual != "unlisted" || len(row.Links)+len(row.Writes) != 0 {
+					} else if row.Actual != "unlisted" || !slices.Equal(row.MatchStatus, []string{"unmatched/search"}) || len(row.Links)+len(row.Writes) != 0 {
 						t.Errorf("程序应保留本地错字样本：%+v", row)
 					}
 				case "unlisted-01", "id-conflict":
@@ -244,7 +244,7 @@ func TestPostgreSQLCurationFixedScoring(t *testing.T) {
 	}{
 		{"safe-miss", func(t *testing.T) {
 			requireCurationOK(t, curation.SaveWorkState(t.Context(), app.database, curation.WorkState{
-				Subject: "release", TargetID: release, Status: "unlisted", InputDigest: "test",
+				Subject: "release", TargetID: release, Status: "unmatched", InputDigest: "test",
 			}))
 			row := newFixedRow(sample, "program")
 			row.score(t, app, sample, part, nil)

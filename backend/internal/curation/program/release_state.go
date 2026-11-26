@@ -60,7 +60,7 @@ func (w *Worker) prepareRelease(ctx context.Context, e catalog.CurationEvidence,
 		}
 		d = releaseInputs(e)
 	}
-	if upgrade && (recheckOnUpgrade(s.Status) || matchedUpgrade(version, s.Status, e)) {
+	if upgrade && (s.RequeryMatchVersion != 0 || recheckOnUpgrade(s.Status) || matchedUpgrade(version, s.Status, e)) {
 		var claimed bool
 		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM curation_pending_items
  WHERE target_id=$1 AND kind=$2 AND status IN ('in_progress','waiting_human') FOR UPDATE)`, e.ID, matchItemKind(e)).Scan(&claimed); err != nil || claimed {
@@ -105,8 +105,8 @@ func updateReleaseProjection(ctx context.Context, tx *sql.Tx, e catalog.Curation
 	err := tx.QueryRowContext(ctx, `UPDATE curation_work_states SET
  local_rule_version=$2,match_rule_version=$3,input_digest=$4,identity_digest=$5,gap_digest=$6,requery_match_version=NULLIF($7::smallint,0),
  updated_at=now() WHERE subject='release' AND target_id=$1 AND generation=$8 AND input_digest=$9
- AND match_rule_version IS NOT DISTINCT FROM NULLIF($10::smallint,0) RETURNING updated_at`,
-		e.ID, LocalRuleVersion, version, d.full, d.identity, d.gap, s.RequeryMatchVersion, s.Generation, s.InputDigest, s.MatchRuleVersion).Scan(&s.UpdatedAt)
+ AND match_rule_version IS NOT DISTINCT FROM NULLIF($10::smallint,0) AND patrol_revision=$11 RETURNING updated_at`,
+		e.ID, LocalRuleVersion, version, d.full, d.identity, d.gap, s.RequeryMatchVersion, s.Generation, s.InputDigest, s.MatchRuleVersion, s.PatrolRevision).Scan(&s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errReleaseChanged
 	}

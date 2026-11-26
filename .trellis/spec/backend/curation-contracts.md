@@ -1028,8 +1028,10 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | 状态 | 处理 |
 | --- | --- |
 | matched | 保留 release、release_group、recording 或 artist 级别 |
-| conflict | 当前线索有候选，但结构或身份有冲突，保存原因；有模型交识别判断 |
-| unmatched | 查空时可交模型。每次成功查空按本次时间再约 90 天；到期含声纹并沿用初次识别判断。完整候选全部被撤销或占用时记 reason=candidates_revoked，停用周期重查 |
+| conflict | 第 1–6 步命中但与本地不符，或名字步骤发现合并键相同的候选分属不同已知发行组（different_release_groups）。有模型时交识别判断 |
+| unmatched | 查空或名字步骤的候选均未通过结构或名称核对时，结论的 conflicts 为空，待定项保留候选证据。按本次查询时间再约 90 天；到期含声纹并沿用初次识别判断。完整候选全部被撤销或占用时记 reason=candidates_revoked，停用周期重查 |
+
+新增或清除影响候选的 MusicBrainz 对应抑制标记时，同一事务登记所属发行重判。
 
 管理员用 `GET /api/v1/admin/curation/releases/{id}/match-results` 读取按来源排序的 results，含 source、status、checked_at、reason、conflicts；无记录为空数组。历史时间未知用 null。进度的 releases 提供 matched、unmatched、conflict、total、processed、try_later。原 POST recheck 接受普通未匹配，返回 202，维持仅程序的手动触发。
 

@@ -13,9 +13,11 @@ import {
   fetchCurationConversations,
   fetchCurationExceptions,
   fetchCurationProgress,
+  fetchReleaseMatchResults,
   fetchCurationSettings,
   fetchCurationSources,
   fetchSuppressions,
+  recheckRelease,
   requestRepatrol,
   setCurationSource,
   setCurationSourceKey,
@@ -164,6 +166,30 @@ export function useRepatrol() {
     mutationFn: () => requestRepatrol(),
     onSuccess: () => {
       if (!scope.isCurrent()) return;
+      void queryClient.invalidateQueries({ queryKey: curationKeys.progress(scope.generation) });
+    },
+  });
+}
+
+/** 一张发行在各来源的识别结论（管理员）。 */
+export function useReleaseMatchResults(releaseId: string) {
+  const { generation } = useViewerScope();
+  return useQuery({
+    queryKey: curationKeys.matchResults(generation, releaseId),
+    queryFn: ({ signal }) => fetchReleaseMatchResults(releaseId, signal),
+    select: (response) => response.data.results,
+  });
+}
+
+/** 手动重查一张普通未匹配的发行：受理后让这一张的结论与整理进度重新读取（结果由后台写回，可能要过一会儿才变）。 */
+export function useRecheckRelease(releaseId: string) {
+  const queryClient = useQueryClient();
+  const scope = useViewerScope();
+  return useMutation({
+    mutationFn: () => recheckRelease(releaseId),
+    onSuccess: () => {
+      if (!scope.isCurrent()) return;
+      void queryClient.invalidateQueries({ queryKey: curationKeys.matchResults(scope.generation, releaseId) });
       void queryClient.invalidateQueries({ queryKey: curationKeys.progress(scope.generation) });
     },
   });
