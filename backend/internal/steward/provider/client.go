@@ -15,6 +15,13 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 )
 
+const (
+	maxRequestAttempts = 5 // 包含首次请求。
+	retryBaseDelay     = 300 * time.Millisecond
+	retryMaxDelay      = 3 * time.Second
+	retryBudget        = 10 * time.Second
+)
+
 type adapter struct {
 	client   *http.Client
 	endpoint string
@@ -24,7 +31,7 @@ type adapter struct {
 
 type throttleObserverKey struct{}
 
-// WithThrottleObserver 让后台调度器在主模型或审查模型收到 429、503 时立即暂停领取。
+// WithThrottleObserver 让后台调度器在主模型或审查模型结束 429、503 重试后暂停领取。
 // 等待时长为零表示立即恢复，负值表示端点未给出可解析的 Retry-After。
 func WithThrottleObserver(ctx context.Context, observe func(time.Duration)) context.Context {
 	return context.WithValue(ctx, throttleObserverKey{}, observe)
@@ -108,6 +115,49 @@ func (a *adapter) Stream(ctx context.Context, request Request) (Stream, error) {
 }
 
 func (a *adapter) do(ctx context.Context, method, address string, body []byte) (*http.Response, error) {
+	deadline := time.Now().Add(retryBudget)
+	for attempt := 1; ; attempt++ {
+		response, err := a.send(ctx, method, address, body)
+		if err != nil {
+			return nil, err
+		}
+		status := response.StatusCode
+		if status >= 200 && status < 300 {
+			return response, nil
+		}
+		if status != http.StatusTooManyRequests && status != http.StatusServiceUnavailable {
+			return nil, a.readFailure(ctx, response)
+		}
+
+		retryAfter := retryAfterDelay(response.Header.Get("Retry-After"), time.Now())
+		delay := retryAfter
+		if delay < 0 {
+			delay = min(retryBaseDelay<<(attempt-1), retryMaxDelay)
+		}
+		if attempt < maxRequestAttempts && delay <= time.Until(deadline) {
+			select {
+			case <-ctx.Done():
+				response.Body.Close()
+				return nil, contextFailure(ctx.Err(), status)
+			case <-time.After(delay):
+			}
+			if time.Now().Before(deadline) {
+				response.Body.Close()
+				continue
+			}
+		}
+		if err := ctx.Err(); err != nil {
+			response.Body.Close()
+			return nil, contextFailure(err, status)
+		}
+		if observe, _ := ctx.Value(throttleObserverKey{}).(func(time.Duration)); observe != nil {
+			observe(retryAfter)
+		}
+		return nil, a.readFailure(ctx, response)
+	}
+}
+
+func (a *adapter) send(ctx context.Context, method, address string, body []byte) (*http.Response, error) {
 	request, err := http.NewRequestWithContext(ctx, method, address, bytes.NewReader(body))
 	if err != nil {
 		return nil, failure(ErrorOther, 0, "无法构造端点请求", "")
@@ -142,26 +192,22 @@ func (a *adapter) do(ctx context.Context, method, address string, body []byte) (
 		}
 		return nil, failure(ErrorUnreachable, 0, "无法连接模型端点或建立传输", "")
 	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		defer response.Body.Close()
-		if response.StatusCode == http.StatusTooManyRequests || response.StatusCode == http.StatusServiceUnavailable {
-			if observe, _ := ctx.Value(throttleObserverKey{}).(func(time.Duration)); observe != nil {
-				observe(retryAfterDelay(response.Header.Get("Retry-After"), time.Now()))
-			}
-		}
-		data, readErr := io.ReadAll(io.LimitReader(response.Body, 64<<10))
-		if ctx.Err() != nil {
-			return nil, contextFailure(ctx.Err(), response.StatusCode)
-		}
-		if isTimeout(readErr) {
-			return nil, failure(ErrorTimeout, response.StatusCode, "读取模型端点响应超时", "")
-		}
-		if readErr != nil && len(data) == 0 {
-			data = []byte("无法读取端点错误响应")
-		}
-		return nil, responseFailure(response.StatusCode, data, a.key)
-	}
 	return response, nil
+}
+
+func (a *adapter) readFailure(ctx context.Context, response *http.Response) error {
+	defer response.Body.Close()
+	data, readErr := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+	if ctx.Err() != nil {
+		return contextFailure(ctx.Err(), response.StatusCode)
+	}
+	if isTimeout(readErr) {
+		return failure(ErrorTimeout, response.StatusCode, "读取模型端点响应超时", "")
+	}
+	if readErr != nil && len(data) == 0 {
+		data = []byte("无法读取端点错误响应")
+	}
+	return responseFailure(response.StatusCode, data, a.key)
 }
 
 func normalizedArguments(raw string) (json.RawMessage, error) {

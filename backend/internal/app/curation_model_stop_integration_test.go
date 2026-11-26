@@ -18,7 +18,7 @@ func TestPostgreSQLCurationModelConcurrentProviderCooldown(t *testing.T) {
 		cooldown time.Duration
 	}{
 		{"429_retry_after", schedulerHTTPFailure{status: http.StatusTooManyRequests, retryAfter: "120"}, 2 * time.Minute},
-		{"503_backoff", schedulerHTTPFailure{status: http.StatusServiceUnavailable}, 10 * time.Minute},
+		{"503_backoff", schedulerHTTPFailure{status: http.StatusServiceUnavailable}, 5 * time.Second},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newSchedulerFixture(t)
@@ -33,6 +33,9 @@ func TestPostgreSQLCurationModelConcurrentProviderCooldown(t *testing.T) {
 				title: "排队中的专辑", artist: "第三位艺人", tracks: []string{"present"},
 			})
 			waiting := f.pending(t, thirdRelease)
+			if tc.failure.retryAfter == "" {
+				first = f.lastProviderAttempt(t, first)
+			}
 			first.fail <- tc.failure
 			schedulerWait(t, "失败项释放领取", func() bool { return f.item(t, failed.ID).Status == "waiting_model" })
 			if got := f.item(t, failed.ID); got.Attempts != 0 {
@@ -102,7 +105,7 @@ func TestPostgreSQLCurationModelConcurrentProviderBackoff(t *testing.T) {
 	// 等每次失败释放领取后才推进时钟，由测试控制三次失败的先后顺序。
 	for i, request := range requests {
 		f.clock.now.Store(start + int64(time.Duration(i)*time.Second))
-		request.fail <- failure
+		f.lastProviderAttempt(t, request).fail <- failure
 		schedulerWait(t, fmt.Sprintf("第 %d 个失败项释放且仍在冷却", i+1), func() bool {
 			p := f.progress(t)
 			return isCooling(p) && p.Running == concurrency-i-1 && p.Items.WaitingModel == int64(readyItems-concurrency+i+1)
@@ -110,34 +113,123 @@ func TestPostgreSQLCurationModelConcurrentProviderBackoff(t *testing.T) {
 	}
 
 	// 通过进度接口的状态变化约束冷却截止时刻。
-	checkCooldown(10*time.Minute-time.Second, true)
+	checkCooldown(5*time.Second-time.Second, true)
 	select {
 	case <-f.requests:
 		t.Fatal("冷却期间提前领取了核对项")
 	case <-time.After(100 * time.Millisecond):
 	}
 	const lastFailure = (concurrency - 1) * time.Second
-	checkCooldown(lastFailure+10*time.Minute, false)
+	checkCooldown(lastFailure+5*time.Second, false)
 
 	// 越过冷却截止时刻并确认调度器重新领取，挂起其他请求直到第四次失败。
-	const nextFailure = lastFailure + 10*time.Minute + time.Second
+	const nextFailure = lastFailure + 5*time.Second + time.Second
 	f.clock.now.Store(start + int64(nextFailure))
 	for i := range requests {
 		requests[i] = f.next(t, false)
 	}
-	requests[0].fail <- failure
+	f.lastProviderAttempt(t, requests[0]).fail <- failure
 	schedulerWait(t, "冷却到期后的失败项释放并重新进入冷却", func() bool {
 		p := f.progress(t)
 		return isCooling(p) && p.Running == concurrency-1 && p.Items.WaitingModel == readyItems-concurrency+1
 	})
-	checkCooldown(nextFailure+20*time.Minute-time.Second, true)
-	checkCooldown(nextFailure+20*time.Minute, false)
+	checkCooldown(nextFailure+10*time.Second-time.Second, true)
+	checkCooldown(nextFailure+10*time.Second, false)
 	requests[0] = f.next(t, false)
 	f.pause(t)
 	for _, request := range requests {
 		request.complete(t)
 	}
 	schedulerWait(t, "暂停后所有核对请求结束", func() bool { return f.progress(t).Running == 0 })
+}
+
+func TestPostgreSQLCurationModelProviderCooldownResetsAfterSuccess(t *testing.T) {
+	f := newSchedulerFixtureWithSources(t, &testLookupGate{}, nil)
+	f.configure(t, &f.admin)
+	item := modelRouteFixture(t, f, f.pending(t, f.a), "")
+	f.update(t, http.MethodPut, curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 1})
+
+	exhaustRetries := func(request schedulerRequest, itemID string) {
+		t.Helper()
+		conversation := f.item(t, itemID).ConversationID
+		for attempt := 1; attempt <= 5; attempt++ {
+			if attempt > 1 {
+				request = f.next(t, false)
+			}
+			if got := f.item(t, itemID); got.Status != "in_progress" || got.ConversationID != conversation || got.Attempts != 0 {
+				t.Fatalf("第 %d 次 HTTP 请求没有保留原领取：%+v", attempt, got)
+			}
+			request.fail <- schedulerHTTPFailure{status: http.StatusServiceUnavailable}
+		}
+		schedulerWait(t, "耗尽重试后释放领取", func() bool { return f.item(t, itemID).Status == "waiting_model" })
+		if got := f.item(t, itemID); got.Attempts != 0 || got.ConversationID != "" {
+			t.Fatalf("接口故障后应释放领取并保留尝试次数：%+v", got)
+		}
+	}
+
+	exhaustRetries(f.next(t, false), item.ID)
+	exhaustRetries(f.afterProviderCooldown(t, 5*time.Second), item.ID)
+	recovered := f.afterProviderCooldown(t, 10*time.Second)
+	conversation := f.item(t, item.ID).ConversationID
+	sub := f.application.app.steward.Subscribe(conversation, 0)
+	if sub == nil {
+		t.Fatal("没有恢复运行的事件订阅")
+	}
+	defer sub.Close()
+	recovered.selectCandidate(t, item.ID, "")
+	if reason := schedulerEnd(t, sub); reason != runtime.EndCompleted {
+		t.Fatalf("恢复运行的结束原因 %s，期望 %s", reason, runtime.EndCompleted)
+	}
+	schedulerWait(t, "恢复运行将发行升级到第二档", func() bool { return f.item(t, item.ID).Route == "lookup" })
+
+	nextItem := f.pending(t, f.b)
+	exhaustRetries(f.next(t, false), nextItem.ID)
+	resumed := f.afterProviderCooldown(t, 5*time.Second)
+	f.pause(t)
+	resumed.complete(t)
+}
+
+func TestPostgreSQLCurationModelProviderRetryAfterBeyondBudget(t *testing.T) {
+	f := newSchedulerFixture(t)
+	f.configure(t, &f.admin)
+	item := f.pending(t, f.a)
+	f.enable(t)
+	first := f.next(t, false)
+	conversation := f.item(t, item.ID).ConversationID
+	first.fail <- schedulerHTTPFailure{status: http.StatusServiceUnavailable, retryAfter: "12"}
+	// 夹具在 5 秒内等到领取释放，覆盖请求内不等待 12 秒的要求。
+	schedulerWait(t, "超出重试预算的 Retry-After 立即交给调度器", func() bool { return f.item(t, item.ID).Status == "waiting_model" })
+	resumed := f.afterProviderCooldown(t, 12*time.Second)
+	if got := f.item(t, item.ID); got.Status != "in_progress" || got.ConversationID == conversation || got.Attempts != 0 {
+		t.Fatalf("按 Retry-After 恢复后应重新领取且保留尝试次数：%+v", got)
+	}
+	f.pause(t)
+	resumed.complete(t)
+}
+
+func (f *schedulerFixture) afterProviderCooldown(t *testing.T, duration time.Duration) schedulerRequest {
+	t.Helper()
+	f.clock.now.Add(int64(duration - time.Nanosecond))
+	if p := f.progress(t); p.State != "unavailable" || p.UnavailableReason == nil || *p.UnavailableReason != "provider_error" {
+		t.Fatalf("%s 冷却到期前一纳秒应仍因模型端点故障暂停，实际进度 %+v", duration, p)
+	}
+	select {
+	case <-f.requests:
+		t.Fatal("冷却到期前收到了模型请求")
+	case <-time.After(100 * time.Millisecond):
+	}
+	f.clock.now.Add(int64(time.Nanosecond))
+	return f.next(t, false)
+}
+
+// 前四次 503 允许立即重试，最后一次响应由用例设定，调度时钟只用于验证冷却。
+func (f *schedulerFixture) lastProviderAttempt(t *testing.T, request schedulerRequest) schedulerRequest {
+	t.Helper()
+	for range 4 {
+		request.fail <- schedulerHTTPFailure{status: http.StatusServiceUnavailable, retryAfter: "0"}
+		request = f.next(t, false)
+	}
+	return request
 }
 
 func (f *schedulerFixture) update(t *testing.T, method, path string, body any) {

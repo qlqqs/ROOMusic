@@ -677,7 +677,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | `completed`、`step_limit`、`token_limit` | 未处理次数加一，第三次转为 `shelved/unhandled` |
 | `review_unavailable` | 保留方案，依次延迟 5 分钟、30 分钟和 2 小时重审。第三次重审仍失败则作废方案并延迟 24 小时回队 |
 | `curation_stopped`、`cancelled` | 作废方案、释放领取，保留未处理次数 |
-| `provider_error` | 作废方案、释放领取。调度器从 10 分钟起倍增退避，最长 6 小时 |
+| `provider_error` | 作废方案、释放领取。调度器按第 25.4 节冷却，无有效 `Retry-After` 时从 5 秒起倍增，最长 10 分钟 |
 | `internal_error`、意外的 `awaiting_confirmation` | 记录异常、作废方案、释放领取 |
 
 ### 17.3 工具、审查与写入
@@ -1115,7 +1115,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 调度器在内存中为会话包预留发行和艺人键，跨类别和重审跳过与在途包冲突的项。同艺人包内的多步任务逐项运行，独立核对逐项分派。关闭时等待在途项收尾，重启按 17.2 回收遗留领取。
 
-主模型或审查模型返回 HTTP 429、503 时，暂停新领取直至 `Retry-After` 指定的时刻（支持秒数和 HTTP 日期）。缺失或无效时采用 `provider_error` 的退避，从 10 分钟起倍增，最长 6 小时。失败项释放领取并保留尝试次数。其他在途项可完成，完成的时间不缩短冷却。
+主模型或审查模型返回 HTTP 429、503 时，客户端先按管家运行时合同在请求内重试。重试成功则继续本次运行。次数或时间预算用尽，或本次等待会超过剩余预算时，客户端才通知调度器暂停新领取。有效的 `Retry-After` 指定恢复时刻（支持秒数和 HTTP 日期）。缺失或无效时从 5 秒起退避，冷却结束后再次失败才翻倍，上限 10 分钟。同一冷却期内的并发失败可以延后恢复时刻，沿用本期退避时长。一次运行成功后，下次退避从 5 秒重新开始，已生效的冷却继续至原定时刻。失败项释放领取并保留尝试次数，其他在途项可完成。
 
 ### 25.5 进度
 
@@ -1254,4 +1254,4 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 28.7 模型并发
 
-见第 25.4 节（迁移 0096，`model_concurrency` 默认 4）。领取时跳过同艺人、同发行的项；每日上限每项开始前检查，并发时至多超出“并发数减一”项；模型接口 429/503 按 `Retry-After` 暂停领取、不计尝试。
+见第 25.4 节（迁移 0096，`model_concurrency` 默认 4）。领取时跳过同艺人、同发行的项；每日上限每项开始前检查，并发时至多超出“并发数减一”项；模型接口 429/503 在请求内重试成功时继续本次运行，重试结束后仍失败才按第 25.4 节暂停领取，保留项的尝试次数。
