@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/11-26-curation-chain-review/prd.md", "reason": "父任务：每条决定的现状、依据与代码位置"}
+{"file": "docs/architecture/adr/0009-curation-chain-review.md", "reason": "整理链梳理的规则汇总"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端开发前清单"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量规范"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "模拟上游与回归相关规范"}
+{"file": ".trellis/spec/backend/sources-contracts.md", "reason": "模拟上游与回归相关规范"}
+{"file": ".trellis/spec/backend/library-scan-verification.md", "reason": "模拟上游与回归相关规范"}
