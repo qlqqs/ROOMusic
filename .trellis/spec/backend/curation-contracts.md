@@ -1107,9 +1107,15 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 | 接口 | 约定 |
 | --- | --- |
-| `NextModelKind` | 全实例一个模型运行；按“巡检与本地整理 → 第一档 → 核对判断 → 第二档 → 联网兜底”取有可领项的类别 |
+| `NextModelKind` | 每个空闲名额按“巡检与本地整理 → 第一档 → 核对判断 → 第二档 → 联网兜底”取有可领项的类别 |
 | `LookupTierReady` | 识别队列里高于“本地完整”的稳定、可见、到期项已排空且 MusicBrainz 可用，第二档才启动；退避不算排空 |
-| `BeforeModelItem` | 每项开始前检查当日用量与每日上限；已开始的项允许完成 |
+| `BeforeModelItem` | 每项开始前检查总日额度，联网项另查联网日额度；已开始的项允许完成 |
+
+管理员通过 `GET/PUT /api/v1/admin/curation/settings` 读写整数 `model_concurrency`（迁移 0096，默认 4，范围 1–16）。保存后立即按新值分派。调低时在途项继续，运行数降到新上限以下再补位。`GET /api/v1/admin/curation/progress` 的 `model.running` 是正在处理的模型运行数，一次合批调用占一个名额。`model.concurrency` 是当前上限。
+
+调度器在内存中为会话包预留发行和艺人键，跨类别和重审跳过与在途包冲突的项。同艺人包内的多步任务逐项运行，独立核对逐项分派。关闭时等待在途项收尾，重启按 17.2 回收遗留领取。
+
+主模型或审查模型返回 HTTP 429、503 时，暂停新领取直至 `Retry-After` 指定的时刻（支持秒数和 HTTP 日期）。缺失或无效时采用 `provider_error` 的退避，从 10 分钟起倍增，最长 6 小时。失败项释放领取并保留尝试次数。其他在途项可完成，完成的时间不缩短冷却。
 
 ### 25.5 进度
 
@@ -1136,7 +1142,8 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | 核对判断 | `verify_artist_credit`（C 的署名提案）、`verify_artist_merge`、`verify_name`；`release_merge` 单独打包 | 只开放提交判断；身份取同一/不同/拿不准，纠正取错字/写法差异/译名差异/拿不准；沿用管家单次运行的总保护 | 写法或译名差异不改；有主张而缺证据转联网 |
 | 联网兜底 | `waiting_route/web`、第二档放弃、无外部对应的 `artist_identity`、待求证的建议；按艺人在库专辑组数降序 | `web_search` 或原生搜索、`fetch_page`、提交；每项 30 次工具调用、30 万 token；单独的每日上限 `web_daily_token_limit` | 无结果或触限即结束；发行识别无对应调用 `FinishUnlisted` |
 
-- 每日上限（总的与联网的）在项边界检查（`BeforeModelItem`），已开始的项可以完成。单项上限按每次请求后实际的 usage 与工具调用次数累计，超过即停止该项的新调用。
+- 每日上限（总的与联网的）在项边界检查（`BeforeModelItem`），达到上限时已开始的项可以完成，总日额度和联网日额度最多各额外消耗「并发数减一」个在途项的用量。到期重审重新占用名额时复查日额度，额度用尽则保留原方案。单项上限按每次请求后实际的 usage 与工具调用次数累计，超过即停止该项的新调用。
+- 自查和联网的 MusicBrainz 工具调用共用现有来源限速器。后台网页工具按开启者、工具组和整理会话计量，同一会话的各项与重审共用额度，并行会话各自计量。交互用户沿用每用户限额。
 - 联网用量同时计入总用量；`curation_model_usage` 加联网输入、输出列。
 
 ### 26.2 外部编号的写入（D4）

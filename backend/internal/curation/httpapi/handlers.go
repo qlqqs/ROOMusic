@@ -16,7 +16,7 @@ import (
 )
 
 type Handlers struct {
-	model      curation.ModelStatus
+	model      curation.ModelScheduler
 	exceptions curation.ExceptionResolver
 	program    curation.ProgramStatus
 	versions   curation.RuleVersions
@@ -27,7 +27,7 @@ type Handlers struct {
 	logger     *slog.Logger
 }
 
-func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, program curation.ProgramStatus, model curation.ModelStatus, exceptions curation.ExceptionResolver, versions curation.RuleVersions, guard *identity.Guard, logger *slog.Logger) *Handlers {
+func New(writer *curation.Writer, reverter *curation.Reverter, sources *curation.Sources, program curation.ProgramStatus, model curation.ModelScheduler, exceptions curation.ExceptionResolver, versions curation.RuleVersions, guard *identity.Guard, logger *slog.Logger) *Handlers {
 	return &Handlers{model: model, exceptions: exceptions, sources: sources, writer: writer, reverter: reverter, program: program, versions: versions, guard: guard, logger: logger}
 }
 
@@ -142,6 +142,7 @@ func (h *Handlers) setSettings(w http.ResponseWriter, r *http.Request, actor ide
 	var body struct {
 		Enabled            *bool           `json:"enabled"`
 		Paused             *bool           `json:"paused"`
+		ModelConcurrency   json.RawMessage `json:"model_concurrency"`
 		Model              json.RawMessage `json:"model"`
 		DailyTokenLimit    json.RawMessage `json:"daily_token_limit"`
 		WebDailyTokenLimit json.RawMessage `json:"web_daily_token_limit"`
@@ -150,6 +151,10 @@ func (h *Handlers) setSettings(w http.ResponseWriter, r *http.Request, actor ide
 		return
 	}
 	var patch curation.ModelSettingsPatch
+	if body.ModelConcurrency != nil && (json.Unmarshal(body.ModelConcurrency, &patch.ModelConcurrency) != nil || patch.ModelConcurrency == nil) {
+		h.respond(w, r, nil, operations.Invalid("invalid_input", "模型并发数必须是 1 到 16 的整数"))
+		return
+	}
 	if body.Model != nil && (json.Unmarshal(body.Model, &patch.Model) != nil || patch.Model == nil || strings.IndexByte(*patch.Model, 0) >= 0) {
 		h.respond(w, r, nil, operations.Invalid("invalid_input", "模型名称无效"))
 		return
@@ -165,6 +170,9 @@ func (h *Handlers) setSettings(w http.ResponseWriter, r *http.Request, actor ide
 		return
 	}
 	s, err := h.writer.UpdateModelSettings(r.Context(), actor.ID, body.Enabled, body.Paused, patch)
+	if err == nil && patch.ModelConcurrency != nil {
+		h.model.Wake()
+	}
 	h.respond(w, r, s, err)
 }
 

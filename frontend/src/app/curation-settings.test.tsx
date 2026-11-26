@@ -132,6 +132,26 @@ describe("总开关与暂停", () => {
     await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings").at(-1)?.body).toEqual({ web_daily_token_limit: 2_000_000 }));
   });
 
+  it("同时运行：越界提示，合法值离开时保存；状态写出同时在跑的项数", async () => {
+    const { api, curation } = setup();
+    enableCuration(curation);
+    curation.model = { ...curation.model, state: "running", items: { ...curation.model.items, in_progress: 3 }, running: 3 };
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const model = await group("模型判断");
+    expect(await within(model).findByText(/同时 3\/4 项/)).toBeTruthy();
+    const input = within(model).getByRole("spinbutton", { name: "同时运行" });
+    await user.clear(input);
+    await user.type(input, "20");
+    await user.tab();
+    expect(within(model).getByText("填 1 到 16 之间的整数。")).toBeTruthy();
+    expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings")).toHaveLength(0);
+    await user.clear(input);
+    await user.type(input, "8");
+    await user.tab();
+    await waitFor(() => expect(api.requestsTo("PUT", "/api/v1/admin/curation/settings").at(-1)?.body).toEqual({ model_concurrency: 8 }));
+  });
+
   it("重新巡检：图标按钮，确认后提交，写明已开始", async () => {
     const { api, curation } = setup();
     enableCuration(curation);

@@ -220,7 +220,7 @@ func TestPostgreSQLCurationModelSettings(t *testing.T) {
 	oldProgram, oldModel := readTimestamps()
 	initial, err := f.writer.Settings(ctx)
 	requireCurationOK(t, err)
-	if initial.Model != "" || initial.DailyTokenLimit == nil || *initial.DailyTokenLimit != 10_000_000 {
+	if initial.ModelConcurrency != 4 || initial.Model != "" || initial.DailyTokenLimit == nil || *initial.DailyTokenLimit != 10_000_000 {
 		t.Fatalf("模型默认设置 %+v", initial)
 	}
 	model, limit := "Synthetic/Model", int64(40000)
@@ -250,5 +250,24 @@ func TestPostgreSQLCurationModelSettings(t *testing.T) {
 	programTime, modelTime = readTimestamps()
 	if !programTime.Equal(oldProgram) || !modelTime.After(oldModel) {
 		t.Fatalf("设置不限用量后程序时间 %v、模型时间 %v", programTime, modelTime)
+	}
+	path := curationBase + "/settings"
+	for _, value := range []int{1, 16} {
+		response := f.application.request(t, "PUT", path, map[string]int{"model_concurrency": value}, &f.admin, nil)
+		if response.Code != 200 || decodeJSONMap(t, response)["model_concurrency"] != float64(value) {
+			t.Fatalf("设置并发数 %d：HTTP %d %s", value, response.Code, response.Body)
+		}
+	}
+	for _, value := range []any{0, 17, nil, 1.5} {
+		response := f.application.request(t, "PUT", path, map[string]any{"model_concurrency": value}, &f.admin, nil)
+		requireAPIError(t, response, 400, "invalid_input")
+	}
+	response := f.application.request(t, "PUT", path, map[string]bool{"paused": true}, &f.admin, nil)
+	if response.Code != 200 || decodeJSONMap(t, response)["model_concurrency"] != float64(16) {
+		t.Fatalf("仅暂停时保留并发数：HTTP %d %s", response.Code, response.Body)
+	}
+	response = f.application.request(t, "GET", path, nil, &f.admin, nil)
+	if response.Code != 200 || decodeJSONMap(t, response)["model_concurrency"] != float64(16) {
+		t.Fatalf("读回并发数：HTTP %d %s", response.Code, response.Body)
 	}
 }

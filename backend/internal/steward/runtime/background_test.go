@@ -50,14 +50,15 @@ func TestSupervisorBackgroundSlot(t *testing.T) {
 		chat2 := mustStart("chat-2", "owner", "admin", false, nil)
 		chat3 := mustStart("chat-3", "owner", "admin", false, nil)
 		background := mustStart("background", "owner", "admin", true, nil)
-		if _, err := start("other-background", "other", "admin", true, nil); !errors.Is(err, ErrBackgroundBusy) {
-			t.Fatalf("第二个后台运行：%v", err)
-		}
+		sameOwner := mustStart("same-owner-background", "owner", "admin", true, nil)
+		otherOwner := mustStart("other-background", "other", "admin", true, nil)
 		s.CancelBackground("other")
-		synctest.Wait()
+		waitCancelled(otherOwner)
 		c10Finished(t, background, false)
+		c10Finished(t, sameOwner, false)
 		s.CancelBackground("owner")
 		waitCancelled(background)
+		waitCancelled(sameOwner)
 		for _, run := range []*Run{chat1, chat2, chat3} {
 			c10Finished(t, run, false)
 		}

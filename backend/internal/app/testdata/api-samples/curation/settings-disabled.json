@@ -7,6 +7,7 @@
     "enabled_by": null,
     "inactive_reason": "disabled",
     "model": "",
+    "model_concurrency": 4,
     "paused": false,
     "web_daily_token_limit": null
   },

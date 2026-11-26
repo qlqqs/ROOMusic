@@ -241,8 +241,8 @@ func (s *Scheduler) itemCheckpoint(ctx context.Context, actor string, items []cu
 }
 
 // 停用网络搜索后结清已转入这条路线的行，沿用正常的项锁、审计和未收录逻辑。
-func (s *Scheduler) finishDisabledWeb(ctx context.Context, actor, model string, now time.Time) error {
-	ready, err := s.writer.HasWaitingWebRoute(ctx, now)
+func (s *Scheduler) finishDisabledWeb(ctx context.Context, actor, model string, now time.Time, excluded []string) error {
+	ready, err := s.writer.HasWaitingWebRoute(ctx, now, excluded)
 	if err != nil || !ready {
 		return err
 	}
@@ -250,7 +250,7 @@ func (s *Scheduler) finishDisabledWeb(ctx context.Context, actor, model string, 
 	if err != nil {
 		return err
 	}
-	items, err := s.writer.ClaimModelKind(ctx, id, now, s.options.BatchSize, []string{"release", "artist"}, "unavailable_web", "")
+	items, err := s.writer.ClaimModelKind(ctx, id, now, s.options.BatchSize, []string{"release", "artist"}, "unavailable_web", "", excluded...)
 	if err != nil || len(items) == 0 {
 		return errors.Join(err, s.launcher.DeleteConversation(ctx, actor, id))
 	}

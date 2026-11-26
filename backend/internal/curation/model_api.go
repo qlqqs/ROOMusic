@@ -21,6 +21,8 @@ type ModelItemCounts struct {
 }
 
 type ModelProgress struct {
+	Running            int             `json:"running"`
+	Concurrency        int             `json:"concurrency"`
 	WebDailyTokenLimit *int64          `json:"web_daily_token_limit"`
 	WebToday           ModelUsage      `json:"web_today"`
 	WebLimitReached    bool            `json:"web_limit_reached"`
@@ -33,7 +35,8 @@ type ModelProgress struct {
 	Items              ModelItemCounts `json:"items"`
 }
 
-type ModelStatus interface {
+type ModelScheduler interface {
+	Wake()
 	ModelStatus(context.Context) (ModelProgress, error)
 }
 
