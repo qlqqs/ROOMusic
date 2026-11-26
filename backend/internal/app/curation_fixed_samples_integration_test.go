@@ -235,8 +235,19 @@ func fixedBatch(t *testing.T, mode string, batch []fixedSample, corpus fixedCorp
 	var begin time.Time
 	owners := map[string]string{}
 	b3Enable(t, app, admin)
-	for _, s := range batch {
-		part := fixedScanPartition(t, app, s)
+	// 目录级本地辅助要求完整目录成员先进入稳定集。固定样本按样本记账，
+	// 但同一批次的成员必须在第一张开始排空前一起确认，否则本地项会被
+	// 稳定集门槛暂存到同目录的下一张样本。
+	parts := make([]fixedPartition, len(batch))
+	for i, s := range batch {
+		parts[i] = fixedScanPartition(t, app, s)
+		for _, id := range parts[i].ids {
+			mustExec(t, app, `UPDATE releases SET curation_changed_at=now()-interval '60 seconds' WHERE id=$1`, id)
+		}
+	}
+	runScan(t, app, &admin)
+	for i, s := range batch {
+		part := parts[i]
 		row := newFixedRow(s, mode)
 		start := time.Now()
 		begin = start
@@ -249,12 +260,10 @@ func fixedBatch(t *testing.T, mode string, batch []fixedSample, corpus fixedCorp
 				continue
 			}
 			owners[id] = s.ID
-			mustExec(t, app, `UPDATE releases SET curation_changed_at=now()-interval '60 seconds' WHERE id=$1`, id)
 			// 交替推进真实程序轮和模型回包。HTTP 闸门只在固定的快速计数中使用。
 			func() {
 				meter.gate.Lock()
 				defer meter.gate.Unlock()
-				runScan(t, app, &admin)
 				clock.advance(t, time.Minute)
 			}()
 			elapsed := fixedDrain(t, app, &admin, clock, meter, script, id, start)
@@ -317,7 +326,10 @@ func fixedDrain(t *testing.T, app *integrationTestApplication, admin *integratio
 		if script && p.Model.UnavailableReason != nil {
 			t.Fatalf("脚本模型不可用：%s", *p.Model.UnavailableReason)
 		}
-		if metricCheckpoint(t, app) == before && p.Queues[0].Ready == 0 && p.Model.Items.InProgress == 0 {
+		// 同一目录的本地辅助项可能覆盖多张发行。只有当前样本已经离开
+		// pending，才能把这一张视为排空，避免把目录级辅助留给下一张样本。
+		state := b3WorkState(t, app, "release", id)
+		if metricCheckpoint(t, app) == before && state.Status != "pending" && p.Queues[0].Ready == 0 && p.Model.Items.InProgress == 0 {
 			if matched > 0 {
 				return matched
 			}

@@ -96,7 +96,7 @@ func assistClaim(t *testing.T, app *integrationTestApplication, admin *integrati
 	batch, err := writer.OpenBatch(t.Context(), "model")
 	requireCurationOK(t, err)
 	ctx := curation.WithModelRun(t.Context(), &curation.ModelRun{
-		ConversationID: conversation.ID, Model: "assist-test", ActorID: admin.id, PendingItemID: item.ID, TaskKind: "patrol_local",
+		ConversationID: conversation.ID, Model: "assist-test", ActorID: admin.id, PendingItemID: item.ID, TaskKind: "local",
 		ClaimDigests: map[string]string{item.ID: claims[0].ModelClaimDigest()},
 		Batch:        func(context.Context) (string, error) { return batch.ID, nil },
 	})
