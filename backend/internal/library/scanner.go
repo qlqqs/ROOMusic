@@ -514,6 +514,12 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 				captureProcessingError(diagnosticError)
 			}
 		}
+		if complete {
+			if err := ingest.AlignModelStagingScopes(ctx, executor, scanID, root.ID); err != nil {
+				complete = false
+				captureProcessingError(err)
+			}
+		}
 		// 先规划曲目身份（遍历已经结束，complete 即遍历证据是否完整）；规划失败时暂存行没有完整的规划，不能写入。
 		planned, planProblem := service.planRootIdentities(ctx, executor, scanID, root, complete, options.Mode, feedback)
 		if planProblem != nil {

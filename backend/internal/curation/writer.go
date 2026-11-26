@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -25,6 +26,7 @@ type Source struct {
 type Request struct {
 	ArtistCredit *ReleaseArtistCredit
 
+	localSplits                 []LocalSplit
 	local                       *localSubmission
 	verification                *verificationWrite
 	ExpectedRevision            int64
@@ -119,6 +121,9 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 	}
 	legacyFingerprint := operations.Fingerprint(fingerprint)
 	fingerprint["writer_level"] = level
+	if len(request.localSplits) > 0 {
+		fingerprint["splits"] = request.localSplits
+	}
 	if len(request.ExpectedScan) > 0 {
 		inputs := map[string]json.RawMessage{}
 		for field := range fields {
@@ -167,7 +172,7 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 				return operations.Outcome{}, err
 			}
 		}
-		if request.ExpectedRevision != 0 && request.Source.Kind == "model" {
+		if request.local != nil || request.ExpectedRevision != 0 && request.Source.Kind == "model" {
 			manual, err := loadManualFields(ctx, tx, target, id)
 			if err != nil {
 				return operations.Outcome{}, err
@@ -182,6 +187,47 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 		write, applied, err = filterAutoFields(ctx, tx, target, id, definitions, locked, fields, request.OnlyEmpty, level)
 		if err != nil {
 			return operations.Outcome{}, err
+		}
+		field := "album_artist"
+		if track {
+			field = "artist"
+		}
+		var accepted []LocalSplit
+		for _, split := range request.localSplits {
+			suppressed, err := suppressionExists(ctx, tx, target, id, "credit_parts_"+field, split.splitKey())
+			if err != nil {
+				return operations.Outcome{}, err
+			}
+			if !suppressed {
+				accepted = append(accepted, split)
+			}
+		}
+		if len(request.localSplits) > 0 && len(accepted) == 0 {
+			delete(write, field)
+			applied.Written = slices.DeleteFunc(applied.Written, func(s string) bool { return s == field })
+			applied.Skipped[field] = "suppressed"
+		}
+		for _, split := range accepted {
+			if _, ok := write[field]; !ok && applied.Skipped[field] != "unchanged" {
+				continue
+			}
+			parts, err := json.Marshal(split.Parts)
+			if err != nil {
+				return operations.Outcome{}, err
+			}
+			joins, err := json.Marshal(split.Joins)
+			if err != nil {
+				return operations.Outcome{}, err
+			}
+			_, err = tx.ExecContext(ctx, `INSERT INTO local_credit_parts(operation_id,target_id,role,source_ref,raw,parts,joins) VALUES($1,$2,$3,$4,$5,$6,$7)`, operationID, id, split.Role, split.Ref, split.raw(), parts, joins)
+			if err != nil {
+				return operations.Outcome{}, err
+			}
+			if applied.Skipped[field] == "unchanged" {
+				write[field] = fields[field]
+				delete(applied.Skipped, field)
+				applied.Written = append(applied.Written, field)
+			}
 		}
 		if len(write) == 0 {
 			return operations.Outcome{}, operations.Conflict("nothing_to_apply", "字段已占用、相同、已有更高级别的值或已标记为不再提出")
@@ -268,7 +314,13 @@ func filterAutoFields(ctx context.Context, tx *sql.Tx, target, id string, defini
 		}
 		if onlyEmpty {
 			_, manual := corrections[name]
-			if manual || exists {
+			replaceLocal := false
+			if exists && level == catalog.LevelProgramExternal && current.EffectiveLevel() == catalog.LevelModelLocal {
+				if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM operations WHERE id=$1 AND origin->>'mode'='local_cleanup')`, current.OperationID).Scan(&replaceLocal); err != nil {
+					return nil, Applied{}, err
+				}
+			}
+			if manual || exists && !replaceLocal {
 				result.Skipped[name] = "occupied"
 				continue
 			}

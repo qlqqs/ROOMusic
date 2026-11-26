@@ -391,7 +391,7 @@ func Open(lifecycle context.Context, settings config.Server, database *sql.DB, f
 	if lifecycle != nil && database != nil {
 		go insightService.Run(lifecycle)
 	}
-	operationKinds := []operations.Kind{curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
+	operationKinds := []operations.Kind{curation.LocalGroupingOperations{}, curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
 		curation.ArtistImageOperations(curationWriter), curation.ArtistBioOperations(curationWriter),
 		curation.ArtistManualImageOperations(curationWriter), curation.ArtistManualBioOperations(curationWriter), curation.ArtistLinkOperations(curationWriter),
 		curation.WithFieldArtistLinks(governance.AutoCorrectionOperations(curationWriter)),
@@ -406,17 +406,6 @@ func Open(lifecycle context.Context, settings config.Server, database *sql.DB, f
 	catalogapi.NewArtistGovernance(database, guard, logger, artistGovernance).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
 	operationsapi.New(database, guard, logger, operationKinds...).Register(mux)
-	var programStatus curation.ProgramStatus
-	programDone := make(chan struct{})
-	if database != nil && !assembly.disableProgram {
-		assembly.program.CachedReleaseCredits = cachedReleaseCredits(settings.DataDirectory, music.BaseURL(), assembly.music.Now)
-		assembly.program.ConfirmScan = libraryService.StartCurationConfirmation
-		worker := program.NewWorker(database, curationWriter, sourceGate, scanRunning, logger, assembly.program)
-		programStatus = worker
-		go func() { defer close(programDone); worker.Run(lifecycle) }()
-	} else {
-		close(programDone)
-	}
 	var analysisWorker *playback.AnalysisWorker
 	analysisDone := make(chan struct{})
 	if database != nil && assembly.analysis != nil {
@@ -430,6 +419,28 @@ func Open(lifecycle context.Context, settings config.Server, database *sql.DB, f
 	diagnosticService := newDiagnostics(database, settings, libraryService, assembly)
 	diagnosticsapi.Register(mux, guard, diagnosticService, logger)
 	supervisor, launcher := registerSteward(lifecycle, mux, database, guard, instanceSecrets, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{forgetPassword: subsonic.Forget, tavilyEndpoint: tavilyEndpoint, mockHost: mockHost, writer: curationWriter, sources: sourceGate, matcher: matcher, music: music, covers: covers, diagnostics: diagnosticService, backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
+	var programStatus curation.ProgramStatus
+	programDone := make(chan struct{})
+	if database != nil && !assembly.disableProgram {
+		assembly.program.CachedReleaseCredits = cachedReleaseCredits(settings.DataDirectory, music.BaseURL(), assembly.music.Now)
+		assembly.program.ConfirmScan = libraryService.StartCurationConfirmation
+		assembly.program.LocalModelConfigured = func(ctx context.Context) (bool, error) {
+			if launcher == nil || assembly.disableModel {
+				return false, nil
+			}
+			settings, err := curationWriter.Settings(ctx)
+			if err != nil || settings.EnabledBy == nil {
+				return false, err
+			}
+			c, err := launcher.Availability(ctx, settings.EnabledBy.ID, settings.Model)
+			return c.Reason != "not_configured", err
+		}
+		worker := program.NewWorker(database, curationWriter, sourceGate, scanRunning, logger, assembly.program)
+		programStatus = worker
+		go func() { defer close(programDone); worker.Run(lifecycle) }()
+	} else {
+		close(programDone)
+	}
 	if worker, ok := programStatus.(*program.Worker); ok {
 		assembly.model.Lookup = worker
 	}

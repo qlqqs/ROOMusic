@@ -56,6 +56,13 @@ func (k trackAutoCorrectionKind) Revert(ctx context.Context, tx *sql.Tx, id stri
 		return out, err
 	}
 	for name := range next {
+		handled, err := suppressCreditParts(ctx, tx, k.suppressions, original.ID, "track", prior.TrackID, name, id)
+		if err != nil {
+			return operations.Outcome{}, err
+		}
+		if handled {
+			continue
+		}
 		current, _ := locked.Current(name)
 		if err := k.suppressions.SuppressTrackValue(ctx, tx, prior.TrackID, name, current.Intent(), id, operations.ActorID(ctx)); err != nil {
 			return operations.Outcome{}, err

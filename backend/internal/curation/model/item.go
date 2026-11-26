@@ -59,6 +59,9 @@ func itemAtLimit(kind TaskKind, calls int, tokens int64) bool {
 
 // 准备好的证据和实际发送的候选保留在该项副本中。
 func (s *Scheduler) prepareItem(ctx context.Context, matcher *program.ModelMatcher, p *curation.PendingItem) error {
+	if p.Kind == "local_cleanup" {
+		return nil
+	}
 	items := []curation.PendingItem{*p}
 	if taskKind(*p) == SelectCandidate {
 		if err := matcher.PrepareSelection(ctx, items); err != nil {
@@ -119,8 +122,8 @@ func firstMessage(items []curation.PendingItem) (string, error) {
 		ReleaseID       string                     `json:"release_id,omitempty"`
 		ArtistID        string                     `json:"artist_id,omitempty"`
 		Evidence        json.RawMessage            `json:"evidence"`
-		Candidates      json.RawMessage            `json:"candidates"`
-		Conflicts       json.RawMessage            `json:"conflicts"`
+		Candidates      json.RawMessage            `json:"candidates,omitempty"`
+		Conflicts       json.RawMessage            `json:"conflicts,omitempty"`
 		CanonicalTitle  string                     `json:"canonical_title,omitempty"`
 		CanonicalArtist string                     `json:"canonical_artist,omitempty"`
 		Requirements    string                     `json:"write_requirements"`
@@ -129,6 +132,24 @@ func firstMessage(items []curation.PendingItem) (string, error) {
 	}
 	rows := make([]messageItem, 0, len(items))
 	for _, p := range items {
+		if p.Kind == "local_cleanup" {
+			var source map[string]json.RawMessage
+			if err := json.Unmarshal(p.Evidence, &source); err != nil {
+				return "", err
+			}
+			evidence := map[string]json.RawMessage{}
+			for _, key := range []string{"directory_key", "release_ids", "directories", "releases", "grouping_requested"} {
+				if v, ok := source[key]; ok {
+					evidence[key] = v
+				}
+			}
+			raw, err := json.Marshal(evidence)
+			if err != nil {
+				return "", err
+			}
+			rows = append(rows, messageItem{ID: p.ID, Kind: p.Kind, Route: taskKind(p), ReleaseID: p.TargetID, Evidence: raw, Requirements: writeRequirements(p)})
+			continue
+		}
 		rows = append(rows, messageItem{
 			ID: p.ID, Kind: p.Kind, Route: taskKind(p), ReleaseID: p.TargetID, ArtistID: p.ArtistID,
 			Evidence: p.Evidence, Candidates: p.Candidates, Conflicts: p.Conflicts,
@@ -150,7 +171,7 @@ func writeRequirements(p curation.PendingItem) string {
 	case "verify_name":
 		return "错字须有已确认结构和外部字段或独立库内多数写法，并经审查。专辑标题可由生效的组级对应与组标题佐证，须核对同组各版标题均与原值不同。"
 	case "local_cleanup":
-		return "本地整理值须逐字出现在本项本地片段中。"
+		return "根据本项完整目录，仅提交可核对的文字、候选编码、署名分段或文件归组。"
 	case "name_patrol":
 		return "依据本块提供的原名和上下文提交巡检判断。"
 	case "release_merge":

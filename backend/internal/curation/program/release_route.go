@@ -29,6 +29,19 @@ func previousReview(s curation.WorkState) (releaseReviewState, error) {
 }
 
 func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationEvidence, fingerprintRequired bool) (MatchResult, error) {
+	configured, err := w.localConfigured(ctx, "release")
+	if err != nil {
+		return MatchResult{}, err
+	}
+	if configured {
+		var ready bool
+		if err := w.db.QueryRowContext(ctx, `SELECT `+localDependencySQL+` FROM (SELECT $1::uuid target_id) r`, e.ID).Scan(&ready); err != nil {
+			return MatchResult{}, err
+		}
+		if !ready {
+			return MatchResult{}, errWaitingForLocal
+		}
+	}
 	if err := w.sources.Check(ctx, "musicbrainz"); err != nil {
 		return MatchResult{}, err
 	}
@@ -39,7 +52,6 @@ func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationE
 	}
 	a, _ := w.sources.ArtistFinder("musicbrainz")
 	var step *FingerprintStep
-	var err error
 	if !u.programOnly {
 		step, err = w.fingerprintStep(ctx)
 		if err != nil {

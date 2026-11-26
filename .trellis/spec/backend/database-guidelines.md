@@ -299,3 +299,7 @@ Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-
 ## 扫描归组迁移
 
 `0100_scan_grouping` 归扫描发行层所有。releases.scan_version_terms 保存扫描版本词；release_attachments 以发行和根内相对路径为键。tracks.sort_position 与 track_effective 的同名列记录内部次序，tracks.position 的 0 表示未知。artist_profiles.list_sort_key 由有效展示名生成，迁移通过现有艺人投影换代刷新旧行。降级先恢复旧曲位，再删列、附属表和排序函数；需要精确恢复分组及人工归属时使用迁移前备份。合入时迁移号按当时最大号顺延。
+
+## 本地辅助的持久化
+
+`local_credit_parts` 按操作、目标、角色和原署名引用存放原串、分段、连接词。`local_model_groupings` 按根与目录键保存唯一有效的归组操作、来源摘要和完整分配。两表到 operations 的外键在提交时校验，使业务行和操作记录能由同一事务发布。

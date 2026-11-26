@@ -936,7 +936,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 | 常量（`curation/program/worker.go`） | 当前值 | 升级时 |
 | --- | --- | --- |
-| `LocalRuleVersion` | 3（第 28 节） | 只重算真实性、分类与缺口，不发外部请求 |
+| `LocalRuleVersion` | 4（第 27.3 节） | 只重算真实性、分类与缺口，不发外部请求 |
 | `MatchRuleVersion` | 104（101 起，各次变化见第 23、28 节） | 已对上的保持；有候选的待定项用已保存的候选离线重判，登记新版本，不发搜索；零候选或旧候选不足以判断的，登记 `requery_match_version`，由普通遍历补查一次 |
 | `PatrolPromptVersion` | 1 | 不让任何工作状态到期；只作用于新巡检与手动重新巡检 |
 
@@ -1204,10 +1204,10 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ### 27.3 本地整理
 
-- 只处理扫描解析后标题、艺人或曲目标题仍是占位值，或推断值里带明显杂质（年份、格式、编号、方括号内容）的专辑；扫描已能解析的“01 - 艺人 - 曲名”不进模型。
-- 按目录提供文件名、目录名与现有标签，只给 `submit_local_cleanup`（`item_id`，可选 `title`、`artist`、`tracks:[{track_id,title}]`）。
-- 后端在写入事务中复核：每个值规范化后必须出现在某个本地片段里，否则丢弃。通过的按模型来源、`writer_level=1`、`origin.mode=local_cleanup` 写自动层，标为模型推断。曲序与碟号不改。
-- 整理出的值可以作搜索输入，认定仍须时长核对（第 23.2 节）。
+- `local_cleanup` 以完整目录为一项。七种扫描结果可请求本地辅助：无名字标签、旧编码多解、含 & 或逗号的原署名、同目录按不同专辑名分开且曲号不连续、同一非根父目录下疑似同套的未识别碟目录、缺曲号或多碟迹象下缺碟号、复合专辑名。缺艺人的半个名字先补再查。匹配后确定性拆分失败由识别程序提供原署名引用。
+- 模型查看本项成员、标签、注释、原文件与目录名、编码读法、平票和编号来源。只使用 `submit_local_cleanup`。带理由的 `undetermined` 结案；`apply` 提交 `texts,encodings,splits,grouping` 的任意组合。领取、调用额度和失败处理沿用第 25 节。
+- 后台逐项核对。本地单一片段经文字归一、标点转空格后须包含提交文字。每张只能从扫描候选中选一个编码，后台解全部乱码字段。署名以段和连接词逐字重建原串。归组须完整覆盖可调整文件，确定的曲位和 CUE 边界受保护，每张每碟曲号唯一。
+- 写入采用 `origin.mode=local_cleanup`，显示为模型推断，自动字段级别 1。保留署名显示串，按有序段投影本地艺人。独立归组记录在下一次扫描消费。各项可撤销，程序核对后直接写入。已配主模型的相关发行先等本地辅助和归组确认，再用可核实的输入查询。具体版匹配可替换本地推断。
 
 ### 27.4 已知局限
 
@@ -1253,7 +1253,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 ### 28.5 扫描侧（`LocalRuleVersion` 3）
 
 细则见 `library-scan-tags.md`、`library-scan-grouping.md`。
-- 真实性新增来源 `legacy_encoding`（旧编码唯一读法，推断）与 `garbled`（多种读法，按占位处理，不进查询，可进本地整理并以各读法作本地片段）。符合西文字节特征的标签保留扫描来源。没有其它标签时读 ID3v1；唯一读法由程序写本地层，级别 1。
+- 真实性新增来源 `legacy_encoding`（旧编码唯一读法，推断）与 `garbled`（乱码按占位处理，多解可由本地辅助从整张候选编码里选择）。符合西文字节特征的标签保留扫描来源。没有其它标签时读 ID3v1；唯一读法由扫描应用并保留推断来源。
 - 中英文占位词（Unknown Artist、Track NN、未知艺术家等）判为占位；`Untitled` 不算。
 - 无 `ALBUMARTIST` 且至少 4 首、至少 3 位不同主艺人、无人担任超过半数曲目的主艺人时判为合辑，专辑艺人取推断值 Various Artists；扫描与整理按每首真实署名拆分后的第一位统计。
 - 同目录曲号分段从 1 重起时推断碟号；`A1`、`B2` 曲号按面解析，A/B 面为第 1 碟、C/D 面为第 2 碟，均标为推断。

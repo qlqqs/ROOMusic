@@ -241,3 +241,7 @@ I1 来源读取仍遵循[艺人合同](./artist-contracts.md)，不改治理记�
 ## 整张发行并入
 
 `release_merge` 记录人工、对话、MCP 与管理员采纳的合并，`release_auto_merge` 记录自动合并。主目标为接收发行，合并与撤销均以 `operations_release_targets` 关联双方。列表的 `changes` 给出来源与碟数，自动合并另核对之后的人工结构操作。见[发行合并合同](./release-merge-contracts.md)。
+
+## 本地推断的撤销
+
+`local_model_grouping` 操作保存原分配与新分配。仅现持有者可撤销，恢复旧分配后请求重扫；撤销标记绑定根、目录和规范化成员位次。本地署名沿用字段撤销，段依附当时的 operation_id；恢复字段 owner 时同时恢复该 owner 的署名段。

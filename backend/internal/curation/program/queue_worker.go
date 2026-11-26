@@ -13,6 +13,7 @@ import (
 
 var subjects = curation.ProgramQueueSubjects[:]
 var errQueueUnchanged = errors.New("本轮无需写入")
+var errWaitingForLocal = errors.New("等待本地辅助")
 var errWaitingForPrints = errors.New("等待抽样曲目的声纹")
 
 type queueAttempt struct {
@@ -182,6 +183,8 @@ func (w *Worker) drainQueues(parent context.Context, kinds []string) error {
 			case failureCode(err) == "source_disabled" || failureCode(err) == "not_found":
 				parked[item.Subject] = true
 				w.setQueueState(item.Subject, "paused", "source_disabled", nil)
+			case errors.Is(err, errWaitingForLocal):
+				w.setQueueState(item.Subject, "idle", "", nil)
 			case errors.Is(err, errWaitingForPrints):
 				w.setQueueState(item.Subject, "idle", "waiting_for_fingerprint", nil)
 			case errors.Is(err, errQueueUnchanged):

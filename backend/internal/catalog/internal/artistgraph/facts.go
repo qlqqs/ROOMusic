@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
-	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"sort"
 	"strings"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
 type creditFact struct {
@@ -27,11 +28,59 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 	facts := []creditFact{}
 	// 同一曲目同人同角色的多种细分只建一条事实，避免同批 upsert 重复命中。
 	seenTrackCredits := make(map[[4]string]bool)
+	partsByTarget := map[string]map[string][]string{}
+	partRows, err := tx.QueryContext(ctx, `SELECT p.target_id::text,p.raw,p.parts FROM local_credit_parts p JOIN release_auto_values a ON a.operation_id=p.operation_id AND a.release_id=p.target_id AND a.field='album_artist' WHERE a.release_id=ANY($1::uuid[])
+ UNION ALL SELECT p.target_id::text,p.raw,p.parts FROM media m JOIN tracks t ON t.medium_id=m.id JOIN track_auto_values a ON a.track_id=t.id AND a.field='artist' JOIN local_credit_parts p ON p.operation_id=a.operation_id AND p.target_id=t.id WHERE m.release_id=ANY($1::uuid[]) ORDER BY 1,2`, ids)
+	if err != nil {
+		return nil, err
+	}
+	for partRows.Next() {
+		var id, name string
+		var raw []byte
+		if err := partRows.Scan(&id, &name, &raw); err != nil {
+			partRows.Close()
+			return nil, err
+		}
+		var parts []string
+		if err := json.Unmarshal(raw, &parts); err != nil {
+			partRows.Close()
+			return nil, err
+		}
+		if partsByTarget[id] == nil {
+			partsByTarget[id] = map[string][]string{}
+		}
+		partsByTarget[id][name] = parts
+	}
+	err = partRows.Err()
+	partRows.Close()
+	if err != nil {
+		return nil, err
+	}
 	add := func(releaseID, trackID, role, raw, layer string) error {
 		if !nonempty(raw) {
 			return nil
 		}
 		names := metadata.CanonicalArtistNames(raw)
+		if layer == "auto" {
+			id := trackID
+			if id == "" {
+				id = releaseID
+			}
+			splits := partsByTarget[id]
+			if parts, ok := splits[raw]; ok {
+				names = parts
+			} else if len(splits) > 0 {
+				var effective []string
+				for _, name := range names {
+					if parts, ok := splits[name]; ok {
+						effective = append(effective, parts...)
+					} else {
+						effective = append(effective, name)
+					}
+				}
+				names = effective
+			}
+		}
 		if len(names) > 100 {
 			return fmt.Errorf("artist subject exceeds name budget")
 		}

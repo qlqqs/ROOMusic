@@ -23,7 +23,7 @@ type CurationArtistCredits struct {
 	Tracks                       map[string][]CurationArtistCredit
 }
 
-// LoadCurationArtistCredits 读取可用于匹配的原署名和当前身份，自动层不参与取证。
+// LoadCurationArtistCredits 读取原署名、已逐字核准的本地分段及其当前身份。外部自动值不参与取证。
 func LoadCurationArtistCredits(ctx context.Context, q Queryer, releaseID string) (CurationArtistCredits, error) {
 	if db, ok := q.(ReadTransactionBeginner); ok {
 		return readWithLocalJITOff(ctx, db, func(tx *sql.Tx) (CurationArtistCredits, error) {
@@ -36,12 +36,14 @@ func LoadCurationArtistCredits(ctx context.Context, q Queryer, releaseID string)
 	rows, err := q.QueryContext(ctx, `WITH scoped AS (
  SELECT c.track_id,c.role,c.name_id,c.position FROM artist_credits c
  WHERE c.release_id=$1 AND c.layer=CASE WHEN EXISTS(
- SELECT 1 FROM release_corrections WHERE release_id=$1 AND field='album_artist') THEN 'correction' ELSE 'scan' END
+ SELECT 1 FROM release_corrections WHERE release_id=$1 AND field='album_artist') THEN 'correction' WHEN EXISTS (SELECT FROM release_auto_values a JOIN local_credit_parts p
+ ON p.operation_id=a.operation_id AND p.target_id=a.release_id WHERE a.release_id=$1 AND a.field='album_artist') THEN 'auto' ELSE 'scan' END
  UNION ALL
  SELECT c.track_id,c.role,c.name_id,c.position FROM media m JOIN tracks t ON t.medium_id=m.id
  JOIN artist_credits c ON c.track_id=t.id WHERE m.release_id=$1 AND t.source_status='present' AND c.role IN ('track_artist','composer','performer','conductor')
  AND c.layer=CASE WHEN c.role<>'track_artist' THEN 'scan' WHEN EXISTS(SELECT 1 FROM track_corrections WHERE track_id=t.id AND field='artist')
- THEN 'correction' ELSE 'scan' END)
+ THEN 'correction' WHEN EXISTS (SELECT FROM track_auto_values a JOIN local_credit_parts p
+ ON p.operation_id=a.operation_id AND p.target_id=a.track_id WHERE a.track_id=t.id AND a.field='artist') THEN 'auto' ELSE 'scan' END)
  SELECT COALESCE(c.track_id::text,''),c.role,c.position,n.spelling,COALESCE(o.redirect_artist_id,route.artist_id)::text
  FROM scoped c JOIN artist_names n ON n.id=c.name_id JOIN artist_name_keys k ON k.id=n.key_id
  LEFT JOIN artist_assignment_overrides ot ON ot.track_id=c.track_id AND ot.key_id=k.id

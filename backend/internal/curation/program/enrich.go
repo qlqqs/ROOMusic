@@ -74,15 +74,17 @@ func externalLabel(labels []sources.Label, number bool) string {
 
 func missingFields(e catalog.CurationEvidence, m sources.Release) map[string]catalog.CorrectionIntent {
 	fields := map[string]catalog.CorrectionIntent{}
-	vacant := func(name string) bool { return !e.Corrected[name] && !e.Automatic[name] }
+	vacant := func(name string) bool {
+		return !e.Corrected[name] && (!e.Automatic[name] || name == "title" && e.LocalTitle != "" || name == "album_artist" && e.LocalArtist != "")
+	}
 	add := func(name, value string, gap bool) {
 		value = metadata.NormalizeValue(value)
 		if gap && vacant(name) && value != "" && len(value) <= metadata.MaxTextBytes && strings.IndexFunc(value, unicode.IsControl) < 0 {
 			fields[name] = catalog.CorrectionIntent{Mode: catalog.CorrectionSet, Value: value}
 		}
 	}
-	add("title", m.Title, e.TitlePlaceholder)
-	add("album_artist", credits(m.Artists), e.AlbumArtist == "")
+	add("title", m.Title, e.TitlePlaceholder || e.LocalTitle != "")
+	add("album_artist", credits(m.Artists), e.AlbumArtist == "" || e.LocalArtist != "")
 	add("label", externalLabel(m.Labels, false), e.Label == "")
 	add("catalog_number", externalLabel(m.Labels, true), e.CatalogNumber == "" && !e.CatalogNumberIsMCN)
 	add("barcode", m.Barcode, len(e.Barcodes) == 0)

@@ -114,8 +114,12 @@ func checkWrite(ctx context.Context, tx *sql.Tx, spec operations.Spec, confirmed
 
 func checkClaimedTarget(ctx context.Context, tx *sql.Tx, run *ModelRun, targetID, column, kind string) error {
 	var current PendingItem
+	predicate := column + "=$2"
+	if run.TaskKind == "patrol_local" && column == "target_id" {
+		predicate = "(" + predicate + " OR (kind='local_cleanup' AND (evidence->'release_ids') ? $2::uuid::text))"
+	}
 	err := tx.QueryRowContext(ctx, `SELECT input_digest,COALESCE(identity_digest,'') FROM curation_pending_items
- WHERE id=$1 AND `+column+`=$2 AND conversation_id=$3 AND status='in_progress' AND ($4='' OR kind=$4) FOR SHARE`,
+ WHERE id=$1 AND `+predicate+` AND conversation_id=$3 AND status='in_progress' AND ($4='' OR kind=$4) FOR SHARE`,
 		run.PendingItemID, targetID, run.ConversationID, kind).Scan(&current.InputDigest, &current.IdentityDigest)
 	if err == sql.ErrNoRows {
 		return operations.Conflict("out_of_batch", "待定项不属于本次运行")

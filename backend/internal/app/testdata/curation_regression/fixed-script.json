@@ -77,7 +77,7 @@
     },
     {
       "when": {
-        "last_user_contains": "µåÎí",
+        "last_user_contains": "legacy-many/01.mp3",
         "tool_available": "submit_local_cleanup"
       },
       "reply": {
@@ -86,24 +86,13 @@
             "name": "submit_local_cleanup",
             "arguments": {
               "item_id": "$current_item",
-              "title": "靛雾"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "when": {
-        "last_user_contains": "È¥µåÎí",
-        "tool_available": "submit_local_cleanup"
-      },
-      "reply": {
-        "tool_calls": [
-          {
-            "name": "submit_local_cleanup",
-            "arguments": {
-              "item_id": "$current_item",
-              "title": "去靛雾"
+              "decision": "apply",
+              "encodings": [
+                {
+                  "release_id": "$release:legacy-many/01.mp3",
+                  "encoding": "GBK"
+                }
+              ]
             }
           }
         ]
@@ -120,7 +109,14 @@
             "name": "submit_local_cleanup",
             "arguments": {
               "item_id": "$current_item",
-              "title": "微雨塘"
+              "decision": "apply",
+              "texts": [
+                {
+                  "target_id": "$release:embedded-artist/01.flac",
+                  "field": "title",
+                  "value": "微雨塘"
+                }
+              ]
             }
           }
         ]

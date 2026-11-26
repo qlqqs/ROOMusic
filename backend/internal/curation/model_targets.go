@@ -8,7 +8,7 @@ import (
 
 // 领取和重审使用同一组互斥键。巡检块可能含多个艺人，发行并入涉及两张发行。
 const modelItemsSQL = `WITH items AS (
- SELECT id,target_id,artist_id,kind,
+ SELECT id,target_id,artist_id,kind,evidence->'release_ids' AS members,
  CASE WHEN kind='release_merge' THEN candidates->0->>'release_id' END AS merge_release,
  CASE WHEN kind='verify_artist_merge' THEN evidence->>'artist_a' END AS artist_a,
  CASE WHEN kind='verify_artist_merge' THEN evidence->>'artist_b' END AS artist_b
@@ -16,6 +16,7 @@ const modelItemsSQL = `WITH items AS (
 
 const modelTargetKeysSQL = `, releases_for_item AS (
  SELECT id,target_id AS release_id FROM items WHERE target_id IS NOT NULL
+ UNION SELECT p.id,v::uuid FROM items p CROSS JOIN LATERAL jsonb_array_elements_text(p.members) v WHERE p.kind='local_cleanup'
  UNION SELECT p.id,r.id FROM items p JOIN releases r ON r.id::text=p.merge_release
  UNION SELECT n.pending_id,i.release_id FROM items p JOIN curation_patrol_names n ON n.pending_id=p.id
  JOIN curation_patrol_inputs i ON i.name_id=n.id

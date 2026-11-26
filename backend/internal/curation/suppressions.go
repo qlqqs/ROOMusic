@@ -32,6 +32,39 @@ func (w *Writer) SuppressReleaseValue(ctx context.Context, tx *sql.Tx, releaseID
 func (w *Writer) SuppressTrackValue(ctx context.Context, tx *sql.Tx, trackID, field string, value catalog.CorrectionIntent, revertID, actorID string) error {
 	return suppressField(ctx, tx, "track", trackID, field, value, revertID, actorID)
 }
+func (w *Writer) SuppressCreditParts(ctx context.Context, tx *sql.Tx, owner, target, id, field, revertID, actor string) (bool, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT parts,joins FROM local_credit_parts WHERE operation_id=$1 AND target_id=$2`, owner, id)
+	if err != nil {
+		return false, err
+	}
+	var splits []LocalSplit
+	for rows.Next() {
+		var split LocalSplit
+		var parts, joins []byte
+		if err = rows.Scan(&parts, &joins); err == nil {
+			err = json.Unmarshal(parts, &split.Parts)
+		}
+		if err == nil {
+			err = json.Unmarshal(joins, &split.Joins)
+		}
+		if err != nil {
+			rows.Close()
+			return false, err
+		}
+		splits = append(splits, split)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return false, err
+	}
+	for _, split := range splits {
+		if err := insertSuppression(ctx, tx, target, id, "credit_parts_"+field, split.splitKey(), []any{split.Parts, split.Joins}, revertID, actor); err != nil {
+			return false, err
+		}
+	}
+	return len(splits) > 0, nil
+}
 func suppressField(ctx context.Context, tx *sql.Tx, target, id, field string, value catalog.CorrectionIntent, revertID, actorID string) error {
 	raw, hash, err := governance.AutoValueKey(field, value)
 	if err != nil {

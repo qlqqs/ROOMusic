@@ -220,3 +220,28 @@ func AlignDiscStagingScopes(ctx context.Context, database Execer, scanID, rootID
     WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.organization_scope='directory:'||p.parent`, scanID, rootID)
 	return err
 }
+
+// AlignModelStagingScopes 固定本轮两次归组共同使用的分配。文件变化或人工结构决定使整份分配失效。
+func AlignModelStagingScopes(ctx context.Context, database Execer, scanID, rootID string) error {
+	_, err := database.ExecContext(ctx, `WITH plans AS (
+ SELECT g.* FROM local_model_groupings g WHERE g.root_id=$2 AND NOT EXISTS(
+ SELECT FROM jsonb_to_recordset(g.assignments) AS f(path text,size bigint,modified bigint,cue_start integer,cue_end integer)
+ LEFT JOIN scan_observations s ON s.scan_run_id=$1 AND s.root_id=$2 AND s.relative_path=f.path
+ WHERE s.relative_path IS NULL OR s.withheld OR s.source_size IS DISTINCT FROM f.size OR (extract(epoch FROM s.source_modified_at)*1000000)::bigint IS DISTINCT FROM f.modified OR s.cue_index_frames IS DISTINCT FROM f.cue_start OR s.cue_end_frames IS DISTINCT FROM f.cue_end)
+ AND NOT EXISTS(SELECT FROM scan_observations s WHERE s.scan_run_id=$1 AND s.root_id=$2
+ AND COALESCE(NULLIF(regexp_replace(s.fingerprint_path,'(^|/)[^/]*$',''),''),'.')=ANY(g.directories)
+ AND NOT (s.relative_path=ANY(g.other_paths))
+ AND NOT EXISTS(SELECT FROM jsonb_array_elements(g.assignments) f WHERE s.relative_path IN (f->>'path',f->>'file')))
+ AND NOT EXISTS(SELECT FROM jsonb_array_elements(g.assignments) f JOIN tracks t ON t.source_root_id=g.root_id AND t.relative_path=f->>'path'
+ JOIN media m ON m.id=t.medium_id WHERE EXISTS(SELECT FROM release_merges x WHERE x.source_release_id=m.release_id OR x.target_release_id=m.release_id)
+ OR EXISTS(SELECT FROM operations o WHERE o.target_id=m.release_id AND o.operation_type IN ('release_merge','release_group_change') AND
+ ((o.origin->>'source') IS DISTINCT FROM 'curation' OR o.origin->>'review_decision'='human'))))
+ , positions AS (
+ SELECT DISTINCT ON (o.id) o.id,p.directory_key,f FROM plans p CROSS JOIN LATERAL jsonb_array_elements(p.assignments) f
+ JOIN scan_observations o ON o.scan_run_id=$1 AND o.root_id=$2 AND o.relative_path IN (f->>'path',f->>'file')
+ ORDER BY o.id,(o.relative_path=f->>'path') DESC,f->>'path')
+ UPDATE scan_observations o SET organization_scope='model:'||p.directory_key,
+ observation=o.observation||jsonb_build_object('model_group',p.f->>'album','model_disc',(p.f->>'disc')::int,'model_track',(p.f->>'track')::int)
+ FROM positions p WHERE o.id=p.id`, scanID, rootID)
+	return err
+}

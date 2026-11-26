@@ -72,8 +72,8 @@ func planTrackFields(e catalog.CurationEvidence, m MatchResult) []curation.Track
 				fields[name] = intent
 			}
 		}
-		add("title", value.title, t.TitlePlaceholder || t.TitleInferred)
-		add("artist", value.artist, t.ArtistPlaceholder)
+		add("title", value.title, t.TitlePlaceholder || t.TitleInferred || t.LocalTitle != "")
+		add("artist", value.artist, t.ArtistPlaceholder || t.LocalArtist != "")
 		if len(fields) > 0 {
 			requests = append(requests, curation.TrackRequest{ArtistCredit: artistCredits[id], ReleaseID: e.ID, TrackID: t.ID, OnlyEmpty: true, Fields: fields, ExpectedScan: map[string]json.RawMessage{"title": jsonValue(t.Title), "artist": jsonValue(t.Artist)}})
 		}

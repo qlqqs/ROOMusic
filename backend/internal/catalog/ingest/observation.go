@@ -17,6 +17,9 @@ import (
 type SourceObservation struct {
 	// 归组副本中的结构碟号，保留原始标签碟号供证据读取。
 	structureDisc         int
+	ModelGroup            string                       `json:"model_group,omitempty"`
+	ModelDisc             int                          `json:"model_disc,omitempty"`
+	ModelTrack            int                          `json:"model_track,omitempty"`
 	Format                string                       `json:"format,omitempty"`
 	ScanTags              *metadata.ScanTags           `json:"scan_tags,omitempty"`
 	Album                 string                       `json:"album,omitempty"`

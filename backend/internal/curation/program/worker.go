@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	LocalRuleVersion    int16 = 3
+	LocalRuleVersion    int16 = curation.LocalRuleVersion
 	MatchRuleVersion    int16 = 104
 	PatrolPromptVersion int16 = 1
 
@@ -25,6 +25,7 @@ const (
 )
 
 type Options struct {
+	LocalModelConfigured                         func(context.Context) (bool, error)
 	CachedReleaseCredits                         func(string) (*sources.Release, error)
 	CanonicalNames                               func(ctx context.Context, releaseID, trackID string) (SearchNames, error)
 	Fingerprints                                 Fingerprints

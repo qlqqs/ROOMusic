@@ -19,16 +19,18 @@ type queueItem struct {
 // 发行投影保存排序依据，各媒体主题共享这些依据并独立消费自己的首次机会。
 const queueRankSQL = curation.QueueRankSQL
 
+const localDependencySQL = `NOT EXISTS(SELECT FROM curation_pending_items p WHERE p.kind='local_cleanup' AND p.status IN ('waiting_model','waiting_route','in_progress') AND (p.evidence->'release_ids') ? r.target_id::text)`
+
 const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (SELECT id FROM curation_eligible_releases),
  candidates AS (
  SELECT s.target_id,s.queue_release_id,r.queue_identity,r.generation,s.manual_requested_at,s.patrol_revision,
  ` + queueRankSQL + ` rank,r.queue_gap,r.queue_artist_unlinked,r.queue_added_at,
  (s.queue_release_id IS NULL OR stable.id IS NOT NULL) stable,
- (s.subject<>'release' OR NOT EXISTS (SELECT FROM curation_work_states fp
+ (s.subject<>'release' OR ((NOT $3::boolean OR ` + localDependencySQL + `) AND NOT EXISTS (SELECT FROM curation_work_states fp
  WHERE fp.subject='fingerprint' AND fp.needs_work AND fp.queue_release_id=r.target_id
  AND fp.generation=r.generation AND fp.input_digest=r.queue_identity
  AND EXISTS (SELECT FROM tracks t JOIN media m ON m.id=t.medium_id WHERE t.id=fp.target_id
- AND t.source_status='present' AND m.release_id=r.target_id))) dependencies_ready
+ AND t.source_status='present' AND m.release_id=r.target_id)))) dependencies_ready
  FROM curation_work_states s LEFT JOIN curation_work_states r ON r.subject='release' AND r.target_id=s.queue_release_id
  CROSS JOIN curation_settings settings
  LEFT JOIN visible v ON v.id=s.queue_release_id
@@ -41,13 +43,24 @@ const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (SELECT id FROM cur
  AND (s.subject<>'fingerprint' OR (s.generation=r.generation AND s.input_digest=r.queue_identity))
  ) `
 
+func (w *Worker) localConfigured(ctx context.Context, subject string) (bool, error) {
+	if subject != "release" || w.opts.LocalModelConfigured == nil {
+		return false, nil
+	}
+	return w.opts.LocalModelConfigured(ctx)
+}
+
 func (w *Worker) nextQueueItem(ctx context.Context, subject string) (queueItem, bool, error) {
 	item := queueItem{Subject: subject}
-	err := w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT target_id,COALESCE(queue_release_id::text,''),
+	configured, err := w.localConfigured(ctx, subject)
+	if err != nil {
+		return item, false, err
+	}
+	err = w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT target_id,COALESCE(queue_release_id::text,''),
  rank,COALESCE(generation,0),COALESCE(queue_identity,''),manual_requested_at,patrol_revision FROM candidates WHERE stable AND dependencies_ready
  ORDER BY rank,CASE WHEN rank=3 THEN queue_gap END DESC,
  CASE WHEN rank=4 THEN queue_artist_unlinked END DESC NULLS LAST,queue_added_at DESC NULLS LAST,target_id LIMIT 1`,
-		subject, w.opts.Now()).Scan(&item.TargetID, &item.ReleaseID, &item.Rank, &item.Generation, &item.InputDigest, &item.ManualRequestedAt, &item.PatrolRevision)
+		subject, w.opts.Now(), configured).Scan(&item.TargetID, &item.ReleaseID, &item.Rank, &item.Generation, &item.InputDigest, &item.ManualRequestedAt, &item.PatrolRevision)
 	if errors.Is(err, sql.ErrNoRows) {
 		return item, false, nil
 	}
@@ -55,13 +68,21 @@ func (w *Worker) nextQueueItem(ctx context.Context, subject string) (queueItem, 
 }
 
 func (w *Worker) queueCounts(ctx context.Context, subject string) (remaining, ready, stable int64, err error) {
-	err = w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT count(*),count(*) FILTER (WHERE stable AND dependencies_ready),count(*) FILTER (WHERE stable) FROM candidates`, subject, w.opts.Now()).Scan(&remaining, &ready, &stable)
+	configured, err := w.localConfigured(ctx, subject)
+	if err != nil {
+		return
+	}
+	err = w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT count(*),count(*) FILTER (WHERE stable AND dependencies_ready),count(*) FILTER (WHERE stable) FROM candidates`, subject, w.opts.Now(), configured).Scan(&remaining, &ready, &stable)
 	return
 }
 
 func (w *Worker) hasHigherIdentity(ctx context.Context, now time.Time) (bool, error) {
 	var high bool
-	err := w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT EXISTS (SELECT FROM candidates WHERE stable AND rank<4)`, "release", now).Scan(&high)
+	configured, err := w.localConfigured(ctx, "release")
+	if err != nil {
+		return false, err
+	}
+	err = w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT EXISTS (SELECT FROM candidates WHERE stable AND dependencies_ready AND rank<4)`, "release", now, configured).Scan(&high)
 	return high, err
 }
 
