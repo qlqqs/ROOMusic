@@ -366,7 +366,13 @@ func Test真实曲库队列试用(t *testing.T) {
 		}
 		if time.Now().After(nextLog) {
 			requests, _, statuses := transport.snapshot()
-			t.Logf("%s 耗时 %.0fs，已处理 %d/%d，出站 %d，HTTP %v，待模型 %d，运行中 %d", mode, time.Since(start).Seconds(), p.Releases.Processed, p.Releases.Total, len(requests), statuses, p.Model.Items.WaitingModel, p.Model.Items.InProgress)
+			unavailableReason := ""
+			if p.Model.UnavailableReason != nil {
+				unavailableReason = *p.Model.UnavailableReason
+			}
+			t.Logf("%s 耗时 %.0fs，已处理 %d/%d，出站 %d，HTTP %v，待模型 %d，运行中 %d，模型状态 %q，不可用原因 %q",
+				mode, time.Since(start).Seconds(), p.Releases.Processed, p.Releases.Total, len(requests), statuses,
+				p.Model.Items.WaitingModel, p.Model.Items.InProgress, p.Model.State, unavailableReason)
 			nextLog = time.Now().Add(20 * time.Second)
 		}
 		time.Sleep(500 * time.Millisecond)
