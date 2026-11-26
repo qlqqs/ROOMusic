@@ -170,6 +170,9 @@ func (s script) reply(t turn) reply {
 		}
 	}
 	if t.curation != "" {
+		if slices.Contains(t.tools, "submit_patrol") || slices.Contains(t.tools, "submit_local_cleanup") {
+			return patrolLocalReply(t)
+		}
 		if response := s.curationReply(t); response.Text != "" || len(response.Calls) > 0 {
 			return response
 		}
@@ -184,6 +187,35 @@ func (s script) reply(t turn) reply {
 		}
 	}
 	return reply{Text: "这是 ROOMusic 外部接口 mock 的合成回复。"}
+}
+
+func patrolLocalReply(t turn) reply {
+	var items []struct {
+		ID       string `json:"item_id"`
+		Kind     string
+		Evidence struct {
+			Kind  string
+			Names []struct{ ID, Name string }
+		}
+	}
+	// 默认 mock 不猜测身份和本地片段，可以用显式脚本指定结果。
+	if t.result != "" || json.Unmarshal([]byte(t.curation), &items) != nil || len(items) != 1 {
+		return reply{Text: "合成整理已结束。"}
+	}
+	item := items[0]
+	if item.Kind == "name_patrol" && slices.Contains(t.tools, "submit_patrol") {
+		results := []object{}
+		if item.Evidence.Kind == "artist" {
+			for _, name := range item.Evidence.Names {
+				results = append(results, object{"id": name.ID, "canonical": name.Name + " | ", "confidence": "low"})
+			}
+		}
+		return reply{Calls: []call{{"submit_patrol", object{"item_id": item.ID, "results": results, "issues": []object{}}}}}
+	}
+	if item.Kind == "local_cleanup" && slices.Contains(t.tools, "submit_local_cleanup") {
+		return reply{Calls: []call{{"submit_local_cleanup", object{"item_id": item.ID}}}}
+	}
+	return reply{Text: "合成整理已结束。"}
 }
 
 type pendingItem struct {

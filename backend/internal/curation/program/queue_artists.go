@@ -118,7 +118,7 @@ func (w *Worker) projectArtistPage(ctx context.Context, tx *sql.Tx, pageSQL stri
 	for _, e := range page {
 		state := states[e.ID]
 		rank := min(e.ImageRank, e.BioRank)
-		want := rank < catalog.ArtistMediaLicensedRank
+		want := rank < catalog.ArtistMediaLicensedRank || e.needsPrimaryName(providers)
 		if e.NoLink {
 			want = e.hasCredits && (providers.namedPlugin && rank < catalog.ArtistMediaPluginRank ||
 				providers.active["web_search"] && e.resolution() == "")

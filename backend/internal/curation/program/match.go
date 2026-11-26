@@ -173,6 +173,9 @@ func PendingEvidence(e catalog.CurationEvidence) map[string]any {
 }
 
 func pendingMatchEvidence(e catalog.CurationEvidence, method string) map[string]any {
+	if method == "search" || method == "" {
+		e = curation.LocalSearchEvidence(e)
+	}
 	type track struct {
 		Authenticity     map[string]metadata.Authenticity `json:"authenticity"`
 		ID               string                           `json:"id"`

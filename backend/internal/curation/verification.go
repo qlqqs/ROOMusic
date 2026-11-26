@@ -36,7 +36,8 @@ func QueueVerification(ctx context.Context, tx *sql.Tx, kind, digest string, v V
 	if kind != "verify_name" && kind != "verify_artist_merge" || !uuid.Valid(v.ReleaseID) || digest == "" {
 		return operations.Invalid("invalid_input", "核对项种类或目标无效")
 	}
-	if v.Before == "" || v.After == "" || normalizedName(v.Before) == normalizedName(v.After) {
+	// 文字纠正跳过规范化后相同的写法；不同本地身份即使仅有标点之别，也交给合并佐证规则。
+	if v.Before == "" || v.After == "" || v.Before == v.After || (kind == "verify_name" && normalizedName(v.Before) == normalizedName(v.After)) {
 		return nil
 	}
 	if kind == "verify_artist_merge" && (!uuid.Valid(v.ArtistA) || !uuid.Valid(v.ArtistB) || v.ArtistA == v.ArtistB) {
@@ -163,7 +164,7 @@ func creditCandidate(ctx context.Context, q operations.Queryer, item PendingItem
 	if at < 0 || at >= len(group) || group[at].ArtistID != p.Local.ArtistID || group[at].Name != p.Local.Name || MusicBrainzSpecialArtist(p.External.ArtistID) {
 		return v, staleVerification()
 	}
-	return VerificationCandidate{ReleaseID: p.ReleaseID, TrackID: p.Local.TrackID, Field: "artist_link", Before: p.Local.Name, After: p.External.CreditName, ArtistA: p.Local.ArtistID, ExternalID: p.External.ArtistID, OperationID: p.Basis.OperationID}, nil
+	return VerificationCandidate{ReleaseID: p.ReleaseID, TrackID: p.Local.TrackID, Field: "artist_link", Before: p.Local.Name, After: p.External.CreditName, ExternalValue: p.External.PrimaryName, ArtistA: p.Local.ArtistID, ExternalID: p.External.ArtistID, OperationID: p.Basis.OperationID}, nil
 }
 
 func (w *Writer) VerificationPlan(ctx context.Context, item PendingItem, in VerificationInput, nameProof *VerificationCandidate) (VerificationPlan, error) {
@@ -481,7 +482,7 @@ func (w *Writer) applyVerification(ctx context.Context, write verificationWrite,
 	source := p.source(model)
 	switch item.Kind {
 	case "verify_artist_credit":
-		out, err := w.ApplyLinks(ctx, LinkRequest{verification: &write, RequireAll: true, ReleaseID: item.TargetID, Source: source, ExternalSource: "musicbrainz", Method: p.Method, Confidence: "reviewed", BatchID: batch, Key: write.key, ConversationID: item.ConversationID, ConfirmedBy: write.actor, Links: []LinkIntent{{ObjectType: "artist", ObjectID: v.ArtistA, ExternalID: v.ExternalID}}})
+		out, err := w.ApplyLinks(ctx, LinkRequest{verification: &write, RequireAll: true, ReleaseID: item.TargetID, Source: source, ExternalSource: "musicbrainz", Method: p.Method, Confidence: "reviewed", BatchID: batch, Key: write.key, ConversationID: item.ConversationID, ConfirmedBy: write.actor, Links: []LinkIntent{{ObjectType: "artist", ObjectID: v.ArtistA, ExternalID: v.ExternalID, ArtistPrimaryName: v.ExternalValue}}})
 		return out.OperationID, err
 	case "verify_name":
 		req := Request{verification: &write, ReleaseID: item.TargetID, ExpectedRevision: p.Revision, Fields: map[string]catalog.CorrectionIntent{v.Field: {Mode: catalog.CorrectionSet, Value: v.After}}, Source: source, BatchID: batch, Key: write.key, ConversationID: item.ConversationID}

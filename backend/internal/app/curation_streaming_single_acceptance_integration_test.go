@@ -28,19 +28,22 @@ func TestPostgreSQLCurationStreamingSingleEnrichment(t *testing.T) {
 			if scanSingles {
 				length = 240000 // writeSyntheticTrack 生成的 FLAC 时长为 240 秒。
 			}
-			official := fmt.Sprintf(`{"id":%q,"title":%q,"length":%d,"artist-credit":[{"name":%q}]}`,
-				recording, title, length, artist)
+			official := fmt.Sprintf(`{"id":%q,"title":%q,"length":%d,"isrcs":[%q],"artist-credit":[{"name":%q}]}`,
+				recording, title, length, code, artist)
 			mux := http.NewServeMux()
 			if method == "isrc" {
-				mux.HandleFunc("GET /mb/isrc/"+code, func(w http.ResponseWriter, r *http.Request) {
-					fmt.Fprintf(w, `{"isrc":%q,"recordings":[%s]}`, code, official)
+				mux.HandleFunc("GET /mb/recording", func(w http.ResponseWriter, r *http.Request) {
+					switch q := r.URL.Query().Get("query"); q {
+					case "isrc:" + code:
+						fmt.Fprintf(w, `{"count":1,"offset":0,"recordings":[%s]}`, official)
+					case "isrc:" + otherCode:
+						fmt.Fprintf(w, `{"count":1,"offset":0,"recordings":[{"id":%q,"title":%q,"length":%d,"isrcs":[%q],"artist-credit":[{"name":%q}]}]}`,
+							otherRecording, otherTitle, length, otherCode, otherArtist)
+					default:
+						t.Errorf("意外的录音搜索 %s", q)
+						http.NotFound(w, r)
+					}
 				})
-				if scanSingles {
-					mux.HandleFunc("GET /mb/isrc/"+otherCode, func(w http.ResponseWriter, r *http.Request) {
-						fmt.Fprintf(w, `{"isrc":%q,"recordings":[{"id":%q,"title":%q,"length":%d,"artist-credit":[{"name":%q}]}]}`,
-							otherCode, otherRecording, otherTitle, length, otherArtist)
-					})
-				}
 			} else {
 				mux.HandleFunc("POST /v2/lookup", func(w http.ResponseWriter, r *http.Request) {
 					form := b3LookupForm(t, r)
@@ -69,7 +72,7 @@ func TestPostgreSQLCurationStreamingSingleEnrichment(t *testing.T) {
 					"TITLE="+title, "ARTIST="+artist, "ISRC="+code)
 				writeSyntheticTrack(t, filepath.Join(app.allowedRoot, "Singles", "mist.flac"), 62,
 					"TITLE="+otherTitle, "ARTIST="+otherArtist, "ISRC="+otherCode)
-				runScan(t, app, &admin)
+				scanAndConfirmCuration(t, app, &admin)
 				b3RequireCount(t, app, 2, `SELECT count(*) FROM releases WHERE source_root_id=$1 AND candidate_kind='loose_unknown'`, root)
 				track = programString(t, app, `SELECT id FROM tracks WHERE source_root_id=$1 AND relative_path='Singles/lamp.flac'`, root)
 				otherTrack = programString(t, app, `SELECT id FROM tracks WHERE source_root_id=$1 AND relative_path='Singles/mist.flac'`, root)

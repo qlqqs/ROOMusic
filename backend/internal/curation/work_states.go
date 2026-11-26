@@ -10,6 +10,7 @@ import (
 )
 
 type WorkState struct {
+	PatrolRevision                                          int64
 	Subject, TargetID                                       string
 	RuleVersion                                             int16
 	LocalRuleVersion, MatchRuleVersion, RequeryMatchVersion int16
@@ -55,7 +56,7 @@ type Execer interface {
 
 func LoadWorkStates(ctx context.Context, q operations.Queryer, subject string, targetIDs []string) (map[string]WorkState, error) {
 	rows, err := q.QueryContext(ctx, `SELECT subject,target_id::text,rule_version,input_digest,status,attempts,generation,retry_count,next_attempt_at,result,updated_at,
- COALESCE(local_rule_version,0),COALESCE(match_rule_version,0),COALESCE(requery_match_version,0),COALESCE(identity_digest,''),COALESCE(gap_digest,''),manual_requested_at
+ COALESCE(local_rule_version,0),COALESCE(match_rule_version,0),COALESCE(requery_match_version,0),COALESCE(identity_digest,''),COALESCE(gap_digest,''),manual_requested_at,patrol_revision
  FROM curation_work_states WHERE subject=$1 AND target_id=ANY($2::uuid[])`, subject, targetIDs)
 	if err != nil {
 		return nil, err
@@ -64,7 +65,7 @@ func LoadWorkStates(ctx context.Context, q operations.Queryer, subject string, t
 	states := make(map[string]WorkState)
 	for rows.Next() {
 		var s WorkState
-		if err := rows.Scan(&s.Subject, &s.TargetID, &s.RuleVersion, &s.InputDigest, &s.Status, &s.Attempts, &s.Generation, &s.RetryCount, &s.NextAttemptAt, &s.Result, &s.UpdatedAt, &s.LocalRuleVersion, &s.MatchRuleVersion, &s.RequeryMatchVersion, &s.IdentityDigest, &s.GapDigest, &s.ManualRequestedAt); err != nil {
+		if err := rows.Scan(&s.Subject, &s.TargetID, &s.RuleVersion, &s.InputDigest, &s.Status, &s.Attempts, &s.Generation, &s.RetryCount, &s.NextAttemptAt, &s.Result, &s.UpdatedAt, &s.LocalRuleVersion, &s.MatchRuleVersion, &s.RequeryMatchVersion, &s.IdentityDigest, &s.GapDigest, &s.ManualRequestedAt, &s.PatrolRevision); err != nil {
 			return nil, err
 		}
 		states[s.TargetID] = s
@@ -114,7 +115,7 @@ func UpsertPendingItem(ctx context.Context, q Execer, item PendingItem) error {
  WHERE NOT EXISTS (SELECT FROM curation_pending_items old WHERE old.target_type='release' AND old.target_id=$1 AND old.kind=$2
  AND old.resolution='suggestion_recorded' AND COALESCE(old.identity_digest,old.input_digest)=COALESCE(NULLIF($9,''),$4)
  AND old.candidates=COALESCE($6::jsonb,'[]') AND old.conflicts=COALESCE($7::jsonb,'[]'))
- ON CONFLICT(target_type,target_id,kind) WHERE status <> 'resolved' AND kind NOT IN ('verify_artist_credit','verify_artist_merge','verify_name')`
+ ON CONFLICT(target_type,target_id,kind) WHERE status <> 'resolved' AND kind NOT IN ('verify_artist_credit','verify_artist_merge','verify_name','name_patrol')`
 	if item.TargetType == "artist" {
 		target, insert = item.ArtistID, `INSERT INTO curation_pending_items AS p(target_type,artist_id,kind,status,rule_version,input_digest,evidence,candidates,conflicts,match_rule_version,identity_digest,route)
  SELECT 'artist',$1,$2,CASE WHEN $10 IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,$3,$4,$5,COALESCE($6::jsonb,'[]'),COALESCE($7::jsonb,'[]'),NULLIF($8::smallint,0),NULLIF($9,''),NULLIF($10,'')

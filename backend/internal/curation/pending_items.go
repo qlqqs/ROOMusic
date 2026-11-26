@@ -79,6 +79,10 @@ func (w *Writer) ClaimModelKind(ctx context.Context, conversation string, now ti
 	// 按同一发行或艺人分组。只有自查和联网需要艺人投影。
 	prefix := "WITH visible AS (" + catalog.VisibleReleaseIDsSQL + ")"
 	group, albums := "p.kind", "0"
+	if kind == "patrol_local" {
+		// 同目录的本地整理共享一次会话。名录块已经由巡检按艺人或专辑分好。
+		group = "CASE WHEN p.kind='local_cleanup' THEN p.evidence->>'directory_key' ELSE p.id::text END"
+	}
 	if kind == "lookup" || kind == "web" {
 		prefix += `, credits AS (` + ArtistReleaseCreditsSQL + ` SELECT * FROM credits),
  release_artist AS (SELECT release_id,min(artist_id::text) AS artist FROM credits GROUP BY release_id HAVING count(DISTINCT artist_id)=1)`

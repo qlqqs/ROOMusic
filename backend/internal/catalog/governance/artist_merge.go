@@ -165,7 +165,8 @@ func (g *ArtistGovernance) CurationMergeExecutor(a, b string, check func(context
 		}
 		var target string
 		err = tx.QueryRowContext(ctx, `SELECT a.id::text FROM artists a WHERE a.id IN ($1,$2)
- ORDER BY (SELECT count(*) FROM artist_effective_credits c WHERE c.artist_id=a.id) DESC,a.id LIMIT 1`, a, b).Scan(&target)
+ ORDER BY EXISTS(SELECT FROM artist_overrides o WHERE o.artist_id=a.id AND o.display_name IS NOT NULL) DESC,
+ (SELECT count(*) FROM artist_effective_credits c WHERE c.artist_id=a.id) DESC,a.id LIMIT 1`, a, b).Scan(&target)
 		if err != nil {
 			return operations.Outcome{}, err
 		}

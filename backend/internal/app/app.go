@@ -536,11 +536,14 @@ func Degraded(frontend fs.FS, logger *slog.Logger) http.Handler {
 	return httpserver.Middleware(logger, mux)
 }
 
-// artistResolutionAdapter 将收藏owner的窄事务端口注入治理，不扩大包依赖。
+// artistResolutionAdapter 在身份变更事务内刷新收藏并收尾已并入艺人的建议。
 type artistResolutionAdapter struct{}
 
 func (artistResolutionAdapter) RefreshArtistResolution(ctx context.Context, tx *sql.Tx, mapping map[string]string) error {
-	return personal.RefreshArtistResolution(ctx, tx, mapping)
+	if err := personal.RefreshArtistResolution(ctx, tx, mapping); err != nil {
+		return err
+	}
+	return curation.SupersedeMergedArtistSuggestions(ctx, tx, mapping)
 }
 
 // ShutdownSteward 在数据库关闭前取消运行并等待内容落库。

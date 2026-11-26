@@ -40,6 +40,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE "+base+"/sources/{id}/keys/{name}", h.admin(h.clearSourceKey))
 	mux.HandleFunc("GET "+base+"/classifications", h.admin(h.classifications))
 	mux.HandleFunc("POST "+base+"/releases/{id}/recheck", h.admin(h.recheckUnlisted))
+	mux.HandleFunc("POST "+base+"/repatrol", h.admin(h.repatrol))
 	mux.HandleFunc("GET "+base+"/progress", h.admin(h.progress))
 	mux.HandleFunc("GET "+base+"/exceptions", h.admin(h.listExceptions))
 	mux.HandleFunc("POST "+base+"/exceptions/{id}/accept", h.admin(h.acceptException))
@@ -96,6 +97,14 @@ func decode(w http.ResponseWriter, r *http.Request, body any) bool {
 		return false
 	}
 	return true
+}
+
+func (h *Handlers) repatrol(w http.ResponseWriter, r *http.Request, _ identity.User) {
+	if err := h.writer.Repatrol(r.Context()); err != nil {
+		h.respond(w, r, nil, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func (h *Handlers) recheckUnlisted(w http.ResponseWriter, r *http.Request, _ identity.User) {

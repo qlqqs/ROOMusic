@@ -11,6 +11,7 @@ import (
 )
 
 type queueItem struct {
+	PatrolRevision                            int64
 	Subject, TargetID, ReleaseID, InputDigest string
 	Rank, Generation                          int
 	ManualRequestedAt                         *time.Time
@@ -21,7 +22,7 @@ const queueRankSQL = curation.QueueRankSQL
 
 const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (` + catalog.VisibleReleaseIDsSQL + `),
  candidates AS (
- SELECT s.target_id,s.queue_release_id,r.queue_identity,r.generation,s.manual_requested_at,
+ SELECT s.target_id,s.queue_release_id,r.queue_identity,r.generation,s.manual_requested_at,s.patrol_revision,
  ` + queueRankSQL + ` rank,r.queue_gap,r.queue_artist_unlinked,r.queue_added_at,
  (s.queue_release_id IS NULL OR stable.id IS NOT NULL) stable,
  (s.subject<>'release' OR NOT EXISTS (SELECT FROM curation_work_states fp
@@ -44,10 +45,10 @@ const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (` + catalog.Visibl
 func (w *Worker) nextQueueItem(ctx context.Context, subject string) (queueItem, bool, error) {
 	item := queueItem{Subject: subject}
 	err := w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT target_id,COALESCE(queue_release_id::text,''),
- rank,COALESCE(generation,0),COALESCE(queue_identity,''),manual_requested_at FROM candidates WHERE stable AND dependencies_ready
+ rank,COALESCE(generation,0),COALESCE(queue_identity,''),manual_requested_at,patrol_revision FROM candidates WHERE stable AND dependencies_ready
  ORDER BY rank,CASE WHEN rank=3 THEN queue_gap END DESC,
  CASE WHEN rank=4 THEN queue_artist_unlinked END DESC NULLS LAST,queue_added_at DESC NULLS LAST,target_id LIMIT 1`,
-		subject, w.opts.Now()).Scan(&item.TargetID, &item.ReleaseID, &item.Rank, &item.Generation, &item.InputDigest, &item.ManualRequestedAt)
+		subject, w.opts.Now()).Scan(&item.TargetID, &item.ReleaseID, &item.Rank, &item.Generation, &item.InputDigest, &item.ManualRequestedAt, &item.PatrolRevision)
 	if errors.Is(err, sql.ErrNoRows) {
 		return item, false, nil
 	}
@@ -70,8 +71,8 @@ func (w *Worker) acknowledgeQueueItem(ctx context.Context, item queueItem) error
 		return nil
 	}
 	_, err := w.db.ExecContext(ctx, `UPDATE curation_work_states SET needs_work=false,manual_requested_at=NULL
- WHERE subject=$1 AND target_id=$2 AND needs_work AND manual_requested_at IS NOT DISTINCT FROM $3::timestamptz`,
-		item.Subject, item.TargetID, item.ManualRequestedAt)
+ WHERE subject=$1 AND target_id=$2 AND needs_work AND manual_requested_at IS NOT DISTINCT FROM $3::timestamptz AND patrol_revision=$4`,
+		item.Subject, item.TargetID, item.ManualRequestedAt, item.PatrolRevision)
 	return err
 }
 

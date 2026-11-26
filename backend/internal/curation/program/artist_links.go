@@ -229,7 +229,13 @@ func (w *Worker) identifyArtists(ctx context.Context, local catalog.CurationArti
 			})
 		}
 	}
-	return consistentArtistLinks(links), proposals, nil
+	links = consistentArtistLinks(links)
+	for i, l := range links {
+		if a, ok := artists[l.ExternalID]; ok && a.ID == l.ExternalID {
+			links[i].ArtistPrimaryName = a.Name
+		}
+	}
+	return links, proposals, nil
 }
 
 func writeArtistLinks(ctx context.Context, db operations.Queryer, writer *curation.Writer, request curation.LinkRequest, links []curation.LinkIntent, write matchStep) error {

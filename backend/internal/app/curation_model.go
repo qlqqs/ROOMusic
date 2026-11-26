@@ -133,6 +133,12 @@ func (l backgroundLauncher) Start(ctx context.Context, p model.RunParams) (model
 		},
 	}
 	switch model.TaskKind(p.Run.TaskKind) {
+	case model.PatrolAndLocal:
+		if p.Items[0].Kind == "local_cleanup" {
+			params.SystemSuffix += localCleanupPrompt
+		} else {
+			params.SystemSuffix += patrolPrompt
+		}
 	case model.SelectCandidate:
 		params.Selection = func(reply string) ([]provider.ToolCall, error) { return selectionActions(reply, p.Items) }
 	case model.WebFallback:
@@ -263,6 +269,8 @@ func selectionActions(reply string, items []curation.PendingItem) ([]provider.To
 
 func taskToolAllowed(kind model.TaskKind, name string) bool {
 	switch name {
+	case "submit_patrol", "submit_local_cleanup":
+		return kind == model.PatrolAndLocal
 	case "shelve_pending_item":
 		return kind == model.SelectCandidate || kind == model.LookupCandidate || kind == model.WebFallback || kind == model.VerifyEvidence
 	case "resolve_release_match":
@@ -296,6 +304,14 @@ func withBackgroundPolicy(d tool.Definition, c stewardConfig) tool.Definition {
 			}
 			itemKind, _ := ctx.Value(itemKindKey{}).(string)
 			switch name {
+			case "submit_patrol":
+				if itemKind != "name_patrol" {
+					return false
+				}
+			case "submit_local_cleanup":
+				if itemKind != "local_cleanup" {
+					return false
+				}
 			case "merge_releases":
 				if itemKind != "release_merge" {
 					return false

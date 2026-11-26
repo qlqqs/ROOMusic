@@ -16,6 +16,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -31,14 +32,20 @@ type metricsModelUsage struct {
 }
 
 type metricsModel struct {
-	mode    string
-	server  *httptest.Server
-	db      *sql.DB
-	gate    sync.RWMutex
-	mu      sync.Mutex
-	targets map[string]metricsModelTarget
-	counts  map[string]map[string]metricsModelUsage
-	routes  map[string][]string
+	mode        string
+	server      *httptest.Server
+	db          *sql.DB
+	gate        sync.RWMutex
+	mu          sync.Mutex
+	targets     map[string]metricsModelTarget
+	counts      map[string]map[string]metricsModelUsage
+	routes      map[string][]string
+	itemUsage   map[metricsItemStage]metricsItemUsage
+	canonical   map[string]string
+	typos       map[string]string
+	lowNames    map[string]bool
+	localReply  func(metricsPending) curation.LocalInput
+	rejectMerge bool
 }
 
 func newMetricsModel(t *testing.T) *metricsModel {
@@ -51,7 +58,9 @@ func newMetricsModel(t *testing.T) *metricsModel {
 	default:
 		t.Fatalf("未知度量模型模式 %q", mode)
 	}
-	m := &metricsModel{mode: mode, targets: map[string]metricsModelTarget{}, counts: map[string]map[string]metricsModelUsage{}, routes: map[string][]string{}}
+	m := &metricsModel{mode: mode, targets: map[string]metricsModelTarget{}, counts: map[string]map[string]metricsModelUsage{},
+		routes: map[string][]string{}, itemUsage: map[metricsItemStage]metricsItemUsage{}, canonical: map[string]string{},
+		typos: map[string]string{}, lowNames: map[string]bool{}}
 	m.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/chat/completions") {
 			http.NotFound(w, r)
@@ -66,6 +75,53 @@ func newMetricsModel(t *testing.T) *metricsModel {
 	}))
 	t.Cleanup(m.server.Close)
 	return m
+}
+
+func (m *metricsModel) setPatrolSamples(samples []metricSample) {
+	for _, sample := range samples {
+		for _, artist := range sample.External.Artists {
+			for _, alias := range artist.Aliases {
+				m.canonical[alias] = artist.Name + " | " + alias
+				m.canonical[artist.Name] = artist.Name + " | " + alias
+			}
+		}
+		if sample.Shape == "title_typo" {
+			m.typos[sample.Local.Album] = sample.Expect.Fields["title"]
+		}
+	}
+}
+
+type metricsItemStage struct{ item, stage string }
+type metricsItemUsage struct{ calls, tokens int }
+type metricsStagePeak struct {
+	Items     int `json:"items"`
+	ToolCalls int `json:"max_tool_calls"`
+	Tokens    int `json:"max_tokens"`
+}
+
+func (m *metricsModel) checkItemBudgets(t *testing.T) map[string]metricsStagePeak {
+	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	peaks := map[string]metricsStagePeak{}
+	for key, use := range m.itemUsage {
+		peak := peaks[key.stage]
+		peak.Items++
+		peak.ToolCalls = max(peak.ToolCalls, use.calls)
+		peak.Tokens = max(peak.Tokens, use.tokens)
+		peaks[key.stage] = peak
+		maxCalls, maxTokens := 20, 150000
+		if key.stage == "web" {
+			maxCalls, maxTokens = 30, 300000
+		}
+		if use.calls > maxCalls || use.tokens > maxTokens {
+			t.Errorf("档位 %s 项 %s 超过 D16：工具调用 %d/%d，token %d/%d", key.stage, key.item, use.calls, maxCalls, use.tokens, maxTokens)
+		}
+	}
+	if peaks["lookup"].Items == 0 || peaks["web"].Items == 0 {
+		t.Errorf("D16 的两档都应有实际用量：%v", peaks)
+	}
+	return peaks
 }
 
 func (m *metricsModel) setTargets(targets map[string]metricsModelTarget) {
@@ -140,6 +196,7 @@ type metricsModelReply struct {
 	text      string
 	sampleIDs []string
 	calls     []metricsToolCall
+	itemIDs   []string
 }
 
 func (m *metricsModel) respond(w http.ResponseWriter, r *http.Request) error {
@@ -155,7 +212,7 @@ func (m *metricsModel) respond(w http.ResponseWriter, r *http.Request) error {
 	defer m.mu.Unlock()
 	var rep metricsModelReply
 	switch q.Model {
-	case "metrics-main":
+	case "metrics-main", "metrics-main-v2":
 		rep, err = m.pendingReply(r.Context(), q)
 	case "metrics-review":
 		rep, err = m.reviewReply(r.Context(), q)
@@ -171,6 +228,17 @@ func (m *metricsModel) respond(w http.ResponseWriter, r *http.Request) error {
 	}
 	if len(rep.sampleIDs) == 0 {
 		return fmt.Errorf("模型调用缺少样本归属：%s", rep.category)
+	}
+	// D16 的两个档位按项统计，度量驱动每次只领取一项。
+	if rep.category == "lookup" || rep.category == "web" {
+		if len(rep.itemIDs) != 1 {
+			return fmt.Errorf("档位 %s 本次领取了 %d 项", rep.category, len(rep.itemIDs))
+		}
+		key := metricsItemStage{rep.itemIDs[0], rep.category}
+		use := m.itemUsage[key]
+		use.calls += len(rep.calls)
+		use.tokens += used.InputTokens + used.OutputTokens
+		m.itemUsage[key] = use
 	}
 	// 驱动每批领一项；较大批次按项平分用量，余数与本次调用次数计入首项。
 	for i, id := range rep.sampleIDs {
@@ -232,11 +300,29 @@ type metricsPending struct {
 	Candidates []struct {
 		ID string `json:"external_id"`
 	}
-	Evidence struct {
-		Names                       []string
-		Title, Artist, Field, After string
-		Tracks                      json.RawMessage
+	RawEvidence json.RawMessage `json:"-"`
+	Evidence    struct {
+		Names                               []string
+		Title, Artist, Field, Before, After string
+		Tracks                              json.RawMessage
 	}
+}
+
+func (p *metricsPending) UnmarshalJSON(data []byte) error {
+	type pending metricsPending
+	envelope := struct {
+		*pending
+		Evidence json.RawMessage
+	}{pending: (*pending)(p)}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return err
+	}
+	p.RawEvidence = envelope.Evidence
+	// 巡检与本地整理使用各自的结构化证据。
+	if p.Kind == "name_patrol" || p.Kind == "local_cleanup" {
+		return nil
+	}
+	return json.Unmarshal(envelope.Evidence, &p.Evidence)
 }
 
 func metricsPendingItems(content string) ([]metricsPending, bool, error) {
@@ -296,6 +382,10 @@ func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (me
 		})
 	}
 	switch {
+	case pending[0].Kind == "name_patrol" && hasTool("submit_patrol"):
+		rep.category = "patrol"
+	case pending[0].Kind == "local_cleanup" && hasTool("submit_local_cleanup"):
+		rep.category = "local_cleanup"
 	case len(q.Tools) == 0:
 		rep.category = "select"
 	case hasTool("search_music_metadata"):
@@ -316,6 +406,7 @@ func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (me
 			return rep, fmt.Errorf("待定项 %s 本地目标 %s 没有样本标注", item.ID, id)
 		}
 		rep.sampleIDs = append(rep.sampleIDs, target.SampleID)
+		rep.itemIDs = append(rep.itemIDs, item.ID)
 		route := m.routes[item.ID]
 		if len(route) == 0 || route[len(route)-1] != rep.category {
 			m.routes[item.ID] = append(route, rep.category)
@@ -331,6 +422,14 @@ func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (me
 			decisions = append(decisions, decision)
 			continue
 		}
+		if rep.category == "patrol" && lastTool == "" {
+			call, err := m.patrolTool(item)
+			if err != nil {
+				return rep, err
+			}
+			rep.calls = append(rep.calls, call)
+			continue
+		}
 		if call := m.nextTool(item, target, rep.category, lastTool, lastResult); call.name != "" {
 			rep.calls = append(rep.calls, call)
 		}
@@ -343,12 +442,53 @@ func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (me
 	return rep, nil
 }
 
+type metricsPatrolBatch struct {
+	Kind  string
+	Names []struct{ ID, Name string }
+}
+
+func (m *metricsModel) patrolTool(item metricsPending) (metricsToolCall, error) {
+	var batch metricsPatrolBatch
+	if err := json.Unmarshal(item.RawEvidence, &batch); err != nil {
+		return metricsToolCall{}, err
+	}
+	reply := curation.PatrolSubmission{ItemID: item.ID, Results: []curation.PatrolResult{}, Issues: []curation.PatrolIssue{}}
+	for _, n := range batch.Names {
+		if batch.Kind == "artist" {
+			canonical, confidence := m.canonical[n.Name], "high"
+			if canonical == "" {
+				canonical = n.Name + " | "
+			}
+			if m.lowNames[n.Name] {
+				confidence = "low"
+			}
+			reply.Results = append(reply.Results, curation.PatrolResult{ID: n.ID, Canonical: canonical, Confidence: confidence})
+		}
+		if batch.Kind == "album" && m.typos[n.Name] != "" {
+			reply.Issues = append(reply.Issues, curation.PatrolIssue{ID: n.ID, Kind: "typo", Suggested: m.typos[n.Name]})
+		}
+	}
+	return metricsToolCall{"submit_patrol", reply}, nil
+}
+
 func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, stage, lastTool, result string) metricsToolCall {
 	abandon := metricsToolCall{"shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "当前证据无法确认对应。"}}
 	match := func(id string) metricsToolCall {
 		return metricsToolCall{"resolve_release_match", map[string]any{"item_id": item.ID, "external_id": id, "basis": map[string]string{"note": "已读取外部候选。"}}}
 	}
 	switch stage {
+	case "patrol":
+		return metricsToolCall{}
+	case "local_cleanup":
+		if lastTool != "" {
+			return metricsToolCall{}
+		}
+		input := curation.LocalInput{ItemID: item.ID}
+		if m.localReply != nil {
+			input = m.localReply(item)
+			input.ItemID = item.ID
+		}
+		return metricsToolCall{"submit_local_cleanup", input}
 	case "lookup":
 		entity, field, title, expected := "release", "release", item.Evidence.Title, target.ReleaseID
 		if item.Kind == "recording_match" {
@@ -422,8 +562,13 @@ func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, 
 			if item.Evidence.After != "" && item.Evidence.After == target.Fields[item.Evidence.Field] {
 				verdict = "typo"
 			}
-		case "verify_artist_credit", "verify_artist_merge":
+		case "verify_artist_credit":
 			verdict = "different"
+		case "verify_artist_merge":
+			verdict = "different"
+			if canonical := m.canonical[item.Evidence.Before]; !m.rejectMerge && canonical != "" && canonical == m.canonical[item.Evidence.After] {
+				verdict = "same"
+			}
 		default:
 			return abandon
 		}

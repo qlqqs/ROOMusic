@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,10 +13,12 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/curation/model"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
+	"github.com/qlqq/roomusic/backend/internal/sources/musicbrainz"
 	"github.com/qlqq/roomusic/backend/internal/upstreammock"
 )
 
@@ -70,7 +73,7 @@ func TestPostgreSQL整理发行组对应的封面归组和撤销(t *testing.T) {
 	for _, s := range []metricSample{a, b} {
 		startRequests := len(cMatchRequests(t, mock))
 		writeMetricSample(t, app.allowedRoot, s)
-		runScan(t, app, &admin)
+		scanAndConfirmCuration(t, app, &admin)
 		publishSearch(t, app)
 		e := metricScannedEntry(t, app, s)
 		ids = append(ids, e.release)
@@ -85,7 +88,7 @@ func TestPostgreSQL整理发行组对应的封面归组和撤销(t *testing.T) {
 		b3RequireCount(t, app, 0, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1`, e.release)
 		b3RequireCount(t, app, 0, `SELECT count(*) FROM external_links WHERE object_type='track' AND object_id=ANY($1::uuid[])`, e.tracks)
 		b3RequireCount(t, app, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1`, e.release)
-		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, e.release)
+		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, e.release)
 		b3RequireCount(t, app, 1, `SELECT count(*) FROM release_external_artworks WHERE release_id=$1`, e.release)
 		mb, artistReads, groupCover := 0, 0, 0
 		for _, req := range cMatchRequests(t, mock)[startRequests:] {
@@ -152,7 +155,7 @@ func TestPostgreSQL整理散放单曲的写入粒度(t *testing.T) {
 	}{{common, "artist"}, {unique, "recording"}} {
 		s := tc.sample
 		writeMetricSample(t, app.allowedRoot, s)
-		runScan(t, app, &admin)
+		scanAndConfirmCuration(t, app, &admin)
 		publishSearch(t, app)
 		track := programString(t, app, `SELECT id FROM tracks WHERE relative_path=$1 AND source_status='present'`, s.Local.Tracks[0].File)
 		release := programString(t, app, `SELECT m.release_id FROM media m JOIN tracks t ON t.medium_id=m.id WHERE t.id=$1`, track)
@@ -164,7 +167,7 @@ func TestPostgreSQL整理散放单曲的写入粒度(t *testing.T) {
 			t.Fatalf("%s 状态 %+v，粒度 %q", s.ID, state, result.Level)
 		}
 		b3RequireCount(t, app, 0, `SELECT count(*) FROM external_links WHERE object_type IN ('release','release_group_match') AND object_id=$1`, release)
-		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, release)
+		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='recording_match'`, release)
 		if tc.level == "recording" {
 			b3RequireCount(t, app, 1, `SELECT count(*) FROM external_links WHERE object_type='track' AND object_id=$1 AND external_id=$2`, track, s.External.Releases[0].Tracks[0].ID)
 		} else {
@@ -193,7 +196,7 @@ func TestPostgreSQL整理两边专辑匹配后用别名合并艺人(t *testing.T
 	for _, s := range []metricSample{primary, alias} {
 		before := len(cMatchRequests(t, mock))
 		writeMetricSample(t, app.allowedRoot, s)
-		runScan(t, app, &admin)
+		scanAndConfirmCuration(t, app, &admin)
 		publishSearch(t, app)
 		e := metricScannedEntry(t, app, s)
 		artists = append(artists, e.artists[s.Local.Artist])
@@ -202,7 +205,7 @@ func TestPostgreSQL整理两边专辑匹配后用别名合并艺人(t *testing.T
 			state := b3WorkState(t, app, "release", e.release)
 			t.Fatalf("%s 未定到版本：状态 %s，结果 %s，出站 %v", s.ID, state.Status, state.Result, cMatchRequests(t, mock)[before:])
 		}
-		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, e.release)
+		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, e.release)
 		if s.ID == primary.ID {
 			var releaseRequests int
 			for _, req := range cMatchRequests(t, mock)[before:] {
@@ -254,7 +257,7 @@ func TestPostgreSQL整理零候选按来源和模型分流(t *testing.T) {
 		t.Helper()
 		before := len(cMatchRequests(t, mock))
 		writeMetricSample(t, app.allowedRoot, s)
-		runScan(t, app, &admin)
+		scanAndConfirmCuration(t, app, &admin)
 		publishSearch(t, app)
 		id := metricScannedEntry(t, app, s).release
 		clock.advance(t, time.Minute)
@@ -277,7 +280,7 @@ func TestPostgreSQL整理零候选按来源和模型分流(t *testing.T) {
 			t.Fatalf("按原题和放宽题查询后应由程序定案：查询 %v，状态 %+v", releaseQueries, state)
 		}
 		b3RequireCount(t, app, 1, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1 AND external_id=$2`, id, relaxed.External.Releases[0].ID)
-		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, id)
+		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, id)
 		t.Run("已可定案时停止扩查", func(t *testing.T) {
 			if len(releaseQueries) != 2 || len(artistQueries) != 0 {
 				t.Errorf("放宽已得到结构吻合的唯一版本，应直接核对详情：发行搜索 %v，艺人存在性搜索 %v", releaseQueries, artistQueries)
@@ -317,24 +320,66 @@ func TestPostgreSQL整理零候选按来源和模型分流(t *testing.T) {
 		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, id)
 	})
 
-	t.Run("艺人在库进入第二档且旧调度不领取", func(t *testing.T) {
+	t.Run("艺人在库且巡检和程序高优先项完成后领取第二档", func(t *testing.T) {
 		id, _ := add(t, cMatchAlbum("未登记专辑三", known.Name, 3, known.ID))
 		f := cMatchFixture(app, admin)
 		pending := programString(t, app, `SELECT id FROM curation_pending_items WHERE target_id=$1 AND status='waiting_route' AND route='lookup' AND candidates='[]'`, id)
 		conversation := modelConversation(t, f)
-		claimed, err := f.writer.ClaimPendingItems(t.Context(), conversation, time.Now(), 10)
-		requireCurationOK(t, err)
-		if len(claimed) != 0 {
-			t.Fatalf("旧调度领取了第二档：%+v", claimed)
-		}
 		state := b3WorkState(t, app, "release", id)
 		if state.Status != "uncertain" || state.IdentityDigest == "" {
 			t.Fatalf("第二档工作状态 %+v", state)
 		}
 
-		// 模拟第二档领用，并直接验证供 E 使用的结清事务。
-		mustExec(t, app, `UPDATE curation_pending_items SET status='in_progress',conversation_id=$2,claimed_at=now() WHERE id=$1`, pending, conversation)
-		err = f.writer.FinishUnlisted(t.Context(), pending, "过期摘要", conversation, "仍未找到")
+		ctx := t.Context()
+		gateClock := newProgramClock()
+		gateClock.now.Store(clock.now.Load())
+		gateOptions := gateClock.options()
+		sourceGate := curation.NewSources(app.database, curation.SourceRegistration{Declaration: musicbrainz.Declaration()})
+		worker := program.NewWorker(app.database, f.writer, sourceGate, func(context.Context) (bool, error) { return false, nil }, nil, gateOptions)
+		// 应用内的工作者已完成本轮。用同一隔离库启动可直接检查就绪状态的工作者，并让它停在轮询点。
+		workerCtx, stopWorker := context.WithCancel(ctx)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			worker.Run(workerCtx)
+		}()
+		defer func() {
+			stopWorker()
+			<-done
+		}()
+		gateClock.wait(t)
+
+		claimWhenReady := func(wantReady bool) []curation.PendingItem {
+			t.Helper()
+			now := gateOptions.Now()
+			ready, err := worker.LookupTierReady(ctx, id, now)
+			requireCurationOK(t, err)
+			if ready != wantReady {
+				t.Fatalf("第二档就绪状态为 %t，期望 %t", ready, wantReady)
+			}
+			if !ready {
+				b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items
+					WHERE id=$1 AND status='waiting_route' AND conversation_id IS NULL`, pending)
+				return nil
+			}
+			items, err := f.writer.ClaimModelKind(ctx, conversation, now, 1, []string{"release"}, string(model.LookupCandidate), id)
+			requireCurationOK(t, err)
+			return items
+		}
+		claimWhenReady(false)
+		mustExec(t, app, `UPDATE curation_patrol_names SET needs_patrol=false,model='合成巡检模型',prompt_version=$2,patrolled_at=now()
+			WHERE id IN (SELECT name_id FROM curation_patrol_inputs WHERE release_id=$1)`, id, program.PatrolPromptVersion)
+		mustExec(t, app, `UPDATE curation_work_states SET needs_work=true,manual_requested_at=$2
+			WHERE subject='release' AND target_id=$1`, id, gateOptions.Now())
+		claimWhenReady(false)
+		mustExec(t, app, `UPDATE curation_work_states SET needs_work=false,manual_requested_at=NULL
+			WHERE subject='release' AND target_id=$1`, id)
+		items := claimWhenReady(true)
+		if len(items) != 1 || items[0].ID != pending || items[0].Route != "lookup" ||
+			items[0].Status != "in_progress" || items[0].ConversationID != conversation {
+			t.Fatalf("第二档应领取指定的零候选项：%+v", items)
+		}
+		err := f.writer.FinishUnlisted(t.Context(), pending, "过期摘要", conversation, "仍未找到")
 		curationCRequireProblem(t, err, http.StatusConflict, "item_stale")
 		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE id=$1 AND status='in_progress'`, pending)
 		requireCurationOK(t, f.writer.FinishUnlisted(t.Context(), pending, state.IdentityDigest, conversation, "仍未找到"))
@@ -364,7 +409,7 @@ func TestPostgreSQL整理未收录九十天与管理员重查(t *testing.T) {
 	root := b3Root(t, app)
 	b3Enable(t, app, admin)
 	writeMetricSample(t, app.allowedRoot, s)
-	runScan(t, app, &admin)
+	scanAndConfirmCuration(t, app, &admin)
 	publishSearch(t, app)
 	id := metricScannedEntry(t, app, s).release
 	clock.advance(t, time.Minute)

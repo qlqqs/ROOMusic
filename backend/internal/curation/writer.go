@@ -23,6 +23,7 @@ type Source struct {
 }
 
 type Request struct {
+	local                       *localSubmission
 	verification                *verificationWrite
 	ExpectedRevision            int64
 	ConfirmedBy, ConversationID string
@@ -127,6 +128,9 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 		Origin:      &operations.Origin{ConversationID: request.ConversationID, Source: "curation", ProviderKind: source.Kind, Provider: source.Provider, Basis: source.Basis},
 		Fingerprint: operations.Fingerprint(fingerprint),
 	}
+	if request.local != nil {
+		spec.Origin.Mode = "local_cleanup"
+	}
 	var applied Applied
 	result, err := operations.Run(ctx, w.db, spec, func(ctx context.Context, tx *sql.Tx, operationID string) (operations.Outcome, error) {
 		var locked autoFieldTarget
@@ -149,6 +153,11 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 		}
 		if err := checkWrite(ctx, tx, spec, request.ConfirmedBy, releaseID, request.ExpectedRevision, locked.EditRevision()); err != nil {
 			return operations.Outcome{}, err
+		}
+		if request.local != nil {
+			if _, err := request.local.read(ctx, tx); err != nil {
+				return operations.Outcome{}, err
+			}
 		}
 		if request.verification != nil {
 			if err := request.verification.check(ctx, tx); err != nil {

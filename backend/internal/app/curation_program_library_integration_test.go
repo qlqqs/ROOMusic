@@ -96,7 +96,7 @@ func TestPostgreSQLCurationProgramLibrary(t *testing.T) {
 				if tc.name == "chinese_search" {
 					f.assertCount(t, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND status='waiting_model' AND conflicts ? 'list_truncated' AND candidates->0->>'external_id'=$2`, tc.id, tc.remote)
 				} else {
-					f.assertCount(t, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, tc.id)
+					f.assertCount(t, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, tc.id)
 				}
 				return
 			}

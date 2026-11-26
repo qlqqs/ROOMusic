@@ -959,8 +959,9 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/rating-invalid-sort": { status: 400, code: "invalid_sort" },
 };
 
-// 204 没有 JSON 响应体；生产 API 的空结果回调不承担解码。
+// 空响应没有 JSON 响应体，样本只核对 HTTP 状态和空体。
 const emptyResponseContracts: Record<string, { status: number }> = {
+  "curation/repatrol": { status: 202 },
   "dsp/responses/preset-delete": { status: 204 },
   "steward/tokens/revoked": { status: 204 },
   "upnp/manual-removed": { status: 204 },

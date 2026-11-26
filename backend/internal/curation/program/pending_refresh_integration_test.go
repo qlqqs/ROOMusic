@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/testsupport"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
@@ -91,7 +92,7 @@ func TestPostgreSQLCurationPendingUpsert(t *testing.T) {
 		{"waiting_model", "waiting_model", "new", "waiting_model", true},
 		{"shelved_changed", "shelved", "new", "waiting_model", true},
 		{"shelved_same", "shelved", "old", "shelved", false},
-		{"waiting_human", "waiting_human", "new", "waiting_human", false},
+		{"分流后识别输入变化", "waiting_route", "new", "waiting_model", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newPendingRefreshFixture(t)
@@ -104,14 +105,14 @@ func TestPostgreSQLCurationPendingUpsert(t *testing.T) {
 			}
 			requirePendingRefreshOK(t, curation.UpsertPendingItem(ctx, f.db, item))
 			var id string
-			if tc.status == "in_progress" || tc.status == "waiting_human" {
+			if tc.status == "in_progress" {
 				id = f.claim(t, release, item.Kind).ID
 			} else {
 				err := f.db.QueryRowContext(ctx, `SELECT id FROM curation_pending_items WHERE target_id=$1`, release).Scan(&id)
 				requirePendingRefreshOK(t, err)
 			}
 			// 写入非零的重试字段与原因，确保刷新时能区分保留和清空。
-			f.exec(t, `UPDATE curation_pending_items SET status=$2,attempts=2,review_retries=1,
+			f.exec(t, `UPDATE curation_pending_items SET status=$2,route=CASE WHEN $2='waiting_route' THEN 'lookup' END,attempts=2,review_retries=1,
 				next_attempt_at=now()+interval '1 hour',shelved_reason='unhandled',updated_at=now()-interval '1 day' WHERE id=$1`,
 				id, tc.status)
 			before, err := f.writer.PendingItem(ctx, id)
@@ -158,6 +159,9 @@ func TestPostgreSQLCurationPendingUpsert(t *testing.T) {
 			}
 			if tc.status == "shelved" {
 				want.Attempts, want.NextAttemptAt = 0, nil
+			}
+			if tc.status == "waiting_route" {
+				want.Route, want.NextAttemptAt = "", nil
 			}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("刷新后的待定项为 %+v，期望 %+v", got, want)
@@ -256,7 +260,20 @@ func TestPostgreSQLCurationExternalRuleUpgradePending(t *testing.T) {
 			old := MatchRuleVersion - 1
 			f.exec(t, "UPDATE curation_work_states SET match_rule_version=$2 WHERE subject='release' AND target_id=$1", f.releaseID, old)
 			f.exec(t, "UPDATE curation_pending_items SET match_rule_version=$2 WHERE id=$1", pending.ID, old)
-			requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
+			if tc.withCandidates {
+				requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
+			} else {
+				// 完整工作队列可在同一次排空中领取登记的补查。直接观察离线维护这一事务的结果。
+				evidence, err := catalog.LoadCurationEvidence(ctx, f.db, []string{f.releaseID})
+				requirePendingRefreshOK(t, err)
+				e := evidence[f.releaseID]
+				state := read()
+				deferred, offlineMatch, err := f.worker.prepareRelease(ctx, e, releaseInputs(e), &state)
+				requirePendingRefreshOK(t, err)
+				if !deferred || offlineMatch != nil {
+					t.Fatalf("零候选应登记普通补查，得到 deferred=%t，离线结果 %+v", deferred, offlineMatch)
+				}
+			}
 			upgrade := read()
 			if f.finder.searches != 1 || len(f.finder.releaseReads) != 0 || upgrade.MatchRuleVersion != MatchRuleVersion ||
 				upgrade.Generation != before.Generation || upgrade.Attempts != before.Attempts || upgrade.Status != before.Status {

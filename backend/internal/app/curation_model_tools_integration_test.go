@@ -45,7 +45,15 @@ func TestPostgreSQLCurationToolsPending(t *testing.T) {
 		User: identity.User{ID: f.admin.id, Role: "admin"}, IdempotencyKey: uuid.New()}
 	wrongCaller := caller
 	wrongCaller.User.ID = f.application.createUser(t, "admin").id
-	runCtx := curation.WithModelRun(ctx, &curation.ModelRun{ConversationID: conversation, Model: "synthetic"})
+	var abandonedReason string
+	runCtx := curation.WithModelRun(ctx, &curation.ModelRun{ConversationID: conversation, Model: "synthetic",
+		Abandon: func(ctx context.Context, id, reason string) error {
+			if id != own.ID {
+				t.Fatalf("放弃工具传递了错误的待定项 %s", id)
+			}
+			abandonedReason = reason
+			return f.writer.FinishModelItem(ctx, own, conversation, "unlisted")
+		}})
 
 	input := func(t *testing.T, toolName, itemID string) json.RawMessage {
 		t.Helper()
@@ -110,11 +118,11 @@ func TestPostgreSQLCurationToolsPending(t *testing.T) {
 	}
 	result, err := shelve.Handler(runCtx, caller, input(t, shelve.Name, own.ID))
 	requireCurationOK(t, err)
-	requireExternalJSON(t, result, map[string]string{"item_id": own.ID, "status": "shelved"})
+	requireExternalJSON(t, result, map[string]string{"item_id": own.ID, "status": "finished_tier"})
 	stored, err := f.writer.PendingItem(ctx, own.ID)
 	requireCurationOK(t, err)
-	if stored.Status != "shelved" || stored.ShelvedReason == nil || *stored.ShelvedReason != "候选无法区分" {
-		t.Fatalf("搁置后的待定项为 %+v", stored)
+	if stored.Status != "resolved" || stored.Resolution == nil || *stored.Resolution != "unlisted" || abandonedReason != "候选无法区分" {
+		t.Fatalf("放弃理由 %q，结清后的待定项 %+v", abandonedReason, stored)
 	}
 	rows, err = read.Handler(runCtx, caller, json.RawMessage(`{}`))
 	requireCurationOK(t, err)

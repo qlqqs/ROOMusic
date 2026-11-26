@@ -173,7 +173,7 @@ func TestPostgreSQLCurationExceptionAcceptDecline(t *testing.T) {
 			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1`, release)
 			nextItem := f.pending(t, release)
 			f.configure(t, &f.admin)
-			f.next(t, false).selectCandidate(t, nextItem.ID, f.remote.ID)
+			f.nextAfterPatrol(t).selectCandidate(t, nextItem.ID, f.remote.ID)
 			schedulerWait(t, "抑制后的候选已释放", func() bool { return f.item(t, nextItem.ID).Status != "in_progress" })
 			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE operation_type='external_link' AND target_id=$1`, release)
 		})

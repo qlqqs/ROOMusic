@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -186,6 +187,31 @@ func (f *schedulerFixture) next(t *testing.T, review bool) schedulerRequest {
 	case <-time.After(5 * time.Second):
 		t.Fatalf("未收到模型请求（审查=%t）；后台工具 %s", review, f.modelToolResults(t))
 		return schedulerRequest{}
+	}
+}
+
+func (f *schedulerFixture) nextAfterPatrol(t *testing.T) schedulerRequest {
+	t.Helper()
+	for {
+		q := f.next(t, false)
+		if !slices.ContainsFunc(q.Tools, func(tool struct {
+			Type     string
+			Function struct{ Name string }
+		}) bool {
+			return tool.Function.Name == "submit_patrol"
+		}) {
+			return q
+		}
+		var content string
+		requireCurationOK(t, json.Unmarshal(q.Messages[len(q.Messages)-1].Content, &content))
+		items, _, err := metricsPendingItems(content)
+		requireCurationOK(t, err)
+		if len(items) != 1 || items[0].Kind != "name_patrol" {
+			t.Fatalf("应收到一块巡检资料，得到 %+v", items)
+		}
+		response, err := (&metricsModel{}).patrolTool(items[0])
+		requireCurationOK(t, err)
+		q.tool(t, response.name, response.args)
 	}
 }
 

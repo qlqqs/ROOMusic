@@ -55,7 +55,7 @@ func newAcceptanceAlbum(t *testing.T) (acceptanceAlbum, *httptest.Server) {
 		case "/lyrics/api/get":
 			q := r.URL.Query()
 			fmt.Fprintf(w, `{"id":8,"trackName":%q,"artistName":%q,"duration":12,"syncedLyrics":"[00:01.00]第一行"}`, q.Get("track_name"), q.Get("artist_name"))
-		case "/mb/release", "/lyrics/api/search":
+		case "/mb/release", "/mb/artist", "/lyrics/api/search":
 			http.NotFound(w, r)
 		default:
 			t.Errorf("意外请求 %s", r.URL)
@@ -117,7 +117,7 @@ func TestPostgreSQLCurationReadOnlyMusicTree(t *testing.T) {
 	writeAcceptanceAudio(t, app.allowedRoot, "合成正式专辑", "第一首", b3LowTone, "MUSICBRAINZ_ALBUMID="+remote.release, "TRACKNUMBER=1")
 	writeSyntheticTrack(t, filepath.Join(app.allowedRoot, "第二版", "02.flac"), 42, "ALBUM=第二版", "TITLE=第二首", "ARTIST=合成正式艺人", "TRACKNUMBER=2")
 	before := acceptanceTree(t, app.allowedRoot, true)
-	runScan(t, app, &admin)
+	scanAndConfirmCuration(t, app, &admin)
 	id := programString(t, app, `SELECT id FROM releases WHERE relative_directory='合成正式专辑'`)
 	other := programString(t, app, `SELECT id FROM releases WHERE relative_directory='第二版'`)
 	track, _ := externalTrack(t, app, id)
@@ -162,7 +162,7 @@ func TestPostgreSQLCurationScannedAlbumProvenance(t *testing.T) {
 	b3Root(t, app)
 	writeAcceptanceAudio(t, app.allowedRoot, "合成正式专辑", "第一首", b3LowTone, "MUSICBRAINZ_ALBUMID="+a.release, "TRACKNUMBER=1")
 	b3Enable(t, app, admin)
-	runScan(t, app, &admin)
+	scanAndConfirmCuration(t, app, &admin)
 	id := programString(t, app, `SELECT id FROM releases WHERE relative_directory='合成正式专辑' AND year IS NULL`)
 	track, _ := externalTrack(t, app, id)
 	clock.advance(t, time.Minute)

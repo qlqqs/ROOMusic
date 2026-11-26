@@ -73,7 +73,7 @@ func TestPostgreSQLArtistWebSearchProgramScope(t *testing.T) {
 	for _, artist := range []string{mb, wd, full, merged, collaborator} {
 		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_pending_items WHERE artist_id=$1 AND status<>'resolved'`, artist)
 	}
-	f.waitArtistResolution(t, stale.ID, "artist_out_of_scope")
+	f.waitArtistResolution(t, stale.ID, "suggestion_recorded")
 	b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_model_exceptions WHERE id=$1 AND status='superseded' AND decided_at IS NOT NULL`, open)
 	b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_model_exceptions WHERE id=$1 AND status='accepting' AND decided_at IS NULL AND decided_by=$2`, accepting, f.admin.id)
 	for _, name := range []string{"缺资料主艺人", "有合作者的主艺人", "只有曲目主署名", "艺人专辑署名"} {

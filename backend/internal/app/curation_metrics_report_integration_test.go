@@ -42,7 +42,9 @@ type metricSummary struct {
 }
 
 func newMetricSummary(shape string) *metricSummary {
-	return &metricSummary{Shape: shape, Endpoints: map[string]metricRequests{}, Model: map[string]metricsModelUsage{"pending_step": {}, "review": {}, "artist_identity": {}, "other": {}}}
+	return &metricSummary{Shape: shape, Endpoints: map[string]metricRequests{}, Model: map[string]metricsModelUsage{
+		"pending_step": {}, "review": {}, "artist_identity": {}, "other": {}, "patrol": {}, "local_cleanup": {},
+	}}
 }
 
 func (r *metricSummary) add(e metricEntry, s metricScore, model map[string]metricsModelUsage) {
@@ -123,8 +125,13 @@ func metricReport(t *testing.T, app *integrationTestApplication, entries []metri
 	}
 	t.Log(log.String())
 	t.Logf("来源/端点汇总（请求数、均值、最多）%+v；模型分类（调用、输入与输出 token）%+v", total.Endpoints, total.Model)
+	if total.DecidableEntered != 0 {
+		t.Errorf("%d 个程序可定样本进入了模型识别", total.DecidableEntered)
+	}
+	peaks := model.checkItemBudgets(t)
+	t.Logf("D16 档位的逐项用量峰值：%+v", peaks)
 	if path := os.Getenv("ROOMUSIC_CURATION_METRICS_OUT"); path != "" {
-		data, err := json.MarshalIndent(map[string]any{"model": model.mode, "token_estimate": "请求与 SSE 响应分别按字节数除以 4 向下取整", "acoustid_enabled": false, "samples": details, "by_shape": shapes, "total": total}, "", "  ")
+		data, err := json.MarshalIndent(map[string]any{"model": model.mode, "token_estimate": "请求与 SSE 响应分别按字节数除以 4 向下取整", "acoustid_enabled": false, "samples": details, "by_shape": shapes, "total": total, "item_usage_peaks": peaks}, "", "  ")
 		requireCurationOK(t, err)
 		requireCurationOK(t, os.MkdirAll(filepath.Dir(path), 0755))
 		requireCurationOK(t, os.WriteFile(path, append(data, '\n'), 0644))

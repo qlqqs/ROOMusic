@@ -80,8 +80,12 @@ func refreshProfiles(ctx context.Context, tx *sql.Tx, ids []string, gen int64) e
  ), counts AS (SELECT artist_id,name_id,sum(votes) AS votes FROM (
  SELECT artist_id,name_id,votes FROM track_counts UNION ALL SELECT artist_id,name_id,votes FROM release_counts
  ) v GROUP BY artist_id,name_id),
- popular AS (SELECT DISTINCT ON (c.artist_id) c.artist_id,n.spelling FROM counts c JOIN artist_names n ON n.id=c.name_id
- ORDER BY c.artist_id,c.votes DESC,n.spelling COLLATE "C",n.id), owned AS (`+ownedNames+`),
+ ranked AS (SELECT c.*,rank() OVER (PARTITION BY artist_id ORDER BY votes DESC) AS place FROM counts c),
+ popular AS (SELECT c.artist_id,
+ CASE WHEN count(*)>1 THEN max(l.artist_primary_name) END AS external_name,min(n.spelling COLLATE "C") AS spelling
+ FROM ranked c JOIN artist_names n ON n.id=c.name_id
+ LEFT JOIN artist_merged_primary_links l ON l.artist_id=c.artist_id AND l.artist_id=ANY($1::uuid[])
+ WHERE c.place=1 GROUP BY c.artist_id), owned AS (`+ownedNames+`),
  named AS MATERIALIZED (SELECT w.artist_id,n.id AS name_id,n.spelling FROM owned w JOIN artist_names n ON n.id=w.name_id),
  fallback AS (SELECT DISTINCT ON (artist_id) artist_id,spelling FROM named ORDER BY artist_id,spelling COLLATE "C",name_id),
  search_names AS (
@@ -90,7 +94,7 @@ func refreshProfiles(ctx context.Context, tx *sql.Tx, ids []string, gen int64) e
  WHERE redirect_artist_id=ANY($1::uuid[]) AND display_name IS NOT NULL
  ), name_lists AS (SELECT artist_id,jsonb_agg(jsonb_build_object('name_id',name_id,'source_artist_id',source_artist_id,'original',original)) AS names
  FROM search_names GROUP BY artist_id)
- SELECT a.id::text,COALESCE(pop.spelling,fallback.spelling,a.initial_name),o.display_name,COALESCE(n.names,'[]'::jsonb) FROM artists a
+ SELECT a.id::text,COALESCE(pop.external_name,pop.spelling,fallback.spelling,a.initial_name),o.display_name,COALESCE(n.names,'[]'::jsonb) FROM artists a
  LEFT JOIN artist_overrides o ON o.artist_id=a.id
  LEFT JOIN popular pop ON pop.artist_id=a.id
  LEFT JOIN fallback ON fallback.artist_id=a.id LEFT JOIN name_lists n ON n.artist_id=a.id

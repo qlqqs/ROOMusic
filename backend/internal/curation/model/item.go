@@ -20,6 +20,8 @@ var (
 
 func taskKind(p curation.PendingItem) TaskKind {
 	switch {
+	case p.Kind == "name_patrol" || p.Kind == "local_cleanup":
+		return PatrolAndLocal
 	case p.Route == "lookup":
 		return LookupCandidate
 	case p.Route == "web" || p.Kind == "artist_identity":

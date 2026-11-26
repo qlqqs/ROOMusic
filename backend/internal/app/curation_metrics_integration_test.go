@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"log/slog"
@@ -37,10 +36,11 @@ func TestPostgreSQLCurationMetrics(t *testing.T) {
 	t.Cleanup(upstream.Close)
 	endpoint := newMetricsModel(t)
 	clock := newProgramClock()
+	// 巡检唤醒写入使用数据库时间，程序和模型的测试时钟须能领取已唤醒的项。
+	clock.now.Store(time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond).UnixNano())
 	opts := clock.options()
 	opts.FullPassInterval = time.Minute
-	// D 接入实际巡检后移除此临时注入。
-	opts.NamesPatrolled = func(context.Context, string) (bool, error) { return true, nil }
+	endpoint.setPatrolSamples(samples)
 	immediate := func() *sources.Limiter { return sources.NewLimiter(0, nil, nil) }
 	app := newConfiguredIntegrationTestApplication(t, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})), config.Server{UpstreamMockURL: upstream.URL},
 		WithCurationProgram(true, opts), WithCurationModel(true, model.Options{Now: opts.Now, PollInterval: 10 * time.Millisecond, BatchSize: 1}),
@@ -62,11 +62,7 @@ func TestPostgreSQLCurationMetrics(t *testing.T) {
 	// 固定入库顺序，保留前面样本的对应与缓存。一次增量的所有出站（包括引起的复查）归本次样本。
 	for i, s := range samples {
 		writeMetricSample(t, app.allowedRoot, s)
-		runScan(t, app, &admin)
-		// 扫描以 PostgreSQL 时钟判断静默期。推进观测时间后走同一个增量扫描入口确认。
-		mustExec(t, app, `UPDATE releases SET curation_changed_at=now()-interval '60 seconds'
-			WHERE NOT curation_confirmed AND curation_changed_at IS NOT NULL`)
-		runScan(t, app, &admin)
+		scanAndConfirmCuration(t, app, &admin)
 		e := metricScannedEntry(t, app, s)
 		target := metricsModelTarget{SampleID: s.ID, ReleaseID: s.Expect.Release, GroupID: s.Expect.Group, Fields: s.Expect.Fields}
 		if len(s.Expect.Recordings) == 1 {
@@ -113,6 +109,15 @@ func TestPostgreSQLCurationMetrics(t *testing.T) {
 		}
 	}
 	metricReport(t, app, entries, endpoint)
+}
+
+func scanAndConfirmCuration(t *testing.T, app *integrationTestApplication, admin *integrationTestUser) {
+	t.Helper()
+	runScan(t, app, admin)
+	// 模拟观测静默期已过，用第二次正常扫描确认成员签名。
+	mustExec(t, app, `UPDATE releases SET curation_changed_at=now()-interval '60 seconds'
+		WHERE NOT curation_confirmed AND curation_changed_at IS NOT NULL`)
+	runScan(t, app, admin)
 }
 
 func metricScannedEntry(t *testing.T, app *integrationTestApplication, s metricSample) metricEntry {
@@ -179,6 +184,7 @@ type metricProgress struct {
 func metricDrain(t *testing.T, app *integrationTestApplication, admin *integrationTestUser, clock *programClock, endpoint *metricsModel, entry metricEntry) {
 	t.Helper()
 	sample := entry.sample.ID
+	writer := curation.NewWriter(app.database, app.dataDirectory, nil)
 	var p metricProgress
 	for round := 1; round <= 12; round++ {
 		before := metricCheckpoint(t, app)
@@ -198,8 +204,11 @@ func metricDrain(t *testing.T, app *integrationTestApplication, admin *integrati
 		end := time.Now().Add(45 * time.Second)
 		for {
 			getJSON(t, app, admin, curationBase+"/progress", &p)
-			if p.Model.State == "idle" && p.Model.Items.WaitingModel == 0 && p.Model.Items.InProgress == 0 {
-				break
+			if p.Model.State == "idle" && p.Model.Items.InProgress == 0 {
+				// 巡检可能唤醒程序识别，等识别结果的艺人项要到下一轮才可领取。
+				if p.Model.Items.WaitingModel == 0 || p.Queues[0].ID == "release" && p.Queues[0].Ready > 0 {
+					break
+				}
 			}
 			if time.Now().After(end) {
 				t.Fatalf("%s 第 %d 轮模型未排空：%+v", sample, round, p.Model)
@@ -207,11 +216,17 @@ func metricDrain(t *testing.T, app *integrationTestApplication, admin *integrati
 			time.Sleep(15 * time.Millisecond)
 		}
 		programDrained := p.State == "idle"
+		recognitionSettled := p.Releases.Total == p.Releases.Processed
 		for _, q := range p.Queues {
 			programDrained = programDrained && q.Ready == 0 && q.State != "running"
+			if q.ID == "release" && q.PauseReason != nil && *q.PauseReason == "source_disabled" {
+				recognitionSettled = true
+			}
 		}
-		if programDrained && p.LastPassFinishedAt != nil && p.LastPassFinishedAt.Equal(tick) &&
-			p.Releases.Total == p.Releases.Processed && metricCheckpoint(t, app) == before {
+		patrolled, err := writer.NamesPatrolled(t.Context(), entry.release)
+		requireCurationOK(t, err)
+		if patrolled && programDrained && p.Model.Items.WaitingModel == 0 && p.LastPassFinishedAt != nil && p.LastPassFinishedAt.Equal(tick) &&
+			recognitionSettled && metricCheckpoint(t, app) == before {
 			return
 		}
 	}

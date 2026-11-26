@@ -64,7 +64,9 @@ func TestPostgreSQLArtistWebSearchMockMediaAndUsage(t *testing.T) {
 	calls := len(f.mockCalls(t, "openai"))
 	progress := f.progress(t)
 	usage := progress.Today
-	if progress.WebToday != usage {
+	patrols := countRows(t, f.application, `SELECT count(*) FROM curation_pending_items WHERE kind='name_patrol' AND resolution='patrolled'`)
+	if patrols != 2 || progress.WebToday.InputTokens+int64(patrols*12) != usage.InputTokens ||
+		progress.WebToday.OutputTokens+int64(patrols*8) != usage.OutputTokens {
 		t.Fatalf("联网用量 %+v，总用量 %+v", progress.WebToday, usage)
 	}
 	if calls < 4 || usage.InputTokens != int64(calls*12) || usage.OutputTokens != int64(calls*8) {
