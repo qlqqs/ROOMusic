@@ -3,6 +3,7 @@
     "batch": null,
     "last_pass_finished_at": null,
     "model": {
+      "concurrency": 4,
       "daily_token_limit": 10000000,
       "items": {
         "in_progress": 0,
@@ -11,6 +12,7 @@
         "waiting_model": 0
       },
       "model": "",
+      "running": 0,
       "state": "paused",
       "today": {
         "date": "2026-01-02",

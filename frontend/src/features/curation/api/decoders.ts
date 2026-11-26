@@ -19,6 +19,8 @@ const settingsDecoder = d.object({
   daily_token_limit: d.nullable(d.integer({ min: 1 })),
   // 联网兜底单独的每日上限（整理链 E，null = 不限；联网用量同时计入总上限）。
   web_daily_token_limit: d.nullable(d.integer({ min: 1 })),
+  // 同时运行的模型任务数（整理缺口 R24），1–16。
+  model_concurrency: d.integer({ min: 1, max: 16 }),
   model: d.string({ max: 200 }),
   enabled: d.boolean(),
   enabled_at: d.nullable(d.timestamp()),
@@ -74,6 +76,9 @@ export type ModelUnavailableReason = (typeof MODEL_UNAVAILABLE_REASONS)[number];
 const usageDecoder = d.object({ date: d.string({ pattern: /^\d{4}-\d{2}-\d{2}$/ }), input_tokens: count(), output_tokens: count() });
 // 模型层（M7 D）：状态与不可用的原因、今天（服务器时区）的用量与上限、待定项各状态的数目（只算可见发行）。
 const modelProgressDecoder = d.object({
+  // 当前同时在跑的项数与并发上限（R24）。
+  concurrency: d.integer({ min: 1, max: 16 }),
+  running: count(),
   daily_token_limit: d.nullable(d.integer({ min: 1 })),
   items: d.object({ in_progress: count(), shelved: count(), waiting_human: count(), waiting_model: count() }),
   model: d.string({ max: 200 }),

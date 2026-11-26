@@ -10,6 +10,7 @@
     },
     "inactive_reason": null,
     "model": "sample-model",
+    "model_concurrency": 4,
     "paused": true,
     "web_daily_token_limit": 240000
   },

@@ -279,7 +279,7 @@ func fetchFailure(err error, curation bool) error {
 		return typed
 	}
 	var outbound *egress.Error
-	if errors.As(err, &outbound) {
+	if errors.Is(err, egress.ErrDenied) && errors.As(err, &outbound) {
 		if outbound.Code == egress.CodeTooManyRedirects {
 			return failure("fetch_too_many_redirects")
 		}

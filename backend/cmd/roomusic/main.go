@@ -89,8 +89,13 @@ func main() {
 		}
 		backups.Start(applicationContext, database)
 		appOptions = append(appOptions, app.WithBackups(backups))
-		application = app.New(applicationContext, settings, database, frontend, logger, appOptions...)
-		requestHandler = application.Handler()
+		var openErr error
+		application, openErr = app.Open(applicationContext, settings, database, frontend, logger, appOptions...)
+		if openErr != nil {
+			logger.Error("出站代理设置加载失败", "event", "network.proxy.load_failed", "module", "network")
+		} else {
+			requestHandler = application.Handler()
+		}
 	}
 	server := &http.Server{
 		Addr:              settings.Address,

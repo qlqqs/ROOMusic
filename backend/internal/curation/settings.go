@@ -35,6 +35,7 @@ type Enabler struct {
 	Username string `json:"username"`
 }
 type Settings struct {
+	ModelConcurrency   int        `json:"model_concurrency"`
 	Model              string     `json:"model"`
 	DailyTokenLimit    *int64     `json:"daily_token_limit"`
 	WebDailyTokenLimit *int64     `json:"web_daily_token_limit"`
@@ -51,9 +52,9 @@ type Settings struct {
 func loadSettings(ctx context.Context, tx *sql.Tx) (Settings, error) {
 	var s Settings
 	var id *string
-	err := tx.QueryRowContext(ctx, `SELECT paused,enabled,enabled_by::text,enabled_at,model,model_daily_token_limit,web_daily_token_limit
+	err := tx.QueryRowContext(ctx, `SELECT paused,enabled,enabled_by::text,enabled_at,model,model_daily_token_limit,web_daily_token_limit,model_concurrency
  FROM curation_settings WHERE id=1 FOR SHARE`).
-		Scan(&s.Paused, &s.Enabled, &id, &s.EnabledAt, &s.Model, &s.DailyTokenLimit, &s.WebDailyTokenLimit)
+		Scan(&s.Paused, &s.Enabled, &id, &s.EnabledAt, &s.Model, &s.DailyTokenLimit, &s.WebDailyTokenLimit, &s.ModelConcurrency)
 	if err != nil {
 		return Settings{}, err
 	}
@@ -123,6 +124,7 @@ func (w *Writer) UpdateSettings(ctx context.Context, actorID string, enabled, pa
 }
 
 type ModelSettingsPatch struct {
+	ModelConcurrency      *int
 	SetWebDailyTokenLimit bool
 	WebDailyTokenLimit    *int64
 	Model                 *string
@@ -138,7 +140,10 @@ func (w *Writer) UpdateModelSettings(ctx context.Context, actorID string, enable
 	if patch.Model != nil && len(*patch.Model) > 200 || invalidTokenLimit(patch.DailyTokenLimit) || invalidTokenLimit(patch.WebDailyTokenLimit) {
 		return Settings{}, operations.Invalid("invalid_input", "模型名称或每日用量上限无效")
 	}
-	if enabled == nil && paused == nil && patch.Model == nil && !patch.SetDailyTokenLimit && !patch.SetWebDailyTokenLimit {
+	if patch.ModelConcurrency != nil && (*patch.ModelConcurrency < 1 || *patch.ModelConcurrency > 16) {
+		return Settings{}, operations.Invalid("invalid_input", "模型并发数必须是 1 到 16 的整数")
+	}
+	if enabled == nil && paused == nil && patch.ModelConcurrency == nil && patch.Model == nil && !patch.SetDailyTokenLimit && !patch.SetWebDailyTokenLimit {
 		return Settings{}, operations.Invalid("invalid_input", "需要指定开关或暂停状态")
 	}
 	tx, err := w.db.BeginTx(ctx, nil)
@@ -153,8 +158,9 @@ func (w *Writer) UpdateModelSettings(ctx context.Context, actorID string, enable
  updated_at=CASE WHEN $1::boolean IS NOT NULL OR $3::boolean IS NOT NULL THEN now() ELSE updated_at END,
  model=COALESCE($4,model),model_daily_token_limit=CASE WHEN $5 THEN $6 ELSE model_daily_token_limit END,
  web_daily_token_limit=CASE WHEN $7 THEN $8 ELSE web_daily_token_limit END,
- model_updated_at=CASE WHEN $4::text IS NOT NULL OR $5 OR $7 THEN now() ELSE model_updated_at END
- WHERE id=1`, enabled, actorID, paused, patch.Model, patch.SetDailyTokenLimit, patch.DailyTokenLimit, patch.SetWebDailyTokenLimit, patch.WebDailyTokenLimit)
+ model_concurrency=COALESCE($9,model_concurrency),
+ model_updated_at=CASE WHEN $4::text IS NOT NULL OR $5 OR $7 OR $9::integer IS NOT NULL THEN now() ELSE model_updated_at END
+ WHERE id=1`, enabled, actorID, paused, patch.Model, patch.SetDailyTokenLimit, patch.DailyTokenLimit, patch.SetWebDailyTokenLimit, patch.WebDailyTokenLimit, patch.ModelConcurrency)
 	if err != nil {
 		return Settings{}, err
 	}

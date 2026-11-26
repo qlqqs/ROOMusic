@@ -73,6 +73,7 @@ func (s *Scheduler) conditions(ctx context.Context, checkBudget bool) (p schedul
 		return p, "", err
 	}
 	p.Model, p.DailyTokenLimit, p.WebDailyTokenLimit = settings.Model, settings.DailyTokenLimit, settings.WebDailyTokenLimit
+	p.Concurrency = settings.ModelConcurrency
 	now := s.options.Now()
 	if checkBudget {
 		p.Today, p.WebToday, err = s.writer.DailyUsage(ctx, now)
@@ -114,10 +115,10 @@ func (s *Scheduler) conditions(ctx context.Context, checkBudget bool) (p schedul
 		switch {
 		case reason != "":
 			unavailable(reason)
+		case checkBudget && cooling:
+			unavailable("provider_error")
 		case checkBudget && p.Today.AtLimit(p.DailyTokenLimit):
 			p.State = "limit_reached"
-		case cooling:
-			unavailable("provider_error")
 		default:
 			p.State = "idle"
 		}
@@ -137,12 +138,12 @@ func (s *Scheduler) ModelStatus(ctx context.Context) (curation.ModelProgress, er
  0,count(*) FILTER (WHERE status='shelved'),
  count(*) FILTER (WHERE status='in_progress' AND next_attempt_at IS NOT NULL)>0
  FROM curation_pending_items p WHERE `+curation.PendingTargetVisibleSQL).Scan(&p.Items.WaitingModel, &p.Items.InProgress, &p.Items.WaitingHuman, &p.Items.Shelved, &waitingReview)
+	s.mu.RLock()
+	p.Running = s.running
+	s.mu.RUnlock()
 	if p.State == "idle" || p.State == "limit_reached" {
-		s.mu.RLock()
-		running := s.running
-		s.mu.RUnlock()
 		switch {
-		case running:
+		case p.Running > 0:
 			p.State = "running"
 		case waitingReview && p.State == "idle":
 			p.State = "waiting_review"

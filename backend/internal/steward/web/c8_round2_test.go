@@ -53,24 +53,39 @@ func TestC8PerUserToolRateLimits(t *testing.T) {
 				}
 			}
 			inputs := map[string]string{"web_search": `{"q":"合成"}`, "fetch_page": `{"url":"https://synthetic.invalid/"}`, "search_music_metadata": `{"entity":"artist","query":"合成"}`, "get_music_metadata": `{"entity":"artist","mbid":"11111111-1111-4111-8111-111111111111"}`}
-			call := func(user string, i int) error {
+			call := func(caller tool.Caller, i int) error {
 				name := tc.names[i%len(tc.names)]
-				_, err := defs[i%2][name].Handler(context.Background(), tool.Caller{User: identity.User{ID: user, Role: "user"}}, json.RawMessage(inputs[name]))
+				_, err := defs[i%2][name].Handler(context.Background(), caller, json.RawMessage(inputs[name]))
 				return err
 			}
+			userA := tool.Caller{User: identity.User{ID: "user-a", Role: "admin"}, Source: tool.SourceChat}
+			userB := tool.Caller{User: identity.User{ID: "user-b", Role: "user"}, Source: tool.SourceChat}
 			for i := 0; i < tc.limit; i++ {
-				if err := call("user-a", i); err != nil {
+				if err := call(userA, i); err != nil {
 					t.Fatalf("第 %d 次提前拒绝：%v", i+1, err)
 				}
 			}
 			for i := 0; i < len(tc.names); i++ {
-				c8Code(t, call("user-a", tc.limit+i), "rate_limited")
+				c8Code(t, call(userA, tc.limit+i), "rate_limited")
 			}
-			if err := call("user-b", 0); err != nil {
+			if err := call(userB, 0); err != nil {
 				t.Fatalf("用户额度相互影响：%v", err)
 			}
+			background := userA
+			background.Source = tool.SourceCuration
+			background.ConversationID = "curation-a"
+			for i := 0; i < tc.limit; i++ {
+				if err := call(background, i); err != nil {
+					t.Fatalf("后台会话第 %d 次调用失败：%v", i+1, err)
+				}
+			}
+			c8Code(t, call(background, tc.limit), "rate_limited")
+			background.ConversationID = "curation-b"
+			if err := call(background, 0); err != nil {
+				t.Fatalf("并行后台会话共用了同一额度：%v", err)
+			}
 			now = now.Add(time.Minute)
-			if err := call("user-a", 0); err != nil {
+			if err := call(userA, 0); err != nil {
 				t.Fatalf("窗口到期未恢复：%v", err)
 			}
 			if len(globalUserLimiter.requests) != 1 {

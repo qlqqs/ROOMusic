@@ -157,6 +157,7 @@ func (l backgroundLauncher) Start(ctx context.Context, p model.RunParams) (model
 		return result.Text, err
 	}
 	ctx = curation.WithModelRun(ctx, &p.Run)
+	ctx = provider.WithThrottleObserver(ctx, p.ProviderError)
 	if len(p.Items) > 0 {
 		ctx = context.WithValue(ctx, itemKindKey{}, p.Items[0].Kind)
 	}

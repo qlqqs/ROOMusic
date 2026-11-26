@@ -34,7 +34,7 @@ export function useCurationSettings() {
 }
 
 /** 设置里可以改的几项（至少一项）：总开关、暂停、整理用的模型（空串 = 对话模型）、每日 token 上限与联网兜底的每日上限（null = 不限）。 */
-export type CurationSettingsChange = { enabled?: boolean; paused?: boolean; model?: string; daily_token_limit?: number | null; web_daily_token_limit?: number | null };
+export type CurationSettingsChange = { enabled?: boolean; paused?: boolean; model?: string; daily_token_limit?: number | null; web_daily_token_limit?: number | null; model_concurrency?: number };
 
 /**
  * 改设置：成功后写回设置；外部源的“能不能用”与后台进度（含模型层）都跟着变，让它们重新读取。

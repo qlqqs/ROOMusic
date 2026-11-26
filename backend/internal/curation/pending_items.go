@@ -75,18 +75,18 @@ func (w *Writer) ClaimPendingItems(ctx context.Context, conversation string, now
 }
 
 // ClaimModelKind 在同一语句内复核类别、释放时间及可见性并领取；第二档还限定已巡检的发行。
-func (w *Writer) ClaimModelKind(ctx context.Context, conversation string, now time.Time, n int, targets []string, kind, releaseID string) ([]PendingItem, error) {
-	return w.modelKindItems(ctx, conversation, now, n, targets, kind, releaseID, nil)
+func (w *Writer) ClaimModelKind(ctx context.Context, conversation string, now time.Time, n int, targets []string, kind, releaseID string, excluded ...string) ([]PendingItem, error) {
+	return w.modelKindItems(ctx, conversation, now, n, targets, kind, releaseID, nil, excluded)
 }
 
 // SelectionItems 读取同类首批项，取得候选详情期间不持有行锁。
-func (w *Writer) SelectionItems(ctx context.Context, now time.Time, n int) ([]PendingItem, error) {
-	return w.modelKindItems(ctx, "", now, n, []string{"release"}, "select", "", nil)
+func (w *Writer) SelectionItems(ctx context.Context, now time.Time, n int, excluded []string) ([]PendingItem, error) {
+	return w.modelKindItems(ctx, "", now, n, []string{"release"}, "select", "", nil, excluded)
 }
 
 // ClaimPreparedSelection 只领取仍就绪且准备期间未变更的项，保留已补全的候选和依据。
 func (w *Writer) ClaimPreparedSelection(ctx context.Context, conversation string, now time.Time, prepared []PendingItem) ([]PendingItem, error) {
-	claimed, err := w.modelKindItems(ctx, conversation, now, len(prepared), []string{"release"}, "select", "", prepared)
+	claimed, err := w.modelKindItems(ctx, conversation, now, len(prepared), []string{"release"}, "select", "", prepared, nil)
 	byID := make(map[string]PendingItem, len(prepared))
 	for _, p := range prepared {
 		byID[p.ID] = p
@@ -105,7 +105,7 @@ func (w *Writer) DeferSelection(ctx context.Context, item PendingItem, next time
 	return err
 }
 
-func (w *Writer) modelKindItems(ctx context.Context, conversation string, now time.Time, n int, targets []string, kind, releaseID string, prepared []PendingItem) ([]PendingItem, error) {
+func (w *Writer) modelKindItems(ctx context.Context, conversation string, now time.Time, n int, targets []string, kind, releaseID string, prepared []PendingItem, excluded []string) ([]PendingItem, error) {
 	// 按同一发行或艺人分组。只有自查和联网需要艺人投影。
 	prefix := "WITH visible AS (" + catalog.VisibleReleaseIDsSQL + ")"
 	group, albums := "p.kind", "0"
@@ -129,14 +129,8 @@ func (w *Writer) modelKindItems(ctx context.Context, conversation string, now ti
  CASE WHEN $4='' THEN 0 ELSE ` + QueueRankSQL + ` END AS priority` + modelQueueFromSQL + `
  AND p.target_type=ANY($3::text[]) AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$1)
  AND ($4='' OR ` + modelKindSQL + `=$4 OR ($4='unavailable_web' AND p.route='web'))
- ), seed AS (
- SELECT pack FROM eligible WHERE $5='' OR target_id=NULLIF($5,'')::uuid
- ORDER BY albums DESC,priority,created_at,id LIMIT 1
- ), picked AS (
- SELECT p.id,e.priority,e.albums FROM eligible e JOIN curation_pending_items p ON p.id=e.id
- WHERE ($4='' OR e.pack=(SELECT pack FROM seed)) AND p.status IN ('waiting_model','waiting_route')
-`
-	args := []any{now, n, targets, kind, releaseID}
+ AND NOT (p.id=ANY(COALESCE($6::uuid[], '{}')))`
+	args := []any{now, n, targets, kind, releaseID, excluded}
 	if conversation != "" {
 		args = append(args, conversation)
 	}
@@ -147,14 +141,20 @@ func (w *Writer) modelKindItems(ctx context.Context, conversation string, now ti
 			ids = append(ids, p.ID)
 			versions = append(versions, p.UpdatedAt)
 		}
-		query += ` AND (p.id,p.updated_at) IN (SELECT * FROM unnest($7::uuid[],$8::timestamptz[]))`
+		query += ` AND (p.id,p.updated_at) IN (SELECT * FROM unnest($8::uuid[],$9::timestamptz[]))`
 		args = append(args, ids, versions)
 	}
+	query += `), seed AS (
+ SELECT pack FROM eligible WHERE $5='' OR target_id=NULLIF($5,'')::uuid
+ ORDER BY albums DESC,priority,created_at,id LIMIT 1
+ ), picked AS (
+ SELECT p.id,e.priority,e.albums FROM eligible e JOIN curation_pending_items p ON p.id=e.id
+ WHERE ($4='' OR e.pack=(SELECT pack FROM seed)) AND p.status IN ('waiting_model','waiting_route')`
 	query += ` ORDER BY (e.target_id=NULLIF($5,'')::uuid) DESC NULLS LAST,e.albums DESC,e.priority,e.created_at,e.id LIMIT $2`
 	rows := "curation_pending_items"
 	if conversation != "" {
 		query += ` FOR UPDATE OF p SKIP LOCKED
- ), claimed AS (UPDATE curation_pending_items SET status='in_progress',conversation_id=$6,claimed_at=$1,updated_at=now(),next_attempt_at=NULL
+ ), claimed AS (UPDATE curation_pending_items SET status='in_progress',conversation_id=$7,claimed_at=$1,updated_at=now(),next_attempt_at=NULL
  WHERE id IN (SELECT id FROM picked) RETURNING *)`
 		rows = "claimed"
 	} else {

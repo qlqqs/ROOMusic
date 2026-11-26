@@ -1,12 +1,66 @@
 package app
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 )
+
+func TestPostgreSQLCurationModelConcurrentProviderCooldown(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		failure  schedulerHTTPFailure
+		cooldown time.Duration
+	}{
+		{"429_retry_after", schedulerHTTPFailure{status: http.StatusTooManyRequests, retryAfter: "120"}, 2 * time.Minute},
+		{"503_backoff", schedulerHTTPFailure{status: http.StatusServiceUnavailable}, 10 * time.Minute},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSchedulerFixture(t)
+			f.configure(t, &f.admin)
+			failed := f.pending(t, f.a)
+			f.update(t, http.MethodPut, curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 2})
+			first := f.next(t, false)
+			firstConversation := f.item(t, failed.ID).ConversationID
+			active := f.pending(t, f.b)
+			second := f.next(t, false)
+			thirdRelease, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{
+				title: "排队中的专辑", artist: "第三位艺人", tracks: []string{"present"},
+			})
+			waiting := f.pending(t, thirdRelease)
+			first.fail <- tc.failure
+			schedulerWait(t, "失败项释放领取", func() bool { return f.item(t, failed.ID).Status == "waiting_model" })
+			if got := f.item(t, failed.ID); got.Attempts != 0 {
+				t.Fatalf("模型服务故障计入失败次数：%+v", got)
+			}
+
+			second.selectCandidate(t, active.ID, "")
+			schedulerWait(t, "在途发行正常升级第二档", func() bool { return f.item(t, active.ID).Route == "lookup" })
+			f.clock.now.Add(int64(tc.cooldown - time.Second))
+			select {
+			case <-f.requests:
+				t.Fatal("并发项完成后提前领取了新项")
+			case <-time.After(100 * time.Millisecond):
+			}
+			if got := f.item(t, waiting.ID); got.Status != "waiting_model" || got.ConversationID != "" {
+				t.Fatalf("冷却期间第三项被领取：%+v", got)
+			}
+			b3RequireCount(t, f.application, 2, `SELECT count(*) FROM steward_conversations WHERE kind='curation'`)
+
+			f.clock.now.Add(int64(time.Second))
+			resumed := f.next(t, false)
+			got := f.item(t, failed.ID)
+			if got.Status != "in_progress" || got.Attempts != 0 || got.ConversationID == firstConversation {
+				t.Fatalf("服务恢复后失败项应按原尝试次数重新领取：%+v", got)
+			}
+			f.pause(t)
+			resumed.complete(t)
+		})
+	}
+}
 
 func (f *schedulerFixture) update(t *testing.T, method, path string, body any) {
 	t.Helper()

@@ -12,6 +12,7 @@ describe("设置分栏", () => {
       { label: "成员", to: "/settings/members" },
       { label: "自动整理", to: "/settings/curation" },
       { label: "局域网设备", to: "/settings/devices" },
+      { label: "网络", to: "/settings/network" },
       { label: "第三方客户端", to: "/settings/clients" },
       { label: "操作记录", to: "/settings/operations" },
       { label: "备份", to: "/settings/backups" },
@@ -26,6 +27,6 @@ describe("设置分栏", () => {
       { label: "Agent", to: "/settings/agent" },
       { label: "关于", to: "/settings/about" },
     ]);
-    expect(visibleSettingsSections("admin")).toHaveLength(12);
+    expect(visibleSettingsSections("admin")).toHaveLength(13);
   });
 });

@@ -104,7 +104,7 @@ func (s *Service) Search(ctx context.Context, user identity.User, query string, 
 	response, err := client.Do(req)
 	if err != nil {
 		var denied *egress.Error
-		if errors.As(err, &denied) && denied.Code != egress.CodeTooManyRedirects {
+		if errors.Is(err, egress.ErrDenied) && errors.As(err, &denied) && denied.Code != egress.CodeTooManyRedirects {
 			return nil, failure("egress_denied")
 		}
 		return nil, failure("search_unreachable")

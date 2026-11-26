@@ -318,7 +318,7 @@ func TestPostgreSQL整理联网额度与单项额度(t *testing.T) {
 			}
 			if tc.webLimit > 0 {
 				second := modelRouteFixture(t, f, f.pending(t, f.b), "web")
-				f.update(t, "PUT", curationBase+"/settings", map[string]int{"web_daily_token_limit": tc.webLimit})
+				f.update(t, "PUT", curationBase+"/settings", map[string]int{"web_daily_token_limit": tc.webLimit, "model_concurrency": 1})
 				f.enable(t)
 				q := f.next(t, false)
 				// 联网按在库组数及创建顺序领取，先让第一项耗完额度。

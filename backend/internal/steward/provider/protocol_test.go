@@ -354,6 +354,51 @@ func TestOpenAIToolResultWireShape(t *testing.T) {
 	}
 }
 
+func TestModelThrottleObserver(t *testing.T) {
+	date := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
+	for _, tc := range []struct {
+		name    string
+		status  int
+		header  string
+		delay   time.Duration
+		observe bool
+	}{
+		{"秒数", http.StatusTooManyRequests, "12", 12 * time.Second, true},
+		{"立即重试", http.StatusServiceUnavailable, "0", 0, true},
+		{"未来日期", http.StatusServiceUnavailable, date.Format(http.TimeFormat), 0, true},
+		{"已过日期", http.StatusServiceUnavailable, date.Add(-2 * time.Hour).Format(http.TimeFormat), 0, true},
+		{"无响应头", http.StatusTooManyRequests, "", -1, true},
+		{"无效响应头", http.StatusServiceUnavailable, "later", -1, true},
+		{"其他状态", http.StatusBadGateway, "12", 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Retry-After", tc.header)
+				w.WriteHeader(tc.status)
+			}))
+			defer server.Close()
+			observed := false
+			var delay time.Duration
+			ctx := WithThrottleObserver(t.Context(), func(d time.Duration) {
+				observed, delay = true, d
+			})
+			start := time.Now()
+			_, err := makeProvider(t, ProtocolOpenAI, server.Client(), server.URL).Stream(ctx, testRequest())
+			var failure *Error
+			if !errors.As(err, &failure) || failure.StatusCode != tc.status || observed != tc.observe {
+				t.Fatalf("状态 %d，通知 %t，错误 %v", tc.status, observed, err)
+			}
+			if tc.header == date.Format(http.TimeFormat) {
+				if delay < time.Until(date) || delay > date.Sub(start) {
+					t.Fatalf("等待时长 %v，恢复时间 %v", delay, date)
+				}
+			} else if delay != tc.delay {
+				t.Fatalf("等待时长 %v，期望 %v", delay, tc.delay)
+			}
+		})
+	}
+}
+
 func TestProtocolsHTTPAndStreamErrorsRedactKey(t *testing.T) {
 	for _, protocol := range []Protocol{ProtocolOpenAI, ProtocolMessages} {
 		for _, tc := range []struct {

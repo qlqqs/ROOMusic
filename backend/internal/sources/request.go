@@ -113,6 +113,7 @@ func (c caller) check(ctx context.Context) error {
 
 type response struct {
 	denied      *egress.Error
+	proxyError  egress.ErrorCode
 	contentType string
 	status      int
 	body        []byte
@@ -490,6 +491,8 @@ func (r *Requester) fetchAttempt(ctx context.Context, c caller, request *http.Re
 		attrs := []any{"event", "sources.request.finished", "module", "sources", "message", "外部源请求结束", "source", r.cache.source, "domain", req.URL.Hostname(), "duration_ms", time.Since(started).Milliseconds(), "attempt", attempt}
 		if res.status != 0 {
 			attrs = append(attrs, "status", res.status)
+		} else if res.proxyError != "" {
+			attrs = append(attrs, "error_code", string(res.proxyError))
 		} else {
 			attrs = append(attrs, "error_code", "request_failed")
 		}
@@ -537,10 +540,12 @@ func fetch(client *http.Client, req *http.Request, limit int64, allStatuses bool
 	resp, err := client.Do(req)
 	if err != nil {
 		// 地址策略与禁止重定向产生的错误无需重试。
-		var denied *egress.Error
-		if errors.Is(err, egress.ErrDenied) {
-			errors.As(err, &denied)
-			return response{denied: denied}
+		var outbound *egress.Error
+		if errors.As(err, &outbound) {
+			if errors.Is(outbound, egress.ErrDenied) {
+				return response{denied: outbound}
+			}
+			return response{retry: true, proxyError: outbound.Code}
 		}
 		return response{retry: true}
 	}
