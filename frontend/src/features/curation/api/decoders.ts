@@ -169,6 +169,28 @@ const matchResultsDecoder = d.object({ results: d.array(matchResultDecoder, { ma
 export const decodeReleaseMatchResults = d.defineDecoder(matchResultsDecoder);
 export type ReleaseMatchResultDTO = d.Infer<typeof matchResultDecoder>;
 
+/**
+ * “整理艺人”的全量队列（ADR 0009 第 7 节）：把没对上 MusicBrainz 的艺人逐个联网查找，专辑艺人在前，合辑各首的艺人在后。
+ * idle 是还没开始过，running 是在查，stopped 是停了（未处理的保留，再开始时接着查）。额度用完时仍是 running，retry_at 是下一个本地日界。
+ * 整理用的模型与管家的网页搜索都配好时 configured 才为 true；按钮能不能点看 can_start、can_stop。
+ */
+export const ARTIST_WEB_QUEUE_STATES = ["idle", "running", "stopped"] as const;
+const artistWebQueueDecoder = d.object({
+  configured: d.boolean(),
+  can_start: d.boolean(),
+  can_stop: d.boolean(),
+  state: d.oneOf(ARTIST_WEB_QUEUE_STATES),
+  generation: count(),
+  total: count(),
+  queued: count(),
+  running: count(),
+  processed: count(),
+  retry_at: d.nullable(d.timestamp()),
+});
+/** GET/POST/DELETE /admin/curation/artist-web-search：读取、开始或接续、停止，都返回队列的状态。 */
+export const decodeArtistWebQueue = d.defineDecoder(artistWebQueueDecoder);
+export type ArtistWebQueueDTO = d.Infer<typeof artistWebQueueDecoder>;
+
 // 批次：一段连续的后台工作；closed_at 为空表示还在进行。改动数与已撤销数由后端按操作记录统计。
 const batchDecoder = d.object({
   closed_at: d.nullable(d.timestamp()),

@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { sampleBody } from "../../../test/api-samples";
 import { without, withValue } from "../../../test/mutate";
 import { decodeArtistDetail, decodeArtistLinkPreview, decodeArtistMediaReject, decodeArtistMediaWrite, decodeArtistWebSearch } from "./decoders";
+import { artistWebSearchOf } from "../../../test/artist-web-search-data";
 
 const manualDetail = decodeArtistDetail(sampleBody("artists/detail-manual-media"));
 
@@ -83,8 +84,8 @@ it("保留网络搜索的简介与图片来源、可空来源地址及引用", (
 it("解码网络搜索的五种状态和待确认候选，拒绝未知状态及不合规候选", () => {
   const sample = sampleBody("artists/web-search");
   expect(decodeArtistWebSearch(sample)).toStrictEqual(sample);
-  for (const state of ["none", "queued", "running", "shelved"]) {
-    const input = { state, candidates: [] };
+  for (const state of ["none", "queued", "running", "shelved"] as const) {
+    const input = artistWebSearchOf({ state });
     expect(decodeArtistWebSearch(input)).toStrictEqual(input);
   }
   expect(() => decodeArtistWebSearch(without(sample, ["candidates"]))).toThrow(/candidates/);

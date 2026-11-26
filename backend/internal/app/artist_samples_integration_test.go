@@ -157,7 +157,10 @@ func recordArtistWebSearchSamples(f *artistSamples, w *curation.Writer) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.get("artists/web-search", base+"/web-search")
+	state := f.get("artists/web-search", base+"/web-search")
+	if state["configured"] != false || state["state"] != "waiting_human" || state["queue"] != nil {
+		t.Fatalf("历史候选的联网状态不符：%v", state)
+	}
 	if err = curation.ResolvePendingItems(ctx, f.app.database, f.primary, "artist_identity", "program_matched"); err != nil {
 		t.Fatal(err)
 	}

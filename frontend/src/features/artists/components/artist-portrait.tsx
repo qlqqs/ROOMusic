@@ -1,4 +1,4 @@
-import { Copyright, Flag, Globe, ImagePlus, Link2, User, X } from "lucide-react";
+import { Copyright, Flag, Globe, ImagePlus, Link2, SearchCheck, User, X } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { cx } from "../../../shared/lib/class-names";
 import { useTooltip } from "../../../shared/ui";
@@ -71,6 +71,13 @@ export function ArtistPortrait({ artist, image, links, media }: ArtistPortraitPr
   const webState = media?.webSearch?.state ?? "none";
   const candidates = webState === "waiting_human" ? (media?.webSearch?.candidates ?? []) : [];
   const searching = webState === "queued" || webState === "running";
+  // “联网查找”：整理用的模型和网页搜索都配好才出现，排队或查找中时不可再点（ADR 0009 第 7 节，只在点了才查）。
+  const webSearch = media?.webSearch ?? null;
+  const queue = webSearch?.queue ?? null;
+  const lookup =
+    media !== null && webSearch !== null && webSearch.configured ? (
+      <IconButton label="联网查找这位艺人的身份" icon={<SearchCheck size={15} aria-hidden="true" />} disabled={!webSearch.can_start || media.startingWebSearch} onClick={() => void media.startWebSearch()} />
+    ) : null;
   // 印章的模式：有候选待确认优先；其次是图片来源；没有图片时管理员看到网络搜索中或“指定对应”。
   const seal = candidates.length > 0 ? "pending" : shown !== null ? "source" : searching ? "searching" : media !== null ? "link" : null;
   const sealLabel =
@@ -80,8 +87,10 @@ export function ArtistPortrait({ artist, image, links, media }: ArtistPortraitPr
         ? sourceSummaryOf("图片", shown)
         : seal === "searching"
           ? webState === "running"
-            ? "正在网络搜索"
-            : "排队等待网络搜索"
+            ? "正在联网查找"
+            : queue === null
+              ? "排队等待联网查找"
+              : `排队等待联网查找（第 ${queue.position} 位，共 ${queue.total} 位）`
           : "指定对应";
   const sealTip = useTooltip(popover === null ? sealLabel : undefined);
   const veilTip = useTooltip(shown === null ? "上传图片" : "更换图片");
@@ -258,6 +267,7 @@ export function ArtistPortrait({ artist, image, links, media }: ArtistPortraitPr
                     }}
                   />
                   <IconButton label="指定对应" icon={<Link2 size={15} aria-hidden="true" />} onClick={() => setPopover("link")} />
+                  {lookup}
                 </>
               }
               end={<IconButton label="更换图片" icon={<ImagePlus size={15} aria-hidden="true" />} onClick={chooseFile} />}
@@ -282,6 +292,7 @@ export function ArtistPortrait({ artist, image, links, media }: ArtistPortraitPr
             setPopover(null);
             setPastedLink("");
           }}
+          footer={lookup === null ? undefined : <PopoverActions start={lookup} />}
         />
       ) : null}
     </div>

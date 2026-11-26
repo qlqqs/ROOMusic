@@ -16,7 +16,7 @@ func TestB3FingerprintNeedsWork(t *testing.T) {
 		for _, status := range []string{"matched", "no_match", "uncertain", "try_later"} {
 			for _, available := range []bool{false, true} {
 				t.Run(fmt.Sprintf("字段=%q/状态=%s/可用=%t", field, status, available), func(t *testing.T) {
-					state := curation.WorkState{RuleVersion: StoredRuleVersion, InputDigest: digest, Status: status, Result: jsonValue(map[string]any{"method": "search"})}
+					state := curation.WorkState{RuleVersion: StoredRuleVersion, InputDigest: digest, FileDigest: digest, Status: status, Result: jsonValue(map[string]any{"method": "search"})}
 					if field != "" {
 						state.Result = jsonValue(map[string]any{"method": "search", "fingerprint": field})
 					}
@@ -54,7 +54,7 @@ func TestB3FingerprintNeedsWork(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			state := curation.WorkState{
-				RuleVersion: StoredRuleVersion, InputDigest: digest, Status: "uncertain",
+				RuleVersion: StoredRuleVersion, InputDigest: digest, FileDigest: digest, Status: "uncertain",
 				Result: jsonValue(map[string]any{"method": tc.method, "conflicts": tc.conflicts}),
 			}
 			if got := needsWork("release", state, digest, now, true); got != tc.want {

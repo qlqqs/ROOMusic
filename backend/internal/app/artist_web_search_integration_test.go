@@ -77,11 +77,13 @@ func newControlledArtistWebSearch(t *testing.T, extra func(http.ResponseWriter, 
 				mock.ServeHTTP(w, r)
 				return
 			}
-			q := schedulerRequest{reply: make(chan string, 1)}
-			if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
+			q := schedulerRequest{reply: make(chan string, 1), fail: make(chan schedulerHTTPFailure, 1)}
+			raw, err := io.ReadAll(r.Body)
+			if err != nil || json.Unmarshal(raw, &q) != nil {
 				http.Error(w, "模型请求无效", http.StatusBadRequest)
 				return
 			}
+			q.wire = raw
 			select {
 			case requests <- q:
 			case <-r.Context().Done():
@@ -93,6 +95,9 @@ func newControlledArtistWebSearch(t *testing.T, extra func(http.ResponseWriter, 
 			case wire := <-q.reply:
 				w.Header().Set("Content-Type", "text/event-stream")
 				io.WriteString(w, wire)
+			case failure := <-q.fail:
+				w.Header().Set("Retry-After", failure.retryAfter)
+				http.Error(w, "合成模型服务暂不可用", failure.status)
 			case <-r.Context().Done():
 			case <-t.Context().Done():
 			}

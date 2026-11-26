@@ -1,3 +1,4 @@
+import { artistWebSearchOf } from "../../../test/artist-web-search-data";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
@@ -54,7 +55,7 @@ function advance(ms: number) {
 describe("useArtistMedia", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.mocked(fetchArtistWebSearch).mockReset().mockResolvedValue({ status: 200, data: { state: "none", candidates: [] } });
+    vi.mocked(fetchArtistWebSearch).mockReset().mockResolvedValue({ status: 200, data: artistWebSearchOf({ state: "none" }) });
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -176,14 +177,14 @@ describe("useArtistMedia", () => {
 
   it.each(["queued", "running"] as const)("网络搜索 %s 每 20 秒重读，候选待确认后停止轮询", async (state) => {
     const status = vi.mocked(fetchArtistWebSearch);
-    status.mockResolvedValueOnce({ status: 200, data: { state, candidates: [] } });
+    status.mockResolvedValueOnce({ status: 200, data: artistWebSearchOf({ state }) });
     const { result } = setup();
 
     await advance(1);
     expect(result.current.webSearch?.state).toBe(state);
     expect(status).toHaveBeenCalledExactlyOnceWith(artistId, expect.any(AbortSignal));
 
-    status.mockResolvedValue({ status: 200, data: { state: "waiting_human", candidates: [] } });
+    status.mockResolvedValue({ status: 200, data: artistWebSearchOf({ state: "waiting_human" }) });
     await advance(19_998);
     expect(status).toHaveBeenCalledOnce();
     await advance(10);
@@ -195,7 +196,7 @@ describe("useArtistMedia", () => {
 
   it.each<ArtistWebSearchDTO["state"]>(["none", "shelved", "waiting_human"])("网络搜索 %s 只读取一次", async (state) => {
     const status = vi.mocked(fetchArtistWebSearch);
-    status.mockResolvedValue({ status: 200, data: { state, candidates: [] } });
+    status.mockResolvedValue({ status: 200, data: artistWebSearchOf({ state }) });
     const { result } = setup();
     await advance(60_000);
     expect(result.current.webSearch?.state).toBe(state);

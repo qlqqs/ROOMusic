@@ -1,4 +1,4 @@
-import { decodeCurationBatch, decodeCurationBatchPage, decodeCurationConversationPage, decodeCurationExceptionAccepted, decodeCurationExceptionDeclined, decodeCurationExceptionPage, decodeCurationProgress, decodeCurationSettings, decodeCurationSource, decodeCurationSources, decodeReleaseMatchResults, decodeScopeRevert, decodeSuppressionPage } from "../features/curation/api/decoders";
+import { decodeArtistWebQueue, decodeCurationBatch, decodeCurationBatchPage, decodeCurationConversationPage, decodeCurationExceptionAccepted, decodeCurationExceptionDeclined, decodeCurationExceptionPage, decodeCurationProgress, decodeCurationSettings, decodeCurationSource, decodeCurationSources, decodeReleaseMatchResults, decodeScopeRevert, decodeSuppressionPage } from "../features/curation/api/decoders";
 import {
   decodeAllowlist,
   decodeAllowlistEntry,
@@ -573,6 +573,15 @@ const successContracts: Record<string, Contract> = {
   "curation/source-key-set": { status: 200, decode: decodeCurationSource },
   "curation/source-key-cleared": { status: 200, decode: decodeCurationSource },
   "curation/progress": { status: 200, decode: decodeCurationProgress },
+  "curation/artist-web-search/artist-candidates": { status: 200, decode: decodeArtistWebSearch },
+  "curation/artist-web-search/artist-start": { status: 202, decode: decodeArtistWebSearch },
+  "curation/artist-web-search/artist-unconfigured": { status: 200, decode: decodeArtistWebSearch },
+  "curation/artist-web-search/candidate-accept": { status: 200, decode: decodeCurationExceptionAccepted },
+  "curation/artist-web-search/candidate-decline": { status: 200, decode: decodeCurationExceptionDeclined },
+  "curation/artist-web-search/queue-idle": { status: 200, decode: decodeArtistWebQueue },
+  "curation/artist-web-search/queue-start": { status: 202, decode: decodeArtistWebQueue },
+  "curation/artist-web-search/queue-stop": { status: 200, decode: decodeArtistWebQueue },
+  "curation/artist-web-search/queue-daily-limit": { status: 202, decode: decodeArtistWebQueue },
   "curation/match-results": { status: 200, decode: decodeReleaseMatchResults },
   "curation/match-results-empty": { status: 200, decode: decodeReleaseMatchResults },
   "curation/batches": { status: 200, decode: decodeCurationBatchPage },
@@ -801,6 +810,9 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "playback-zones/responses/errors/volume-fixed": { status: 409, code: "volume_fixed" },
   "playback-zones/responses/errors/zone-offline": { status: 409, code: "zone_offline" },
   "errors/backup-deletions-invalid": { status: 400, code: "invalid_input" },
+  "curation/artist-web-search/error-model-not-configured": { status: 409, code: "model_not_configured" },
+  "curation/artist-web-search/error-search-unconfigured": { status: 409, code: "search_unconfigured" },
+  "curation/artist-web-search/error-source-disabled": { status: 409, code: "source_disabled" },
   "errors/root-scan-interval-invalid-input": { status: 400, code: "invalid_input" },
   "errors/backup-retention-invalid": { status: 400, code: "invalid_input" },
   "errors/curation-key-not-supported": { status: 400, code: "key_not_supported" },

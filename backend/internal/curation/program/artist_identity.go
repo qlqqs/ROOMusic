@@ -79,7 +79,8 @@ func (m *ModelMatcher) PlanArtistIdentity(ctx context.Context, item curation.Pen
 				editions = append(editions, r)
 			}
 		}
-		result := decideAlbum(e, "search", editions, MatchSnapshot{})
+		// 每版完整发行的署名均已核对候选 MBID，可用于短专辑的艺人判定。
+		result := compareAlbumEditions(e, "search", editions, MatchSnapshot{}, true)
 		if result.Status != "matched" && !slices.Contains(result.Conflicts, "different_release_groups") {
 			continue
 		}

@@ -193,6 +193,9 @@ func TestB3FingerprintSingleRules(t *testing.T) {
 			e.CandidateKind = "loose_unknown"
 			track := &e.Tracks[0]
 			track.TitlePlaceholder = tc.name == "占位标题"
+			if !track.TitlePlaceholder {
+				track.Artist = "正式艺人"
+			}
 			length, officialLength := int64(100000), int64(100000)
 			if tc.name == "时长不符" {
 				length = 106000
@@ -313,6 +316,7 @@ func TestB3MatchWithoutFingerprint(t *testing.T) {
 			case "搜索无结果":
 				want = albumPageResult(curation.ReleasePage{}, false)
 				want.Snapshot.Pages = append(want.Snapshot.Pages, SearchPage{Kind: "release", Relaxed: true})
+				want.Snapshot.FormatRelaxed = true
 				want.Route, want.Fingerprint = "lookup", "unavailable"
 			case "信息不足":
 				e.TitlePlaceholder, e.ArtistPlaceholder = true, true

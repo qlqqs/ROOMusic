@@ -155,6 +155,11 @@ export function fetchArtistWebSearch(artistId: string, signal?: AbortSignal): Pr
   return apiRequest({ method: "GET", path: `/api/v1/artists/${artistId}/web-search`, signal }, decodeArtistWebSearch);
 }
 
+/** 管理员：联网查找这一位（无请求体）。受理时 202 并返回最新状态；模型或网页搜索没配好、MusicBrainz 关闭时 409。 */
+export function startArtistWebSearch(artistId: string): Promise<ApiResponse<ArtistWebSearchDTO>> {
+  return apiRequest({ method: "POST", path: `/api/v1/artists/${artistId}/web-search` }, decodeArtistWebSearch);
+}
+
 /**
  * 采纳或不采纳一个身份候选：走自动整理的例外接口（完整的响应由 curation 解码，这里只需要成功与否）。
  * 采纳后同一位艺人的其他候选由后端关闭。

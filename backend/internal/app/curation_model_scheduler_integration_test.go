@@ -41,6 +41,7 @@ type schedulerRequest struct {
 		Content json.RawMessage
 	}
 	inputTokens int
+	wire        []byte
 	reply       chan string
 	fail        chan schedulerHTTPFailure
 }

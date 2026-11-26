@@ -1,0 +1,21 @@
+{
+  "body": {
+    "can_start": false,
+    "can_stop": true,
+    "candidates": [],
+    "configured": true,
+    "queue": {
+      "generation": 1,
+      "position": 1,
+      "total": 1
+    },
+    "state": "queued",
+    "usage": {
+      "token_limit": 50000,
+      "tokens": 0,
+      "tool_call_limit": 10,
+      "tool_calls": 0
+    }
+  },
+  "status": 202
+}

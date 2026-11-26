@@ -1,0 +1,65 @@
+{
+  "body": {
+    "exception": {
+      "artist": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "纸屿"
+      },
+      "can_accept": false,
+      "conversation_id": "00000000-0000-4000-8000-000000000002",
+      "created_at": "2026-01-01T00:00:00Z",
+      "decided_at": "2026-01-01T00:00:01Z",
+      "decided_by": "00000000-0000-4000-8000-000000000003",
+      "evidence": [
+        {
+          "quote": "纸屿二重奏（Wikidata Q900001）与同名独奏者分别录制潮声作品。 海岸来信是为测试创作的独立音乐组合，作品以潮汐和沿岸生活为主题。",
+          "url": "https://mock.example/searxng/artists/coast"
+        }
+      ],
+      "id": "00000000-0000-4000-8000-000000000004",
+      "input": {
+        "basis": {
+          "citations": [
+            "https://mock.example/searxng/artists/coast"
+          ],
+          "note": "署名与二重奏相同，还需核对。"
+        },
+        "external_id": "00000000-0000-4000-8000-000000000005",
+        "item_id": "00000000-0000-4000-8000-000000000006",
+        "source": "musicbrainz"
+      },
+      "kind": "artist_identity",
+      "operation_ids": [
+        "00000000-0000-4000-8000-000000000007"
+      ],
+      "pending_item_id": "00000000-0000-4000-8000-000000000006",
+      "preview": {
+        "changes": [
+          {
+            "after": {
+              "description": "海岸二重奏",
+              "external_id": "00000000-0000-4000-8000-000000000005",
+              "musicbrainz": "00000000-0000-4000-8000-000000000005",
+              "name": "纸屿",
+              "name_matches": true,
+              "source": "musicbrainz",
+              "wikidata": null
+            },
+            "before": null,
+            "field": "artist_link"
+          }
+        ]
+      },
+      "reason_code": "no_evidence",
+      "reasons": [],
+      "release": null,
+      "review": null,
+      "status": "accepted",
+      "tool": "resolve_artist_identity"
+    },
+    "operation_ids": [
+      "00000000-0000-4000-8000-000000000007"
+    ]
+  },
+  "status": 200
+}

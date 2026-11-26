@@ -573,9 +573,29 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if scanGrouping {
 				rollbackExec(t, db, scanGroupingLegacyRows)
 			}
+			artistWeb := strings.HasSuffix(m.Name, "_artist_web_lookup.sql")
+			if artistWeb {
+				rollbackExec(t, db, `INSERT INTO artists(id,initial_name) VALUES
+ ('a1030000-0000-4000-8000-000000000001','合成候选艺人'),
+ ('a1030000-0000-4000-8000-000000000002','已有对应艺人');
+ INSERT INTO curation_pending_items(id,target_type,artist_id,kind,status,rule_version,input_digest,evidence,resolution,resolved_at,item_tool_calls,item_tokens)
+ VALUES('a1030000-0000-4000-8000-000000000003','artist','a1030000-0000-4000-8000-000000000001','artist_identity','resolved',1,'合成旧证据','{}','suggestion_recorded',now(),4,120);
+ INSERT INTO curation_model_exceptions(id,pending_item_id,tool,input,preview,provider,reason_code)
+ VALUES('a1030000-0000-4000-8000-000000000004','a1030000-0000-4000-8000-000000000003','resolve_artist_identity','{}','{}','synthetic','no_evidence');
+ INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence)
+ VALUES('a1030000-0000-4000-8000-000000000005','musicbrainz','artist','a1030000-0000-4000-8000-000000000002',
+ 'a1030000-0000-4000-8000-000000000006','artist_credit','certain');
+ INSERT INTO curation_model_usage(day,input_tokens,output_tokens) VALUES('2026-01-02',90,30);`)
+			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
+			if artistWeb {
+				assertArtistWebMigrationSeed(t, db)
+				rollbackExec(t, db, `UPDATE curation_artist_web_queue SET generation=1,state='stopped',started_at=now(),stopped_at=now() WHERE id;
+ UPDATE curation_pending_items SET artist_web_generation=1,artist_web_suspended=true,artist_web_priority=2
+ WHERE id='a1030000-0000-4000-8000-000000000003';`)
+			}
 			if m.Version == 102 {
 				assertProgramMatchMigration(t, db)
 			}
@@ -743,6 +763,12 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s3 := rollbackSnapshot(t, db)
+			if artistWeb {
+				assertArtistWebMigrationSeed(t, db)
+				if diff := postgrestest.Diff(s1, s3); len(diff) > 0 {
+					t.Fatalf("艺人联网迁移再次升级未保留旧行：\n%s", strings.Join(diff, "\n"))
+				}
+			}
 			if scanGrouping {
 				assertScanGroupingMigrationUp(t, db)
 			}
@@ -768,6 +794,20 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 				t.Fatalf("再次升级结构/行数不一致：\n%s", strings.Join(diff, "\n"))
 			}
 		})
+	}
+}
+
+func assertArtistWebMigrationSeed(t *testing.T, db *sql.DB) {
+	t.Helper()
+	var seeded bool
+	err := db.QueryRowContext(t.Context(), `SELECT
+ (SELECT state='idle' AND generation=0 AND actor_id IS NULL AND started_at IS NULL AND stopped_at IS NULL
+ FROM curation_artist_web_queue WHERE id) AND EXISTS (
+ SELECT FROM curation_pending_items WHERE id='a1030000-0000-4000-8000-000000000003'
+ AND artist_web_generation IS NULL AND artist_web_actor IS NULL AND artist_web_priority IS NULL AND NOT artist_web_suspended
+ AND item_tool_calls=4 AND item_tokens=120)`).Scan(&seeded)
+	if err != nil || !seeded {
+		t.Fatalf("迁移默认队列与旧待定项的用量不符：seeded=%v，错误=%v", seeded, err)
 	}
 }
 

@@ -296,6 +296,10 @@ func DecideAlbum(e catalog.CurationEvidence, method string, releases []sources.R
 }
 
 func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.Release, snapshot MatchSnapshot) MatchResult {
+	return compareAlbumEditions(e, method, releases, snapshot, false)
+}
+
+func compareAlbumEditions(e catalog.CurationEvidence, method string, releases []sources.Release, snapshot MatchSnapshot, artistCreditVerified bool) MatchResult {
 	result := newMatch("album", method)
 	result.Candidates = releaseCandidates(method, releases)
 	result.Snapshot = snapshot
@@ -319,6 +323,7 @@ func decideAlbum(e catalog.CurationEvidence, method string, releases []sources.R
 		r := candidate.Release
 		var c comparison
 		c.compareRelease(e, method, *r)
+		c.artistMatch = artistCreditVerified || c.artistMatch
 		c.compareTracks(e, method, *r)
 		if method == "acoustid" {
 			for _, pair := range c.pairs {

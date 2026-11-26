@@ -408,7 +408,65 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordExternalCurationSamples(t, samples)
 	recordCurationCLinkSamples(t, samples)
 	recordReleaseMatchResultSamples(t, samples)
+	recordManualArtistWebSearchSamples(t, samples)
 	samples.finish()
+}
+
+func recordManualArtistWebSearchSamples(t *testing.T, samples *apiSampleRecorder) {
+	f := newArtistWebSearchFixture(t, "", false, false, nil)
+	artist := f.addArtist(t, "联网样本艺人")
+	const base = "curation/artist-web-search/"
+	const queue = curationBase + "/artist-web-search"
+	single := "/api/v1/artists/" + artist + "/web-search"
+	record := func(name, method, path string, status int, code string) {
+		t.Helper()
+		response := f.application.request(t, method, path, nil, &f.admin, map[string]string{"X-Request-ID": sampleRequestID})
+		if code != "" {
+			requireAPIError(t, response, status, code)
+		}
+		samples.record(base+name, response, status)
+	}
+	record("artist-unconfigured", http.MethodGet, single, 200, "")
+	record("queue-idle", http.MethodGet, queue, 200, "")
+	f.stewardSettings(t, &f.admin, map[string]any{"search_source": "searxng", "searxng_url": f.endpoint + "/searxng"})
+	record("error-model-not-configured", http.MethodPost, queue, 409, "model_not_configured")
+	f.stewardSettings(t, &f.admin, map[string]any{
+		"endpoint": f.endpoint + "/openai/v1", "protocol": "responses", "model": "mock-model", "search_source": "none",
+	})
+	record("error-search-unconfigured", http.MethodPost, single, 409, "search_unconfigured")
+	f.configureMock(t)
+	f.update(t, http.MethodPut, curationBase+"/sources/web_search", map[string]bool{"enabled": false})
+	record("error-source-disabled", http.MethodPost, queue, 409, "source_disabled")
+	f.update(t, http.MethodPut, curationBase+"/sources/web_search", map[string]bool{"enabled": true})
+	record("artist-start", http.MethodPost, single, 202, "")
+	record("queue-start", http.MethodPost, queue, 202, "")
+	record("queue-stop", http.MethodDelete, queue, 200, "")
+	mustExec(t, f.application, `UPDATE curation_settings SET model_daily_token_limit=1000`)
+	requireCurationOK(t, f.writer.AddModelUsage(t.Context(), f.clock.options().Now(), 900, 100))
+	record("queue-daily-limit", http.MethodPost, queue, 202, "")
+
+	g := newArtistWebSearchFixture(t, "candidates", true, true, nil)
+	g.configureMock(t)
+	artist = g.addArtist(t, webSearchArtistName)
+	item := g.startArtist(t, artist)
+	schedulerWait(t, "生成两个接口样本候选", func() bool {
+		return countRows(t, g.application, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1 AND status='open'`, item.ID) == 2
+	})
+	state := g.status(t, artist, "waiting_human", 2)
+	recordCandidate := func(name, method, path string) {
+		t.Helper()
+		response := g.application.request(t, method, path, nil, &g.admin, map[string]string{"X-Request-ID": sampleRequestID})
+		body := bytes.ReplaceAll(response.Body.Bytes(), []byte(g.endpoint), []byte("https://mock.example"))
+		response.Body = bytes.NewBuffer(body)
+		samples.record(base+name, response, 200)
+	}
+	recordCandidate("artist-candidates", http.MethodGet, "/api/v1/artists/"+artist+"/web-search")
+	byMBID := map[string]string{}
+	for _, candidate := range state.Candidates {
+		byMBID[candidate.ExternalID] = candidate.ExceptionID
+	}
+	recordCandidate("candidate-decline", http.MethodPost, curationBase+"/exceptions/"+byMBID[webSearchSoloMBID]+"/decline")
+	recordCandidate("candidate-accept", http.MethodPost, curationBase+"/exceptions/"+byMBID[artistMediaMBID]+"/accept")
 }
 
 func recordReleaseMatchResultSamples(t *testing.T, samples *apiSampleRecorder) {

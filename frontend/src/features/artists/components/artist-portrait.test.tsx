@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { sampleBody } from "../../../test/api-samples";
 import { artistMediaControls } from "../../../test/artist-media-controls";
+import { artistWebSearchOf } from "../../../test/artist-web-search-data";
 import { artistImage } from "../../../test/artist-media-data";
 import { decodeArtistDetail, decodeArtistWebSearch, type ArtistImageDTO } from "../api/decoders";
 import { ArtistPortrait } from "./artist-portrait";
@@ -31,10 +32,10 @@ it.each<{ image: ArtistImageDTO | null; sourceName: string; kind: string; glyph:
 });
 
 it.each([
-  ["queued", "排队等待网络搜索"],
-  ["running", "正在网络搜索"],
+  ["queued", "排队等待联网查找"],
+  ["running", "正在联网查找"],
 ] as const)("无图时 %s 显示网络搜索印章和细弧", (state, label) => {
-  const media = { ...artistMediaControls(), webSearch: { state, candidates: [] } };
+  const media = { ...artistMediaControls(), webSearch: artistWebSearchOf({ state }) };
   const { container } = render(<ArtistPortrait artist={{ ...artist, image: null }} image={null} links={links} media={media} />);
   const seal = screen.getByRole("button", { name: label });
   expect(seal.getAttribute("data-kind")).toBe("searching");

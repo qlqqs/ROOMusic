@@ -2,6 +2,7 @@ export { CurationBatchesSection } from "./components/curation-batches-section";
 export { CurationExceptionsSection } from "./components/curation-exceptions-section";
 export { CurationModelSection } from "./components/curation-model-section";
 export { CurationProgressSection } from "./components/curation-progress-section";
+export { ArtistWebQueueControl } from "./components/artist-web-queue-control";
 export { CurationSourcesSection } from "./components/curation-sources-section";
 export { ReleaseMatchResults } from "./components/release-match-results";
 export { PluginsSection } from "./components/plugins-section";
