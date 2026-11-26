@@ -286,6 +286,11 @@ func TestPostgreSQL整理本地模型只写本地片段并保留碟号曲序(t *
 			FROM tracks t JOIN media m ON m.id=t.medium_id WHERE t.id=ANY($1::uuid[])`, entry.tracks)
 	}
 	before := order()
+	scanned, err := catalog.LoadCurationEvidence(t.Context(), app.database, []string{entry.release})
+	requireCurationOK(t, err)
+	if e := scanned[entry.release]; e.Title != "海港剪报" || e.Authenticity["title"] != metadata.Inferred {
+		t.Fatalf("扫描应从目录推断去噪后的专辑名，实际为 %q、%v", e.Title, e.Authenticity["title"])
+	}
 	var input curation.LocalInput
 	raw, err := json.Marshal(map[string]any{"title": "海港剪报", "artist": "凭空编造艺人", "tracks": []map[string]string{
 		{"track_id": entry.tracks[0], "title": "纸灯"},
@@ -306,11 +311,9 @@ func TestPostgreSQL整理本地模型只写本地片段并保留碟号曲序(t *
 		t.Errorf("应调用一次本地整理：%+v", use)
 	}
 	b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='local_cleanup' AND resolution='local_cleanup'`, entry.release)
-	b3RequireCount(t, app, 1, `SELECT count(*) FROM release_auto_values v JOIN operations o ON o.id=v.operation_id
-		WHERE v.release_id=$1 AND v.field='title' AND v.text_value='海港剪报' AND v.writer_level=1 AND o.origin->>'mode'='local_cleanup'`, entry.release)
+	b3RequireCount(t, app, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1`, entry.release)
 	b3RequireCount(t, app, 1, `SELECT count(*) FROM track_auto_values v JOIN operations o ON o.id=v.operation_id
 		WHERE v.track_id=$1 AND v.field='title' AND v.text_value='纸灯' AND v.writer_level=1 AND o.origin->>'mode'='local_cleanup'`, entry.tracks[0])
-	b3RequireCount(t, app, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1 AND field<>'title'`, entry.release)
 	b3RequireCount(t, app, 0, `SELECT count(*) FROM track_auto_values WHERE track_id=$1`, entry.tracks[1])
 	evidence, err := catalog.LoadCurationEvidence(t.Context(), app.database, []string{entry.release})
 	requireCurationOK(t, err)

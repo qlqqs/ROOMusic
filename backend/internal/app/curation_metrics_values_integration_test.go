@@ -128,7 +128,12 @@ func metricScoreValues(t *testing.T, app *integrationTestApplication, entries []
 		sample, want := e.sample.ID, e.sample.Expect
 		checkLinks(i, metricLinkSubject{"release", e.release}, sample, want.Release)
 		checkLinks(i, metricLinkSubject{"release_group", groupIDs[e.release]}, sample, want.Group)
-		checkLinks(i, metricLinkSubject{"release_group_match", e.release}, sample, want.GroupMatch)
+		groupMatch := want.GroupMatch
+		// 同时允许版本或组级时，用同一组标注核对实际降级；完整指标仍按标注的首选版本评分。
+		if groupMatch == "" && slices.Contains(want.Accept, "release_group") && len(links[metricLinkSubject{"release_group_match", e.release}]) > 0 {
+			groupMatch = want.Group
+		}
+		checkLinks(i, metricLinkSubject{"release_group_match", e.release}, sample, groupMatch)
 		checkFields(i, e.release, sample, want.Fields, false)
 		for j, id := range e.tracks {
 			var recording string

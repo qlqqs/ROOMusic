@@ -161,8 +161,8 @@ func newSchedulerFixtureWithSources(t *testing.T, lookup model.LookupQueue, fake
 	src := func(path string) sources.Options {
 		return sources.Options{BaseURL: server.URL + path, NewClient: b3HTTPClient(server), Limiter: sources.NewLimiter(0, nil, nil)}
 	}
-	opts = append(opts, WithCurationModel(true, model.Options{Now: f.clock.options().Now, PollInterval: 20 * time.Millisecond, Lookup: lookup}),
-		WithCurationSources(src("/mb"), coverartarchive.Options{BaseURL: server.URL + "/covers", NewClient: b3HTTPClient(server), Limiter: sources.NewLimiter(0, nil, nil), ManifestLimiter: sources.NewLimiter(0, nil, nil)}, src("/lyrics")))
+	opts = append([]Option{WithCurationModel(true, model.Options{Now: f.clock.options().Now, PollInterval: 20 * time.Millisecond, Lookup: lookup}),
+		WithCurationSources(src("/mb"), coverartarchive.Options{BaseURL: server.URL + "/covers", NewClient: b3HTTPClient(server), Limiter: sources.NewLimiter(0, nil, nil), ManifestLimiter: sources.NewLimiter(0, nil, nil)}, src("/lyrics"))}, opts...)
 	logger := slog.New(slog.NewTextHandler(t.Output(), &slog.HandlerOptions{Level: slog.LevelError}))
 	g := newGroupEnvironmentForApp(t, newIntegrationTestApplicationWithLogger(t, logger, opts...))
 	f.curationFixture = &curationFixture{&operationsEnvironment{g}, curation.NewWriter(g.application.database, g.application.dataDirectory, nil)}
@@ -214,7 +214,7 @@ func (f *schedulerFixture) nextAfterPatrol(t *testing.T) schedulerRequest {
 		if len(items) != 1 || items[0].Kind != "name_patrol" {
 			t.Fatalf("应收到一块巡检资料，得到 %+v", items)
 		}
-		response, err := (&metricsModel{}).patrolTool(items[0])
+		response, err := (&metricsModel{}).patrolTool(items[0], nil)
 		requireCurationOK(t, err)
 		q.tool(t, response.name, response.args)
 	}

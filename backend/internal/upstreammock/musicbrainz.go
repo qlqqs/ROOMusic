@@ -17,14 +17,21 @@ func (inc includes) has(key string) bool { return slices.Contains(inc, key) }
 
 var searchIncludes = includes{"artist-credits", "release-groups", "media", "labels", "isrcs"}
 
-func (d dataset) credit(id string) []object {
-	a := d.artist(id)
-	return []object{{"name": a.Name, "artist": object{"id": id, "name": a.Name}, "joinphrase": ""}}
+func (d dataset) credit(id string, credits []artistCredit) []object {
+	if len(credits) == 0 {
+		credits = []artistCredit{{Artist: id}}
+	}
+	var rows []object
+	for _, c := range credits {
+		a := d.artist(c.Artist)
+		rows = append(rows, object{"name": a.Name, "artist": object{"id": c.Artist, "name": a.Name}, "joinphrase": c.JoinPhrase})
+	}
+	return rows
 }
 func (d dataset) releaseEntity(v release, inc includes) object {
 	row := object{"id": v.ID, "title": v.Title, "barcode": v.Barcode, "date": v.Date, "country": v.Country, "status": "Official", "track-count": v.trackCount()}
 	if inc.has("artist-credits") {
-		row["artist-credit"] = d.credit(v.Artist)
+		row["artist-credit"] = d.credit(v.Artist, v.Credits)
 	}
 	if inc.has("release-groups") {
 		row["release-group"] = d.group(v.Group)
@@ -45,7 +52,7 @@ func (d dataset) releaseEntity(v release, inc includes) object {
 					rec := d.recording(t.Recording)
 					track := object{"id": t.ID, "position": j + 1, "number": strconv.Itoa(j + 1), "title": rec.Title, "length": rec.Length, "recording": d.recordingEntity(rec, inc)}
 					if inc.has("artist-credits") {
-						track["artist-credit"] = d.credit(rec.Artist)
+						track["artist-credit"] = d.credit(rec.Artist, rec.Credits)
 					}
 					tracks = append(tracks, track)
 				}
@@ -60,7 +67,7 @@ func (d dataset) releaseEntity(v release, inc includes) object {
 func (d dataset) recordingEntity(v recording, inc includes) object {
 	row := object{"id": v.ID, "title": v.Title, "length": v.Length}
 	if inc.has("artist-credits") {
-		row["artist-credit"] = d.credit(v.Artist)
+		row["artist-credit"] = d.credit(v.Artist, v.Credits)
 	}
 	if inc.has("isrcs") {
 		row["isrcs"] = []string{v.ISRC}
@@ -123,7 +130,7 @@ func (d dataset) groupEntity(g group, inc includes) object {
 		if r.Group == g.ID {
 			rels = append(rels, d.releaseEntity(r, nil))
 			if inc.has("artist-credits") {
-				row["artist-credit"] = d.credit(r.Artist)
+				row["artist-credit"] = d.credit(r.Artist, r.Credits)
 			}
 		}
 	}

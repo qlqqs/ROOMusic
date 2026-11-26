@@ -32,6 +32,9 @@ type metricSummary struct {
 	Entered          int                          `json:"entered_model_items"`
 	DecidableEntered int                          `json:"program_decidable_entered_samples"`
 	Model            map[string]metricsModelUsage `json:"model_usage"`
+	Accepted         int                          `json:"accepted_samples"`
+	AcceptanceRate   float64                      `json:"acceptance_rate"`
+	Attribution      map[string]int               `json:"failure_attribution"`
 	Complete         int                          `json:"completed_samples"`
 	CompletionRate   float64                      `json:"completion_rate"`
 	Pending          int                          `json:"open_pending_items"`
@@ -42,7 +45,7 @@ type metricSummary struct {
 }
 
 func newMetricSummary(shape string) *metricSummary {
-	return &metricSummary{Shape: shape, Endpoints: map[string]metricRequests{}, Model: map[string]metricsModelUsage{
+	return &metricSummary{Shape: shape, Attribution: map[string]int{"info_missing": 0, "source_unavailable": 0, "model_judgment": 0}, Endpoints: map[string]metricRequests{}, Model: map[string]metricsModelUsage{
 		"pending_step": {}, "review": {}, "artist_identity": {}, "other": {}, "patrol": {}, "local_cleanup": {},
 	}}
 }
@@ -66,6 +69,13 @@ func (r *metricSummary) add(e metricEntry, s metricScore, model map[string]metri
 		sum.InputTokens += usage.InputTokens
 		sum.OutputTokens += usage.OutputTokens
 		r.Model[category] = sum
+	}
+	if s.Accepted {
+		r.Accepted++
+	}
+	r.AcceptanceRate = float64(r.Accepted) / float64(r.Samples)
+	if s.Attribution != nil {
+		r.Attribution[s.Attribution.Category]++
 	}
 	if s.Complete {
 		r.Complete++
@@ -93,7 +103,11 @@ func metricReport(t *testing.T, app *integrationTestApplication, entries []metri
 	total := newMetricSummary("合计")
 	for i, e := range entries {
 		detail := scores[i].metricDetail
+		detail.OracleInfoGap = model.mode == "oracle" && !detail.Accepted
 		details = append(details, detail)
+		if !detail.Accepted {
+			t.Errorf("%s 不符合预期：%s", detail.ID, strings.Join(detail.Rejected, "；"))
+		}
 		row, err := json.Marshal(detail)
 		requireCurationOK(t, err)
 		t.Logf("样本明细 %s", row)
@@ -105,12 +119,28 @@ func metricReport(t *testing.T, app *integrationTestApplication, entries []metri
 		r.add(e, scores[i], usage[e.sample.ID])
 		total.add(e, scores[i], usage[e.sample.ID])
 	}
+	legacy, complete := 0, 0
+	for i, e := range entries {
+		if len(e.sample.Expect.Accept) == 0 {
+			legacy++
+			if scores[i].Complete {
+				complete++
+			}
+		}
+	}
+	baseline := 90
+	if model.mode == "first_candidate" {
+		baseline = 88
+	}
+	if legacy == 92 && complete < baseline {
+		t.Errorf("原 92 个样本完整达标 %d，基线 %d", complete, baseline)
+	}
 	var shapes []*metricSummary
 	for _, shape := range slices.Sorted(maps.Keys(groups)) {
 		shapes = append(shapes, groups[shape])
 	}
 	var log strings.Builder
-	log.WriteString("\n形态 | 样本 | 请求均值/最多 | MB 秒 | 进模型项/程序可定样本 | 调用/token | 完成 | 待定/例外 | 错连/并/改\n")
+	log.WriteString("\n形态 | 样本 | 请求均值/最多 | MB 秒 | 进模型项/程序可定样本 | 调用/token | 完整达标 | 符合预期 | 待定/例外 | 错连/并/改\n")
 	for _, r := range append(slices.Clone(shapes), total) {
 		for key, v := range r.Endpoints {
 			v.Mean = float64(v.Count) / float64(r.Samples)
@@ -121,7 +151,7 @@ func metricReport(t *testing.T, app *integrationTestApplication, entries []metri
 			calls += u.Calls
 			tokens += u.InputTokens + u.OutputTokens
 		}
-		fmt.Fprintf(&log, "%s | %d | %.2f/%d | %d | %d/%d | %d/%d | %d/%d | %d/%d | %d/%d/%d\n", r.Shape, r.Samples, r.Requests.Mean, r.Requests.Max, r.MBSeconds, r.Entered, r.DecidableEntered, calls, tokens, r.Complete, r.Samples, r.Pending, r.Exceptions, r.WrongLinks, r.WrongMerges, r.WrongFields)
+		fmt.Fprintf(&log, "%s | %d | %.2f/%d | %d | %d/%d | %d/%d | %d/%d | %d/%d | %d/%d | %d/%d/%d\n", r.Shape, r.Samples, r.Requests.Mean, r.Requests.Max, r.MBSeconds, r.Entered, r.DecidableEntered, calls, tokens, r.Complete, r.Samples, r.Accepted, r.Samples, r.Pending, r.Exceptions, r.WrongLinks, r.WrongMerges, r.WrongFields)
 	}
 	t.Log(log.String())
 	t.Logf("来源/端点汇总（请求数、均值、最多）%+v；模型分类（调用、输入与输出 token）%+v", total.Endpoints, total.Model)

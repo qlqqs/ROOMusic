@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"html"
 	"io"
 	"maps"
 	"net/http"
@@ -15,14 +14,19 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/curation/model"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/upstreammock"
+	"golang.org/x/time/rate"
 )
 
 type metricsModelTarget struct {
-	SampleID, ReleaseID, GroupID, RecordingID, ArtistID, SearchTitle string
-	Fields                                                           map[string]string
+	SampleID, ReleaseID, GroupID, GroupMatch, RecordingID, ArtistID, SearchTitle string
+	Fields, Suggestions                                                          map[string]string
 }
 
 type metricsModelUsage struct {
@@ -32,20 +36,22 @@ type metricsModelUsage struct {
 }
 
 type metricsModel struct {
-	mode        string
-	server      *httptest.Server
-	db          *sql.DB
-	gate        sync.RWMutex
-	mu          sync.Mutex
-	targets     map[string]metricsModelTarget
-	counts      map[string]map[string]metricsModelUsage
-	routes      map[string][]string
-	itemUsage   map[metricsItemStage]metricsItemUsage
-	canonical   map[string]string
-	typos       map[string]string
-	lowNames    map[string]bool
-	localReply  func(metricsPending) curation.LocalInput
-	rejectMerge bool
+	mode         string
+	server       *httptest.Server
+	db           *sql.DB
+	gate         sync.RWMutex
+	mu           sync.Mutex
+	targets      map[string]metricsModelTarget
+	counts       map[string]map[string]metricsModelUsage
+	routes       map[string][]string
+	itemUsage    map[metricsItemStage]metricsItemUsage
+	canonical    map[string]string
+	typos        map[string]string
+	lowNames     map[string]bool
+	metadataPace *rate.Limiter
+	webPace      *rate.Limiter
+	localReply   func(metricsPending) curation.LocalInput
+	rejectMerge  bool
 
 	// 真实曲库没有标注全部艺人，缺少标注时不作身份结论。
 	manifestOracle bool
@@ -56,14 +62,15 @@ func newMetricsModel(t *testing.T) *metricsModel {
 	mode := os.Getenv("ROOMUSIC_CURATION_METRICS_MODEL")
 	switch mode {
 	case "":
-		mode = "oracle"
-	case "oracle", "first_candidate":
+		mode = "oracle_open"
+	case "oracle", "oracle_open", "first_candidate":
 	default:
 		t.Fatalf("未知度量模型模式 %q", mode)
 	}
 	m := &metricsModel{mode: mode, targets: map[string]metricsModelTarget{}, counts: map[string]map[string]metricsModelUsage{},
 		routes: map[string][]string{}, itemUsage: map[metricsItemStage]metricsItemUsage{}, canonical: map[string]string{},
-		typos: map[string]string{}, lowNames: map[string]bool{}}
+		typos: map[string]string{}, lowNames: map[string]bool{},
+		metadataPace: rate.NewLimiter(rate.Every(time.Minute/20), 1), webPace: rate.NewLimiter(rate.Every(time.Minute/30), 1)}
 	m.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/chat/completions") {
 			http.NotFound(w, r)
@@ -88,8 +95,12 @@ func (m *metricsModel) setPatrolSamples(samples []metricSample) {
 				m.canonical[artist.Name] = artist.Name + " | " + alias
 			}
 		}
-		if sample.Shape == "title_typo" {
-			m.typos[sample.Local.Album] = sample.Expect.Fields["title"]
+		if sample.Shape == "title_typo" || sample.Shape == "group_title_typo" {
+			value := sample.Expect.Fields["title"]
+			if value == "" {
+				value = sample.Expect.Suggestions["title"]
+			}
+			m.typos[sample.Local.Album] = value
 		}
 	}
 }
@@ -121,7 +132,7 @@ func (m *metricsModel) checkItemBudgets(t *testing.T) map[string]metricsStagePea
 			t.Errorf("档位 %s 项 %s 超过 D16：工具调用 %d/%d，token %d/%d", key.stage, key.item, use.calls, maxCalls, use.tokens, maxTokens)
 		}
 	}
-	if peaks["lookup"].Items == 0 || peaks["web"].Items == 0 {
+	if os.Getenv("ROOMUSIC_CURATION_METRICS_SAMPLES") == "" && (peaks["lookup"].Items == 0 || peaks["web"].Items == 0) {
 		t.Errorf("D16 的两档都应有实际用量：%v", peaks)
 	}
 	return peaks
@@ -177,16 +188,14 @@ func (m *metricsModel) usage() map[string]map[string]metricsModelUsage {
 	return result
 }
 
+type metricsFunctionTool struct {
+	Type     string
+	Function struct{ Name string }
+}
 type metricsChatRequest struct {
-	Model string
-	Tools []struct {
-		Type     string
-		Function struct{ Name string }
-	}
-	Messages []struct {
-		Role, Content string
-		ToolCalls     []struct{ Function struct{ Name string } } `json:"tool_calls"`
-	}
+	Model    string
+	Tools    []metricsFunctionTool
+	Messages []upstreammock.OracleMessage
 }
 
 type metricsToolCall struct {
@@ -224,6 +233,18 @@ func (m *metricsModel) respond(w http.ResponseWriter, r *http.Request) error {
 	}
 	if err != nil {
 		return err
+	}
+	// 模拟模型以工具的真实时间额度发起调用，避免批量扫描在几秒内耗完同一用户的一分钟额度。
+	for _, call := range rep.calls {
+		switch call.name {
+		case "get_music_metadata", "search_music_metadata":
+			err = m.metadataPace.Wait(r.Context())
+		case "web_search":
+			err = m.webPace.Wait(r.Context())
+		}
+		if err != nil {
+			return err
+		}
 	}
 	wire, used, err := metricsFrame(rep.text, rep.calls, len(body))
 	if err != nil {
@@ -298,16 +319,25 @@ func metricsFrame(content string, calls []metricsToolCall, inputBytes int) ([]by
 type metricsPending struct {
 	ID         string `json:"item_id"`
 	Kind       string
-	ReleaseID  string `json:"release_id"`
-	ArtistID   string `json:"artist_id"`
+	Route      model.TaskKind `json:"route"`
+	ReleaseID  string         `json:"release_id"`
+	ArtistID   string         `json:"artist_id"`
 	Candidates []struct {
-		ID string `json:"external_id"`
+		ID      string `json:"external_id"`
+		GroupID string `json:"release_group_id"`
 	}
+	RawItem     json.RawMessage `json:"-"`
 	RawEvidence json.RawMessage `json:"-"`
 	Evidence    struct {
-		Names                               []string
-		Title, Artist, Field, Before, After string
-		Tracks                              json.RawMessage
+		Authenticity struct {
+			Title, Artist, Label metadata.Authenticity
+			CatalogNumber        metadata.Authenticity `json:"catalog_number"`
+		}
+		Names                                      []string
+		Title, Artist, Field, Before, After, Label string
+		CatalogNumber                              string `json:"catalog_number"`
+		Barcodes                                   []string
+		Tracks                                     json.RawMessage
 	}
 }
 
@@ -320,6 +350,7 @@ func (p *metricsPending) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return err
 	}
+	p.RawItem = data
 	p.RawEvidence = envelope.Evidence
 	// 巡检与本地整理使用各自的结构化证据。
 	if p.Kind == "name_patrol" || p.Kind == "local_cleanup" {
@@ -342,21 +373,34 @@ func metricsPendingItems(content string) ([]metricsPending, bool, error) {
 	return items, true, err
 }
 
-func metricsToolBody(content, name string) (string, bool) {
-	prefix := `<roomusic-source kind="tool" name="` + name + `">`
-	body, ok := strings.CutPrefix(content, prefix)
-	if !ok {
-		return "", false
+// 档位以本次领取的首条消息为准。旧首条消息没有 route，使用当次运行的系统提示。
+func metricsPendingStage(p metricsPending, system string) string {
+	switch p.Kind {
+	case "name_patrol":
+		return "patrol"
+	case "local_cleanup":
+		return "local_cleanup"
 	}
-	return strings.TrimSpace(html.UnescapeString(strings.TrimSuffix(body, "</roomusic-source>"))), true
+	if p.Route != "" {
+		return string(p.Route)
+	}
+	for _, route := range []model.TaskKind{model.LookupCandidate, model.WebFallback, model.VerifyEvidence, model.SelectCandidate} {
+		if strings.Contains(system, backgroundPrompt(route)) {
+			return string(route)
+		}
+	}
+	return ""
 }
 
 func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (metricsModelReply, error) {
 	rep := metricsModelReply{text: "处理完成"}
 	var pending []metricsPending
-	var lastTool, lastResult string
-	for _, msg := range q.Messages {
+	var lastTool, lastResult, system string
+	var history []upstreammock.OracleMessage
+	for i, msg := range q.Messages {
 		switch msg.Role {
+		case "system":
+			system = msg.Content
 		case "user":
 			items, found, err := metricsPendingItems(msg.Content)
 			if err != nil {
@@ -364,39 +408,23 @@ func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (me
 			}
 			if found {
 				pending, lastTool, lastResult = items, "", ""
+				history = q.Messages[i+1:]
 			}
 		case "assistant":
 			for _, tc := range msg.ToolCalls {
 				lastTool = tc.Function.Name
 			}
 		case "tool":
-			lastResult, _ = metricsToolBody(msg.Content, lastTool)
+			raw, _ := upstreammock.OracleToolBody(msg.Content, lastTool)
+			lastResult = string(raw)
 		}
 	}
 	if len(pending) == 0 {
 		return rep, fmt.Errorf("首条消息缺少待定项")
 	}
-	hasTool := func(name string) bool {
-		return slices.ContainsFunc(q.Tools, func(t struct {
-			Type     string
-			Function struct{ Name string }
-		}) bool {
-			return t.Function.Name == name
-		})
-	}
-	switch {
-	case pending[0].Kind == "name_patrol" && hasTool("submit_patrol"):
-		rep.category = "patrol"
-	case pending[0].Kind == "local_cleanup" && hasTool("submit_local_cleanup"):
-		rep.category = "local_cleanup"
-	case len(q.Tools) == 0:
-		rep.category = "select"
-	case hasTool("search_music_metadata"):
-		rep.category = "lookup"
-	case hasTool("web_search"):
-		rep.category = "web"
-	default:
-		rep.category = "verify"
+	rep.category = metricsPendingStage(pending[0], system)
+	if rep.category == "" {
+		return rep, fmt.Errorf("本项首条消息与系统提示未说明档位：%s", pending[0].ID)
 	}
 	var decisions []map[string]string
 	for _, item := range pending {
@@ -421,7 +449,7 @@ func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (me
 		if rep.category == "select" {
 			decision := map[string]string{"item_id": item.ID, "decision": "upgrade"}
 			for _, candidate := range item.Candidates {
-				if m.mode == "first_candidate" || candidate.ID == target.ReleaseID || candidate.ID == target.RecordingID {
+				if m.mode == "first_candidate" || candidate.ID == target.ReleaseID || candidate.ID == target.RecordingID || target.GroupMatch != "" && candidate.GroupID == target.GroupMatch {
 					decision["decision"], decision["external_id"] = "select", candidate.ID
 					break
 				}
@@ -429,15 +457,27 @@ func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (me
 			decisions = append(decisions, decision)
 			continue
 		}
+		var evidence *upstreammock.OracleEvidence
+		if m.mode == "oracle" {
+			observed := upstreammock.NewOracleEvidence(item.RawItem, history)
+			evidence = &observed
+		}
 		if rep.category == "patrol" && lastTool == "" {
-			call, err := m.patrolTool(item)
+			call, err := m.patrolTool(item, evidence)
 			if err != nil {
 				return rep, err
 			}
 			rep.calls = append(rep.calls, call)
 			continue
 		}
-		if call := m.nextTool(item, target, rep.category, lastTool, lastResult); call.name != "" {
+		webMetadata := rep.category == "web" && slices.ContainsFunc(q.Tools, func(tool metricsFunctionTool) bool { return tool.Function.Name == "search_music_metadata" })
+		if call := m.nextTool(item, target, rep.category, lastTool, lastResult, evidence, webMetadata); call.name != "" {
+			if evidence != nil && call.name == "shelve_pending_item" && (rep.category == "lookup" || rep.category == "web") &&
+				slices.ContainsFunc(q.Tools, func(tool metricsFunctionTool) bool { return tool.Function.Name == "read_pending_items" }) {
+				if action := evidence.ReadPending(item.ID); action.Name != "" {
+					call = metricsToolCall{action.Name, action.Args}
+				}
+			}
 			rep.calls = append(rep.calls, call)
 		}
 	}
@@ -454,7 +494,7 @@ type metricsPatrolBatch struct {
 	Names []struct{ ID, Name string }
 }
 
-func (m *metricsModel) patrolTool(item metricsPending) (metricsToolCall, error) {
+func (m *metricsModel) patrolTool(item metricsPending, evidence *upstreammock.OracleEvidence) (metricsToolCall, error) {
 	var batch metricsPatrolBatch
 	if err := json.Unmarshal(item.RawEvidence, &batch); err != nil {
 		return metricsToolCall{}, err
@@ -466,19 +506,52 @@ func (m *metricsModel) patrolTool(item metricsPending) (metricsToolCall, error) 
 			if canonical == "" {
 				canonical = n.Name + " | "
 			}
+			if evidence != nil {
+				original, latin, _ := strings.Cut(canonical, "|")
+				if !evidence.Seen(strings.TrimSpace(original)) || strings.TrimSpace(latin) != "" && !evidence.Seen(strings.TrimSpace(latin)) {
+					canonical, confidence = n.Name+" | ", "low"
+				}
+			}
 			if m.lowNames[n.Name] || (m.manifestOracle && m.canonical[n.Name] == "") {
 				confidence = "low"
 			}
 			reply.Results = append(reply.Results, curation.PatrolResult{ID: n.ID, Canonical: canonical, Confidence: confidence})
 		}
-		if batch.Kind == "album" && m.typos[n.Name] != "" {
+		if batch.Kind == "album" && m.typos[n.Name] != "" && (evidence == nil || evidence.Seen(m.typos[n.Name])) {
 			reply.Issues = append(reply.Issues, curation.PatrolIssue{ID: n.ID, Kind: "typo", Suggested: m.typos[n.Name]})
 		}
 	}
 	return metricsToolCall{"submit_patrol", reply}, nil
 }
 
-func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, stage, lastTool, result string) metricsToolCall {
+func (item metricsPending) lookup(target metricsModelTarget) upstreammock.OracleLookup {
+	auth := item.Evidence.Authenticity
+	q := upstreammock.OracleLookup{ItemID: item.ID, Entity: "release", ExpectedID: target.ReleaseID, ExpectedGroup: target.GroupMatch,
+		Title: auth.Title.SearchValue(item.Evidence.Title), Artist: auth.Artist.SearchValue(item.Evidence.Artist),
+		CatalogNumber: auth.CatalogNumber.SearchValue(item.Evidence.CatalogNumber), Label: auth.Label.SearchValue(item.Evidence.Label), Barcodes: item.Evidence.Barcodes}
+	var tracks []struct {
+		Title        string
+		Authenticity map[string]metadata.Authenticity
+	}
+	if json.Unmarshal(item.Evidence.Tracks, &tracks) == nil && len(tracks) > 0 {
+		q.TrackTitle = tracks[0].Authenticity["title"].SearchValue(tracks[0].Title)
+	}
+	if item.Kind == "recording_match" {
+		q.Entity, q.ExpectedID = "recording", target.RecordingID
+	}
+	return q
+}
+
+func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, stage, lastTool, result string, evidence *upstreammock.OracleEvidence, webMetadata bool) metricsToolCall {
+	// 前档没有候选时，网页检索后再用元数据工具按标题补查。已有候选已由前档处理。
+	if stage == "web" && webMetadata && evidence == nil && len(item.Candidates) == 0 && (item.Kind == "release_match" || item.Kind == "recording_match") {
+		switch lastTool {
+		case "web_search":
+			stage, lastTool = "lookup", ""
+		case "search_music_metadata", "get_music_metadata", "resolve_release_match":
+			stage = "lookup"
+		}
+	}
 	abandon := metricsToolCall{"shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "当前证据无法确认对应。"}}
 	match := func(id string) metricsToolCall {
 		return metricsToolCall{"resolve_release_match", map[string]any{"item_id": item.ID, "external_id": id, "basis": map[string]string{"note": "已读取外部候选。"}}}
@@ -490,39 +563,65 @@ func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, 
 		if lastTool != "" {
 			return metricsToolCall{}
 		}
-		input := curation.LocalInput{ItemID: item.ID}
+		input := curation.LocalInput{ItemID: item.ID, Title: target.Fields["title"], Artist: target.Fields["album_artist"]}
 		if m.localReply != nil {
 			input = m.localReply(item)
 			input.ItemID = item.ID
 		}
+		if evidence != nil {
+			if !evidence.ContainsText(input.Title) {
+				input.Title = ""
+			}
+			if !evidence.ContainsText(input.Artist) {
+				input.Artist = ""
+			}
+			input.Tracks = slices.DeleteFunc(input.Tracks, func(tr struct {
+				TrackID string `json:"track_id"`
+				Title   string `json:"title"`
+			}) bool {
+				return !evidence.Seen(tr.TrackID) || !evidence.ContainsText(tr.Title)
+			})
+		}
 		return metricsToolCall{"submit_local_cleanup", input}
 	case "lookup":
-		entity, field, title, expected := "release", "release", item.Evidence.Title, target.ReleaseID
-		if item.Kind == "recording_match" {
-			entity, field, expected = "recording", "recording", target.RecordingID
-			var tracks []struct{ Title string }
-			if json.Unmarshal(item.Evidence.Tracks, &tracks) == nil && len(tracks) > 0 {
-				title = tracks[0].Title
+		q := item.lookup(target)
+		entity, title, expected := q.Entity, q.Title, q.ExpectedID
+		if entity == "recording" {
+			title = q.TrackTitle
+		}
+		if evidence != nil {
+			if lastTool == "resolve_release_match" || lastTool == "shelve_pending_item" {
+				return metricsToolCall{}
 			}
+			action := evidence.Lookup(q)
+			if action.Name != "" {
+				return metricsToolCall{action.Name, action.Args}
+			}
+			return metricsShelveFact(item.ID, abandon, target.Suggestions, evidence)
 		}
 		switch lastTool {
 		case "":
-			if m.mode == "oracle" && target.SearchTitle != "" {
+			if m.mode == "oracle_open" && target.SearchTitle != "" {
 				title = target.SearchTitle
 			}
-			query := field + ":" + fmt.Sprintf("%q", title)
+			query := entity + ":" + fmt.Sprintf("%q", title)
 			if title == "" {
-				query = "artist:" + fmt.Sprintf("%q", item.Evidence.Artist)
+				query = "artist:" + fmt.Sprintf("%q", q.Artist)
 			}
-			if title == "" && item.Evidence.Artist == "" {
+			if title == "" && q.Artist == "" {
 				return abandon
 			}
 			return metricsToolCall{"search_music_metadata", map[string]any{"entity": entity, "query": query, "limit": 10}}
 		case "search_music_metadata":
-			var found struct{ Results []struct{ MBID string } }
+			var found struct {
+				Results []struct {
+					MBID         string
+					ReleaseGroup struct{ MBID string } `json:"release_group"`
+				}
+			}
 			_ = json.Unmarshal([]byte(result), &found)
 			for _, candidate := range found.Results {
-				if m.mode == "first_candidate" || candidate.MBID == expected {
+				if m.mode == "first_candidate" || candidate.MBID == expected || target.GroupMatch != "" && candidate.ReleaseGroup.MBID == target.GroupMatch {
 					include := []string{"artist-credits"}
 					if entity == "release" {
 						include = append(include, "recordings")
@@ -543,11 +642,36 @@ func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, 
 			return metricsToolCall{}
 		}
 	case "web":
+		if evidence != nil && lastTool != "" {
+			if strings.HasPrefix(lastTool, "resolve_") || lastTool == "shelve_pending_item" {
+				return metricsToolCall{}
+			}
+			entity, expected := "release", target.ReleaseID
+			switch item.Kind {
+			case "artist_identity":
+				entity, expected = "artist", target.ArtistID
+			case "recording_match":
+				entity, expected = "recording", target.RecordingID
+			}
+			action := evidence.Web(item.ID, entity, expected)
+			// 联网搜索没有提供发行或录音编号时，继续使用本档实际开放的元数据工具。
+			if action.Name == "" && webMetadata && (item.Kind == "release_match" || item.Kind == "recording_match") {
+				action = evidence.Lookup(item.lookup(target))
+			}
+			if action.Name != "" {
+				return metricsToolCall{action.Name, action.Args}
+			}
+			return metricsShelveFact(item.ID, abandon, target.Suggestions, evidence)
+		}
 		switch lastTool {
 		case "":
-			query := strings.TrimSpace(item.Evidence.Artist + " " + item.Evidence.Title + " " + strings.Join(item.Evidence.Names, " "))
+			q := item.lookup(target)
+			query := strings.TrimSpace(q.Artist + " " + q.Title + " " + strings.Join(item.Evidence.Names, " "))
 			if query == "" {
-				query = "未标记的本地发行"
+				if q.TrackTitle == "" {
+					return abandon
+				}
+				query = q.TrackTitle
 			}
 			return metricsToolCall{"web_search", map[string]string{"q": query}}
 		case "web_search":
@@ -570,7 +694,7 @@ func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, 
 		verdict := "uncertain"
 		switch item.Kind {
 		case "verify_name":
-			if item.Evidence.After != "" && item.Evidence.After == target.Fields[item.Evidence.Field] {
+			if item.Evidence.After != "" && (item.Evidence.After == target.Fields[item.Evidence.Field] || item.Evidence.After == target.Suggestions[item.Evidence.Field]) {
 				verdict = "typo"
 			}
 		case "verify_artist_credit":
@@ -588,12 +712,35 @@ func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, 
 		}
 		return metricsToolCall{"submit_verification", map[string]string{"item_id": item.ID, "verdict": verdict, "reason": "按照合成样本的标注核对。"}}
 	}
+	if stage == "web" || stage == "lookup" {
+		return metricsShelveFact(item.ID, abandon, target.Suggestions, evidence)
+	}
 	return abandon
 }
 
+func metricsShelveFact(itemID string, abandon metricsToolCall, suggestions map[string]string, evidence *upstreammock.OracleEvidence) metricsToolCall {
+	for _, field := range []string{"year", "label", "catalog_number", "barcode"} {
+		value := suggestions[field]
+		if value != "" && (evidence == nil || evidence.ContainsText(value)) {
+			return metricsToolCall{"shelve_pending_item", map[string]any{"item_id": itemID, "reason": "缺少可写入的开放库依据，保留建议。", "fact": map[string]string{"field": field, "value": value}}}
+		}
+	}
+	return abandon
+}
+
+type metricsReviewTarget struct {
+	ID   string
+	Data struct {
+		GroupID string `json:"group_id"`
+	}
+}
+
 type metricsReviewEvidence struct {
-	ID      string `json:"item_id"`
-	Facts   struct{ Targets []struct{ ID string } }
+	ID    string `json:"item_id"`
+	Facts struct {
+		Targets  []metricsReviewTarget
+		External struct{ Data []externalRelease }
+	}
 	Preview struct {
 		Data []struct {
 			Field string
@@ -633,7 +780,7 @@ func (m *metricsModel) reviewReply(ctx context.Context, q metricsChatRequest) (m
 		}
 		rep.sampleIDs = append(rep.sampleIDs, target.SampleID)
 		decision := "approved"
-		if m.mode == "oracle" {
+		if m.mode != "first_candidate" {
 			approve, err := m.checkPreview(ctx, target, item.Tool, e)
 			if err != nil {
 				return rep, err
@@ -660,11 +807,25 @@ func (m *metricsModel) checkPreview(ctx context.Context, expected metricsModelTa
 			linked = tool == "resolve_artist_identity" && expected.ArtistID != "" && entry["source"] == "musicbrainz" && entry["external_id"] == expected.ArtistID
 		case "track_links":
 			// 预览只给出数量；逐轨对应在度量时与标注比对。
+		case "release_group_match":
+			linked = tool == "resolve_release_match" && expected.GroupMatch != "" && ch.After == expected.GroupMatch
 		case "group_external_link":
 			if expected.GroupID == "" || ch.After != expected.GroupID {
 				return false, nil
 			}
 		case "group":
+			if m.mode == "oracle" {
+				// 审查只能根据收到的资料对照目标本地组，开卷模式沿用数据库核对。
+				known := slices.ContainsFunc(e.Facts.External.Data, func(r externalRelease) bool {
+					return slices.ContainsFunc(e.Facts.Targets, func(t metricsReviewTarget) bool {
+						return t.ID == r.ReleaseID && t.Data.GroupID == ch.After
+					}) && slices.ContainsFunc(r.Links, func(l reviewLink) bool { return l.ObjectType == "release_group" && l.ExternalID == expected.GroupID })
+				})
+				if !known {
+					return false, nil
+				}
+				continue
+			}
 			var matches bool
 			err := m.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM external_links WHERE object_type='release_group'
 				AND object_id=$1 AND source='musicbrainz' AND external_id=$2)`, ch.After, expected.GroupID).Scan(&matches)
@@ -679,4 +840,55 @@ func (m *metricsModel) checkPreview(ctx context.Context, expected metricsModelTa
 		}
 	}
 	return linked, nil
+}
+
+func TestMetricsOracleModesUseCurrentItem(t *testing.T) {
+	const hiddenTitle = "薄纱梯田"
+	const externalID = "53000000-0000-4000-8000-000000000037"
+	const current = `<roomusic-source type="curation_pending" trust="untrusted">[{"item_id":"本项","kind":"release_match","release_id":"本地甲","evidence":{"title":"薄沙梯田"}}]</roomusic-source>`
+	for _, tc := range []struct{ mode, title string }{{"oracle", "薄沙梯田"}, {"oracle_open", hiddenTitle}, {"first_candidate", "薄沙梯田"}} {
+		t.Run(tc.mode, func(t *testing.T) {
+			t.Setenv("ROOMUSIC_CURATION_METRICS_MODEL", tc.mode)
+			m := newMetricsModel(t)
+			m.setTargets(map[string]metricsModelTarget{"本地甲": {SampleID: "合成样本", ReleaseID: externalID, SearchTitle: hiddenTitle}})
+			var q metricsChatRequest
+			requireCurationOK(t, json.Unmarshal([]byte(`{"tools":[{"function":{"name":"search_music_metadata"}},{"function":{"name":"get_music_metadata"}}]}`), &q))
+			q.Messages = []upstreammock.OracleMessage{
+				{Role: "system", Content: backgroundPrompt(model.LookupCandidate)},
+				{Role: "user", Content: strings.Replace(current, "薄沙梯田", hiddenTitle, 1)},
+				{Role: "tool", Content: `<roomusic-source kind="tool" name="search_music_metadata">{"results":[{"mbid":"` + externalID + `"}]}</roomusic-source>`},
+				{Role: "user", Content: current},
+			}
+			rep, err := m.pendingReply(t.Context(), q)
+			requireCurationOK(t, err)
+			if len(rep.calls) != 1 || rep.calls[0].name != "search_music_metadata" {
+				t.Fatalf("应从本项开始查询，实际 %+v", rep)
+			}
+			got := rep.calls[0].args.(map[string]any)["query"]
+			if got != fmt.Sprintf("release:%q", tc.title) {
+				t.Fatalf("查询参数 %q，期望 %q", got, tc.title)
+			}
+		})
+	}
+}
+
+func TestMetricsOraclePatrolAndLocalValues(t *testing.T) {
+	m := metricsModel{mode: "oracle", typos: map[string]string{"砂港": "沙港"}}
+	var item metricsPending
+	requireCurationOK(t, json.Unmarshal([]byte(`{"item_id":"本项","kind":"name_patrol","evidence":{"kind":"album","names":[{"id":"专辑甲","name":"砂港"}]}}`), &item))
+	e := upstreammock.NewOracleEvidence(item.RawItem, nil)
+	closed, err := m.patrolTool(item, &e)
+	requireCurationOK(t, err)
+	open, err := m.patrolTool(item, nil)
+	requireCurationOK(t, err)
+	if len(closed.args.(curation.PatrolSubmission).Issues) != 0 || len(open.args.(curation.PatrolSubmission).Issues) != 1 {
+		t.Fatalf("巡检建议的可见性异常 %+v / %+v", closed, open)
+	}
+	requireCurationOK(t, json.Unmarshal([]byte(`{"item_id":"本项","kind":"local_cleanup","evidence":{"directories":[{"path":"03 - 桦窗册"}]}}`), &item))
+	e = upstreammock.NewOracleEvidence(item.RawItem, nil)
+	out := m.nextTool(item, metricsModelTarget{Fields: map[string]string{"title": "桦窗册", "album_artist": "标注中的隐名"}}, "local_cleanup", "", "", &e, false)
+	input := out.args.(curation.LocalInput)
+	if input.Title != "桦窗册" || input.Artist != "" {
+		t.Fatalf("本地整理越过可见片段 %+v", input)
+	}
 }

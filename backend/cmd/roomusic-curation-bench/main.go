@@ -24,6 +24,7 @@ var manifest []byte
 type corpusEntry struct {
 	ID, Group, Title, Artist, Category, Tags string
 	LocalTitle                               string `json:"local_title"`
+	LocalArtist                              string `json:"local_artist"`
 	Tolerance                                bool
 }
 
@@ -66,6 +67,9 @@ func run(ctx context.Context, args []string) error {
 	case "real-corpus":
 		out := flags.String("out", "", "生成曲库的目录")
 		reference := flags.String("reference", "", "另存本次生成使用的公开发行明细 JSON")
+		referenceIn := flags.String("reference-in", "", "从已有公开发行明细 JSON 离线生成")
+		ids := flags.String("releases", "", "只生成指定发行编号，多个编号以逗号分隔")
+		trackMap := flags.String("track-map", "", "曲目对照表，默认为输出目录旁的 <目录>-tracks.json")
 		ffmpeg := flags.String("ffmpeg", os.Getenv("ROOMUSIC_FFMPEG_PATH"), "ffmpeg 路径，默认使用 ROOMUSIC_FFMPEG_PATH 或 PATH")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
@@ -73,7 +77,7 @@ func run(ctx context.Context, args []string) error {
 		if *out == "" || flags.NArg() != 0 {
 			return errors.New("real-corpus 需要 -out 目录")
 		}
-		return generateCorpus(sources.WithBackground(ctx), corpus.Releases, *out, *ffmpeg, *reference)
+		return generateCorpus(sources.WithBackground(ctx), corpus.Releases, corpusOptions{out: *out, ffmpeg: *ffmpeg, reference: *reference, referenceIn: *referenceIn, ids: *ids, trackMap: *trackMap})
 	default:
 		return fmt.Errorf("未知子命令 %q", args[0])
 	}

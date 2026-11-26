@@ -3,10 +3,15 @@ package app
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"maps"
 	"math"
 	"net/http/httptest"
 	"os"
+	"path"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,16 +25,39 @@ import (
 )
 
 type metricEntry struct {
-	sample   metricSample
-	release  string
-	tracks   []string
-	artists  map[string]string // 扫描署名到本地艺人编号
-	merges   []string
-	requests map[string]int
+	drainIssue string
+	queries    []metricSourceQuery
+	sample     metricSample
+	release    string
+	tracks     []string
+	artists    map[string]string // 扫描署名到本地艺人编号
+	merges     []string
+	requests   map[string]int
 }
 
 func TestPostgreSQLCurationMetrics(t *testing.T) {
-	app, entries, endpoint := runMetricSamples(t, loadMetricSamples(t))
+	if os.Getenv("ROOMUSIC_CURATION_METRICS_MODEL") == "" {
+		t.Setenv("ROOMUSIC_CURATION_METRICS_MODEL", "oracle")
+	}
+	samples := loadMetricSamples(t)
+	if raw := os.Getenv("ROOMUSIC_CURATION_METRICS_SAMPLES"); raw != "" {
+		ids := map[string]bool{}
+		for _, id := range strings.Split(raw, ",") {
+			ids[strings.TrimSpace(id)] = true
+		}
+		selected := make([]metricSample, 0, len(ids))
+		for _, s := range samples {
+			if ids[s.ID] {
+				selected = append(selected, s)
+				delete(ids, s.ID)
+			}
+		}
+		if len(ids) > 0 {
+			t.Fatalf("未知度量样本：%v", slices.Sorted(maps.Keys(ids)))
+		}
+		samples = selected
+	}
+	app, entries, endpoint := runMetricSamples(t, samples)
 	metricReport(t, app, entries, endpoint)
 }
 
@@ -65,52 +93,70 @@ func runMetricSamples(t *testing.T, samples []metricSample) (*integrationTestApp
 	previous := metricCounters(t, mock)
 	seenMerge := map[string]bool{}
 	// 固定入库顺序，保留前面样本的对应与缓存。一次增量的所有出站（包括引起的复查）归本次样本。
-	for i, s := range samples {
-		writeMetricSample(t, app.allowedRoot, s)
-		scanAndConfirmCuration(t, app, &admin)
-		e := metricScannedEntry(t, app, s)
-		target := metricsModelTarget{SampleID: s.ID, ReleaseID: s.Expect.Release, GroupID: s.Expect.Group, Fields: s.Expect.Fields}
-		if len(s.Expect.Recordings) == 1 {
-			target.RecordingID = s.Expect.Recordings[0]
+	for i := 0; i < len(samples); {
+		// 混放目录必须在同一次扫描中观察全部文件；每个专辑仍按自己的路径与标注评分。
+		end := i + 1
+		for end < len(samples) && samples[end].Local.Directory == samples[i].Local.Directory {
+			end++
 		}
-		for _, release := range s.External.Releases {
-			if release.ID == target.ReleaseID {
-				target.SearchTitle = release.Title
+		started := time.Now()
+		for _, s := range samples[i:end] {
+			writeMetricSample(t, app.allowedRoot, s)
+		}
+		scanAndConfirmCuration(t, app, &admin)
+		var batch []metricEntry
+		for _, s := range samples[i:end] {
+			e := metricScannedEntry(t, app, s)
+			target := metricsModelTarget{SampleID: s.ID, ReleaseID: s.Expect.Release, GroupID: s.Expect.Group, GroupMatch: s.Expect.GroupMatch, Suggestions: s.Expect.Suggestions, Fields: s.Expect.Fields}
+			if len(s.Expect.Recordings) == 1 {
+				target.RecordingID = s.Expect.Recordings[0]
 			}
-			for _, track := range release.Tracks {
-				if track.ID == target.RecordingID {
-					target.SearchTitle = track.Title
+			for _, release := range s.External.Releases {
+				if release.ID == target.ReleaseID {
+					target.SearchTitle = release.Title
+				}
+				for _, track := range release.Tracks {
+					if track.ID == target.RecordingID {
+						target.SearchTitle = track.Title
+					}
 				}
 			}
-		}
-		targets[e.release] = target
-		for name, id := range e.artists {
-			if _, known := targets[id]; !known {
-				targets[id] = metricsModelTarget{SampleID: s.ID, ArtistID: s.Expect.Artists[name]}
+			targets[e.release] = target
+			for name, id := range e.artists {
+				if _, known := targets[id]; !known {
+					targets[id] = metricsModelTarget{SampleID: s.ID, ArtistID: s.Expect.Artists[name]}
+				}
 			}
+			batch = append(batch, e)
 		}
 		endpoint.setTargets(targets)
-		metricDrain(t, app, &admin, clock, endpoint, e)
-		// 每次增量已完全排空，由新增的操作确定本次样本触发了哪些艺人合并。
-		metricReadRows(t, app, `SELECT id FROM operations WHERE operation_type='artist_merge'`, func(rows *sql.Rows) {
-			var id string
-			requireCurationOK(t, rows.Scan(&id))
-			if !seenMerge[id] {
-				e.merges = append(e.merges, id)
-				seenMerge[id] = true
+		for _, e := range batch {
+			e.drainIssue = metricDrainResult(t, app, &admin, clock, endpoint, e)
+			if scan := e.sample.Expect.Scan; scan != nil && (scan.ArtistRetry != "" || scan.RelaxedTitle != "" || len(scan.ForbiddenQuery) > 0) {
+				e.queries = metricQueriesSince(t, mock, started)
 			}
-		})
-		next := metricCounters(t, mock)
-		e.requests = map[string]int{}
-		for key, n := range next {
-			if delta := n - previous[key]; delta > 0 {
-				e.requests[key] = delta
+			// 每次增量已完全排空，由新增的操作确定本次样本触发了哪些艺人合并。
+			metricReadRows(t, app, `SELECT id FROM operations WHERE operation_type='artist_merge'`, func(rows *sql.Rows) {
+				var id string
+				requireCurationOK(t, rows.Scan(&id))
+				if !seenMerge[id] {
+					e.merges = append(e.merges, id)
+					seenMerge[id] = true
+				}
+			})
+			next := metricCounters(t, mock)
+			e.requests = map[string]int{}
+			for key, n := range next {
+				if delta := n - previous[key]; delta > 0 {
+					e.requests[key] = delta
+				}
 			}
+			previous = next
+			entries = append(entries, e)
 		}
-		previous = next
-		entries = append(entries, e)
-		if (i+1)%10 == 0 {
-			t.Logf("已扫描并排空 %d/%d", i+1, len(samples))
+		i = end
+		if i%10 == 0 {
+			t.Logf("已扫描并检查队列 %d/%d", i, len(samples))
 		}
 	}
 	return app, entries, endpoint
@@ -128,28 +174,40 @@ func scanAndConfirmCuration(t *testing.T, app *integrationTestApplication, admin
 func metricScannedEntry(t *testing.T, app *integrationTestApplication, s metricSample) metricEntry {
 	t.Helper()
 	e := metricEntry{sample: s, artists: map[string]string{}}
-	rows, err := app.database.Query(`SELECT m.release_id,t.id,t.duration_seconds
+	files := map[string]int{}
+	for i, track := range s.Local.Tracks {
+		files[path.Join(s.Local.Directory, track.File)] = i
+	}
+	rows, err := app.database.Query(`SELECT m.release_id,t.id,t.duration_seconds,t.relative_path
  FROM tracks t JOIN media m ON m.id=t.medium_id WHERE t.source_status='present' AND starts_with(t.relative_path,$1)
  ORDER BY m.position,t.position,t.relative_path`, s.Local.Directory+"/")
 	requireCurationOK(t, err)
 	defer rows.Close()
+	e.tracks = make([]string, len(s.Local.Tracks))
+	count := 0
 	for rows.Next() {
-		var release, id string
+		var release, id, file string
 		var seconds float64
-		requireCurationOK(t, rows.Scan(&release, &id, &seconds))
+		requireCurationOK(t, rows.Scan(&release, &id, &seconds, &file))
+		i, own := files[file]
+		if s.Local.Cue {
+			i = count
+		} else if !own {
+			continue
+		}
 		if e.release != "" && release != e.release {
 			t.Fatalf("%s 的文件被扫描到多个发行", s.ID)
 		}
-		i := len(e.tracks)
 		if i >= len(s.Local.Tracks) || seconds <= 0 || math.Abs(seconds-float64(s.Local.Tracks[i].Seconds)) > 0.5 {
 			t.Fatalf("%s 第 %d 首扫描时长 %.3f 与样本不符", s.ID, i+1, seconds)
 		}
 		e.release = release
-		e.tracks = append(e.tracks, id)
+		e.tracks[i] = id
+		count++
 	}
 	requireCurationOK(t, rows.Err())
-	if len(e.tracks) != len(s.Local.Tracks) || len(e.tracks) == 0 {
-		t.Fatalf("%s 扫描曲数 %d，清单 %d", s.ID, len(e.tracks), len(s.Local.Tracks))
+	if count != len(s.Local.Tracks) || count == 0 {
+		t.Fatalf("%s 扫描曲数 %d，清单 %d", s.ID, count, len(s.Local.Tracks))
 	}
 	credits, err := catalog.LoadCurationArtistCredits(t.Context(), app.database, e.release)
 	requireCurationOK(t, err)
@@ -188,6 +246,13 @@ type metricProgress struct {
 
 func metricDrain(t *testing.T, app *integrationTestApplication, admin *integrationTestUser, clock *programClock, endpoint *metricsModel, entry metricEntry) {
 	t.Helper()
+	if issue := metricDrainResult(t, app, admin, clock, endpoint, entry); issue != "" {
+		t.Fatal(issue)
+	}
+}
+
+func metricDrainResult(t *testing.T, app *integrationTestApplication, admin *integrationTestUser, clock *programClock, endpoint *metricsModel, entry metricEntry) string {
+	t.Helper()
 	sample := entry.sample.ID
 	writer := curation.NewWriter(app.database, app.dataDirectory, nil)
 	var p metricProgress
@@ -207,16 +272,23 @@ func metricDrain(t *testing.T, app *integrationTestApplication, admin *integrati
 			}
 		}()
 		end := time.Now().Add(45 * time.Second)
+		var idleSince time.Time
 		for {
 			getJSON(t, app, admin, curationBase+"/progress", &p)
 			if p.Model.State == "idle" && p.Model.Items.InProgress == 0 {
 				// 巡检可能唤醒程序识别，等识别结果的艺人项要到下一轮才可领取。
-				if p.Model.Items.WaitingModel == 0 || p.Queues[0].ID == "release" && p.Queues[0].Ready > 0 {
+				if idleSince.IsZero() {
+					idleSince = time.Now()
+				}
+				// 待领取项依赖下一次程序投影时，推进合成时钟；十二轮上限仍会报告真正的滞留。
+				if p.Model.Items.WaitingModel == 0 || p.Queues[0].ID == "release" && p.Queues[0].Ready > 0 || time.Since(idleSince) >= time.Second {
 					break
 				}
+			} else {
+				idleSince = time.Time{}
 			}
 			if time.Now().After(end) {
-				t.Fatalf("%s 第 %d 轮模型未排空：%+v", sample, round, p.Model)
+				return fmt.Sprintf("%s 第 %d 轮模型未排空：%+v", sample, round, p.Model)
 			}
 			time.Sleep(15 * time.Millisecond)
 		}
@@ -232,10 +304,10 @@ func metricDrain(t *testing.T, app *integrationTestApplication, admin *integrati
 		requireCurationOK(t, err)
 		if patrolled && programDrained && p.Model.Items.WaitingModel == 0 && p.LastPassFinishedAt != nil && p.LastPassFinishedAt.Equal(tick) &&
 			recognitionSettled && metricCheckpoint(t, app) == before {
-			return
+			return ""
 		}
 	}
-	t.Fatalf("%s 超过 12 个完整轮次：%+v", sample, p)
+	return fmt.Sprintf("%s 超过 12 个完整轮次：%+v", sample, p)
 }
 
 func metricCheckpoint(t *testing.T, app *integrationTestApplication) string {

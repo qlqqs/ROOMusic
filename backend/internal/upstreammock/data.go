@@ -30,7 +30,10 @@ type group struct {
 	Type  string `json:"primary-type"`
 	Date  string `json:"first-release-date"`
 }
+type artistCredit struct{ Artist, JoinPhrase string }
+
 type recording struct {
+	Credits                 []artistCredit
 	ID, Title, Artist, ISRC string
 	Length                  int
 }
@@ -39,6 +42,7 @@ type medium struct {
 	Tracks []struct{ ID, Recording string }
 }
 type release struct {
+	Credits                                                                 []artistCredit
 	ID, Title, Artist, Group, Country, Date, Barcode, Label, Catalog, Image string
 	Media                                                                   []medium
 }
