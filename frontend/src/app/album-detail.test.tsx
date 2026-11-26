@@ -831,6 +831,20 @@ describe("专辑详情：外部识别", () => {
     expect(api.requestsTo("POST", /^\/api\/v1\/admin\/curation\/releases\/[^/]+\/recheck$/)).toHaveLength(0);
   });
 
+  it("已匹配且快照为 null 时显示外部识别结论", async () => {
+    const album = symphonies();
+    const { api } = setup({ groups: [album] });
+    api.on("GET", matchPath(album.representative.id), () => sampleResponse("curation/match-results-matched"));
+
+    const user = userEvent.setup();
+    renderApp({ path: `/albums/${album.id}` });
+    await user.click(await screen.findByText("外部识别"));
+    const matched = await screen.findByText("已匹配");
+    const row = matched.closest("li");
+    if (row === null) throw new Error("缺少已匹配的来源行");
+    expect(within(row).getByText("MusicBrainz")).toBeTruthy();
+  });
+
   it("在外部识别的冲突来源行列出供挑选的候选", async () => {
     const album = symphonies();
     const { api } = setup({ groups: [album] });

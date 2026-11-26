@@ -1,0 +1,108 @@
+{
+  "body": {
+    "batch": null,
+    "last_pass_finished_at": null,
+    "model": {
+      "can_retry": true,
+      "concurrency": 4,
+      "configured": true,
+      "context_hint": "使用本机模型时，请按模型服务实际加载的上下文长度设置单次最多发送。",
+      "daily_token_limit": 10000000,
+      "items": {
+        "in_progress": 0,
+        "shelved": 0,
+        "waiting_human": 0,
+        "waiting_model": 1
+      },
+      "model": "test-main",
+      "pause_kind": "provider_quota",
+      "reason_detail": "余额不足",
+      "retry_at": "2026-01-01T00:00:00Z",
+      "running": 0,
+      "state": "unavailable",
+      "today": {
+        "date": "2026-01-02",
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "unavailable_reason": "provider_quota"
+    },
+    "pending": {
+      "waiting_model": 1
+    },
+    "queues": [
+      {
+        "completed_items_per_second": null,
+        "eta_seconds": null,
+        "id": "release",
+        "pause_reason": null,
+        "ready": 0,
+        "remaining": 0,
+        "retry_at": null,
+        "source": null,
+        "state": "unavailable",
+        "successful_requests_per_second": null
+      },
+      {
+        "completed_items_per_second": null,
+        "eta_seconds": null,
+        "id": "artwork",
+        "pause_reason": null,
+        "ready": 0,
+        "remaining": 0,
+        "retry_at": null,
+        "source": null,
+        "state": "unavailable",
+        "successful_requests_per_second": null
+      },
+      {
+        "completed_items_per_second": null,
+        "eta_seconds": null,
+        "id": "lyrics",
+        "pause_reason": null,
+        "ready": 0,
+        "remaining": 0,
+        "retry_at": null,
+        "source": null,
+        "state": "unavailable",
+        "successful_requests_per_second": null
+      },
+      {
+        "completed_items_per_second": null,
+        "eta_seconds": null,
+        "id": "artist_media",
+        "pause_reason": null,
+        "ready": 0,
+        "remaining": 0,
+        "retry_at": null,
+        "source": null,
+        "state": "unavailable",
+        "successful_requests_per_second": null
+      },
+      {
+        "completed_items_per_second": null,
+        "eta_seconds": null,
+        "id": "fingerprint",
+        "pause_reason": null,
+        "ready": 0,
+        "remaining": 0,
+        "retry_at": null,
+        "source": null,
+        "state": "unavailable",
+        "successful_requests_per_second": null
+      }
+    ],
+    "releases": {
+      "conflict": 0,
+      "matched": 0,
+      "processed": 0,
+      "query_error": 0,
+      "total": 2,
+      "try_later": 0,
+      "unmatched": 0
+    },
+    "rule_version": 106,
+    "state": "unavailable"
+  },
+  "status": 200
+}

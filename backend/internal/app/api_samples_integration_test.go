@@ -410,6 +410,9 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordCurationCLinkSamples(t, samples)
 	recordReleaseMatchResultSamples(t, samples)
 	recordManualArtistWebSearchSamples(t, samples)
+	recordProgramMatchSamples(t, samples)
+	recordAlbumRetryProgressSample(t, samples)
+	recordModelQuotaProgressSample(t, samples)
 	samples.finish()
 }
 

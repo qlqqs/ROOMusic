@@ -1,0 +1,17 @@
+{
+  "body": {
+    "results": [
+      {
+        "candidates": [],
+        "checked_at": "2026-01-01T00:00:00Z",
+        "conflicts": [],
+        "reason": "",
+        "selection": null,
+        "snapshot_id": null,
+        "source": "musicbrainz",
+        "status": "matched"
+      }
+    ]
+  },
+  "status": 200
+}

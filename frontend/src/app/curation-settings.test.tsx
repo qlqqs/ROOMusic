@@ -80,6 +80,25 @@ describe("有冲突的专辑", () => {
     expect(await within(await group("有冲突的专辑")).findByText("没有分不出版本的专辑。")).toBeTruthy();
   });
 
+  it("列出单曲录音候选并提交所选录音", async () => {
+    const { api, curation } = setup();
+    curation.conflicts = decodeConflictPage(sampleBody("curation/conflicts-recording")).items;
+    const item = curation.conflicts[0];
+    const [first, second] = item?.candidates ?? [];
+    if (item === undefined || first === undefined || second === undefined) throw new Error("缺少单曲录音冲突样本");
+    expect([first.entity, second.entity]).toEqual(["recording", "recording"]);
+
+    const user = userEvent.setup();
+    renderApp({ path: "/settings/curation" });
+    const section = within(await group("有冲突的专辑"));
+    expect(await section.findByRole("button", { name: `选这一版：${first.title}` })).toBeTruthy();
+    await user.click(section.getByRole("button", { name: `选这一版：${second.title}` }));
+    expect(await section.findByText("没有分不出版本的专辑。")).toBeTruthy();
+
+    const requests = api.requestsTo("POST", `/api/v1/admin/curation/releases/${item.release_id}/match-selection`);
+    expect(requests.map(({ body }) => body)).toEqual([{ source: item.source, snapshot_id: item.snapshot_id, external_id: second.external_id }]);
+  });
+
   it.each([
     ["item_stale", "候选已经变了，页面刷新后请再看一下。"],
     ["insufficient_corroboration", "这一版的曲目结构和本地对不上，没有写入。"],

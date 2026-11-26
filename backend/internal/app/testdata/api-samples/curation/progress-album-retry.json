@@ -1,0 +1,108 @@
+{
+  "body": {
+    "batch": null,
+    "last_pass_finished_at": "2026-01-01T00:00:00Z",
+    "model": {
+      "can_retry": false,
+      "concurrency": 4,
+      "configured": false,
+      "context_hint": "使用本机模型时，请按模型服务实际加载的上下文长度设置单次最多发送。",
+      "daily_token_limit": 10000000,
+      "items": {
+        "in_progress": 0,
+        "shelved": 0,
+        "waiting_human": 0,
+        "waiting_model": 0
+      },
+      "model": "",
+      "pause_kind": null,
+      "reason_detail": null,
+      "retry_at": null,
+      "running": 0,
+      "state": "unavailable",
+      "today": {
+        "date": "2026-01-02",
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "unavailable_reason": "not_configured"
+    },
+    "pending": {
+      "waiting_model": 0
+    },
+    "queues": [
+      {
+        "completed_items_per_second": null,
+        "eta_seconds": null,
+        "id": "release",
+        "pause_reason": "invalid_response",
+        "ready": 0,
+        "remaining": 1,
+        "retry_at": "2026-01-01T00:00:01Z",
+        "source": "musicbrainz",
+        "state": "paused",
+        "successful_requests_per_second": null
+      },
+      {
+        "completed_items_per_second": null,
+        "eta_seconds": 0,
+        "id": "artwork",
+        "pause_reason": null,
+        "ready": 0,
+        "remaining": 0,
+        "retry_at": null,
+        "source": null,
+        "state": "idle",
+        "successful_requests_per_second": null
+      },
+      {
+        "completed_items_per_second": null,
+        "eta_seconds": 0,
+        "id": "lyrics",
+        "pause_reason": null,
+        "ready": 0,
+        "remaining": 0,
+        "retry_at": null,
+        "source": null,
+        "state": "idle",
+        "successful_requests_per_second": null
+      },
+      {
+        "completed_items_per_second": null,
+        "eta_seconds": 0,
+        "id": "artist_media",
+        "pause_reason": null,
+        "ready": 0,
+        "remaining": 0,
+        "retry_at": null,
+        "source": null,
+        "state": "idle",
+        "successful_requests_per_second": null
+      },
+      {
+        "completed_items_per_second": null,
+        "eta_seconds": 0,
+        "id": "fingerprint",
+        "pause_reason": null,
+        "ready": 0,
+        "remaining": 0,
+        "retry_at": null,
+        "source": null,
+        "state": "idle",
+        "successful_requests_per_second": null
+      }
+    ],
+    "releases": {
+      "conflict": 0,
+      "matched": 0,
+      "processed": 0,
+      "query_error": 0,
+      "total": 1,
+      "try_later": 1,
+      "unmatched": 0
+    },
+    "rule_version": 106,
+    "state": "idle"
+  },
+  "status": 200
+}

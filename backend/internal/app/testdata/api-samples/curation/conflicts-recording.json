@@ -1,0 +1,115 @@
+{
+  "body": {
+    "items": [
+      {
+        "candidates": [
+          {
+            "artist": "合成单曲艺人",
+            "barcode": "",
+            "catalog_numbers": [],
+            "country": "",
+            "date": "",
+            "entity": "recording",
+            "external_id": "00000000-0000-4000-8000-000000000001",
+            "method": "isrc",
+            "recording": {
+              "Artists": [
+                {
+                  "ArtistID": "",
+                  "JoinPhrase": "",
+                  "Name": "合成单曲艺人"
+                }
+              ],
+              "ID": "00000000-0000-4000-8000-000000000001",
+              "ISRCs": [
+                "USABC2600001"
+              ],
+              "LengthMS": 100000,
+              "Releases": null,
+              "Title": "合成单曲录音"
+            },
+            "release_group_id": "",
+            "source": "musicbrainz",
+            "status": "",
+            "title": "合成单曲录音",
+            "track_count": 0,
+            "verification": {
+              "artist_match": true,
+              "comparable": 1,
+              "comparable_track_titles": 0,
+              "contradicted": false,
+              "direct": true,
+              "external_tracks": 1,
+              "local_tracks": 1,
+              "matched_track_titles": 0,
+              "method": "isrc",
+              "title_match": true,
+              "within": 1
+            }
+          },
+          {
+            "artist": "合成单曲艺人",
+            "barcode": "",
+            "catalog_numbers": [],
+            "country": "",
+            "date": "",
+            "entity": "recording",
+            "external_id": "00000000-0000-4000-8000-000000000002",
+            "method": "isrc",
+            "recording": {
+              "Artists": [
+                {
+                  "ArtistID": "",
+                  "JoinPhrase": "",
+                  "Name": "合成单曲艺人"
+                }
+              ],
+              "ID": "00000000-0000-4000-8000-000000000002",
+              "ISRCs": [
+                "USABC2600001"
+              ],
+              "LengthMS": 100000,
+              "Releases": null,
+              "Title": "合成单曲・录音"
+            },
+            "release_group_id": "",
+            "source": "musicbrainz",
+            "status": "",
+            "title": "合成单曲・录音",
+            "track_count": 0,
+            "verification": {
+              "artist_match": true,
+              "comparable": 1,
+              "comparable_track_titles": 0,
+              "contradicted": false,
+              "direct": true,
+              "external_tracks": 1,
+              "local_tracks": 1,
+              "matched_track_titles": 0,
+              "method": "isrc",
+              "title_match": true,
+              "within": 1
+            }
+          }
+        ],
+        "checked_at": "2026-01-01T00:00:00Z",
+        "conflicts": [
+          "ambiguous"
+        ],
+        "reason": "",
+        "release_id": "00000000-0000-4000-8000-000000000003",
+        "selection": null,
+        "snapshot_id": "00000000-0000-4000-8000-000000000004",
+        "source": "musicbrainz",
+        "status": "conflict",
+        "title": "合成冲突单曲"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 1
+    }
+  },
+  "status": 200
+}

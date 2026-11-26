@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { CurationProgressDTO, CurationSettingsDTO, SuppressionDTO } from "./api/decoders";
-import { isPairedIdentityMarker, skippedReason, skippedSummary, suppressionSubjectText, suppressionValueText } from "./curation-text";
+import { sampleBody } from "../../test/api-samples";
+import { decodeCurationProgress, type CurationProgressDTO, type CurationSettingsDTO, type SuppressionDTO } from "./api/decoders";
+import { isPairedIdentityMarker, modelUnavailableText, needsAgentSettings, queueText, skippedReason, skippedSummary, suppressionSubjectText, suppressionValueText } from "./curation-text";
 import { dismissHint, hintDismissed, shouldShowFirstScanHint } from "./first-scan-hint";
 import { progressRefetchInterval } from "./hooks/use-curation";
 import { idleQueues } from "../../test/curation-data";
@@ -51,6 +52,35 @@ describe("一次性提示", () => {
 });
 
 describe("文案", () => {
+  it("识别队列写出专辑专属错误和重试时刻，声纹错误省略内部来源名", () => {
+    const { queues } = decodeCurationProgress(sampleBody("curation/progress-album-retry"));
+    const queue = queues.find(({ id }) => id === "release");
+    if (queue === undefined || queue.retry_at === null) throw new Error("缺少识别队列重试样本");
+    const retryAt = queue.retry_at;
+    const formatTime = (iso: string) => {
+      expect(iso).toBe(retryAt);
+      return "10:30";
+    };
+
+    expect(queueText(queue, formatTime)).toBe("MusicBrainz 返回的数据有误，约 10:30 重试这一张 · 剩 1");
+    expect(queueText({ ...queue, pause_reason: "invalid_query" }, formatTime)).toBe("MusicBrainz 查询条件有误，约 10:30 重试这一张 · 剩 1");
+    expect(queueText({ ...queue, pause_reason: "fingerprint_failed", source: "local_fingerprint" }, formatTime)).toBe("声纹没算出来，约 10:30 重试这一张 · 剩 1");
+  });
+
+  it.each([
+    ["configuration", "模型接口拒绝了请求，改好配置或测试连接成功后继续。", true],
+    ["provider_quota", "服务商的额度或余额不足，会定时自动再试。", false],
+    ["empty_replies", "模型连续没有给出回答，测试连接成功后继续。", true],
+    ["tool_unsupported_override", "你在 Agent 设置里把这个模型标成了不支持工具调用，换一个模型或改掉这项设置。", true],
+  ] as const)("模型不可用原因 %s 对应文案与 Agent 设置入口", (reason, message, needsSettings) => {
+    expect(modelUnavailableText(reason, true)).toBe(message);
+    expect(needsAgentSettings(reason)).toBe(needsSettings);
+  });
+
+  it("非开启者看到开启者标记模型不支持工具调用", () => {
+    expect(modelUnavailableText("tool_unsupported_override", false)).toBe("开启者在 Agent 设置里把模型标成了不支持工具调用。");
+  });
+
   const marker = (subject: string, value: SuppressionDTO["value"]): SuppressionDTO => ({
     created_at: "2026-01-01T00:00:00Z", created_by: "00000000-0000-4000-8000-000000000001", id: "00000000-0000-4000-8000-000000000002", operation_id: null,
     subject, target_id: "00000000-0000-4000-8000-000000000003", target_type: "release", value, value_hash: "x",
