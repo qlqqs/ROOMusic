@@ -13,7 +13,7 @@ const QueueRankSQL = `CASE WHEN s.manual_requested_at IS NOT NULL THEN 0
  WHEN r.queue_has_id THEN 2 WHEN r.queue_class IN ('has_gaps','insufficient') THEN 3 ELSE 4 END`
 
 // SQL 分类与调度器的模型任务一一对应。
-const modelKindSQL = `CASE WHEN p.kind IN ('name_patrol','local_cleanup') THEN 'patrol_local'
+const modelKindSQL = `CASE WHEN p.kind='local_cleanup' THEN 'local' WHEN p.kind='name_patrol' THEN 'patrol_local'
  WHEN p.route='lookup' THEN 'lookup'
  WHEN p.route='web' OR p.kind='artist_identity' THEN 'web'
  WHEN p.kind IN ('release_merge','verify_artist_credit','verify_artist_merge','verify_name') THEN 'verify'
@@ -33,10 +33,19 @@ const modelQueueFromSQL = ` FROM curation_pending_items p
  AND (COALESCE(p.target_id,work.queue_release_id) IS NULL OR EXISTS (SELECT FROM curation_stable_releases stable
  WHERE stable.id=COALESCE(p.target_id,work.queue_release_id)))`
 
+// 只有同目录的在途项与延后项全部允许时，才分派整目录。
+func localDirectoryReadySQL(at, excluded string) string {
+	return ` AND (p.kind<>'local_cleanup' OR p.single_request OR NOT EXISTS (
+ SELECT FROM curation_pending_items peer
+ WHERE peer.kind='local_cleanup' AND peer.evidence->>'directory_key'=p.evidence->>'directory_key'
+ AND peer.status IN ('waiting_model','waiting_route','in_progress')
+ AND (peer.status='in_progress' OR peer.next_attempt_at>` + at + ` OR peer.id=ANY(` + excluded + `::uuid[]))))`
+}
+
 func (w *Writer) ReadyModelKinds(ctx context.Context, now time.Time, targets []string, excluded []string) (map[string]bool, error) {
 	rows, err := w.db.QueryContext(ctx, `WITH visible AS (`+catalog.VisibleReleaseIDsSQL+`)
  SELECT DISTINCT `+modelKindSQL+modelQueueFromSQL+`
- AND p.target_type=ANY($1::text[]) AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$2) AND NOT (p.id=ANY($3::uuid[]))`, targets, now, excluded)
+ AND p.target_type=ANY($1::text[]) AND (p.next_attempt_at IS NULL OR p.next_attempt_at<=$2) AND NOT (p.id=ANY($3::uuid[]))`+localDirectoryReadySQL("$2", "$3"), targets, now, excluded)
 	if err != nil {
 		return nil, err
 	}
@@ -81,14 +90,18 @@ func (w *Writer) BeforeModelKind(ctx context.Context, actor string, now time.Tim
 	if settings.Paused {
 		return ModelItemCheckpoint{Reason: "paused"}, nil
 	}
-	if settings.DailyTokenLimit == nil && (kind != "web" || settings.WebDailyTokenLimit == nil) {
+	return w.CheckDailyBudget(ctx, now, settings.DailyTokenLimit)
+}
+
+func (w *Writer) CheckDailyBudget(ctx context.Context, now time.Time, limit *int64) (ModelItemCheckpoint, error) {
+	if limit == nil {
 		return ModelItemCheckpoint{}, nil
 	}
-	today, web, err := w.DailyUsage(ctx, now)
+	today, err := w.TodayUsage(ctx, now)
 	if err != nil {
 		return ModelItemCheckpoint{}, err
 	}
-	if today.AtLimit(settings.DailyTokenLimit) || kind == "web" && web.AtLimit(settings.WebDailyTokenLimit) {
+	if today.AtLimit(limit) {
 		next := NextBudgetDay(now)
 		return ModelItemCheckpoint{Reason: "limit_reached", RetryAt: &next}, nil
 	}

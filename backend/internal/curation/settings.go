@@ -35,16 +35,16 @@ type Enabler struct {
 	Username string `json:"username"`
 }
 type Settings struct {
-	ModelConcurrency   int        `json:"model_concurrency"`
-	Model              string     `json:"model"`
-	DailyTokenLimit    *int64     `json:"daily_token_limit"`
-	WebDailyTokenLimit *int64     `json:"web_daily_token_limit"`
-	Paused             bool       `json:"paused"`
-	Enabled            bool       `json:"enabled"`
-	EnabledBy          *Enabler   `json:"enabled_by"`
-	EnabledAt          *time.Time `json:"enabled_at"`
-	Active             bool       `json:"active"`
-	InactiveReason     *string    `json:"inactive_reason"`
+	ModelConcurrency int        `json:"model_concurrency"`
+	Model            string     `json:"model"`
+	DailyTokenLimit  *int64     `json:"daily_token_limit"`
+	MaxRequestTokens int64      `json:"max_request_tokens"`
+	Paused           bool       `json:"paused"`
+	Enabled          bool       `json:"enabled"`
+	EnabledBy        *Enabler   `json:"enabled_by"`
+	EnabledAt        *time.Time `json:"enabled_at"`
+	Active           bool       `json:"active"`
+	InactiveReason   *string    `json:"inactive_reason"`
 }
 
 // 设置行与有效开启者的共享锁保持到自动写入或开批次的事务结束。
@@ -52,9 +52,9 @@ type Settings struct {
 func loadSettings(ctx context.Context, tx *sql.Tx) (Settings, error) {
 	var s Settings
 	var id *string
-	err := tx.QueryRowContext(ctx, `SELECT paused,enabled,enabled_by::text,enabled_at,model,model_daily_token_limit,web_daily_token_limit,model_concurrency
+	err := tx.QueryRowContext(ctx, `SELECT paused,enabled,enabled_by::text,enabled_at,model,model_daily_token_limit,max_request_tokens,model_concurrency
  FROM curation_settings WHERE id=1 FOR SHARE`).
-		Scan(&s.Paused, &s.Enabled, &id, &s.EnabledAt, &s.Model, &s.DailyTokenLimit, &s.WebDailyTokenLimit, &s.ModelConcurrency)
+		Scan(&s.Paused, &s.Enabled, &id, &s.EnabledAt, &s.Model, &s.DailyTokenLimit, &s.MaxRequestTokens, &s.ModelConcurrency)
 	if err != nil {
 		return Settings{}, err
 	}
@@ -124,12 +124,11 @@ func (w *Writer) UpdateSettings(ctx context.Context, actorID string, enabled, pa
 }
 
 type ModelSettingsPatch struct {
-	ModelConcurrency      *int
-	SetWebDailyTokenLimit bool
-	WebDailyTokenLimit    *int64
-	Model                 *string
-	SetDailyTokenLimit    bool
-	DailyTokenLimit       *int64
+	ModelConcurrency   *int
+	MaxRequestTokens   *int64
+	Model              *string
+	SetDailyTokenLimit bool
+	DailyTokenLimit    *int64
 }
 
 func invalidTokenLimit(limit *int64) bool {
@@ -137,13 +136,13 @@ func invalidTokenLimit(limit *int64) bool {
 }
 
 func (w *Writer) UpdateModelSettings(ctx context.Context, actorID string, enabled, paused *bool, patch ModelSettingsPatch) (Settings, error) {
-	if patch.Model != nil && len(*patch.Model) > 200 || invalidTokenLimit(patch.DailyTokenLimit) || invalidTokenLimit(patch.WebDailyTokenLimit) {
+	if patch.Model != nil && len(*patch.Model) > 200 || invalidTokenLimit(patch.DailyTokenLimit) || invalidTokenLimit(patch.MaxRequestTokens) {
 		return Settings{}, operations.Invalid("invalid_input", "模型名称或每日用量上限无效")
 	}
 	if patch.ModelConcurrency != nil && (*patch.ModelConcurrency < 1 || *patch.ModelConcurrency > 16) {
 		return Settings{}, operations.Invalid("invalid_input", "模型并发数必须是 1 到 16 的整数")
 	}
-	if enabled == nil && paused == nil && patch.ModelConcurrency == nil && patch.Model == nil && !patch.SetDailyTokenLimit && !patch.SetWebDailyTokenLimit {
+	if enabled == nil && paused == nil && patch.ModelConcurrency == nil && patch.Model == nil && !patch.SetDailyTokenLimit && patch.MaxRequestTokens == nil {
 		return Settings{}, operations.Invalid("invalid_input", "需要指定开关或暂停状态")
 	}
 	tx, err := w.db.BeginTx(ctx, nil)
@@ -151,16 +150,27 @@ func (w *Writer) UpdateModelSettings(ctx context.Context, actorID string, enable
 		return Settings{}, err
 	}
 	defer tx.Rollback()
+	if patch.MaxRequestTokens != nil {
+		var old int64
+		if err := tx.QueryRowContext(ctx, `SELECT max_request_tokens FROM curation_settings WHERE id=1 FOR UPDATE`).Scan(&old); err != nil {
+			return Settings{}, err
+		}
+		if *patch.MaxRequestTokens > old {
+			if _, err := tx.ExecContext(ctx, `UPDATE curation_pending_items SET status='waiting_model',model_stop_code=NULL,shelved_reason=NULL,updated_at=now() WHERE status='shelved' AND model_stop_code='content_too_long'`); err != nil {
+				return Settings{}, err
+			}
+		}
+	}
 	_, err = tx.ExecContext(ctx, `UPDATE curation_settings SET enabled=COALESCE($1::boolean,enabled),
  paused=CASE WHEN NOT enabled AND $1 THEN false ELSE COALESCE($3::boolean,paused) END,
  enabled_at=CASE WHEN $1 AND (NOT enabled OR enabled_by IS DISTINCT FROM $2::uuid) THEN now() ELSE enabled_at END,
  enabled_by=CASE WHEN $1 THEN $2::uuid ELSE enabled_by END,
  updated_at=CASE WHEN $1::boolean IS NOT NULL OR $3::boolean IS NOT NULL THEN now() ELSE updated_at END,
  model=COALESCE($4,model),model_daily_token_limit=CASE WHEN $5 THEN $6 ELSE model_daily_token_limit END,
- web_daily_token_limit=CASE WHEN $7 THEN $8 ELSE web_daily_token_limit END,
- model_concurrency=COALESCE($9,model_concurrency),
- model_updated_at=CASE WHEN $4::text IS NOT NULL OR $5 OR $7 OR $9::integer IS NOT NULL THEN now() ELSE model_updated_at END
- WHERE id=1`, enabled, actorID, paused, patch.Model, patch.SetDailyTokenLimit, patch.DailyTokenLimit, patch.SetWebDailyTokenLimit, patch.WebDailyTokenLimit, patch.ModelConcurrency)
+ max_request_tokens=COALESCE($7::bigint,max_request_tokens),
+ model_concurrency=COALESCE($8,model_concurrency),
+ model_updated_at=CASE WHEN $4::text IS NOT NULL OR $5 OR $7::bigint IS NOT NULL OR $8::integer IS NOT NULL THEN now() ELSE model_updated_at END
+ WHERE id=1`, enabled, actorID, paused, patch.Model, patch.SetDailyTokenLimit, patch.DailyTokenLimit, patch.MaxRequestTokens, patch.ModelConcurrency)
 	if err != nil {
 		return Settings{}, err
 	}

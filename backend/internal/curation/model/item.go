@@ -33,6 +33,10 @@ func taskKind(p curation.PendingItem) TaskKind {
 	}
 }
 
+func rulesKind(kind TaskKind, p curation.PendingItem) bool {
+	return kind == SelectCandidate || kind == VerifyEvidence || p.Kind == "local_cleanup"
+}
+
 func itemLimits(kind TaskKind) (calls int, tokens int64) {
 	switch kind {
 	case LookupCandidate:
@@ -53,64 +57,61 @@ func itemAtLimit(kind TaskKind, calls int, tokens int64) bool {
 	return maxCalls > 0 && (calls >= maxCalls || tokens >= maxTokens)
 }
 
-// 首条消息按整项拆包；不截断曲目清单。大小沿用管家消息请求的 1 MiB 边界。
-const selectionMessageBytes = 1 << 20
-
-func selectionBatchSize(items []curation.PendingItem) (int, error) {
-	for n := len(items); n > 0; n-- {
-		message, err := firstMessage(items[:n], nil, nil)
-		if err != nil {
-			return 0, err
+// 准备好的证据和实际发送的候选保留在该项副本中。
+func (s *Scheduler) prepareItem(ctx context.Context, matcher *program.ModelMatcher, p *curation.PendingItem) error {
+	items := []curation.PendingItem{*p}
+	if taskKind(*p) == SelectCandidate {
+		if err := matcher.PrepareSelection(ctx, items); err != nil {
+			return err
 		}
-		if len(message) <= selectionMessageBytes {
-			return n, nil
+		*p = items[0]
+		return nil
+	}
+	if err := matcher.AnnotatePendingEvidence(ctx, items); err != nil {
+		return err
+	}
+	if err := matcher.AddCanonicalNames(ctx, items); err != nil {
+		return err
+	}
+	*p = items[0]
+	if !strings.HasPrefix(p.Kind, "verify_") {
+		return nil
+	}
+	if p.Kind == "verify_name" {
+		entries, err := s.writer.LoadCurationEvidence(ctx, []string{p.TargetID})
+		if err != nil {
+			return err
+		}
+		if e, ok := entries[p.TargetID]; ok && program.IdentityDigest(e) == p.IdentityDigest {
+			p.PreparedLocal = program.PendingEvidence(e)
 		}
 	}
-	return 0, nil
+	proof, err := matcher.VerificationPlan(ctx, *p, curation.VerificationInput{})
+	if err != nil {
+		var failure *operations.Failure
+		if errors.As(err, &failure) {
+			switch failure.Code {
+			case "item_stale", "no_evidence", "no_strong_evidence", "manual_structure", "nothing_to_apply", "source_disabled":
+				return nil
+			}
+		}
+		return err
+	}
+	p.PreparedVerification = &proof
+	return nil
 }
 
 func (s *Scheduler) taskMessage(ctx context.Context, items []curation.PendingItem) (string, error) {
-	if taskKind(items[0]) == SelectCandidate {
-		return firstMessage(items, nil, nil)
-	}
 	matcher := program.NewModelMatcher(s.db, s.writer, s.sources)
-	if err := matcher.AnnotatePendingEvidence(ctx, items); err != nil {
-		return "", err
-	}
-	if err := matcher.AddCanonicalNames(ctx, items); err != nil {
-		return "", err
-	}
-	if len(items) != 1 || !strings.HasPrefix(items[0].Kind, "verify_") {
-		return firstMessage(items, nil, nil)
-	}
-	var local map[string]any
-	if p := items[0]; p.Kind == "verify_name" {
-		entries, err := s.writer.LoadCurationEvidence(ctx, []string{p.TargetID})
-		if err != nil {
-			return "", err
-		}
-		if e, ok := entries[p.TargetID]; ok && program.IdentityDigest(e) == p.IdentityDigest {
-			local = program.PendingEvidence(e)
-		}
-	}
-	// 首次判断和独立审查使用相同的后端取证入口。此处的快照只供阅读。
-	proof, err := matcher.VerificationPlan(ctx, items[0], curation.VerificationInput{})
-	if err != nil {
-		var failure *operations.Failure
-		if !errors.As(err, &failure) {
-			return "", err
-		}
-		switch failure.Code {
-		case "item_stale", "no_evidence", "no_strong_evidence", "manual_structure", "nothing_to_apply", "source_disabled":
-			return firstMessage(items, nil, local)
-		default:
+	for i := range items {
+		if err := s.prepareItem(ctx, matcher, &items[i]); err != nil {
 			return "", err
 		}
 	}
-	return firstMessage(items, &proof, local)
+	return firstMessage(items)
 }
 
-func firstMessage(items []curation.PendingItem, proof *curation.VerificationPlan, local map[string]any) (string, error) {
+func firstMessage(items []curation.PendingItem) (string, error) {
 	type messageItem struct {
 		ID              string                     `json:"item_id"`
 		Kind            string                     `json:"kind"`
@@ -132,7 +133,7 @@ func firstMessage(items []curation.PendingItem, proof *curation.VerificationPlan
 			ID: p.ID, Kind: p.Kind, Route: taskKind(p), ReleaseID: p.TargetID, ArtistID: p.ArtistID,
 			Evidence: p.Evidence, Candidates: p.Candidates, Conflicts: p.Conflicts,
 			CanonicalTitle: p.CanonicalTitle, CanonicalArtist: p.CanonicalArtist,
-			Requirements: writeRequirements(p), Local: local, Verification: proof,
+			Requirements: writeRequirements(p), Local: p.PreparedLocal, Verification: p.PreparedVerification,
 		})
 	}
 	data, err := json.Marshal(rows)
@@ -190,11 +191,6 @@ func (s *Scheduler) deferSourceItem(ctx context.Context, p curation.PendingItem,
 	kind := taskKind(p)
 	// 普通执行允许刚好用完本档额度。来源重试要在领取前留出完整的新一轮额度。
 	atLimit := itemAtLimit(kind, p.ItemToolCalls, p.ItemTokens)
-	if atLimit {
-		if next := s.options.Now().Add(7 * 24 * time.Hour); next.After(retryAt) {
-			retryAt = next
-		}
-	}
 	return s.writer.DeferModelItem(ctx, p, conversation, string(kind), retryAt, atLimit)
 }
 
@@ -207,8 +203,8 @@ func (s *Scheduler) abandon(ctx context.Context, p curation.PendingItem, model, 
 	if !retryAt.IsZero() {
 		return s.deferSourceItem(ctx, p, conversation, retryAt)
 	}
-	if taskKind(p) == SelectCandidate {
-		return s.writer.AdvanceModelItem(ctx, p, conversation, string(SelectCandidate), "lookup", reason)
+	if rulesKind(taskKind(p), p) {
+		return s.writer.FinishUndetermined(ctx, p, conversation, reason)
 	}
 	if taskKind(p) != WebFallback && p.Kind != "release_merge" {
 		_, web, err := s.sources.MatchFallbackReadiness(ctx)

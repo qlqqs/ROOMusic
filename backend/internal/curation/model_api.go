@@ -21,23 +21,26 @@ type ModelItemCounts struct {
 }
 
 type ModelProgress struct {
-	Running            int             `json:"running"`
-	Concurrency        int             `json:"concurrency"`
-	WebDailyTokenLimit *int64          `json:"web_daily_token_limit"`
-	WebToday           ModelUsage      `json:"web_today"`
-	WebLimitReached    bool            `json:"web_limit_reached"`
-	WebRetryAt         *time.Time      `json:"web_retry_at"`
-	State              string          `json:"state"`
-	UnavailableReason  *string         `json:"unavailable_reason"`
-	Model              string          `json:"model"`
-	Today              ModelUsage      `json:"today"`
-	DailyTokenLimit    *int64          `json:"daily_token_limit"`
-	Items              ModelItemCounts `json:"items"`
+	Running           int             `json:"running"`
+	Concurrency       int             `json:"concurrency"`
+	Configured        bool            `json:"configured"`
+	PauseKind         *string         `json:"pause_kind"`
+	ReasonDetail      *string         `json:"reason_detail"`
+	RetryAt           *time.Time      `json:"retry_at"`
+	CanRetry          bool            `json:"can_retry"`
+	ContextHint       string          `json:"context_hint"`
+	State             string          `json:"state"`
+	UnavailableReason *string         `json:"unavailable_reason"`
+	Model             string          `json:"model"`
+	Today             ModelUsage      `json:"today"`
+	DailyTokenLimit   *int64          `json:"daily_token_limit"`
+	Items             ModelItemCounts `json:"items"`
 }
 
 type ModelScheduler interface {
 	Wake()
 	ModelStatus(context.Context) (ModelProgress, error)
+	RetryModel(context.Context) (ModelProgress, error)
 }
 
 type ExceptionResolver interface {

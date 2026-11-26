@@ -65,9 +65,8 @@ func TestPostgreSQLArtistWebSearchMockMediaAndUsage(t *testing.T) {
 	progress := f.progress(t)
 	usage := progress.Today
 	patrols := countRows(t, f.application, `SELECT count(*) FROM curation_pending_items WHERE kind='name_patrol' AND resolution='patrolled'`)
-	if patrols != 2 || progress.WebToday.InputTokens+int64(patrols*12) != usage.InputTokens ||
-		progress.WebToday.OutputTokens+int64(patrols*8) != usage.OutputTokens {
-		t.Fatalf("联网用量 %+v，总用量 %+v", progress.WebToday, usage)
+	if patrols != 2 {
+		t.Fatalf("已巡检项数 %d", patrols)
 	}
 	if calls < 4 || usage.InputTokens != int64(calls*12) || usage.OutputTokens != int64(calls*8) {
 		t.Fatalf("mock 模型请求数=%d，当日用量 %+v", calls, usage)

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/egress"
 )
@@ -78,28 +79,21 @@ func (a *adapter) Stream(ctx context.Context, request Request) (Stream, error) {
 	if request.Model == "" || request.MaxOutputTokens < 0 || (a.protocol == ProtocolMessages && request.MaxOutputTokens == 0) {
 		return nil, failure(ErrorOther, 0, "模型名或最大输出 token 数无效", "")
 	}
-	var body any
-	var err error
-	var parser streamParser
-	resource := "chat/completions"
-	if a.protocol == ProtocolMessages {
-		resource = "messages"
-		body, err = messagesRequest(request)
-		parser = newMessagesParser(request)
-	} else if a.protocol == ProtocolResponses {
-		resource = "responses"
-		body, err = responsesRequest(request)
-		parser = &responsesParser{}
-	} else {
-		body, err = a.openAIRequest(request)
-		parser = &openAIParser{calls: make(map[int]*callFragments)}
-	}
+	encoded, err := a.encodeRequest(request)
 	if err != nil {
 		return nil, err
 	}
-	encoded, err := json.Marshal(body)
-	if err != nil {
-		return nil, failure(ErrorOther, 0, "请求包含无效 JSON", "")
+	var parser streamParser
+	resource := "chat/completions"
+	switch a.protocol {
+	case ProtocolMessages:
+		resource = "messages"
+		parser = newMessagesParser(request)
+	case ProtocolResponses:
+		resource = "responses"
+		parser = &responsesParser{}
+	default:
+		parser = &openAIParser{calls: make(map[int]*callFragments)}
 	}
 	address, err := endpointURL(a.endpoint, a.protocol, resource)
 	if err != nil {
@@ -111,7 +105,110 @@ func (a *adapter) Stream(ctx context.Context, request Request) (Stream, error) {
 		cancel()
 		return nil, err
 	}
-	return newStream(ctx, requestCtx, cancel, response, parser, a.key), nil
+	stream := newStream(ctx, requestCtx, cancel, response, parser, a.key)
+	if ctx.Value(singleAttemptKey{}) == true {
+		now := time.Now()
+		if delay := upstreamDelay(response.Header, now); delay != nil {
+			return &recoveryStream{Stream: stream, retryAt: now.Add(*delay)}, nil
+		}
+	}
+	return stream, nil
+}
+
+// 流中途失败仍遵守建立流时收到的上游恢复时刻。
+type recoveryStream struct {
+	Stream
+	retryAt time.Time
+}
+
+func (s *recoveryStream) Next() (Event, error) {
+	event, err := s.Stream.Next()
+	var failure *Error
+	if errors.As(err, &failure) && failure.BackgroundClass() == "temporary" {
+		delay := max(0, time.Until(s.retryAt))
+		if failure.RetryDelay == nil || delay > *failure.RetryDelay {
+			failure.RetryDelay = &delay
+		}
+	}
+	return event, err
+}
+
+func (a *adapter) encodeRequest(r Request) ([]byte, error) {
+	var body any
+	var err error
+	switch a.protocol {
+	case ProtocolMessages:
+		body, err = messagesRequest(r)
+	case ProtocolResponses:
+		body, err = responsesRequest(r)
+	default:
+		body, err = a.openAIRequest(r)
+	}
+	if err != nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return nil, failure(ErrorOther, 0, "请求包含无效 JSON", "")
+	}
+	return encoded, nil
+}
+
+// RequestTokens 使用所选协议的实际序列化内容估算上下文开销。
+func RequestTokens(protocol Protocol, endpoint string, request Request) (int64, error) {
+	a := adapter{protocol: protocol, endpoint: endpoint}
+	raw, err := a.encodeRequest(request)
+	if err != nil {
+		return 0, err
+	}
+	var estimate, letters int64
+	for _, r := range string(raw) {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			letters++
+			continue
+		}
+		estimate += (letters + 3) / 4
+		letters = 0
+		estimate += int64((utf8.RuneLen(r) + 1) / 2)
+	}
+	return estimate + (letters+3)/4 + int64(request.MaxOutputTokens), nil
+}
+
+type singleAttemptKey struct{}
+
+func SingleAttempt(ctx context.Context) context.Context {
+	return context.WithValue(ctx, singleAttemptKey{}, true)
+}
+
+func upstreamDelay(header http.Header, now time.Time) *time.Duration {
+	delay := retryAfterDelay(header.Get("Retry-After"), now)
+	for _, key := range []string{"x-ratelimit-reset-requests", "x-ratelimit-reset-tokens"} {
+		if d, err := time.ParseDuration(header.Get(key)); err == nil {
+			delay = max(delay, d)
+		}
+	}
+	for _, key := range []string{"anthropic-ratelimit-requests-reset", "anthropic-ratelimit-tokens-reset", "anthropic-ratelimit-input-tokens-reset", "anthropic-ratelimit-output-tokens-reset"} {
+		if t, err := time.Parse(time.RFC3339, header.Get(key)); err == nil {
+			delay = max(delay, max(0, t.Sub(now)))
+		}
+	}
+	if delay < 0 {
+		return nil
+	}
+	return &delay
+}
+
+// BackgroundRetry 共享同一模型步骤的发起次数及时间预算。
+func BackgroundRetry(err error, attempt int, started time.Time) (time.Duration, bool) {
+	var failure *Error
+	if !errors.As(err, &failure) || failure.BackgroundClass() != "temporary" || attempt >= maxRequestAttempts {
+		return 0, false
+	}
+	delay := min(retryBaseDelay<<(attempt-1), retryMaxDelay)
+	if failure.RetryDelay != nil {
+		delay = *failure.RetryDelay
+	}
+	return delay, delay <= time.Until(started.Add(retryBudget))
 }
 
 func (a *adapter) do(ctx context.Context, method, address string, body []byte) (*http.Response, error) {
@@ -124,6 +221,15 @@ func (a *adapter) do(ctx context.Context, method, address string, body []byte) (
 		status := response.StatusCode
 		if status >= 200 && status < 300 {
 			return response, nil
+		}
+		if ctx.Value(singleAttemptKey{}) == true {
+			delay := upstreamDelay(response.Header, time.Now())
+			err := a.readFailure(ctx, response)
+			var failure *Error
+			if errors.As(err, &failure) {
+				failure.RetryDelay = delay
+			}
+			return nil, err
 		}
 		if status != http.StatusTooManyRequests && status != http.StatusServiceUnavailable {
 			return nil, a.readFailure(ctx, response)

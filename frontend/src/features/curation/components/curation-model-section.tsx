@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Check, CircleAlert, RefreshCw } from "lucide-react";
+import { Check, CircleAlert, PlugZap, RefreshCw } from "lucide-react";
 import { useRef, useState, type KeyboardEvent } from "react";
 import { flushSync } from "react-dom";
 import { formatCount } from "../../../shared/lib/number";
@@ -7,8 +7,8 @@ import { formatDateTime } from "../../../shared/lib/time";
 import { Button, ConfirmDialog, FailureNotice, QueryContent, SettingRow, SettingsGroup, Skeleton } from "../../../shared/ui";
 import { utf8ByteLength } from "../../auth";
 import type { CurationModelProgressDTO, CurationSettingsDTO } from "../api/decoders";
-import { modelStateText, modelUnavailableText, needsAgentSettings, tokenText } from "../curation-text";
-import { useCurationConversations, useCurationProgress, useRepatrol, useUpdateCurationSettings, type CurationSettingsChange } from "../hooks/use-curation";
+import { modelPauseText, modelStateText, modelUnavailableText, needsAgentSettings, tokenText } from "../curation-text";
+import { useCurationConversations, useCurationProgress, useRepatrol, useRetryCurationModel, useUpdateCurationSettings, type CurationSettingsChange } from "../hooks/use-curation";
 import styles from "./curation-sections.module.css";
 
 const AGENT_SETTINGS = "/settings/agent";
@@ -17,8 +17,8 @@ const WAN = 10_000;
 const MAX_LIMIT_TOKENS = 1_000_000_000_000;
 
 /**
- * “模型判断”卡片（M7 D、E2，整理链 G）：模型层的状态与原因、整理用的模型、每日 token 上限与联网兜底的上限、今天的用量（含联网）、
- * 待定项各状态的数目、重新巡检、最近的后台会话。
+ * “模型判断”卡片（M7 D、E2，整理链 G，ADR 0009 第 6 节）：模型层的状态与暂停原因（能测试连接时行尾有按钮）、整理用的模型、同时运行数、
+ * 单次最多发送、整理与艺人联网共用的每日 token 上限、今天的用量、待定项各状态的数目、重新巡检、最近的后台会话。
  * 模型与上限即改即存（照备份的“自动清理”：离开或回车时保存，勾“不限”立即保存），失败回到服务器的值并就近提示。
  * mine：当前管理员就是开启者（原因说的是他自己的管家设置，可以链接过去）；sameReviewModel：他的审查模型与有效的整理模型相同（U11）。
  */
@@ -79,21 +79,21 @@ function ModelRows({
     ["处理中", items.in_progress],
     ["搁置", items.shelved],
   ] as const;
-  const web = model.web_today.input_tokens + model.web_today.output_tokens;
-  const showWeb = web > 0 || model.web_daily_token_limit !== null;
   const todayNote =
     model.state === "limit_reached"
-      ? "到了上限，明天继续。"
-      : model.web_limit_reached
-        ? `联网到了上限，其它判断照常${model.web_retry_at === null ? "" : `，${formatDateTime(model.web_retry_at)} 恢复联网`}。`
-        : `按服务器的日期（${model.today.date}）统计，含审查与联网。`;
+      ? model.retry_at === null
+        ? "到了上限，明天继续。"
+        : `到了上限，${formatDateTime(model.retry_at)} 继续。`
+      : `按服务器的日期（${model.today.date}）统计，整理与艺人联网共用；管家对话不计入。`;
+  // 本地每日上限由状态本身说明；其余暂停写出原因与恢复方式，优先于笼统的不可用原因。
+  const pause = model.pause_kind === null || model.pause_kind === "daily_limit" ? null : modelPauseText(model.pause_kind, model.reason_detail, model.retry_at);
   return (
     <>
       <SettingRow label="状态" plainLabel>
         <span className={styles.value}>
           {modelStateText[model.state]}
           {model.running > 0 ? ` · 同时 ${formatCount(model.running)}/${formatCount(model.concurrency)} 项` : ""}
-          {model.state === "unavailable" && reason !== null ? `：${modelUnavailableText(reason, mine)}` : ""}
+          {pause !== null ? `：${pause}。` : model.state === "unavailable" && reason !== null ? `：${modelUnavailableText(reason, mine)}` : ""}
           {mine && needsAgentSettings(reason) ? (
             <>
               {" "}
@@ -101,11 +101,12 @@ function ModelRows({
             </>
           ) : null}
         </span>
+        {model.can_retry ? <RetryModelButton /> : null}
       </SettingRow>
       <ModelField settings={settings} sameReviewModel={sameReviewModel} onSaved={onSaved} />
       <ConcurrencyField settings={settings} onSaved={onSaved} />
-      <LimitField settings={settings} field="daily_token_limit" onSaved={onSaved} />
-      <LimitField settings={settings} field="web_daily_token_limit" onSaved={onSaved} />
+      <RequestSizeField settings={settings} hint={model.context_hint} onSaved={onSaved} />
+      <LimitField settings={settings} onSaved={onSaved} />
       <SettingRow label="今天" description={todayNote} plainLabel>
         <span className={styles.meterValue}>
           {limit === null ? null : (
@@ -115,7 +116,6 @@ function ModelRows({
           )}
           <span className={styles.value}>
             输入 {formatCount(model.today.input_tokens)} · 输出 {formatCount(model.today.output_tokens)}，共 {formatCount(total)}
-            {showWeb ? `，其中联网 ${formatCount(web)}` : ""}
           </span>
         </span>
       </SettingRow>
@@ -184,25 +184,19 @@ function ModelField({ settings, sameReviewModel, onSaved }: { settings: Curation
   );
 }
 
-type LimitKey = "daily_token_limit" | "web_daily_token_limit";
-
-const limitLabels: Record<LimitKey, string> = { daily_token_limit: "每日上限", web_daily_token_limit: "联网每日上限" };
-
-function limitDescription(field: LimitKey, limit: number | null): string {
-  if (field === "web_daily_token_limit") {
-    return limit === null ? "不限：联网兜底只受每日上限约束。" : `联网兜底每天 ${tokenText(limit)} token，用量同时计入每日上限；达到后只停联网。`;
-  }
-  return limit === null ? "不限：后台整理不按天停下。" : `每天 ${tokenText(limit)} token，达到后当天不再启动新的判断。`;
+function limitDescription(limit: number | null): string {
+  return limit === null ? "不限：整理与艺人联网不按天停下。" : `整理与艺人联网每天共用 ${tokenText(limit)} token，达到后当天不再发起新的请求。`;
 }
 
 /**
- * 每日上限与联网每日上限（field 选哪一个）：单位万 token（服务器的值不是整万时改用 token，编辑时不四舍五入）；勾“不限”立即保存，
+ * 每日上限：单位万 token（服务器的值不是整万时改用 token，编辑时不四舍五入）；勾“不限”立即保存，
  * 取消“不限”只解除停用并聚焦数字框，离开或回车时保存。
  */
-function LimitField({ settings, field, onSaved }: { settings: CurationSettingsDTO; field: LimitKey; onSaved: (text: string) => void }) {
+function LimitField({ settings, onSaved }: { settings: CurationSettingsDTO; onSaved: (text: string) => void }) {
   const update = useUpdateCurationSettings();
+  const field = "daily_token_limit";
   const limit = settings[field];
-  const label = limitLabels[field];
+  const label = "每日上限";
   const inWan = limit === null || limit % WAN === 0;
   const unit = inWan ? WAN : 1;
   const max = MAX_LIMIT_TOKENS / unit;
@@ -232,7 +226,7 @@ function LimitField({ settings, field, onSaved }: { settings: CurationSettingsDT
   };
 
   return (
-    <SettingRow label={label} description={limitDescription(field, limit)} plainLabel>
+    <SettingRow label={label} description={limitDescription(limit)} plainLabel>
       {(ids) => (
         <div role="group" aria-labelledby={ids.labelId} className={styles.field}>
           <div className={styles.limitRow}>
@@ -337,6 +331,74 @@ function ConcurrencyField({ settings, onSaved }: { settings: CurationSettingsDTO
         </div>
       )}
     </SettingRow>
+  );
+}
+
+/**
+ * 单次最多发送（token，1 到 10¹²）：一次请求按估算最多带多少内容，超出时分批，单张专辑放不下时先去掉分数最低的候选。
+ * 离开或回车时保存；hint 是服务器给的设置提示（例如本机模型按实际加载的上下文长度设置）。
+ */
+function RequestSizeField({ settings, hint, onSaved }: { settings: CurationSettingsDTO; hint: string | null; onSaved: (text: string) => void }) {
+  const update = useUpdateCurationSettings();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const value = draft ?? String(settings.max_request_tokens);
+  const reset = () => setDraft(null);
+  const commit = () => {
+    if (draft === null) return;
+    const text = draft.trim();
+    const number = /^\d+$/.test(text) ? Number(text) : Number.NaN;
+    if (!(number >= 1 && number <= MAX_LIMIT_TOKENS)) {
+      setError(`填 1 到 ${formatCount(MAX_LIMIT_TOKENS)} 之间的整数。`);
+      return;
+    }
+    setError(null);
+    if (number === settings.max_request_tokens) return reset();
+    save(update, { max_request_tokens: number }, onSaved, reset);
+  };
+  return (
+    <SettingRow label="单次最多发送" description={`一次请求最多带多少 token，超出时分批发送。${hint ?? ""}`}>
+      {(ids) => (
+        <div className={styles.field}>
+          <div className={styles.limitRow}>
+            <input
+              id={ids.controlId}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={MAX_LIMIT_TOKENS}
+              step={1}
+              className={styles.limitInput}
+              aria-describedby={ids.descriptionId}
+              aria-invalid={error === null ? undefined : true}
+              value={value}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setError(null);
+              }}
+              onBlur={commit}
+              onKeyDown={(event) => onEnter(event, commit)}
+            />
+            <span className={styles.unit} aria-hidden="true">
+              token
+            </span>
+          </div>
+          <FieldError error={error} />
+          {update.isError ? <FailureNotice error={update.error} context="write" /> : null}
+        </div>
+      )}
+    </SettingRow>
+  );
+}
+
+/** 状态行尾的“测试模型连接”：用开启者的配置发一次小请求，成功后暂停解除；失败时就近提示。只在服务器说能测试时出现。 */
+function RetryModelButton() {
+  const retry = useRetryCurationModel();
+  return (
+    <>
+      <Button variant="icon" icon={<PlugZap size={16} />} label="测试模型连接" onClick={() => retry.mutate()} disabled={retry.isPending} />
+      {retry.isError ? <FailureNotice error={retry.error} context="write" /> : null}
+    </>
   );
 }
 

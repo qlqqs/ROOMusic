@@ -822,3 +822,57 @@ func TestEmbeddedMigrationRollbackFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestPostgreSQLCurationModelRulesMigrationRoundTrip(t *testing.T) {
+	const version = 98
+	available, err := loadMigrations(migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := openMigrationTestDatabase(t)
+	before, after := migrationPrefix(available, version-1), migrationPrefix(available, version)
+	if _, ok := after["0098_curation_model_rules.sql"]; !ok {
+		t.Fatal("缺少模型规则迁移")
+	}
+	rollbackApply(t, db, before)
+	rollbackExec(t, db, `UPDATE curation_settings SET model_daily_token_limit=NULL,web_daily_token_limit=23456,model_concurrency=7 WHERE id=1;
+ INSERT INTO curation_model_usage(day,input_tokens,output_tokens,web_input_tokens,web_output_tokens) VALUES
+ ('2026-01-02',100,25,30,3),('2026-01-03',47,13,5,7);
+ INSERT INTO release_groups(id) VALUES('f9800000-0000-4000-8000-000000000010');
+ INSERT INTO releases(id,group_id,title,artist) VALUES
+ ('f9800000-0000-4000-8000-000000000011','f9800000-0000-4000-8000-000000000010','合成旧触限发行','合成艺人'),
+ ('f9800000-0000-4000-8000-000000000012','f9800000-0000-4000-8000-000000000010','合成旧来源退避发行','合成艺人');
+ INSERT INTO curation_pending_items(id,target_type,target_id,kind,status,route,rule_version,input_digest,evidence,next_attempt_at,reset_item_usage_on_claim,attempts) VALUES
+ ('f9800000-0000-4000-8000-000000000001','release','f9800000-0000-4000-8000-000000000011','release_match','waiting_route','lookup',102,'synthetic-budget','{}','2026-01-09T00:00:00Z',true,2),
+ ('f9800000-0000-4000-8000-000000000002','release','f9800000-0000-4000-8000-000000000012','release_match','waiting_route','lookup',102,'synthetic-source','{}','2026-01-09T00:00:00Z',false,1);`)
+	requireQuery := func(query string) {
+		t.Helper()
+		var result bool
+		if err := db.QueryRowContext(t.Context(), query).Scan(&result); err != nil || !result {
+			t.Fatalf("结果应为真，实际 %t，错误 %v，查询 %s", result, err, query)
+		}
+	}
+	checkTotals := func() {
+		t.Helper()
+		requireQuery(`SELECT count(*)=2 AND bool_and(CASE WHEN day='2026-01-02' THEN input_tokens=100 AND output_tokens=25 ELSE day='2026-01-03' AND input_tokens=47 AND output_tokens=13 END) FROM curation_model_usage`)
+	}
+	checkQueue := func() {
+		t.Helper()
+		requireQuery(`SELECT count(*)=2 AND bool_and(status='waiting_route' AND attempts=0 AND CASE WHEN reset_item_usage_on_claim THEN next_attempt_at IS NULL ELSE next_attempt_at IS NOT DISTINCT FROM '2026-01-09T00:00:00Z'::timestamptz END) FROM curation_pending_items`)
+	}
+	rollbackApply(t, db, after)
+	requireQuery(`SELECT model_daily_token_limit IS NULL AND model_concurrency=7 AND max_request_tokens=128000 FROM curation_settings WHERE id=1`)
+	requireQuery(`SELECT count(*)=0 FROM information_schema.columns WHERE table_schema=current_schema() AND column_name IN ('web_daily_token_limit','web_input_tokens','web_output_tokens')`)
+	checkTotals()
+	checkQueue()
+	rollbackExec(t, db, `UPDATE curation_settings SET model_daily_token_limit=98765 WHERE id=1`)
+	rollbackApply(t, db, before)
+	requireQuery(`SELECT model_daily_token_limit=98765 AND web_daily_token_limit IS NULL AND model_concurrency=7 FROM curation_settings WHERE id=1`)
+	requireQuery(`SELECT bool_and(web_input_tokens=0 AND web_output_tokens=0) FROM curation_model_usage`)
+	checkTotals()
+	checkQueue()
+	rollbackApply(t, db, after)
+	requireQuery(`SELECT model_daily_token_limit=98765 AND model_concurrency=7 AND max_request_tokens=128000 FROM curation_settings WHERE id=1`)
+	checkTotals()
+	checkQueue()
+}

@@ -45,6 +45,10 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+base+"/exceptions", h.admin(h.listExceptions))
 	mux.HandleFunc("POST "+base+"/exceptions/{id}/accept", h.admin(h.acceptException))
 	mux.HandleFunc("POST "+base+"/exceptions/{id}/decline", h.admin(h.declineException))
+	mux.HandleFunc("POST "+base+"/model/retry", h.admin(func(w http.ResponseWriter, r *http.Request, _ identity.User) {
+		p, err := h.model.RetryModel(r.Context())
+		h.respond(w, r, p, err)
+	}))
 	mux.HandleFunc("GET "+base+"/settings", h.admin(h.settings))
 	mux.HandleFunc("PUT "+base+"/settings", h.admin(h.setSettings))
 	mux.HandleFunc("GET "+base+"/batches", h.admin(h.batches))
@@ -140,12 +144,12 @@ func (h *Handlers) settings(w http.ResponseWriter, r *http.Request, _ identity.U
 
 func (h *Handlers) setSettings(w http.ResponseWriter, r *http.Request, actor identity.User) {
 	var body struct {
-		Enabled            *bool           `json:"enabled"`
-		Paused             *bool           `json:"paused"`
-		ModelConcurrency   json.RawMessage `json:"model_concurrency"`
-		Model              json.RawMessage `json:"model"`
-		DailyTokenLimit    json.RawMessage `json:"daily_token_limit"`
-		WebDailyTokenLimit json.RawMessage `json:"web_daily_token_limit"`
+		Enabled          *bool           `json:"enabled"`
+		Paused           *bool           `json:"paused"`
+		ModelConcurrency json.RawMessage `json:"model_concurrency"`
+		Model            json.RawMessage `json:"model"`
+		DailyTokenLimit  json.RawMessage `json:"daily_token_limit"`
+		MaxRequestTokens json.RawMessage `json:"max_request_tokens"`
 	}
 	if !decode(w, r, &body) {
 		return
@@ -164,13 +168,12 @@ func (h *Handlers) setSettings(w http.ResponseWriter, r *http.Request, actor ide
 		h.respond(w, r, nil, operations.Invalid("invalid_input", "每日用量上限无效"))
 		return
 	}
-	patch.SetWebDailyTokenLimit = body.WebDailyTokenLimit != nil
-	if patch.SetWebDailyTokenLimit && json.Unmarshal(body.WebDailyTokenLimit, &patch.WebDailyTokenLimit) != nil {
-		h.respond(w, r, nil, operations.Invalid("invalid_input", "联网每日用量上限无效"))
+	if body.MaxRequestTokens != nil && (json.Unmarshal(body.MaxRequestTokens, &patch.MaxRequestTokens) != nil || patch.MaxRequestTokens == nil) {
+		h.respond(w, r, nil, operations.Invalid("invalid_input", "单次最多发送必须是正整数"))
 		return
 	}
 	s, err := h.writer.UpdateModelSettings(r.Context(), actor.ID, body.Enabled, body.Paused, patch)
-	if err == nil && patch.ModelConcurrency != nil {
+	if err == nil {
 		h.model.Wake()
 	}
 	h.respond(w, r, s, err)

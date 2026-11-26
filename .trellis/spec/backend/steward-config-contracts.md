@@ -250,3 +250,7 @@ env -u ROOMUSIC_TEST_DATABASE_URL mise exec -- go test ./internal/steward/tool/.
 修复轮只运行用户指定 build、限定包 vet 与 diagnostics 测试，不运行数据库集成；实际结果见
 `temp/c9-backend-tests/fix-report.txt`（本机忽略文件）。旧白名单/自身停用/清理策略断言需由测试代理调整，不能沿用上轮通过状态。
 `main.go` 移除 slog.SetDefault：生产装配显式传入 logger；默认 logger 的 nil 回退及无生产调用的 zones.LoadUser 不构成运行依赖。
+
+## 整理模型的设置与测试
+
+整理读取开启者保存的有效端点、协议、凭据与能力设置，可用整理设置覆盖模型名。配置变更后唤醒模型队列。整理的管理员接口 `POST /api/v1/admin/curation/model/retry` 对该有效模型发送一次工具探测，使用预期工具并完整结束才放行。后台验证结果绑定有效配置，手动指定不支持工具时需要修改能力配置。本机上下文长度由 `context_hint` 提示管理员按服务实际加载值设置。

@@ -300,3 +300,70 @@ func TestPostgreSQLCurationModelAPIMatchErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestPostgreSQLCurationModelRulesSettingsAndProgress(t *testing.T) {
+	f := newSchedulerFixture(t)
+	call := func(method, path string, body any) map[string]any {
+		t.Helper()
+		response := f.application.request(t, method, curationBase+path, body, &f.admin, nil)
+		if response.Code != 200 {
+			t.Fatalf("%s %s HTTP %d：%s", method, path, response.Code, response.Body)
+		}
+		return decodeJSONMap(t, response)
+	}
+	check := func(body map[string]any, want map[string]any) {
+		t.Helper()
+		for key, value := range want {
+			if actual, exists := body[key]; !exists || actual != value {
+				t.Errorf("%s=%v（存在=%t），期望 %v", key, actual, exists, value)
+			}
+		}
+	}
+	retry := curationBase + "/model/retry"
+	requireAPIError(t, f.application.request(t, "POST", retry, nil, &f.ordinary, nil), 403, "forbidden")
+	requireAPIError(t, f.application.request(t, "POST", retry, nil, &f.admin, map[string]string{"Origin": "https://synthetic.invalid"}), 403, "origin_forbidden")
+
+	defaults := call("GET", "/settings", nil)
+	check(defaults, map[string]any{"model_concurrency": float64(4), "daily_token_limit": float64(10000000), "max_request_tokens": float64(128000)})
+	if _, legacy := defaults["web_daily_token_limit"]; legacy {
+		t.Error("设置仍包含旧联网子额度")
+	}
+	for _, patch := range []map[string]any{
+		{"web_daily_token_limit": 1},
+		{"max_request_tokens": nil}, {"max_request_tokens": "128000"}, {"max_request_tokens": 1.5},
+		{"max_request_tokens": 0}, {"max_request_tokens": 1000000000001},
+		{"model_concurrency": nil}, {"model_concurrency": "16"}, {"model_concurrency": 0}, {"model_concurrency": 17},
+		{"daily_token_limit": false}, {"daily_token_limit": 1.5}, {"daily_token_limit": 0},
+	} {
+		body := f.application.request(t, "PUT", curationBase+"/settings", patch, &f.admin, nil)
+		if body.Code != 400 {
+			t.Errorf("非法设置 %v 应返回 400，实际 HTTP %d：%s", patch, body.Code, body.Body)
+		}
+	}
+	check(call("PUT", "/settings", map[string]any{"model_concurrency": 1, "max_request_tokens": 1, "daily_token_limit": nil}),
+		map[string]any{"model_concurrency": float64(1), "max_request_tokens": float64(1), "daily_token_limit": nil})
+	check(call("PUT", "/settings", map[string]any{"model_concurrency": 16, "max_request_tokens": 1000000000000}),
+		map[string]any{"model_concurrency": float64(16), "max_request_tokens": float64(1000000000000), "daily_token_limit": nil})
+
+	f.enable(t)
+	response := call("GET", "/progress", nil)
+	progress, ok := response["model"].(map[string]any)
+	if !ok {
+		t.Fatalf("未配置时仍应返回完整的 model 对象：%v", response)
+	}
+	check(progress, map[string]any{
+		"configured": false, "state": "unavailable", "unavailable_reason": "not_configured",
+		"pause_kind": nil, "reason_detail": nil, "retry_at": nil, "can_retry": false,
+	})
+	hint, ok := progress["context_hint"].(string)
+	if !ok || !strings.Contains(hint, "实际加载的上下文长度") {
+		t.Errorf("缺少本机上下文提示：%v", progress["context_hint"])
+	}
+	for _, key := range []string{"web_today", "web_daily_token_limit", "web_limit_reached", "web_retry_at"} {
+		if _, legacy := progress[key]; legacy {
+			t.Errorf("进度仍含旧联网额度字段 %s", key)
+		}
+	}
+	check(call("POST", "/model/retry", nil), map[string]any{"unavailable_reason": "not_configured", "can_retry": false})
+	requireCurationRuleRequestCount(t, f, 0)
+}

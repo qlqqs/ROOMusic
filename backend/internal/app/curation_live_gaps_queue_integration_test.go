@@ -118,11 +118,8 @@ func TestPostgreSQLLiveGapsSourceRetry(t *testing.T) {
 				if tc.route == "lookup" {
 					delay, requests = 20*time.Minute, 1
 				}
-				if capped {
-					delay = 7 * 24 * time.Hour
-					if tc.route == "lookup" {
-						delay = 8 * 24 * time.Hour
-					}
+				if capped && tc.route == "lookup" {
+					delay = 8 * 24 * time.Hour
 				}
 				deadline := f.clock.options().Now().Add(delay)
 				if failures.Load()-firstFailures != requests || got.SourceRetryCount != i+1 || got.Status != "waiting_route" || got.Route != tc.route || got.NextAttemptAt == nil || !got.NextAttemptAt.Equal(deadline) || got.Attempts != p.Attempts || got.Resolution != nil || after.Status == "unlisted" || after.Attempts != before.Attempts || after.Generation != before.Generation {

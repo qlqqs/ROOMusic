@@ -9,10 +9,10 @@
       "username": "curator"
     },
     "inactive_reason": null,
+    "max_request_tokens": 240000,
     "model": "",
     "model_concurrency": 4,
-    "paused": true,
-    "web_daily_token_limit": 240000
+    "paused": true
   },
   "status": 200
 }

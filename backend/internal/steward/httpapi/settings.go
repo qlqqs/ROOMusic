@@ -165,6 +165,9 @@ func (h *Handlers) putSettings(w http.ResponseWriter, r *http.Request, user iden
 		h.supervisor.CancelUser(user.ID)
 		h.supervisor.CancelBackground(user.ID)
 	}
+	if h.modelWake != nil {
+		h.modelWake()
+	}
 	h.writeSettings(w, r, user.ID, saved)
 }
 
@@ -325,9 +328,16 @@ func (h *Handlers) resolveModelConfig(ctx context.Context, userID string) (runti
 }
 
 func modelConfig(settings runtime.UserSettings, userID string, secrets *secret.Store) (runtime.UserSettings, string, error) {
+	return backgroundModelConfig(settings, userID, secrets, "", false)
+}
+func backgroundModelConfig(settings runtime.UserSettings, userID string, secrets *secret.Store, override string, verified bool) (runtime.UserSettings, string, error) {
 	settings, support, err := effectiveSettings(settings)
 	if err != nil {
 		return settings, "", errInvalidModelConfig
+	}
+	if override != "" && override != settings.Model {
+		settings.Model = override
+		support = provider.ToolSupportUnconfirmed
 	}
 	if !settings.IsConfigured() {
 		return settings, "", &ModelUnavailable{Reason: "not_configured"}
@@ -354,7 +364,16 @@ func modelConfig(settings runtime.UserSettings, userID string, secrets *secret.S
 			support = *overrides.ToolSupport
 		}
 	}
-	if support == provider.ToolSupportUnsupported {
+	var manual manualOverrides
+	if len(settings.Overrides) > 0 {
+		if err := json.Unmarshal(settings.Overrides, &manual); err != nil {
+			return settings, "", errInvalidModelConfig
+		}
+	}
+	if manual.ToolSupport != nil {
+		support = *manual.ToolSupport
+	}
+	if support == provider.ToolSupportUnsupported && (!verified || manual.ToolSupport != nil) {
 		return settings, "", &ModelUnavailable{Reason: "tool_unsupported"}
 	}
 	return settings, string(key), nil
