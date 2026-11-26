@@ -159,10 +159,18 @@ func (w *Worker) projectReleasePage(ctx context.Context, page []catalog.Curation
 		state := releases[e.ID]
 		d := releaseInputs(e)
 		need := releaseQueueNeeds(e, state, d, opts)
+		allowed, hasID := releaseAdmission(e, opts.fingerprints)
+		// 已跳过或刚入库的对象仍作为媒体队列的父行；首次可识别时由 pending 恢复。
+		skipped := !allowed && len(e.StaleAuto) == 0 && (state.TargetID == "" || state.Status == "pending" || state.Status == "done")
+		if skipped {
+			need = false
+		} else if allowed && state.Status == "done" && (state.FileDigest != d.file || state.InputDigest == "" || state.IdentityDigest != d.identity) {
+			need = true
+		}
 		class := e.Classification()
 		projected = append(projected, queueProjection{
 			Subject: "release", ID: e.ID, Release: e.ID, Class: class.Class,
-			HasID: e.HasSearchID(), Gap: class.GapOrder[:], Unlinked: missing[e.ID],
+			HasID: hasID, Skipped: skipped, Gap: class.GapOrder[:], Unlinked: missing[e.ID],
 			Added: &row.AddedAt, Identity: d.identity, Need: need,
 		})
 		cover := subjectEvidence("artwork", e, state)
@@ -202,24 +210,19 @@ func releaseQueueNeeds(e catalog.CurationEvidence, state curation.WorkState, d r
 	if len(e.StaleAuto) > 0 {
 		return true
 	}
-	if state.Status == "no_usable_candidates" && state.MatchRuleVersion == MatchRuleVersion {
-		review, err := previousReview(state)
-		if err == nil && review.BlockDigest == blockedLinkDigest(e) {
-			return false
-		}
-	}
-	if state.InputDigest != d.full || state.IdentityDigest != d.identity ||
+	if state.FileDigest != d.file || state.InputDigest != d.full || state.IdentityDigest != d.identity ||
 		state.GapDigest != d.gap || state.LocalRuleVersion != LocalRuleVersion || state.MatchRuleVersion != MatchRuleVersion {
 		return true
 	}
 	tracks, artists, merges := matchBackfills(state, e)
-	return tracks || artists || merges || needsWork("release", state, d.identity, opts.now, opts.fingerprints)
+	return tracks || artists || merges || needsWork("release", state, d.file, opts.now, opts.fingerprints)
 }
 
 type queueProjection struct {
 	Subject  string                `json:"subject"`
 	ID       string                `json:"id"`
 	Release  string                `json:"parent_id,omitempty"`
+	Skipped  bool                  `json:"skipped"`
 	Need     bool                  `json:"need"`
 	Class    catalog.CurationClass `json:"class,omitempty"`
 	HasID    bool                  `json:"has_id"`
@@ -247,13 +250,14 @@ func saveQueueProjection(ctx context.Context, tx *sql.Tx, rows []queueProjection
 	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO curation_work_states AS s
  (subject,target_id,rule_version,input_digest,status,queue_release_id,queue_class,queue_has_id,queue_gap,queue_artist_unlinked,queue_added_at,queue_identity,needs_work)
- SELECT p.subject,p.id,CASE p.subject WHEN 'release' THEN $2::smallint ELSE $3::smallint END,'','pending',
+ SELECT p.subject,p.id,CASE p.subject WHEN 'release' THEN $2::smallint ELSE $3::smallint END,'',CASE WHEN p.skipped THEN 'done' ELSE 'pending' END,
  p.parent_id,p.class,p.has_id,p.gap,p.unlinked,p.added,p.identity_digest,p.need
- FROM jsonb_to_recordset($1::jsonb) AS p(subject text,id uuid,parent_id uuid,class text,has_id boolean,gap integer[],unlinked boolean,added timestamptz,identity_digest text,need boolean)
- ON CONFLICT(subject,target_id) DO UPDATE SET queue_release_id=excluded.queue_release_id,queue_class=excluded.queue_class,
+ FROM jsonb_to_recordset($1::jsonb) AS p(subject text,id uuid,parent_id uuid,class text,has_id boolean,gap integer[],unlinked boolean,added timestamptz,identity_digest text,need boolean,skipped boolean)
+ ON CONFLICT(subject,target_id) DO UPDATE SET status=CASE WHEN excluded.status='done' AND s.status='pending' THEN 'done'
+ WHEN excluded.subject='release' AND excluded.needs_work AND s.status='done' THEN 'pending' ELSE s.status END,queue_release_id=excluded.queue_release_id,queue_class=excluded.queue_class,
  queue_has_id=excluded.queue_has_id,queue_gap=excluded.queue_gap,queue_artist_unlinked=excluded.queue_artist_unlinked,
  queue_added_at=excluded.queue_added_at,queue_identity=excluded.queue_identity,needs_work=excluded.needs_work OR s.manual_requested_at IS NOT NULL
- WHERE (s.queue_release_id,s.queue_class,s.queue_has_id,s.queue_gap,s.queue_artist_unlinked,s.queue_added_at,s.queue_identity,s.needs_work)
+ WHERE (excluded.subject='release' AND (excluded.status='done' AND s.status='pending' OR excluded.needs_work AND s.status='done')) OR (s.queue_release_id,s.queue_class,s.queue_has_id,s.queue_gap,s.queue_artist_unlinked,s.queue_added_at,s.queue_identity,s.needs_work)
  IS DISTINCT FROM (excluded.queue_release_id,excluded.queue_class,excluded.queue_has_id,excluded.queue_gap,excluded.queue_artist_unlinked,excluded.queue_added_at,excluded.queue_identity,
  excluded.needs_work OR s.manual_requested_at IS NOT NULL)`, jsonValue(rows), MatchRuleVersion, resourceRuleVersion)
 	return err

@@ -5,11 +5,13 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/operations"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
@@ -233,20 +235,27 @@ func (w *Worker) identifyArtists(ctx context.Context, local catalog.CurationArti
 	return links, proposals, nil
 }
 
-func writeArtistLinks(ctx context.Context, db operations.Queryer, writer *curation.Writer, request curation.LinkRequest, links []curation.LinkIntent, write matchStep) error {
-	if len(links) == 0 || request.Source.Kind != "source" {
+func writeArtistLinks(ctx context.Context, db operations.Queryer, writer *curation.Writer, request curation.LinkRequest, links []curation.LinkIntent, splits []curation.CreditSplit, write matchStep) error {
+	if request.Source.Kind != "source" {
 		return nil
 	}
-	request.Links, request.Method, request.Confidence = links, "artist_credit", "certain"
-	err := write(ctx, "artist_links", func(batch, key string) error {
-		request.BatchID, request.Key = batch, key
-		_, err := writer.ApplyLinks(ctx, request)
-		return err
-	})
-	if err != nil {
-		return err
+	if len(links) > 0 {
+		request.Links, request.Method, request.Confidence = links, "artist_credit", "certain"
+		err := write(ctx, "artist_links", func(batch, key string) error {
+			request.BatchID, request.Key = batch, key
+			_, err := writer.ApplyLinks(ctx, request)
+			return err
+		})
+		if err != nil {
+			return err
+		}
 	}
 	externals := map[string]bool{}
+	for _, split := range splits {
+		for _, credit := range split.Credits {
+			externals[credit.ArtistID] = true
+		}
+	}
 	for _, link := range links {
 		externals[link.ExternalID] = true
 	}
@@ -297,6 +306,72 @@ func mergeLinkedArtists(ctx context.Context, writer *curation.Writer, source cur
 		}
 		if !merged {
 			remaining = append(remaining, id)
+		}
+	}
+	return nil
+}
+
+func planCreditSplits(local catalog.CurationArtistCredits, e catalog.CurationEvidence, m MatchResult) []curation.CreditSplit {
+	var splits []curation.CreditSplit
+	paired := map[string]string{}
+	for _, p := range m.Pairs {
+		paired[p.TrackID] = p.RecordingID
+	}
+	for _, g := range artistCreditGroups(local, e, m) {
+		if len(g.local) == 0 || len(g.local) == len(g.external) || len(g.external) < 2 {
+			continue
+		}
+		s := curation.CreditSplit{Role: g.role, TrackID: g.trackID, Credits: g.external}
+		switch g.role {
+		case "track_artist":
+			s.BasisType, s.BasisID = "track", paired[g.trackID]
+			for _, t := range e.Tracks {
+				if t.ID == g.trackID && !t.ArtistCorrected && !t.ArtistAutomatic {
+					s.LocalText = t.Artist
+					break
+				}
+			}
+		default:
+			if e.Corrected["album_artist"] || e.Automatic["album_artist"] {
+				continue
+			}
+			s.BasisType, s.BasisID = "release_group_match", m.GroupID
+			if m.Release != nil {
+				s.BasisType, s.BasisID = "release", m.Release.ID
+			}
+			if g.role == "release_artist" {
+				s.LocalText = e.Artist
+			} else {
+				s.LocalText = e.AlbumArtist
+			}
+		}
+		s.LocalText = strings.TrimSpace(s.LocalText)
+		if s.BasisID == "" || s.LocalText == "" || s.LocalText != strings.TrimSpace(credits(g.external)) {
+			continue
+		}
+		seenNames, seenIDs := map[string]bool{}, map[string]bool{}
+		valid := true
+		for _, c := range g.external {
+			if c.Name == "" || !uuid.Valid(c.ArtistID) || curation.MusicBrainzSpecialArtist(c.ArtistID) || seenNames[c.Name] || seenIDs[c.ArtistID] {
+				valid = false
+				break
+			}
+			seenNames[c.Name], seenIDs[c.ArtistID] = true, true
+		}
+		if valid {
+			splits = append(splits, s)
+		}
+	}
+	return splits
+}
+
+func writeCreditSplits(ctx context.Context, writer *curation.Writer, req curation.LinkRequest, splits []curation.CreditSplit, write matchStep) error {
+	for _, split := range splits {
+		if err := write(ctx, "split_credit/"+split.Role+"/"+split.TrackID, func(batch, key string) error {
+			req.BatchID, req.Key = batch, key
+			return writer.SplitArtistCredit(ctx, req, split)
+		}); err != nil {
+			return err
 		}
 	}
 	return nil

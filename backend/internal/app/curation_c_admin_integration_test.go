@@ -104,8 +104,8 @@ func TestPostgreSQLCurationCProgress(t *testing.T) {
 		version             int16
 	}{
 		{f.a, "release", "matched", version},
-		{f.b, "release", "uncertain", version},
-		{noMatch, "release", "no_match", version},
+		{f.b, "release", "conflict", version},
+		{noMatch, "release", "unmatched", version},
 		{tryLater, "release", "try_later", version},
 		{outdated, "release", "matched", version - 1},
 		{unprocessed, "artwork", "done", version},
@@ -135,7 +135,7 @@ func TestPostgreSQLCurationCProgress(t *testing.T) {
 	var got curation.Progress
 	getJSON(t, app, &f.admin, path, &got)
 	want := curation.Progress{State: "unavailable", RuleVersion: version,
-		Releases: curation.ReleaseProgress{Total: 6, Processed: 3, Matched: 1, Uncertain: 1, NoMatch: 1, TryLater: 1},
+		Releases: curation.ReleaseProgress{Total: 6, Processed: 3, Matched: 1, Conflict: 1, Unmatched: 1, TryLater: 1},
 		Pending:  curation.PendingProgress{WaitingModel: 1}}
 	for i, id := range [...]string{"release", "artwork", "lyrics", "artist_media", "fingerprint"} {
 		want.Queues[i] = curation.QueueProgress{ID: id, State: "unavailable"}

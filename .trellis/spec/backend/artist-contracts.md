@@ -221,3 +221,7 @@ scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为�
 错误：只刷新带括号端，或只检查两发行中任意一个有present曲目。正确：刷新与有效性判断都覆盖两端，缺失任一端时不保留候选。
 
 返工根因是版本变更传播遗漏：图版本升到2，共享refs门禁仍认1，静态编译无法发现SQL中的数字失配。所有引用门禁必须使用共享版本权威；`TestArtistRefsReadyUsesCurrentVersions`逐项验证四个版本条件，`TestPackageDependencyDirections`约束无循环的包依赖。历史迁移保留原版本，不能为修复运行时门禁而篡改迁移。
+
+## 程序识别规则 105
+
+MusicBrainz 人数与扫描署名不同时，只有完整姓名与连接词拼接等于本地显示文字才拆分。release_match_credit_parts 保存角色、位置、局部原文、艺人编号、具体依据行和操作。扫描文字仍用于显示；依据撤销或原文变化会撤回对应的拆分。人工修正优先。

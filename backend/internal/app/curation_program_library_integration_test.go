@@ -176,7 +176,7 @@ func TestPostgreSQLCurationProgramGroup(t *testing.T) {
 				t.Fatalf("重新归入 %s，期望 %s", got, wantGroup)
 			}
 			// 用新的识别依据重跑计划，验证不归组的理由。
-			mustExec(t, f.application, `UPDATE tracks SET title='重扫后的曲目标题' WHERE id=$1`, tr)
+			mustExec(t, f.application, `UPDATE tracks SET title='重扫后的曲目标题',source_modified_at=now() WHERE id=$1`, tr)
 			programFinishedScan(t, f)
 			f.clock.advance(t, time.Minute)
 			reason := programString(t, f.application, `SELECT result->>'group' FROM curation_work_states WHERE subject='release' AND target_id=$1`, b)

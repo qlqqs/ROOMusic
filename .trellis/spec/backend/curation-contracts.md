@@ -414,7 +414,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | 6 | `search` | `SearchReleases` | 从不判定（`search_only`） |
 
 `durations_ok` = 可比较的对数 ≥ ⌈配对数/2⌉ 且全部在容差内。本地有推断的曲号时，每一对都必须可比较且在容差内（否则 `inferred_positions`）；(碟号、曲号)重复即 `position_conflict`。
-其他直接拿不准的：`too_many`（候选多于 3 个）、`list_truncated`（列表 25 条或录音的发行数 25）、`isrc_spread`（交集为空）、`ambiguous`（多个候选都通过）。
+当前步骤有冲突的情况包括`list_truncated`（列表 25 条或录音的发行数 25）、`isrc_spread`（交集为空）、`ambiguous`（多个候选都通过）。
 
 相反证据（任何一条就拿不准）：`duration_mismatch`、`barcode_mismatch`、`catalog_mismatch`、`title_artist_mismatch`（第 2–4 步，标题与艺人都对不上）、
 `release_tag_mismatch`、`group_tag_mismatch`、`artist_tag_mismatch`、`disc_tag_mismatch`、`recording_tag_mismatch`、`track_tag_mismatch`、`isrc_mismatch`、
@@ -587,7 +587,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 3. 去掉曲目数或碟数与本地不符的发行（两个值都给了才比较），再在有结果的曲目之间求发行交集。
    - 抽样 ≥ 2 首却只有 1 首有结果 → `acoustid_sparse`；
    - 交集为空 → `acoustid_spread`；
-   - 交集多于 3 个 → `too_many`。
+   - 多个发行候选按第 23.2 节核对。
 4. 按 ID 读回完整发行后核对，通过 = `count_equal` ∧ `durations_ok` ∧ 每首有结果的抽样曲目配对到的录音 ∈ R_t。
    - 配对到的录音不在 R_t 里 → `acoustid_mismatch`；
    - 其余相反证据同第 2–4 步，`title_artist_mismatch` 也适用。
@@ -624,7 +624,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 - 专辑方式里，外部已合并掉的旧录音 ID 可能误报 `acoustid_mismatch`，结果只是拿不准，交给模型。
 - 同一首歌在 MusicBrainz 里常有重复录音，单曲方式会出现较多 `ambiguous`。
-- 同一张专辑的多个版本，在曲目数与碟数都相同时会是 `too_many` 或 `ambiguous`。
+- 同一张专辑多个版本的曲数与碟数吻合时按第 23.2 节判定。
 - 真实的匹配比例要到 V12 的真实试用才知道。
 - arm64 的 fpcalc 只在发布流水线的构建阶段验证（经自带的 glibc 加载器运行，构建时核对版本并对合成正弦波算一次指纹；见部署环境合同）。CI 的镜像任务只构建 amd64，改动镜像后用发布流水线的手动运行验证 arm64。
 
@@ -659,7 +659,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 待定项保存会话、领取时间、未处理次数、重审次数、下次尝试时间和搁置原因。程序重判时，搁置项的输入摘要 `input_digest`、候选 `candidates` 或冲突 `conflicts` 任一项与保存值不同，就回到 `waiting_model`，清零未处理次数并清空搁置原因。候选与冲突按 `jsonb` 值用 `IS DISTINCT FROM` 比较。三项相同则继续搁置。重判保留 `waiting_human` 项的原有内容。`resolved` 项保留原处理结果，并排除在未结束项的冲突索引之外。
 
-程序重判时，领取中（`in_progress`）的项也刷新摘要、规则版本、证据、候选与冲突，领取关系、会话与各计数不变；否则工作状态记下新摘要后不会再重判，模型每次都得到 `item_stale`（V12 发现：建项后同轮补歌词即触发）。`curation_model_exceptions` 以方案项 ID 唯一，保存待定项、工具输入、预览、模型写入者、审查决定与理由、会话和人工决定。删除会话会清空例外的会话引用，例外仍可读取。0064 回退会删除整理会话、例外和按日用量。
+同一代的本地投影刷新保留领取关系、会话、候选与各计数，并同步完整证据摘要。程序完成新一轮识别时，将上一代仍在领取中的识别项结为 `superseded`；仍需模型时另建项。旧会话提交须通过原项 ID 和领取检查。`curation_model_exceptions` 以方案项 ID 唯一，保存待定项、工具输入、预览、模型写入者、审查决定与理由、会话和人工决定。删除会话会清空例外的会话引用，例外仍可读取。0064 回退会删除整理会话、例外和按日用量。
 
 ### 17.2 调度、停止与收尾
 
@@ -937,7 +937,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | 常量（`curation/program/worker.go`） | 当前值 | 升级时 |
 | --- | --- | --- |
 | `LocalRuleVersion` | 3（第 28 节） | 只重算真实性、分类与缺口，不发外部请求 |
-| `MatchRuleVersion` | 104（101 起，各次变化见第 23、28 节） | 已对上的保持；有候选的待定项用已保存的候选离线重判，登记新版本，不发搜索；零候选或旧候选不足以判断的，登记 `requery_match_version`，由普通遍历补查一次 |
+| `MatchRuleVersion` | 105 | 对第 23.6 节指定的工作状态登记一次 requery_match_version |
 | `PatrolPromptVersion` | 1 | 不让任何工作状态到期；只作用于新巡检与手动重新巡检 |
 
 迁移 0086 给 `curation_work_states` 加 `local_rule_version`、`match_rule_version`、`identity_digest`、`gap_digest`、`requery_match_version`，
@@ -947,7 +947,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 - **识别摘要**只哈希原始输入：标题与采用的署名及其原始来源名、条码与目录号与厂牌、碟结构、在库曲目的碟位曲序与整秒时长与 inferred 位、
   标签标识与 ISRC、可重建的 CUE 目录、已有对应与 `external_link` 抑制标记。不含真实性等解释结果，因此本地规则升级不改变识别摘要。
-  识别摘要变化才重新识别。
+  文件摘要决定是否因物理文件变化重查。成员签名含根、路径和大小（含 CUE 文本），实际音频另计去重、排序的路径、大小及微秒修改时间。同尺寸的 CUE 文本改动无法检测；本轮光盘目录仅取现有 CUE 镜像 TOC。
 - **缺口摘要**记各可写字段的真实性、人工与自动占用、抑制标记，以及封面、歌词的有无。只有缺口摘要变化时，重算本地计划与发生变化的媒体主题，不重新识别。
 - 整份发行指纹（`curation.ReleaseDigest`）保持不变，继续作为写入校验：待定项 `input_digest`、模型预览与采纳、确认恢复、并入证据都用它。
 
@@ -988,67 +988,54 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 按 `PageCurationReleases` 分页实时计算，不读文件、不调外部能力。
 
-## 23. 程序匹配规则与终止状态（整理链 C，2026-11-25，`MatchRuleVersion` 102）
+## 23. 程序匹配规则与终止状态（识别规则 105）
 
 依据 ADR 0006 第 16.3 节。MusicBrainz 查询写法的实测见整理链父任务的 `research/mb-query-probes-2026-11-25.md`。
 
 ### 23.1 查询
 
-1. 标签编号：唯一的发行（单曲为录音）编号读取一次；多个发行编号为 `mixed_release_tags`。
-2. 合并发行搜索：条码（含 CUE 的 MCN）、目录号加厂牌、标题加艺人加曲目数用 OR 合并成一次，取 100 条，保存 `count`、`offset`、`limit` 与原始行数。
-   按返回的条码、目录号在本地分回各分支，Lucene 命中与分数不证明标识相符。艺人已有可信外部编号时用 `arid:`（发行搜索的 `artist:` 不展开别名），合辑用 Various Artists 的编号。
-3. ISRC：最多四个曲位合并成一次录音搜索，按返回的 `isrcs` 分回曲位。
-4. 碟片 ID：`inc=recordings+artist-credits+labels+release-groups`，精确结果一次带回曲目。声纹在强标识之后。
-5. 规范名（子任务 D 提供，缺省无值）优先，原标签值作为不同写法的第二次尝试。占位值不进入查询。
-6. 完整性：只有 `count` 已知且等于实际收齐的不同编号数时才算没有截断；失败响应不当空页。
+发行 MBID、CUE 镜像 TOC、条码、目录号及厂牌、ISRC（至多四轨）、声纹（至多四轨）、文字依次执行。当前步骤取得候选即核对并停止，只有空结果才继续。查过可用编号的对象在声纹后结束。散曲查录音编号和 ISRC。
+
+文字使用当前可搜索的专辑名与艺人，散曲使用曲名与曲目艺人。合辑认可 Various Artists 编号。名字缺一项且无编号时跳过；两项均缺且无编号时仅在声纹可用时进入。先按名字与曲数查，空页才清理版本或格式字样、去掉曲数再查。仍为空时，分页 finder 查艺人，名字或别名只对应一个身份才按其 arid 查。简单 finder 最多执行前两次文字查询。程序不读取巡检名。
 
 ### 23.2 专辑判定（命中即停）
 
 | 级别 | 条件 | 结果 |
 | --- | --- | --- |
 | 标识 | 第 15.2 节的方法条件；`tag_id` 另加文字反证：专辑标题与艺人都不等、且已配对的真实曲名一对都不相等（至少有一对可比）时记 `tag_text_mismatch`，定不下来 | 版本级 |
-| 发行组唯一 | 标题与艺人都是真实值且未放宽；第一页完整；不是合辑或古典；本地多于 4 首；按总曲数、各碟曲数、规范化标题与艺人筛选后的结果非空且同属一个发行组 | 发行组级 |
-| 结构吻合 | 至多 3 个候选读取完整曲目：同碟曲数、总曲数相等，时长通过，无硬冲突；≤4 首另要求标题与艺人相等；推断或放宽的输入只能走这一级 | 一个通过为版本级；同组多个通过为发行组级 |
+| 发行组唯一 | 完整候选中至少两版，专辑与艺人合并键相等，曲数相等，同属一个已知发行组且没有已知反证；普通专辑多于四首 | 发行组级 |
+| 结构吻合 | 单版、合辑、古典或四首及以下的候选逐版核对：同碟曲数、总曲数相等，时长通过，无硬冲突；≤4 首另要求标题与艺人相等 | 一个通过为版本级；同组多个通过为发行组级 |
 | 定不下来 | 其余有可用候选的 | 待定项（识别兜底第一档） |
 
-- 发行组唯一而有非真实曲名时继续尝试结构吻合；同组多个版本通过时按日期最早、再按编号字典序取一个，只用于补曲名。
-- 新冲突代码：`tag_text_mismatch`、`duration_missing`、`artist_mismatch`。旧的 `search_only` 可读，新判定写具体原因。
-- 请求数：组级通常 1 次搜索；版本级通常 1 次搜索加 1 次详情；同名跨组消歧最多 1 次搜索加 3 次详情。
+- 普通同组多版直接定到组。需要补推断曲名时只读取最早一版（同日按编号排序），代表版只提供已核对的曲名。同名候选跨组记 `different_release_groups`。
 
 ### 23.3 发行组级对应
 
 - `external_links` 新对象类型 `release_group_match`：`object_id` 是这张本地发行，`external_id` 是外部发行组编号，由 `external_link` 操作持有，可撤销并写抑制标记。
 - 可以用于：按发行组取封面（`CoverTarget{Kind:"release_group"}`）、专辑归组的强证据（`checkGroupEvidence` 认本发行未撤销的 `release_group_match`）、艺人对应。
-- 不能用于：版本字段补空（同组多版通过时取的参考版只补曲名）、录音对应、发行并入的发现与执行。
+- 组级缺年份时使用发行组的 first-release-date，摘要缺日期时只查组实体。版本级专属字段不补（同组多版通过时取的参考版只补曲名）、录音对应、发行并入的发现与执行。
 
 ### 23.4 散放单曲与艺人
 
 - 散放单曲：标签录音、ISRC、声纹之后是文字搜索（带覆盖容差的 `dur` 区间）。真实标题与艺人、完整页、恰好一个通过：录音对应；多个通过且有序外部艺人编号完全相同：只建立艺人对应；署名显示相同而编号不同算歧义。推断文字只接受恰好一个通过。
 - 艺人对应：人数相同、位置对应；名字规范化后相同，或是外部登记的别名（`artist/<id>?inc=aliases+url-rels`，与艺人资料共用同一次读取与缓存），即写 `artist_credit` 对应。艺人搜索用不带字段名的引号短语，能匹配别名。
-- 名字不同也不是别名的同位署名写入 `curation_artist_credit_proposals`（状态 `open`，由子任务 E 消费）；署名人数不同不产生；合辑与古典中能证实的角色错位跳过。程序不自动改名。
+- 名字不同也不是别名的同位署名写入 `curation_artist_credit_proposals`（状态 `open`，由子任务 E 消费）；署名人数不同但本地全文恰等于外部姓名及连接词的拼接时按外部位置建对应，显示沿用本地文字；合辑与古典中能证实的角色错位跳过。程序不自动改名。
 
 ### 23.5 零候选与终止状态
 
-零候选指有效查询成功但没有候选。依次：去掉版本后缀与括号、去掉曲目数，最多两次放宽（结果只认结构吻合）；按名称与别名查一次艺人；没有配置模型记 `unlisted`；
-艺人不在外部库时“网络搜索”可用进联网路线，否则 `unlisted`；艺人在库或无法确定进第二档路线。第二档与联网路线的待定项状态为 `waiting_route`（带 `route`），
-现有模型调度只领取 `waiting_model`。
+`curation_release_match_results` 按发行与来源保存最近一次结论和查询时间。无查询的对象保留独立媒体队列的父投影，跳过计入 processed；查询失败不改最近成功时间。
 
-| 工作状态 | 含义与再取 |
+| 状态 | 处理 |
 | --- | --- |
-| `matched` | 结果带 `level`（`release`、`release_group`、`recording`、`artist`）与 `rule` |
-| `uncertain` | 有可交给模型的候选或路线 |
-| `no_usable_candidates` | 候选全集都被撤销标记或已有的其它对应阻止；不建待定项，不调用模型；阻止它的对应或抑制变化才重开 |
-| `unlisted` | 首次进入时 `next_attempt_at` 设为 90 天后，同一识别摘要只自动重查一次，只走程序检索与核对 |
-| `try_later` | 来源不可用，按退避重试，不计失败 |
+| matched | 保留 release、release_group、recording 或 artist 级别 |
+| conflict | 当前线索有候选，但结构或身份有冲突，保存原因；有模型交识别判断 |
+| unmatched | 查空时可交模型。每次成功查空按本次时间再约 90 天；到期含声纹并沿用初次识别判断。完整候选全部被撤销或占用时记 reason=candidates_revoked，停用周期重查 |
 
-- 手动重查：`POST /api/v1/admin/curation/releases/{id}/recheck`（管理员），只接受可见且未收录的发行，返回 202；不存在或不可见 404，状态不符 409。只走程序。
-- `Writer.FinishUnlisted` 供子任务 E 结清第二档与联网都没有结果的项。
+管理员用 `GET /api/v1/admin/curation/releases/{id}/match-results` 读取按来源排序的 results，含 source、status、checked_at、reason、conflicts；无记录为空数组。历史时间未知用 null。进度的 releases 提供 matched、unmatched、conflict、total、processed、try_later。原 POST recheck 接受普通未匹配，返回 202，维持仅程序的手动触发。
 
 ### 23.6 升级
 
-旧的 `matched` 不因升级重查，也不批量撤销先前的 `tag_id` 结论。有候选的待定项用已保存的候选离线重判（零出站），写入复用在线路径；快照不足以判断的保留候选交第一档；
-零候选或只剩截断前缀的登记 `requery_match_version` 补查一次。识别摘要在 102 补入专辑的原始曲目标题及来源、合辑与古典的判别证据、本发行的组级对应与抑制；
-升级轮先按 101 算法核对旧摘要再建 102 基线。迁移 0087 增加对象类型、工作与待定状态、到期索引、路线字段与艺人提案表。
+105 的默认重查对象为未匹配（含候选已撤销）、有冲突及查询出错。将来的特定升级可声明复核级别及门槛，此时版级或录音级只读原对应 ID，其他级别保持原结论。
 
 ## 24. 自动层的写入先后与作废（整理链 F，2026-11-25）
 
@@ -1086,9 +1073,9 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 - 五条程序队列各一个取项循环：识别（`release`）、封面（`artwork`）、歌词（`lyrics`）、艺人资料（`artist_media`）、声纹（`fingerprint`，只算本机声纹，AcoustID 查询仍在识别里）。
 - 每次按状态与优先级取下一项，不存翻页位置。`curation_work_states` 为从未处理的目标补 `pending` 行；`pending` 不计入进度的 processed。
-- 优先级：手动触发 → 新入库（首次启用后第一次完整扫描的最大入库时间之后创建的发行）→ 有可检索的外部编号、条码或 ISRC → 有缺口（按 A 的缺口排序键降序）→ 本地完整（艺人尚无外部对应的在前）。同档按入库时间倒序。
+- 优先级：手动触发 → 新入库（首次启用后第一次完整扫描的最大入库时间之后创建的发行）→ 有可检索的外部编号、条码或 ISRC → 有缺口（按 A 的缺口排序键降序）→ 本地完整（艺人尚无外部对应的在前）。本地齐全且无可查编号的发行，即使刚入库也排在缺口之后。同档按入库时间倒序。
 - 封面与艺人资料在识别确定身份后取得资格；歌词不依赖外部对应。同一发行的并发写入靠现有写入路径的行锁与锁内复核串行；结论、待定项与清待做标记同一事务；多步写入沿用步骤派生幂等键重放。
-- 未收录的 90 天程序重查与手动重查沿用第 23.5 节。
+- 普通未匹配的周期重查与手动重查沿用第 23.5 节。
 
 ### 25.2 稳定（D7）
 
@@ -1221,15 +1208,15 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
   - 子集要求本地每首与外部不同曲目一一配对（标题规范化相等、时长在容差内），本地至少 max(4, 外部曲数一半)；
   - 超集要求外部某版是本地的完整前缀，多出的曲目只在末尾；
   - 吻合候选恰好同属一个组时，只建组级对应，`rule` 为 `partial_subset` 或 `partial_superset`，不建录音对应、不补版本字段。程序与模型提交共用同一判定。
-  - 首搜没有完整或部分吻合时，与零候选共用一次去曲数补查；摘要曲数不同但可能构成子集或超集的候选，在三次详情预算内读取，同名同艺人优先。
+  - 部分吻合要求专辑名与艺人合并键均相等。已知异名且曲数不同的候选跳过详情；同一步有候选即终止搜索。
   - 模型提交部分吻合的版本时，后端补读其它发行组里仍可能吻合的候选详情（摘要曲数不可能构成子集或超集的不读、也不计为未排除）。只剩提交的组吻合时落组级对应；多个组都吻合时拒绝，错误码 `track_count`，错误文本列出这些组的编号与标题并提示勿重复提交；补读遇来源不可用原样返回，走 28.1 的稍后重试。
 
 ### 28.3 匹配判定
 
 - **合作署名**：专辑与曲目艺人比较前，双方把 feat.、ft.、featuring、&、、、/、;、x、×、with 统一为同一分隔符；`and` 不作连接词。
 - **发行组唯一级**：本地有可比时长时，所有可比时长都须在容差内，否则降到结构吻合或待定。
-- **反证**：判 `tag_text_mismatch` 时，艺人比较纳入外部艺人登记的别名与巡检规范名。
-- **同名不同人**：`arid:` 过滤的查询没有任何候选通过结构核对时，按名字补查一次，计作不同写法的尝试。
+- **反证**：判 `tag_text_mismatch` 时，程序比较纳入外部艺人登记的别名。
+- **同名不同人**：`arid:` 过滤的查询有候选即核对并保存结论。
 - **版本级署名的艺人对应**：自动层署名（级别 3、4）来自已生效的版本级对应时，按人数与位置写 `artist_credit`，不再交联网查身份；撤销该对应或作废该自动值时，同一事务复核并撤除派生对应。组级对应不派生。
 
 ### 28.4 模型可取得的信息
@@ -1252,6 +1239,8 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 - 103：未收录、待定，以及冲突码为 `track_count`、`position_conflict`、`artist_mismatch`、`tag_text_mismatch` 的待定项各补查一次，已匹配的不重查。
 - 104：已匹配且版本级对应仍生效、署名自动值来自该发行、本地艺人尚无对应的发行，用已缓存的发行详情离线补建艺人对应；缓存不存在就跳过，不出站。
+
+- 105：当前文件摘要与判定见第 22.2、23 节。已匹配默认不重查。
 
 ### 28.7 模型并发
 

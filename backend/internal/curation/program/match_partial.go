@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
@@ -16,7 +17,7 @@ type partialTrack struct {
 
 // 部分结构只支持组级对应。所有用于配对的曲目都要有标题、时长，且没有标识反证。
 func partialAlbumRule(e catalog.CurationEvidence, r sources.Release, recordings map[string]map[string]bool) (rule string, externalTracks int) {
-	if !r.Complete || !completeRelease(&r, r.ID) || r.Group.ID == "" || len(tags(e.Tracks, "mb_release")) != 0 {
+	if !sameAlbumNames(e, r) || !r.Complete || !completeRelease(&r, r.ID) || r.Group.ID == "" || len(tags(e.Tracks, "mb_release")) != 0 {
 		return "", 0
 	}
 	var c comparison
@@ -130,7 +131,14 @@ func partialAlbumRule(e catalog.CurationEvidence, r sources.Release, recordings 
 }
 
 // 摘要没有曲数时仍须核实。已知曲数要能支持完整吻合或部分吻合。
-func needsPartialDetail(local int, candidate Candidate) bool {
+func needsPartialDetail(e catalog.CurationEvidence, candidate Candidate) bool {
+	local := len(e.Tracks)
+	// 确知曲数不等时只能部分吻合，摘要中的异名已经足以排除。
+	if candidate.TrackCount > 0 && candidate.TrackCount != local &&
+		((candidate.Title != "" && textnorm.MergeKey(candidate.Title) != textnorm.MergeKey(e.Title)) ||
+			(candidate.Artist != "" && textnorm.MergeKey(candidate.Artist) != textnorm.MergeKey(albumArtist(e)))) {
+		return false
+	}
 	if candidate.Release != nil && candidate.Release.Complete && completeRelease(candidate.Release, candidate.ExternalID) {
 		return false
 	}
@@ -157,11 +165,11 @@ func checkPartialAlbumMatch(e catalog.CurationEvidence, result MatchResult) (Mat
 	var rule string
 	for _, candidate := range result.Candidates {
 		r := candidate.Release
-		if blockedCodes(candidate.Conflicts) {
+		if blockedCodes(candidate.Conflicts) || r != nil && !sameAlbumNames(e, *r) && candidate.TrackCount > 0 && candidate.TrackCount != len(e.Tracks) {
 			continue
 		}
 		if r == nil || !r.Complete {
-			if result.Method != "model" || needsPartialDetail(len(e.Tracks), candidate) {
+			if result.Method != "model" || needsPartialDetail(e, candidate) {
 				unknownGroups = append(unknownGroups, candidate.ReleaseGroupID)
 			}
 			continue

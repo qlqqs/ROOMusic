@@ -15,9 +15,7 @@ import (
 
 type SearchNames struct{ Title, Artist, ArtistID string }
 type MatchOptions struct {
-	Artists     sources.ArtistFinder
-	Names       SearchNames
-	ProgramOnly bool
+	Artists sources.ArtistFinder
 }
 type SearchPage struct {
 	curation.PageInfo
@@ -57,30 +55,12 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 		}
 	}
 	searchInput := curation.LocalSearchEvidence(e)
-	base := localNames(searchInput, mode)
-	if opts.Names.ArtistID == "" {
-		opts.Names.ArtistID = base.ArtistID
-	}
-	names := base
-	if base.Title != "" && opts.Names.Title != "" {
-		names.Title = opts.Names.Title
-	}
-	if base.Artist != "" && opts.Names.Artist != "" {
-		names.Artist = opts.Names.Artist
-	}
-	if opts.Names.ArtistID != "" {
-		names.ArtistID = opts.Names.ArtistID
-	}
-	if e.Compilation && mode == "album" {
-		names.ArtistID = variousArtistsID
-	}
-	e.ArtistMBID = base.ArtistID
-
-	var text MatchResult
+	names := localNames(searchInput, mode)
+	hasID := searchIdentifier(searchInput, mode)
+	completeNames := names.Title != "" && (names.Artist != "" || e.Compilation && mode == "album")
+	emptyNames := names.Title == "" && names.Artist == ""
 	var prior []SearchPage
-	insufficient := insufficientEvidence(searchInput)
-	pf, paged := f.(curation.ReleasePageFinder)
-	if !insufficient {
+	if hasID {
 		if mode == "single" {
 			m, err := singleIdentifiers(ctx, e, rf)
 			if m.Status != "" || err != nil {
@@ -110,7 +90,7 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 						if artists == nil {
 							artists = map[string]sources.Artist{}
 						}
-						agree, err := tagArtistNamesAgree(ctx, r, albumArtist(e), opts.Names.Artist, opts.Artists, artists)
+						agree, err := tagArtistNamesAgree(ctx, r, albumArtist(e), "", opts.Artists, artists)
 						if err != nil {
 							return MatchResult{}, err
 						}
@@ -122,37 +102,44 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 					return m, nil
 				}
 			}
-			if paged {
-				q := releaseQuery(names, len(e.Tracks))
-				q.Barcodes = e.SearchBarcodes()
-				q.CatalogNumber = e.Authenticity["catalog_number"].SearchValue(e.CatalogNumber)
-				q.Label = e.Authenticity["label"].SearchValue(e.Label)
-				if q.Title != "" || len(q.Barcodes) > 0 || q.CatalogNumber != "" {
+			discs, err := discCandidates(ctx, f, e)
+			if err != nil {
+				return MatchResult{}, err
+			}
+			if discs.hit {
+				discs.pages = prior
+				return checkCandidates(ctx, f, e, "disc_id", discs, opts)
+			}
+			if pf, ok := f.(curation.ReleasePageFinder); ok {
+				for _, q := range []curation.ReleaseSearch{
+					{Barcodes: e.SearchBarcodes()},
+					{CatalogNumber: e.Authenticity["catalog_number"].SearchValue(e.CatalogNumber), Label: e.Authenticity["label"].SearchValue(e.Label)},
+				} {
+					if len(q.Barcodes) == 0 && q.CatalogNumber == "" {
+						continue
+					}
 					page, err := found(pf.SearchReleasePage(ctx, q))
 					if err != nil {
 						return MatchResult{}, err
 					}
-					text = albumPageResult(page, false)
-					text.Snapshot.Pages[0].Canonical = canonicalQuery(base, names)
-					strong, method := identifierHits(q, page.Items)
-					if len(strong) > 0 {
-						list := releaseList{items: strong, pages: text.Snapshot.Pages, counts: page.Counts}
-						if !page.Complete {
-							list.codes = []string{"list_truncated"}
-						}
-						return checkCandidates(ctx, f, e, method, list, opts)
+					ev := albumPageResult(page, false).Snapshot.Pages[0]
+					method := "catalog_number"
+					if len(q.Barcodes) > 0 {
+						method = "barcode"
 					}
-					if q.Title == "" {
-						prior = text.Snapshot.Pages
-						prior[0].Kind = "identifier"
-						text = newMatch(mode, "")
+					ev.Kind = method
+					prior = append(prior, ev)
+					if len(page.Items) == 0 {
+						continue
 					}
+					list := releaseList{items: uniqueReleases(page.Items), pages: prior, counts: page.Counts}
+					if !page.Complete {
+						list.codes = []string{"list_truncated"}
+					}
+					return checkCandidates(ctx, f, e, method, list, opts)
 				}
-			} else {
-				m, err := legacyAlbumIDs(ctx, e, f)
-				if err != nil || m.Status != "" {
-					return m, err
-				}
+			} else if m, err := legacyAlbumIDs(ctx, e, f); err != nil || m.Status != "" {
+				return m, err
 			}
 			isrcs, err := isrcCandidates(ctx, rf, e)
 			if err != nil {
@@ -160,38 +147,57 @@ func matchWithOptions(ctx context.Context, e catalog.CurationEvidence, f sources
 			}
 			prior = append(prior, isrcs.pages...)
 			if isrcs.hit {
-				isrcs.pages = append(slices.Clone(text.Snapshot.Pages), prior...)
+				isrcs.pages = prior
 				return checkCandidates(ctx, f, e, "isrc", isrcs, opts)
 			}
-			discs, err := discCandidates(ctx, f, e)
-			if err != nil {
-				return MatchResult{}, err
-			}
-			if discs.hit {
-				discs.pages = append(slices.Clone(text.Snapshot.Pages), prior...)
-				return checkCandidates(ctx, f, e, "disc_id", discs, opts)
-			}
+
 		}
 	}
 	fingerprint := "unavailable"
-	if fp != nil && !opts.ProgramOnly {
+	var queriedPrint bool
+	if fp != nil && (hasID || completeNames || emptyNames) {
 		m, state, err := fp.match(ctx, mode, e, f, rf)
 		fingerprint = state
+		queriedPrint = state == "used" && !m.noFingerprintQuery
 		if m.Status != "" || err != nil {
-			m.Snapshot.Pages = append(append(slices.Clone(text.Snapshot.Pages), prior...), m.Snapshot.Pages...)
+			m.Snapshot.Pages = append(prior, m.Snapshot.Pages...)
 			m.Fingerprint = state
 			return m, err
 		}
 	}
-	if insufficient {
+	if hasID || !completeNames {
 		m := newMatch(mode, "")
 		m.Fingerprint = fingerprint
-		m.Conflicts = []string{"insufficient_evidence"}
+		m.Snapshot.Pages = prior
+		m.Route = "lookup"
+		if !hasID && (!emptyNames || !queriedPrint) {
+			m.Route = ""
+			m.Conflicts = []string{"insufficient_evidence"}
+		}
 		return m, nil
 	}
-	m, err := textSearch(ctx, searchInput, mode, base, names, f, rf, opts, text, prior)
+	if !e.Compilation {
+		names.ArtistID = ""
+	}
+	m, err := textSearch(ctx, searchInput, mode, names, f, rf, opts.Artists)
+
 	m.Fingerprint = fingerprint
 	return m, err
+}
+
+func releaseAdmission(e catalog.CurationEvidence, fingerprints bool) (allowed, hasID bool) {
+	e.Compilation = curation.CompilationEvidence(e)
+	e = curation.LocalSearchEvidence(e)
+	mode := "album"
+	if e.CandidateKind == "loose_unknown" {
+		if len(e.Tracks) != 1 {
+			return false, false
+		}
+		mode = "single"
+	}
+	n := localNames(e, mode)
+	hasID = searchIdentifier(e, mode)
+	return e.CanMatch(n.Title, n.Artist, hasID, fingerprints), hasID
 }
 
 func localNames(e catalog.CurationEvidence, mode string) SearchNames {
@@ -217,16 +223,17 @@ func localNames(e catalog.CurationEvidence, mode string) SearchNames {
 	}
 	return n
 }
-func canonicalQuery(original, names SearchNames) bool {
-	return original.Title != names.Title || original.ArtistID != names.ArtistID || names.ArtistID == "" && original.Artist != names.Artist
+func searchIdentifier(e catalog.CurationEvidence, mode string) bool {
+	if len(sampleISRCTracks(e)) > 0 {
+		return true
+	}
+	if mode == "single" {
+		return len(tags(e.Tracks, "mb_recording")) > 0
+	}
+	return len(tags(e.Tracks, "mb_release")) > 0 || len(e.DiscTOCs()) > 0 ||
+		len(e.SearchBarcodes()) > 0 || e.Authenticity["catalog_number"].SearchValue(e.CatalogNumber) != ""
 }
 
-func releaseQuery(n SearchNames, count int) curation.ReleaseSearch {
-	if n.Title == "" || n.Artist == "" && n.ArtistID == "" {
-		return curation.ReleaseSearch{}
-	}
-	return curation.ReleaseSearch{Title: n.Title, Artist: n.Artist, ArtistID: n.ArtistID, TrackCount: count}
-}
 func identifierHits(q curation.ReleaseSearch, rows []sources.Release) ([]sources.Release, string) {
 	var barcode, catalog []sources.Release
 	for _, r := range rows {
@@ -281,8 +288,8 @@ func recordingSearchEvidence(page curation.RecordingPage, kind string, relaxed b
 
 func queryText(ctx context.Context, mode string, e catalog.CurationEvidence, n SearchNames, count int, relaxed bool, f sources.ReleaseFinder, rf sources.RecordingFinder) (MatchResult, error) {
 	if mode == "album" {
-		q := releaseQuery(n, count)
-		if q.Title == "" {
+		q := curation.ReleaseSearch{Title: n.Title, Artist: n.Artist, ArtistID: n.ArtistID, TrackCount: count}
+		if q.Title == "" && q.ArtistID == "" {
 			return newMatch(mode, ""), nil
 		}
 		if pf, ok := f.(curation.ReleasePageFinder); ok {
@@ -292,7 +299,7 @@ func queryText(ctx context.Context, mode string, e catalog.CurationEvidence, n S
 		rows, err := found(f.SearchReleases(ctx, sources.ReleaseQuery{Title: q.Title, Artist: q.Artist, TrackCount: q.TrackCount}))
 		return albumPageResult(curation.ReleasePage{Items: rows}, relaxed), err
 	}
-	if n.Title == "" || n.Artist == "" && n.ArtistID == "" {
+	if n.ArtistID == "" && (n.Title == "" || n.Artist == "") {
 		return newMatch(mode, ""), nil
 	}
 	q := curation.RecordingSearch{Title: n.Title, Artist: n.Artist, ArtistID: n.ArtistID}
@@ -308,31 +315,11 @@ func queryText(ctx context.Context, mode string, e catalog.CurationEvidence, n S
 	return recordingPageResult(curation.RecordingPage{Items: rows}, relaxed), err
 }
 
-func appendSearch(result, next MatchResult) MatchResult {
-	if result.Method == "" {
-		next.Snapshot.Pages = append(slices.Clone(result.Snapshot.Pages), next.Snapshot.Pages...)
-		return next
-	}
-	result.Snapshot.Pages = append(result.Snapshot.Pages, next.Snapshot.Pages...)
-	seen := make(map[string]bool, len(result.Candidates))
-	for _, r := range result.Candidates {
-		seen[r.ExternalID] = true
-	}
-	for _, r := range next.Candidates {
-		if !seen[r.ExternalID] {
-			result.Candidates = append(result.Candidates, r)
-			seen[r.ExternalID] = true
-		}
-	}
-	slices.SortFunc(result.Candidates, func(a, b Candidate) int { return strings.Compare(a.ExternalID, b.ExternalID) })
-	return result
-}
-
-const editionLabel = `(?:deluxe(?:\s+edition)?|single|ep|(?:[0-9]{4}\s+)?remaster(?:ed)?(?:\s+edition)?)`
+const editionLabel = `(?:豪华版|豪華版|deluxe(?:\s+edition)?|single|ep|(?:[0-9]{4}\s+)?remaster(?:ed)?(?:\s+edition)?)`
 
 var editionSuffix = regexp.MustCompile(`(?i)(?:\s*[（(\[]\s*` + editionLabel + `\s*[)）\]]|\s+(?:[-–—]\s*)?` + editionLabel + `)\s*$`)
 
-const audioFormat = `(?i:flac|mp3|alac|wav|ape|web(?:-dl)?|cd[- ]rip|[0-9]+\s*kbps|[0-9]+\s*bit(?:[ -]+[0-9]+(?:\.[0-9]+)?\s*khz)?|[0-9]+(?:\.[0-9]+)?\s*khz)`
+const audioFormat = `(?i:flac|mp3|alac|wav|ape|web(?:-dl)?|cd[- ]rip|[0-9]+\s*k(?:bps)?|[0-9]+\s*bit(?:[ -]+[0-9]+(?:\.[0-9]+)?\s*khz)?|[0-9]+(?:\.[0-9]+)?\s*khz)`
 
 var bracketFormat = regexp.MustCompile(`\[\s*` + audioFormat + `(?:[ /,_-]+` + audioFormat + `)*\s*\]`)
 var plainFormat = regexp.MustCompile(`(?:^|\s+)(?:-\s+)?` + audioFormat + `(?:$|\s+)`)
@@ -359,172 +346,72 @@ func textSearchEvidence(e catalog.CurationEvidence, mode string, snapshot MatchS
 	}
 	if mode == "single" {
 		e.Tracks = slices.Clone(e.Tracks)
-		e.Tracks[0].Title = cleanSearchFormat(e.Tracks[0].Title)
+		e.Tracks[0].Title = relaxedTitle(e.Tracks[0].Title)
 		e.Tracks[0].Artist = cleanSearchFormat(e.Tracks[0].Artist)
-	} else {
-		e.Title = cleanSearchFormat(e.Title)
-		e.AlbumArtist = cleanSearchFormat(e.AlbumArtist)
-		e.Artist = cleanSearchFormat(e.Artist)
 	}
+	// 专辑查找可放宽 query，组和部分结构仍用原专辑名、艺人名核对。
 	return e
 }
 
-func textSearch(ctx context.Context, e catalog.CurationEvidence, mode string, original, names SearchNames, f sources.ReleaseFinder, rf sources.RecordingFinder, opts MatchOptions, result MatchResult, prior []SearchPage) (MatchResult, error) {
+func textSearch(ctx context.Context, e catalog.CurationEvidence, mode string, names SearchNames, f sources.ReleaseFinder, rf sources.RecordingFinder, af sources.ArtistFinder) (MatchResult, error) {
 	count := len(e.Tracks)
 	if mode == "single" {
 		count = 0
 	}
-	if result.Status == "" {
-		var err error
-		result, err = queryText(ctx, mode, e, names, count, false, f, rf)
-		if err != nil {
-			return result, err
-		}
-		if len(result.Snapshot.Pages) > 0 {
-			result.Snapshot.Pages[0].Canonical = canonicalQuery(original, names)
-		}
-	}
-	if len(prior) > 0 {
-		if mode == "album" && result.Method == "search" {
-			result.Snapshot.Pages = append(result.Snapshot.Pages, prior...)
-		} else {
-			result.Snapshot.Pages = append(prior, result.Snapshot.Pages...)
-		}
-	}
-	// 每一步先按已有证据判定，只有待定或零候选才继续扩查。
-	var decision MatchResult
-	details := searchDetails{finder: f, attempted: map[string]bool{}}
-	decide := func() error {
-		result.Snapshot.ArtistID = e.ArtistMBID
-		if len(result.Candidates) == 0 {
-			decision = result
-			return nil
-		}
-		var err error
-		checked := textSearchEvidence(e, mode, result.Snapshot)
-		if mode == "single" {
-			decision = decideSearchSingle(checked, result)
-		} else {
-			decision, err = decideSearchAlbum(ctx, checked, result, &details)
-		}
-		// 下次查询并入新候选时，复用已经读取的发行详情。
-		result.Candidates = decision.Candidates
-		return err
-	}
-	finished := func() bool {
-		return decision.Status == "matched" || decision.Status == "no_usable_candidates"
-	}
-	try := func(n SearchNames, num int, relaxed bool) error {
+	var pages []SearchPage
+	query := func(n SearchNames, num int, relaxed bool) (MatchResult, error) {
 		m, err := queryText(ctx, mode, e, n, num, relaxed, f, rf)
 		if err != nil {
-			return err
+			return m, err
 		}
-		result = appendSearch(result, m)
-		return decide()
-	}
-	if err := decide(); err != nil {
-		return decision, err
-	}
-	// 已有艺人对应可能来自同名的另一人。用原名补查时只采信结构。
-	triedName := false
-	if names.ArtistID != "" && !e.Compilation && original.Artist != "" && original.Title != "" &&
-		decision.Status != "matched" && !slices.Contains(decision.Conflicts, "ambiguous") {
-		byName := original
-		byName.ArtistID = ""
-		result.Snapshot.NameOnlyArtist = true
-		if err := try(byName, count, true); err != nil {
-			return decision, err
+		pages = append(pages, m.Snapshot.Pages...)
+		m.Snapshot.Pages = slices.Clone(pages)
+		m.Snapshot.ArtistID = e.ArtistMBID
+		m.Snapshot.FormatRelaxed = relaxed
+		if len(m.Candidates) == 0 {
+			return m, nil
 		}
-		original.ArtistID = ""
-		triedName = true
+		input := textSearchEvidence(e, mode, m.Snapshot)
+		if mode == "single" {
+			return decideSearchSingle(input, m), nil
+		}
+		return decideSearchAlbum(ctx, input, m, &searchDetails{finder: f, attempted: map[string]bool{}})
 	}
-	realAlbum := count > 0 && original.Title != "" && original.Artist != "" &&
-		e.Authenticity["title"] == metadata.Real && e.SelectedArtistAuth() == metadata.Real
-	mayRelaxCount := func() bool {
-		return realAlbum && decision.Status != "matched" && !decision.partialStructure && !slices.Contains(decision.Conflicts, "ambiguous")
+	m, err := query(names, count, false)
+	if err != nil || len(m.Candidates) > 0 {
+		return m, err
 	}
-	if finished() && !mayRelaxCount() {
-		return decision, nil
-	}
-	if !finished() && !triedName && canonicalQuery(original, names) && !hasExactText(e, mode, result.Candidates) {
-		if err := try(original, count, false); err != nil || finished() && !mayRelaxCount() {
-			return decision, err
+	relaxed := names
+	relaxed.Title = relaxedTitle(names.Title)
+	relaxed.Artist = cleanSearchFormat(names.Artist)
+	if relaxed.Title != "" && (relaxed != names || count != 0) {
+		m, err = query(relaxed, 0, true)
+		if err != nil || len(m.Candidates) > 0 {
+			return m, err
 		}
 	}
-	relaxed := original
-	if len(result.Candidates) == 0 && original.Title != "" {
-		relaxed.Title = relaxedTitle(original.Title)
-		relaxed.Artist = cleanSearchFormat(original.Artist)
-		result.Snapshot.FormatRelaxed = cleanSearchFormat(original.Title) != original.Title || relaxed.Artist != original.Artist
-		if relaxed.Title != "" && relaxed != original {
-			if err := try(relaxed, count, true); err != nil || finished() && !mayRelaxCount() {
-				return decision, err
-			}
-		}
-	}
-	// 首搜可能只返回同曲数的其他版本。去曲数与零候选放宽共用这一次查询。
-	if count > 0 && relaxed.Title != "" && (len(result.Candidates) == 0 || mayRelaxCount()) {
-		result.Snapshot.CountRelaxed = len(result.Candidates) > 0
-		if err := try(relaxed, 0, true); err != nil || finished() {
-			return decision, err
-		}
-	}
-	exists := e.ArtistMBID != ""
-	if e.ArtistMBID == "" && opts.Artists != nil && original.Artist != "" && !hasExactText(e, mode, result.Candidates) {
-		artists, page, unknown, err := lookupArtist(ctx, opts.Artists, original.Artist)
+	_, albumPages := f.(curation.ReleasePageFinder)
+	_, singlePages := rf.(curation.RecordingPageFinder)
+	if af != nil && names.Artist != "" && (mode == "album" && albumPages || mode == "single" && singlePages) {
+		artists, page, unknown, err := lookupArtist(ctx, af, names.Artist)
 		if err != nil {
-			return result, err
+			return m, err
 		}
-		result.Snapshot.Pages = append(result.Snapshot.Pages, page)
-		result.Snapshot.Artists, result.ArtistEvidence = artists, artists
-		exists = len(artists) > 0 || unknown
+		pages = append(pages, page)
+		m.Snapshot.Pages = pages
 		if len(artists) == 1 && !unknown {
 			for id := range artists {
 				e.ArtistMBID = id
 			}
-			if err := decide(); err != nil || finished() {
-				return decision, err
-			}
-			if !hasExactText(e, mode, result.Candidates) && !(names.ArtistID == e.ArtistMBID && names.Title == original.Title) {
-				n := original
-				n.ArtistID = e.ArtistMBID
-				if err := try(n, count, false); err != nil {
-					return decision, err
-				}
+			m, err = query(SearchNames{ArtistID: e.ArtistMBID}, count, false)
+			m.ArtistEvidence, m.Snapshot.Artists = artists, artists
+			if err != nil || len(m.Candidates) > 0 {
+				return m, err
 			}
 		}
 	}
-	decision.Snapshot, decision.ArtistEvidence = result.Snapshot, result.ArtistEvidence
-	if len(result.Candidates) == 0 {
-		if exists || opts.Artists == nil || original.Artist == "" {
-			decision.Route = "lookup"
-		} else {
-			decision.Route = "web"
-		}
-	}
-	return decision, nil
-}
-func hasExactText(e catalog.CurationEvidence, mode string, rows []Candidate) bool {
-	n := localNames(e, mode)
-	counts := localDiscCounts(e)
-	for _, c := range rows {
-		var cs []sources.Credit
-		if c.Release != nil {
-			cs = c.Release.Artists
-		}
-		if c.Recording != nil {
-			cs = c.Recording.Artists
-		}
-		if c.Release != nil {
-			if wrong, _ := searchShape(counts, len(e.Tracks), c); wrong {
-				continue
-			}
-		}
-		if sameText(n.Title, c.Title) && (sameArtist(n.Artist, c.Artist) || creditID(cs, e.ArtistMBID)) {
-			return true
-		}
-	}
-	return false
+	m.Route = "lookup"
+	return m, nil
 }
 func lookupArtist(ctx context.Context, f sources.ArtistFinder, name string) (map[string]sources.Artist, SearchPage, bool, error) {
 	var rows []sources.Artist

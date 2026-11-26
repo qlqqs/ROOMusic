@@ -11,6 +11,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
 // ReleaseDigest 与发行匹配工作状态共用同一份目录证据。
@@ -138,9 +139,17 @@ func (p ReleaseMergeEvidence) inputDigest() string {
 
 func (p ReleaseMergeEvidence) check(ctx context.Context, q operations.Queryer) error {
 	a, b := p.Target, p.Source
-	if a.ExternalID == "" || a.ExternalID != b.ExternalID || a.OperationID == "" || b.OperationID == "" || a.RecordingCount == 0 || b.RecordingCount == 0 || p.RecordingsOverlap {
+	if a.ExternalID == "" || a.ExternalID != b.ExternalID || a.OperationID == "" || b.OperationID == "" || a.RecordingCount == 0 || b.RecordingCount == 0 {
 		return operations.Conflict("no_strong_evidence", "双方需要有佐证的同一发行对应，且已对应的录音不相交")
 	}
+	if p.RecordingsOverlap {
+		return operations.Conflict("no_strong_evidence", "有相同录音的发行保留各自版本")
+	}
+	return p.checkStructure(ctx, q)
+}
+
+func (p ReleaseMergeEvidence) checkStructure(ctx context.Context, q operations.Queryer) error {
+	a, b := p.Target, p.Source
 	var blocked bool
 	err := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM curation_suppressions WHERE target_type='release' AND target_id=$1 AND subject='release_merge' AND value_hash=$2)`, min(a.ReleaseID, b.ReleaseID), hashExternalValue(max(a.ReleaseID, b.ReleaseID))).Scan(&blocked)
 	if err != nil {
@@ -243,4 +252,48 @@ func buildMergeLayout(plan governance.ReleaseMergePreview, entries map[string]ca
 		layout.Layout = append(layout.Layout, disc)
 	}
 	return layout
+}
+
+func coversEdition(r sources.Release, preview governance.ReleaseMergePreview, entries map[string]catalog.CurationEvidence) bool {
+	if !r.Complete || r.ID == "" || len(r.Media) != len(preview.Media) {
+		return false
+	}
+	type slot struct{ disc, track int }
+	recordings := make(map[slot]string)
+	seen := make(map[string]bool)
+	counts := make(map[int]int)
+	for _, disc := range r.Media {
+		if len(disc.Tracks) == 0 || disc.TrackCount > 0 && disc.TrackCount != len(disc.Tracks) || counts[disc.Position] != 0 {
+			return false
+		}
+		counts[disc.Position] = len(disc.Tracks)
+		for _, t := range disc.Tracks {
+			k := slot{disc.Position, t.Position}
+			if t.RecordingID == "" || seen[t.RecordingID] || recordings[k] != "" {
+				return false
+			}
+			seen[t.RecordingID] = true
+			recordings[k] = t.RecordingID
+		}
+	}
+	for _, m := range preview.Media {
+		if m.TrackCount != counts[m.PositionAfter] || m.TrackCount == 0 {
+			return false
+		}
+		owner := preview.Target.ID
+		if m.FromRelease == preview.Source.ID {
+			owner = preview.Source.ID
+		}
+		for _, t := range entries[owner].Tracks {
+			if t.Disc != m.PositionBefore {
+				continue
+			}
+			k := slot{m.PositionAfter, t.Position}
+			if t.ExternalID == "" || recordings[k] != t.ExternalID {
+				return false
+			}
+			delete(recordings, k)
+		}
+	}
+	return len(recordings) == 0
 }

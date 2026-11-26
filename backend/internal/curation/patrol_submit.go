@@ -201,7 +201,7 @@ func (w *Writer) SubmitPatrol(ctx context.Context, item PendingItem, in PatrolSu
 		// 先锁待定项，再锁发行工作状态，锁序与程序结论和模型结项一致。
 		const affected = patrolMembership + `, affected AS (SELECT DISTINCT m.release_id FROM members m
  JOIN curation_work_states s ON s.target_id=m.release_id AND s.subject='release'
- WHERE m.name_id=ANY($1::text[]) AND s.status IN ('uncertain','no_match','try_later','unlisted','pending')) `
+ WHERE m.name_id=ANY($1::text[]) AND s.status IN ('conflict','no_match','try_later','unmatched','pending')) `
 		_, err = tx.ExecContext(ctx, affected+`UPDATE curation_pending_items p SET status='resolved',resolution='patrol_requery',resolved_at=now(),updated_at=now()
  FROM affected a WHERE p.target_id=a.release_id AND p.kind IN ('release_match','recording_match')
  AND p.status IN ('waiting_model','waiting_route','shelved')`, changed)
@@ -209,8 +209,8 @@ func (w *Writer) SubmitPatrol(ctx context.Context, item PendingItem, in PatrolSu
 			return err
 		}
 		_, err = tx.ExecContext(ctx, affected+`UPDATE curation_work_states s SET needs_work=true,patrol_revision=patrol_revision+1,requery_match_version=match_rule_version,
- next_attempt_at=CASE WHEN status IN ('try_later','unlisted') THEN now() ELSE next_attempt_at END,updated_at=now()
- FROM affected a WHERE s.subject='release' AND s.target_id=a.release_id AND s.status IN ('uncertain','no_match','try_later','unlisted','pending')`, changed)
+ next_attempt_at=CASE WHEN status IN ('try_later','unmatched') THEN now() ELSE next_attempt_at END,updated_at=now()
+ FROM affected a WHERE s.subject='release' AND s.target_id=a.release_id AND s.status IN ('conflict','no_match','try_later','unmatched','pending')`, changed)
 		if err != nil {
 			return err
 		}

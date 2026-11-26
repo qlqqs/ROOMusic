@@ -419,7 +419,7 @@ func TestPostgreSQL整理未收录九十天与管理员重查(t *testing.T) {
 	clock.advance(t, time.Minute)
 	begin := clock.options().Now()
 	first := b3WorkState(t, app, "release", id)
-	if first.Status != "unlisted" || first.NextAttemptAt == nil || first.NextAttemptAt.Sub(begin) != 90*24*time.Hour {
+	if first.Status != "unmatched" || first.NextAttemptAt == nil || first.NextAttemptAt.Sub(begin) != 90*24*time.Hour {
 		t.Fatalf("首次未收录应登记九十天到期，状态 %+v，当前时间 %v", first, begin)
 	}
 
@@ -438,17 +438,15 @@ func TestPostgreSQL整理未收录九十天与管理员重查(t *testing.T) {
 		if req.Path == "/musicbrainz/ws/2/release" {
 			searches++
 		}
-		if req.Service == "acoustid" || req.Service == "searxng" || req.Service == "openai" {
-			t.Errorf("程序重查发出了非程序来源请求：%+v", req)
-		}
 	}
-	if searches != 2 || second.Status != "unlisted" || second.NextAttemptAt != nil || second.Generation != first.Generation+1 ||
-		!strings.Contains(string(second.Result), "program_recheck_inconclusive") {
-		t.Fatalf("到期应仅用程序重查一次：搜索 %d，之前 %+v，之后 %+v，结果 %s", searches, first, second, second.Result)
+	if searches != 2 || second.Status != "unmatched" || second.NextAttemptAt == nil || second.NextAttemptAt.Sub(begin) != 180*24*time.Hour || second.Generation != first.Generation+1 {
+		t.Fatalf("到期重查后应再次预约，搜索 %d，之前 %+v，之后 %+v", searches, first, second)
 	}
+	b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, id)
 	clock.advance(t, 90*24*time.Hour)
-	if n := len(cMatchRequests(t, mock)); n != len(got) {
-		t.Fatalf("下一次九十天不应再自动重查，新增 %d 个请求", n-len(got))
+	third := b3WorkState(t, app, "release", id)
+	if third.Status != "unmatched" || third.Generation != second.Generation+1 || third.NextAttemptAt == nil || third.NextAttemptAt.Sub(begin) != 270*24*time.Hour {
+		t.Fatalf("第二次到期未重查：%+v", third)
 	}
 
 	check := func(release string, user *integrationTestUser, want int) {
@@ -467,9 +465,9 @@ func TestPostgreSQL整理未收录九十天与管理员重查(t *testing.T) {
 	check(id, &admin, http.StatusAccepted)
 	clock.advance(t, time.Minute)
 	after := b3WorkState(t, app, "release", id)
-	if after.Generation != second.Generation+1 || after.Status != "unlisted" || after.NextAttemptAt != nil {
-		t.Fatalf("两次手动登记应合并为一次程序重查，状态 %+v -> %+v", second, after)
+	if after.Generation != third.Generation+1 || after.Status != "unmatched" || after.NextAttemptAt == nil {
+		t.Fatalf("两次手动登记应合并为一次程序重查，状态 %+v -> %+v", third, after)
 	}
-	b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, id)
+	b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match' AND status<>'resolved'`, id)
 	b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_artist_credit_proposals WHERE release_id=$1`, id)
 }

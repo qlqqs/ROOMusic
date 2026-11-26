@@ -51,8 +51,11 @@ func needsWork(subject string, state curation.WorkState, digest string, now time
 		return false
 	}
 	previous := state.InputDigest
-	if subject == "release" && state.IdentityDigest != "" {
-		previous = state.IdentityDigest
+	if subject == "release" {
+		if state.Status == "pending" || state.ManualRequestedAt != nil {
+			return true
+		}
+		previous = state.FileDigest
 	}
 	if previous != digest || subject != "release" && state.RuleVersion != resourceRuleVersion {
 		return true
@@ -63,7 +66,7 @@ func needsWork(subject string, state curation.WorkState, digest string, now time
 	if subject == "release" && state.RequeryMatchVersion == MatchRuleVersion {
 		return true
 	}
-	if subject == "release" && state.Status == "unlisted" {
+	if subject == "release" && state.Status == "unmatched" {
 		return state.NextAttemptAt != nil && !now.Before(*state.NextAttemptAt)
 	}
 	if !fingerprintAvailable || subject != "release" || (state.Status != "no_match" && state.Status != "uncertain") {
@@ -125,10 +128,11 @@ func subjectEvidence(subject string, e catalog.CurationEvidence, state curation.
 }
 
 type outcome struct {
-	status, group, trackFields, artistLinks, matchReason string
-	match                                                MatchResult
-	proposals                                            []curation.ArtistCreditProposal
-	review                                               releaseReviewState
+	checkedAt                                                          time.Time
+	status, group, trackFields, artistLinks, matchReason, releaseMerge string
+	match                                                              MatchResult
+	proposals                                                          []curation.ArtistCreditProposal
+	review                                                             releaseReviewState
 }
 
 func (w *Worker) evaluate(ctx context.Context, u *unit, e catalog.CurationEvidence, fingerprintRequired bool) (out outcome, err error) {
@@ -170,10 +174,10 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	var offline *MatchResult
 	var review releaseReviewState
 	if subject == "release" {
-		inputs = releaseDigests{digest, IdentityDigest(input), GapDigest(input)}
+		inputs = releaseDigests{digest, IdentityDigest(input), GapDigest(input), input.FileDigest}
 		// 旧基线与现有对应的维护一起提交，外部暂时失败时保留原状态。
 		creditUpgrade := state.Status == "matched" && state.MatchRuleVersion != MatchRuleVersion && w.hasCachedCreditInput(input)
-		if !creditUpgrade && state.InputDigest == digest && (state.IdentityDigest == "" || state.IdentityDigest == inputs.identity && state.LocalRuleVersion != LocalRuleVersion && state.MatchRuleVersion == MatchRuleVersion) {
+		if (state.FileDigest == input.FileDigest || state.FileDigest == "" && state.Status == "matched") && !creditUpgrade && state.InputDigest == digest && (state.IdentityDigest == "" || state.IdentityDigest == inputs.identity && state.LocalRuleVersion != LocalRuleVersion && state.MatchRuleVersion == MatchRuleVersion) {
 			tracks, artists, merges := matchBackfills(state, input)
 			if tracks || artists || merges {
 				return w.backfillMatch(ctx, e, state, states, tracks, artists, merges)
@@ -185,9 +189,6 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 		if err != nil {
 			return err
 		}
-		if state.Status == "no_usable_candidates" && review.BlockDigest == blockedLinkDigest(input) && state.MatchRuleVersion == MatchRuleVersion {
-			return nil
-		}
 		deferred, offline, err = w.prepareRelease(ctx, input, inputs, &state)
 		if err != nil {
 			return err
@@ -198,14 +199,12 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 		if deferred {
 			return nil
 		}
-		if state.IdentityDigest != "" {
-			workDigest = inputs.identity
-		}
+		workDigest = inputs.file
 		version = MatchRuleVersion
 	}
 	now := w.opts.Now()
 	// 新启用的插件或更新的密钥可以补齐上一轮留下的空缺。
-	ordinary := offline != nil || state.Status == "no_usable_candidates" && review.BlockDigest != blockedLinkDigest(input) || needsWork(subject, state, workDigest, now, false) || subject != "release" && currentAttempt(ctx) != nil
+	ordinary := offline != nil || subject == "release" && state.FileDigest != input.FileDigest || needsWork(subject, state, workDigest, now, false) || subject != "release" && currentAttempt(ctx) != nil
 	if subject == "release" && !ordinary {
 		tracks, artists, merges := matchBackfills(state, input)
 		if tracks || artists || merges {
@@ -220,7 +219,8 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	}
 	u := unit{w: w, subject: subject, id: id, ruleVersion: version, generation: state.Generation + 1, releaseID: e.ID, inputDigest: digest, releaseState: states.releases[e.ID]}
 	u.offline = offline != nil
-	u.programOnly = subject == "release" && state.IdentityDigest == inputs.identity && review.UnlistedSince != nil && (state.Status == "unlisted" || state.Status == "try_later")
+	u.programOnly = subject == "release" && (state.ManualRequestedAt != nil || state.Status == "try_later" && review.Manual)
+	review.Manual = u.programOnly
 	if subject == "release" {
 		u.releaseInput, u.identityDigest = &input, inputs.identity
 	}
@@ -258,7 +258,9 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 		return err
 	}
 	if retry || out.status == "try_later" {
-		if !u.programOnly && review.UnlistedSince != nil {
+		if u.programOnly {
+			state.Result = jsonValue(review)
+		} else if review.UnlistedSince != nil {
 			state.Result = nil
 		}
 		delay := min(24*time.Hour, 10*time.Minute<<min(state.RetryCount, 8))
@@ -281,22 +283,28 @@ func (w *Worker) process(ctx context.Context, e *catalog.CurationEvidence, subje
 	}
 	state.Status, state.Attempts, state.Generation = out.status, state.Attempts+1, u.generation
 	state.RetryCount, state.NextAttemptAt, state.Result = 0, nil, nil
-	if u.programOnly {
-		out.review.UnlistedSince = review.UnlistedSince
-		out.review.RecheckedAt = &now
-		if out.status == "unlisted" {
-			out.review.Reason = "program_recheck_inconclusive"
-		}
-	} else if out.status == "unlisted" {
+	out.checkedAt = w.opts.Now().UTC()
+	if out.status == "unmatched" && out.matchReason != "candidates_revoked" {
+		now = out.checkedAt
 		next := now.Add(90 * 24 * time.Hour)
 		state.NextAttemptAt = &next
 		out.review.UnlistedSince = &now
-		out.review.Reason = out.matchReason
+		if review.UnlistedSince != nil {
+			out.review.UnlistedSince = review.UnlistedSince
+			out.review.RecheckedAt = &now
+		}
 	}
-	if out.status == "no_usable_candidates" {
-		out.review.BlockDigest = blockedLinkDigest(input)
+	out.review.Reason = out.matchReason
+	if err := w.saveConclusion(ctx, e, state, out, states, u.source()); err != nil {
+		return err
 	}
-	return w.saveConclusion(ctx, e, state, out, states, u.source())
+	if out.status == "matched" && out.match.Release != nil {
+		if err := w.finishEditionMerge(ctx, &u, *out.match.Release); err != nil {
+			return err
+		}
+		_, err = w.db.ExecContext(ctx, `UPDATE curation_work_states SET result=result || '{"release_merge":"done"}'::jsonb WHERE subject='release' AND target_id=$1 AND generation=$2 AND status='matched'`, e.ID, state.Generation)
+	}
+	return err
 }
 
 func (w *Worker) saveConclusion(ctx context.Context, e *catalog.CurationEvidence, state curation.WorkState, out outcome, states pageStates, source string) error {
@@ -335,6 +343,9 @@ func (w *Worker) saveConclusionOnce(ctx context.Context, e *catalog.CurationEvid
 	}
 	var postIdentity string
 	if state.Subject == "release" {
+		if fresh.FileDigest != state.FileDigest {
+			return errReleaseChanged
+		}
 		postIdentity = IdentityDigest(fresh)
 	}
 	if postDigest != state.InputDigest || state.Subject == "release" && postIdentity != state.IdentityDigest {
@@ -356,7 +367,7 @@ func (w *Worker) saveConclusionOnce(ctx context.Context, e *catalog.CurationEvid
 	state.InputDigest = postDigest
 	var related *curation.WorkState
 	if state.Subject == "release" {
-		releaseDigests{postDigest, postIdentity, GapDigest(fresh)}.record(&state)
+		releaseDigests{postDigest, postIdentity, GapDigest(fresh), fresh.FileDigest}.record(&state)
 		state.Result = releaseResult(out)
 		if err := curation.SaveArtistCreditProposals(ctx, tx, e.ID, postIdentity, out.proposals); err != nil {
 			return err
@@ -390,6 +401,13 @@ func (w *Worker) saveConclusionOnce(ctx context.Context, e *catalog.CurationEvid
 		if errors.Is(err, sql.ErrNoRows) || err == nil && (generation != previous.Generation || status != previous.Status || (out.status != "matched" && patrolRevision != previous.PatrolRevision)) {
 			return errReleaseChanged
 		}
+		if err != nil {
+			return err
+		}
+	}
+	if state.Subject == "release" && (out.status == "matched" || out.status == "unmatched" || out.status == "conflict") {
+		checked := out.checkedAt
+		err := curation.SaveReleaseMatchResult(ctx, tx, e.ID, curation.ReleaseMatchResult{Source: "musicbrainz", Status: out.status, CheckedAt: &checked, Reason: out.matchReason, Conflicts: out.match.Conflicts})
 		if err != nil {
 			return err
 		}
@@ -500,14 +518,11 @@ func releaseResult(out outcome) []byte {
 		ReleaseMerge    string             `json:"release_merge,omitempty"`
 		ArtistLinks     string             `json:"artist_links,omitempty"`
 		TrackFields     string             `json:"track_fields,omitempty"`
-	}{Verification: m.Verification, releaseReviewState: out.review, Level: m.Level, Rule: m.Rule, Route: m.Route, Credits: m.Credits, ExternalGroupID: m.GroupID, Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks}
+	}{Verification: m.Verification, releaseReviewState: out.review, Level: m.Level, Rule: m.Rule, Route: m.Route, Credits: m.Credits, ExternalGroupID: m.GroupID, Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: m.Conflicts, Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks, ReleaseMerge: out.releaseMerge}
 	if m.Release != nil {
 		r.ExternalID, r.ExternalGroupID = m.Release.ID, m.Release.Group.ID
-		if out.status == "matched" {
-			r.ReleaseMerge = "done"
-		}
 	}
-	if out.status == "no_usable_candidates" {
+	if out.matchReason == "candidates_revoked" {
 		for _, c := range m.Candidates {
 			r.Blocked = append(r.Blocked, blockedCandidate{c.ExternalID, c.Conflicts})
 		}
@@ -523,11 +538,16 @@ func savePending(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidence, st
 	if m.Mode == "single" {
 		kind = "recording_match"
 	}
+	// 新一轮程序结论使原先领取的识别失效；旧会话按原项 ID 提交时必须重新核对。
+	if _, err := tx.ExecContext(ctx, `UPDATE curation_pending_items SET status='resolved',resolution='superseded',resolved_at=now(),updated_at=now()
+	WHERE target_id=$1 AND kind IN ('release_match','recording_match') AND status='in_progress'`, e.ID); err != nil {
+		return err
+	}
 	if m.Status == "matched" {
 		return curation.ResolvePendingItems(ctx, tx, e.ID, kind, "program_matched")
 	}
-	if m.Status == "no_usable_candidates" || m.Status == "unlisted" {
-		return curation.ResolvePendingItems(ctx, tx, e.ID, kind, m.Status)
+	if m.Route == "" {
+		return curation.ResolvePendingItems(ctx, tx, e.ID, kind, state.Status)
 	}
 	if slices.Contains(m.Conflicts, "insufficient_evidence") {
 		return curation.ResolvePendingItems(ctx, tx, e.ID, kind, "insufficient_evidence")

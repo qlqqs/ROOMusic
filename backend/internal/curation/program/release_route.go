@@ -4,19 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/operations"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
 // 重查期间仍保留首次未收录的时间，来源退避后从同一模式接上。
 type releaseReviewState struct {
+	Manual        bool       `json:"manual_recheck,omitempty"`
 	UnlistedSince *time.Time `json:"unlisted_since,omitempty"`
 	RecheckedAt   *time.Time `json:"rechecked_at,omitempty"`
 	Reason        string     `json:"reason,omitempty"`
-	BlockDigest   string     `json:"block_digest,omitempty"`
 }
 
 func previousReview(s curation.WorkState) (releaseReviewState, error) {
@@ -29,6 +31,19 @@ func previousReview(s curation.WorkState) (releaseReviewState, error) {
 }
 
 func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationEvidence, fingerprintRequired bool) (MatchResult, error) {
+	step, err := w.fingerprintStep(ctx)
+	if err != nil {
+		return MatchResult{}, err
+	}
+	fixed := u.releaseState.Status == "matched" && (e.ExternalID != "" || e.CandidateKind == "loose_unknown" && len(e.Tracks) == 1 && e.Tracks[0].ExternalID != "")
+	if allowed, _ := releaseAdmission(e, step != nil); !allowed && !fixed {
+		m := newMatch("album", "")
+		if e.CandidateKind == "loose_unknown" {
+			m.Mode = "single"
+		}
+		m.Conflicts = []string{"insufficient_evidence"}
+		return m, nil
+	}
 	if err := w.sources.Check(ctx, "musicbrainz"); err != nil {
 		return MatchResult{}, err
 	}
@@ -38,37 +53,42 @@ func (w *Worker) searchRelease(ctx context.Context, u *unit, e catalog.CurationE
 		return MatchResult{}, operations.Conflict("source_disabled", "识别来源未启用")
 	}
 	a, _ := w.sources.ArtistFinder("musicbrainz")
-	var step *FingerprintStep
-	var err error
-	if !u.programOnly {
-		step, err = w.fingerprintStep(ctx)
+	if fixed {
+		if e.ExternalID != "" {
+			release, err := found(r.ReleaseByID(ctx, e.ExternalID))
+			if err != nil {
+				return MatchResult{}, err
+			}
+			if release.ID != e.ExternalID {
+				return uncertain(newMatch("album", "tag_id"), "existing_link"), nil
+			}
+			return DecideAlbum(e, "tag_id", []sources.Release{release}), nil
+		}
+		recording, err := found(f.RecordingByID(ctx, e.Tracks[0].ExternalID))
 		if err != nil {
 			return MatchResult{}, err
 		}
-		if fingerprintRequired && step == nil {
-			return MatchResult{}, operations.Conflict("source_disabled", "识别来源未启用")
+		if recording.ID != e.Tracks[0].ExternalID {
+			return uncertain(newMatch("single", "tag_id"), "existing_link"), nil
 		}
+		return DecideSingle(e, "tag_id", []sources.Recording{recording}), nil
 	}
-	names := SearchNames{}
-	if w.opts.CanonicalNames != nil {
-		trackID := ""
-		if e.CandidateKind == "loose_unknown" && len(e.Tracks) == 1 {
-			trackID = e.Tracks[0].ID
-		}
-		names, err = w.opts.CanonicalNames(ctx, e.ID, trackID)
-		if err != nil {
-			return MatchResult{}, err
-		}
+	if fingerprintRequired && step == nil {
+		return MatchResult{}, operations.Conflict("source_disabled", "识别来源未启用")
 	}
-	if names.ArtistID == "" {
-		names.ArtistID = e.ArtistMBID
-	}
-	return matchWithOptions(ctx, e, r, f, step, MatchOptions{Artists: a, Names: names, ProgramOnly: u.programOnly})
+	return matchWithOptions(ctx, e, r, f, step, MatchOptions{Artists: a})
 }
 
 func (w *Worker) concludeMatch(ctx context.Context, u *unit, e catalog.CurationEvidence, m MatchResult) (out outcome, err error) {
 	out.match = m
 	if m.Status == "matched" {
+		if m.Level == "release_group" && m.GroupFirstReleaseDate == "" && e.Year == 0 && !e.Corrected["year"] && !e.Automatic["year"] && !u.offline {
+			m.GroupFirstReleaseDate, err = w.sources.GroupFirstReleaseDate(ctx, "musicbrainz", m.GroupID)
+			if err != nil {
+				return out, err
+			}
+			out.match = m
+		}
 		out.group, out.artistLinks, out.proposals, err = w.applyMatch(ctx, u, e, m)
 		if errors.Is(err, errArtistCreditUnconfirmed) {
 			out.match.Status, out.match.Route = "uncertain", "select"
@@ -81,28 +101,37 @@ func (w *Worker) concludeMatch(ctx context.Context, u *unit, e catalog.CurationE
 	if err != nil {
 		return out, err
 	}
-	if out.match.Route == "select" && len(out.match.Candidates) > 0 && len(out.match.modelCandidates()) == 0 {
-		// 已见候选都受阻，页仍不完整时交给后续查找，第一档没有可选项。
-		out.match.Route = "lookup"
+	switch out.match.Status {
+	case "matched":
+		out.status = "matched"
+	case "no_usable_candidates":
+		out.status = "unmatched"
+		out.matchReason = "candidates_revoked"
+		out.match.Route = ""
+	case "uncertain":
+		out.status = "conflict"
+		if len(out.match.Conflicts) == 0 {
+			out.match.Conflicts = []string{"insufficient_corroboration"}
+		}
+	default:
+		out.status = "unmatched"
+		if slices.Contains(out.match.Conflicts, "insufficient_evidence") {
+			out.status = "done"
+		}
 	}
-	if u.programOnly && out.match.Status != "matched" {
-		out.match.Status, out.match.Route = "unlisted", ""
-	} else if out.match.Route == "lookup" || out.match.Route == "web" {
-		model, web, err := w.sources.MatchFallbackReadiness(ctx)
+	if out.status == "conflict" || out.status == "unmatched" && out.matchReason == "" {
+		model, err := curation.MatchModelConfigured(ctx, w.db)
 		if err != nil {
 			return out, err
 		}
-		configured := model && (out.match.Route != "web" || web)
-		if configured {
-			out.match.Status = "uncertain"
-		} else {
-			out.match.Status, out.match.Route = "unlisted", ""
-			out.matchReason = "model_unconfigured"
-			if model {
-				out.matchReason = "web_unavailable"
+		if model && !u.programOnly {
+			out.match.Route = "lookup"
+			if len(out.match.modelCandidates()) > 0 {
+				out.match.Route = "select"
 			}
+		} else {
+			out.match.Route = ""
 		}
 	}
-	out.status = out.match.Status
 	return out, nil
 }

@@ -165,7 +165,11 @@ func TestAlbumCorroboration(t *testing.T) {
 		if got.Level != "release_group" || got.GroupID != r.Group.ID || got.Release != nil || len(got.Pairs) != 0 {
 			t.Fatalf("同组的三个版本只应定到发行组：%+v", got)
 		}
-		wantMatch(t, DecideAlbum(e, "barcode", rows), "uncertain", "too_many")
+		got = DecideAlbum(e, "barcode", rows)
+		wantMatch(t, got, "matched")
+		if got.Level != "release_group" {
+			t.Fatal(got.Level)
+		}
 		e.Tracks[0].Identifiers["mb_release"] = []string{"1", "2"}
 		wantMatch(t, DecideAlbum(e, "tag_id", nil), "uncertain", "mixed_release_tags")
 	})
@@ -209,6 +213,13 @@ func TestLookupBounds(t *testing.T) {
 	for i := range rows {
 		rows[i] = sources.Release{ID: fmt.Sprint(i)}
 	}
+	four := slices.Clone(rows[:4])
+	for i := range four {
+		four[i] = r
+		four[i].ID = rows[i].ID
+		four[i].Complete = true
+		four[i].Status = "Pseudo-Release"
+	}
 	for _, tc := range []struct {
 		name, method, code string
 		list               releaseList
@@ -218,7 +229,7 @@ func TestLookupBounds(t *testing.T) {
 		{"isrc", "isrc", "list_truncated", isrcReleaseList([][]sources.Recording{{{Releases: rows}}})},
 		{"spread", "isrc", "isrc_spread", isrcReleaseList([][]sources.Recording{{{Releases: rows[:1]}}, {{Releases: rows[1:2]}}})},
 		{"fuzzy", "disc_id", "disc_fuzzy", discReleaseList([]sources.DiscMatch{{Exact: false, Releases: []sources.Release{r}}})},
-		{"four", "barcode", "too_many", releasePages([][]sources.Release{rows[:4]})},
+		{"four", "barcode", "pseudo_release", releasePages([][]sources.Release{four})},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := fullCandidates(t.Context(), nil, e, tc.method, tc.list)
@@ -287,10 +298,10 @@ func TestAlbumMethodRequirements(t *testing.T) {
 			e.TitlePlaceholder = true
 		}},
 		{"catalog_label_only", "catalog_number", "matched", func(e *catalog.CurationEvidence, r *sources.Release) { e.Tracks[0].DurationSeconds = 0 }},
-		{"catalog_duration_only", "catalog_number", "matched", func(e *catalog.CurationEvidence, r *sources.Release) { e.Label = "其他" }},
+		{"catalog_duration_only", "catalog_number", "matched", func(e *catalog.CurationEvidence, r *sources.Release) { e.Label = "" }},
 		{"catalog_neither", "catalog_number", "uncertain", func(e *catalog.CurationEvidence, r *sources.Release) {
 			e.Tracks[0].DurationSeconds = 0
-			e.Label = "其他"
+			e.Label = ""
 		}},
 		{"isrc_unconfirmed", "isrc", "uncertain", func(e *catalog.CurationEvidence, r *sources.Release) {
 			e.Tracks[0].CueISRC = "USABC2300001"

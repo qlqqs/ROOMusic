@@ -209,13 +209,14 @@ func TestPostgreSQLCurationProgramRescanAndChanges(t *testing.T) {
 	f.correct(t, f.a, 1, map[string]any{"title": setChange("人工标题")})
 	f.clock.advance(t, time.Minute)
 	s := f.assertRelease(t, f.a, "matched", "tag_id")
-	if s.Attempts != before.Attempts+1 || f.source.calls["ReleaseByID"] != orig["ReleaseByID"]+1 {
+	if s.Attempts != before.Attempts || f.source.calls["ReleaseByID"] != orig["ReleaseByID"] {
 		t.Fatal(s, f.source.calls)
 	}
 	programTag(t, f.application, track, "mb_recording", uuid.New())
+	mustExec(t, f.application, `UPDATE tracks SET source_modified_at=now() WHERE id=$1`, track)
 	programFinishedScan(t, f)
 	f.clock.advance(t, time.Minute)
-	f.assertRelease(t, f.a, "uncertain", "tag_id")
+	f.assertRelease(t, f.a, "conflict", "tag_id")
 }
 
 func TestPostgreSQLCurationProgramRestart(t *testing.T) {
@@ -427,14 +428,14 @@ func TestPostgreSQLCurationProgramRealRescan(t *testing.T) {
 	}
 	confirmProgramRelease(t, f.application, &f.admin, id)
 	f.clock.advance(t, time.Minute)
-	first := f.assertRelease(t, id, "unlisted", "search")
+	first := f.assertRelease(t, id, "unmatched", "search")
 	before := maps.Clone(f.source.calls)
 	if before["SearchReleases"] < 2 {
 		t.Fatal(before)
 	}
 	runScan(t, f.application, &f.admin)
 	f.clock.advance(t, time.Minute)
-	again := f.assertRelease(t, id, "unlisted", "search")
+	again := f.assertRelease(t, id, "unmatched", "search")
 	if again.Attempts != first.Attempts || !maps.Equal(before, f.source.calls) {
 		t.Fatalf("重扫相同文件后 %v -> %v", before, f.source.calls)
 	}
@@ -449,7 +450,7 @@ func TestPostgreSQLCurationProgramRealRescan(t *testing.T) {
 	}
 	confirmProgramRelease(t, f.application, &f.admin, visible)
 	f.clock.advance(t, time.Minute)
-	changed := f.assertRelease(t, visible, "unlisted", "search")
+	changed := f.assertRelease(t, visible, "unmatched", "search")
 	f.assertCount(t, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1`, visible)
 	if changed.InputDigest == first.InputDigest || f.source.calls["SearchReleases"] != before["SearchReleases"]+2 {
 		t.Fatalf("增加曲目后状态 %+v，调用 %v", changed, f.source.calls)

@@ -60,6 +60,28 @@ func (s *Sources) ReleaseGroupDetails(ctx context.Context, sourceID, groupID str
 	return finder.ReleaseGroupDetails(ctx, groupID)
 }
 
+func (s *Sources) GroupFirstReleaseDate(ctx context.Context, sourceID, groupID string) (string, error) {
+	r, ok := s.lookup(sourceID)
+	if !ok {
+		return "", sources.ErrUnavailable
+	}
+	f, ok := r.Releases.(interface {
+		GroupFirstReleaseDate(context.Context, string) (string, error)
+	})
+	if !ok {
+		return "", nil
+	}
+	ctx, err := (guardedFinders{registration: r, gate: s}).background(ctx)
+	if err != nil {
+		return "", err
+	}
+	date, err := f.GroupFirstReleaseDate(ctx, groupID)
+	if errors.Is(err, sources.ErrNotFound) {
+		return "", nil
+	}
+	return date, err
+}
+
 func (s *Sources) ReleaseGroupEditions(ctx context.Context, sourceID, groupID string) ([]string, bool, error) {
 	group, err := s.ReleaseGroupDetails(ctx, sourceID, groupID)
 	if err != nil {

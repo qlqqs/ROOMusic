@@ -239,6 +239,7 @@ func TestPostgreSQLCurationExternalRuleUpgradePending(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newShelvedPendingFixture(t, "release_match")
+			f.exec(t, `UPDATE curation_settings SET model='synthetic' WHERE id=1`)
 			ctx := t.Context()
 			f.finder.search = []sources.Release{f.remote}
 			requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
@@ -292,8 +293,8 @@ func TestPostgreSQLCurationExternalRuleUpgradePending(t *testing.T) {
 			after := read()
 			if !tc.withCandidates {
 				resolved := f.load(t, pending.ID)
-				if after.Status != "unlisted" || resolved.Status != "resolved" {
-					t.Fatalf("历史零候选补查后应结清并记为未收录：状态 %+v，待定项 %+v", after, resolved)
+				if after.Status != "unmatched" || resolved.Status != "waiting_route" {
+					t.Fatalf("历史零候选补查后应记为未匹配并交识别判断：状态 %+v，待定项 %+v", after, resolved)
 				}
 			}
 			requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
@@ -307,8 +308,9 @@ func TestPostgreSQLCurationExternalRuleUpgradePending(t *testing.T) {
 			}
 		})
 	}
-	t.Run("完整快照直接定版且零出站", func(t *testing.T) {
+	t.Run("完整旧快照也按新规则查询", func(t *testing.T) {
 		f := newShelvedPendingFixture(t, "release_match")
+		f.exec(t, `UPDATE curation_settings SET model='synthetic' WHERE id=1`)
 		ctx := t.Context()
 		requirePendingRefreshOK(t, testsupport.SetArtistProjectionVersionCurrent(ctx, f.db))
 		f.exec(t, `UPDATE tracks SET duration_seconds=100 WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, f.releaseID)
@@ -326,14 +328,16 @@ func TestPostgreSQLCurationExternalRuleUpgradePending(t *testing.T) {
 		f.exec(t, `UPDATE curation_pending_items SET match_rule_version=$2,candidates=$3,conflicts='[]',
  evidence=jsonb_set(evidence,'{match_snapshot}',$4::jsonb) WHERE id=$1`, pending.ID, old, jsonValue(candidates), jsonValue(snapshot))
 		f.exec(t, `UPDATE curation_work_states SET match_rule_version=$2 WHERE subject='release' AND target_id=$1`, f.releaseID, old)
+		f.finder.completePage = true
+		f.finder.search = []sources.Release{f.remote}
 		requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
 		requirePendingRefreshOK(t, f.worker.walk(ctx, false, nil, false))
 		states, err := curation.LoadWorkStates(ctx, f.db, "release", []string{f.releaseID})
 		requirePendingRefreshOK(t, err)
 		state := states[f.releaseID]
-		if state.Status != "matched" || state.MatchRuleVersion != MatchRuleVersion || f.finder.searches != 1 ||
+		if state.Status != "matched" || state.MatchRuleVersion != MatchRuleVersion || f.finder.searches != 2 ||
 			len(f.finder.releaseReads) != 0 || f.finder.recordingSearches != 0 || len(f.finder.recordingReads) != 0 {
-			t.Fatalf("离线重判应写入版本且零外部请求：状态 %+v，调用 %+v", state, f.finder)
+			t.Fatalf("按新规则补查应使用本次取得的完整版本：状态 %+v，调用 %+v", state, f.finder)
 		}
 		got := f.load(t, pending.ID)
 		if got.Status != "resolved" || got.Resolution == nil || *got.Resolution != "program_matched" {

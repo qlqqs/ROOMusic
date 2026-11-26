@@ -20,6 +20,17 @@ func Text(raw string) string {
 	return normalizeText(raw, embeddedTables.require())
 }
 
+// MergeKey 用于归组和识别时比较专辑名及署名，保留括号内正文。
+func MergeKey(raw string) string {
+	folded := cases.Fold().String(norm.NFD.String(raw))
+	return norm.NFC.String(strings.Map(func(r rune) rune {
+		if unicode.IsPunct(r) || unicode.IsSpace(r) || unicode.IsMark(r) && unicode.Is(unicode.Diacritic, r) {
+			return -1
+		}
+		return r
+	}, folded))
+}
+
 // CatalogNumber 在 Text 规则上额外删除 Unicode 空白、Pd 连字符与 U+2212 减号。
 // 其他标点保留；仅用于唱片编号，不能作为姓名/标题的键。
 // 与 Text 相同，必须先成功调用 LoadEmbedded，否则 panic。

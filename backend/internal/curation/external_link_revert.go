@@ -46,6 +46,29 @@ func (externalLinkKind) Revert(ctx context.Context, tx *sql.Tx, operationID stri
 	if err != nil {
 		return operations.Outcome{}, err
 	}
+	if s.Split != nil {
+		r, err := tx.ExecContext(ctx, `DELETE FROM release_match_credit_parts WHERE operation_id=$1`, original.ID)
+		if err != nil {
+			return operations.Outcome{}, err
+		}
+		if n, err := r.RowsAffected(); err != nil || n == 0 {
+			if err == nil {
+				err = operations.Conflict("revert_conflict", "拆分依据已失效")
+			}
+			return operations.Outcome{}, err
+		}
+		if err := catalog.RefreshMatchCredits(ctx, tx, original.TargetID); err != nil {
+			return operations.Outcome{}, err
+		}
+		if err := insertSuppression(ctx, tx, "release", original.TargetID, "split_credit", operations.Fingerprint(*s.Split), s.Split, operationID, operations.ActorID(ctx)); err != nil {
+			return operations.Outcome{}, err
+		}
+		return externalOutcome(ctx, release, original.After, map[string]any{})
+	}
+	var derived bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM release_match_credit_parts WHERE release_id=$1)`, original.TargetID).Scan(&derived); err != nil {
+		return operations.Outcome{}, err
+	}
 	skipped := 0
 	var unlinkedArtists []string
 	for _, l := range s.Links {
@@ -81,6 +104,11 @@ func (externalLinkKind) Revert(ctx context.Context, tx *sql.Tx, operationID stri
 			unlinkedArtists = append(unlinkedArtists, l.ObjectID)
 		}
 		if err := SuppressExternalLink(ctx, tx, l.ObjectType, l.ObjectID, s.Source, l.ExternalID, operationID, operations.ActorID(ctx)); err != nil {
+			return operations.Outcome{}, err
+		}
+	}
+	if derived {
+		if err := catalog.RefreshMatchCredits(ctx, tx, original.TargetID); err != nil {
 			return operations.Outcome{}, err
 		}
 	}
@@ -140,6 +168,13 @@ func (externalLinkKind) Describe(ctx context.Context, q operations.Queryer, reco
 			d.Changes = change
 			if r.Type != operations.TypeRevert && r.RevertedByID == "" {
 				d.Revertible = true
+				if s.Split != nil {
+					if err := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM release_match_credit_parts WHERE operation_id=$1)`, r.ID).Scan(&d.Revertible); err != nil {
+						return nil, err
+					}
+					descriptions[r.ID] = d
+					continue
+				}
 				for _, l := range s.Links {
 					objects = append(objects, object{s.Source, l, r.ID})
 				}
@@ -186,6 +221,9 @@ func (externalLinkKind) PreviewRevert(ctx context.Context, q operations.Queryer,
 	s, err := readLinkState(record.After)
 	if err != nil {
 		return nil, err
+	}
+	if s.Split != nil {
+		return []operations.PreviewChange{{Field: s.Split.Role, Before: s.Split.Credits, After: s.Split.LocalText}}, nil
 	}
 	var artistIDs []string
 	for _, l := range s.Links {

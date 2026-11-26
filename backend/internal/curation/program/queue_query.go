@@ -18,7 +18,8 @@ type queueItem struct {
 }
 
 // 发行投影保存排序依据，各媒体主题共享这些依据并独立消费自己的首次机会。
-const queueRankSQL = curation.QueueRankSQL
+const queueRankSQL = `CASE WHEN s.subject='release' AND s.manual_requested_at IS NULL
+ AND r.queue_class='local_complete' AND NOT r.queue_has_id THEN 4 ELSE ` + curation.QueueRankSQL + ` END`
 
 const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (` + catalog.VisibleReleaseIDsSQL + `),
  candidates AS (
@@ -35,7 +36,7 @@ const queueCandidatesSQL = `WITH visible AS NOT MATERIALIZED (` + catalog.Visibl
  LEFT JOIN visible v ON v.id=s.queue_release_id
  LEFT JOIN curation_stable_releases stable ON stable.id=s.queue_release_id
  WHERE s.subject=$1 AND settings.id=1
- AND (s.needs_work OR (s.queue_release_id IS NOT NULL AND s.status IN ('try_later','unlisted') AND s.next_attempt_at<=$2))
+ AND (s.needs_work OR (s.queue_release_id IS NOT NULL AND s.status IN ('try_later','unmatched') AND s.next_attempt_at<=$2))
  AND (v.id IS NOT NULL OR (s.subject='artist_media' AND s.queue_release_id IS NULL))
  AND (s.subject NOT IN ('lyrics','fingerprint') OR EXISTS (SELECT FROM tracks t JOIN media m ON m.id=t.medium_id
  WHERE t.id=s.target_id AND t.source_status='present' AND m.release_id=s.queue_release_id))

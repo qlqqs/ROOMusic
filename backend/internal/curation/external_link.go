@@ -57,6 +57,7 @@ type LinkApplied struct {
 }
 
 type linkState struct {
+	Split      *CreditSplit    `json:"split,omitempty"`
 	Provider   string          `json:"provider,omitempty"`
 	Source     string          `json:"source"`
 	Method     string          `json:"method"`
@@ -170,6 +171,16 @@ func addUnoccupiedLink(ctx context.Context, tx *sql.Tx, l Link) (string, error) 
 		return "", err
 	}
 	if existing == l.ExternalID {
+		// 独立的有效署名可以接管仅由拆分支撑的对应。
+		if l.ObjectType == "artist" && l.Method != "split_credit" {
+			r, err := tx.ExecContext(ctx, `UPDATE external_links SET method=$3,operation_id=$4 WHERE object_type='artist' AND object_id=$1 AND external_id=$2 AND source='musicbrainz' AND method='split_credit'`, l.ObjectID, l.ExternalID, l.Method, l.OperationID)
+			if err != nil {
+				return "", err
+			}
+			if n, err := r.RowsAffected(); err != nil || n > 0 {
+				return "", err
+			}
+		}
 		return "unchanged", nil
 	}
 	return "occupied", nil
