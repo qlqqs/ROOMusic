@@ -69,12 +69,22 @@ func (a adapter) claimed(ctx context.Context, c tool.Caller) (*curation.ModelRun
 	if err != nil {
 		return nil, nil, err
 	}
-	if !settings.Active || settings.EnabledBy.ID != c.User.ID {
+	if artistActor := curation.ArtistWebActor(ctx); artistActor != c.User.ID && (!settings.Active || settings.EnabledBy.ID != c.User.ID) {
 		return nil, nil, &tool.Error{Code: tool.CodePermissionDenied, Message: "当前操作者已不是自动整理开启者"}
 	}
 	items, err := a.writer.ClaimedItems(ctx, run.ConversationID)
 	if err != nil {
 		return nil, nil, err
+	}
+	// 同一模型回答可依次提交多位同名候选，第一条建议已经结清本项。
+	if len(items) == 0 && curation.ArtistWebActor(ctx) != "" && run.PendingItemID != "" {
+		p, err := a.writer.PendingItem(ctx, run.PendingItemID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if p.ArtistWebGeneration != nil && p.ConversationID == run.ConversationID && curation.SuggestionRecorded(p) {
+			items = []curation.PendingItem{p}
+		}
 	}
 	items = slices.DeleteFunc(items, func(p curation.PendingItem) bool {
 		if run.PendingItemID != "" && p.ID != run.PendingItemID {

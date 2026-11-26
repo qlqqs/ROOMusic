@@ -24,6 +24,8 @@ func taskKind(p curation.PendingItem) TaskKind {
 		return PatrolAndLocal
 	case p.Route == "lookup":
 		return LookupCandidate
+	case p.ArtistWebGeneration != nil:
+		return ArtistWeb
 	case p.Route == "web" || p.Kind == "artist_identity":
 		return WebFallback
 	case p.Kind == "release_match" || p.Kind == "recording_match":
@@ -34,11 +36,13 @@ func taskKind(p curation.PendingItem) TaskKind {
 }
 
 func rulesKind(kind TaskKind, p curation.PendingItem) bool {
-	return kind == SelectCandidate || kind == VerifyEvidence || p.Kind == "local_cleanup"
+	return kind == ArtistWeb || kind == SelectCandidate || kind == VerifyEvidence || p.Kind == "local_cleanup"
 }
 
 func itemLimits(kind TaskKind) (calls int, tokens int64) {
 	switch kind {
+	case ArtistWeb:
+		return curation.ArtistWebCallLimit, curation.ArtistWebTokenLimit
 	case LookupCandidate:
 		return 20, 150000
 	case WebFallback:
@@ -145,6 +149,8 @@ func firstMessage(items []curation.PendingItem) (string, error) {
 
 func writeRequirements(p curation.PendingItem) string {
 	switch p.Kind {
+	case "artist_identity":
+		return "核实本地署名，搜索网页并提交 MusicBrainz 艺人编号、依据和本项实际查到的引用。程序核对发行结构。"
 	case "release_match", "recording_match":
 		return "提交本项核对过的 MusicBrainz 编号。核对逐碟位置、曲名、时长和真实署名，署名可用登记别名、巡检规范名核实。完整专辑直接写入须超过四首、有可比时长且全部在容差内，短专辑须独立审查。有反证时须有独立标识。同组多版结构吻合可提交任一吻合发行，只写组级对应。子集须逐首以曲名和时长一一配对、至少四首且达到外部一半，超集须完整保留外部曲序前缀。部分吻合只接受唯一发行组。年份、厂牌、目录号、条码以外部版本实际值为准；只有具体建议时用 shelve_pending_item 的 fact。"
 	case "verify_name":
@@ -191,6 +197,12 @@ func (s *Scheduler) deferSourceItem(ctx context.Context, p curation.PendingItem,
 	kind := taskKind(p)
 	// 普通执行允许刚好用完本档额度。来源重试要在领取前留出完整的新一轮额度。
 	atLimit := itemAtLimit(kind, p.ItemToolCalls, p.ItemTokens)
+	if kind == ArtistWeb {
+		if atLimit {
+			return s.writer.ShelvePendingItem(ctx, p.ID, conversation, "item_limit")
+		}
+		return s.writer.ReleaseModelItems(ctx, conversation, []string{p.ID}, false, &retryAt)
+	}
 	return s.writer.DeferModelItem(ctx, p, conversation, string(kind), retryAt, atLimit)
 }
 
@@ -200,8 +212,14 @@ func (s *Scheduler) abandon(ctx context.Context, p curation.PendingItem, model, 
 			return err
 		}
 	}
+	if taskKind(p) == ArtistWeb && (reason == "item_limit" || itemAtLimit(ArtistWeb, p.ItemToolCalls, p.ItemTokens)) {
+		return s.writer.ShelvePendingItem(ctx, p.ID, conversation, "item_limit")
+	}
 	if !retryAt.IsZero() {
 		return s.deferSourceItem(ctx, p, conversation, retryAt)
+	}
+	if taskKind(p) == ArtistWeb {
+		return s.writer.FinishModelItem(ctx, p, conversation, "no_result")
 	}
 	if rulesKind(taskKind(p), p) {
 		return s.writer.FinishUndetermined(ctx, p, conversation, reason)

@@ -350,6 +350,9 @@ func (r *ExceptionResolver) acceptArtistIdentity(ctx context.Context, e curation
 	if item.Kind != "artist_identity" || !curation.SuggestionRecorded(item) || !strings.EqualFold(in.ItemID, item.ID) {
 		return staleException()
 	}
+	if item.ArtistWebGeneration != nil {
+		ctx = curation.WithArtistWebActor(ctx, actor)
+	}
 	plan, err := r.matcher.PlanArtistIdentity(ctx, item, in.Source, in.ExternalID)
 	if err != nil {
 		return classifyChange(err)
@@ -477,6 +480,9 @@ func (r *ExceptionResolver) Decline(ctx context.Context, id, actor string) (cura
 		if err != nil {
 			return e, err
 		}
+		if err = curation.CheckArtistWebInput(ctx, tx, item); err != nil {
+			return e, classifyChange(err)
+		}
 		if ids[item.ArtistID] != item.ArtistID || !curation.SuggestionRecorded(item) {
 			return e, staleException()
 		}
@@ -495,6 +501,12 @@ func (r *ExceptionResolver) Decline(ctx context.Context, id, actor string) (cura
 		}
 		if err = curation.SuppressExternalLink(ctx, tx, "artist", item.ArtistID, in.Source, externalID, "", actor); err != nil {
 			return e, err
+		}
+		if item.ArtistWebGeneration != nil {
+			_, err = tx.ExecContext(ctx, `UPDATE curation_pending_items SET resolution='no_result' WHERE id=$1 AND NOT EXISTS(SELECT FROM curation_model_exceptions WHERE pending_item_id=$1 AND status IN ('open','accepting','accepted'))`, item.ID)
+			if err != nil {
+				return e, err
+			}
 		}
 	case e.Tool == "correct_release" || e.Tool == "correct_track":
 		parse, suppress, target := governance.ParseCorrectionChanges, r.writer.SuppressReleaseValue, item.TargetID

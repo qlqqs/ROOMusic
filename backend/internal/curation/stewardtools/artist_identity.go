@@ -17,8 +17,8 @@ const urlSchema = `{"type":"string","minLength":1,"maxLength":2048}`
 type availability = func(context.Context, tool.Caller) bool
 
 func (a adapter) identityTool(available availability) tool.Definition {
-	return tool.Definition{Name: "resolve_artist_identity", Description: "提交已核对的 MusicBrainz 或 Wikidata 艺人身份，附判断依据与引用网页，经独立审查后建立对应。", MinRole: tool.RoleAdmin, Scope: tool.ScopeShared, Revertible: true, Available: available,
-		Input:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_id":` + idSchema + `,"source":{"type":"string","enum":["musicbrainz","wikidata"]},"external_id":{"type":"string","minLength":2,"maxLength":36},"basis":{"type":"object","additionalProperties":false,"properties":{"note":` + noteSchema + `,"citations":{"type":"array","maxItems":5,"items":` + urlSchema + `}},"required":["note","citations"]}},"required":["item_id","source","external_id","basis"]}`),
+	return tool.Definition{Name: "resolve_artist_identity", Description: "提交 MusicBrainz 艺人编号、判断依据与引用网页。有专辑结构佐证时建立对应，其他候选由管理员确认。", MinRole: tool.RoleAdmin, Scope: tool.ScopeShared, Revertible: true, Available: available,
+		Input:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"item_id":` + idSchema + `,"source":{"type":"string","enum":["musicbrainz"]},"external_id":{"type":"string","minLength":2,"maxLength":36},"basis":{"type":"object","additionalProperties":false,"properties":{"note":` + noteSchema + `,"citations":{"type":"array","maxItems":5,"items":` + urlSchema + `}},"required":["note","citations"]}},"required":["item_id","source","external_id","basis"]}`),
 		Output: json.RawMessage(`{"type":"object"}`), Preview: a.previewIdentity, Handler: a.resolveIdentity}
 }
 
@@ -82,6 +82,12 @@ func (a adapter) previewIdentity(ctx context.Context, c tool.Caller, raw json.Ra
 	if err != nil {
 		return tool.Preview{}, err
 	}
+	if item.ArtistWebGeneration != nil {
+		if in.Source != "musicbrainz" || !uuid.Valid(in.ExternalID) {
+			return tool.Preview{}, invalid()
+		}
+		return tool.Preview{BackgroundDirect: true, Summary: "程序核对艺人候选"}, nil
+	}
 	plan, err := a.matcher.PlanArtistIdentity(ctx, item, in.Source, in.ExternalID)
 	if err != nil {
 		return tool.Preview{}, toolError(err)
@@ -130,15 +136,37 @@ func (a adapter) resolveIdentity(ctx context.Context, c tool.Caller, raw json.Ra
 	if err != nil {
 		return nil, toolError(err)
 	}
-	if c.ReviewID == "" || c.ReviewDecision != "approved" {
-		return nil, &tool.Error{Code: tool.CodePermissionDenied, Message: "身份写入需要独立审查"}
-	}
-	proof, err := a.previewIdentity(ctx, c, raw)
-	if err != nil {
-		return nil, err
-	}
-	if proof.Contradicted {
-		return nil, toolError(operations.Conflict("no_evidence", "身份对应缺少网页佐证"))
+	if item.ArtistWebGeneration != nil {
+		_, proof, err := artistPageEvidence(ctx, run, item, in.Basis.Citations)
+		if err != nil {
+			return nil, toolError(err)
+		}
+		if !plan.StructureMatched() {
+			preview, err := json.Marshal(map[string]any{"changes": plan.Changes})
+			if err != nil {
+				return nil, err
+			}
+			evidence, err := json.Marshal(proof)
+			if err != nil {
+				return nil, err
+			}
+			id, err := a.writer.RecordSuggestion(ctx, curation.ModelException{PendingItemID: item.ID, ExpectedClaimDigest: item.ModelClaimDigest(), Tool: "resolve_artist_identity", Input: raw, Preview: preview, Evidence: evidence, Provider: run.Model, ConversationID: &run.ConversationID, ReasonCode: "no_evidence"})
+			if err != nil {
+				return nil, toolError(err)
+			}
+			return json.Marshal(map[string]string{"exception_id": id})
+		}
+	} else {
+		if c.ReviewID == "" || c.ReviewDecision != "approved" {
+			return nil, &tool.Error{Code: tool.CodePermissionDenied, Message: "身份写入需要独立审查"}
+		}
+		proof, err := a.previewIdentity(ctx, c, raw)
+		if err != nil {
+			return nil, err
+		}
+		if proof.Contradicted {
+			return nil, toolError(operations.Conflict("no_evidence", "身份对应缺少网页佐证"))
+		}
 	}
 	batch, err := run.Batch(ctx)
 	if err != nil {

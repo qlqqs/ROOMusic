@@ -89,6 +89,7 @@ func SaveWorkState(ctx context.Context, q Execer, s WorkState) error {
 }
 
 type PendingItem struct {
+	ArtistWebGeneration                                     *int64            `json:"-"`
 	PreparedLocal                                           map[string]any    `json:"-"`
 	PreparedVerification                                    *VerificationPlan `json:"-"`
 	EmptyCount                                              int               `json:"-"`

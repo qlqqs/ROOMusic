@@ -177,7 +177,7 @@ func (l backgroundLauncher) Start(ctx context.Context, p model.RunParams) (model
 		}
 	}
 	p.Run.EvidencePage = func(ctx context.Context, item, address string) (string, error) {
-		if item == "" || item != p.Run.PendingItemID || p.Run.TaskKind != string(model.WebFallback) {
+		if item == "" || item != p.Run.PendingItemID || (p.Run.TaskKind != string(model.WebFallback) && p.Run.TaskKind != string(model.ArtistWeb)) {
 			return "", operations.Invalid("invalid_citation", "引用不属于当前联网项")
 		}
 		if err := l.sources.Check(ctx, "web_search"); err != nil {
@@ -202,10 +202,10 @@ func (l backgroundLauncher) Start(ctx context.Context, p model.RunParams) (model
 		ctx = context.WithValue(ctx, itemKindKey{}, p.Items[0].Kind)
 	}
 	webEnabled := func(ctx context.Context) bool {
-		return p.Run.TaskKind == string(model.WebFallback) && l.sources != nil && l.sources.Check(ctx, "web_search") == nil
+		return (p.Run.TaskKind == string(model.WebFallback) || p.Run.TaskKind == string(model.ArtistWeb)) && l.sources != nil && l.sources.Check(ctx, "web_search") == nil
 	}
 	params := stewardapi.BackgroundParams{
-		RequestBudget: p.Budget, Verified: p.Verified, UserID: p.Run.ActorID, ConversationID: p.Run.ConversationID, Model: p.Run.Model, Text: p.Text, ReviewPlanID: p.ReviewPlanID, ItemID: p.Run.PendingItemID, ClaimDigests: p.Run.ClaimDigests,
+		RemainingItemBudget: p.RemainingItemBudget, ChargeEstimatedUsage: p.ChargeEstimatedUsage, RequestBudget: p.Budget, Verified: p.Verified, UserID: p.Run.ActorID, ConversationID: p.Run.ConversationID, Model: p.Run.Model, Text: p.Text, ReviewPlanID: p.ReviewPlanID, ItemID: p.Run.PendingItemID, ClaimDigests: p.Run.ClaimDigests,
 		WebSearchEnabled: webEnabled,
 		SystemSuffix:     backgroundPrompt(model.TaskKind(p.Run.TaskKind)),
 		BeforeRequest:    func(ctx context.Context) error { return curationRunError(p.BeforeRequest(ctx)) },
@@ -258,7 +258,7 @@ func applyTaskPrompt(params *stewardapi.BackgroundParams, p model.RunParams) {
 		}
 	case model.SelectCandidate:
 		params.Selection = func(reply string) ([]provider.ToolCall, error) { return selectionActions(reply, p.Items) }
-	case model.WebFallback:
+	case model.ArtistWeb, model.WebFallback:
 		params.StepLimit = 31
 	}
 }
@@ -304,7 +304,7 @@ func backgroundPrompt(kind model.TaskKind) string {
 		return base + matching + "使用 MusicBrainz 查询、读取工具，必要时改用原文、别名或不同查询。可以提交候选之外的发行或录音编号。没有可核对的结果就用 shelve_pending_item 放弃本档。年份、厂牌、目录号、条码有具体建议但缺少开放库字段依据时，用该工具的 fact 提交字段与值；后端先转联网求证，仍无外部值时只留建议。"
 	case model.VerifyEvidence:
 		return base + "按提供的佐证判断是否同一身份、是否明确错字。可按给定编号读回发行组版本、完整曲目或艺人别名。保留特殊写法、译名和风格，写法差异不纠正。用提交工具给出判断和理由。发行并入只按生效对应和结构证据。"
-	case model.WebFallback:
+	case model.ArtistWeb, model.WebFallback:
 		return base + matching + "用搜索和网页正文核对身份、简介、图片和待证明的主张。给出本次实际查到的引用、摘录和出处。发行编号须核对结构。遇到无法区分的同名艺人，在同一步分别提交各候选并说明歧义。没有证据时用 shelve_pending_item 结束本项。年份、厂牌、目录号、条码缺少开放库字段依据时，只用该工具的 fact 记录具体建议，网页和记忆均不能授权自动写入。"
 	default:
 		return base
@@ -420,6 +420,9 @@ func selectionActions(reply string, items []curation.PendingItem) ([]provider.To
 }
 
 func taskToolAllowed(kind model.TaskKind, name string) bool {
+	if kind == model.ArtistWeb {
+		return name == "web_search" || name == "fetch_page" || name == "resolve_artist_identity" || name == "shelve_pending_item"
+	}
 	switch name {
 	case "submit_patrol", "submit_local_cleanup":
 		return kind == model.PatrolAndLocal

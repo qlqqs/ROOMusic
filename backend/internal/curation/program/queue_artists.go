@@ -120,10 +120,9 @@ func (w *Worker) projectArtistPage(ctx context.Context, tx *sql.Tx, pageSQL stri
 		rank := min(e.ImageRank, e.BioRank)
 		want := rank < catalog.ArtistMediaLicensedRank || e.needsPrimaryName(providers)
 		if e.NoLink {
-			want = e.hasCredits && (providers.namedPlugin && rank < catalog.ArtistMediaPluginRank ||
-				providers.active["web_search"] && e.resolution() == "")
+			want = e.hasCredits && providers.namedPlugin && rank < catalog.ArtistMediaPluginRank
 		}
-		needs := !e.waitingForRecognition && (e.shouldClose() || want && (e.missingWebItem(providers) || needsWork("artist_media", state, digest([]any{e, providers.digest}), w.opts.Now(), false)))
+		needs := !e.waitingForRecognition && (e.shouldClose() || want && needsWork("artist_media", state, digest([]any{e, providers.digest}), w.opts.Now(), false))
 		if !want && rank > 0 && (!e.NoLink || e.hasCredits) {
 			item := mediaRecovery{Subject: "artist_media", ID: e.ID, Release: parents[e.ID], state: state, input: digest([]any{e, providers.digest}), imageRank: e.ImageRank, bioRank: e.BioRank}
 			if e.shouldClose() {

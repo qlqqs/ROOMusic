@@ -121,7 +121,8 @@ type Request struct {
 	// Tools 是本次允许的工具定义。
 	Tools []ToolDefinition `json:"tools,omitempty"`
 	// MaxOutputTokens 是输出上限；Messages 必须为正数，OpenAI 为零时省略。
-	MaxOutputTokens int `json:"max_output_tokens"`
+	MaxNativeSearchCalls int `json:"-"`
+	MaxOutputTokens      int `json:"max_output_tokens"`
 }
 
 // Usage 是本次请求的累计用量；nil 表示未提供，不估算。

@@ -34,6 +34,9 @@ const (
 
 // RunParams 是入口已取得的调用者身份、会话及模型配置，不包含端点密钥。
 type RunParams struct {
+	RemainingItemBudget  func() (int, int64)
+	ChargeEstimatedUsage func(context.Context, int64) error
+
 	RequestBudget    int64
 	BackgroundClaims map[string]string
 	// Selection 把一次无工具选择的文本答复转换为后端操作，操作单独留档。

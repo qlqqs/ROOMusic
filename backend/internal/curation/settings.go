@@ -85,6 +85,9 @@ func loadSettings(ctx context.Context, tx *sql.Tx) (Settings, error) {
 }
 
 func activeEnabler(ctx context.Context, tx *sql.Tx) (string, error) {
+	if actor := ArtistWebActor(ctx); actor != "" {
+		return actor, checkArtistWebActor(ctx, tx, actor)
+	}
 	s, err := loadSettings(ctx, tx)
 	if err != nil {
 		return "", err

@@ -358,7 +358,7 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 			return backgroundEnd(check.error)
 		}
 		var itemEnd RunEnd
-		if s.params.OnToolCalls != nil && (err == nil || s.params.RequestBudget == 0) {
+		if s.params.OnToolCalls != nil && s.params.RemainingItemBudget == nil && (err == nil || s.params.RequestBudget == 0) {
 			var countErr error
 			itemEnd, countErr = backgroundEnd(s.params.OnToolCalls(ctx, len(step.calls)+nativeSearchCount(step.content.Searches)))
 			if countErr != nil {
@@ -540,11 +540,42 @@ func (s *runState) readStep(ctx context.Context, request provider.Request) (mode
 	}
 	started := time.Now()
 	for attempt := 1; ; attempt++ {
+		var estimate int64
+		if s.params.RemainingItemBudget != nil {
+			calls, tokens := s.params.RemainingItemBudget()
+			if tokens <= 0 || calls <= 0 {
+				return modelStep{}, &requestCheckError{ErrItemLimit}
+			}
+			request.MaxNativeSearchCalls = calls
+			size, err := provider.RequestTokens(s.params.Protocol, s.params.Endpoint, request)
+			if err != nil {
+				return modelStep{}, err
+			}
+			input := size - int64(request.MaxOutputTokens)
+			if input >= tokens {
+				return modelStep{}, &requestCheckError{ErrItemLimit}
+			}
+			request.MaxOutputTokens = int(min(int64(request.MaxOutputTokens), tokens-input))
+			estimate = input + int64(request.MaxOutputTokens)
+		}
 		var events []Event
 		sink := s.sink
 		s.sink = func(e Event) { events = append(events, e) }
 		step, err := s.readModel(ctx, request)
 		s.sink = sink
+		if estimate > 0 {
+			if n := nativeSearchCount(step.content.Searches); n > 0 {
+				if countErr := s.params.OnToolCalls(context.WithoutCancel(ctx), n); countErr != nil {
+					return step, &requestCheckError{countErr}
+				}
+			}
+		}
+		if estimate > 0 && step.usage.InputTokens == nil && step.usage.OutputTokens == nil {
+			if chargeErr := s.params.ChargeEstimatedUsage(context.WithoutCancel(ctx), estimate); chargeErr != nil {
+				return step, chargeErr
+			}
+		}
+
 		if err == nil {
 			for _, e := range events {
 				sink(e)
@@ -565,13 +596,13 @@ func (s *runState) readStep(ctx context.Context, request provider.Request) (mode
 				return step, &requestCheckError{checkErr}
 			}
 		}
-		if checkErr := checkRequest(); checkErr != nil {
-			return step, &requestCheckError{checkErr}
-		}
 		if time.Since(started) >= 10*time.Second {
 			return step, err
 		}
 		s.recordUsage(ctx, UsageMain, step.usage)
+		if checkErr := checkRequest(); checkErr != nil {
+			return modelStep{}, &requestCheckError{checkErr}
+		}
 	}
 }
 

@@ -15,7 +15,7 @@ const QueueRankSQL = `CASE WHEN s.manual_requested_at IS NOT NULL THEN 0
 // SQL 分类与调度器的模型任务一一对应。
 const modelKindSQL = `CASE WHEN p.kind='local_cleanup' THEN 'local' WHEN p.kind='name_patrol' THEN 'patrol_local'
  WHEN p.route='lookup' THEN 'lookup'
- WHEN p.route='web' OR p.kind='artist_identity' THEN 'web'
+ WHEN p.kind='artist_identity' THEN 'artist_web' WHEN p.route='web' THEN 'web'
  WHEN p.kind IN ('release_merge','verify_artist_credit','verify_artist_merge','verify_name') THEN 'verify'
  WHEN p.kind IN ('release_match','recording_match') THEN 'select' END`
 
@@ -25,13 +25,10 @@ const modelQueueFromSQL = ` FROM curation_pending_items p
  CROSS JOIN LATERAL (SELECT work.manual_requested_at, p.attempts) s
  LEFT JOIN curation_work_states r ON r.subject='release' AND r.target_id=COALESCE(p.target_id,work.queue_release_id)
  CROSS JOIN curation_settings settings
- WHERE settings.id=1 AND p.status IN ('waiting_model','waiting_route') AND ` + PendingTargetVisibleSQL + `
- AND (p.kind<>'artist_identity' OR NOT EXISTS (` + ArtistReleaseCreditsSQL + `
- SELECT FROM credits c JOIN visible v ON v.id=c.release_id LEFT JOIN curation_work_states recognition
- ON recognition.subject='release' AND recognition.target_id=c.release_id
- WHERE c.artist_id=p.artist_id AND ` + ReleaseRecognitionPendingSQL + `))
- AND (COALESCE(p.target_id,work.queue_release_id) IS NULL OR EXISTS (SELECT FROM curation_stable_releases stable
- WHERE stable.id=COALESCE(p.target_id,work.queue_release_id)))`
+ WHERE settings.id=1 AND p.status IN ('waiting_model','waiting_route') AND (p.artist_web_generation IS NOT NULL OR ` + PendingTargetVisibleSQL + `)
+ AND (CASE WHEN p.kind='artist_identity' THEN EXISTS(SELECT FROM curation_artist_web_queue q
+ WHERE q.generation=p.artist_web_generation AND q.state='running' AND NOT p.artist_web_suspended) ELSE COALESCE(p.target_id,work.queue_release_id) IS NULL OR EXISTS (SELECT FROM curation_stable_releases stable
+ WHERE stable.id=COALESCE(p.target_id,work.queue_release_id)) END)`
 
 // 只有同目录的在途项与延后项全部允许时，才分派整目录。
 func localDirectoryReadySQL(at, excluded string) string {
@@ -83,6 +80,9 @@ func (w *Writer) BeforeModelKind(ctx context.Context, actor string, now time.Tim
 	settings, err := w.Settings(ctx)
 	if err != nil {
 		return ModelItemCheckpoint{}, err
+	}
+	if kind == "artist_web" {
+		return w.CheckDailyBudget(ctx, now, settings.DailyTokenLimit)
 	}
 	if !settings.Active || settings.EnabledBy.ID != actor {
 		return ModelItemCheckpoint{Reason: "disabled"}, nil

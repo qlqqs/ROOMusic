@@ -187,6 +187,23 @@ func addUnoccupiedLink(ctx context.Context, tx *sql.Tx, l Link) (string, error) 
 }
 
 func (w *Writer) ApplyLinks(ctx context.Context, request LinkRequest) (LinkApplied, error) {
+	return w.applyLinks(ctx, nil, request)
+}
+func (w *Writer) ApplyArtistReleaseLinks(ctx context.Context, tx *sql.Tx, item PendingItem, request LinkRequest) (LinkApplied, error) {
+	// 艺人项和艺人写锁由外层对应事务持有，发行必须属于该项领取时的证据。
+	var allowed bool
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM curation_pending_items p, jsonb_array_elements(p.evidence->'albums') a
+ WHERE p.id=$1 AND p.artist_id=$2 AND p.artist_web_generation IS NOT NULL AND p.input_digest=$3 AND a->>'id'=$4
+ AND (p.status='in_progress' AND p.conversation_id=$5 OR p.resolution='suggestion_recorded' AND $6))`, item.ID, item.ArtistID, item.InputDigest, request.ReleaseID, request.ConversationID, request.ConfirmedBy != "").Scan(&allowed)
+	if err != nil {
+		return LinkApplied{}, err
+	}
+	if !allowed {
+		return LinkApplied{}, operations.Conflict("item_stale", "发行不属于本次艺人核对")
+	}
+	return w.applyLinks(ctx, tx, request)
+}
+func (w *Writer) applyLinks(ctx context.Context, parent *sql.Tx, request LinkRequest) (LinkApplied, error) {
 	external, err := musicBrainzSource(request.ExternalSource, request.Source)
 	if err != nil {
 		return LinkApplied{}, err
@@ -209,13 +226,15 @@ func (w *Writer) ApplyLinks(ctx context.Context, request LinkRequest) (LinkAppli
 		return LinkApplied{}, err
 	}
 	applied := LinkApplied{Written: []LinkIntent{}, Skipped: map[string]string{}}
-	result, err := operations.Run(ctx, w.db, spec, func(ctx context.Context, tx *sql.Tx, operationID string) (operations.Outcome, error) {
+	execute := func(ctx context.Context, tx *sql.Tx, operationID string) (operations.Outcome, error) {
 		release, err := governance.LockAutoRelease(ctx, tx, id)
 		if err != nil {
 			return operations.Outcome{}, err
 		}
-		if err := checkWrite(ctx, tx, spec, request.ConfirmedBy, id, request.ExpectedRevision, release.EditRevision()); err != nil {
-			return operations.Outcome{}, err
+		if parent == nil {
+			if err := checkWrite(ctx, tx, spec, request.ConfirmedBy, id, request.ExpectedRevision, release.EditRevision()); err != nil {
+				return operations.Outcome{}, err
+			}
 		}
 		if request.verification != nil {
 			if err := request.verification.check(ctx, tx); err != nil {
@@ -269,7 +288,13 @@ func (w *Writer) ApplyLinks(ctx context.Context, request LinkRequest) (LinkAppli
 			err = request.verification.finish(ctx, tx, operationID)
 		}
 		return out, err
-	})
+	}
+	var result operations.Result
+	if parent == nil {
+		result, err = operations.Run(ctx, w.db, spec, execute)
+	} else {
+		result, _, err = operations.RunInTx(ctx, parent, spec, execute)
+	}
 	if err != nil {
 		var failure *operations.Failure
 		if errors.As(err, &failure) && failure.Code == "nothing_to_apply" {

@@ -40,7 +40,7 @@ func (w *Writer) RecordItemUsage(ctx context.Context, day time.Time, itemID, con
 
 func (w *Writer) AddItemCalls(ctx context.Context, itemID, conversation string, calls int) error {
 	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET item_tool_calls=item_tool_calls+$3
- WHERE id=$1 AND conversation_id=$2 AND status='in_progress'`, itemID, conversation, calls)
+ WHERE id=$1 AND conversation_id=$2 AND (status='in_progress' OR (artist_web_generation IS NOT NULL AND resolution='suggestion_recorded'))`, itemID, conversation, calls)
 	return err
 }
 
@@ -57,4 +57,10 @@ func (u ModelUsage) AtLimit(limit *int64) bool {
 func NextBudgetDay(now time.Time) time.Time {
 	y, m, d := now.Date()
 	return time.Date(y, m, d+1, 0, 0, 0, 0, now.Location())
+}
+
+// 端点未报告用量时，仅对手动艺人项扣除本次完整请求的估算。
+func (w *Writer) AddEstimatedItemTokens(ctx context.Context, item, conversation string, n int64) error {
+	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET item_tokens=item_tokens+$3 WHERE id=$1 AND conversation_id=$2 AND status='in_progress' AND artist_web_generation IS NOT NULL`, item, conversation, n)
+	return err
 }

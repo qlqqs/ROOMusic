@@ -914,16 +914,17 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 ## 网络搜索与身份待定项
 
-`web_search` 默认开启，能力为 `["artist_image","artist_bio"]`。仅该来源返回 `requirements`，顺序为 `{kind:"model",ready}`、`{kind:"search",ready}`，其他来源省略字段。两项依赖都按自动整理开启者的管家设置读取。整体开关、开启者或来源开关不可用时沿用对应原因；单独缺搜索时返回 `search_unconfigured`。对话模型未就绪由模型层给出原因，程序层在两项就绪时才建项。
+管理员显式启动艺人联网队列。单人使用 `GET/POST /api/v1/artists/{id}/web-search`，全量、进度和停止使用 `GET/POST/DELETE /api/v1/admin/curation/artist-web-search`。队列按照专辑主署名、曲目主署名排序，只领取当前运行代次中尚无 MusicBrainz 对应的有效艺人。停止保留剩余项和本项次数，重新启动接续。旧自动项不领取，历史建议仍可处理。查过且输入摘要未变的艺人跳过。艺人资料补齐继续处理已有对应和按名称查询的插件。
 
-程序在 SQL 分页中筛选有 MusicBrainz 或 Wikidata 艺人对应的有效艺人，以及同时满足以下条件的有效艺人：家族无对应、有在库的发行艺人、专辑艺人或曲目艺人主署名、缺图或缺简介。无对应的候选先由已启用的艺人插件按名查询。模型只收到名字、别名、至多 8 个专辑名与年份、12 个曲目名，以及图片与简介的缺口。整理摘要纳入对应、名字与署名样本、资料等级、抑制标记和相关来源状态。摘要变化可重开搁置项。程序收尾已对应、补齐、目标并入或失去主署名的待定项，并将其 `open` 例外置为 `superseded`，由采纳流程处理 `accepting` 例外。
+`resolve_artist_identity` 接受 MusicBrainz 艺人编号、说明和本项实际取得的 1 至 5 个网页引用。程序查询候选艺人名下发行，按 A2.3 核对本地结构。吻合即确认艺人，唯一版本写版本及曲目对应，同组多版只认到组，跨组记发行冲突，仅写艺人对应。完全无结构吻合时留给管理员通过现有例外接口确认或否掉，否掉会抑制该对应。手动队列不走独立审查。匹配后的图片、简介由资料程序补齐。
 
-迁移 0074 使用两个互斥的目标列。发行继续使用 `target_id`；艺人项使用 `target_type=artist,artist_id,kind=artist_identity`，未结束项按艺人及种类唯一。领取、到期判断与计数共用目标可见性。后台通过 `read_pending_items` 读取已领取艺人项的 `item_id,kind,artist_id,evidence`，同一模型层每日额度覆盖主模型与审查。
+每位艺人最多执行 10 次工具调用。每次模型请求和重试前检查共享日账与本项剩余的 50000 token，按完整协议请求估算输入并限制输出。已发送请求按上游报告结算，最后一次实耗可越过余量，触线后停止发送。上游完全缺报 usage 时，本项扣除输入估算加此次输出上限，共享日账仅记录已报告用量。
 
-* `resolve_artist_identity` 提交外部来源、编号和 `basis={note,citations}`，引用为 1 至 5 个 HTTP(S) 网址。程序核验条目类型、本地与外部名字或别名、家族已有对应和抑制标记，再交独立审查。MusicBrainz 类型为空时仍可核对，只拒绝 `Other` 与 `Character`。Wikidata 要求人物或音乐团体的 P31。审查通过写模型来源的 `artist_link`，同事务结束身份项。已有对应返回 `occupied`。
-* `submit_artist_media` 提交一项或两项资料，共用 1 至 5 个 `{url,title}` 网页引用。标题 schema 使用 `maxLength: 500`。标题清理为纯文本后允许空串，长度以艺人页使用的 500 个 UTF-16 码元为上限。写库前复查引用数量、URL 形状及标题长度与编码。简介去 HTML 后为 20 至 4000 个 Unicode 字符，语言为 zh 或 en。图片所在网页须在引用中，下载限 10 秒、16 MiB，校验格式和尺寸，短边至少 200 像素。图片下载和引用公网检查使用管家联网合同的出站规则。媒体操作来源为 `model/web_search`，模型名单独记录。任一项写入即以 `resolved/model_media` 结束本次待定项。程序层按更新后的缺口和输入摘要判断是否为剩余缺口创建新项。[管家联网合同](steward-web-contracts.md)
+历史网页资料的写入与撤销合同如下。
+
+* `submit_artist_media` 提交一项或两项资料，共用 1 至 5 个 `{url,title}` 网页引用。标题 schema 使用 `maxLength: 500`。标题清理为纯文本后允许空串，长度以艺人页使用的 500 个 UTF-16 码元为上限。写库前复查引用数量、URL 形状及标题长度与编码。简介去 HTML 后为 20 至 4000 个 Unicode 字符，语言为 zh 或 en。图片所在网页须在引用中，下载限 10 秒、16 MiB，校验格式和尺寸，短边至少 200 像素。图片下载和引用公网检查使用管家联网合同的出站规则。媒体操作来源为 `model/web_search`，模型名单独记录。任一项写入即以 `resolved/model_media` 结束本次待定项。[管家联网合同](steward-web-contracts.md)
 * 写入按对应、名字或模型领取关系复查依据。有许可来源、插件、网络搜索的等级依次降低。更高等级的自动资料事务内替换家族内的低等级行，旧行保存在操作的 `replaced` 快照。撤销只删除新操作持有的行，旧图提交后按引用清理。网络搜索图片的外部标识是图片地址的 SHA-256，简介固定为 `artist`。插件沿用条目 ID。
-* 例外同时返回可空的 `release` 和 `artist`，后者形状为 `{id,name}`。同项允许多个未决身份候选。采纳时复查预览，记录确认者并写对应，仅将同项的 `open` 候选置为 `superseded`。`accepting` 候选保留原状态和确认者，后续由其采纳流程按 `occupied` 等既有判定处理。待定项的采纳收尾在没有 `open` 或 `accepting` 候选时将该项置为 `resolved`。不采纳时写 `external_link` 抑制，最后一个候选被拒后重新排队。状态接口返回 `none|queued|running|shelved|waiting_human` 与 `candidates` 数组，候选引用的标题为 `""`。
+* 例外同时返回可空的 `release` 和 `artist`，后者形状为 `{id,name}`。同项允许多个未决身份候选。采纳时复查预览，记录确认者并写对应，仅将同项的 `open` 候选置为 `superseded`。`accepting` 候选保留原状态和确认者，后续由其采纳流程按 `occupied` 等既有判定处理。待定项的采纳收尾在没有 `open` 或 `accepting` 候选时将该项置为 `resolved`。不采纳时写 `external_link` 抑制，最后一个候选被拒后本次查找结为 `no_result`。状态接口返回 `none|queued|running|shelved|waiting_human` 与 `candidates` 数组，候选引用的标题为 `""`。
 * 离线试用可为 mock 的 `-script` 选择 `backend/internal/upstreammock/testdata/artist-{identity,media,candidates}.json`。用主署名“纸屿”试验身份与同名候选，用“海岸来信”试验图片与简介。示例插件用“折纸灯乐团”试验按名补简介。
 
 工具边界验证应覆盖第六条引用、501 字标题、经管家出站放行名单登记的内网地址，以及纯文本标题写入。集成验证应覆盖单项资料写入后原待定项的结论、剩余缺口的新摘要、人工资料优先和程序收尾时的例外状态。
@@ -1141,7 +1142,7 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 | 第一档选择 | 有可用候选的 `release_match`、`recording_match`，发行与录音分批 | 一次主模型请求，不带工具与原生搜索；首条消息含本地真实性、逐碟曲序与时长、每个候选的完整曲目；严格 JSON：`select`（只接受发给该项的编号）或带理由的 `undetermined` | 选定的交 26.2；定不了则按 25.4 结案 |
 | 第二档自己查 | `waiting_route/lookup`（第一档升级与 C 的零候选），`LookupTierReady` 为真才启动 | 管家后台运行，按艺人打包，`search_music_metadata`、`get_music_metadata`、提交任何 MB 编号、放弃；每项 20 次工具调用、15 万 token | 来源可用时放弃或触限：网络搜索可用转 `web`，否则 `FinishUnlisted` |
 | 核对判断 | `verify_artist_credit`（C 的署名提案）、`verify_artist_merge`、`verify_name`；`release_merge` 单独打包 | 只开放提交判断；身份取同一/不同/拿不准，纠正取错字/写法差异/译名差异/拿不准；沿用管家单次运行的总保护 | 写法或译名差异不改；有主张而缺证据转联网 |
-| 联网兜底 | `waiting_route/web`、第二档放弃、无外部对应的 `artist_identity`、待求证的建议；按艺人在库专辑组数降序 | `web_search` 或原生搜索、`fetch_page`、提交；每项 30 次工具调用、30 万 token；计入共享日额度 | 来源可用时无结果或触限即结束；发行识别无对应调用 `FinishUnlisted` |
+| 联网兜底 | `waiting_route/web`、第二档放弃、待求证的建议；按艺人在库专辑组数降序 | `web_search` 或原生搜索、`fetch_page`、提交；每项 30 次工具调用、30 万 token；计入共享日额度 | 来源可用时无结果或触限即结束；发行识别无对应调用 `FinishUnlisted` |
 
 - 共享每日上限在项边界检查（`BeforeModelItem`），达到上限时已开始的项可以完成，日额度最多额外消耗「并发数减一」个在途项的用量。到期重审重新占用名额时复查日额度，额度用尽则保留原方案。第二档与联网档按每次请求的实际 usage 与工具调用次数记账。相同路线的 `try_later` 跨会话累计，来源故障时达到上限按 28.1 排定复查。来源可用时沿用本档的超额处理。
 - 自查和联网的 MusicBrainz 工具调用共用现有来源限速器。后台网页工具按开启者、工具组和整理会话计量，同一会话的各项与重审共用额度，并行会话各自计量。交互用户沿用每用户限额。

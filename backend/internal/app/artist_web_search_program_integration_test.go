@@ -43,7 +43,7 @@ func TestPostgreSQLArtistWebSearchProgramScope(t *testing.T) {
 	merge := &artistMergeFixture{programFixture: &programFixture{curationFixture: f.curationFixture}}
 	stale := f.pendingArtist(t, merged, "并入既有对应")
 	conversation := modelConversation(t, f.curationFixture)
-	modelClaim(t, f.curationFixture, conversation, stale)
+	mustExec(t, app, `UPDATE curation_pending_items SET status='in_progress',conversation_id=$2,claimed_at=now() WHERE id=$1`, stale.ID, conversation)
 	makeException := func(externalID string) string {
 		t.Helper()
 		input, err := json.Marshal(webSearchIdentityProposal(stale.ID, "wikidata", externalID, f.endpoint+"/searxng/artists/coast"))
@@ -77,14 +77,18 @@ func TestPostgreSQLArtistWebSearchProgramScope(t *testing.T) {
 	b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_model_exceptions WHERE id=$1 AND status='superseded' AND decided_at IS NOT NULL`, open)
 	b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_model_exceptions WHERE id=$1 AND status='accepting' AND decided_at IS NULL AND decided_by=$2`, accepting, f.admin.id)
 	for _, name := range []string{"缺资料主艺人", "有合作者的主艺人", "只有曲目主署名", "艺人专辑署名"} {
-		f.status(t, f.artistID(t, name), "queued", 0)
+		f.status(t, f.artistID(t, name), "none", 0)
 	}
 
+	created := app.request(t, http.MethodPost, "/api/v1/artists/"+main+"/web-search", nil, &f.admin, nil)
+	if created.Code != http.StatusAccepted {
+		t.Fatalf("手动加入艺人 HTTP %d %s", created.Code, created.Body)
+	}
 	item := f.artistItem(t, main)
 	evidence := decodeArtistWorkEvidence(t, item)
 	if !slices.Contains(evidence.Names, "缺资料主艺人") || len(evidence.Albums) != 1 ||
 		evidence.Albums[0].Name != "沿岸合成专辑" || evidence.Albums[0].Year != 2024 ||
-		!slices.Equal(evidence.Tracks, []string{"潮声合成曲目"}) || !evidence.Gaps.Image || !evidence.Gaps.Bio {
+		!slices.Equal(evidence.Tracks, []string{"潮声合成曲目"}) {
 		t.Fatalf("主署名待定项证据 %+v", evidence)
 	}
 	f.clock.advance(t, time.Minute)
@@ -153,18 +157,8 @@ func TestPostgreSQLArtistWebSearchProgramPluginName(t *testing.T) {
 			if !named.Load() {
 				t.Fatal("没有按艺人名且无 MBID 的插件请求")
 			}
-			if !tc.webEnabled || tc.manualImage {
-				f.status(t, artist, "none", 0)
-				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_pending_items WHERE artist_id=$1`, artist)
-				return
-			}
-
-			f.status(t, artist, "queued", 0)
-			item := f.artistItem(t, artist)
-			evidence := decodeArtistWorkEvidence(t, item)
-			if !evidence.Gaps.Image || evidence.Gaps.Bio {
-				t.Fatalf("插件写入后留下的待定项证据 %+v", evidence)
-			}
+			f.status(t, artist, "none", 0)
+			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_pending_items WHERE artist_id=$1`, artist)
 		})
 	}
 }

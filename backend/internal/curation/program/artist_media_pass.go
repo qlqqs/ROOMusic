@@ -22,7 +22,6 @@ type artistEvidence struct {
 	NoLink                             bool
 	hasCredits, waitingForRecognition  bool
 	pendingStatus                      string
-	finishedForInput                   bool
 	albumAuth, trackAuth               []metadata.Authenticity
 }
 
@@ -46,10 +45,6 @@ func (e artistEvidence) resolution() string {
 func (e artistEvidence) shouldClose() bool {
 	reason := e.resolution()
 	return !e.waitingForRecognition && e.pendingStatus != "" && reason != "" && !(reason == "filled" && e.pendingStatus == "in_progress")
-}
-
-func (e artistEvidence) missingWebItem(providers artistProviders) bool {
-	return e.NoLink && providers.active["web_search"] && e.resolution() == "" && e.pendingStatus == "" && !e.finishedForInput
 }
 
 const artistMediaCandidatesSQL = `SELECT a.id FROM artists a
@@ -127,12 +122,8 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 			ON recognition.subject='release' AND recognition.target_id=c.release_id
 			WHERE c.canonical_id=p.canonical_id AND `+curation.ReleaseRecognitionPendingSQL+`),
 		COALESCE((SELECT status FROM curation_pending_items pi WHERE pi.artist_id=p.canonical_id
-			AND pi.target_type='artist' AND pi.kind='artist_identity' AND pi.status<>'resolved'),''),
-		EXISTS(SELECT FROM curation_pending_items pi JOIN curation_work_states w
-			ON w.subject='artist_media' AND w.target_id=pi.artist_id AND w.input_digest=pi.input_digest
-			WHERE pi.artist_id=p.canonical_id AND pi.kind='artist_identity' AND pi.status='resolved'
-			AND pi.resolution IN ('no_result','suggestion_recorded') AND pi.candidates='[]' AND pi.conflicts='[]'),
-        (SELECT jsonb_build_object('link_id',l.link_id,'source',l.source,'external_id',l.external_id)
+			AND pi.target_type='artist' AND pi.kind='artist_identity' AND pi.artist_web_generation IS NULL AND pi.status<>'resolved'),''),
+		(SELECT jsonb_build_object('link_id',l.link_id,'source',l.source,'external_id',l.external_id)
          FROM artist_merged_primary_links l WHERE l.artist_id=p.canonical_id AND l.artist_primary_name IS NULL)
     FROM page p JOIN artists a ON a.id=p.canonical_id LEFT JOIN artist_profiles profile ON profile.artist_id=p.canonical_id
 	ORDER BY p.canonical_id`, args...)
@@ -144,7 +135,7 @@ func artistMediaPage(ctx context.Context, db catalog.Queryer, pageSQL string, ar
 	for rows.Next() {
 		var e artistEvidence
 		var ids, qids, markers, names, lookup []byte
-		if err := rows.Scan(&e.ID, &e.Name, &ids, &qids, &e.ImageRank, &e.BioRank, &markers, &names, &e.Albums, &e.Tracks, &e.hasCredits, &e.waitingForRecognition, &e.pendingStatus, &e.finishedForInput, &lookup); err != nil {
+		if err := rows.Scan(&e.ID, &e.Name, &ids, &qids, &e.ImageRank, &e.BioRank, &markers, &names, &e.Albums, &e.Tracks, &e.hasCredits, &e.waitingForRecognition, &e.pendingStatus, &lookup); err != nil {
 			return nil, err
 		}
 		if len(lookup) > 0 {
@@ -239,22 +230,13 @@ func (w *Worker) artistProviders(ctx context.Context) (artistProviders, error) {
 	var namedPlugin bool
 	for _, s := range settings {
 		switch s.ID {
-		case "musicbrainz", "wikidata", "commons", "wikipedia", "fanarttv", "theaudiodb", "web_search":
+		case "musicbrainz", "wikidata", "commons", "wikipedia", "fanarttv", "theaudiodb":
 		default:
 			if !strings.HasPrefix(s.ID, "plugin:") || !slices.Contains(s.Capabilities, sources.ArtistImageLookup) && !slices.Contains(s.Capabilities, sources.ArtistBioLookup) {
 				continue
 			}
 		}
 		active[s.ID] = s.Active
-		if s.ID == "web_search" {
-			for _, requirement := range s.Requirements {
-				if requirement.Ready {
-					state = append(state, s.ID+"/"+requirement.Kind)
-				} else {
-					active[s.ID] = false
-				}
-			}
-		}
 		if strings.HasPrefix(s.ID, "plugin:") && s.Active {
 			namedPlugin = true
 		}
@@ -287,7 +269,7 @@ func (w *Worker) closeInactiveArtistItems(ctx context.Context, priority func() e
 			return err
 		}
 		page, err := artistMediaPage(ctx, w.db, `SELECT artist_id FROM curation_pending_items
-			WHERE target_type='artist' AND kind='artist_identity' AND status<>'resolved'
+			WHERE target_type='artist' AND kind='artist_identity' AND artist_web_generation IS NULL AND status<>'resolved'
 			AND artist_id>COALESCE(NULLIF($1,'')::uuid,'00000000-0000-0000-0000-000000000000'::uuid)
 			ORDER BY artist_id LIMIT $2`, after, pageSize)
 		if err != nil || len(page) == 0 {
@@ -316,8 +298,8 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 	}
 	if e.NoLink {
 		canUpgrade := providers.namedPlugin && min(e.ImageRank, e.BioRank) < catalog.ArtistMediaPluginRank
-		canQueue := providers.active["web_search"] && e.resolution() == ""
-		if !e.hasCredits || !canUpgrade && !canQueue {
+
+		if !e.hasCredits || !canUpgrade {
 			return nil
 		}
 	} else if !e.needsPrimaryName(providers) && e.ImageRank >= catalog.ArtistMediaLicensedRank && e.BioRank >= catalog.ArtistMediaLicensedRank {
@@ -325,7 +307,7 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 	}
 	input := digest([]any{e, providers.digest})
 	// 模型写入一项资料后结束原项，程序用当前缺口和摘要建立下一项。
-	if !e.missingWebItem(providers) && !needsWork(subject, state, input, w.opts.Now(), false) {
+	if !needsWork(subject, state, input, w.opts.Now(), false) {
 		return nil
 	}
 	if err := w.ready(ctx); err != nil {
@@ -351,7 +333,7 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 	if e.ImageRank == 0 && e.BioRank == 0 {
 		state.Status = "no_match"
 	}
-	if e.NoLink && (e.pendingStatus != "" || providers.active["web_search"]) {
+	if e.NoLink && e.pendingStatus != "" {
 		return w.finishArtistState(ctx, e, providers, &state)
 	}
 	return curation.SaveWorkState(ctx, w.db, state)
@@ -359,11 +341,6 @@ func (w *Worker) processArtistMedia(ctx context.Context, e artistEvidence, provi
 
 // 建项或收尾时在目录写锁内重读。资料写入、认领和当前批次外的人工改动可能发生在插件查询期间。
 func (w *Worker) finishArtistState(ctx context.Context, observed artistEvidence, p artistProviders, state *curation.WorkState) error {
-	if state != nil && p.active["web_search"] && observed.resolution() == "" {
-		if err := w.sources.Check(ctx, "web_search"); err != nil {
-			return err
-		}
-	}
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -389,13 +366,7 @@ func (w *Worker) finishArtistState(ctx context.Context, observed artistEvidence,
 				return err
 			}
 		}
-	} else if state != nil && p.active["web_search"] {
-		input := digest([]any{e, p.digest})
-		evidence := map[string]any{"authenticity": e.sampleAuthenticity(), "names": e.Names, "albums": e.Albums, "tracks": e.Tracks, "gaps": map[string]bool{"image": e.ImageRank == 0, "bio": e.BioRank == 0}}
-		item := curation.PendingItem{TargetType: "artist", ArtistID: e.ID, Kind: "artist_identity", RuleVersion: resourceRuleVersion, InputDigest: input, Evidence: jsonValue(evidence)}
-		if err := curation.UpsertPendingItem(ctx, tx, item); err != nil {
-			return err
-		}
+
 	}
 	if state != nil {
 		if state.InputDigest != digest([]any{e, p.digest}) {

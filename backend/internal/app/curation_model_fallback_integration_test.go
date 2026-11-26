@@ -560,15 +560,15 @@ func TestPostgreSQL整理同位外部署名经审查建立对应(t *testing.T) {
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_artist_credit_proposals WHERE id=$1 AND status='accepted'`, id)
 }
 
-func TestPostgreSQL整理艺人联网无结果后程序队列排空(t *testing.T) {
+func TestPostgreSQLArtistWebSearchNoResultDoesNotRestart(t *testing.T) {
 	f := newArtistWebSearchFixture(t, "", true, false, nil)
 	f.configureMock(t)
 	artist := f.addArtist(t, "合成无外部对应艺人")
 	f.enable(t)
 	f.clock.advance(t, time.Minute)
-	item := f.artistItem(t, artist)
+	item := f.startArtist(t, artist)
 	conversation := modelConversation(t, f.curationFixture)
-	claims, err := f.writer.ClaimModelKind(t.Context(), conversation, f.clock.options().Now(), 1, []string{"artist"}, "web", "")
+	claims, err := f.writer.ClaimModelKind(curation.WithArtistWebActor(t.Context(), f.admin.id), conversation, f.clock.options().Now(), 1, []string{"artist"}, "artist_web", "")
 	requireCurationOK(t, err)
 	if len(claims) != 1 || claims[0].ID != item.ID {
 		t.Fatalf("艺人项未领取：%+v", claims)

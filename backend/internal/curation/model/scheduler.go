@@ -53,6 +53,9 @@ type Run interface {
 }
 
 type RunParams struct {
+	RemainingItemBudget  func() (int, int64)
+	ChargeEstimatedUsage func(context.Context, int64) error
+
 	Budget             int64
 	Verified           bool
 	Items              []curation.PendingItem
@@ -200,7 +203,25 @@ func (s *Scheduler) Run(ctx context.Context) {
 
 // 单一领取循环按包预留目标键；候选准备、模型运行和收尾可在不同包之间并行。
 func (s *Scheduler) dispatch(ctx context.Context) (bool, error) {
+	now := s.options.Now()
+	manual, err := s.writer.ReadyArtistWebActor(ctx, now)
+	if err != nil {
+		return false, err
+	}
+	if manual != "" {
+		active, err := s.dispatchFor(curation.WithArtistWebActor(ctx, manual))
+		if err != nil || active {
+			return active, err
+		}
+	}
+	return s.dispatchFor(ctx)
+}
+
+func (s *Scheduler) dispatchFor(ctx context.Context) (bool, error) {
 	progress, actor, err := s.conditions(ctx, true)
+	if err == nil && progress.modelBusy {
+		return false, nil
+	}
 	if err == nil && progress.PauseKind != nil && *progress.PauseKind == "provider_quota" && progress.RetryAt != nil && !progress.RetryAt.After(s.options.Now()) && !progress.Today.AtLimit(progress.DailyTokenLimit) && progress.Configured && progress.State == "unavailable" {
 		err = s.probe(ctx, progress, actor, false)
 		return false, err
@@ -220,7 +241,7 @@ func (s *Scheduler) dispatch(ctx context.Context) (bool, error) {
 	}
 
 	now := s.options.Now()
-	if progress.State == "idle" {
+	if progress.State == "idle" && curation.ArtistWebActor(ctx) == "" {
 		if err := s.writer.MaterializePatrol(ctx, program.PatrolPromptVersion); err != nil {
 			return false, err
 		}
@@ -531,6 +552,16 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 	trackedID := ""
 	p := items[0]
 	calls, tokens := p.ItemToolCalls, p.ItemTokens
+	if kind == ArtistWeb {
+		params.RemainingItemBudget = func() (int, int64) { return curation.ArtistWebCallLimit - calls, curation.ArtistWebTokenLimit - tokens }
+		params.ChargeEstimatedUsage = func(ctx context.Context, n int64) error {
+			if err := s.writer.AddEstimatedItemTokens(ctx, p.ID, conversation, n); err != nil {
+				return err
+			}
+			tokens += n
+			return nil
+		}
+	}
 	if p.ClaimSourceRecoveryAt != nil {
 		failures.record(*p.ClaimSourceRecoveryAt)
 	}
@@ -546,7 +577,7 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 		}
 		return failures.retryAt(now, p.SourceRetryCount)
 	}
-	if kind == LookupCandidate || kind == WebFallback {
+	if kind == LookupCandidate || kind == WebFallback || kind == ArtistWeb {
 		trackedID = p.ID
 		params.Run.SourceUnavailable = func(ctx context.Context, recovery time.Time) error {
 			if recovery.IsZero() {
@@ -576,12 +607,24 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 	firstRequest := true
 	params.BeforeRequest = func(ctx context.Context) error {
 		// 在途答案可落地，下一次实际出站前再检查全局暂停。
-		live, enabler, err := s.conditions(ctx, firstRequest)
+		live, enabler, err := s.conditions(ctx, firstRequest || kind == ArtistWeb)
 		if err != nil {
 			return err
 		}
 		if enabler != actor || live.config.Key != w.config || live.State != "idle" || live.PauseKind != nil || !live.allows(kind) {
 			return ErrStopped
+		}
+		if kind == ArtistWeb {
+			ok, err := s.writer.ArtistWebRunning(ctx, *p.ArtistWebGeneration, p.ID)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return ErrStopped
+			}
+			if itemAtLimit(kind, calls, tokens) {
+				return ErrItemLimit
+			}
 		}
 		firstRequest = false
 		return nil
@@ -596,7 +639,7 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 		if err := s.checkRunConditions(ctx, actor, items); err != nil {
 			return err
 		}
-		if itemLimit(kind, calls, tokens) || (itemAtLimit(kind, calls, tokens) && !sourceRetryAt(s.options.Now()).IsZero()) {
+		if kind != ArtistWeb && (itemLimit(kind, calls, tokens) || (itemAtLimit(kind, calls, tokens) && !sourceRetryAt(s.options.Now()).IsZero())) {
 			return ErrItemLimit
 		}
 		if len(items) == 1 {
@@ -622,13 +665,16 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 		if usageErr != nil {
 			return usageErr
 		}
+		if kind == ArtistWeb && calls+n > curation.ArtistWebCallLimit {
+			return ErrItemLimit
+		}
 		if trackedID != "" && n > 0 {
 			if err := s.writer.AddItemCalls(ctx, trackedID, conversation, n); err != nil {
 				return err
 			}
 			calls += n
 		}
-		if itemLimit(kind, calls, tokens) {
+		if kind != ArtistWeb && itemLimit(kind, calls, tokens) {
 			return ErrItemLimit
 		}
 		return nil
@@ -672,7 +718,7 @@ func (s *Scheduler) runBatch(ctx context.Context, w *modelWork, conversation str
 		reason = "provider_error"
 	}
 	now := s.options.Now()
-	if itemAtLimit(kind, calls, tokens) && !sourceRetryAt(now).IsZero() {
+	if itemAtLimit(kind, calls, tokens) && (kind == ArtistWeb || !sourceRetryAt(now).IsZero()) {
 		reason = "item_limit"
 	} else if itemLimit(kind, calls, tokens) && reason != "provider_error" && reason != "cancelled" && reason != "review_unavailable" {
 		reason = "item_limit"

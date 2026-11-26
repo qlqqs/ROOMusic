@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
 type TaskKind string
@@ -16,6 +19,7 @@ const (
 	VerifyEvidence  TaskKind = "verify"
 	LookupCandidate TaskKind = "lookup"
 	WebFallback     TaskKind = "web"
+	ArtistWeb       TaskKind = "artist_web"
 )
 
 // QueueOrder 让各任务提供自己的就绪判据。第二档暂不可启动时继续检查联网任务。
@@ -80,6 +84,40 @@ func (s *Scheduler) nextKind(ctx context.Context, now time.Time, conditions sche
 // 到期的重审优先；只要包内有一项目标已被占用，就继续寻找其他会话。
 func (s *Scheduler) nextWork(ctx context.Context, actor string, progress schedulingConditions, now time.Time, excluded []string) (*modelWork, error) {
 	w := &modelWork{actor: actor, model: progress.Model, config: progress.config.Key, budget: progress.budget, verified: progress.verified}
+	if curation.ArtistWebActor(ctx) != "" {
+		if progress.State != "idle" || !progress.allows(ArtistWeb) {
+			return nil, nil
+		}
+		ready, err := s.writer.PeekModelKind(ctx, now, 1, string(ArtistWeb), excluded)
+		if err != nil || len(ready) == 0 {
+			return nil, err
+		}
+		if err = curation.CheckArtistWebInput(ctx, s.db, ready[0]); err != nil {
+			var f *operations.Failure
+			if !errors.As(err, &f) || f.Code != "item_stale" {
+				return nil, err
+			}
+			_, err = s.db.ExecContext(ctx, `UPDATE curation_pending_items SET status='resolved',resolution='input_changed',resolved_at=now(),next_attempt_at=NULL,updated_at=now()
+        WHERE id=$1 AND updated_at=$2 AND status IN ('waiting_model','waiting_route')`, ready[0].ID, ready[0].UpdatedAt)
+			if err == nil {
+				s.Wake()
+			}
+			return nil, err
+		}
+		point, err := s.writer.BeforeModelKind(ctx, actor, now, string(ArtistWeb))
+		if err != nil || point.Reason != "" {
+			return nil, err
+		}
+		w.conversation, err = s.launcher.CreateConversation(ctx, actor, "整理艺人", progress.Model)
+		if err != nil {
+			return nil, err
+		}
+		w.items, err = s.writer.ClaimPreparedKind(ctx, w.conversation, now, string(ArtistWeb), ready)
+		if err != nil || len(w.items) == 0 {
+			return nil, errors.Join(err, s.launcher.DeleteConversation(ctx, actor, w.conversation))
+		}
+		return w, nil
+	}
 	err := s.db.QueryRowContext(ctx, `SELECT conversation_id,review_retries FROM curation_pending_items p
  WHERE status='in_progress' AND next_attempt_at<=$1 AND $3
  AND NOT EXISTS (

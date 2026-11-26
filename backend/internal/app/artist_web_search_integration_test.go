@@ -144,6 +144,15 @@ func (f *artistWebSearchFixture) addArtist(t *testing.T, name string) string {
 	return f.artistID(t, name)
 }
 
+func (f *artistWebSearchFixture) startArtist(t *testing.T, artist string) curation.PendingItem {
+	t.Helper()
+	r := f.application.request(t, http.MethodPost, "/api/v1/artists/"+artist+"/web-search", nil, &f.admin, nil)
+	if r.Code != http.StatusAccepted {
+		t.Fatalf("联网查找 HTTP %d %s", r.Code, r.Body)
+	}
+	return f.artistItem(t, artist)
+}
+
 func (f *artistWebSearchFixture) pendingArtist(t *testing.T, artist, name string) curation.PendingItem {
 	t.Helper()
 	if f.requests != nil {
@@ -342,11 +351,10 @@ func TestPostgreSQLArtistWebSearchIdentityRejectionsAndStates(t *testing.T) {
 		return true
 	})
 	artist := f.addArtist(t, webSearchArtistName)
-	item := f.pendingArtist(t, artist, webSearchArtistName)
-	f.status(t, artist, "queued", 0)
+	item := f.startArtist(t, artist)
+
 	requireAPIError(t, f.application.request(t, http.MethodGet, "/api/v1/artists/"+artist+"/web-search", nil, &f.ordinary, nil), 403, "forbidden")
 	modelSuppressLink(t, &programFixture{curationFixture: f.curationFixture}, "artist", artist, artistMediaMBID)
-	f.enable(t)
 
 	next := f.next(t, false)
 	f.status(t, artist, "running", 0)
@@ -363,7 +371,7 @@ func TestPostgreSQLArtistWebSearchIdentityRejectionsAndStates(t *testing.T) {
 	for _, tc := range []struct{ id, code string }{
 		{noNameMBID, "not_an_artist"},
 		{webSearchOtherMBID, "not_an_artist"},
-		{meridianMBID, "identity_mismatch"},
+
 		{artistMediaMBID, "suppressed"},
 	} {
 		next.tool(t, "resolve_artist_identity", webSearchIdentityProposal(item.ID, "musicbrainz", tc.id, f.endpoint+"/searxng/artists/coast"))
@@ -395,12 +403,12 @@ func TestPostgreSQLArtistWebSearchMusicBrainzWithoutType(t *testing.T) {
 		return true
 	})
 	artist := f.addArtist(t, webSearchArtistName)
-	item := f.pendingArtist(t, artist, webSearchArtistName)
-	f.enable(t)
+	item := f.startArtist(t, artist)
 	f.next(t, false).tool(t, "web_search", map[string]string{"q": webSearchArtistName})
 	f.next(t, false).tool(t, "resolve_artist_identity", webSearchIdentityProposal(item.ID, "musicbrainz", webSearchSoloMBID, f.endpoint+"/searxng/artists/coast"))
-	f.next(t, true).review(t, "approved")
-	f.waitArtistResolution(t, item.ID, "model_linked")
+	f.waitArtistResolution(t, item.ID, "suggestion_recorded")
+	state := f.status(t, artist, "waiting_human", 1)
+	readExceptionDecision(t, f.decide(t, &f.admin, state.Candidates[0].ExceptionID, "accept"), "accepted", f.admin.id)
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links l JOIN operations o ON o.id=l.operation_id
 		WHERE l.object_type='artist' AND l.object_id=$1 AND l.source='musicbrainz' AND l.external_id=$2
 		AND o.operation_type='artist_link' AND o.origin->>'provider_kind'='model'`, artist, webSearchSoloMBID)
