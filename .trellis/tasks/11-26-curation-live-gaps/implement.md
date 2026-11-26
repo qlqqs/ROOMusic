@@ -33,28 +33,6 @@
 4. 用并发版跑一次真实模型轮，写报告。程序轮、oracle 轮和串行部分快照沿用已有结果。
 5. 文档（原步骤 6）与收尾（原步骤 7）。
 
-### 在途状态（2026-11-26 09:20 UTC 更新，供上下文压缩后续命）
-
-停止规则和后续事项以 prd.md 的“收尾停止规则”“后续事项”为准。
-
-- 第一次最终轮（`temp/real-final-jx5TQgEV/`）因冷却翻倍缺陷停住，已用 SIGQUIT 结束，不算结果。当前在修：W10，终端 `term_68ae45a1-d5f1-4772-bd0a-f8c5615bf3db`，工作目录 `.worktrees/ROOMusic/ROOMusic/live-gaps-w10`，分支 `task/live-gaps-w10`；之后派测试代理写一个定向用例，然后合入，再跑下面这一轮。
-- 最终真实模型轮（W10 合入后在 main 上重跑，唯一一次，下列定位信息届时更新）：
-  - 人工上限（用户侧要求）：开跑 40 分钟未排空就取快照停止，按当时结果出报告，不等 140 分钟观察窗，不再查因重跑；届时仍在等来源重试的项按 R18 计为符合，其余未完成如实列出。
-  - 每 5 分钟看一次进度；连续两次“运行中 0 且待模型不变”即按卡住处理（取快照、停止、报告）。
-  - W3 子代理：Orca 终端句柄 `term_92c11118-23a8-4515-bf02-188258b30706`（Codex，gpt-6.2-astra）；
-  - 工作目录：`/home/qlqq/workspace/.worktrees/ROOMusic/ROOMusic/live-gaps-w3`，分支 `task/live-gaps-w3`，基于 main `270f3691`；
-  - 本轮临时目录：该工作目录下 `temp/real-final-jx5TQgEV/`（`run.log` 为进度）；
-  - Compose 项目：`roomusic-compose-test-real-final-jx5tqgev`；
-  - 开跑时间：08:58:40 UTC；
-  - 观察窗上限：max(30 分钟, 专辑数 × 5 分钟)，28 张即 140 分钟（`backend/internal/app/curation_live_corpus_integration_test.go:312`）；
-  - 设置：model_concurrency=4，每日与联网每日上限不限，主模型与审查都用 gpt-6.2-sol，网页回环 long；
-  - 结果文件：`.trellis/tasks/11-26-curation-live-gaps/research/live/real.json` 与 `live-trial-2026-11-26.md` 的真实轮部分（落在 W3 工作目录，需提交后合入 main）。
-- 剩余步骤：
-  1. 节点三，未完成：真实模型轮出结果后，审阅报告，提交 W3 分支并合入 main（合入前跑 `TestPackageDependencyDirections`），向会话 roomusic-37（`uds:/run/user/1000/cc-socks/1837906.sock`）报进度；符合预期不到 100% 只报数字与逐张原因，不修。
-  2. 文档：合同第 28 节、ADR 0006 第 16.8 节已提交（`42b31bfe`、`472bb807`）；只需按真实轮结果补 V6 数字。
-  3. 勾选 prd.md 验收项（V1–V10，按“进度审查后的裁定”修订后的口径）。
-  4. 归档：`task.py archive 11-26-curation-live-gaps --skip-branch-validation`，提交删除。需要清理：Orca 工作目录 `live-gaps-w3`，`orca worktree rm` 后删分支 `task/live-gaps-w3`；关闭终端 `term_92c11118-…`；确认该轮 Compose 项目的容器、网络、卷已清理。其他 W1、W2、W5–W9 的工作目录和分支都已删除。
-
 ## 验证命令（范围上限）
 
 - 单元测试：`cd backend && mise exec -- go test ./internal/curation/... ./internal/library/parser/... ./internal/catalog/... -count=1`。按改动收窄。
