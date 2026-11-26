@@ -68,6 +68,7 @@ type Scheduler struct {
 	workers            sync.WaitGroup
 	providerUntil      time.Time
 	providerBackoff    time.Duration
+	activeBackoff      time.Duration
 }
 
 func NewScheduler(db *sql.DB, writer *curation.Writer, sources *curation.Sources, launcher Launcher, logger *slog.Logger, options Options) *Scheduler {
@@ -531,11 +532,10 @@ func (s *Scheduler) runBatch(ctx context.Context, actor, model, conversation, pl
 		}
 	} else if reason == "provider_error" {
 		s.pauseProvider(-1)
-	} else {
+	} else if err == nil && reason == "completed" {
 		s.mu.Lock()
-		if !now.Before(s.providerUntil) {
-			s.providerBackoff = 0
-		}
+		// 在途项成功仅清零下一轮退避，当前冷却期仍按原间隔合并失败。
+		s.providerBackoff = 0
 		s.mu.Unlock()
 	}
 	// 收尾遇到暂时的数据库故障时，先完成本会话，再领取新项。
@@ -573,12 +573,16 @@ func (s *Scheduler) release(ctx context.Context, id string, count bool, next *ti
 func (s *Scheduler) pauseProvider(delay time.Duration) {
 	s.mu.Lock()
 	now := s.options.Now()
+	if !now.Before(s.providerUntil) {
+		s.activeBackoff = 0
+	}
 	if delay < 0 {
 		// 同一冷却期内，在途请求的失败只延后恢复时刻。
-		if !now.Before(s.providerUntil) {
-			s.providerBackoff = min(6*time.Hour, max(10*time.Minute, s.providerBackoff*2))
+		if s.activeBackoff == 0 {
+			s.providerBackoff = min(10*time.Minute, max(5*time.Second, s.providerBackoff*2))
+			s.activeBackoff = s.providerBackoff
 		}
-		delay = s.providerBackoff
+		delay = s.activeBackoff
 	}
 	until := now.Add(delay)
 	if until.After(s.providerUntil) {

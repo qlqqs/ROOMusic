@@ -164,7 +164,7 @@ MCP 的成员开关和每次工具调用身份复查沿用原合同；关闭后�
 摘要输入是一条 user 消息：previous_summary 来源块包住旧摘要，conversation_history 来源块包住待压缩回合的角色/内容 JSON。
 两块都用 escapeSource；不注入 memoryBlock，不包含记忆工具参数/结果、页面上下文或模型搜索不透明块。
 保留普通文本和其他工具调用，每条工具结果截至 2000 rune 后加 `[工具结果已截短]`；原始消息不受影响。
-使用本次 RunParams.Provider（本人端点、密钥和同一出站客户端）及 Model（对话模型），无 Tools/ForceTool/NativeSearch，MaxOutputTokens=2000、context 超时 60 秒，不重试。
+使用本次 RunParams.Provider（本人端点、密钥和同一出站客户端）及 Model（对话模型），无 Tools/ForceTool/NativeSearch，MaxOutputTokens=2000、context 超时 60 秒。摘要层只调用一次 Provider，HTTP 429、503 沿用下述请求内重试。
 内部消费 Provider 流，只接受正常结束且非空的 UTF-8 文本，拒绝 NUL、工具调用、截断/中断和关闭失败；输出防止异常端点无限流入的硬上限为 64 KiB。
 摘要不产生 text/search/citations SSE；最终用量快照沿用 recordUsage，已知输入和输出计入本次总量/400000 上限及 usage 事件，未知不估算，不另算主循环步骤。
 成功重放在系统提示词之后、分界后历史之前放一条 user 来源块：
@@ -819,6 +819,8 @@ data: {"seq":42,"type":"text","step":1,"text":"回答增量"}
 | 智谱 | `open.bigmodel.cn` | `/api/paas/v4` | openai |
 
 回环 IP 写法的主机按 `localhost` 加端口匹配。预设只用于猜测协议、补前缀和 `provider_name`，不代表工具能力。
+
+对话与后台整理共用 Provider 客户端。收到 HTTP 429、503 响应头时可重发同一请求，含首次最多发送 5 次。自首次发送起，10 秒内可发起重试。有效的 `Retry-After`（秒数或 HTTP 日期）决定等待时长，否则从 300 毫秒起翻倍，上限 3 秒。所需等待超过剩余预算时立即按本次错误处理。等待遵守调用方的 context。成功响应直接交给现有流解析器，读流期间的超时、中断及错误事件按下表处理。
 
 错误分类（`provider.Error{Kind, StatusCode, Message}`；`Message` 去掉密钥与敏感请求头后最多 500 个字符）：
 

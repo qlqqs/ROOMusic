@@ -399,6 +399,67 @@ func TestModelThrottleObserver(t *testing.T) {
 	}
 }
 
+func TestModelRetries503AndCompletesStream(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		retryAfter string
+		minDelay   time.Duration
+	}{
+		{name: "default_backoff", minDelay: 300 * time.Millisecond},
+		{name: "retry_after", retryAfter: "1", minDelay: time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests atomic.Int32
+			firstFailure := make(chan time.Time, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				switch requests.Add(1) {
+				case 1:
+					if tc.retryAfter != "" {
+						w.Header().Set("Retry-After", tc.retryAfter)
+					}
+					firstFailure <- time.Now()
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				case 2:
+					if elapsed := time.Since(<-firstFailure); elapsed < tc.minDelay {
+						t.Errorf("503 后等待 %s 就重试，至少应等待 %s", elapsed, tc.minDelay)
+					}
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, textResponse(ProtocolOpenAI, false))
+			}))
+			defer server.Close()
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			ctx = WithThrottleObserver(ctx, func(delay time.Duration) {
+				t.Errorf("重试成功的请求通知了调度器，冷却 %s", delay)
+			})
+			stream, err := makeProvider(t, ProtocolOpenAI, server.Client(), server.URL).Stream(ctx, testRequest())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stream.Close()
+			for _, want := range []string{"合成", "回答"} {
+				event, err := stream.Next()
+				if err != nil || event.Type != EventText || event.Text != want {
+					t.Fatalf("流文本事件 %+v，错误 %v，期望 %q", event, err, want)
+				}
+			}
+			event, err := stream.Next()
+			if err != nil || event.Type != EventDone || event.Finish == nil || event.Finish.Reason != FinishNormal {
+				t.Fatalf("流未正常结束，事件 %+v，错误 %v", event, err)
+			}
+			if _, err := stream.Next(); !errors.Is(err, io.EOF) {
+				t.Fatalf("结束事件后应读到 EOF，实际 %v", err)
+			}
+			if got := requests.Load(); got != 2 {
+				t.Fatalf("HTTP 请求次数 %d，期望 2", got)
+			}
+		})
+	}
+}
+
 func TestProtocolsHTTPAndStreamErrorsRedactKey(t *testing.T) {
 	for _, protocol := range []Protocol{ProtocolOpenAI, ProtocolMessages} {
 		for _, tc := range []struct {
@@ -408,8 +469,13 @@ func TestProtocolsHTTPAndStreamErrorsRedactKey(t *testing.T) {
 			kind   ErrorKind
 		}{{"401", 401, `{"error":{"message":"` + syntheticKey + `"}}`, ErrorAuthentication}, {"404_model", 404, `{"error":{"code":"model_not_found","message":"missing"}}`, ErrorModelNotFound}, {"404_model_type", 404, `{"error":{"type":"model_not_found","message":"missing"}}`, ErrorModelNotFound}, {"404_route", 404, `{"error":{"message":"route missing"}}`, ErrorOther}, {"429", 429, `{"error":{"message":"quota"}}`, ErrorRateLimit}, {"500", 500, `{"error":{"message":"` + syntheticKey + `"}}`, ErrorOther}, {"interrupted", 200, "", ErrorStreamInterrupted}, {"error_event", 200, namedFrame("error", `{"type":"error","error":{"type":"rate_limit_error","message":"`+syntheticKey+`"}}`), ErrorRateLimit}} {
 			t.Run(string(protocol)+"/"+tc.name, func(t *testing.T) {
+				var requests atomic.Int32
 				s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requests.Add(1)
 					checkRequest(t, r)
+					if tc.status == http.StatusTooManyRequests {
+						w.Header().Set("Retry-After", "0")
+					}
 					w.WriteHeader(tc.status)
 					if tc.name == "interrupted" {
 						body := textResponse(protocol, false)
@@ -424,13 +490,21 @@ func TestProtocolsHTTPAndStreamErrorsRedactKey(t *testing.T) {
 					}
 				}))
 				defer s.Close()
-				_, err := collectStream(t, makeProvider(t, protocol, s.Client(), s.URL), testRequest())
+				events, err := collectStream(t, makeProvider(t, protocol, s.Client(), s.URL), testRequest())
 				var typed *Error
 				if !errors.As(err, &typed) || typed.Kind != tc.kind {
 					t.Fatalf("got %v want %s", err, tc.kind)
 				}
 				if strings.Contains(err.Error(), syntheticKey) {
 					t.Fatal("error contains key")
+				}
+				if tc.name == "interrupted" {
+					if len(events) == 0 || events[0].Type != EventText || events[0].Text != "合成" {
+						t.Fatalf("中断前应已读到文本，实际事件 %+v", events)
+					}
+					if got := requests.Load(); got != 1 {
+						t.Fatalf("读流中断后总请求次数 %d，期望 1", got)
+					}
 				}
 			})
 		}
