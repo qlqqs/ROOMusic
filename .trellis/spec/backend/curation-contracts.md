@@ -936,8 +936,8 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 
 | 常量（`curation/program/worker.go`） | 当前值 | 升级时 |
 | --- | --- | --- |
-| `LocalRuleVersion` | 2 | 只重算真实性、分类与缺口，不发外部请求 |
-| `MatchRuleVersion` | 101 | 已对上的保持；有候选的待定项用已保存的候选离线重判，登记新版本，不发搜索；零候选或旧候选不足以判断的，登记 `requery_match_version`，由普通遍历补查一次 |
+| `LocalRuleVersion` | 3（第 28 节） | 只重算真实性、分类与缺口，不发外部请求 |
+| `MatchRuleVersion` | 104（101 起，各次变化见第 23、28 节） | 已对上的保持；有候选的待定项用已保存的候选离线重判，登记新版本，不发搜索；零候选或旧候选不足以判断的，登记 `requery_match_version`，由普通遍历补查一次 |
 | `PatrolPromptVersion` | 1 | 不让任何工作状态到期；只作用于新巡检与手动重新巡检 |
 
 迁移 0086 给 `curation_work_states` 加 `local_rule_version`、`match_rule_version`、`identity_digest`、`gap_digest`、`requery_match_version`，
@@ -1200,3 +1200,58 @@ type ExternalApplied struct { OperationID string; Skipped string } // Skipped: l
 ### 27.4 已知局限
 
 艺人入库按 `textnorm.Text` 规范化后的名字归一（`catalog/internal/artistgraph/names.go`），没有人工区分时，同名的不同人共用一个本地艺人。本任务不拆开。
+
+## 28. 真实试用缺口与现实情形（2026-11-26，`MatchRuleVersion` 104，`LocalRuleVersion` 3，审查策略第 7 版）
+
+依据任务 `11-26-curation-live-gaps` 的 PRD（R1–R24）。第 23–27 节与本节不一致处以本节为准。
+
+### 28.1 来源不可用与连续无决定
+
+- 第二档与联网项在本项运行中遇到来源不可用（工具结果 `source_unavailable`，或工具内部读详情得到来源 5xx、429、网络错误），且没有成功提交时，走 `try_later`：保持原路线，`next_attempt_at` 不早于来源恢复时刻，不增加尝试次数，不调用 `FinishUnlisted`。触及单项上限时同样处理。
+- 工具错误区分 `not_found` 与 `source_unavailable`，提示说明来源不可用时不必放弃。
+- 第一档回复去掉代码块包裹后逐项校验，不合格项只给该项记一次。第一、二档与联网档同一项连续三次没有可执行的决定，走放弃路径：第一档升到 `waiting_route/lookup`；第二档在联网可用时转联网，否则未收录；联网档未收录。不再进入 `shelved`。
+- 硬反证（时长、真实文字）留下的建议 `can_accept=false`，手动采纳返回 409 `nothing_to_apply`。
+
+### 28.2 发行组级对应的补充用途
+
+- **专辑标题佐证**：本发行有生效的 `release_group_match`，后端读回的组标题规范化后等于候选值，且组内没有一个版本的标题等于本地原值时，组标题作为专辑标题纠错的结构佐证，交独立审查，批准后按级别 3 写入。曲目标题与版本字段仍不从组级取得。审查策略升为第 7 版。
+- **同组多版**：第二档、联网档提示与 `resolve_release_match` 说明告知模型，分不出版本时提交任一结构吻合的版本，后端只建组级对应；经审查的提交在写入前同样判版。
+- **子集与超集**（`match_partial.go`）：
+  - 子集要求本地每首与外部不同曲目一一配对（标题规范化相等、时长在容差内），本地至少 max(4, 外部曲数一半)；
+  - 超集要求外部某版是本地的完整前缀，多出的曲目只在末尾；
+  - 吻合候选恰好同属一个组时，只建组级对应，`rule` 为 `partial_subset` 或 `partial_superset`，不建录音对应、不补版本字段。程序与模型提交共用同一判定。
+  - 首搜没有完整或部分吻合时，与零候选共用一次去曲数补查；摘要曲数不同但可能构成子集或超集的候选，在三次详情预算内读取，同名同艺人优先。
+  - 已知局限：同名同艺人分属多个组时，排除不了其它组就保持待定；模型补读的曲表进不了提交判定（见任务 PRD“不做”）。
+
+### 28.3 匹配判定
+
+- **合作署名**：专辑与曲目艺人比较前，双方把 feat.、ft.、featuring、&、、、/、;、x、×、with 统一为同一分隔符；`and` 不作连接词。
+- **发行组唯一级**：本地有可比时长时，所有可比时长都须在容差内，否则降到结构吻合或待定。
+- **反证**：判 `tag_text_mismatch` 时，艺人比较纳入外部艺人登记的别名与巡检规范名。
+- **同名不同人**：`arid:` 过滤的查询没有任何候选通过结构核对时，按名字补查一次，计作不同写法的尝试。
+- **版本级署名的艺人对应**：自动层署名（级别 3、4）来自已生效的版本级对应时，按人数与位置写 `artist_credit`，不再交联网查身份；撤销该对应或作废该自动值时，同一事务复核并撤除派生对应。组级对应不派生。
+
+### 28.4 模型可取得的信息
+
+后端判定所需的每类外部信息，模型都能在首条消息或工具里取得：
+- 首条消息含 `route`、`evidence.route_history`（此前各档放弃与被拒原因）与 `write_requirements`（后端接受写入的佐证要求）；
+- `get_music_metadata` 增 `release_group`（组标题与带结构摘要的版本列表，长列表按 `offset`/`next_offset` 翻页）与艺人 `aliases`。
+
+### 28.5 扫描侧（`LocalRuleVersion` 3）
+
+细则见 `library-scan-tags.md`、`library-scan-grouping.md`。
+- 真实性新增来源 `legacy_encoding`（旧编码唯一读法，推断）与 `garbled`（多种读法，按占位处理，不进查询，可进本地整理并以各读法作本地片段）。没有其它标签时读 ID3v1；唯一读法由程序写本地层，级别 1。
+- 中英文占位词（Unknown Artist、Track NN、未知艺术家等）判为占位；`Untitled` 不算。
+- 无 `ALBUMARTIST` 且至少 4 首、至少 3 位不同曲目艺人、无人过半时判为合辑，专辑艺人取推断值 Various Artists；整理证据用同一门槛。
+- 同目录曲号分段从 1 重起时推断碟号；`A1`、`B2` 曲号按面解析，A/B 面为第 1 碟、C/D 面为第 2 碟，均标为推断。
+- 目录名识别“艺人 - 年份 - 专辑”等写法，推断值去掉格式与码率噪声；零候选放宽时同样去掉标签值里的这类噪声。
+- 混放目录里有明确且不同专辑标签的曲目不被多数决吞并。
+
+### 28.6 升级
+
+- 103：未收录、待定，以及冲突码为 `track_count`、`position_conflict`、`artist_mismatch`、`tag_text_mismatch` 的待定项各补查一次，已匹配的不重查。
+- 104：已匹配且版本级对应仍生效、署名自动值来自该发行、本地艺人尚无对应的发行，用已缓存的发行详情离线补建艺人对应；缓存不存在就跳过，不出站。
+
+### 28.7 模型并发
+
+见第 25.4 节（迁移 0096，`model_concurrency` 默认 4）。领取时跳过同艺人、同发行的项；每日上限每项开始前检查，并发时至多超出“并发数减一”项；模型接口 429/503 按 `Retry-After` 暂停领取、不计尝试。
