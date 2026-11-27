@@ -213,21 +213,21 @@ func TestPostgreSQLMovedFileJoinsTargetRelease(t *testing.T) {
 	root := insertScannerRoot(t, fixture, "moved-joins-target")
 	service := scannerTestApplication(fixture)
 	for number := 1; number <= 3; number++ {
-		writeAudio(t, root, "A/a"+string(rune('0'+number))+".flac", audioFile{seed: byte(number), title: "A" + string(rune('0'+number)), album: "A", track: number})
+		writeAudio(t, root, "A/0"+string(rune('0'+number))+".flac", audioFile{seed: byte(number), title: "A" + string(rune('0'+number)), album: "A", track: number})
 	}
 	for number := 1; number <= 2; number++ {
 		writeAudio(t, root, "B/b"+string(rune('0'+number))+".flac", audioFile{seed: byte(10 + number), title: "B" + string(rune('0'+number)), album: "B", track: number})
 	}
-	// 一首属于 B 的曲目放错在 A 目录里：A 目录里 A 专辑占多数，它作为杂音留在 A 的 Release 中。
-	writeAudio(t, root, "A/b3.flac", audioFile{seed: 20, title: "B3", album: "B", track: 3})
+	// 一首属于 B 的曲目放错在 A；目录内文件名曲号 01–04 连续，仍属于同一个候选。
+	writeAudio(t, root, "A/04.flac", audioFile{seed: 20, title: "B3", album: "B", track: 3})
 	requireScanStatus(t, runTestScan(t, fixture, service, root), "succeeded")
 	before := releaseIDsByTitle(t, fixture, root.ID)
-	strayID := presentTrackIDs(t, fixture, root.ID)["A/b3.flac"]
+	strayID := presentTrackIDs(t, fixture, root.ID)["A/04.flac"]
 	if len(before) != 2 || releaseOfTrack(t, fixture, strayID) != before["A"] {
 		t.Fatalf("放错位置的曲目应留在 A 的 Release 中：%v", before)
 	}
 
-	moveFixture(t, root, "A/b3.flac", "B/b3.flac")
+	moveFixture(t, root, "A/04.flac", "B/b3.flac")
 	requireScanStatus(t, runTestScan(t, fixture, service, root), "succeeded")
 	requireSameReleases(t, before, releaseIDsByTitle(t, fixture, root.ID))
 	after := presentTrackIDs(t, fixture, root.ID)

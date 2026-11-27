@@ -115,6 +115,8 @@ func TestPostgreSQLScanFeedbackCandidateChanges(t *testing.T) {
 	db := feedbackDB(t)
 	root := feedbackRoot(t, db)
 	a, b := observation("album/a.flac", "A", 1), observation("album/b.flac", "B", 2)
+	// 没有曲目艺人，就没有可推得的专辑艺人。
+	a.Artist, b.Artist = "未知艺术家", "未知艺术家"
 	f := NewScanFeedback(feedbackRun(t, db))
 	release := feedbackPersist(t, db, f, root, feedbackCandidate(t, db, f.scanID, root, "", nil, a, b))
 	ids := feedbackTracks(t, db, release)

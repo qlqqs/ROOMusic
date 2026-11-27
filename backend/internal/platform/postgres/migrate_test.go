@@ -294,10 +294,15 @@ func TestPostgreSQLMigrationRejectsDriftAndFutureVersion(t *testing.T) {
 	if _, err := database.Exec(`UPDATE schema_migrations SET checksum=$1 WHERE version=3`, findMigrationByVersion(t, 3).Checksum); err != nil {
 		t.Fatalf("restore checksum: %v", err)
 	}
-	if _, err := database.Exec(`INSERT INTO schema_migrations(version,name,checksum) VALUES(99,'0099_future.sql','future')`); err != nil {
+	latest, err := LatestMigrationVersion()
+	if err != nil {
+		t.Fatal(err)
+	}
+	future := latest + 1
+	if _, err := database.Exec(`INSERT INTO schema_migrations(version,name,checksum) VALUES($1,$2,'future')`, future, fmt.Sprintf("%04d_future.sql", future)); err != nil {
 		t.Fatalf("inject future version: %v", err)
 	}
-	if err := applyMigrations(context.Background(), database); err == nil || !strings.Contains(err.Error(), "unknown version 99") {
+	if err := applyMigrations(context.Background(), database); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("unknown version %d", future)) {
 		t.Fatalf("expected unknown version error, got %v", err)
 	}
 }
