@@ -16,6 +16,7 @@ const tools = [
   "merge_artists", "preview_artist_split", "split_artist", "rename_artist", "ignore_artist_candidate", "revert_operation",
   "web_search", "fetch_page", "search_music_metadata", "get_music_metadata", NATIVE_SEARCH,
   "remember", "forget", "list_memories",
+  "list_library_directory", "read_library_file", "load_skill", "match_release_external", "regroup_local_files",
 ];
 
 describe("工具的中文名称", () => {

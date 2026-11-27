@@ -12,11 +12,14 @@ import {
   FileInput,
   FileSearch,
   FileText,
+  FolderOpen,
+  FolderTree,
   Globe,
   Heart,
   History,
   Layers,
   Library,
+  Link2,
   ListMinus,
   ListMusic,
   ListOrdered,
@@ -48,6 +51,7 @@ import { NATIVE_SEARCH } from "./run/reduce";
 // 只显示查询词与访问的域名，不显示完整地址（查询串可能带别的内容）。
 // C9 加了诊断、应用配置与个人播放设置的工具：配置类的修改不能撤销，确认卡片上会标明。
 // C10 加了记忆的三个工具（只作用于本人）：记下或改写、删除之后让设置页的记忆列表重读。
+// 单张专辑整理（2026-11）加了列目录、读文件、读技能三个只读工具，以及建立 MusicBrainz 对应、重新归组两个修改工具。
 // 参数与标题来自曲库、个人数据与外部网页，是不可信文本，只按文本节点渲染。
 
 /** 工具改动的数据：app 负责的几类（StewardDataScope），加上管家自己的记忆（C10，由 steward 自己刷新）。 */
@@ -275,6 +279,13 @@ const toolLabels: Readonly<Record<string, ToolLabel>> = {
     changes: "artists",
   },
   revert_operation: { label: "撤销一条修改", icon: Undo2, result: done("已撤销"), changes: "catalog" },
+
+  // ---- 单张专辑整理（管理员）：读音乐目录里的文件，经程序核对后建立对应、重新归组 ----
+  list_library_directory: { label: "查看文件夹", icon: FolderOpen, argument: (input) => stringField(input, "path") || undefined, unit: "项" },
+  read_library_file: { label: "读取文件", icon: FileText, argument: (input) => stringField(input, "path") },
+  load_skill: { label: "读取技能", icon: BookOpen, argument: (input) => stringField(input, "name") },
+  match_release_external: { label: "对应到 MusicBrainz", icon: Link2, result: done("已对应"), changes: "catalog" },
+  regroup_local_files: { label: "重新归组文件", icon: FolderTree, result: done("已提交，扫描后生效"), changes: "catalog" },
 
   // ---- 联网（C8，只读）：外部内容带来源标记进入模型 ----
   web_search: { label: "联网搜索", icon: Globe, result: searchResultsOf },
