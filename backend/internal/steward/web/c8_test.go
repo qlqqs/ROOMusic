@@ -14,6 +14,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 	"unicode/utf8"
 
@@ -299,39 +300,42 @@ func TestC8SearchDeniedAndMissingKey(t *testing.T) {
 	c8Code(t, err, "search_key_invalid")
 }
 func TestC8MusicRateLimitUserAgentAndFailures(t *testing.T) {
-	var times []time.Time
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		times = append(times, time.Now())
-		if !strings.HasPrefix(r.UserAgent(), "ROOMusic/") || !strings.Contains(r.UserAgent(), "https://") || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
-			t.Errorf("头部=%v", r.Header)
-		}
-		if r.URL.Query().Get("query") == "unavailable" {
-			w.WriteHeader(503)
-			return
-		}
-		io.WriteString(w, `{"artists":[{"id":"synthetic-id","name":"艺人","secret":"不能输出"}]}`)
-	}))
-	defer server.Close()
 	s1, s2 := New(nil, nil, nil, nil), New(nil, nil, nil, nil)
 	if s1.music.Limiter() != s2.music.Limiter() || s1.music.Limiter() != sources.DefaultLimiter(musicbrainz.Declaration()) {
 		t.Fatal("多个 Service 没有共用实例限速")
 	}
-	limiter := sources.NewLimiter(time.Second, nil, nil)
-	for _, s := range []*Service{s1, s2} {
-		s.WithMusic(musicbrainz.New(musicbrainz.Options{BaseURL: server.URL, Limiter: limiter, NewClient: func(egress.Options) (*http.Client, error) { return server.Client(), nil }}))
-		result, err := s.SearchMusic(context.Background(), "artist", "query", 1)
-		if err != nil || len(result) != 1 {
-			t.Fatalf("结果=%v 错误=%v", result, err)
+	synctest.Test(t, func(t *testing.T) {
+		var times []time.Time
+		client := &http.Client{Transport: c8Transport(func(r *http.Request) (*http.Response, error) {
+			w := httptest.NewRecorder()
+			times = append(times, time.Now())
+			if !strings.HasPrefix(r.UserAgent(), "ROOMusic/") || !strings.Contains(r.UserAgent(), "https://") || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+				t.Errorf("头部=%v", r.Header)
+			}
+			if r.URL.Query().Get("query") == "unavailable" {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return w.Result(), nil
+			}
+			io.WriteString(w, `{"artists":[{"id":"synthetic-id","name":"艺人","secret":"不能输出"}]}`)
+			return w.Result(), nil
+		})}
+		limiter := sources.NewLimiter(time.Second, nil, nil)
+		for _, s := range []*Service{s1, s2} {
+			s.WithMusic(musicbrainz.New(musicbrainz.Options{Limiter: limiter, NewClient: func(egress.Options) (*http.Client, error) { return client, nil }}))
+			result, err := s.SearchMusic(context.Background(), "artist", "query", 1)
+			if err != nil || len(result) != 1 {
+				t.Fatalf("结果=%v 错误=%v", result, err)
+			}
 		}
-	}
-	if len(times) != 2 || times[1].Sub(times[0]) < time.Second-10*time.Millisecond {
-		t.Fatalf("限速=%v", times)
-	}
-	_, err := s1.SearchMusic(context.Background(), "artist", "unavailable", 1)
-	c8Code(t, err, "source_unavailable")
-	if len(times) != 3 {
-		t.Fatal("503 被重试")
-	}
+		if len(times) != 2 || times[1].Sub(times[0]) < time.Second {
+			t.Fatalf("限速=%v", times)
+		}
+		_, err := s1.SearchMusic(context.Background(), "artist", "unavailable", 1)
+		c8Code(t, err, "source_unavailable")
+		if attempts := len(times) - 2; attempts != 5 {
+			t.Fatalf("503 请求 %d 次，期望含首次共 5 次", attempts)
+		}
+	})
 }
 func TestC8CoverArtRedirectOfficialOnly(t *testing.T) {
 	for _, tc := range []struct {

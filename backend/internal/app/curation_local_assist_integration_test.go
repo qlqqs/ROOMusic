@@ -221,10 +221,15 @@ func TestPostgreSQLLocalAssistSevenReasons(t *testing.T) {
 			}
 			b3Enable(t, app, admin)
 			if withModel {
-				clock.tick <- time.Unix(0, clock.now.Add(int64(time.Minute)))
-				schedulerWait(t, "有脚本回答的本地辅助目录结案", func() bool {
-					return countRows(t, app, `SELECT count(*) FROM curation_pending_items WHERE kind='local_cleanup' AND status<>'resolved'`) == 0
-				})
+				// 目录项已全部投影；先让单并发模型逐目录结案，避免程序盘点和模型争用同一批发行。
+				const pending = `SELECT count(*) FROM curation_pending_items WHERE kind='local_cleanup' AND status<>'resolved'`
+				for remaining := countRows(t, app, pending); remaining > 0; {
+					previous := remaining
+					schedulerWait(t, "脚本模型完成下一个本地辅助目录", func() bool {
+						remaining = countRows(t, app, pending)
+						return remaining < previous
+					})
+				}
 				for _, reason := range wantReasons {
 					n := countRows(t, app, `SELECT count(*) FROM curation_pending_items p
 						WHERE p.kind='local_cleanup' AND p.conversation_id IS NOT NULL AND p.resolution IN ('local_cleanup','undetermined')

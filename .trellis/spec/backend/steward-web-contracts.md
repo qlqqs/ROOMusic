@@ -159,7 +159,7 @@ M7 B1 起，两个工具经 `sources/musicbrainz` 的适配器请求 MusicBrainz
 工具的名字、参数、输出字段与每用户额度没有变化：
 
 - 固定 `https://musicbrainz.org/ws/2`，请求带 fmt=json，PublicOnly；User-Agent 为 `ROOMusic/<构建版本或 dev> ( <buildinfo.ProjectURL> )`，不含实例信息。
-- 对话调用排队超过 10 秒返回 rate_limited，取消立即退出；503 不重试；响应读取上限 2 MiB。
+- 对话调用排队超过 10 秒返回 rate_limited，取消立即退出；503、429 按 `sources-contracts.md` 第 4 节请求内短重试（含首次最多 5 次），用尽返回 source_unavailable；响应读取上限 2 MiB。
 - 错误码的对应：适配器的 `ErrRateLimited` → `rate_limited`；`ErrNotFound`、`ErrUnavailable`、`ErrTryLater` → `source_unavailable`。
 - 适配器多解出的字段（ISRC、别名、disc ID 等）不进入工具输出。
 - 有结果的响应缓存 30 天、空结果 1 天：有效期内同一查询读到的是缓存，不反映 MusicBrainz 上更新的编辑。
@@ -234,7 +234,7 @@ cover-art 是本工具的本地选项，不传给 MusicBrainz；只对 release �
 4. 管理员/成员/放行名单的 SearXNG 保存与调用；403、Tavily 401/432/433/429/434、空 results、超大和非法 JSON。
 5. Available 的聊天/MCP 列表与调用一致；设置变更后不能调用已失效工具；ctx 取消传递。
 6. fetch_page 的私网和混合 DNS、DNS 重绑定、重定向到私网、userinfo、端口/URL 长度、五/六跳、20 秒、类型、gzip 解压上限、字符集、UTF-8 截断、HTML 排除块与空白。
-7. MusicBrainz 全 Service 共用每秒许可、排队取消与十秒超限（注入时钟）、503 一次即失败；MBID/include 校验与字段裁剪。
+7. MusicBrainz 全 Service 共用每秒许可、排队取消与十秒超限（注入时钟）、503 按来源短重试用尽后才失败；MBID/include 校验与字段裁剪。
 8. Cover Art Archive 的 404 得空列表、清单 307 到官方 index.json、禁止跳图片/其他域名、不下载图片、四个字段的映射、清单请求经过限速器；User-Agent 与头部无用户/实例信息。
 9. 外部内容的 Untrusted 与既有来源标记，日志不得包含查询词、查询串、正文、密钥；64 KiB 注册表截断。
 

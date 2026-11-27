@@ -37,6 +37,7 @@ import (
 	stewardapi "github.com/qlqq/roomusic/backend/internal/steward/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/steward/memory"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
+	"github.com/qlqq/roomusic/backend/internal/steward/skills"
 	"github.com/qlqq/roomusic/backend/internal/steward/token"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 	"github.com/qlqq/roomusic/backend/internal/steward/web"
@@ -98,6 +99,8 @@ func newC3AppFixture(t *testing.T) *c3AppFixture {
 	// 对照注册表使用同一组业务定义，HTTP 一侧必须经过真实 registerSteward 装配。
 	definitions := catalogtools.StewardTools(catalog.NewStore(db), governance.NewStore(db))
 	definitions = append(definitions, librarytools.StewardTools(scans)...)
+	definitions = append(definitions, librarytools.BrowseTools(scans)...)
+	definitions = append(definitions, skills.Tool())
 	definitions = append(definitions, operationtools.StewardTools(db)...)
 	definitions = append(definitions, governancetools.StewardTools(db, nil)...)
 	definitions = append(definitions, operationtools.RevertTools(db)...)
@@ -181,8 +184,8 @@ func TestPostgreSQLMCPRealRegistryProtocolsAndIsolation(t *testing.T) {
 				}
 				caller := tool.Caller{User: f.users[role], Source: tool.SourceChat}
 				all := f.registry.List(caller)
-				if role == "admin" && len(all) != 60 {
-					t.Fatalf("实际登记工具数=%d，期望 60", len(all))
+				if role == "admin" && len(all) != 63 {
+					t.Fatalf("实际登记工具数=%d，期望 63", len(all))
 				}
 				readWrite := scope == token.ScopeReadWrite
 				var want []tool.Definition
@@ -240,17 +243,21 @@ func TestPostgreSQLMCPRealRegistryProtocolsAndIsolation(t *testing.T) {
 						if names[definition.Name] {
 							t.Errorf("成员能看到 %s", definition.Name)
 						}
+						wantCode := tool.CodePermissionDenied
+						if definition.Name == "load_skill" {
+							wantCode = tool.CodeTargetNotFound
+						}
 						_, directErr := f.registry.Invoke(ctx, caller, definition.Name, json.RawMessage(`{}`))
 						var denied *tool.Error
-						if !errors.As(directErr, &denied) || denied.Code != tool.CodePermissionDenied {
-							t.Fatal("注册表未拒绝管理员工具")
+						if !errors.As(directErr, &denied) || denied.Code != wantCode {
+							t.Fatalf("注册表调用 %s 返回 %v，期望 %s", definition.Name, directErr, wantCode)
 						}
 						result, err := session.CallTool(ctx, &sdk.CallToolParams{Name: definition.Name, Arguments: map[string]any{}})
 						if err != nil {
 							t.Fatal(err)
 						}
-						if !result.IsError || len(result.Content) != 1 || !strings.Contains(result.Content[0].(*sdk.TextContent).Text, `"code":"permission_denied"`) {
-							t.Fatal("MCP 未返回 permission_denied")
+						if !result.IsError || len(result.Content) != 1 || !strings.Contains(result.Content[0].(*sdk.TextContent).Text, `"code":"`+string(wantCode)+`"`) {
+							t.Fatalf("MCP 调用 %s 未返回 %s", definition.Name, wantCode)
 						}
 					}
 				}
