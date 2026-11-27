@@ -14,15 +14,10 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
-func parseMP3(path string) (AudioObservation, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return AudioObservation{}, err
-	}
-	defer file.Close()
+func parseMP3(file *os.File) (AudioObservation, error) {
 	observation := AudioObservation{SourceKind: "mp3_id3v2", InferredFields: make(map[string]bool), Codec: "mp3"}
 	header := make([]byte, 10)
-	if _, err = io.ReadFull(file, header); err != nil {
+	if _, err := io.ReadFull(file, header); err != nil {
 		return observation, fmt.Errorf("invalid MP3 stream")
 	}
 	if string(header[:3]) == "ID3" {
@@ -31,7 +26,7 @@ func parseMP3(path string) (AudioObservation, error) {
 			return observation, fmt.Errorf("ID3 metadata too large")
 		}
 		data := make([]byte, size-10)
-		if _, err = io.ReadFull(file, data); err != nil {
+		if _, err := io.ReadFull(file, data); err != nil {
 			return observation, err
 		}
 		if err := parseID3Frames(data, &observation, header[3], header[5]); err != nil {
@@ -49,7 +44,7 @@ func parseMP3(path string) (AudioObservation, error) {
 		applyMP3StreamFacts(file, info.Size(), &observation)
 	}
 	finalizeTags(&observation)
-	return applyFilenameFallback(path, observation), nil
+	return observation, nil
 }
 
 // parseID3Frames 解析标签体里的帧；major 是 ID3v2 主版本号，tagFlags 是标签头的标志字节。

@@ -35,7 +35,7 @@ func TestDSFMetadataPointerPriorityAndRecovery(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			data := dsdTestDSF(payload, tc.tail, tc.pointer)
-			obs, err := parseDSF(writeFingerprintFixture(t, "track.dsf", data))
+			obs, err := ParseAudioFile(writeFingerprintFixture(t, "track.dsf", data))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -63,7 +63,7 @@ func TestDFFID3TagsTakePriorityOverDIIN(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			data := dsdTestDFF(payload, "DSD ", "DSD ", tc.chunks...)
-			obs, err := parseDFF(writeFingerprintFixture(t, "track.dff", data))
+			obs, err := ParseAudioFile(writeFingerprintFixture(t, "track.dff", data))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -142,8 +142,7 @@ func TestDSTDFFPreservesUnsupportedEncodingErrorChain(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			data := dsdTestDFF([]byte{1, 2, 3, 4}, tc.compression, tc.audioID)
-			// 纯包阶段尚未放开扩展名分派，直接验证 parser 的容器入口与错误映射。
-			_, err := parseDFF(writeFingerprintFixture(t, "compressed.dff", data))
+			_, err := ParseAudioFile(writeFingerprintFixture(t, "compressed.dff", data))
 			if !errors.Is(err, ErrUnsupportedEncoding) {
 				t.Fatalf("未保留 parser 哨兵：%v", err)
 			}

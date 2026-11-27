@@ -13,12 +13,7 @@ import (
 // 扫描接入时通过 errors.Is 将其映射为 unsupported_format。
 var ErrUnsupportedEncoding = errors.New("unsupported audio encoding")
 
-func parseDSDFile(path string, container dsdio.Container, tags func(io.ReaderAt, int64, dsdio.Layout, *AudioObservation) error) (AudioObservation, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return AudioObservation{}, err
-	}
-	defer file.Close()
+func parseDSDFile(file *os.File, container dsdio.Container, tags func(io.ReaderAt, int64, dsdio.Layout, *AudioObservation) error) (AudioObservation, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return AudioObservation{}, err
@@ -42,7 +37,7 @@ func parseDSDFile(path string, container dsdio.Container, tags func(io.ReaderAt,
 		return AudioObservation{}, err
 	}
 	finalizeTags(&observation)
-	return applyFilenameFallback(path, observation), nil
+	return observation, nil
 }
 
 func probeDSDContainer(reader io.ReaderAt, size int64, expected dsdio.Container) (dsdio.Layout, error) {

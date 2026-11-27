@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/steward/provider"
+	"github.com/qlqq/roomusic/backend/internal/steward/skills"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
@@ -507,6 +508,9 @@ func mainRequest(p RunParams, mode, memory string, messages []provider.Message, 
 	}
 	if p.Selection != nil {
 		tools = nil
+	}
+	if !p.Background && slices.ContainsFunc(tools, func(d provider.ToolDefinition) bool { return d.Name == skills.LoadToolName }) {
+		prompt += skillPrompt(skills.List(p.Caller.User))
 	}
 	output := maxOutputTokens
 	if p.RequestBudget > 0 {

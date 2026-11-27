@@ -9,14 +9,9 @@ import (
 	"os"
 )
 
-func parseFLAC(path string) (AudioObservation, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return AudioObservation{}, err
-	}
-	defer file.Close()
+func parseFLAC(file *os.File) (AudioObservation, error) {
 	magic := make([]byte, 4)
-	if _, err = io.ReadFull(file, magic); err != nil || string(magic) != "fLaC" {
+	if _, err := io.ReadFull(file, magic); err != nil || string(magic) != "fLaC" {
 		return AudioObservation{}, fmt.Errorf("invalid FLAC stream")
 	}
 	observation := AudioObservation{SourceKind: "flac_vorbis_comment", InferredFields: make(map[string]bool), Codec: "flac"}
@@ -27,7 +22,7 @@ func parseFLAC(path string) (AudioObservation, error) {
 	lastBlock := false
 	for !lastBlock {
 		header := make([]byte, 4)
-		if _, err = io.ReadFull(file, header); err != nil {
+		if _, err := io.ReadFull(file, header); err != nil {
 			return observation, fmt.Errorf("read FLAC metadata: %w", err)
 		}
 		lastBlock = header[0]&0x80 != 0
@@ -37,7 +32,7 @@ func parseFLAC(path string) (AudioObservation, error) {
 			return observation, fmt.Errorf("FLAC metadata too large")
 		}
 		block := make([]byte, blockLength)
-		if _, err = io.ReadFull(file, block); err != nil {
+		if _, err := io.ReadFull(file, block); err != nil {
 			return observation, err
 		}
 		switch blockType {
@@ -57,7 +52,7 @@ func parseFLAC(path string) (AudioObservation, error) {
 		}
 	}
 	finalizeTags(&observation)
-	return applyFilenameFallback(path, observation), nil
+	return observation, nil
 }
 
 func parseFLACStreamInfo(block []byte, fileSize int64, observation *AudioObservation) error {

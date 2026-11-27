@@ -5,12 +5,13 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/qlqq/roomusic/backend/internal/playback/dsdio"
 )
 
-func parseDFF(path string) (AudioObservation, error) {
-	return parseDSDFile(path, dsdio.DFF, readDFFTags)
+func parseDFF(file *os.File) (AudioObservation, error) {
+	return parseDSDFile(file, dsdio.DFF, readDFFTags)
 }
 
 func readDFFTags(reader io.ReaderAt, _ int64, layout dsdio.Layout, observation *AudioObservation) error {

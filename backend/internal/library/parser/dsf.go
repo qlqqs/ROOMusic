@@ -2,12 +2,13 @@ package parser
 
 import (
 	"io"
+	"os"
 
 	"github.com/qlqq/roomusic/backend/internal/playback/dsdio"
 )
 
-func parseDSF(path string) (AudioObservation, error) {
-	return parseDSDFile(path, dsdio.DSF, readDSFTags)
+func parseDSF(file *os.File) (AudioObservation, error) {
+	return parseDSDFile(file, dsdio.DSF, readDSFTags)
 }
 
 func readDSFTags(reader io.ReaderAt, size int64, layout dsdio.Layout, observation *AudioObservation) error {

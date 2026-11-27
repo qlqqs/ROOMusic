@@ -4,23 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"os"
 )
 
 var ErrUnknownFormat = errors.New("无法识别音频格式")
-
-func fileFormat(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return "", err
-	}
-	return detectFormat(f, info.Size())
-}
 
 func detectFormat(reader io.ReaderAt, size int64) (string, error) {
 	var head [16]byte

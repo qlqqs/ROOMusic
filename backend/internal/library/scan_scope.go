@@ -40,10 +40,11 @@ func (root registeredRoot) directoryExists(dir string) (bool, error) {
 	if !filepath.IsLocal(dir) || filepath.Clean(dir) != dir {
 		return false, fs.ErrInvalid
 	}
+	excluded := firstExcludedPath(root.filter.exclusions, dir)
 	var current string
 	for _, name := range strings.Split(dir, "/") {
 		current = filepath.Join(current, name)
-		if root.filter.skipDir(current, name) {
+		if filepath.ToSlash(current) == excluded {
 			return false, nil
 		}
 		info, err := os.Lstat(filepath.Join(root.Path, current))

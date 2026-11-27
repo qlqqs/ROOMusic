@@ -45,6 +45,7 @@ import (
 	stewardmcp "github.com/qlqq/roomusic/backend/internal/steward/mcp"
 	"github.com/qlqq/roomusic/backend/internal/steward/memory"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
+	"github.com/qlqq/roomusic/backend/internal/steward/skills"
 	"github.com/qlqq/roomusic/backend/internal/steward/token"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 	"github.com/qlqq/roomusic/backend/internal/steward/web"
@@ -114,6 +115,8 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	definitions = append(definitions, governancetools.StewardTools(database, artistResolutionAdapter{})...)
 	definitions = append(definitions, operationtools.RevertTools(database, kinds...)...)
 	definitions = append(definitions, librarytools.StewardTools(scans)...)
+	definitions = append(definitions, librarytools.BrowseTools(scans)...)
+	definitions = append(definitions, skills.Tool())
 	if len(configurations) > 0 {
 		configuration = configurations[0]
 		if configuration.tavilyEndpoint != "" {
@@ -254,7 +257,7 @@ func withCurrentStewardUser(definition tool.Definition, guard *identity.Guard, s
 		}
 		caller.User = user
 		if !definition.MinRole.Allows(user) {
-			return caller, &tool.Error{Code: tool.CodePermissionDenied, Message: "无权调用此工具"}
+			return caller, definition.RoleDeniedError()
 		}
 		if user.Role != "admin" {
 			enabled, err := store.GetMembersEnabled(ctx)

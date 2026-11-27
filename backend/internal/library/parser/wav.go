@@ -9,12 +9,7 @@ import (
 	"strings"
 )
 
-func parseWAV(path string) (AudioObservation, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return AudioObservation{}, err
-	}
-	defer file.Close()
+func parseWAV(file *os.File) (AudioObservation, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return AudioObservation{}, err
@@ -107,7 +102,7 @@ func parseWAV(path string) (AudioObservation, error) {
 		return o, err
 	}
 	finalizeTags(&o)
-	return applyFilenameFallback(path, o), nil
+	return o, nil
 }
 
 // mergeWAVInfo 在 ID3 全部读完后，用 INFO 补齐缺失字段和署名角色。

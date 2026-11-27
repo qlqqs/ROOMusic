@@ -14,12 +14,7 @@ type apeHeader struct {
 	md5                            [16]byte
 }
 
-func parseAPE(path string) (AudioObservation, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return AudioObservation{}, err
-	}
-	defer file.Close()
+func parseAPE(file *os.File) (AudioObservation, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return AudioObservation{}, err
@@ -39,7 +34,7 @@ func parseAPE(path string) (AudioObservation, error) {
 		return AudioObservation{}, err
 	}
 	finalizeTags(&observation)
-	return applyFilenameFallback(path, observation), nil
+	return observation, nil
 }
 
 func apeStreamStart(reader io.ReaderAt, size int64) (int64, error) {

@@ -38,6 +38,27 @@ func (filter scanFilter) skipDir(relativeDir, name string) bool {
 
 func (filter scanFilter) skipFile(name string) bool { return strings.HasPrefix(name, ".") }
 
+// PathExcluded 判断规范的根内相对路径及其祖先是否命中忽略规则或该根的排除集合。
+// 空路径表示登记根，登记根本身不参与判断。
+func PathExcluded(exclusions map[string]struct{}, relativePath string) bool {
+	return firstExcludedPath(exclusions, relativePath) != ""
+}
+
+func firstExcludedPath(exclusions map[string]struct{}, relativePath string) string {
+	if relativePath == "" {
+		return ""
+	}
+	filter := scanFilter{exclusions: exclusions}
+	var current string
+	for name := range strings.SplitSeq(relativePath, "/") {
+		current = path.Join(current, name)
+		if filter.skipDir(current, name) {
+			return current
+		}
+	}
+	return ""
+}
+
 func isSupportedAudioExtension(extension string) bool {
 	switch extension {
 	case ".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a", ".ape", ".wv", ".aif", ".aiff", ".dsf", ".dff":
