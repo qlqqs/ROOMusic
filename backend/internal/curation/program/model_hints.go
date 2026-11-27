@@ -265,62 +265,14 @@ func (w *Worker) lookupHint(ctx context.Context, e catalog.CurationEvidence, mod
 func checkHintCandidates(ctx context.Context, e catalog.CurationEvidence, mode string, rows []Candidate, method string, g curation.JudgeGroup, snap MatchSnapshot, f sources.ReleaseFinder, rf sources.RecordingFinder) (MatchResult, error) {
 	result := newMatch(mode, "model")
 	var passed []Candidate
-	if method == "" || method == "model" {
-		method = "search"
-	}
 	// 版本线索只区分同一发行组内的版次。
 	sameGroup := len(rows) > 1 && rows[0].ReleaseGroupID != "" && !slices.ContainsFunc(rows[1:], func(c Candidate) bool {
 		return c.ReleaseGroupID != rows[0].ReleaseGroupID
 	})
 	for _, c := range rows {
-		var checked MatchResult
-		if mode == "single" {
-			if rf == nil {
-				return result, sources.ErrUnavailable
-			}
-			rec, err := queryResult(rf.RecordingByID(ctx, c.ExternalID))
-			if err != nil {
-				return result, err
-			}
-			if rec.ID != c.ExternalID {
-				continue
-			}
-			checked = DecideSingle(e, method, []sources.Recording{rec})
-			c.Recording = &rec
-		} else {
-			r := c.Release
-			if !completeRelease(r, c.ExternalID) || !r.Complete {
-				detail, err := queryResult(f.ReleaseByID(ctx, c.ExternalID))
-				if err != nil {
-					return result, err
-				}
-				if detail.ID != c.ExternalID {
-					continue
-				}
-				r = &detail
-			}
-			if !matchesHint(e, g, *r, sameGroup) {
-				continue
-			}
-			checked = decideAlbum(e, method, []sources.Release{*r}, snap)
-			if checked.Status == "uncertain" {
-				checked = partialAlbumMatch(e, checked)
-			}
-			if method == "search" && checked.Status != "matched" && shortHintMatches(e, g, *r, len(rows) == 1) {
-				// 这里只补足唯一反证 title_mismatch，保留原结构比较得到的曲目配对。
-				if len(checked.Candidates) == 1 && slices.Equal(checked.Candidates[0].Conflicts, []string{"title_mismatch"}) {
-					var comp comparison
-					comp.compareRelease(e, "search", *r)
-					comp.compareTracks(e, "model", *r)
-					checked.Status, checked.Level, checked.Rule, checked.Release, checked.Pairs = "matched", "release", "model_title_tracks", r, comp.pairs
-					checked.Conflicts = nil
-					checked.Candidates[0].Conflicts = nil
-					checked.Candidates[0].Verification = verifyAlbum(e, *r, comp)
-					checked.Candidates[0].Verification.Direct = true
-					checked.Candidates[0].Verification.Method = "model_title_tracks"
-				}
-			}
-			c.Release = r
+		checked, err := checkHintCandidate(ctx, e, mode, &c, method, g, snap, f, rf, sameGroup, len(rows) == 1)
+		if err != nil {
+			return result, err
 		}
 		if checked.Status != "matched" {
 			continue
@@ -339,6 +291,62 @@ func checkHintCandidates(ctx context.Context, e catalog.CurationEvidence, mode s
 		result.Route = ""
 	}
 	return result, nil
+}
+
+func checkHintCandidate(ctx context.Context, e catalog.CurationEvidence, mode string, c *Candidate, method string, g curation.JudgeGroup, snap MatchSnapshot, f sources.ReleaseFinder, rf sources.RecordingFinder, sameGroup, unique bool) (MatchResult, error) {
+	if method == "" || method == "model" {
+		method = "search"
+	}
+	var checked MatchResult
+	if mode == "single" {
+		if rf == nil {
+			return MatchResult{}, sources.ErrUnavailable
+		}
+		rec, err := queryResult(rf.RecordingByID(ctx, c.ExternalID))
+		if err != nil {
+			return MatchResult{}, err
+		}
+		if rec.ID != c.ExternalID {
+			return uncertain(MatchResult{}, "external_id_mismatch"), nil
+		}
+		checked = DecideSingle(e, method, []sources.Recording{rec})
+		c.Recording = &rec
+	} else {
+		r := c.Release
+		if !completeRelease(r, c.ExternalID) || !r.Complete {
+			detail, err := queryResult(f.ReleaseByID(ctx, c.ExternalID))
+			if err != nil {
+				return MatchResult{}, err
+			}
+			if detail.ID != c.ExternalID {
+				return uncertain(MatchResult{}, "external_id_mismatch"), nil
+			}
+			r = &detail
+		}
+		if !matchesHint(e, g, *r, sameGroup) {
+			return MatchResult{}, nil
+		}
+		checked = decideAlbum(e, method, []sources.Release{*r}, snap)
+		if checked.Status == "uncertain" {
+			checked = partialAlbumMatch(e, checked)
+		}
+		if method == "search" && checked.Status != "matched" && shortHintMatches(e, g, *r, unique) {
+			// 这里只补足唯一反证 title_mismatch，保留原结构比较得到的曲目配对。
+			if len(checked.Candidates) == 1 && slices.Equal(checked.Candidates[0].Conflicts, []string{"title_mismatch"}) {
+				var comp comparison
+				comp.compareRelease(e, "search", *r)
+				comp.compareTracks(e, "model", *r)
+				checked.Status, checked.Level, checked.Rule, checked.Release, checked.Pairs = "matched", "release", "model_title_tracks", r, comp.pairs
+				checked.Conflicts = nil
+				checked.Candidates[0].Conflicts = nil
+				checked.Candidates[0].Verification = verifyAlbum(e, *r, comp)
+				checked.Candidates[0].Verification.Direct = true
+				checked.Candidates[0].Verification.Method = "model_title_tracks"
+			}
+		}
+		c.Release = r
+	}
+	return checked, nil
 }
 
 func shortHintMatches(e catalog.CurationEvidence, g curation.JudgeGroup, r sources.Release, unique bool) bool {

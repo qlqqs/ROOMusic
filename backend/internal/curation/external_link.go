@@ -93,7 +93,9 @@ func (r LinkRequest) normalizedLinks() ([]LinkIntent, error) {
 				}
 			case "release_group_match":
 				reviewed := r.Method == "independent_review" && (uuid.Valid(r.ApprovedReviewID) || r.ConfirmedBy != "")
-				if r.Source.Kind != "model" || r.ExternalSource != "musicbrainz" || r.Method != "album_structure" && r.Method != "model" && !reviewed || r.CheckEvidence == nil {
+				steward := r.Source.Kind == "source" && r.Source.Provider == "steward" && uuid.Valid(r.ConfirmedBy) && r.RequireAll && r.Method == "search"
+				model := r.Source.Kind == "model" && (r.Method == "album_structure" || r.Method == "model" || reviewed)
+				if !(steward || model) || r.ExternalSource != "musicbrainz" || r.CheckEvidence == nil {
 					return nil, operations.Invalid("invalid_input", "发行组级对应缺少 MusicBrainz 结构核对")
 				}
 			}
@@ -291,7 +293,7 @@ func (w *Writer) applyLinks(ctx context.Context, parent *sql.Tx, request LinkReq
 	}
 	var result operations.Result
 	if parent == nil {
-		result, err = operations.Run(ctx, w.db, spec, execute)
+		result, err = w.runMatchOperation(ctx, spec, execute)
 	} else {
 		result, _, err = operations.RunInTx(ctx, parent, spec, execute)
 	}

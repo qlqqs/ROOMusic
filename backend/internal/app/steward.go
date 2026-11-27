@@ -119,6 +119,9 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	definitions = append(definitions, skills.Tool())
 	if len(configurations) > 0 {
 		configuration = configurations[0]
+		if configuration.matcher != nil {
+			definitions = append(definitions, curationtools.MatchReleaseExternal(configuration.matcher))
+		}
 		if configuration.tavilyEndpoint != "" {
 			webService.WithTavily(configuration.tavilyEndpoint, configuration.mockHost)
 		}

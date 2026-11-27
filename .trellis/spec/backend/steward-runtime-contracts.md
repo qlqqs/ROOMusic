@@ -453,6 +453,8 @@ schema 子集（输入、输出都按此编译，出现其他关键字注册失�
 
 ## 3. 工具清单
 
+`match_release_external` 供管理员在聊天和 MCP 中使用，`ScopeShared`、`Revertible: true`、`Untrusted: true`。输入为 `release_id`、`entity`（`release` 或 `recording`）、`mbid`，可带展示依据 `basis`。聊天沿用 C6/C7 确认策略，MCP 读写令牌直接执行。预览显示目标版本资料、层级及可补的空字段；结果含 `level`、`operation_id`、`operation_ids` 并提示“署名、封面等稍后自动补齐”。后台整理使用单独注册表。核对、拒绝码和幂等收据见[自动整理合同第 2.6 节](./curation-contracts.md#26-识别接口与结论读取)。
+
 原有 16 个曲库工具，全部 `Scope: read`、`Revertible: false`、`Untrusted: true`，输出 schema 都是 `{"type":"object"}`。
 “分页”指接受 `page`、`page_size`。所有 `id` 是 36 字符的 UUID（处理器再校验格式并转小写）。
 

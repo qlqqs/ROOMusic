@@ -266,7 +266,7 @@ func (k groupChangeKind) Revert(ctx context.Context, tx *sql.Tx, operationID str
 		if err := json.Unmarshal(original.Origin, &source); err != nil {
 			return operations.Outcome{}, err
 		}
-		if source.Source == "curation" {
+		if source.Source == "curation" || source.ProviderKind == "source" && source.Provider == "steward" {
 			if err := k.suppressions.SuppressGroupJoin(ctx, tx, original.TargetID, locked.groupID, operationID, operations.ActorID(ctx)); err != nil {
 				return operations.Outcome{}, err
 			}

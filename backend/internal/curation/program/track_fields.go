@@ -196,10 +196,11 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 	var err error
 	var saved struct {
 		releaseReviewState
-		Level   string
-		Rule    string
-		GroupID string `json:"external_group_id"`
-		Credits []sources.Credit
+		Provider string
+		Level    string
+		Rule     string
+		GroupID  string `json:"external_group_id"`
+		Credits  []sources.Credit
 	}
 	if err = json.Unmarshal(s.Result, &saved); err != nil {
 		return err
@@ -297,6 +298,12 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 	if !ok || ReleaseDigest(entry) != s.InputDigest {
 		return errReleaseChanged
 	}
+	if artists && saved.Provider == "steward" && match.Release != nil {
+		entry, err = w.backfillFieldCredits(ctx, tx, entry, match.Release)
+		if err != nil {
+			return err
+		}
+	}
 	d := releaseInputs(entry)
 	if err := localRequests.project(ctx, tx, e.ID); err != nil {
 		return err
@@ -307,12 +314,12 @@ func (w *Worker) backfillMatch(ctx context.Context, e *catalog.CurationEvidence,
 	if err := refreshMatchItem(ctx, tx, entry, s, d, MatchRuleVersion); err != nil {
 		return err
 	}
-	err = tx.QueryRowContext(ctx, `UPDATE curation_work_states SET result=result || $5::jsonb,updated_at=now(),
+	err = tx.QueryRowContext(ctx, `UPDATE curation_work_states SET result=result || $5::jsonb,updated_at=now(),input_digest=$13,
  local_rule_version=$7,match_rule_version=$8,identity_digest=$9,gap_digest=$10,file_digest=$12,
  needs_work=manual_requested_at IS DISTINCT FROM $11::timestamptz,
  manual_requested_at=CASE WHEN manual_requested_at IS DISTINCT FROM $11 THEN manual_requested_at END
  WHERE subject='release' AND target_id=$1 AND status='matched' AND generation=$2 AND rule_version=$3 AND input_digest=$4 AND updated_at=$6
- RETURNING result,updated_at`, e.ID, s.Generation, s.RuleVersion, s.InputDigest, jsonValue(markers), s.UpdatedAt, LocalRuleVersion, MatchRuleVersion, d.identity, d.gap, s.ManualRequestedAt, d.file).Scan(&s.Result, &s.UpdatedAt)
+ RETURNING result,updated_at`, e.ID, s.Generation, s.RuleVersion, s.InputDigest, jsonValue(markers), s.UpdatedAt, LocalRuleVersion, MatchRuleVersion, d.identity, d.gap, s.ManualRequestedAt, d.file, d.full).Scan(&s.Result, &s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errReleaseChanged
 	}

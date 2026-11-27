@@ -135,6 +135,7 @@ func subjectEvidence(subject string, e catalog.CurationEvidence, state curation.
 
 type outcome struct {
 	keepSourceResult bool
+	provider         string
 
 	trackRequests                                                      []curation.TrackRequest
 	localRequests                                                      localCreditRequests
@@ -585,6 +586,7 @@ func releaseResult(out outcome) []byte {
 		releaseReviewState
 		Snapshot        *MatchSnapshot     `json:"match_snapshot,omitempty"`
 		Verification    *MatchVerification `json:"verification,omitempty"`
+		Provider        string             `json:"provider,omitempty"`
 		Blocked         []blockedCandidate `json:"blocked,omitempty"`
 		Level           string             `json:"level,omitempty"`
 		Rule            string             `json:"rule,omitempty"`
@@ -600,7 +602,7 @@ func releaseResult(out outcome) []byte {
 		ReleaseMerge    string             `json:"release_merge,omitempty"`
 		ArtistLinks     string             `json:"artist_links,omitempty"`
 		TrackFields     string             `json:"track_fields,omitempty"`
-	}{Verification: m.Verification, releaseReviewState: out.review, Level: m.Level, Rule: m.Rule, Route: m.Route, Credits: m.Credits, ExternalGroupID: m.GroupID, Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: out.resultConflicts(), Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks, ReleaseMerge: out.releaseMerge}
+	}{Provider: out.provider, Verification: m.Verification, releaseReviewState: out.review, Level: m.Level, Rule: m.Rule, Route: m.Route, Credits: m.Credits, ExternalGroupID: m.GroupID, Mode: m.Mode, Method: m.Method, Fingerprint: m.Fingerprint, Conflicts: out.resultConflicts(), Group: out.group, TrackFields: out.trackFields, ArtistLinks: out.artistLinks, ReleaseMerge: out.releaseMerge}
 	if out.status == "conflict" {
 		r.Snapshot = &m.Snapshot
 	}

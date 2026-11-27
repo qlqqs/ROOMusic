@@ -99,7 +99,7 @@ func checkWrite(ctx context.Context, tx *sql.Tx, spec operations.Spec, confirmed
 	if err := tx.QueryRowContext(ctx, "SELECT enabled FROM curation_settings WHERE id=1 FOR SHARE").Scan(&enabled); err != nil {
 		return err
 	}
-	if !enabled && ArtistWebActor(ctx) == "" {
+	if !enabled && manualSourceActor(ctx) == "" {
 		return operations.Conflict("curation_disabled", "自动整理开关已关闭")
 	}
 	admin, err := identity.IsEnabledAdmin(ctx, tx, confirmed)

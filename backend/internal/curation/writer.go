@@ -140,7 +140,7 @@ func (w *Writer) applyFields(ctx context.Context, request Request, trackID strin
 		spec.Origin.Mode = "local_cleanup"
 	}
 	var applied Applied
-	result, err := operations.Run(ctx, w.db, spec, func(ctx context.Context, tx *sql.Tx, operationID string) (operations.Outcome, error) {
+	result, err := w.runMatchOperation(ctx, spec, func(ctx context.Context, tx *sql.Tx, operationID string) (operations.Outcome, error) {
 		var locked autoFieldTarget
 		var err error
 		if track {

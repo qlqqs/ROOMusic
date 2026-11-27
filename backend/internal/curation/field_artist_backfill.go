@@ -33,7 +33,7 @@ func BackfillFieldArtistLinks(ctx context.Context, tx *sql.Tx, releaseID, extern
 	JOIN operations o ON o.id=f.operation_id AND o.target_id=$1 AND o.created_at>=f.linked_at
 	JOIN external_links r ON r.source='musicbrainz' AND r.object_type='release' AND r.object_id=$1 AND r.external_id=$2
 	JOIN operations owner ON owner.id=r.operation_id
-	WHERE NOT (o.response ? 'artist_credit') AND o.origin->>'source'='curation' AND
+	WHERE NOT (o.response ? 'artist_credit') AND (o.origin->>'source'='curation' OR (o.origin->>'source' IN ('chat','mcp') AND o.origin->>'provider'='steward')) AND
 	((f.writer_level=4 AND o.origin->>'provider_kind'='source') OR (f.writer_level=3 AND o.origin->>'provider_kind'='model'))
 	AND EXISTS (SELECT FROM artist_effective_credits c JOIN artist_credits fact ON fact.id=c.credit_id AND fact.layer='auto'
 	WHERE ((f.track='' AND c.role='album_artist' AND c.release_id=$1) OR (c.role='track_artist' AND c.track_id=NULLIF(f.track,'')::uuid))
@@ -74,7 +74,8 @@ func BackfillFieldArtistLinks(ctx context.Context, tx *sql.Tx, releaseID, extern
 		fromRelease := f.provider == "musicbrainz" && f.level == catalog.LevelProgramExternal &&
 			(strings.HasPrefix(f.basis, "MusicBrainz 发行 "+externalID+"，依据") || f.track != "" && f.basis == "按已有 MusicBrainz 对应补全曲目字段")
 		verified := f.level == catalog.LevelModelExternal && f.basis == "external_value"
-		if !fromRelease && !verified && !(f.level == catalog.LevelModelExternal && f.key == DerivedKey(f.owner, step)) {
+		fromMatch := (f.level == catalog.LevelModelExternal || f.level == catalog.LevelProgramExternal && f.provider == "steward") && f.key == DerivedKey(f.owner, step)
+		if !fromRelease && !verified && !fromMatch {
 			continue
 		}
 		var name strings.Builder

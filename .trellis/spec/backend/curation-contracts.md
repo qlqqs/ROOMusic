@@ -86,6 +86,25 @@
 
 `POST /api/v1/admin/curation/releases/{id}/match-selection` 接受 `{source,snapshot_id,external_id}`，要求 `Idempotency-Key`。后端在发行锁内重新读取快照、候选、外部发行和本地证据，选择必须仍是当前候选并通过结构核对。摘要、文件、来源结果或候选发生变化返回 `409 item_stale`，选择无法满足结构核对的独立佐证返回 `409 insufficient_corroboration`，选择已被撤销或同值已标记时步骤内部跳过，不返回 `nothing_to_apply`。成功响应是更新后的匹配结果并包含实际 `operation_ids`。
 
+管理员也可在聊天或 MCP 中用 `match_release_external` 指定 MusicBrainz 编号。工具输入为 `{release_id,entity,mbid}`。程序入口是 `ModelMatcher.PreviewExternal(ctx, in ExternalMatchInput, actor string)` 和 `ModelMatcher.SelectExternal(ctx, in ExternalMatchInput, actor, key string, origin operations.Origin, requestID string)`，分别返回 `ExternalMatchPreview`、`ExternalMatchResult` 和错误。预览按当前证据展示目标版本的标题、艺人、碟曲数、对应层级和可补字段。执行重新取详情，使用与人工选候选相同的发行锁，同时绑定文件摘要、发行证据摘要、工作状态及代次。
+
+| 条件 | 拒绝码与处置 |
+| --- | --- |
+| 发行不存在或不可见 | `not_found` |
+| 发行可见但没有整理资格 | `not_eligible` |
+| 已有版本或组级对应，或单轨散曲已有录音对应 | `already_matched`，先用 `revert_operation` 撤销 |
+| 所选编号的外部对应已被撤销并标记 | `suppressed`，到自动整理设置的“不再提出”中清除 |
+| UUID 无效、类型无效、专辑选录音或散曲选发行 | `invalid_input` |
+| 最新详情缺少结构佐证或出现反证 | `insufficient_corroboration`，消息带具体原因，如 `track_count`、`position_conflict`、`duration_mismatch`、`recording_tag_mismatch` |
+| 核对期间文件、发行证据、资格或工作结论变化 | `item_stale`，重新读取 |
+| 同一操作者用同一幂等键请求其他目标 | `idempotency_conflict` |
+
+该入口从点名的候选和空快照开始，无需冲突待定项。`release` 按结构核对版本；部分覆盖符合第 2.3 节时，或存在无法区分的同组版本时，写发行本身的 `release_group_match`，保留组级结论、公共署名及可证实的组级字段。`recording` 仅用于 `loose_unknown` 的单轨发行，核对曲名、艺人、时长及本地编号后对应到曲目。精确版本、发行组和录音的结果层级分别是 `release`、`release_group` 和 `recording`。
+
+对应、自动字段、归组和结案在同一事务提交，各治理步骤保留独立的可撤销操作。操作来源为聊天或 MCP，保留会话、方案或令牌标识，写入方为 `source/steward`。返回实际对应的 `matched_mbid`、首条 `operation_id` 及全部 `operation_ids`，同键同输入回放原收据。结案把发行状态置为 `matched`，代次加一，使用当前 `MatchRuleVersion`，结束等待的发行与录音识别项。在途识别提交时仍须核对原摘要。
+
+管家操作没有程序批次，`LoadProgramChanges` 的 `OtherOperation` 会触发队列重新投影。程序维护按现有对应补署名、艺人和适用的封面、歌词；管家写入的自动署名字段按版本对应操作派生的键核对来源，复用字段署名回填。管理员点名执行独立于后台总开关，仍须通过 MusicBrainz 来源开关和扫描闸门。后台运行后才执行后续补齐。
+
 `POST /api/v1/admin/curation/releases/{id}/recheck` 不带请求体，仅对原因不是 `candidates_revoked` 的 `unmatched` 有效，写入新的待核对标记并返回 `202`，否则返回 `409 not_unlisted`。`POST /api/v1/admin/curation/model/retry` 触发当前模型失败段重试并返回模型进度。
 
 `POST /api/v1/admin/curation/releases/{id}/adopt-name` 接受 `{target_id,field,basis_operation_id,expected_revision}` 和 `Idempotency-Key`。`target_id` 为发行或曲目的目标，`field` 为可采用的名称字段。请求标识或依据不是 UUID 返回 `400 invalid_input`，依据操作不存在或不是当前 MusicBrainz 对应返回 `409 item_stale`，预期人工版本变化返回 `409 revision_conflict`，成功写人工层并返回 `{field,effective_value,revision,operation_id}`。

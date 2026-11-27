@@ -40,7 +40,10 @@ type MatchPlan struct {
 	item         curation.PendingItem
 }
 type ApplyOptions struct {
-	checkSelection func(context.Context, *sql.Tx) error
+	// 管家写入复用持有发行锁的事务，提交由最外层负责。
+	selectionTx       *sql.Tx
+	groupChangeSource string
+	checkSelection    func(context.Context, *sql.Tx) error
 	// ApprovedReviewID 由后台的审查执行器传入。
 	ApprovedReviewID string
 	// Finish 在匹配结论的同一事务记录人工采纳及其操作编号。
@@ -390,7 +393,7 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 			return staleItem()
 		}
 		if ReleaseDigest(e) != plan.item.InputDigest {
-			if !allMatchLinks(e, p.links.Links) {
+			if opt.selectionTx != nil || !allMatchLinks(e, p.links.Links) {
 				return staleItem()
 			}
 			expected := p.evidence
@@ -447,11 +450,14 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 	if len(out.OperationIDs) > 0 {
 		out.OperationID = out.OperationIDs[0]
 	}
-	tx, err := m.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
-	if err != nil {
-		return MatchApplied{}, err
+	tx := opt.selectionTx
+	if tx == nil {
+		tx, err = m.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+		if err != nil {
+			return MatchApplied{}, err
+		}
+		defer tx.Rollback()
 	}
-	defer tx.Rollback()
 	if err := checkCurrent(ctx, tx); err != nil {
 		if opt.ConfirmedBy == "" && failureCode(err) == "item_stale" {
 			// 同会话同键的治理操作已经回放；原项已成功结清时直接返回原操作，保留其后的新结论。
@@ -472,8 +478,15 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 		return MatchApplied{}, err
 	}
 	conclusion := outcome{status: "matched", group: group, match: plan.match, trackRequests: p.tracks, releaseMerge: mergeDone}
+	if opt.selectionTx != nil {
+		conclusion.provider = opt.Source.Provider
+	}
 	digest := ReleaseDigest(fresh)
-	if fresh.FileDigest != p.evidence.FileDigest || !allMatchLinks(fresh, p.links.Links) || ReleaseDigest(afterMatch(p.evidence, fresh, conclusion)) != digest {
+	before := p.evidence
+	if opt.selectionTx != nil && group == "joined" && fresh.GroupID == p.group.joinID && fresh.GroupChangeSource == opt.groupChangeSource {
+		before.GroupID, before.GroupChangeSource, before.GroupExternalID = fresh.GroupID, fresh.GroupChangeSource, fresh.GroupExternalID
+	}
+	if fresh.FileDigest != p.evidence.FileDigest || !allMatchLinks(fresh, p.links.Links) || ReleaseDigest(afterMatch(before, fresh, conclusion)) != digest {
 		return MatchApplied{}, staleItem()
 	}
 	states, err := curation.LoadWorkStates(ctx, tx, "release", []string{fresh.ID})
@@ -481,7 +494,7 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 		return MatchApplied{}, err
 	}
 	state := states[fresh.ID]
-	if state.Status != "matched" || state.InputDigest != digest {
+	if opt.selectionTx != nil || state.Status != "matched" || state.InputDigest != digest {
 		state.Generation++
 		state.Attempts++
 	}
@@ -511,6 +524,9 @@ func (m *ModelMatcher) Apply(ctx context.Context, plan MatchPlan, opt ApplyOptio
 		if err := opt.Finish(ctx, tx, out.OperationIDs); err != nil {
 			return MatchApplied{}, err
 		}
+	}
+	if opt.selectionTx != nil {
+		return out, nil
 	}
 	return out, tx.Commit()
 }

@@ -14,6 +14,9 @@ import (
 
 // DiscoverReleaseMerges 与扫描、并入事务共用目录写锁，避免并发匹配把两个方向分别入队。
 func (w *Writer) DiscoverReleaseMerges(ctx context.Context, external string, version int16) error {
+	if scope := w.matchTransaction; scope != nil {
+		return w.discoverReleaseMerges(ctx, scope.tx, external, version)
+	}
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -194,11 +197,22 @@ type EditionAction struct {
 
 // ProgramMergePreview 取两个仍生效的版本对应，先核对目录预览，再交写入事务复核。
 func (w *Writer) ProgramMergePreview(ctx context.Context, release sources.Release) (*EditionAction, error) {
+	if scope := w.matchTransaction; scope != nil {
+		return w.programMergePreview(ctx, scope.tx, release)
+	}
 	tx, err := w.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
+	action, err := w.programMergePreview(ctx, tx, release)
+	if err != nil {
+		return nil, err
+	}
+	return action, tx.Commit()
+}
+
+func (w *Writer) programMergePreview(ctx context.Context, tx *sql.Tx, release sources.Release) (*EditionAction, error) {
 	ids, err := ObjectsLinkedTo(ctx, tx, "musicbrainz", "release", release.ID)
 	if err != nil || len(ids) < 2 {
 		return nil, err
@@ -228,7 +242,7 @@ func (w *Writer) ProgramMergePreview(ctx context.Context, release sources.Releas
 				for _, sides := range [][2]string{{a, b}, {b, a}} {
 					to, from := entries[sides[0]], entries[sides[1]]
 					if release.Group.ID != "" && to.GroupExternalID == release.Group.ID && from.ExternalGroupID == release.Group.ID {
-						return &EditionAction{JoinRelease: from.ID, JoinGroup: to.GroupID}, tx.Commit()
+						return &EditionAction{JoinRelease: from.ID, JoinGroup: to.GroupID}, nil
 					}
 				}
 				continue
@@ -247,9 +261,9 @@ func (w *Writer) ProgramMergePreview(ctx context.Context, release sources.Releas
 				return nil, err
 			}
 			if coversEdition(release, preview, entries) {
-				return &EditionAction{Merge: &preview}, tx.Commit()
+				return &EditionAction{Merge: &preview}, nil
 			}
 		}
 	}
-	return nil, tx.Commit()
+	return nil, nil
 }
