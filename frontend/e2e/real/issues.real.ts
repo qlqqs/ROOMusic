@@ -27,7 +27,7 @@ const initial: readonly Track[] = [
   { file: "c1.wav", title: "C One", album: albumC, fill: 0x71 },
   { file: "c2.wav", title: "C Two", album: albumC, fill: 0x72 },
 ];
-const write = (track: Track) => writeFile(trackFile(track.file), syntheticWav({ title: track.title, album: track.album, artist }, track.fill));
+const write = (track: Track) => writeFile(trackFile(track.file), syntheticWav({ title: track.title, album: track.album, artist, albumArtist: artist }, track.fill));
 
 type Located = { groupId: string; releaseId: string };
 let splitA: Located;

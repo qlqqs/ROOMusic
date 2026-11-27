@@ -1,6 +1,6 @@
 import type { Request, Route } from "@playwright/test";
 import { decodeCatalogState, type CatalogStateDTO, type ReleaseGroupSummaryWithAddedAtDTO } from "../../src/features/catalog/api/decoders";
-import type { DiagnosticsPageDTO, RootDTO, RootOperationDTO, ScanDTO, ScanReportDTO, ScanScheduleDTO } from "../../src/features/library/api/decoders";
+import { decodeRootList, type DiagnosticsPageDTO, type RootListItemDTO, type RootOperationDTO, type ScanDTO, type ScanReportDTO, type ScanScheduleDTO } from "../../src/features/library/api/decoders";
 import type { RecentReleaseDTO } from "../../src/features/listening/api/decoders";
 import type { MemberDTO } from "../../src/features/members/api/decoders";
 import { loadApiSample, sampleBody } from "../../src/test/api-samples";
@@ -111,7 +111,7 @@ export type ApiMock = CatalogData & {
   /** 当前会话的用户名；null 表示没有有效会话。 */
   session: string | null;
   accounts: Map<string, Account>;
-  roots: RootDTO[];
+  roots: RootListItemDTO[];
   operations: RootOperationDTO[];
   users: MemberDTO[];
   scans: Map<string, ScanDTO>;
@@ -158,8 +158,8 @@ const json = (body: unknown, status = 200): Handled => ({ status, body });
 const notFound = (message: string): Handled => json({ error: { code: "not_found", message }, request_id: "sample-request" }, 404);
 const idIn = (path: string, segment: string): string => new RegExp(`/${segment}/([^/?]+)`).exec(path)?.[1] ?? "";
 
-function seedRoots(): RootDTO[] {
-  return (sampleBody("library-roots/list") as { items: RootDTO[] }).items;
+function seedRoots(): RootListItemDTO[] {
+  return decodeRootList(sampleBody("library-roots/list")).items;
 }
 
 /** 仅暴露拦截器真正使用的端口，Vitest 可执行同一路由回调而不启动浏览器。 */
@@ -441,7 +441,7 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
           const name = requested.split("/").filter(Boolean).pop() ?? requested;
           let root = mock.roots.find((candidate) => candidate.name === name);
           if (root === undefined) {
-            root = { id: uuidOf("a", counter++), path: name, name, status: "active", revision: 1, created_at: now(), updated_at: now(), excluded_paths: [] };
+            root = { id: uuidOf("a", counter++), path: name, name, status: "active", revision: 1, created_at: now(), updated_at: now(), excluded_paths: [], scan_watch_mode: null, poll_interval_minutes: 60 };
             mock.roots = [...mock.roots, root];
           }
           recordOperation({ operation: "create", status: "succeeded", root_id: root.id, revision: root.revision });
@@ -504,7 +504,7 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
         if (root === undefined) return notFound("目录不存在");
         const { expected_revision: expected } = body as { expected_revision: number };
         if (root.revision !== expected || root.status !== (restoring ? "disabled" : "active")) return sample("errors/revision-conflict");
-        const updated: RootDTO = { ...root, status: restoring ? "active" : "disabled", revision: root.revision + 1, updated_at: now() };
+        const updated: RootListItemDTO = { ...root, status: restoring ? "active" : "disabled", revision: root.revision + 1, updated_at: now(), scan_watch_mode: null };
         mock.roots = mock.roots.map((candidate, position) => (position === index ? updated : candidate));
         recordOperation({ operation: restoring ? "restore" : "disable", status: "succeeded", root_id: root.id, revision: updated.revision });
         return json({ id: root.id, path: root.name, status: updated.status, revision: updated.revision });

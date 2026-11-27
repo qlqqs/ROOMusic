@@ -43,7 +43,7 @@ for (const width of [390, 1440]) {
     await expect.poll(() => header.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
 
     const photoSeal = header.getByRole("button", { name: "图片来源：网络搜索" });
-    await expect(photoSeal.locator("svg.lucide-sparkles")).toBeVisible();
+    await expect(photoSeal.locator("svg.lucide-globe")).toBeVisible();
     expect(await photoSeal.evaluate((element) => {
       const probe = document.createElement("span");
       probe.style.color = "var(--text-accent)";
@@ -89,8 +89,14 @@ for (const width of [390, 1440]) {
       input: { artist_id: detail.artist.id, external_id: candidate.external_id, source: candidate.source },
       preview: { changes: [{ field: "external_link", before: null, after: candidate.external_id }] },
     });
-    let status: ArtistWebSearchDTO = artistWebSearchOf({ state: "running" });
-    await page.route(`**${statusPath}`, (route) => route.fulfill({ json: status }));
+    let status: ArtistWebSearchDTO = artistWebSearchOf({ configured: true, can_start: true });
+    await page.route(`**${statusPath}`, (route) => {
+      if (route.request().method() === "POST") {
+        status = artistWebSearchOf({ state: "running", configured: true, can_stop: true });
+        return route.fulfill({ status: 202, json: status });
+      }
+      return route.fulfill({ json: status });
+    });
 
     const path = `/api/v1/admin/curation/exceptions/${candidate.exception_id}/accept`;
     let finishAccept = () => {};
@@ -107,7 +113,14 @@ for (const width of [390, 1440]) {
 
     await page.goto(url);
     const header = page.locator("#main header").filter({ has: page.getByRole("heading", { level: 1, name: detail.artist.name }) });
-    await expect(header.getByRole("button", { name: "正在网络搜索" })).toBeVisible();
+    await header.getByRole("button", { name: "指定对应" }).click();
+    const [lookupRequest] = await Promise.all([
+      page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname === statusPath),
+      header.getByRole("button", { name: "联网查找这位艺人的身份" }).click(),
+    ]);
+    expect(lookupRequest.postData()).toBeNull();
+    await page.keyboard.press("Escape");
+    await expect(header.getByRole("button", { name: "正在联网查找" })).toBeVisible();
     const ring = header.locator("svg[data-indeterminate]");
     await expect(ring).toBeVisible();
     const arc = ring.locator("circle").last();

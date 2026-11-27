@@ -22,8 +22,16 @@ export async function login(api: APIRequestContext, credentials = admin) {
   return decodeID(await body(await post(api, "/api/v1/auth/login", credentials)));
 }
 export async function scan(api: APIRequestContext) {
-  const result = decodeScan(await body(await post(api, "/api/v1/scans", {})));
-  await expect.poll(async () => decodeScan(await body(await api.get(`/api/v1/scans/${result.id}`))).status).toBe("succeeded");
+  let scanId = "";
+  // 200 会返回已有扫描，可能是目录监听发起的局部扫描。等待能新建覆盖整库的手动扫描。
+  await expect.poll(async () => {
+    const response = await post(api, "/api/v1/scans", {});
+    if (response.status() === 200) return false;
+    expect(response.status(), "启动手动扫描").toBe(202);
+    scanId = decodeScan(await body(response)).id;
+    return true;
+  }).toBe(true);
+  await expect.poll(async () => decodeScan(await body(await api.get(`/api/v1/scans/${scanId}`))).status).toBe("succeeded");
 }
 export async function catalog(api: APIRequestContext) {
   const groups = decodeReleaseGroupPage(await body(await api.get("/api/v1/release-groups?page_size=100")));
@@ -120,10 +128,12 @@ function riffChunk(id: string, payload: Buffer): Buffer {
  * fill 是音频数据每个字节的值：不同专辑用不同的值，内容指纹才互不相同；同一个路径改标签时保持 fill，
  * 扫描认为是同一首曲目只是标签变了。format 可以改位深与采样率（例如 24 位、96 kHz），版本对比据此区分音频格式。
  */
-export function syntheticWav(tags: { title: string; album: string; artist: string }, fill: number, seconds = 0.2, format: { sampleRate?: number; bitDepth?: number } = {}): Buffer {
+export function syntheticWav(tags: { title: string; album: string; artist: string; albumArtist?: string }, fill: number, seconds = 0.2, format: { sampleRate?: number; bitDepth?: number } = {}): Buffer {
   const { sampleRate = 44_100, bitDepth = 16 } = format;
   const blockAlign = 2 * (bitDepth / 8); // 立体声
-  const info = ([["INAM", tags.title], ["IPRD", tags.album], ["IART", tags.artist]] as const).map(([id, text]) => riffChunk(id, Buffer.from(`${text}\0`, "utf8")));
+  const fields: [string, string][] = [["INAM", tags.title], ["IPRD", tags.album], ["IART", tags.artist]];
+  if (tags.albumArtist !== undefined) fields.push(["AART", tags.albumArtist]);
+  const info = fields.map(([id, text]) => riffChunk(id, Buffer.from(`${text}\0`, "utf8")));
   const fmt = Buffer.alloc(16);
   fmt.writeUInt16LE(1, 0); // PCM
   fmt.writeUInt16LE(2, 2); // 声道

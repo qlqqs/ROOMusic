@@ -32,7 +32,7 @@ const initial: readonly Track[] = [
   { path: twoFile, file: "t1.wav", title: "Two One", album: two, fill: 0x51 },
   { path: twoFile, file: "t2.wav", title: "Two Two", album: two, fill: 0x52 },
 ];
-const write = (track: Track, fill = track.fill) => writeFile(track.path(track.file), syntheticWav({ title: track.title, album: track.album, artist }, fill));
+const write = (track: Track, fill = track.fill) => writeFile(track.path(track.file), syntheticWav({ title: track.title, album: track.album, artist, albumArtist: artist }, fill));
 
 type Located = { groupId: string; releaseId: string };
 let oldOne: Located;
