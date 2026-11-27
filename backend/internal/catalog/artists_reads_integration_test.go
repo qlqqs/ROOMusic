@@ -416,7 +416,7 @@ func TestPostgreSQLArtistReadFilenameInferredArtist(t *testing.T) {
 	ctx := context.Background()
 	scanID := uuid.New()
 	f.exec(`INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())`, scanID)
-	// 模拟无标签解析结果；艺人必须由 organizer 从文件名拆出，不能直接塞进艺人事实表。
+	// 模拟无标签解析结果，保留整个文件名标题与占位艺人。
 	observation := ingest.SourceObservation{
 		RelativePath: "Filename/示例艺人 - 示例曲.flac", Directory: "Filename",
 		Title: "示例艺人 - 示例曲", Album: "Filename", Artist: "未知艺术家",
@@ -452,27 +452,21 @@ func TestPostgreSQLArtistReadFilenameInferredArtist(t *testing.T) {
  WHERE m.release_id=$1::uuid`, releaseID).Scan(&trackID, &title, &artist, &source, &inferred); err != nil {
 		t.Fatal(err)
 	}
-	if title != "示例曲" || artist != "示例艺人" || source != "filename_fallback" || !inferred {
-		t.Fatalf("文件名艺人及其推断证据未写入: 标题=%q 艺人=%q 来源=%q inferred=%t", title, artist, source, inferred)
+	if title != "示例艺人 - 示例曲" || artist != "未知艺术家" || source != "display_fallback" || !inferred {
+		t.Fatalf("文件名标题或占位艺人的来源错误: 标题=%q 艺人=%q 来源=%q inferred=%t", title, artist, source, inferred)
 	}
 	// 复用现有发布流程，在 CATP 内真实刷新艺人图后再读公开摘要。
 	publishArtistReadFixture(t, f)
-	id := findArtistReadFixture(t, f, "示例艺人")
-	detail, err := f.store.LoadArtist(ctx, id)
-	if err != nil || detail.Artist.ID != id || detail.Artist.Name != "示例艺人" || !detail.Artist.Available || detail.Artist.TrackCount != 1 || detail.Artist.AlbumCount != 1 {
-		t.Fatalf("文件名艺人未成为可读取的实体: %+v %v", detail, err)
-	}
 	summaries, err := f.store.LoadTrackSummaries(ctx, []string{trackID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	summary, ok := summaries[trackID]
-	if !ok || !summary.Present || summary.Title != "示例曲" || summary.Artist != "示例艺人" {
+	if !ok || !summary.Present || summary.Title != title || summary.Artist != artist || len(summary.ArtistRefs) != 0 {
 		t.Fatalf("文件名曲目不可读取: %+v", summaries)
 	}
-	assertArtistRefs(t, summary.ArtistRefs, "track_artist", "示例艺人", "示例艺人", id)
 	var placeholders int
-	if err := f.database.QueryRow(`SELECT COUNT(*) FROM artist_name_keys WHERE normalized_key='未知艺术家'`).Scan(&placeholders); err != nil {
+	if err := f.database.QueryRow(`SELECT COUNT(*) FROM artist_name_keys WHERE normalized_key IN ('未知艺术家','示例艺人')`).Scan(&placeholders); err != nil {
 		t.Fatal(err)
 	}
 	if placeholders != 0 {

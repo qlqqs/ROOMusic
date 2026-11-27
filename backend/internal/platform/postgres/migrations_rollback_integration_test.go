@@ -34,6 +34,15 @@ var rollbackFixtures = map[int64]string{
  WHERE subject='release' AND target_id='e9800000-0000-4000-8000-000000000002';
  INSERT INTO curation_release_match_results(release_id,source,status,checked_at,conflicts)
  VALUES('e9800000-0000-4000-8000-000000000002','synthetic','conflict','2026-01-02T00:00:00Z',ARRAY['track_count']);`,
+	93: `INSERT INTO curation_pending_items(target_type,target_id,kind,status,rule_version,input_digest,evidence)
+ SELECT 'release','e8700000-0000-4000-8000-000000000002',kind,'waiting_model',1,'fixture','{}'
+ FROM (VALUES ('name_patrol'),('local_cleanup')) AS kinds(kind);`,
+	91: `INSERT INTO curation_pending_items(id,target_type,target_id,kind,status,rule_version,input_digest,evidence)
+ VALUES('e9100000-0000-4000-8000-000000000001','release','e8700000-0000-4000-8000-000000000002','verify_name','waiting_model',1,'fixture','{}');
+ INSERT INTO curation_model_exceptions(id,pending_item_id,tool,input,preview,provider,reason_code)
+ VALUES(gen_random_uuid(),'e9100000-0000-4000-8000-000000000001','submit_verification','{}','{}','synthetic','name_difference');`,
+	89: `INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status)
+ VALUES('fingerprint',gen_random_uuid(),1,'fixture','done'),('release',gen_random_uuid(),1,'fixture','pending');`,
 	87: `INSERT INTO external_links(id,source,object_type,object_id,external_id,method,confidence)
  VALUES('e8700000-0000-4000-8000-000000000003','musicbrainz','release_group_match','e8700000-0000-4000-8000-000000000002','synthetic-group','search','certain');
  INSERT INTO curation_work_states(subject,target_id,rule_version,input_digest,status,next_attempt_at) VALUES
@@ -568,7 +577,7 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  ('f7900000-0000-4000-8000-000000000003','f6900000-0000-4000-8000-000000000001','f7900000-0000-4000-8000-000000000001',12),
  ('f7900000-0000-4000-8000-000000000004','f6900000-0000-4000-8000-000000000001','f7900000-0000-4000-8000-000000000002',24);`)
 			}
-			if m.Version == 87 {
+			if m.Version == 87 || m.Version == 91 || m.Version == 93 {
 				rollbackExec(t, db, `INSERT INTO release_groups(id) VALUES('e8700000-0000-4000-8000-000000000001');
  INSERT INTO releases(id,group_id,title,artist) VALUES('e8700000-0000-4000-8000-000000000002',
  'e8700000-0000-4000-8000-000000000001','整理规则迁移测试发行','测试艺人');`)

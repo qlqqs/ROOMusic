@@ -209,7 +209,7 @@ func TestPostgreSQLArtworkPriority格式版本各用内嵌封面(t *testing.T) {
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid`, 2, root.ID)
 }
 
-// 不同专辑的碟目录保持 Box 叶子；格式拆分后仍能用 Box 父目录的精确名封面兜底。
+// 同一张多碟专辑按格式分出版本后，各版本仍使用发行目录的封面。
 func TestPostgreSQLArtworkPriority格式拆分Box叶子使用父目录封面(t *testing.T) {
 	fixture := newLibraryFixture(t)
 	root := insertScannerRoot(t, fixture, "artwork-priority-box-formats")
@@ -217,7 +217,7 @@ func TestPostgreSQLArtworkPriority格式拆分Box叶子使用父目录封面(t *
 	cover := jpegArtworkOfWidth(7)
 	writeArtworkPriorityFLAC(t, root, "Box/Disc 1/01.flac", "Album", 1, 1, nil)
 	writeIncrementalTestMP3(t, root, "Box/Disc 1/01.mp3", 2, 1, nil)
-	writeArtworkPriorityFLAC(t, root, "Box/Disc 3/01.flac", "另一专辑", 3, 3, nil)
+	writeArtworkPriorityFLAC(t, root, "Box/Disc 3/01.flac", "Album", 3, 3, nil)
 	writeScanFixtureFile(t, root, "Box/cover.jpg", cover)
 	runIncrementalTestScan(t, service, logs, root)
 	flacID := assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 1/01.flac", "format_split", "folder", cover)
@@ -225,14 +225,16 @@ func TestPostgreSQLArtworkPriority格式拆分Box叶子使用父目录封面(t *
 	if flacID == mp3ID {
 		t.Fatal("Box 叶子的两种格式应属于各自的发行版本")
 	}
-	assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 3/01.flac", "box_leaf", "folder", cover)
-	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid`, 3, root.ID)
+	if id := assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 3/01.flac", "format_split", "folder", cover); id != flacID {
+		t.Fatal("两个碟目录的 FLAC 应属于同一版本")
+	}
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid`, 2, root.ID)
 }
 
-// 注册根里的图片不属于任何一个 Box 叶子，普通叶子与格式拆分叶子都不能继承。
+// 注册根位于多碟发行目录之外，普通多碟与格式拆分的版本都不能越界使用它的封面。
 func TestPostgreSQLArtworkPriorityBox叶子不使用注册根封面(t *testing.T) {
 	for _, split := range []bool{false, true} {
-		name, kind := "普通Box叶子", "box_leaf"
+		name, kind := "多碟发行", "strict_multidisc"
 		if split {
 			name, kind = "格式拆分Box叶子", "format_split"
 		}
@@ -240,15 +242,15 @@ func TestPostgreSQLArtworkPriorityBox叶子不使用注册根封面(t *testing.T
 			fixture := newLibraryFixture(t)
 			root := insertScannerRoot(t, fixture, "artwork-priority-root-box")
 			service, logs := newIncrementalTestService(t, fixture)
-			writeArtworkPriorityFLAC(t, root, "Disc 1/01.flac", "Album", 1, 1, nil)
+			writeArtworkPriorityFLAC(t, root, "Box/Disc 1/01.flac", "Album", 1, 1, nil)
 			if split {
-				writeIncrementalTestMP3(t, root, "Disc 1/01.mp3", 2, 1, nil)
+				writeIncrementalTestMP3(t, root, "Box/Disc 1/01.mp3", 2, 1, nil)
 			}
 			writeScanFixtureFile(t, root, "cover.jpg", jpegArtworkOfWidth(6))
 			runIncrementalTestScan(t, service, logs, root)
-			flacID := assertArtworkPriorityBinding(t, fixture, service, root, "Disc 1/01.flac", kind, "", nil)
+			flacID := assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 1/01.flac", kind, "", nil)
 			if split {
-				mp3ID := assertArtworkPriorityBinding(t, fixture, service, root, "Disc 1/01.mp3", kind, "", nil)
+				mp3ID := assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 1/01.mp3", kind, "", nil)
 				if flacID == mp3ID {
 					t.Fatal("注册根下的两种格式应属于各自的发行版本")
 				}
@@ -270,16 +272,22 @@ func TestPostgreSQLArtworkPriority损坏封面逐档回退(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fixture := newLibraryFixture(t)
 			root := insertScannerRoot(t, fixture, "artwork-priority-fallback")
-			service, logs := newIncrementalTestService(t, fixture)
+			service := scannerTestApplication(fixture)
 			writeArtworkPriorityFLAC(t, root, "Album/01.flac", "专辑", 1, 1, tc.embedded)
 			writeScanFixtureFile(t, root, tc.path, tc.folder)
-			scan, _ := runIncrementalTestScan(t, service, logs, root)
+			scan := runFilterLifecycleScan(t, service)
+			requireFilterScan(t, scan, "succeeded", 0)
 			want := tc.embedded
 			if tc.source == "folder" {
 				want = tc.folder
 			}
 			assertArtworkPriorityBinding(t, fixture, service, root, "Album/01.flac", "", tc.source, want)
-			assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM scan_diagnostics WHERE scan_run_id=$1::uuid`, 0, scan.ID)
+			diagnostics := 0
+			if tc.source == "embedded" {
+				diagnostics = 1
+				requireDiagnosticCount(t, fixture, scan.ID, "attachment_unreadable", 1)
+			}
+			assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM scan_diagnostics WHERE scan_run_id=$1::uuid`, diagnostics, scan.ID)
 		})
 	}
 }

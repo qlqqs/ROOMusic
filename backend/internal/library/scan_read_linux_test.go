@@ -75,7 +75,7 @@ func TestPostgreSQLScanReadFormatCache(t *testing.T) {
 		writeAudio(t, root, wrong, audioFile{seed: 12, title: "FLAC title", album: "Wrong suffix", track: 1})
 		writeFixtureFile(t, root, extensionless, artworkPriorityM4A(cover))
 		writeFixtureFile(t, root, sheet, filterCueDocument("image"))
-		writeFixtureFile(t, root, "Flac/photo.png", []byte("photo is ignored"))
+		writeFixtureFile(t, root, "Flac/photo.png", pngArtworkOfWidth(5))
 		writeFixtureFile(t, root, "Flac/notes.txt", []byte("text is ignored"))
 		writeAudio(t, root, "Other/valid.wma", audioFile{seed: 13, title: "Audio in WMA path", album: "Old diagnostic suffix", track: 1})
 		cuePath := filepath.Join(root.Path, sheet)
@@ -86,8 +86,8 @@ func TestPostgreSQLScanReadFormatCache(t *testing.T) {
 		if progress := first.Progress; progress == nil || progress.FilesCounted != 4 || progress.FilesProcessed != 4 {
 			t.Errorf("预计数与已处理数应均为 4：%+v", progress)
 		}
-		if n := opens(); n[cuePath] != 1 || n[imagePath] != 0 || n[textPath] != 0 {
-			t.Errorf("CUE/图片/文本打开次数 = %d/%d/%d，期望 1/0/0", n[cuePath], n[imagePath], n[textPath])
+		if n := opens(); n[cuePath] != 1 || n[imagePath] != 1 || n[textPath] != 0 {
+			t.Errorf("CUE/图片/文本打开次数 = %d/%d/%d，期望 1/1/0（图片附件读取尺寸）", n[cuePath], n[imagePath], n[textPath])
 		}
 		if summary.FilesParsed != 3 {
 			t.Errorf("判型读取次数 = %d，期望 3", summary.FilesParsed)

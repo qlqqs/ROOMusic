@@ -17,13 +17,10 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/curation/model"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
-	"github.com/qlqq/roomusic/backend/internal/curation/stewardtools"
-	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/sources/coverartarchive"
-	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 	"github.com/qlqq/roomusic/backend/internal/upstreammock"
 )
 
@@ -202,7 +199,8 @@ func TestPostgreSQLCurationAuthenticityFromScan(t *testing.T) {
 		manual.Tracks[0].Authenticity["artist"] != metadata.Real {
 		t.Errorf("人工设值应为真实，人工设空应保留缺口及修正标志，得到 %+v", manual)
 	}
-	// 自带有效外部编号的发行仍可补其它空字段。
+	// 配置合成模型，让时长冲突的发行进入识别判断；带有效编号的发行仍由程序匹配。
+	mustExec(t, app, `UPDATE curation_settings SET model='synthetic' WHERE id=1`)
 	f.enable(t)
 	clock.advance(t, time.Minute)
 	if state := b3WorkState(t, app, "release", tagged.ID); state.Status != "matched" {
@@ -247,48 +245,40 @@ func requireCurationAuthenticitySearchEvidence(t *testing.T, app *integrationTes
 		t.Fatalf("推断名称的搜索应留下一项候选，得到 %+v", candidates)
 	}
 
+	// 识别判断在首条消息携带证据；复用调度器准备新旧待定项时调用的读取流程。
 	conversation := modelConversation(t, f)
-	_, err = f.writer.ClaimPendingItems(t.Context(), conversation, time.Now(), 20)
+	claimed, err := f.writer.ClaimModelKind(t.Context(), conversation, time.Now(), 1, []string{"release"}, "select", release)
 	requireCurationOK(t, err)
-	caller := tool.Caller{Source: tool.SourceCuration, ConversationID: conversation, User: identity.User{ID: f.admin.id, Role: "admin"}}
-	ctx := curation.WithModelRun(t.Context(), &curation.ModelRun{ConversationID: conversation, Model: "合成模型"})
-	for _, definition := range stewardtools.StewardTools(f.writer, program.NewModelMatcher(app.database, f.writer, nil)) {
-		if definition.Name != "read_pending_items" {
-			continue
-		}
-		assertEvidence := func(t *testing.T) {
-			t.Helper()
-			result, err := definition.Handler(ctx, caller, modelToolInput(t, map[string]any{"item_ids": []string{want.ID}}))
-			requireCurationOK(t, err)
-			var items []struct {
-				ItemID   string `json:"item_id"`
-				Evidence struct {
-					Authenticity map[string]metadata.Authenticity
-					UsesInferred bool `json:"uses_inferred"`
-					Tracks       []struct {
-						Authenticity map[string]metadata.Authenticity
-					}
-				}
-			}
-			requireCurationOK(t, json.Unmarshal(result, &items))
-			if len(items) != 1 || items[0].ItemID != want.ID {
-				t.Fatalf("模型应读到领取的待定项，得到 %s", result)
-			}
-			e := items[0].Evidence
-			if !e.UsesInferred || e.Authenticity["title"] != metadata.Inferred || e.Authenticity["artist"] != metadata.Real ||
-				len(e.Tracks) != 1 || e.Tracks[0].Authenticity["title"] != metadata.Inferred {
-				t.Errorf("模型证据应标记推断搜索及发行和曲目各字段的真实性，得到 %s", result)
-			}
-		}
-		t.Run("模型读取新待定项的真实性", assertEvidence)
-		// 模拟整份指纹仍有效但尚未写入真实性的历史项。
-		mustExec(t, app, `UPDATE curation_pending_items
- SET evidence=(evidence-'authenticity'-'uses_inferred') #- '{tracks,0,authenticity}',
- match_rule_version=NULL, identity_digest=NULL WHERE id=$1`, want.ID)
-		t.Run("模型读取旧待定项时补上真实性", assertEvidence)
-		return
+	if len(claimed) != 1 || claimed[0].ID != id {
+		t.Fatalf("识别判断应领取目标发行的待定项 %s，得到 %+v", id, claimed)
 	}
-	t.Fatal("缺少模型待定项读取工具")
+	matcher := program.NewModelMatcher(app.database, f.writer, nil)
+	assertEvidence := func(t *testing.T) {
+		t.Helper()
+		items, err := f.writer.ClaimedItems(t.Context(), conversation)
+		requireCurationOK(t, err)
+		if len(items) != 1 || items[0].ID != id {
+			t.Fatalf("会话领取项与预期不符：%+v", items)
+		}
+		requireCurationOK(t, matcher.AnnotatePendingEvidence(t.Context(), items))
+		var evidence struct {
+			Authenticity map[string]metadata.Authenticity
+			UsesInferred bool `json:"uses_inferred"`
+			Tracks       []struct {
+				Authenticity map[string]metadata.Authenticity
+			}
+		}
+		requireCurationOK(t, json.Unmarshal(items[0].Evidence, &evidence))
+		if !evidence.UsesInferred || evidence.Authenticity["title"] != metadata.Inferred || evidence.Authenticity["artist"] != metadata.Inferred ||
+			len(evidence.Tracks) != 1 || evidence.Tracks[0].Authenticity["title"] != metadata.Inferred || evidence.Tracks[0].Authenticity["artist"] != metadata.Real {
+			t.Errorf("发行标题、按曲目推得的专辑艺人与文件名曲名应为推断，标签曲艺人应为真实，得到 %s", items[0].Evidence)
+		}
+	}
+	t.Run("模型读取新待定项的真实性", assertEvidence)
+	mustExec(t, app, `UPDATE curation_pending_items
+ SET evidence=(evidence-'authenticity'-'uses_inferred') #- '{tracks,0,authenticity}',
+ match_rule_version=NULL, identity_digest=NULL WHERE id=$1`, id)
+	t.Run("模型读取旧待定项时补上真实性", assertEvidence)
 }
 
 func TestPostgreSQLCurationClassifications(t *testing.T) {

@@ -194,7 +194,7 @@ func (flow *claimFlow) writeSet(t *testing.T, directory string, base byte, prefi
 	media := []string{"CD", "Vinyl", "CD"}
 	for number := 1; number <= 3; number++ {
 		writeSyntheticTrack(t, filepath.Join(flow.library, directory, trackName(number)), base+byte(number),
-			"TITLE="+prefix+" "+string(rune('0'+number)), "ARTIST=Pianist", "ALBUM=Suite "+directory, "MEDIA="+media[number-1], "TRACKNUMBER="+string(rune('0'+number)))
+			"TITLE="+prefix+" "+string(rune('0'+number)), "ARTIST=Pianist", "ALBUMARTIST=Pianist", "ALBUM=Suite "+directory, "MEDIA="+media[number-1], "TRACKNUMBER="+string(rune('0'+number)))
 	}
 }
 

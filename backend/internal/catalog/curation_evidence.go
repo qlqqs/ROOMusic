@@ -450,7 +450,8 @@ func loadCurationTracks(ctx context.Context, q Queryer, ids []string, result map
 			}
 		}
 		t.Authenticity["position"] = auth("track_number", positiveNumber(t.Position), false)
-		t.Authenticity["disc"] = auth("disc_number", positiveNumber(t.DiscNumber), false)
+		// 碟位默认从 1 开始，只有逐字段观察才能证明文件提供过碟号。
+		t.Authenticity["disc"] = auth("disc_number", observed["disc_number"].Value, false)
 		t.Authenticity["duration_seconds"] = metadata.FieldAuthenticity("duration", positiveNumber(t.DurationSeconds), "", false, false)
 		t.TitlePlaceholder = t.Authenticity["title"] == metadata.Placeholder
 		t.ArtistPlaceholder = t.Authenticity["artist"] == metadata.Placeholder
