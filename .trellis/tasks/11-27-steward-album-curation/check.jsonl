@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "测试归属、路径边界、依赖方向门禁"}
-{"file": ".trellis/spec/backend/steward-runtime-contracts.md", "reason": "工具合同与审查证据例外"}
-{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "对应与归组的核对规则"}
-{"file": ".trellis/tasks/11-27-steward-album-curation/design.md", "reason": "本任务设计"}
