@@ -9,16 +9,7 @@ import (
 	"os"
 )
 
-func parseOgg(path string) (AudioObservation, error) {
-	return parseOggStream(path, false)
-}
-
-func parseOggStream(path string, requireOpus bool) (AudioObservation, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return AudioObservation{}, err
-	}
-	defer file.Close()
+func parseOggStream(file *os.File, requireOpus bool) (AudioObservation, error) {
 	reader := newOggPageReader(file)
 	o := AudioObservation{SourceKind: "ogg_vorbis_comment", InferredFields: map[string]bool{}}
 	opusHead := false
@@ -79,7 +70,7 @@ func parseOggStream(path string, requireOpus bool) (AudioObservation, error) {
 		o.ContentFingerprint = fingerprint.fingerprint()
 	}
 	finalizeTags(&o)
-	return applyFilenameFallback(path, o), nil
+	return o, nil
 }
 
 // oggPageReader 逐页读取段表，段负载在调用方按顺序消费；所有读取缓冲大小固定。
@@ -137,8 +128,6 @@ func (r *oggPageReader) readSegment(length byte) ([]byte, error) {
 	}
 	return segment, nil
 }
-
-func parseOpus(path string) (AudioObservation, error) { return parseOggStream(path, true) }
 
 func parseOggPacket(packet []byte, o *AudioObservation, codecHeader, opusHead *bool) error {
 	if bytes.HasPrefix(packet, []byte("\x01vorbis")) {

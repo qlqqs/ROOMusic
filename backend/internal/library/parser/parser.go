@@ -4,6 +4,8 @@ package parser
 
 import (
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
@@ -78,39 +80,59 @@ const (
 const maxMP3FrameSearchBytes = 64 << 10
 
 func ParseAudioFile(path string) (AudioObservation, error) {
-	format, err := fileFormat(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return AudioObservation{}, err
 	}
-	observation, err := parseAudioFormat(path, format)
+	defer file.Close()
+	return ParseOpenedAudioFile(file, path)
+}
+
+// ParseOpenedAudioFile 从已打开的句柄解析容器和标签。name 只用于文件名推断，句柄仍由调用方关闭。
+func ParseOpenedAudioFile(file *os.File, name string) (AudioObservation, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return AudioObservation{}, err
+	}
+	format, err := detectFormat(file, info.Size())
+	if err != nil {
+		return AudioObservation{}, err
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return AudioObservation{}, err
+	}
+	observation, err := parseAudioFormat(file, format)
 	observation.Format = format
+	if err == nil {
+		observation = applyFilenameFallback(name, observation)
+	}
 	return observation, err
 }
 
-func parseAudioFormat(path, extension string) (AudioObservation, error) {
+func parseAudioFormat(file *os.File, extension string) (AudioObservation, error) {
 	switch extension {
 	case ".flac":
-		return parseFLAC(path)
+		return parseFLAC(file)
 	case ".mp3":
-		return parseMP3(path)
+		return parseMP3(file)
 	case ".ogg":
-		return parseOgg(path)
+		return parseOggStream(file, false)
 	case ".opus":
-		return parseOpus(path)
+		return parseOggStream(file, true)
 	case ".wav":
-		return parseWAV(path)
+		return parseWAV(file)
 	case ".m4a":
-		return parseM4A(path)
+		return parseM4A(file)
 	case ".ape":
-		return parseAPE(path)
+		return parseAPE(file)
 	case ".wv":
-		return parseWavPack(path)
+		return parseWavPack(file)
 	case ".aif", ".aiff":
-		return parseAIFF(path)
+		return parseAIFF(file)
 	case ".dsf":
-		return parseDSF(path)
+		return parseDSF(file)
 	case ".dff":
-		return parseDFF(path)
+		return parseDFF(file)
 	default:
 		return AudioObservation{}, fmt.Errorf("unsupported format")
 	}

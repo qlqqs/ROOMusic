@@ -17,6 +17,8 @@ const pageDescription = "page 从 1 开始，默认 1；page_size 默认 20、�
 
 type input struct {
 	ID       string `json:"id"`
+	RootID   string `json:"root_id"`
+	Path     string `json:"path"`
 	Page     int    `json:"page"`
 	PageSize int    `json:"page_size"`
 }
@@ -34,7 +36,11 @@ func definition(name, description string, role tool.Role, properties, required s
 			if p.ID != "" && !uuid.Valid(p.ID) {
 				return nil, &tool.Error{Code: tool.CodeInvalidInput, Message: "扫描标识必须是 UUID"}
 			}
+			if p.RootID != "" && !uuid.Valid(p.RootID) {
+				return nil, &tool.Error{Code: tool.CodeInvalidInput, Message: "目录标识必须是 UUID"}
+			}
 			p.ID = strings.ToLower(p.ID)
+			p.RootID = strings.ToLower(p.RootID)
 			value, err := read(ctx, caller, p)
 			if errors.Is(err, library.ErrScanNotFound) {
 				return nil, &tool.Error{Code: tool.CodeTargetNotFound, Message: "目标不存在"}

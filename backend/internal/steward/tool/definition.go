@@ -103,6 +103,10 @@ type Basis struct {
 // 两个 schema 都仅支持 type、properties、required、additionalProperties: false、
 // enum、items、minimum、maximum、minLength、maxLength、maxItems；不支持的关键字在注册时拒绝。
 type Definition struct {
+	// HideRoleDenied 使身份不足的调用与读取目标不存在返回同一错误。
+	HideRoleDenied bool
+	// MaxOutputBytes 为需要返回全文的只读工具预留 JSON 编码空间；零值沿用通用上限。
+	MaxOutputBytes int
 	// ReadOnly 允许 personal 范围的只读工具供只读 MCP 令牌使用。
 	ReadOnly bool
 	// InvalidInputCode 为空时沿用 validation_failed。
@@ -130,6 +134,14 @@ type Definition struct {
 	Untrusted bool
 	// Handler 是经调用入口校验后执行的处理器。
 	Handler Handler
+}
+
+// RoleDeniedError 为注册表与入口身份复查提供相同的拒绝结果。
+func (d Definition) RoleDeniedError() *Error {
+	if d.HideRoleDenied {
+		return &Error{Code: CodeTargetNotFound, Tool: d.Name, Message: "目标不存在"}
+	}
+	return &Error{Code: CodePermissionDenied, Tool: d.Name, Message: "无权调用此工具"}
 }
 
 // Result 是一次成功调用的有界结果。

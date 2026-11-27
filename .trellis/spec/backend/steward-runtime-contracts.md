@@ -222,6 +222,7 @@ MCP 只读可 list、不可 remember/forget；记忆只读一次/排序/8000 转
 审查中取消以 cancelled 结束且不落审查；审查存储错误按 database_unavailable 返回，不透出原始错误。review_started 后由 review_finished 或错误/取消 done 收尾，保存失败不执行。
 不可用的 steward.review.finished 只新增固定 reason_category（timeout/upstream_error/invalid_result/truncated），不记录错误正文。
 会话列表新增整数 pending_item_count：单条聚合查询统计未过期 pending 方案中尚无结果的 pending 项，无待处理项为 0，不逐会话查询。
+聊天与 MCP 的 `list_library_directory`、`read_library_file` 可以返回登记根内的相对路径。这两种工具结果不进入独立审查证据，审查的目标摘要继续省略来源路径。
 实现、全文常量、外发字段、协议调研与测试断言以[审查合同](./steward-review-contracts.md)为准。
 
 ## C6 共享写入与确认合同
@@ -343,11 +344,12 @@ ReleaseConversation 和启动恢复只中断 running 调用，不中断 awaiting
 | `platform/secret` | 实例密钥文件、加解密（2026-11-25 从 `steward/secret` 移来，供管家、AirPlay 凭据与 Subsonic 共用） | 无 |
 | `steward/web` | 搜索、网页正文、MusicBrainz 与封面清单 | `steward/runtime`（只读设置端口）、`platform/secret`、`platform/egress`、`sources`、`sources/musicbrainz`、`steward/tool`、`platform/buildinfo`、`platform/uuid` |
 | `steward/provider` | 三种协议适配、流解析、探测、地址预设 | `platform/egress`；可用 `net/http` |
-| `steward/runtime` | 循环、历史摘要、设置/会话/消息/工具调用/放行名单存储 | `platform/uuid`、`steward/provider`、`steward/tool`、`steward/memory` |
+| `steward/runtime` | 循环、历史摘要、设置/会话/消息/工具调用/放行名单存储 | `platform/uuid`、`steward/provider`、`steward/tool`、`steward/memory`、`steward/skills` |
 | `steward/memory` | 本人记忆存储、限额与三个工具 | `platform/uuid`、`steward/tool` |
+| `steward/skills` | 内置技能头部、身份过滤与全文读取 | `identity`、`steward/tool` |
 | `steward/httpapi` | 路由、SSE 订阅、成员开关 | `identity`、`platform/httpserver`、`platform/uuid`、`steward/{egress,memory,provider,runtime,secret,tool}`；可用 `net/http` |
 | `catalog/stewardtools` | 目录与问题工具 | `catalog`、`catalog/governance`、`platform/uuid`、`steward/tool` |
-| `library/stewardtools` | 扫描工具 | `library`、`platform/uuid`、`steward/tool` |
+| `library/stewardtools` | 扫描、目录与文件工具 | `library`、`platform/uuid`、`steward/tool` |
 | `operations/stewardtools` | 操作记录工具 | `operations`、`platform/uuid`、`steward/tool` |
 | `zones/stewardtools` | 本人播放与队列 | `zones`、`zones/queue`、`catalog`、`platform/uuid`、`steward/tool` |
 | `listening/stewardtools` | 本人播放历史 | `listening`、`platform/uuid`、`steward/tool` |
@@ -402,6 +404,8 @@ type Definition struct {
     Scope             Scope
     Revertible        bool
     Untrusted         bool            // 输出含标签、文件名等不可信文本
+    HideRoleDenied    bool            // 身份不足时按读取目标不可见返回 not_found
+    MaxOutputBytes    int             // 只读工具可提高输出上限，零值沿用 64 KiB
     Available         func(context.Context, Caller) bool // nil 表示始终可用，列表与调用均检查
     Preview           func(context.Context, Caller, json.RawMessage) (Preview, error)
     Handler           Handler
@@ -431,8 +435,9 @@ schema 子集（输入、输出都按此编译，出现其他关键字注册失�
 | `validation_failed` | `CodeInvalidInput` | 输入不是合法 JSON 或不符合输入 schema；处理器内的 UUID、搜索词校验也用这个码 |
 | `not_found` | `CodeTargetNotFound` | 由处理器返回：工具要读取的对象不存在 |
 
-输出上限：单个结果的 JSON 编码最多 64 KiB（65,536 字节）。超出时 `Output` 改成一个 JSON 字符串，内容是原 JSON 文本的前缀
-（按 UTF-8 字符边界切，转义后的总长不超过上限），`Truncated = true`；截断后的输出不再符合工具的输出 schema。
+单个结果的 JSON 编码默认最多 64 KiB。`read_library_file` 以 416 KiB 为上限，容纳 64 KiB 文本原文解码及 JSON 转义后的完整内容。
+超出工具上限时，`Output` 改成承载原 JSON 文本前缀的 JSON 字符串，按 UTF-8 字符边界截断，转义后的总长不超过上限。
+同时设置 `Truncated = true`，此时输出形状变为字符串。只有 `ScopeRead` 的定义可以配置 `MaxOutputBytes`，最小为 64 KiB。
 
 ### 新增一个工具
 
@@ -443,7 +448,7 @@ schema 子集（输入、输出都按此编译，出现其他关键字注册失�
 4. 输出里不放 ADR 0005 第 3 节排除的字段（绝对路径与挂载位置、歌词、密钥与会话标识、他人的个人数据）；输出含标签、文件名等文字时 `Untrusted: true`。
 5. 新的 `stewardtools` 包先在 `app/dependency_rules_test.go` 登记，再在 `app/steward.go` 的 `definitions` 里追加。
 6. `Invoke` 鉴权后直接执行 `read` 与 `personal`；`personal` 不经过共享写入确认或 `operations.Run`，三种模式语义相同。
-   `shared` 经鉴权进入方案预览或后端许可的直接执行路径；全部范围共用 64 KiB 输出上限。
+   `shared` 经鉴权进入方案预览或后端许可的直接执行路径。
 7. 在同包的集成测试里覆盖最低身份、分页上限与输出不含排除字段，并更新第 3 节的清单。
 
 ## 3. 工具清单
@@ -476,6 +481,35 @@ schema 子集（输入、输出都按此编译，出现其他关键字注册失�
 - 对象不存在：目录工具遇到 `catalog.ErrReleaseNotFound`、`ErrReleaseGroupNotFound`、`ErrTrackNotFound`、`ErrArtistNotFound`，
   扫描工具遇到 `library.ErrScanNotFound` 时返回 `not_found`（`*tool.Error`）。
 - 处理器返回的其他错误不是 `*tool.Error`，在循环里统一记为 `tool_execution_failed`（第 7 节）。
+
+### 单张专辑整理的只读工具
+
+以下工具最低身份为管理员，`ScopeRead`、`Untrusted: true`，注册到聊天和 MCP 的注册表。后台整理注册表不含这三个工具。
+
+| 工具 | 参数（* 必填） | 输出 |
+| --- | --- | --- |
+| `list_library_directory` | `root_id`*、`path`（空或省略表示根）、分页 | `{path, items, pagination}`，按名称排序。各项含 `name,type,size_bytes`，链接只含 `name,type`。扫描归属在可选的 `owners` 中，每项含 `release_id,release_title`，曲目另含 `disc_number,track_number` |
+| `read_library_file` | `root_id`*、`path`* | `{path,type,size_bytes}`，文本另有 `text,encoding`，音频另有 `format,audio,tags`，图片另有 `format,width,height` |
+| `load_skill` | `name`* | `{name,text}`，`text` 为包含头部的 Markdown 全文 |
+
+- `root_id` 取自 `list_library_roots`。路径以 `/` 分段，最多 4 KiB。绝对路径与含 `..` 的路径返回 `validation_failed`。
+  在已启用的登记根中使用 `os.OpenRoot` 打开目录和文件，逐段核对目录并拒绝打开链接。
+  内置忽略规则和用户排除规则检查每段路径。缺失、停用、排除或无法安全打开的目标统一返回 `not_found`。
+- 类型为 `directory`、`audio`、`image`、`text`、`other` 或 `link`。先过滤再分页，随后只查询当页归属。
+  曲目按根 ID 和物理路径、CUE sheet、CUE 父音频反查，只取 `source_status='present'`。附件按发行来源根和附件相对路径反查。
+  工具生成的路径字段只返回根内相对路径。
+- `.cue .log .nfo .txt .m3u .m3u8` 上限 64 KiB 原始字节，超出返回 `too_large`。音频解析使用已打开的句柄，仅投影已解析的标签、
+  编号、注释与容器参数。图片只读头部尺寸。解码失败返回 `invalid_file`。普通文件的封面字节、歌词、原始标签字节均不投影。
+
+### 内置技能
+
+技能放在 `backend/internal/steward/skills/*.md`，随服务用 `go:embed` 打包。头部由 `---` 围起，包含 `name`、
+`description`、`min_role`，文件名与名称一致。列表和全文读取均按技能最低身份过滤。
+`load_skill` 对未知技能和身份不足的调用统一返回 `not_found`。
+
+聊天模型能调用 `load_skill` 且当前身份有可用技能时，主系统提示在模式说明后追加“可用技能”，只列名称和用途。
+后台整理的系统提示省略这段。首个技能 `album-curation` 指导管理员调查本地文件、查证 MusicBrainz、修正归组并建立对应，
+写入沿用各操作工具的鉴权与审批。
 
 ### C5 播放与个人库工具
 
@@ -876,7 +910,7 @@ JSON 错误信封只给上表的固定消息；适配器脱敏后的 `Message` �
 | `maxOutputTokens` | 8,192 | 每次模型请求的输出上限 |
 | `finalizeTimeout` | 5 秒 | 每次落库收尾与释放会话的时限（不受取消影响） |
 | `titleCharacters` | 32 | 默认标题长度 |
-| 工具输出上限（`tool/registry.go`） | 64 KiB | 见第 2 节 |
+| 工具输出上限（`tool/registry.go`） | 默认 64 KiB | 读文件工具的上限见第 2 节 |
 | 模型请求总时限（`httpapi/outbound.go`） | 5 分钟 | 单次模型请求，含读完流 |
 
 流程：

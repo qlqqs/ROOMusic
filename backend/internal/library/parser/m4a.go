@@ -16,12 +16,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
-func parseM4A(path string) (AudioObservation, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return AudioObservation{}, err
-	}
-	defer file.Close()
+func parseM4A(file *os.File) (AudioObservation, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return AudioObservation{}, err
@@ -85,7 +80,7 @@ func parseM4A(path string) (AudioObservation, error) {
 		o.Bitrate = estimatedBitrateKbps(info.Size(), o.DurationSeconds)
 	}
 	finalizeTags(&o)
-	return applyFilenameFallback(path, o), nil
+	return o, nil
 }
 
 func parseM4AAtoms(data []byte, o *AudioObservation) {

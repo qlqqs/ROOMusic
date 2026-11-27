@@ -29,7 +29,7 @@ func TestParseM4AReaderParsesLateMoovAndRawITunesAtoms(t *testing.T) {
 		t.Fatalf("write M4A fixture: %v", err)
 	}
 
-	observation, err := parseM4A(path)
+	observation, err := ParseAudioFile(path)
 	if err != nil {
 		t.Fatalf("parse late moov M4A: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestParseM4AReaderParsesALACConfigAndLargesize(t *testing.T) {
 		t.Fatalf("write ALAC fixture: %v", err)
 	}
 
-	observation, err := parseM4A(path)
+	observation, err := ParseAudioFile(path)
 	if err != nil {
 		t.Fatalf("parse ALAC M4A: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestParseM4AReaderRejectsTruncatedAtomWithoutPanic(t *testing.T) {
 	if err := os.WriteFile(path, fixture, 0o644); err != nil {
 		t.Fatalf("write truncated fixture: %v", err)
 	}
-	if _, err := parseM4A(path); err == nil {
+	if _, err := ParseAudioFile(path); err == nil {
 		t.Fatal("truncated M4A atom was accepted")
 	}
 }
@@ -132,7 +132,7 @@ func TestParseM4AReaderRejectsTooManyTopLevelAtoms(t *testing.T) {
 	if err := os.WriteFile(path, fixture, 0o644); err != nil {
 		t.Fatalf("write excessive-atom fixture: %v", err)
 	}
-	if _, err := parseM4A(path); err == nil {
+	if _, err := ParseAudioFile(path); err == nil {
 		t.Fatal("M4A with excessive top-level atoms was accepted")
 	}
 }
@@ -143,7 +143,7 @@ func TestParseM4AReaderRejectsContainerWithoutAudioSampleEntry(t *testing.T) {
 	if err := os.WriteFile(path, fixture, 0o644); err != nil {
 		t.Fatalf("write empty M4A fixture: %v", err)
 	}
-	if _, err := parseM4A(path); err == nil {
+	if _, err := ParseAudioFile(path); err == nil {
 		t.Fatal("M4A container without an audio sample entry was accepted")
 	}
 }
@@ -206,11 +206,11 @@ func TestParseExistingTagParsersRetainAlbumArtist(t *testing.T) {
 	if err := os.WriteFile(mp3Path, repairMP3Frames(map[string]string{"TIT2": "Track", "TPE2": "Various Artists", "TCON": "Rock", "TDRC": "2024", "TSRC": "USAAA2400001"}), 0o644); err != nil {
 		t.Fatalf("write MP3 fixture: %v", err)
 	}
-	flac, err := parseFLAC(flacPath)
+	flac, err := ParseAudioFile(flacPath)
 	if err != nil {
 		t.Fatalf("parse FLAC album artist: %v", err)
 	}
-	mp3, err := parseMP3(mp3Path)
+	mp3, err := ParseAudioFile(mp3Path)
 	if err != nil {
 		t.Fatalf("parse MP3 album artist: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestParseFLACRetainsReleaseMetadataAndTrackCredits(t *testing.T) {
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("写入 FLAC fixture：%v", err)
 	}
-	observation, err := parseFLAC(path)
+	observation, err := ParseAudioFile(path)
 	if err != nil {
 		t.Fatalf("解析 FLAC metadata：%v", err)
 	}
@@ -269,7 +269,7 @@ func TestParseMP3DecodesUTF16AndReadsMPEGFacts(t *testing.T) {
 	if err := os.WriteFile(path, fixture, 0o644); err != nil {
 		t.Fatalf("写入 MP3 fixture：%v", err)
 	}
-	observation, err := parseMP3(path)
+	observation, err := ParseAudioFile(path)
 	if err != nil {
 		t.Fatalf("解析 MP3：%v", err)
 	}
@@ -308,7 +308,7 @@ func TestParseMP3AttachedPictureKeepsMIMESeparateFromDescription(t *testing.T) {
 		t.Fatalf("write MP3 artwork fixture: %v", err)
 	}
 
-	observation, err := parseMP3(path)
+	observation, err := ParseAudioFile(path)
 	if err != nil {
 		t.Fatalf("parse MP3 artwork: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestParseWAVReaderSkipsLargePayloadAndParsesFacts(t *testing.T) {
 		t.Fatalf("close WAV fixture: %v", err)
 	}
 
-	observation, err := parseWAV(path)
+	observation, err := ParseAudioFile(path)
 	if err != nil {
 		t.Fatalf("parse WAV fixture: %v", err)
 	}
@@ -402,7 +402,7 @@ func TestParseWAVReaderRejectsContainerWithoutAudioChunks(t *testing.T) {
 	if err := os.WriteFile(path, fixture, 0o644); err != nil {
 		t.Fatalf("write empty WAV fixture: %v", err)
 	}
-	if _, err := parseWAV(path); err == nil {
+	if _, err := ParseAudioFile(path); err == nil {
 		t.Fatal("WAV container without format and data chunks was accepted")
 	}
 }
@@ -427,11 +427,11 @@ func TestParseOggAndOpusIdentificationFacts(t *testing.T) {
 	if err := os.WriteFile(opusPath, repairOggPage(opus), 0o644); err != nil {
 		t.Fatalf("write Opus fixture: %v", err)
 	}
-	vorbisObservation, err := parseOgg(vorbisPath)
+	vorbisObservation, err := ParseAudioFile(vorbisPath)
 	if err != nil {
 		t.Fatalf("parse Vorbis fixture: %v", err)
 	}
-	opusObservation, err := parseOpus(opusPath)
+	opusObservation, err := ParseAudioFile(opusPath)
 	if err != nil {
 		t.Fatalf("parse Opus fixture: %v", err)
 	}

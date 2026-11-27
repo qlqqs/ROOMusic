@@ -16,12 +16,7 @@ type aiffChunk struct {
 	start, size int64
 }
 
-func parseAIFF(path string) (AudioObservation, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return AudioObservation{}, err
-	}
-	defer file.Close()
+func parseAIFF(file *os.File) (AudioObservation, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return AudioObservation{}, err
@@ -87,7 +82,7 @@ func parseAIFF(path string) (AudioObservation, error) {
 	}
 	observation.Bitrate = estimatedBitrateKbps(info.Size(), observation.DurationSeconds)
 	finalizeTags(&observation)
-	return applyFilenameFallback(path, observation), nil
+	return observation, nil
 }
 
 func walkAIFFChunks(ctx context.Context, reader io.ReaderAt, size int64, visit func(aiffChunk, bool) error) error {

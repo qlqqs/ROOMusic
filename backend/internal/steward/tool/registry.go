@@ -45,6 +45,9 @@ func (registry *Registry) Register(definition Definition) error {
 	if definition.Handler == nil {
 		return fmt.Errorf("tool %q has no handler", definition.Name)
 	}
+	if definition.MaxOutputBytes != 0 && (definition.Scope != ScopeRead || definition.MaxOutputBytes < maxOutputBytes) {
+		return fmt.Errorf("tool %q has an invalid output limit", definition.Name)
+	}
 	input, err := compileSchema(definition.Input)
 	if err != nil {
 		return fmt.Errorf("tool %q input schema: %w", definition.Name, err)
@@ -90,7 +93,10 @@ func (registry *Registry) Invoke(ctx context.Context, caller Caller, name string
 		return Result{}, &Error{Code: CodeNotFound, Tool: name, Message: "工具不存在"}
 	}
 	definition := registered.definition
-	if !definition.MinRole.Allows(caller.User) || (definition.Available != nil && !definition.Available(ctx, caller)) {
+	if !definition.MinRole.Allows(caller.User) {
+		return Result{}, definition.RoleDeniedError()
+	}
+	if definition.Available != nil && !definition.Available(ctx, caller) {
 		return Result{}, &Error{Code: CodePermissionDenied, Tool: name, Message: "无权调用此工具"}
 	}
 	if definition.Scope == ScopeShared && !caller.SharedExecution {
@@ -123,12 +129,17 @@ func (registry *Registry) Invoke(ctx context.Context, caller Caller, name string
 	if !json.Valid(output) {
 		return Result{}, fmt.Errorf("tool %q returned invalid JSON", name)
 	}
-	return BoundResult(output, definition.Untrusted), nil
+	limit := definition.MaxOutputBytes
+	if limit == 0 {
+		limit = maxOutputBytes
+	}
+	bounded, truncated := boundOutput(output, limit)
+	return Result{Output: bounded, Truncated: truncated, Untrusted: definition.Untrusted}, nil
 }
 
 // BoundResult 为执行结果与已提交操作的对账结果应用同一输出上限。
 func BoundResult(output json.RawMessage, untrusted bool) Result {
-	bounded, truncated := boundOutput(output)
+	bounded, truncated := boundOutput(output, maxOutputBytes)
 	return Result{Output: bounded, Truncated: truncated, Untrusted: untrusted}
 }
 
@@ -138,12 +149,12 @@ func cloneDefinition(definition Definition) Definition {
 	return definition
 }
 
-func boundOutput(output json.RawMessage) (json.RawMessage, bool) {
-	if len(output) <= maxOutputBytes {
+func boundOutput(output json.RawMessage, limit int) (json.RawMessage, bool) {
+	if len(output) <= limit {
 		return bytes.Clone(output), false
 	}
 	// 直接切 JSON 会得到无效文档；将文本前缀编码成字符串，且将转义开销计入上限。
-	low, high := 0, maxOutputBytes-2
+	low, high := 0, limit-2
 	var bounded []byte
 	for low <= high {
 		mid := low + (high-low)/2
@@ -152,7 +163,7 @@ func boundOutput(output json.RawMessage) (json.RawMessage, bool) {
 			end--
 		}
 		encoded, _ := json.Marshal(string(output[:end])) // 字符串编码不会失败。
-		if len(encoded) <= maxOutputBytes {
+		if len(encoded) <= limit {
 			bounded = encoded
 			low = mid + 1
 		} else {
@@ -168,7 +179,10 @@ func (registry *Registry) PreviewCall(ctx context.Context, caller Caller, name s
 	if !exists {
 		return Preview{}, &Error{Code: CodeNotFound, Tool: name, Message: "工具不存在"}
 	}
-	if !registered.definition.MinRole.Allows(caller.User) || (registered.definition.Available != nil && !registered.definition.Available(ctx, caller)) {
+	if !registered.definition.MinRole.Allows(caller.User) {
+		return Preview{}, registered.definition.RoleDeniedError()
+	}
+	if registered.definition.Available != nil && !registered.definition.Available(ctx, caller) {
 		return Preview{}, &Error{Code: CodePermissionDenied, Tool: name, Message: "无权调用此工具"}
 	}
 	value, err := decodeJSON(input)

@@ -23,12 +23,7 @@ type wavpackBlock struct {
 	totalSamples int64
 }
 
-func parseWavPack(path string) (AudioObservation, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return AudioObservation{}, err
-	}
-	defer file.Close()
+func parseWavPack(file *os.File) (AudioObservation, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return AudioObservation{}, err
@@ -114,7 +109,7 @@ func parseWavPack(path string) (AudioObservation, error) {
 		return AudioObservation{}, err
 	}
 	finalizeTags(&observation)
-	return applyFilenameFallback(path, observation), nil
+	return observation, nil
 }
 
 // walkWavPackBlocks 只读取连续块的头部；音频之后的 APEv2/ID3v1 不属于块序列。

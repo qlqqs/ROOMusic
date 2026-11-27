@@ -17,18 +17,27 @@ import (
 )
 
 func decodeCueText(data []byte) (string, string, error) {
+	return decodeText(data, "CUE")
+}
+
+// DecodeText 返回受支持的文本编码及其解码结果，拒绝无效编码和不支持的控制字符。
+func DecodeText(data []byte) (string, string, error) {
+	return decodeText(data, "text")
+}
+
+func decodeText(data []byte, kind string) (string, string, error) {
 	if bytes.HasPrefix(data, []byte{0x00, 0x00, 0xfe, 0xff}) || bytes.HasPrefix(data, []byte{0xff, 0xfe, 0x00, 0x00}) {
-		return "", "", fmt.Errorf("unsupported UTF-32 CUE encoding")
+		return "", "", fmt.Errorf("unsupported UTF-32 %s encoding", kind)
 	}
 	if bytes.HasPrefix(data, []byte{0xef, 0xbb, 0xbf}) {
 		if !utf8.Valid(data[3:]) {
-			return "", "", fmt.Errorf("unsupported CUE encoding")
+			return "", "", fmt.Errorf("unsupported %s encoding", kind)
 		}
-		return validatedCueText(string(data[3:]), "utf-8-bom")
+		return validatedText(string(data[3:]), "utf-8-bom", kind)
 	}
 	if bytes.HasPrefix(data, []byte{0xff, 0xfe}) || bytes.HasPrefix(data, []byte{0xfe, 0xff}) {
 		if len(data[2:])%2 != 0 {
-			return "", "", fmt.Errorf("invalid UTF-16 CUE encoding")
+			return "", "", fmt.Errorf("invalid UTF-16 %s encoding", kind)
 		}
 		littleEndian := data[0] == 0xff
 		units := make([]uint16, (len(data)-2)/2)
@@ -40,12 +49,12 @@ func decodeCueText(data []byte) (string, string, error) {
 			}
 		}
 		if !validUTF16Units(units) {
-			return "", "", fmt.Errorf("invalid UTF-16 CUE encoding")
+			return "", "", fmt.Errorf("invalid UTF-16 %s encoding", kind)
 		}
-		return validatedCueText(string(utf16.Decode(units)), "utf-16")
+		return validatedText(string(utf16.Decode(units)), "utf-16", kind)
 	}
 	if utf8.Valid(data) {
-		return validatedCueText(string(data), "utf-8")
+		return validatedText(string(data), "utf-8", kind)
 	}
 	// 同时尝试现有资料库常见的 GBK、Shift-JIS 和 Big5，并用文本质量稳定裁决；
 	// 解码错误不会通过替换字符静默吞掉。
@@ -61,11 +70,11 @@ func decodeCueText(data []byte) (string, string, error) {
 		{name: "big5", enc: traditionalchinese.Big5.NewDecoder()},
 	} {
 		decoded, _, decodeErr := transform.Bytes(candidate.enc, data)
-		if decodeErr != nil || !utf8.Valid(decoded) || strings.ContainsRune(string(decoded), utf8.RuneError) || !validCueText(string(decoded)) {
+		if decodeErr != nil || !utf8.Valid(decoded) || strings.ContainsRune(string(decoded), utf8.RuneError) || !validText(string(decoded)) {
 			continue
 		}
 		content := string(decoded)
-		score := cueDecodedTextScore(content)*10 - candidateIndex
+		score := decodedTextScore(content)*10 - candidateIndex
 		if score > bestScore {
 			bestContent = content
 			bestEncoding = candidate.name
@@ -75,17 +84,17 @@ func decodeCueText(data []byte) (string, string, error) {
 	if bestContent != "" && bestScore > -1000 {
 		return bestContent, bestEncoding, nil
 	}
-	return "", "", fmt.Errorf("unsupported CUE encoding")
+	return "", "", fmt.Errorf("unsupported %s encoding", kind)
 }
 
-func validatedCueText(value, encoding string) (string, string, error) {
-	if !validCueText(value) {
-		return "", "", fmt.Errorf("CUE contains unsupported control characters")
+func validatedText(value, encoding, kind string) (string, string, error) {
+	if !validText(value) {
+		return "", "", fmt.Errorf("%s contains unsupported control characters", kind)
 	}
 	return value, encoding, nil
 }
 
-func validCueText(value string) bool {
+func validText(value string) bool {
 	for _, character := range value {
 		if unicode.IsControl(character) && character != '\n' && character != '\r' && character != '\t' {
 			return false
@@ -110,7 +119,7 @@ func validUTF16Units(units []uint16) bool {
 	return true
 }
 
-func cueDecodedTextScore(value string) int {
+func decodedTextScore(value string) int {
 	score := 0
 	for _, character := range value {
 		switch {
