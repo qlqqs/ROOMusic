@@ -56,13 +56,14 @@ func cMatchRequests(t *testing.T, mock *upstreammock.Server) []cMatchRequest {
 func TestPostgreSQL整理发行组对应的封面归组和撤销(t *testing.T) {
 	artist := metricArtist{ID: uuid.New(), Name: "合成发行组艺人"}
 	a := cMatchAlbum("合成组第一版", artist.Name, 5, artist.ID)
-	b := cMatchAlbum("合成组第二版", artist.Name, 5, artist.ID)
+	b := cMatchAlbum("合成组第一版", artist.Name, 5, artist.ID)
+	b.ID, b.Local.Directory = "合成组第二版", "合成组第二版"
 	a.External.Artists = []metricArtist{artist}
 	group := a.External.Releases[0].Group
 	a.External.Releases[0].Image = "cover.png"
 	b.External.Releases[0].Group = group
 	clock := newProgramClock()
-	app, mock, _ := newCurationMockApplication(t, writeMetricCatalog(t, []metricSample{a, b}), clock)
+	app, mock, _ := newCurationMockApplication(t, writeMetricCatalog(t, []metricSample{a, b}), clock, WithDirectoryWatchClock(sampleDirectoryWatchClock{now: time.Now()}))
 	admin := app.createUser(t, "admin")
 	b3Root(t, app)
 	b3Enable(t, app, admin)
@@ -74,6 +75,7 @@ func TestPostgreSQL整理发行组对应的封面归组和撤销(t *testing.T) {
 		publishSearch(t, app)
 		e := metricScannedEntry(t, app, s)
 		ids = append(ids, e.release)
+		b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_stable_releases WHERE id=$1`, e.release)
 		clock.advance(t, time.Minute)
 		state := b3WorkState(t, app, "release", e.release)
 		var result struct{ Level, Rule string }
@@ -84,7 +86,8 @@ func TestPostgreSQL整理发行组对应的封面归组和撤销(t *testing.T) {
 		b3RequireCount(t, app, 1, `SELECT count(*) FROM external_links WHERE object_type='release_group_match' AND object_id=$1 AND external_id=$2`, e.release, group)
 		b3RequireCount(t, app, 0, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1`, e.release)
 		b3RequireCount(t, app, 0, `SELECT count(*) FROM external_links WHERE object_type='track' AND object_id=ANY($1::uuid[])`, e.tracks)
-		b3RequireCount(t, app, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1`, e.release)
+		b3RequireCount(t, app, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1 AND field<>'year'`, e.release)
+		b3RequireCount(t, app, 1, `SELECT count(*) FROM release_effective WHERE id=$1 AND year=2019`, e.release)
 		b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='release_match'`, e.release)
 		b3RequireCount(t, app, 1, `SELECT count(*) FROM release_external_artworks WHERE release_id=$1`, e.release)
 		mb, detailReads, artistReads, groupCover := 0, 0, 0, 0
@@ -108,7 +111,11 @@ func TestPostgreSQL整理发行组对应的封面归组和撤销(t *testing.T) {
 			}
 		}
 		// 第二张复用封面清单缓存，第一张必须向独立封面服务取组清单。
-		if mb != 1 || detailReads != 1 || artistReads > 1 || len(ids) == 1 && groupCover != 1 {
+		wantReads := 0
+		if len(ids) == 1 {
+			wantReads = 1
+		}
+		if mb != wantReads || detailReads > 1 || artistReads > 1 || groupCover != wantReads {
 			t.Errorf("%s 的列表请求为 %d，版本详情 %d，艺人读取 %d，组封面清单 %d", s.ID, mb, detailReads, artistReads, groupCover)
 		}
 	}

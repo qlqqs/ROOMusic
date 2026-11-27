@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
-	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -27,7 +26,7 @@ func TestPostgreSQL整理第一档禁用曲目字段直写(t *testing.T) {
 		t.Fatalf("第一档附带工具 %+v", request.Tools)
 	}
 	request.tool(t, "correct_track", schedulerTrackCorrection(f.a, track, 1, "title", setChange("模型曲名")))
-	schedulerWait(t, "无效工具答复释放项目", func() bool { return f.item(t, item.ID).Attempts > 0 })
+	schedulerWait(t, "无效工具答复释放项目", func() bool { return f.item(t, item.ID).EmptyCount == 1 })
 	f.pause(t)
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE operation_type IN ('track_correction','track_auto_correction')`)
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM steward_reviews`)
@@ -56,69 +55,12 @@ func TestPostgreSQLStewardCorrectTrackManual(t *testing.T) {
 }
 
 func TestPostgreSQLCurationExceptionTrackAcceptDecline(t *testing.T) {
-	for _, action := range []string{"accept", "stale", "decline"} {
-		t.Run(action, func(t *testing.T) {
-			f := newSchedulerFixture(t)
-			f.configure(t, &f.admin)
-			reviewer := f.application.createUser(t, "admin")
-			track, scannedTitle := externalTrack(t, f.application, f.a)
-			f.enable(t)
-			f.pause(t)
-			conversation := modelConversation(t, f.curationFixture)
-			item := modelClaim(t, f.curationFixture, conversation, f.pending(t, f.a))
-			input, err := json.Marshal(schedulerTrackCorrection(f.a, track, 1, "title", setChange("模型建议曲名")))
-			requireCurationOK(t, err)
-			preview, err := json.Marshal(map[string]any{"changes": []map[string]string{{"field": "title", "before": scannedTitle, "after": "模型建议曲名"}}})
-			requireCurationOK(t, err)
-			id, err := f.writer.CreateException(t.Context(), curation.ModelException{
-				PendingItemID: item.ID, PlanItemID: uuid.New(), ConversationID: &conversation, Tool: "correct_track", Provider: "test-main",
-				Input: input, Preview: preview, Review: curation.ExceptionReview{ID: uuid.New(), Model: "test-review", Decision: "needs_human_confirmation", Source: "model", Reasons: []string{"合成审查理由"}},
-			})
-			requireCurationOK(t, err)
-			ex, err := f.writer.Exception(t.Context(), id)
-			requireCurationOK(t, err)
-			if ex.PendingItemID != item.ID || ex.Track == nil || ex.Track.ID != track || ex.Track.Title != scannedTitle {
-				t.Fatalf("曲目例外 %+v，曲目 %+v", ex, ex.Track)
-			}
-
-			switch action {
-			case "accept":
-				accepted := readExceptionDecision(t, f.decide(t, &reviewer, ex.ID, "accept"), "accepted", reviewer.id)
-				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM track_corrections WHERE track_id=$1 AND field='title' AND text_value='模型建议曲名'`, track)
-				b3RequireCount(t, f.application, 1, `
-					SELECT count(*) FROM operations WHERE id=$1 AND actor_id=$2 AND batch_id IS NULL
-					  AND operation_type='track_correction' AND origin->>'review_id'=$3 AND origin->>'review_decision'='human'`,
-					accepted.OperationIDs[0], reviewer.id, ex.Review.ID)
-			case "stale":
-				// 只改有效前值，曲目的人工版本保持为 1。
-				f.update(t, "PUT", curationBase+"/settings", map[string]bool{"paused": false})
-				applyTrackAuto(t, f.curationFixture, trackAutoRequest(track, f.a, "fixture", "", map[string]any{"title": "变更后的自动前值"}))
-				f.pause(t)
-				requireAPIError(t, f.decide(t, &reviewer, ex.ID, "accept"), 409, "exception_stale")
-				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_model_exceptions WHERE id=$1 AND status='open' AND decided_by IS NULL`, ex.ID)
-				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM track_effective WHERE id=$1 AND title='变更后的自动前值' AND edit_revision=1`, track)
-				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM track_corrections WHERE track_id=$1`, track)
-				return
-			case "decline":
-				readExceptionDecision(t, f.decide(t, &reviewer, ex.ID, "decline"), "declined", reviewer.id)
-				b3RequireCount(t, f.application, 1, `
-					SELECT count(*) FROM curation_suppressions
-					WHERE target_type='track' AND target_id=$1 AND subject='title' AND created_by=$2
-					  AND value='{"mode":"set","value":"模型建议曲名"}'::jsonb`, track, reviewer.id)
-				modelWaitResolution(t, f, item.ID, "suggestion_recorded")
-				f.update(t, "PUT", curationBase+"/settings", map[string]bool{"paused": false})
-				repeated := trackAutoRequest(track, f.a, "musicbrainz", "", map[string]any{"title": "模型建议曲名"})
-				repeated.OnlyEmpty = true
-				applied, err := f.writer.ApplyTrack(t.Context(), repeated)
-				curationCRequireProblem(t, err, 409, "nothing_to_apply")
-				if applied.Skipped["title"] != "suppressed" {
-					t.Fatalf("程序重复提出的结果 %+v", applied)
-				}
-				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM track_corrections WHERE track_id=$1`, track)
-			}
-			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM track_auto_values WHERE track_id=$1`, track)
-		})
-	}
+	f := newSchedulerFixture(t)
+	track, before := externalTrack(t, f.application, f.a)
+	item := modelClaim(t, f.curationFixture, modelConversation(t, f.curationFixture), f.pending(t, f.a))
+	assertHistoricalExceptionLocked(t, f, item, "correct_track", schedulerTrackCorrection(f.a, track, 1, "title", setChange("模型建议曲名")))
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM track_effective WHERE id=$1 AND title=$2 AND edit_revision=1`, track, before)
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM track_corrections WHERE track_id=$1`, track)
 }
 
 func TestPostgreSQLStewardReviewTrackEvidence(t *testing.T) {

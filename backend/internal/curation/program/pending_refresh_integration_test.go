@@ -294,7 +294,7 @@ func TestPostgreSQLCurationExternalRuleUpgradePending(t *testing.T) {
 			after := read()
 			if !tc.withCandidates {
 				resolved := f.load(t, pending.ID)
-				if after.Status != "unmatched" || resolved.Status != "waiting_route" {
+				if after.Status != "unmatched" || resolved.Status != "waiting_model" || resolved.Route != "select" {
 					t.Fatalf("历史零候选补查后应记为未匹配并交识别判断：状态 %+v，待定项 %+v", after, resolved)
 				}
 			}

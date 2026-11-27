@@ -93,8 +93,8 @@ func TestPostgreSQL整理关闭总开关后双层停止出站(t *testing.T) {
 	b3RequireCount(t, app, 0, `SELECT count(*) FROM steward_conversations WHERE kind='curation'`)
 	b3Enable(t, app, admin)
 	metricDrain(t, app, &admin, clock, endpoint, entry)
-	if calls, patrol := metricCounters(t, mock), endpoint.usage()[s.ID]["patrol"]; len(calls) == 0 || patrol.Calls == 0 {
-		t.Fatalf("重新开启后同一专辑应实际请求来源与巡检模型：来源 %v，巡检 %+v", calls, patrol)
+	if calls, patrol := metricCounters(t, mock), endpoint.usage()[s.ID]["patrol"]; len(calls) == 0 || patrol.Calls != 0 {
+		t.Fatalf("重新开启后程序应直接识别该专辑：来源 %v，巡检 %+v", calls, patrol)
 	}
 }
 

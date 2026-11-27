@@ -106,7 +106,7 @@ func (m *metricsModel) setPatrolSamples(samples []metricSample) {
 }
 
 type metricsItemStage struct{ item, stage string }
-type metricsItemUsage struct{ calls, tokens int }
+type metricsItemUsage struct{ requests, calls, inputTokens, tokens int }
 type metricsStagePeak struct {
 	Items     int `json:"items"`
 	ToolCalls int `json:"max_tool_calls"`
@@ -124,16 +124,12 @@ func (m *metricsModel) checkItemBudgets(t *testing.T) map[string]metricsStagePea
 		peak.ToolCalls = max(peak.ToolCalls, use.calls)
 		peak.Tokens = max(peak.Tokens, use.tokens)
 		peaks[key.stage] = peak
-		maxCalls, maxTokens := 20, 150000
-		if key.stage == "web" {
-			maxCalls, maxTokens = 30, 300000
-		}
-		if use.calls > maxCalls || use.tokens > maxTokens {
-			t.Errorf("档位 %s 项 %s 超过 D16：工具调用 %d/%d，token %d/%d", key.stage, key.item, use.calls, maxCalls, use.tokens, maxTokens)
+		if use.requests != 1 || use.calls != 0 || use.inputTokens > 128000 {
+			t.Errorf("模型%s项 %s 的请求数 %d，工具调用 %d，输入 token %d", key.stage, key.item, use.requests, use.calls, use.inputTokens)
 		}
 	}
-	if os.Getenv("ROOMUSIC_CURATION_METRICS_SAMPLES") == "" && (peaks["lookup"].Items == 0 || peaks["web"].Items == 0) {
-		t.Errorf("D16 的两档都应有实际用量：%v", peaks)
+	if os.Getenv("ROOMUSIC_CURATION_METRICS_SAMPLES") == "" && peaks["select"].Items == 0 {
+		t.Error("整库样本未实际调用模型识别候选")
 	}
 	return peaks
 }
@@ -253,16 +249,20 @@ func (m *metricsModel) respond(w http.ResponseWriter, r *http.Request) error {
 	if len(rep.sampleIDs) == 0 {
 		return fmt.Errorf("模型调用缺少样本归属：%s", rep.category)
 	}
-	// D16 的两个档位按项统计，度量驱动每次只领取一项。
-	if rep.category == "lookup" || rep.category == "web" {
-		if len(rep.itemIDs) != 1 {
-			return fmt.Errorf("档位 %s 本次领取了 %d 项", rep.category, len(rep.itemIDs))
+	// 每个随批判断的项都受同一个请求的上下文上限约束。
+	if rep.category == "select" || rep.category == "verify" {
+		if len(q.Tools) != 0 {
+			return fmt.Errorf("模型%s请求携带了工具", rep.category)
 		}
-		key := metricsItemStage{rep.itemIDs[0], rep.category}
-		use := m.itemUsage[key]
-		use.calls += len(rep.calls)
-		use.tokens += used.InputTokens + used.OutputTokens
-		m.itemUsage[key] = use
+		for _, item := range rep.itemIDs {
+			key := metricsItemStage{item, rep.category}
+			use := m.itemUsage[key]
+			use.requests++
+			use.calls += len(rep.calls)
+			use.inputTokens = max(use.inputTokens, used.InputTokens)
+			use.tokens += used.InputTokens + used.OutputTokens
+			m.itemUsage[key] = use
+		}
 	}
 	// 驱动每批领一项；较大批次按项平分用量，余数与本次调用次数计入首项。
 	for i, id := range rep.sampleIDs {
@@ -325,6 +325,7 @@ type metricsPending struct {
 	Candidates []struct {
 		ID      string `json:"external_id"`
 		GroupID string `json:"release_group_id"`
+		Title   string `json:"title"`
 	}
 	RawItem     json.RawMessage `json:"-"`
 	RawEvidence json.RawMessage `json:"-"`
@@ -426,7 +427,7 @@ func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (me
 	if rep.category == "" {
 		return rep, fmt.Errorf("本项首条消息与系统提示未说明档位：%s", pending[0].ID)
 	}
-	var decisions []map[string]string
+	var decisions []any
 	for _, item := range pending {
 		id := item.ReleaseID
 		if id == "" {
@@ -447,14 +448,51 @@ func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (me
 			m.routes[item.ID] = append(route, rep.category)
 		}
 		if rep.category == "select" {
-			decision := map[string]string{"item_id": item.ID, "decision": "upgrade"}
+			decision := curation.JudgeAnswer{ItemID: item.ID, Decision: "undetermined", Reason: "当前候选缺少证据"}
 			for _, candidate := range item.Candidates {
 				if m.mode == "first_candidate" || candidate.ID == target.ReleaseID || candidate.ID == target.RecordingID || target.GroupMatch != "" && candidate.GroupID == target.GroupMatch {
-					decision["decision"], decision["external_id"] = "select", candidate.ID
+					decision.Decision, decision.SelectedID = "judge", candidate.ID
+					if candidate.Title != "" && item.Kind == "release_match" && candidate.Title != item.Evidence.Title {
+						decision.Groups = []curation.JudgeGroup{{Name: curation.JudgeName{Release: candidate.Title, Artist: item.Evidence.Artist}}}
+					}
 					break
 				}
 			}
+			if decision.SelectedID == "" && item.Kind == "release_match" && target.ReleaseID != "" {
+				name := curation.JudgeName{Release: item.Evidence.Title, Artist: item.Evidence.Artist}
+				if credit := metadata.CanonicalArtistNames(name.Artist); len(credit) > 1 {
+					name.Artist = credit[0]
+				}
+				if m.mode == "oracle_open" && target.SearchTitle != "" {
+					name.Release = target.SearchTitle
+				}
+				if name.Artist != item.Evidence.Artist || name.Release != item.Evidence.Title {
+					decision.Decision = "judge"
+					decision.Groups = []curation.JudgeGroup{{Name: name}}
+				}
+			}
 			decisions = append(decisions, decision)
+			continue
+		}
+		if rep.category == "verify" {
+			verdict := "undetermined"
+			switch item.Kind {
+			case "verify_name":
+				verdict = "keep"
+				if item.Evidence.After != "" && item.Evidence.After == target.Fields[item.Evidence.Field] {
+					verdict = "typo"
+				}
+			case "verify_artist_merge", "verify_artist_credit":
+				if !m.manifestOracle {
+					verdict = "different"
+					if alias := m.canonical[item.Evidence.Before]; !m.rejectMerge && alias != "" && alias == m.canonical[item.Evidence.After] {
+						verdict = "same"
+					}
+				}
+			case "release_merge":
+				verdict = "keep"
+			}
+			decisions = append(decisions, map[string]string{"item_id": item.ID, "verdict": verdict, "reason": "按本项证据与合成样本标注核对"})
 			continue
 		}
 		var evidence *upstreammock.OracleEvidence
@@ -481,7 +519,7 @@ func (m *metricsModel) pendingReply(_ context.Context, q metricsChatRequest) (me
 			rep.calls = append(rep.calls, call)
 		}
 	}
-	if rep.category == "select" {
+	if rep.category == "select" || rep.category == "verify" {
 		raw, err := json.Marshal(map[string]any{"items": decisions})
 		rep.text = string(raw)
 		return rep, err
@@ -682,30 +720,6 @@ func (m *metricsModel) nextTool(item metricsPending, target metricsModelTarget, 
 		case "resolve_artist_identity":
 			return metricsToolCall{}
 		}
-	case "verify":
-		if lastTool != "" {
-			return metricsToolCall{}
-		}
-		verdict := "uncertain"
-		switch item.Kind {
-		case "verify_name":
-			if item.Evidence.After != "" && (item.Evidence.After == target.Fields[item.Evidence.Field] || item.Evidence.After == target.Suggestions[item.Evidence.Field]) {
-				verdict = "typo"
-			}
-		case "verify_artist_credit":
-			verdict = "different"
-		case "verify_artist_merge":
-			verdict = "different"
-			if canonical := m.canonical[item.Evidence.Before]; !m.rejectMerge && canonical != "" && canonical == m.canonical[item.Evidence.After] {
-				verdict = "same"
-			}
-		default:
-			return abandon
-		}
-		if m.manifestOracle && (item.Kind == "verify_artist_credit" || item.Kind == "verify_artist_merge") {
-			verdict = "uncertain"
-		}
-		return metricsToolCall{"submit_verification", map[string]string{"item_id": item.ID, "verdict": verdict, "reason": "按照合成样本的标注核对。"}}
 	}
 	if stage == "web" || stage == "lookup" {
 		return metricsShelveFact(item.ID, abandon, target.Suggestions, evidence)

@@ -340,11 +340,11 @@ func TestPostgreSQLListeningFollowsTracksThroughRescans(t *testing.T) {
 			t.Fatalf("move %s: %v", from, err)
 		}
 	}
-	// Alpha 有三首，目录里还有一首属于 Gamma 的曲目（杂音，随多数留在 Alpha 的发行里）；Gamma 两首；Beta 一首。
+	// Alpha 有三首，目录里第四首的标签为 Gamma，连续曲号使四首归为一张；Gamma 两首；Beta 一首。
 	for number := 1; number <= 3; number++ {
 		write("Alpha/0"+string(rune('0'+number))+".flac", byte(number), "Alpha", "Alpha "+string(rune('0'+number)), number)
 	}
-	write("Alpha/stray.flac", 20, "Gamma", "Gamma Stray", 3)
+	write("Alpha/stray.flac", 20, "Gamma", "Gamma Stray", 4)
 	write("Gamma/01.flac", 31, "Gamma", "Gamma 1", 1)
 	write("Gamma/02.flac", 32, "Gamma", "Gamma 2", 2)
 	write("Beta/01.flac", 40, "Beta", "Beta 1", 1)

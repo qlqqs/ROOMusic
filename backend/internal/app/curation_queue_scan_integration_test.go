@@ -96,7 +96,7 @@ func TestPostgreSQL整理进行中新专辑优先(t *testing.T) {
 		t.Fatalf("首项出站顺序 %v，期望 %v", got, want)
 	}
 	for _, title := range got {
-		if s := b3WorkState(t, app, "release", id(title)); s.Status != "unlisted" || s.Attempts != 1 {
+		if s := b3WorkState(t, app, "release", id(title)); s.Status != "unmatched" || s.Attempts != 1 {
 			t.Fatalf("%s 应处理一次并结案：%+v", title, s)
 		}
 	}
@@ -207,7 +207,7 @@ func TestPostgreSQL整理安静窗口只发一次确认扫描(t *testing.T) {
 	requireClaims(2)
 	id := programString(t, app, `SELECT r.id FROM releases r JOIN media m ON m.release_id=r.id
 		JOIN tracks t ON t.medium_id=m.id WHERE t.relative_path=$1 AND t.source_status='present'`, album+"/02.flac")
-	if s := b3WorkState(t, app, "release", id); s.Status != "unlisted" || s.Attempts != 1 {
+	if s := b3WorkState(t, app, "release", id); s.Status != "unmatched" || s.Attempts != 1 {
 		t.Fatalf("稳定确认后应进入识别：%+v", s)
 	}
 	if len(metricCounters(t, mock)) == 0 {

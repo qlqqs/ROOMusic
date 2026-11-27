@@ -422,7 +422,10 @@ func TestPostgreSQLOutboundProxyCurationBackoff(t *testing.T) {
 		curation.SourceRegistration{Declaration: musicbrainz.Declaration(), Releases: music, Recordings: music},
 	).WithScanCheck(f.scanCheck)
 	f.run(t)
-	requireUnattemptedProgramState(t, f.stateFor(t, "release", f.a))
+	state := f.stateFor(t, "release", f.a)
+	if state.Status != "try_later" || state.RetrySource != "musicbrainz" || state.Attempts != 0 || state.Generation != 0 || state.NextAttemptAt == nil || !state.NextAttemptAt.Equal(f.clock.options().Now().Add(5*time.Second)) {
+		t.Fatalf("代理断开后的来源重试状态 %+v", state)
+	}
 	queues, err := f.worker.QueueProgress(t.Context())
 	requireCurationOK(t, err)
 	queue := queues[0]

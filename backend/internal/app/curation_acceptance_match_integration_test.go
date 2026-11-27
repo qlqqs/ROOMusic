@@ -64,8 +64,8 @@ func TestPostgreSQL整理唯一候选撤销后不调用模型(t *testing.T) {
 	b3Enable(t, app, admin)
 	metricDrain(t, app, &admin, clock, endpoint, entry)
 	before := endpoint.usage()
-	if len(before) == 0 {
-		t.Fatal("首次整理应实际调用巡检模型")
+	if len(before) != 0 {
+		t.Fatal("带有效发行编号的专辑应由程序直接识别")
 	}
 	operation := programString(t, app, `SELECT operation_id FROM external_links WHERE object_type='release' AND object_id=$1 AND external_id=$2`, entry.release, remote)
 	cMatchFixture(app, admin).undo(t, operation)

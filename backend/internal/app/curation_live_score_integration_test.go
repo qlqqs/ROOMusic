@@ -425,7 +425,7 @@ func liveCorpusScore(t *testing.T, app *integrationTestApplication, entries []li
 		for _, problem := range metricSuggestionIssues(entries[i].Title, entries[i].ReleaseIDs, rules[i], score.Suggestions, answers) {
 			issue(i, fmt.Sprintf("%s %s，期望 %s，实际 %s", problem.Kind, problem.Field, problem.Expected, problem.Actual))
 		}
-		if score.Outcome != metricWaitingSource && !slices.Contains(score.Accept, score.Outcome) {
+		if score.Outcome != metricWaitingSource && !metricAcceptsOutcome(score.Accept, score.Outcome) {
 			issue(i, fmt.Sprintf("终态 %q，允许 %v", score.Outcome, score.Accept))
 		}
 		score.Accepted = !rejected[i]
@@ -480,7 +480,7 @@ func TestPostgreSQLCurationLiveAttributionScope(t *testing.T) {
 	endpoint.mu.Lock()
 	defer endpoint.mu.Unlock()
 	safe := liveCorpusScore(t, app, []liveAlbum{album}, endpoint.routes)
-	if safe.Accepted != 1 || safe.Samples[0].Outcome != "unlisted" || safe.Samples[0].Attribution != nil {
+	if safe.Accepted != 1 || safe.Samples[0].Outcome != "unmatched" || safe.Samples[0].Attribution != nil {
 		t.Fatalf("正确未收录的试用样本被归因：%+v", safe)
 	}
 	// 同一份运行只改检验标注，核实需要外部编号时才检查能否取得它。

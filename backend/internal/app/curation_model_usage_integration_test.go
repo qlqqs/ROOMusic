@@ -24,7 +24,8 @@ func TestPostgreSQLCurationModelDailyLimit(t *testing.T) {
 		t.Fatalf("普通对话被计入整理用量 %+v", usage)
 	}
 
-	release, _, item := f.matchFixture(t)
+	_, _, item := f.matchFixture(t)
+	item = modelRouteFixture(t, f, item, "")
 	const highInput = 120001
 	const limit = highInput + 7
 	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "daily_token_limit": limit, "model_concurrency": 1})
@@ -32,7 +33,7 @@ func TestPostgreSQLCurationModelDailyLimit(t *testing.T) {
 	second := f.pending(t, f.b)
 	first.inputTokens = highInput
 	first.selectCandidate(t, item.ID, f.remote.ID)
-	review := f.next(t, true)
+	modelWaitResolution(t, f, item.ID, "judge_submitted")
 	if usage := f.progress(t).Today; usage.InputTokens != highInput || usage.OutputTokens != 7 {
 		t.Fatalf("主模型用量 %+v", usage)
 	}
@@ -42,20 +43,20 @@ func TestPostgreSQLCurationModelDailyLimit(t *testing.T) {
 	if checkpoint.Reason != "limit_reached" || checkpoint.RetryAt == nil || !checkpoint.RetryAt.Equal(nextDay) {
 		t.Fatalf("达到上限后下一项应等到次日：%+v", checkpoint)
 	}
-	review.review(t, "approved")
+
 	schedulerWait(t, "当前项完成后停在日限", func() bool {
 		p := f.progress(t)
 		return p.State == "limit_reached" && p.Running == 0
 	})
-	if got := f.item(t, item.ID); got.Resolution == nil || *got.Resolution != "model_matched" {
+	if got := f.item(t, item.ID); got.Resolution == nil || *got.Resolution != "judge_submitted" {
 		t.Fatalf("达到上限后已开始的项未能写入：%+v", got)
 	}
-	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1`, release)
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND result->'judge'->>'item_id'=$2`, item.TargetID, item.ID)
 	if got := f.item(t, second.ID); got.Status != "waiting_model" || got.ConversationID != "" || got.Attempts != 0 {
 		t.Fatalf("下一项应原样留在队列：%+v", got)
 	}
 	got := f.progress(t)
-	if got.Today.InputTokens != highInput+13 || got.Today.OutputTokens != 14 || got.Today.Date != "2026-01-02" {
+	if got.Today.InputTokens != highInput || got.Today.OutputTokens != 7 || got.Today.Date != "2026-01-02" {
 		t.Fatalf("当日上限及总用量 %+v", got)
 	}
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM steward_conversations WHERE kind='curation'`)
@@ -143,49 +144,20 @@ func TestPostgreSQLCurationModelRestartRecovery(t *testing.T) {
 }
 
 func TestPostgreSQL整理自查的摘要计入当天总额度(t *testing.T) {
-	gate := &testLookupGate{}
-	gate.ready.Store(true)
-	f := newSchedulerFixtureWithSources(t, gate, nil)
+	f := newSchedulerFixture(t)
 	f.configure(t, &f.admin)
-	_, _, item := f.matchFixture(t)
-	item = modelRouteFixture(t, f, item, "lookup")
-	const input = 120001
-	const limit = input + 13 + 14
-	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "daily_token_limit": limit})
-	first := f.next(t, false)
-	conversation := f.item(t, item.ID).ConversationID
-	store := runtime.NewStore(f.application.database)
-	detail, err := store.GetConversation(t.Context(), f.admin.id, conversation)
-	requireCurationOK(t, err)
-	for range 7 {
-		_, err = store.AppendMessage(t.Context(), f.admin.id, conversation, runtime.MessageInput{Role: "user", Content: detail.Messages[0].Content})
-		requireCurationOK(t, err)
+	item := f.pending(t, f.a)
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "daily_token_limit": 120008})
+	q := f.next(t, false)
+	q.inputTokens = 120001
+	q.undetermined(t, item.ID, "无需工具查询")
+	modelWaitResolution(t, f, item.ID, "undetermined")
+	p := f.progress(t)
+	if p.State != "limit_reached" || p.Today.InputTokens != 120001 || p.Today.OutputTokens != 7 {
+		t.Fatalf("单次识别的实耗 %+v", p)
 	}
-	first.inputTokens = input
-	first.tool(t, "get_music_metadata", map[string]any{"entity": "release", "mbid": f.remote.ID})
-	summary := f.next(t, false)
-	if !strings.Contains(string(summary.Messages[0].Content), "对话摘要整理器") {
-		t.Fatal("未收到压缩自查历史的摘要请求")
-	}
-	if got := f.progress(t).Today; got.InputTokens != input || got.OutputTokens != 7 {
-		t.Fatalf("摘要前用量 %+v", got)
-	}
-	summary.complete(t)
-	submission := f.next(t, false)
-	if got := f.progress(t).Today; got.InputTokens != input+13 || got.OutputTokens != 14 {
-		t.Fatalf("摘要后用量 %+v", got)
-	}
-	checkpoint, err := f.writer.BeforeModelItem(t.Context(), f.admin.id, f.clock.options().Now())
-	requireCurationOK(t, err)
-	if checkpoint.Reason != "limit_reached" {
-		t.Fatalf("摘要应耗完剩余的日额度：%+v", checkpoint)
-	}
-	submission.tool(t, "resolve_release_match", f.matchProposal(item.ID))
-	f.next(t, true).review(t, "approved")
-	modelWaitResolution(t, f, item.ID, "model_matched")
-	if got := f.progress(t).Today; got.InputTokens != input+39 || got.OutputTokens != 28 {
-		t.Fatalf("自查、摘要与审查总用量 %+v", got)
-	}
+	requireCurationRuleRequestCount(t, f, 1)
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM steward_reviews`)
 }
 
 func TestPostgreSQLCurationModelConcurrentDailyLimits(t *testing.T) {
@@ -193,11 +165,13 @@ func TestPostgreSQLCurationModelConcurrentDailyLimits(t *testing.T) {
 	f := newSchedulerFixture(t)
 	f.configure(t, &f.admin)
 	configureModelWeb(t, f)
-	first := modelRouteFixture(t, f, f.pending(t, f.a), "web")
-	second := modelRouteFixture(t, f, f.pending(t, f.b), "web")
+	first := f.pending(t, f.a)
+
 	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": 2, "daily_token_limit": 20})
 
-	a, b := f.next(t, false), f.next(t, false)
+	a := f.next(t, false)
+	second := f.pending(t, f.b)
+	b := f.next(t, false)
 	if strings.Contains(string(a.Messages[len(a.Messages)-1].Content), second.ID) {
 		a, b = b, a
 	}
@@ -212,28 +186,28 @@ func TestPostgreSQLCurationModelConcurrentDailyLimits(t *testing.T) {
 	thirdRelease, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{
 		title: "第三张专辑", artist: "第三位艺人", tracks: []string{"present"},
 	})
-	third := modelRouteFixture(t, f, f.pending(t, thirdRelease), "web")
+	third := f.pending(t, thirdRelease)
 
 	// 首项的 13 个输入、7 个输出 token 正好达到上限。
-	a.tool(t, "shelve_pending_item", map[string]string{"item_id": first.ID, "reason": "未找到发行依据"})
-	modelWaitResolution(t, f, first.ID, "unlisted")
+	a.undetermined(t, first.ID, "未找到发行依据")
+	modelWaitResolution(t, f, first.ID, "undetermined")
 	schedulerWait(t, "第一项达到日额后仍有一项运行", func() bool {
 		p := f.progress(t)
 		return p.Running == 1 && p.Today.InputTokens == 13 && p.Today.OutputTokens == 7
 	})
-	if p := f.item(t, third.ID); p.Status != "waiting_route" || p.ConversationID != "" {
+	if p := f.item(t, third.ID); p.Status != "waiting_model" || p.ConversationID != "" {
 		t.Fatalf("达到上限后提前领取第三项 %+v", p)
 	}
 
 	b.inputTokens = 33
-	b.tool(t, "shelve_pending_item", map[string]string{"item_id": second.ID, "reason": "已在途的发行完成核对"})
-	modelWaitResolution(t, f, second.ID, "unlisted")
+	b.undetermined(t, second.ID, "已在途的发行完成核对")
+	modelWaitResolution(t, f, second.ID, "undetermined")
 	schedulerWait(t, "在途项完成且腾出全部并发名额", func() bool { return f.progress(t).Running == 0 })
 	p := f.progress(t)
 	if p.Today.InputTokens != 46 || p.Today.OutputTokens != 14 || p.State != "limit_reached" {
 		t.Fatalf("应只超出第二项的 40 个 token，进度 %+v", p)
 	}
-	if pending := f.item(t, third.ID); pending.Status != "waiting_route" || pending.Attempts != 0 || pending.ConversationID != "" {
+	if pending := f.item(t, third.ID); pending.Status != "waiting_model" || pending.Attempts != 0 || pending.ConversationID != "" {
 		t.Fatalf("第三项应保留原状 %+v", pending)
 	}
 	b3RequireCount(t, f.application, 2, `SELECT count(*) FROM steward_conversations WHERE kind='curation'`)

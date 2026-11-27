@@ -428,7 +428,7 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 		if stop == "" && (s.inputTokens+s.outputTokens >= maxRunTokens || step.finish.Reason == provider.FinishOutputLimit) {
 			stop = EndTokenLimit
 		}
-		if stop == "" && s.params.OnToolCalls != nil {
+		if stop == "" && (s.params.OnToolCalls != nil || s.params.Selection != nil) {
 			end, err := s.beforeStep(ctx)
 			if err != nil {
 				return RunEnd{}, err

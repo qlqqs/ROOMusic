@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,233 +12,94 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
-	"github.com/qlqq/roomusic/backend/internal/sources"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 )
 
-// 条件就绪，出站限流、503 冷却以及队列优先级使用真实的来源策略。
-type liveGapsLookup struct{ policy *sources.QueuePolicy }
-
-func (l liveGapsLookup) LookupTierReady(context.Context, string, time.Time) (bool, error) {
-	return l.policy.Pause("musicbrainz") == nil, nil
-}
-func (l liveGapsLookup) PreparationContext(ctx context.Context) context.Context {
-	return l.policy.Context(ctx, sources.QueueModelLookup, nil)
-}
-
-func TestPostgreSQLLiveGapsSourceRetry(t *testing.T) {
-	for _, tc := range []struct {
-		route string
-		limit bool
-	}{{"lookup", false}, {"web", false}, {"lookup", true}, {"web", true}} {
-		exit := "放弃"
-		if tc.limit {
-			exit = "触限"
-		}
-		t.Run(tc.route+"/"+exit, func(t *testing.T) {
-			s := liveGapsEditions(5)
-			s.External.Releases = s.External.Releases[:1]
-			source := liveGapsSource(t, s)
-			var healthy atomic.Bool
-			var failures atomic.Int32
-			var longRecovery atomic.Bool
-			sourceClock := newProgramClock()
-			gate := liveGapsLookup{sources.NewQueuePolicy(sourceClock.options().Now)}
-			server := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if !healthy.Load() {
-					failures.Add(1)
-					// 第二档的 Retry-After 大于十分钟，能够识别用固定退避替代来源恢复时刻的错误。
-					retry := "0"
-					if tc.route == "lookup" {
-						retry = "1200"
-						if longRecovery.Load() {
-							retry = "691200"
-						}
-					}
-					w.Header().Set("Retry-After", retry)
-					http.Error(w, "合成目录维护中", http.StatusServiceUnavailable)
-					return
-				}
-				source.ServeHTTP(w, r)
-			})
-			f := newSchedulerFixtureWithSources(t, gate, server, func(o *options) { o.music.Now = sourceClock.options().Now })
-			metricObserveClaims(t, f.application)
-			target, _ := liveGapsLocal(t, f, s, s.Local.Album)
-			p := modelRouteFixture(t, f, f.pending(t, target), tc.route)
-			remote := s.External.Releases[0].ID
-			mustExec(t, f.application, `UPDATE curation_pending_items SET candidates=jsonb_build_array(jsonb_build_object('external_id',$2::text)) WHERE id=$1`, p.ID, remote)
-			if tc.limit {
-				// 首轮查询与放弃消耗两次工具调用、40 token，下一轮先取得本次来源错误，再触及上限。
-				calls, tokens := 16, 0
-				if tc.route == "web" {
-					calls, tokens = 0, 300000-80
-				}
-				mustExec(t, f.application, `UPDATE curation_pending_items SET item_tool_calls=$2,item_tokens=$3 WHERE id=$1`, p.ID, calls, tokens)
-			}
-			f.configure(t, &f.admin)
-			if tc.route == "web" {
-				configureModelWeb(t, f)
-			}
-			before := b3WorkState(t, f.application, "release", target)
-			f.enable(t)
-			args := map[string]any{"item_id": p.ID, "external_id": remote, "basis": map[string]string{"note": "按曲序核对候选版本"}}
-			rounds := 2
-			if !tc.limit && tc.route == "lookup" {
-				rounds = 1
-			}
-			for i := 0; i < rounds; i++ {
-				q := f.next(t, false)
-				start := f.item(t, p.ID)
-				firstFailures := failures.Load()
-				capped := tc.limit && i == 1
-				if capped {
-					longRecovery.Store(true)
-				}
-				if tc.route == "lookup" {
-					q.tool(t, "get_music_metadata", map[string]string{"entity": "release", "mbid": remote})
-				} else {
-					q.tool(t, "resolve_release_match", args)
-				}
-				afterFailure := f.next(t, false)
-				if got := afterFailure.lastToolResult(t); !strings.Contains(got, "source_unavailable") {
-					t.Fatalf("模型应收到来源不可用，实际 %s", got)
-				}
-				if capped {
-					afterFailure.tool(t, "get_music_metadata", map[string]string{"entity": "release", "mbid": remote})
-				} else {
-					afterFailure.tool(t, "shelve_pending_item", map[string]string{"item_id": p.ID, "reason": "来源暂时不可用"})
-				}
-				const used = 2
-				schedulerWait(t, "本次领取已结束", func() bool { return f.item(t, p.ID).Status != "in_progress" })
-				got := f.item(t, p.ID)
-				after := b3WorkState(t, f.application, "release", target)
-				delay := (5 * time.Second) << i
-				requests := int32(5)
-				if tc.route == "lookup" {
-					delay, requests = 20*time.Minute, 1
-				}
-				if capped && tc.route == "lookup" {
-					delay = 8 * 24 * time.Hour
-				}
-				deadline := f.clock.options().Now().Add(delay)
-				if failures.Load()-firstFailures != requests || got.SourceRetryCount != i+1 || got.Status != "waiting_route" || got.Route != tc.route || got.NextAttemptAt == nil || !got.NextAttemptAt.Equal(deadline) || got.Attempts != p.Attempts || got.Resolution != nil || after.Status != before.Status || after.Attempts != before.Attempts || after.Generation != before.Generation {
-					t.Fatalf("第 %d 轮 %d 次来源请求，期望 %d 次、%s 后重试；待定项 %+v，发行 %+v", i+1, failures.Load()-firstFailures, requests, delay, got, after)
-				}
-				if got.ItemToolCalls != start.ItemToolCalls+used || got.ItemTokens != start.ItemTokens+int64(20*used) {
-					t.Fatalf("本轮使用 %d 次工具，累计用量 %d/%d → %d/%d", used, start.ItemToolCalls, start.ItemTokens, got.ItemToolCalls, got.ItemTokens)
-				}
-				if retry, ok := metricSourceRetries(t, f.application, f.clock.options().Now())[p.ID]; !ok || retry.Route != tc.route {
-					t.Fatalf("评分缺少来源等待记录 %+v", retry)
-				}
-				if _, ok := metricSourceRetries(t, f.application, deadline)[p.ID]; ok {
-					t.Fatal("评分仍将到期项计为等待")
-				}
-				last := i+1 == rounds
-				healthy.Store(last)
-				sourceClock.now.Store(deadline.UnixNano())
-				if capped {
-					f.clock.now.Store(deadline.Add(-time.Second).UnixNano())
-					select {
-					case <-f.requests:
-						t.Fatal("到期前收到新模型请求")
-					case <-time.After(100 * time.Millisecond):
-					}
-					b3RequireCount(t, f.application, rounds, `SELECT count(*) FROM steward_conversations WHERE kind='curation'`)
-					waiting := f.item(t, p.ID)
-					if waiting.ItemToolCalls != got.ItemToolCalls || waiting.ItemTokens != got.ItemTokens {
-						t.Fatal("到期领取前已清零用量")
-					}
-				}
-				f.clock.now.Store(deadline.UnixNano())
-				if !last {
-					// 下一次领取应原样继承本轮累计用量。
-					schedulerWait(t, "普通重试已领取", func() bool { return f.item(t, p.ID).Status == "in_progress" })
-					next := f.item(t, p.ID)
-					if next.ItemToolCalls != got.ItemToolCalls || next.ItemTokens != got.ItemTokens || next.SourceRetryCount != got.SourceRetryCount {
-						t.Fatalf("普通重试丢失累计值 %+v", next)
-					}
-				}
-			}
-			resumed := f.next(t, false)
-			if tc.limit {
-				got := f.item(t, p.ID)
-				if got.ItemToolCalls != 0 || got.ItemTokens != 0 || got.SourceRetryCount != 0 {
-					t.Fatalf("满额后到期领取未清零 %+v", got)
-				}
-			}
-			resumed.tool(t, "resolve_release_match", args)
-			modelWaitResolution(t, f, p.ID, "model_matched")
-			schedulerWait(t, "成功后清除来源退避", func() bool { return f.item(t, p.ID).SourceRetryCount == 0 })
-			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_id=$1 AND object_type='release' AND external_id=$2`, target, remote)
-		})
-	}
-}
-
-func TestPostgreSQLLiveGapsTransientSource(t *testing.T) {
+// 只让指定版本的详情接口失败，以区分真实出站与冷却期间的本地等待。
+func judgeRetryFixture(t *testing.T, failures int32, retryAfter string) (*schedulerFixture, *programClock, string, string, *atomic.Int32) {
+	t.Helper()
 	s := liveGapsEditions(5)
 	s.External.Releases = s.External.Releases[:1]
 	remote := s.External.Releases[0].ID
 	source := liveGapsSource(t, s)
 	var reads atomic.Int32
 	server := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/mb/release/"+remote && reads.Add(1) == 1 {
-			w.Header().Set("Retry-After", "0")
-			http.Error(w, "合成的短暂故障", http.StatusServiceUnavailable)
+		if r.URL.Path == "/mb/release/"+remote && reads.Add(1) <= failures {
+			w.Header().Set("Retry-After", retryAfter)
+			http.Error(w, "合成目录维护中", http.StatusServiceUnavailable)
 			return
 		}
 		source.ServeHTTP(w, r)
 	})
-	gate := &testLookupGate{}
-	gate.ready.Store(true)
-	f := newSchedulerFixtureWithSources(t, gate, server)
+	f, clock := newJudgeProgramFixture(t, server)
 	target, _ := liveGapsLocal(t, f, s, s.Local.Album)
-	item := modelRouteFixture(t, f, f.pending(t, target), "lookup")
-	mustExec(t, f.application, `UPDATE curation_pending_items SET candidates=jsonb_build_array(jsonb_build_object('external_id',$2::text)) WHERE id=$1`, item.ID, remote)
-	f.configure(t, &f.admin)
-	f.enable(t)
-	q := f.next(t, false)
-	conversation := f.item(t, item.ID).ConversationID
-	q.tool(t, "get_music_metadata", map[string]string{"entity": "release", "mbid": remote})
-	next := f.next(t, false)
-	got := f.item(t, item.ID)
-	if reads.Load() != 2 || !strings.Contains(next.lastToolResult(t), remote) || got.Status != "in_progress" || got.ConversationID != conversation || got.NextAttemptAt != nil || got.SourceRetryCount != 0 || got.ClaimSourceRecoveryAt != nil {
-		t.Fatalf("请求内恢复后读了 %d 次，待定项 %+v", reads.Load(), got)
+	p := judgeFixtureItem(t, f, target, program.Candidate{ExternalID: remote, Method: "search"})
+	judgeFixtureAnswer(t, f, p, curation.JudgeAnswer{SelectedID: remote})
+	return f, clock, target, remote, &reads
+}
+
+func TestPostgreSQLLiveGapsSourceRetry(t *testing.T) {
+	for _, delay := range []time.Duration{20 * time.Minute, 8 * 24 * time.Hour} {
+		t.Run(delay.String(), func(t *testing.T) {
+			f, clock, target, remote, reads := judgeRetryFixture(t, 1, fmt.Sprint(int(delay.Seconds())))
+			clock.advance(t, 0)
+			deadline := clock.options().Now().Add(delay)
+			before := b3WorkState(t, f.application, "release", target)
+			if before.Status != "try_later" || before.RetryCount != 0 || before.NextAttemptAt == nil || !before.NextAttemptAt.Equal(deadline) || reads.Load() != 1 {
+				t.Fatalf("暂缓至 %s，实际状态 %+v，出站 %d 次", deadline, before, reads.Load())
+			}
+			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND result->'retry'->>'source'='musicbrainz' AND result->'judge'->>'next'='-1'`, target)
+			clock.advance(t, delay-time.Second)
+			if reads.Load() != 1 {
+				t.Fatal("恢复前再次出站")
+			}
+			clock.advance(t, time.Second)
+			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_id=$1 AND external_id=$2`, target, remote)
+			requireCurationRuleRequestCount(t, f, 1)
+		})
 	}
-	next.tool(t, "resolve_release_match", map[string]any{"item_id": item.ID, "external_id": remote, "basis": map[string]string{"note": "核对合成曲序"}})
-	modelWaitResolution(t, f, item.ID, "model_matched")
-	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1 AND external_id=$2`, target, remote)
+}
+
+func TestPostgreSQLLiveGapsTransientSource(t *testing.T) {
+	f, clock, target, remote, reads := judgeRetryFixture(t, 1, "0")
+	clock.advance(t, 0)
+	if reads.Load() != 2 {
+		t.Fatalf("一次短重试后应成功，详情请求 %d 次", reads.Load())
+	}
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_id=$1 AND external_id=$2`, target, remote)
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='matched' AND retry_count=0 AND NOT result ? 'retry'`, target)
+	requireCurationRuleRequestCount(t, f, 1)
 }
 
 func TestPostgreSQLLiveGapsWebSuggestionRetry(t *testing.T) {
-	clock := newProgramClock()
-	f := newSchedulerFixture(t, func(o *options) { o.music.Now = clock.options().Now })
-	title := programString(t, f.application, `SELECT title FROM releases WHERE id=$1`, f.a)
-	item := queueModelVerification(t, f, "verify_name", curation.VerificationCandidate{ReleaseID: f.a, Field: "title", Before: title, After: "合成的另一种写法"})
-	mustExec(t, f.application, `UPDATE curation_pending_items SET status='waiting_route',route='web' WHERE id=$1`, item)
-	f.configure(t, &f.admin)
-	configureModelWeb(t, f)
-	f.enable(t)
-	f.next(t, false).tool(t, "get_music_metadata", map[string]string{"entity": "release", "mbid": unavailableMusicBrainzID})
+	var healthy atomic.Bool
+	f := newControlledArtistWebSearch(t, func(w http.ResponseWriter, r *http.Request) bool {
+		if !strings.Contains(r.URL.Path, "/searxng/") || healthy.Load() {
+			return false
+		}
+		w.Header().Set("Retry-After", "0")
+		http.Error(w, "合成搜索服务临时故障", http.StatusServiceUnavailable)
+		return true
+	})
+	artist := f.addArtist(t, "暂时无法查证的艺人")
+	item := f.startArtist(t, artist)
 	q := f.next(t, false)
-	if !strings.Contains(q.lastToolResult(t), "source_unavailable") {
-		t.Fatal("该项没有收到来源错误")
+	q.tool(t, "web_search", map[string]string{"q": "暂时无法查证的艺人"})
+	next := f.next(t, false)
+	if !strings.Contains(next.lastToolResult(t), "source_unavailable") {
+		t.Fatalf("来源错误 %s", next.lastToolResult(t))
 	}
-	proposal := map[string]string{"item_id": item, "verdict": "style", "reason": "保留原写法"}
-	q.tool(t, "submit_verification", proposal)
-	schedulerWait(t, "本次建议执行完毕", func() bool { return f.item(t, item).Status != "in_progress" })
-	got := f.item(t, item)
-	deadline := f.clock.options().Now().Add(5 * time.Second)
-	if got.Status != "waiting_route" || got.Route != "web" || got.NextAttemptAt == nil || !got.NextAttemptAt.Equal(deadline) || got.Attempts != 0 || got.Resolution != nil {
-		t.Fatalf("来源故障后提交建议，待定项 %+v", got)
+	next.tool(t, "shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "查找服务不可用"})
+	schedulerWait(t, "艺人待办按来源错误推迟", func() bool { return f.item(t, item.ID).NextAttemptAt != nil })
+	got := f.item(t, item.ID)
+	if got.SourceRetryCount != 1 || got.ClaimSourceRecoveryAt != nil || got.ItemToolCalls != 2 || got.Resolution != nil || got.Attempts != 0 {
+		t.Fatalf("来源错误后待办 %+v", got)
 	}
-	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1`, item)
-	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1`, f.a)
-	// 到期后同一建议在新领取中可以正常结案。
-	clock.now.Store(deadline.UnixNano())
-	f.clock.now.Store(deadline.UnixNano())
-	f.next(t, false).tool(t, "submit_verification", proposal)
-	modelWaitResolution(t, f, item, "suggestion_recorded")
-	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1`, item)
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1`, item.ID)
+	healthy.Store(true)
+	f.clock.now.Store(got.NextAttemptAt.UnixNano())
+	f.next(t, false).tool(t, "shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "未找到证据"})
+	f.waitArtistResolution(t, item.ID, "no_result")
 }
 
 func TestPostgreSQLLiveGapsUpgrade(t *testing.T) {
@@ -248,7 +108,7 @@ func TestPostgreSQLLiveGapsUpgrade(t *testing.T) {
 			t.Fatalf("匹配、本地、审查规则为 %d/%d/%d，匹配规则至少为 104，本地和审查规则应为 4/7", program.MatchRuleVersion, program.LocalRuleVersion, runtime.ReviewPolicyVersion)
 		}
 	})
-	for _, kind := range []string{"unlisted", "uncertain", "track_count", "position_conflict", "artist_mismatch", "tag_text_mismatch", "matched"} {
+	for _, kind := range []string{"unmatched", "conflict", "track_count", "position_conflict", "artist_mismatch", "tag_text_mismatch", "matched"} {
 		t.Run(kind, func(t *testing.T) {
 			f := newProgramFixture(t)
 			f.enable(t)
@@ -257,7 +117,7 @@ func TestPostgreSQLLiveGapsUpgrade(t *testing.T) {
 			}
 			f.run(t)
 			base := f.stateFor(t, "release", f.a)
-			if kind == "matched" && base.Status != "matched" || kind != "matched" && base.Status != "unlisted" {
+			if kind == "matched" && base.Status != "matched" || kind != "matched" && base.Status != "unmatched" {
 				t.Fatalf("初始夹具状态 %+v", base)
 			}
 			initialSearches := f.source.callCount("SearchReleases")
@@ -273,20 +133,20 @@ func TestPostgreSQLLiveGapsUpgrade(t *testing.T) {
 				FOR EACH ROW WHEN (NEW.subject='release' AND NEW.requery_match_version=%d AND OLD.requery_match_version IS DISTINCT FROM NEW.requery_match_version)
 				EXECUTE FUNCTION record_gaps_requery()`, program.MatchRuleVersion))
 			status := kind
-			if kind != "matched" && kind != "unlisted" {
-				status = "uncertain"
+			if kind != "matched" && kind != "unmatched" {
+				status = "conflict"
 			}
 			// 历史未收录有正常的长周期复查期限。版本补查应在升级时独立执行。
 			mustExec(t, f.application, `UPDATE curation_work_states SET match_rule_version=102,local_rule_version=2,status=$2,
-				next_attempt_at=CASE WHEN $2='unlisted' THEN $3::timestamptz END WHERE subject='release' AND target_id=$1`, f.a, status, f.clock.options().Now().Add(60*24*time.Hour))
-			if kind != "uncertain" && status == "uncertain" {
+				next_attempt_at=CASE WHEN $2='unmatched' THEN $3::timestamptz END WHERE subject='release' AND target_id=$1`, f.a, status, f.clock.options().Now().Add(60*24*time.Hour))
+			if kind != "conflict" && status == "conflict" {
 				candidates, err := json.Marshal([]program.Candidate{{ExternalID: uuid.New(), Title: "雾港候选", Source: "musicbrainz", Method: "search"}})
 				requireCurationOK(t, err)
 				conflicts, err := json.Marshal([]string{kind})
 				requireCurationOK(t, err)
 				requireCurationOK(t, curation.UpsertPendingItem(t.Context(), f.application.database, curation.PendingItem{
 					TargetID: f.a, Kind: "release_match", RuleVersion: program.StoredRuleVersion, MatchRuleVersion: 102,
-					InputDigest: base.InputDigest, IdentityDigest: base.IdentityDigest, Evidence: []byte(`{"method":"search"}`), Candidates: candidates, Conflicts: conflicts, Route: "lookup",
+					InputDigest: base.InputDigest, IdentityDigest: base.IdentityDigest, Evidence: []byte(`{"method":"search"}`), Candidates: candidates, Conflicts: conflicts, Route: "select",
 				}))
 			}
 			f.clock.advance(t, 6*time.Hour)
@@ -318,57 +178,30 @@ func TestPostgreSQLLiveGapsUpgrade(t *testing.T) {
 }
 
 func TestPostgreSQLLiveGapsLookupWithoutDecision(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		web  bool
-	}{
-		{"可联网时同一项继续识别", true},
-		{"未配置联网时记为未收录", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			s := liveGapsEditions(5)
-			s.External.Releases = s.External.Releases[:1]
-			gate := &testLookupGate{}
-			gate.ready.Store(true)
-			f := newSchedulerFixtureWithSources(t, gate, liveGapsSource(t, s))
-			target, _ := liveGapsLocal(t, f, s, s.Local.Album)
-			p := modelRouteFixture(t, f, f.pending(t, target), "lookup")
+	for _, web := range []bool{false, true} {
+		t.Run(fmt.Sprintf("网页来源开启=%t", web), func(t *testing.T) {
+			f := newSchedulerFixture(t)
 			f.configure(t, &f.admin)
-			if tc.web {
+			if web {
 				configureModelWeb(t, f)
 			}
+			p := modelRouteFixture(t, f, f.pending(t, f.a), "")
 			f.enable(t)
-			for attempt := 0; attempt < 3; attempt++ {
-				q := f.next(t, false)
-				item := f.item(t, p.ID)
-				if item.Status != "in_progress" || item.Route != "lookup" || int(item.Attempts) != attempt {
-					t.Fatalf("第二档第 %d 次领取状态 %s/%s，尝试 %d", attempt+1, item.Status, item.Route, item.Attempts)
+			for _, delay := range []time.Duration{5 * time.Second, 10 * time.Second, 0} {
+				f.next(t, false).complete(t)
+				if delay > 0 {
+					deadline := f.clock.options().Now().Add(delay)
+					schedulerWait(t, "空答推迟重试", func() bool { return f.item(t, p.ID).NextAttemptAt != nil })
+					if !f.item(t, p.ID).NextAttemptAt.Equal(deadline) {
+						t.Fatalf("空答重试时间 %+v", f.item(t, p.ID))
+					}
+					f.clock.now.Store(deadline.UnixNano())
 				}
-				q.complete(t)
 			}
-			schedulerWait(t, "第二档第三次无决定后放弃本档", func() bool {
-				item := f.item(t, p.ID)
-				return item.Route == "web" || item.Status == "resolved" || item.Status == "shelved"
-			})
-			item := f.item(t, p.ID)
-			if tc.web {
-				if item.Route != "web" || item.ShelvedReason != nil {
-					t.Fatalf("第二档三次无决定后应转联网，实际 %s/%s，尝试 %d", item.Status, item.Route, item.Attempts)
-				}
-				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_work_states WHERE subject='release' AND target_id=$1 AND status='unmatched'`, target)
-				// 联网档收到同一待定项后能接受新决定，并由后端实际读回版本明细定案。
-				web := f.next(t, false)
-				id := s.External.Releases[0].ID
-				web.tool(t, "resolve_release_match", map[string]any{"item_id": p.ID, "external_id": id, "basis": map[string]string{"note": "联网档重新核对五首曲目的曲序与时长"}})
-				modelWaitResolution(t, f, p.ID, "model_matched")
-				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1 AND external_id=$2`, target, id)
-				return
-			}
-			if item.Status != "resolved" || item.Resolution == nil || *item.Resolution != "unlisted" || item.ShelvedReason != nil {
-				t.Fatalf("第二档三次无决定且无联网来源时应结案为未收录，实际 %s/%s，尝试 %d", item.Status, item.Route, item.Attempts)
-			}
-			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE subject='release' AND target_id=$1 AND status='conflict' AND next_attempt_at IS NULL`, target)
-			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_id=$1`, target)
+			schedulerWait(t, "三次空答后搁置", func() bool { return f.item(t, p.ID).Status == "shelved" })
+			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='conflict'`, f.a)
+			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_id=$1`, f.a)
+			requireCurationRuleRequestCount(t, f, 3)
 		})
 	}
 }

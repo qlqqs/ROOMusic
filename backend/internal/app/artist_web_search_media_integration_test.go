@@ -3,7 +3,6 @@ package app
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/qlqq/roomusic/backend/internal/curation/stewardtools"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/curation/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/sources"
 )
@@ -32,7 +32,7 @@ func webSearchMediaInput(item, imageURL, page string, bio bool) map[string]any {
 	return input
 }
 
-// 历史网页资料建议仍使用现有的媒体校验和人工采纳入口。
+// 网页媒体保留输入校验，艺人候选接口只采纳身份候选。
 func TestPostgreSQLArtistWebSearchHistoricalMediaValidation(t *testing.T) {
 	f := newControlledArtistWebSearch(t, func(w http.ResponseWriter, r *http.Request) bool {
 		switch r.URL.Path {
@@ -85,16 +85,8 @@ func TestPostgreSQLArtistWebSearchHistoricalMediaValidation(t *testing.T) {
 		id, err := f.writer.CreateException(t.Context(), curation.ModelException{PendingItemID: item.ID, Tool: "submit_artist_media", Input: raw, Preview: preview, Provider: "合成模型", ConversationID: &conversation, ReasonCode: "no_evidence"})
 		requireCurationOK(t, err)
 		result := f.decide(t, &f.admin, id, "accept")
-		if asset != imageURL {
-			requireAPIError(t, result, 400, "invalid_input")
-			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE target_id=$1 AND target_type='artist'`, artist)
-			continue
-		}
-		readExceptionDecision(t, result, "accepted", f.admin.id)
-		detail := readArtistMedia(t, f.application, &f.admin, artist)
-		if detail.Image == nil || detail.Bio == nil || detail.Bio.Text != webSearchBio {
-			t.Fatalf("历史建议采纳后资料不全 %+v", detail)
-		}
+		requireAPIError(t, result, 404, "not_found")
+		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE target_id=$1 AND target_type='artist'`, artist)
 	}
 }
 

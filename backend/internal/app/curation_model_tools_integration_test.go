@@ -45,23 +45,14 @@ func TestPostgreSQLCurationToolsPending(t *testing.T) {
 		User: identity.User{ID: f.admin.id, Role: "admin"}, IdempotencyKey: uuid.New()}
 	wrongCaller := caller
 	wrongCaller.User.ID = f.application.createUser(t, "admin").id
-	var abandonedReason string
-	runCtx := curation.WithModelRun(ctx, &curation.ModelRun{ConversationID: conversation, Model: "synthetic",
-		Abandon: func(ctx context.Context, id, reason string) error {
-			if id != own.ID {
-				t.Fatalf("放弃工具传递了错误的待定项 %s", id)
-			}
-			abandonedReason = reason
-			return f.writer.FinishModelItem(ctx, own, conversation, "unlisted")
-		}})
-
+	runCtx := curation.WithModelRun(ctx, &curation.ModelRun{ConversationID: conversation, Model: "synthetic"})
 	input := func(t *testing.T, toolName, itemID string) json.RawMessage {
 		t.Helper()
 		switch toolName {
 		case "read_pending_items":
 			return modelToolInput(t, map[string]any{"item_ids": []string{itemID}})
-		case "resolve_release_match":
-			return modelToolInput(t, map[string]any{"item_id": itemID, "external_id": uuid.New(), "basis": tool.Basis{Note: "合成比对依据"}})
+		case "submit_judge":
+			return modelToolInput(t, map[string]any{"item_id": itemID, "decision": "judge", "selected_id": uuid.New()})
 		case "shelve_pending_item":
 			return modelToolInput(t, map[string]any{"item_id": itemID, "reason": "候选无法区分"})
 		default:
@@ -73,7 +64,12 @@ func TestPostgreSQLCurationToolsPending(t *testing.T) {
 	for _, definition := range stewardtools.StewardTools(f.writer, nil) {
 		definitions[definition.Name] = definition
 	}
-	for _, name := range []string{"read_pending_items", "resolve_release_match", "shelve_pending_item"} {
+	for _, name := range []string{"read_pending_items", "resolve_release_match"} {
+		if _, ok := definitions[name]; ok {
+			t.Fatalf("旧整理工具仍在注册表中 %s", name)
+		}
+	}
+	for _, name := range []string{"submit_judge", "shelve_pending_item"} {
 		definition, ok := definitions[name]
 		if !ok {
 			t.Fatalf("缺少工具 %s", name)
@@ -95,38 +91,24 @@ func TestPostgreSQLCurationToolsPending(t *testing.T) {
 					args := input(t, name, tc.id)
 					_, err := definition.Handler(tc.ctx, tc.caller, args)
 					requireCurationToolCode(t, err, tc.code)
-					if name == "resolve_release_match" {
-						_, err = definition.Preview(tc.ctx, tc.caller, args)
-						requireCurationToolCode(t, err, tc.code)
-					}
+
 				})
 			}
 		})
 	}
 
-	read := definitions["read_pending_items"]
-	if !read.Untrusted {
-		t.Fatal("待定项外部资料应标为不可信")
-	}
-	rows, err := read.Handler(runCtx, caller, json.RawMessage(`{}`))
-	requireCurationOK(t, err)
-	requireExternalJSON(t, rows, []map[string]any{{"item_id": own.ID, "kind": own.Kind, "release_id": own.TargetID,
-		"conflicts": own.Conflicts, "evidence": own.Evidence, "candidates": own.Candidates}})
 	shelve := definitions["shelve_pending_item"]
 	if shelve.Scope != tool.ScopePersonal {
 		t.Fatalf("搁置工具范围为 %s，期望 personal", shelve.Scope)
 	}
 	result, err := shelve.Handler(runCtx, caller, input(t, shelve.Name, own.ID))
 	requireCurationOK(t, err)
-	requireExternalJSON(t, result, map[string]string{"item_id": own.ID, "status": "finished_tier"})
+	requireExternalJSON(t, result, map[string]string{"item_id": own.ID, "status": "undetermined"})
 	stored, err := f.writer.PendingItem(ctx, own.ID)
 	requireCurationOK(t, err)
-	if stored.Status != "resolved" || stored.Resolution == nil || *stored.Resolution != "unlisted" || abandonedReason != "候选无法区分" {
-		t.Fatalf("放弃理由 %q，结清后的待定项 %+v", abandonedReason, stored)
+	if stored.Status != "resolved" || stored.Resolution == nil || *stored.Resolution != "undetermined" {
+		t.Fatalf("识别判断应保存定不了的结论：%+v", stored)
 	}
-	rows, err = read.Handler(runCtx, caller, json.RawMessage(`{}`))
-	requireCurationOK(t, err)
-	requireExternalJSON(t, rows, []any{})
 }
 
 func TestPostgreSQLCurationToolsAutoCorrectRelease(t *testing.T) {

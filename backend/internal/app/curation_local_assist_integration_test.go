@@ -220,8 +220,8 @@ func TestPostgreSQLLocalAssistSevenReasons(t *testing.T) {
 				}
 			}
 			b3Enable(t, app, admin)
-			clock.advance(t, time.Minute)
 			if withModel {
+				clock.tick <- time.Unix(0, clock.now.Add(int64(time.Minute)))
 				schedulerWait(t, "有脚本回答的本地辅助目录结案", func() bool {
 					return countRows(t, app, `SELECT count(*) FROM curation_pending_items WHERE kind='local_cleanup' AND status<>'resolved'`) == 0
 				})
@@ -240,6 +240,7 @@ func TestPostgreSQLLocalAssistSevenReasons(t *testing.T) {
 					t.Error("同一艺人的两张独立专辑被合并")
 				}
 			} else {
+				clock.advance(t, time.Minute)
 				if got := assistSnapshot(t, app); got != before {
 					t.Errorf("缺配模型改变了扫描字段、成员或位次：%s -> %s", before, got)
 				}

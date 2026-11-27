@@ -72,31 +72,18 @@ func TestPostgreSQLArtistWebSearchMockCandidates(t *testing.T) {
 			if p := f.progress(t); p.Items.WaitingHuman != 0 {
 				t.Fatalf("进度仍有人工待办 %+v", p.Items)
 			}
-			var listed struct {
-				Items []curation.ModelException
-				Total int
-			}
-			getJSON(t, app, &f.admin, curationBase+"/exceptions?status=open", &listed)
-			if listed.Total != 2 || len(listed.Items) != 2 {
-				t.Fatalf("例外列表 %+v", listed)
-			}
+			listed := f.status(t, artist, "waiting_human", 2)
 			bySource := make(map[string]curation.ModelException)
-			for _, ex := range listed.Items {
-				if ex.Artist == nil || ex.Artist.ID != artist || ex.Artist.Name != webSearchArtistName || ex.Release != nil ||
-					ex.PendingItemID != item.ID || ex.Review.ID != "" || !ex.CanAccept || ex.ReasonCode != "no_evidence" {
+			for _, candidate := range listed.Candidates {
+				if candidate.Source != "musicbrainz" || len(candidate.Citations) != 1 || candidate.Citations[0].URL != f.endpoint+"/searxng/artists/coast" {
+					t.Fatalf("艺人页候选资料 %+v", candidate)
+				}
+				ex, err := f.writer.Exception(t.Context(), candidate.ExceptionID)
+				requireCurationOK(t, err)
+				if ex.PendingItemID != item.ID || ex.Artist == nil || ex.Artist.ID != artist || !ex.CanAccept || ex.Review.ID != "" {
 					t.Fatalf("艺人建议不符 %+v", ex)
 				}
-				var in struct {
-					Source     string
-					ExternalID string `json:"external_id"`
-					Basis      struct{ Citations []string }
-				}
-				requireCurationOK(t, json.Unmarshal(ex.Input, &in))
-				if len(in.Basis.Citations) != 1 || in.Basis.Citations[0] != f.endpoint+"/searxng/artists/coast" ||
-					(in.Source != "musicbrainz" || in.ExternalID != artistMediaMBID && in.ExternalID != webSearchSoloMBID) {
-					t.Fatalf("候选建议字段 %s", ex.Input)
-				}
-				bySource[in.ExternalID] = ex
+				bySource[candidate.ExternalID] = ex
 			}
 			duo, solo := bySource[artistMediaMBID], bySource[webSearchSoloMBID]
 			if duo.ID == "" || solo.ID == "" {
