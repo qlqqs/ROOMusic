@@ -15,6 +15,7 @@ import (
 
 type Writer struct {
 	matchTransaction *stewardMatchTransaction
+	confirmGrouping  func(context.Context) error
 	artists          *governance.ArtistGovernance
 	db               *sql.DB
 	artworks         *artwork.Store

@@ -140,6 +140,7 @@ func NormalizeKey(header string) (key string, ok bool) {
 
 // Origin 记录后端入口提供的来源，不参与操作指纹。
 type Origin struct {
+	ConfirmedBy    string `json:"confirmed_by,omitempty"`
 	ProviderKind   string `json:"provider_kind,omitempty"`
 	Provider       string `json:"provider,omitempty"`
 	Basis          string `json:"basis,omitempty"`

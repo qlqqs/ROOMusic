@@ -54,10 +54,13 @@ func (record Record) ChangeType() string {
 
 // recordProjection 与 recordSource 一起读取一条记录及“谁撤销了它”；撤销关系由唯一约束保证至多一条。
 const (
-	recordProjection = `o.id::text, o.actor_id::text, o.operation_type, o.target_type, o.target_id::text,
+	recordFields = `o.id::text, o.actor_id::text, o.operation_type, o.target_type, o.target_id::text,
 		o.expected_revision, o.result_revision, o.before_state, o.after_state,
-		COALESCE(o.reverts_operation_id::text, ''), COALESCE(original.operation_type, ''), COALESCE(reverted.id::text, ''), o.created_at, o.origin, o.batch_id::text`
-	recordSource = ` FROM operations o LEFT JOIN operations reverted ON reverted.reverts_operation_id = o.id
+		COALESCE(o.reverts_operation_id::text, ''), COALESCE(original.operation_type, ''), COALESCE(reverted.id::text, ''), o.created_at, `
+	recordProjection = recordFields + `o.origin, o.batch_id::text`
+	// 公开操作列表的来源不包含确认者，管理员接口单独展示操作者。
+	listRecordProjection = recordFields + `o.origin - 'confirmed_by', o.batch_id::text`
+	recordSource         = ` FROM operations o LEFT JOIN operations reverted ON reverted.reverts_operation_id = o.id
 		LEFT JOIN operations original ON original.id = o.reverts_operation_id`
 )
 
@@ -179,7 +182,7 @@ func List(ctx context.Context, database Queryer, params ListParams) (Page, error
 		return Page{}, fmt.Errorf("%w: count operations: %w", ErrQuery, err)
 	}
 	next := len(arguments) + 1
-	query := "SELECT " + recordProjection + recordSource + where +
+	query := "SELECT " + listRecordProjection + recordSource + where +
 		" ORDER BY o.created_at DESC, o.id DESC LIMIT $" + strconv.Itoa(next) + " OFFSET $" + strconv.Itoa(next+1)
 	listArguments := append(append([]any{}, arguments...), params.PageSize, (params.Page-1)*params.PageSize)
 	rows, err := database.QueryContext(ctx, query, listArguments...)

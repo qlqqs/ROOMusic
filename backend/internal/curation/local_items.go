@@ -44,17 +44,20 @@ type localTrack struct {
 	Identifiers map[string][]string `json:"identifiers,omitempty"`
 }
 type localRelease struct {
-	ID        string          `json:"release_id"`
-	Title     string          `json:"title"`
-	Artist    string          `json:"artist"`
-	Kind      string          `json:"scan_grouping"`
-	Fields    []string        `json:"fields,omitempty"`
-	Encodings []string        `json:"encodings,omitempty"`
-	Credits   []localCredit   `json:"credits,omitempty"`
-	Tracks    []localTrack    `json:"tracks"`
-	Reasons   []string        `json:"reasons,omitempty"`
-	Protected bool            `json:"protected_structure,omitempty"`
-	Conflicts json.RawMessage `json:"conflicts,omitempty"`
+	displayTitle   string
+	protection     []string
+	stewardGrouped bool
+	ID             string          `json:"release_id"`
+	Title          string          `json:"title"`
+	Artist         string          `json:"artist"`
+	Kind           string          `json:"scan_grouping"`
+	Fields         []string        `json:"fields,omitempty"`
+	Encodings      []string        `json:"encodings,omitempty"`
+	Credits        []localCredit   `json:"credits,omitempty"`
+	Tracks         []localTrack    `json:"tracks"`
+	Reasons        []string        `json:"reasons,omitempty"`
+	Protected      bool            `json:"protected_structure,omitempty"`
+	Conflicts      json.RawMessage `json:"conflicts,omitempty"`
 }
 type localAlbum struct {
 	DirectoryKey string         `json:"directory_key"`
@@ -270,6 +273,10 @@ func localScopeKeys(r localRelease) []string {
 	return keys
 }
 func localScopes(ctx context.Context, tx *sql.Tx, ids []string, entries map[string]catalog.CurationEvidence, request *localCredit) ([]localAlbum, error) {
+	return loadLocalScopes(ctx, tx, ids, entries, request, false)
+}
+
+func loadLocalScopes(ctx context.Context, tx *sql.Tx, ids []string, entries map[string]catalog.CurationEvidence, request *localCredit, explicit bool) ([]localAlbum, error) {
 	peers, err := catalog.LocalDirectoryPeers(ctx, tx, ids)
 	if err != nil {
 		return nil, err
@@ -289,7 +296,12 @@ func localScopes(ctx context.Context, tx *sql.Tx, ids []string, entries map[stri
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id::text, EXISTS(SELECT FROM release_merges WHERE source_release_id=r.id OR target_release_id=r.id) OR EXISTS(SELECT FROM operations o WHERE o.target_id=r.id AND o.operation_type IN ('release_merge','release_group_change') AND ((o.origin->>'source') IS DISTINCT FROM 'curation' OR o.origin->>'review_decision'='human')),
+	rows, err := tx.QueryContext(ctx, `SELECT id::text, EXISTS(SELECT FROM release_merges WHERE source_release_id=r.id OR target_release_id=r.id) OR EXISTS(SELECT FROM operations o WHERE o.target_id=r.id AND o.operation_type IN ('release_merge','release_group_change') AND ((o.origin->>'source') IS DISTINCT FROM 'curation' OR o.origin->>'review_decision'='human') AND NOT EXISTS(SELECT FROM operations undo WHERE undo.reverts_operation_id=o.id)),
+ EXISTS(SELECT FROM operations op WHERE op.operation_type='local_model_grouping'
+ AND (op.origin->>'source') IS DISTINCT FROM 'curation' AND NOT EXISTS(SELECT FROM operations undo WHERE undo.reverts_operation_id=op.id)
+ AND (op.target_id=r.id OR EXISTS(SELECT FROM local_model_groupings g CROSS JOIN LATERAL jsonb_array_elements(g.assignments) f
+ JOIN tracks t ON t.source_root_id=g.root_id AND t.relative_path=f->>'path' JOIN media m ON m.id=t.medium_id
+ WHERE g.operation_id=op.id AND t.source_status='present' AND m.release_id=r.id))),
  (SELECT jsonb_object_agg(field_key,candidates) FROM release_field_decisions WHERE release_id=r.id AND reason='tied_candidates'),
  (SELECT jsonb_agg(DISTINCT c) FROM curation_pending_items p CROSS JOIN LATERAL jsonb_array_elements(p.evidence->'releases') rel
  CROSS JOIN LATERAL jsonb_array_elements(rel->'credits') c WHERE p.kind='local_cleanup' AND (p.evidence->'release_ids') ? r.id::text AND rel->>'release_id'=r.id::text AND c->>'requested'='true')
@@ -301,9 +313,9 @@ func localScopes(ctx context.Context, tx *sql.Tx, ids []string, entries map[stri
 	var releases []localRelease
 	for rows.Next() {
 		var id string
-		var protected bool
+		var protected, grouped bool
 		var conflicts, requests []byte
-		if err := rows.Scan(&id, &protected, &conflicts, &requests); err != nil {
+		if err := rows.Scan(&id, &protected, &grouped, &conflicts, &requests); err != nil {
 			return nil, err
 		}
 		var extra []localCredit
@@ -316,7 +328,28 @@ func localScopes(ctx context.Context, tx *sql.Tx, ids []string, entries map[stri
 			extra = append(extra, *request)
 		}
 		r := makeLocalRelease(full[id], files, extra)
-		r.Protected = r.Protected || protected
+		r.displayTitle = full[id].Title
+		if full[id].AutomaticTitle != "" {
+			r.displayTitle = full[id].AutomaticTitle
+		}
+		if explicit && slices.ContainsFunc(full[id].Tracks, func(t catalog.CurationTrack) bool { return t.ExternalID != "" }) {
+			r.Protected = true
+		}
+		if r.Protected {
+			r.protection = append(r.protection, "已有外部对应")
+		}
+		if protected {
+			r.protection = append(r.protection, "人工合并或调整专辑组")
+		}
+		if grouped {
+			r.protection = append(r.protection, "管家已人工重新归组")
+			r.stewardGrouped = true
+			r.Reasons, r.Fields, r.Encodings, r.Credits = nil, nil, nil, nil
+			for i := range r.Tracks {
+				r.Tracks[i].Fields = nil
+			}
+		}
+		r.Protected = r.Protected || protected || grouped
 		r.Conflicts = conflicts
 		releases = append(releases, r)
 	}
@@ -384,6 +417,13 @@ func localScopes(ctx context.Context, tx *sql.Tx, ids []string, entries map[stri
 		unknown := modifiable && len(members) > 1 && len(a.Directories) > 1
 		mixed := modifiable && split && len(tags) > 1
 		a.Group = a.Group || unknown || mixed
+		if explicit {
+			a.Group = true
+		} else if slices.ContainsFunc(a.Releases, func(r localRelease) bool { return r.stewardGrouped }) {
+			// 替换同一目录的分配会连带覆盖人工归组。
+			a.Group = false
+			unknown, mixed = false, false
+		}
 		if !needed && !a.Group {
 			continue
 		}

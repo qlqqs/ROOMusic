@@ -235,7 +235,7 @@ func AlignModelStagingScopes(ctx context.Context, database Execer, scanID, rootI
  AND NOT EXISTS(SELECT FROM jsonb_array_elements(g.assignments) f JOIN tracks t ON t.source_root_id=g.root_id AND t.relative_path=f->>'path'
  JOIN media m ON m.id=t.medium_id WHERE EXISTS(SELECT FROM release_merges x WHERE x.source_release_id=m.release_id OR x.target_release_id=m.release_id)
  OR EXISTS(SELECT FROM operations o WHERE o.target_id=m.release_id AND o.operation_type IN ('release_merge','release_group_change') AND
- ((o.origin->>'source') IS DISTINCT FROM 'curation' OR o.origin->>'review_decision'='human'))))
+ ((o.origin->>'source') IS DISTINCT FROM 'curation' OR o.origin->>'review_decision'='human') AND NOT EXISTS(SELECT FROM operations undo WHERE undo.reverts_operation_id=o.id))))
  , positions AS (
  SELECT DISTINCT ON (o.id) o.id,p.directory_key,f FROM plans p CROSS JOIN LATERAL jsonb_array_elements(p.assignments) f
  JOIN scan_observations o ON o.scan_run_id=$1 AND o.root_id=$2 AND o.relative_path IN (f->>'path',f->>'file')
