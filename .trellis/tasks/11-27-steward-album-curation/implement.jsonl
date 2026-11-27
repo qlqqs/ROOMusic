@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/steward-runtime-contracts.md", "reason": "管家工具框架、确认流程、工具清单与限额"}
+{"file": ".trellis/spec/backend/curation-contracts.md", "reason": "识别核对、写入流程、本地辅助归组规则与不再提出"}
+{"file": ".trellis/spec/backend/agent-and-operation-guidelines.md", "reason": "三种模式与工具权限、注册工具约束"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "路径边界测试要求与门禁"}
+{"file": ".trellis/tasks/11-27-steward-album-curation/design.md", "reason": "本任务设计"}
