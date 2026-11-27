@@ -209,6 +209,8 @@ func (r *fixedRow) score(t *testing.T, app *integrationTestApplication, s fixedS
 			if i < len(s.ExpectedTitles) && tr.Title != s.ExpectedTitles[i] {
 				r.ScanDiff = append(r.ScanDiff, file+" 标题 "+tr.Title)
 			}
+			// 已知偏差，暂不处理：缺曲号时 PositionInferred 也为真（curation_evidence.go），
+			// 产品按合同不写曲号（1/0）仍会记一条差异，所以本样本不计入正确负例。
 			if s.ID == "missing-position" && (tr.Disc != 1 || i == 3 && tr.PositionInferred) {
 				r.ScanDiff = append(r.ScanDiff, fmt.Sprintf("%s 碟/轨 %d/%d，推断=%t", file, tr.Disc, tr.Position, tr.PositionInferred))
 			}

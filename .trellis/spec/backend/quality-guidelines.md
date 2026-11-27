@@ -33,6 +33,12 @@ ROOMUSIC_CURATION_METRICS_SUITE=fixed ROOMUSIC_TEST_RUN='^TestPostgreSQLCuration
 
 样本和脚本在 `backend/internal/app/testdata/curation_regression/`。每种模式以全部样本为分母计算每张请求数，含零请求样本，模型调用也计入。正确识别计到指定版或组且完成该层必需写入的张数。正确未匹配、有冲突和不查可在明细中核对。缺写、待名字核对和认对张数下降分别报告。认错按样本去重，逐条用模式、样本、对象、字段和错值比对 `fixed-baseline.json`；已有错认标红并列负责子任务，新增错认使常规命令失败。全部任务合入后的验收要求认错为零。
 
+已知偏差（2026-11-27 决定暂不处理，都不影响认对和认错）：
+- `spoken-podcast` 预期不查，实际查询后未匹配。样本写的播客标记是 `PODCAST=1`，读文件只认 `PCST`、`ISPODCAST` 和 MP3 流派首项 `Podcast`。
+- `missing-position` 结论正确，但评分把缺曲号也当作推断，多记一条扫描差异（`curation_fixed_report_integration_test.go`）。
+
+两张都不计入正确负例。两种模式的正确负例因此比反例总数少 2，不代表退步。
+
 用 `ROOMUSIC_CURATION_METRICS_SAMPLES` 指定逗号分隔的样本 ID 做定向核查。选择混放目录时包含该目录的所有样本。首次基线采集使用 `ROOMUSIC_CURATION_METRICS_SUITE=fixed-capture`，将 `ROOMUSIC_CURATION_METRICS_OUT` 指到本轮临时 JSON；相对路径从 `backend/internal/app/` 起算。日常回归只读基线。独立的程序计时运行保留真实限速、60 秒成员静默、确认扫描和队列轮询，输出请求区间、定时器、扫描和队列观测。
 
 ```sh
