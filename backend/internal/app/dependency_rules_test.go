@@ -29,6 +29,7 @@ var packageRules = map[string]packageRule{
 	"insights/httpapi":                  {imports: []string{"identity", "insights", "platform/httpserver"}, http: true},
 	"insights/schema":                   {imports: []string{"platform/uuid", "platform/buildinfo"}},
 	"plugins/runtime":                   {},
+	"plugins/runtime/runtimetest":       {},
 	"plugins":                           {imports: []string{"plugins/runtime", "sources"}},
 	"plugins/httpapi":                   {imports: []string{"identity", "platform/httpserver", "plugins"}, http: true},
 	"platform/diagnostics":              {imports: []string{"platform/buildinfo", "platform/postgres"}},

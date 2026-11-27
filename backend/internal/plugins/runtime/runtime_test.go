@@ -9,14 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
-	goruntime "runtime"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	extism "github.com/extism/go-sdk"
+	"github.com/qlqq/roomusic/backend/internal/plugins/runtime/runtimetest"
 )
 
 func sandboxFixture(t *testing.T, name string) (*Engine, string, []byte) {
@@ -33,7 +32,7 @@ func sandboxFixture(t *testing.T, name string) (*Engine, string, []byte) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	engine, err := New(filepath.Join(dir, "cache"), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	engine, err := New(filepath.Join(dir, ".cache"), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,22 +46,7 @@ func sandboxFixture(t *testing.T, name string) (*Engine, string, []byte) {
 
 func buildFixture(t *testing.T, dir, name string) []byte {
 	t.Helper()
-	source, err := filepath.Abs(filepath.Join("testdata", name+".go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	wasm := filepath.Join(dir, name+".wasm")
-	cmd := exec.CommandContext(t.Context(), filepath.Join(goruntime.GOROOT(), "bin", "go"), "build", "-buildmode=c-shared", "-o", wasm, source)
-	cmd.Dir = "../../../plugins/examples/lyrics-demo"
-	cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm", "CGO_ENABLED=0")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("构建 WASI 夹具失败 %v\n%s", err, output)
-	}
-	b, err := os.ReadFile(wasm)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
+	return runtimetest.Build(t, dir, "../../../plugins/examples/lyrics-demo", filepath.Join("testdata", name+".go"))
 }
 
 func callFixture(ctx context.Context, e *Engine, wasm []byte, id, name string, input []byte, fetch Fetch) (Result, error) {
@@ -146,20 +130,23 @@ func TestPluginSandbox(t *testing.T) {
 func TestPluginCallDeadline(t *testing.T) {
 	e, _, wasm := sandboxFixture(t, "sandbox")
 	requireHealthyPlugin(t, e, wasm)
-	ctx, cancel := context.WithTimeout(t.Context(), 13*time.Second)
-	defer cancel()
 	start := time.Now()
-	_, err := callFixture(ctx, e, wasm, "slow", "spin", []byte("{}"), nil)
-	elapsed := time.Since(start)
-	if !errors.Is(err, context.DeadlineExceeded) || elapsed < 9*time.Second || elapsed > 11*time.Second {
-		t.Errorf("死循环应在 10 秒预算耗尽时终止，耗时 %v，错误 %v", elapsed, err)
+	_, err := e.Call(t.Context(), "slow", func(ctx context.Context) ([]byte, error) {
+		deadline, ok := ctx.Deadline()
+		const budget = 10 * time.Second
+		if !ok || deadline.Before(start.Add(budget)) || deadline.After(time.Now().Add(budget)) {
+			t.Fatalf("插件调用未设置 10 秒截止时间：%v", deadline)
+		}
+		return wasm, nil
+	}, "spin", []byte("{}"), nil)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("死循环应由插件截止时间终止，错误 %v", err)
 	}
 	requireHealthyPlugin(t, e, wasm)
 }
 
 func TestPluginConcurrencyQuota(t *testing.T) {
 	e, _, wasm := sandboxFixture(t, "upstream_fetch")
-	// 预热编译缓存，候用用例只测已进入上游的调用。
 	requireHealthyPlugin(t, e, wasm)
 	ctx, cancel := context.WithCancel(t.Context())
 	reached := make(chan struct{}, 2)
@@ -167,11 +154,7 @@ func TestPluginConcurrencyQuota(t *testing.T) {
 	defer func() {
 		cancel()
 		for range 2 {
-			select {
-			case <-finished:
-			case <-time.After(10 * time.Second):
-				t.Error("被取消的插件调用未退出")
-			}
+			<-finished
 		}
 	}()
 	for range 2 {
@@ -190,8 +173,6 @@ func TestPluginConcurrencyQuota(t *testing.T) {
 		case err := <-finished:
 			finished <- err
 			t.Fatalf("前两次调用应能同时进入上游，错误 %v", err)
-		case <-time.After(8 * time.Second):
-			t.Fatal("前两次调用未同时进入上游")
 		}
 	}
 	requireHealthyPlugin(t, e, wasm)

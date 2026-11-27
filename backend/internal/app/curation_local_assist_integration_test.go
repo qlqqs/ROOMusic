@@ -174,7 +174,7 @@ func TestPostgreSQLLocalAssistSevenReasons(t *testing.T) {
 			opts.FullPassInterval = time.Minute
 			fast := func() *sources.Limiter { return sources.NewLimiter(0, nil, nil) }
 			app := newConfiguredIntegrationTestApplication(t, slog.New(slog.NewTextHandler(io.Discard, nil)), config.Server{UpstreamMockURL: server.URL},
-				WithCurationProgram(true, opts), WithCurationModel(true, model.Options{Now: opts.Now, PollInterval: 10 * time.Millisecond, BatchSize: 1}),
+				withPausedScanTimers, WithCurationProgram(true, opts), WithCurationModel(true, model.Options{Now: opts.Now, PollInterval: 10 * time.Millisecond, BatchSize: 1}),
 				WithCurationSources(sources.Options{Limiter: fast()}, coverartarchive.Options{Limiter: fast(), ManifestLimiter: fast()}, sources.Options{Limiter: fast()}))
 			clock.wait(t)
 			admin := app.createUser(t, "admin")
@@ -245,7 +245,16 @@ func TestPostgreSQLLocalAssistSevenReasons(t *testing.T) {
 					t.Error("同一艺人的两张独立专辑被合并")
 				}
 			} else {
-				clock.advance(t, time.Minute)
+				clock.tick <- time.Unix(0, clock.now.Add(int64(time.Minute)))
+				// 确认本批每张稳定发行都已走完程序识别，再核对无模型时保留的扫描数据。
+				for settled := 0; settled < len(releases); {
+					previous := settled
+					schedulerWait(t, "程序整理完成下一张稳定发行", func() bool {
+						settled = countRows(t, app, `SELECT count(*) FROM curation_work_states
+							WHERE subject='release' AND target_id=ANY($1::uuid[]) AND status<>'pending'`, releases)
+						return settled > previous
+					})
+				}
 				if got := assistSnapshot(t, app); got != before {
 					t.Errorf("缺配模型改变了扫描字段、成员或位次：%s -> %s", before, got)
 				}

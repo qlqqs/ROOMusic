@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 )
@@ -21,6 +22,13 @@ func writeSyntheticTrack(t *testing.T, path string, md5 byte, comments ...string
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
+}
+
+// 手动驱动扫描的整理夹具固定每日调度与目录监听时钟；确认扫描仍由整理程序触发。
+func withPausedScanTimers(o *options) {
+	clock := sampleDirectoryWatchClock{now: time.Unix(0, 0).UTC()}
+	o.scanSchedulerClock = clock
+	o.directoryWatchClock = clock
 }
 
 // runScan 启动一次扫描并等它成功结束。

@@ -515,10 +515,10 @@ test("升级首次打开导入旧 sessionStorage 队列、当前项、模式与�
     await reopened.getByRole("button", { name: "已播放 1 首" }).click();
     const handle = reopened.getByRole("button", { name: `拖动《${first.track.title}》调整顺序` });
     await handle.focus();
-    // 每一步等读屏播报：拿起后 dnd-kit 要先量出各行位置，方向键才有目标。
+    // 拿起与首次命中原行是两次播报；等行位置已量好再按方向键。
     const status = reopened.getByRole("status").filter({ hasText: first.track.title });
     await page.keyboard.press("Space");
-    await expect(status).toContainText("第 1 首");
+    await expect(status).toHaveText(`《${first.track.title}》移到第 1 首。`);
     await page.keyboard.press("ArrowDown");
     await expect(status).toContainText("移到第 2 首");
     await page.keyboard.press("Space");

@@ -9,13 +9,12 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	pluginruntime "github.com/qlqq/roomusic/backend/internal/plugins/runtime"
+	"github.com/qlqq/roomusic/backend/internal/plugins/runtime/runtimetest"
 )
 
 func pluginTestEngine(t *testing.T) (*pluginruntime.Engine, string) {
@@ -46,22 +45,7 @@ func pluginTestEngine(t *testing.T) (*pluginruntime.Engine, string) {
 
 func buildPluginFixture(t *testing.T, dir, file string) []byte {
 	t.Helper()
-	source, err := filepath.Abs(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	wasm := filepath.Join(dir, strings.TrimSuffix(filepath.Base(file), ".go")+".wasm")
-	cmd := exec.CommandContext(t.Context(), filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-buildmode=c-shared", "-o", wasm, source)
-	cmd.Dir = "../../plugins/examples/lyrics-demo"
-	cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm", "CGO_ENABLED=0")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("构建 WASI 夹具失败 %v\n%s", err, output)
-	}
-	b, err := os.ReadFile(wasm)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
+	return runtimetest.Build(t, dir, "../../plugins/examples/lyrics-demo", file)
 }
 
 func bundleFixture(t *testing.T, raw, wasm []byte, method uint16, extra bool) []byte {

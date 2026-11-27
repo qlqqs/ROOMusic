@@ -33,7 +33,7 @@ func newCurationMockApplication(t *testing.T, dataDir string, clock *programCloc
 	immediate := func() *sources.Limiter { return sources.NewLimiter(0, nil, nil) }
 	opts := clock.options()
 	opts.FullPassInterval = time.Minute
-	applied = append([]Option{WithCurationProgram(true, opts),
+	applied = append([]Option{withPausedScanTimers, WithCurationProgram(true, opts),
 		WithCurationSources(sources.Options{Limiter: immediate()}, coverartarchive.Options{Limiter: immediate(), ManifestLimiter: immediate()}, sources.Options{Limiter: immediate()})}, applied...)
 	app := newConfiguredIntegrationTestApplication(t, slog.New(slog.NewTextHandler(io.Discard, nil)), config.Server{UpstreamMockURL: upstream.URL}, applied...)
 	clock.wait(t)

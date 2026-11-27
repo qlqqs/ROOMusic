@@ -269,8 +269,8 @@ func (s *Store) releaseConversation(ctx context.Context, userID, conversationID 
  WHERE t.message_id=m.id AND c.user_id=$1::uuid AND c.id=$2::uuid AND t.status='running'`, userID, conversationID); err != nil {
 		return storeError("结束未完成的管家工具调用", err)
 	}
-	if err := requireAffected(tx.ExecContext(ctx, `UPDATE steward_conversations SET status='idle',updated_at=clock_timestamp(),
- last_run_finished_at=CASE WHEN $3 THEN clock_timestamp() ELSE last_run_finished_at END
+	if err := requireAffected(tx.ExecContext(ctx, `UPDATE steward_conversations SET status='idle',updated_at=statement_timestamp(),
+ last_run_finished_at=CASE WHEN $3 THEN statement_timestamp() ELSE last_run_finished_at END
  WHERE user_id=$1::uuid AND id=$2::uuid`, userID, conversationID, finished)); err != nil {
 		return storeError("释放管家会话", err)
 	}
