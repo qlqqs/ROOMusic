@@ -242,7 +242,7 @@ MCP 只读可 list、不可 remember/forget；记忆只读一次/排序/8000 转
 
 ### 工具与输入
 
-新增 12 个工具，均要求管理员、输出含不可信资料；read 两项，其余 shared。路径 ID 变成下面列出的工具字段。
+以下治理工具均要求管理员、输出含不可信资料；read 两项，其余 shared。路径 ID 变成下面列出的工具字段。
 shared 的可选 `basis={source:local|external|mixed,note}` 只展示，不参与执行器或操作指纹。
 
 | 工具 | 输入要点 | 可撤销 |
@@ -259,6 +259,7 @@ shared 的可选 `basis={source:local|external|mixed,note}` 只展示，不参�
 | rename_artist | artist_id、expected_revision、mode=set/auto；set 带 name，auto 省略 | 否 |
 | ignore_artist_candidate | artist_id、expected_revision、other_artist_id、other_expected_revision、key_pairs、ignored | 否 |
 | revert_operation | operation_id | 否 |
+| regroup_local_files | root_id、directory、albums[].files[]；普通文件给根内相对路径 path、disc、track，CUE 父音频给 path 和 tracks[].{track_id,disc,track} | 是 |
 
 HTTP 的问题核对与艺人拆分原有 `basis` 是令牌；工具为避免与展示对象重名，令牌改叫 `basis_token`，进入既有命令前映射回去。
 `get_release_issues` 现在保留 fields/grouping/missing_tracks 的 basis；核对人仍不外发。

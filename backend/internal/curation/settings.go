@@ -14,10 +14,11 @@ import (
 )
 
 type Writer struct {
-	artists  *governance.ArtistGovernance
-	db       *sql.DB
-	artworks *artwork.Store
-	logger   *slog.Logger
+	confirmGrouping func(context.Context) error
+	artists         *governance.ArtistGovernance
+	db              *sql.DB
+	artworks        *artwork.Store
+	logger          *slog.Logger
 }
 
 func NewWriter(db *sql.DB, dataDirectory string, logger *slog.Logger) *Writer {

@@ -226,6 +226,19 @@ AcoustID 来源只有工具可用、密钥填写且密钥状态有效时才 acti
 
 扫描还会把曲号和碟号推断冲突统一记为对应的 `missing_position` 或 `missing_disc`。每个目录只建立一个 `local_cleanup` 项，目录内的多张专辑一起提供证据。目录项只有在 `evidence.release_ids` 中的全部发行进入 `curation_stable_releases` 后才能领取。同一目录的本地辅助项处于 `waiting_model`、`waiting_route` 或 `in_progress` 时，目录内全部发行都不进入识别队列。目录项结案后，这些发行一起放行并分别送入 MusicBrainz 识别队列。无模型时七类仍建立本地辅助项，程序不等待这些项而继续可确定的下一步，待模型配置后再处理。
 
+管理员可通过聊天或 MCP 调用 `regroup_local_files`。预览和 `Writer.SubmitStewardGrouping` 按 `root_id` 与目录内的已扫描音频构造同一个目录连通范围。所选目录只有子目录时，其下的发行仍须属于同一连通范围。文件路径相对于根，CUE 以父音频路径及各分轨的 `track_id/disc/track` 提交。预览列出现有发行 ID、标题和分组后的文件位次。执行在治理事务内重新核对管理员、范围和扫描状态，允许在自动整理关闭时运行。
+
+| 拒绝码 | 条件 |
+| --- | --- |
+| `scan_running` | 有扫描进行中，稍后重试 |
+| `not_stable` | 范围内有发行尚未进入 `curation_stable_releases` |
+| `protected` | 列出有外部对应、人工合并、调整专辑组或管家归组的发行 ID、标题及原因，提示先用 `revert_operation` 撤销 |
+| `invalid_grouping` | 范围不连通、夹带范围外文件、文件重复或遗漏、同张同碟曲号重复、碟轨与真实观察冲突、CUE 分轨不完整或散曲与其他文件合并；返回具体冲突 |
+| `not_found` | 目录没有已扫描音频 |
+| `idempotency_conflict` | 同一管理员用同一键提交不同请求 |
+
+管家归组沿用 `local_model_grouping`、来源快照和撤销执行器。操作记录以确认管理员为操作者，origin 记录 chat/mcp、会话或令牌来源和服务端确认的管理员 `confirmed_by`；公开操作列表的来源摘要省略确认者。相同键和输入重放原响应。写入和撤销后将相关发行标为未确认，并把变化时间设为已满 60 秒；提交后请求确认扫描。文件和 CUE 区间由扫描再次核对，下一次扫描完成后可用 `list_library_directory` 确认。非整理来源的有效归组按分配文件的当前归属保护拆分后的每张发行，本地辅助不会改写这些发行或覆盖其目录分配；撤销后解除这份保护。
+
 ### 5.1 模型状态、额度和批次
 
 模型进度 `state` 为 `idle`、`running`、`paused`、`disabled`、`waiting_for_scan`、`limit_reached` 或 `unavailable`，不会产生 `waiting_review`。`pause_kind` 的取值与错误类别一一对应。

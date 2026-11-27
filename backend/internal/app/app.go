@@ -367,7 +367,7 @@ func Open(lifecycle context.Context, settings config.Server, database *sql.DB, f
 	}
 	pluginapi.Register(mux, guard, pluginStore)
 	artistGovernance := governance.NewArtistGovernance(artistResolutionAdapter{})
-	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger).WithArtists(artistGovernance)
+	curationWriter := curation.NewWriter(database, settings.DataDirectory, logger).WithArtists(artistGovernance).WithGroupingConfirmation(libraryService.StartCurationConfirmation)
 	endpoint := settings.InsightsURL
 	if endpoint == "" {
 		endpoint = config.DefaultInsightsURL
@@ -390,7 +390,7 @@ func Open(lifecycle context.Context, settings config.Server, database *sql.DB, f
 	if lifecycle != nil && database != nil {
 		go insightService.Run(lifecycle)
 	}
-	operationKinds := []operations.Kind{curation.LocalGroupingOperations{}, curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
+	operationKinds := []operations.Kind{curation.LocalGroupingOperations{Writer: curationWriter}, curation.ExternalLinkOperations(curationWriter), curation.ExternalArtworkOperations(curationWriter), curation.ExternalLyricsOperations(curationWriter),
 		curation.ArtistImageOperations(curationWriter), curation.ArtistBioOperations(curationWriter),
 		curation.ArtistManualImageOperations(curationWriter), curation.ArtistManualBioOperations(curationWriter), curation.ArtistLinkOperations(curationWriter),
 		curation.WithFieldArtistLinks(governance.AutoCorrectionOperations(curationWriter)),
