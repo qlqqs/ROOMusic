@@ -223,9 +223,10 @@ test.describe("扫描", () => {
 
     await expect(page.getByRole("region", { name: "状态" })).toContainText("有目录没扫完，那里的曲目保持原样。");
     const summary = page.getByRole("list", { name: "按类别汇总" });
-    await expect(summary).toContainText("音频解析失败");
+    await expect(summary).toContainText("目录不可用");
+    await expect(summary).toContainText("格式暂不支持");
     const table = page.getByRole("table", { name: "诊断明细" });
-    await expect(table.getByRole("row", { name: /broken\.flac/ })).toBeVisible();
+    await expect(table.getByRole("row", { name: /broken\.flac/ })).toContainText("音频格式暂不支持");
     await expect(page.getByRole("region", { name: "诊断" })).not.toContainText("/");
   });
 

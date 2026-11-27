@@ -348,7 +348,7 @@ test.describe("顶栏头像菜单", () => {
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await openSettings(page);
     await expect(settingsNav.getByRole("link", { name: "账号", exact: true })).toHaveAttribute("aria-current", "page");
-    await expect(settingsNav.getByRole("link")).toHaveText(["账号", "播放", "Agent", "关于", "音乐目录", "成员", "自动整理", "局域网设备", "第三方客户端", "操作记录", "备份", "匿名统计"]);
+    await expect(settingsNav.getByRole("link")).toHaveText(["账号", "播放", "Agent", "关于", "音乐目录", "成员", "自动整理", "局域网设备", "网络", "第三方客户端", "操作记录", "备份", "匿名统计"]);
   });
 
   test("退出失败留在当前页面，菜单关闭且提示重试后才真正退出", async ({ page, backend }) => {

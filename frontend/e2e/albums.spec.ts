@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expectNoHorizontalOverflow } from "./support/checks";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { albumGroup, albumGroups } from "../src/test/catalog-data";
 import { LONG_TITLE, multiVersionGroup, seedVersions } from "./support/albums-data";
 import { expect, test } from "./support/fixtures";
@@ -14,6 +14,14 @@ const cards = (page: Page) => page.locator('a[href^="/albums/"]');
 const searchBox = (page: Page) => page.getByRole("textbox", { name: "筛选专辑" });
 const attention = (page: Page) => page.getByRole("button", { name: "需要关注" });
 const pager = (page: Page) => page.getByRole("navigation", { name: "专辑分页" });
+
+async function loadCovers(covers: Locator) {
+  for (const cover of await covers.all()) {
+    await cover.scrollIntoViewIfNeeded();
+    await expect(cover).toHaveJSProperty("complete", true);
+    expect(await cover.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+  }
+}
 
 /** 120 个专辑，每第 10 个需要关注：三页，筛选后 12 个。 */
 const manyGroups = () => albumGroups(120, (index) => ({ attention_count: index % 10 === 0 ? 1 : 0 }));
@@ -140,7 +148,7 @@ test.describe("专辑列表", () => {
     await expect(page).toHaveURL(new RegExp(`${href ?? "no-href"}$`));
   });
 
-  test("封面：有封面的图片真的加载，没有封面是文字版面，加载失败说明原因", async ({ page, backend }) => {
+  test("封面：有封面的图片真的加载，没有封面时显示占位，加载失败说明原因", async ({ page, backend }) => {
     // 默认 12 个专辑：序号能被 3 整除的没有封面（4 个），其余 8 个有封面。
     const mock = await backend.start({ signedInAs: "curator" });
     mock.brokenArtworks.add("cover-001.png");
@@ -148,10 +156,10 @@ test.describe("专辑列表", () => {
     await expect(cards(page)).toHaveCount(12);
     await expect(page.getByText("封面无法加载")).toHaveCount(1);
     await expect(cards(page).first()).toContainText("封面无法加载");
-    await expect
-      .poll(() => page.locator('a[href^="/albums/"] img').evaluateAll((images) => images.filter((image) => (image as HTMLImageElement).naturalWidth > 0).length))
-      .toBe(7);
-    // 没有封面：文字版面里排着标题，不发图片请求。
+    const covers = cards(page).locator("img");
+    await expect(covers).toHaveCount(7);
+    await loadCovers(covers);
+    // 没有封面：卡片仍有标题，不发图片请求。
     await expect(cards(page).nth(2)).toContainText("Album 003");
     await expect(cards(page).nth(2).locator("img")).toHaveCount(0);
     expect(mock.callsTo("GET", /\/api\/v1\/artworks\//).map((call) => call.path).sort()).toEqual(
@@ -159,16 +167,15 @@ test.describe("专辑列表", () => {
     );
   });
 
-  test("封面懒加载：图片都带 loading=lazy，滚动到底之后全部加载完成", async ({ page, backend }) => {
+  test("封面懒加载：图片都带 loading=lazy，逐一滚入视口后全部加载完成", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = albumGroups(48, () => ({ artwork: true }));
     await page.goto("/albums");
     await expect(cards(page)).toHaveCount(48);
-    await expect(page.locator('a[href^="/albums/"] img[loading="lazy"]')).toHaveCount(48);
-    await page.locator("#main").evaluate((main) => main.scrollTo(0, main.scrollHeight));
-    await expect
-      .poll(() => page.locator('a[href^="/albums/"] img').evaluateAll((images) => images.filter((image) => (image as HTMLImageElement).naturalWidth > 0).length))
-      .toBe(48);
+    const covers = cards(page).locator("img");
+    await expect(covers).toHaveCount(48);
+    await expect(covers.and(page.locator('img[loading="lazy"]'))).toHaveCount(48);
+    await loadCovers(covers);
   });
 
   test("资料库没有专辑：管理员被引导去音乐目录，成员只被告知等待", async ({ page, backend }) => {
