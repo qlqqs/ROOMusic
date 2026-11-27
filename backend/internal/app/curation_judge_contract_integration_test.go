@@ -367,15 +367,8 @@ func TestPostgreSQLJudgeNameKeepUncertainAndLateCorrection(t *testing.T) {
 				want = "管理员正在使用的标题"
 				f.correct(t, release, 1, map[string]any{"title": setChange(want)})
 			}
-			reply, err := json.Marshal(map[string]any{"items": []curation.VerificationInput{
-				{ItemID: itemID, Verdict: verdict, Reason: "合成名字核对决定"},
-			}})
-			requireCurationOK(t, err)
-			claimed := f.item(t, itemID)
-			req.reply <- req.frame(t, map[string]string{"content": string(reply)}, "stop")
-			schedulerWait(t, "执行当前名字核对答复", func() bool {
-				return countRows(t, app, `SELECT count(*) FROM steward_tool_calls c JOIN steward_messages m ON m.id=c.message_id
-					WHERE m.conversation_id=$1 AND c.tool_name='submit_verification' AND c.status='succeeded'`, claimed.ConversationID) == 1
+			replyAndWaitJudgeVerification(t, f, req, curation.VerificationInput{
+				ItemID: itemID, Verdict: verdict, Reason: "合成名字核对决定",
 			})
 			if verdict != "typo" {
 				modelWaitResolution(t, f, itemID, "undetermined")
@@ -507,11 +500,16 @@ func queueJudgeArtistPair(t *testing.T, f *schedulerFixture, target, digest, lef
 	return programString(t, f.application, `SELECT id FROM curation_pending_items WHERE target_id=$1 AND input_digest=$2 AND kind='verify_artist_merge'`, target, digest)
 }
 
-func replyJudgeIdentity(t *testing.T, request schedulerRequest, item, verdict string) {
+func replyAndWaitJudgeVerification(t *testing.T, f *schedulerFixture, request schedulerRequest, input curation.VerificationInput) {
 	t.Helper()
-	raw, err := json.Marshal(map[string]any{"items": []curation.VerificationInput{{ItemID: item, Verdict: verdict, Reason: "合成身份核对"}}})
+	raw, err := json.Marshal(map[string]any{"items": []curation.VerificationInput{input}})
 	requireCurationOK(t, err)
+	conversationID := f.item(t, input.ItemID).ConversationID
 	request.reply <- request.frame(t, map[string]string{"content": string(raw)}, "stop")
+	schedulerWait(t, "核对工具成功记录答复 "+input.ItemID, func() bool {
+		return countRows(t, f.application, `SELECT count(*) FROM steward_tool_calls c JOIN steward_messages m ON m.id=c.message_id
+			WHERE m.conversation_id=$1 AND c.tool_name='submit_verification' AND c.status='succeeded'`, conversationID) == 1
+	})
 }
 
 func TestPostgreSQLJudgeArtistPairConcurrentSingleDecision(t *testing.T) {
@@ -546,7 +544,7 @@ func TestPostgreSQLJudgeArtistPairConcurrentSingleDecision(t *testing.T) {
 		t.Fatalf("并发会话中只有同一无序名字对的首项可领取，反向项为 %+v", f.item(t, second))
 	}
 	parallel.undetermined(t, independent.ID, "独立发行的证据不足")
-	replyJudgeIdentity(t, active, first, "different")
+	replyAndWaitJudgeVerification(t, f, active, curation.VerificationInput{ItemID: first, Verdict: "different", Reason: "合成身份核对"})
 	modelWaitResolution(t, f, first, "different")
 	modelWaitResolution(t, f, second, "different")
 	modelWaitResolution(t, f, independent.ID, "undetermined")
@@ -568,7 +566,7 @@ func TestPostgreSQLJudgeUncertainArtistPairCanAskOnNewEvidence(t *testing.T) {
 	f.enable(t)
 	initial := f.next(t, false)
 	requireCurationRuleItems(t, initial, first)
-	replyJudgeIdentity(t, initial, first, "undetermined")
+	replyAndWaitJudgeVerification(t, f, initial, curation.VerificationInput{ItemID: first, Verdict: "undetermined", Reason: "合成身份核对"})
 	modelWaitResolution(t, f, first, "undetermined")
 	same := queueJudgeArtistPair(t, f, f.a, "原证据", left, right, "合成甲团", "合成乙团", external)
 	if same != first || f.item(t, same).Status != "resolved" {
@@ -582,7 +580,7 @@ func TestPostgreSQLJudgeUncertainArtistPairCanAskOnNewEvidence(t *testing.T) {
 	}
 	retry := f.next(t, false)
 	requireCurationRuleItems(t, retry, second)
-	replyJudgeIdentity(t, retry, second, "undetermined")
+	replyAndWaitJudgeVerification(t, f, retry, curation.VerificationInput{ItemID: second, Verdict: "undetermined", Reason: "合成身份核对"})
 	modelWaitResolution(t, f, second, "undetermined")
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_artist_negative_pairs`)
 	b3RequireCount(t, f.application, 2, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='verify_artist_merge' AND resolution='undetermined'`, f.a)
