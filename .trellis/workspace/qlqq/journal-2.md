@@ -677,3 +677,54 @@ star/unstar 原子批量写入、getStarred2、浏览实体带 starred；私有�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 78: 管家单张专辑整理工具与技能
+<!-- trellis-session: v=2 fp=b346f9ceb1026448 -->
+
+**Date**: 2026-11-27
+**Task**: 管家单张专辑整理工具与技能
+**Branch**: `main`
+
+### Summary
+
+固定回归问题答复；新增管家五个工具与整理技能，三批实施合入本地 main
+
+### Main Changes
+
+### 经过
+
+- 回答固定回归问题：脚本模式下应认出的 20 张全部认对，8 张是反例；`spoken-podcast`（样本播客标记键名用错）与 `missing-position`（评分把缺曲号当推断）两处偏差按用户决定不处理，在评分代码和质量规范旁写了说明。
+- 讨论后新建任务"管家单张专辑整理工具与技能"，规划经用户在选择框批准后分三批实施，每批实现与测试由不同 Codex 子代理完成：
+  - 第一批：`list_library_directory`、`read_library_file`（os.Root 打开，排除与忽略路径完全不显示，只给相对路径）、`load_skill` 与技能 `album-curation`；
+  - 第二批：`match_release_external`，复用识别核对与写入，可认到发行组，散曲认到录音，各步与结论同一事务；
+  - 第三批：`regroup_local_files`，复用本地辅助归组核对与撤销，受保护发行先撤销再归组，管家归组算人工结构，不等 60 秒静默。
+- 前端补了五个工具的中文名与图标。
+
+### 验证
+
+- 测试代理：只读工具 8 例；建立对应 7 例各 3 轮；重新归组 6 组场景 3 轮。
+- 主代理在合并后的 main 上：构建、vet、依赖门禁、curation/operations/ingest/catalog 单测，以及受影响的 `TestPostgreSQLStewardGrouping`、`TestPostgreSQLStewardMatchExternalAlbum`、`TestPostgreSQLStewardMatchExternalRegistration`、`TestPostgreSQLStewardBrowseToolResults` 重跑通过；前端 tool-labels 用例、typecheck、lint 通过。
+- 集成测试锁常被另一个任务的度量跑次占用，未绕过锁，改为每 5 秒排队。
+
+### 留给后续
+
+- "整理不了的专辑"列表与"交给管家"入口、散曲合并成专辑：用户定为以后一起优化。
+- 管家归组过的专辑本地辅助不再修文字和编码（比设计宽，已接受）。
+- 真实模型试用轮未跑，按需进行。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `666b3ff4` | chore(task): 归档管家单张专辑整理工具与技能 |
+| `164aef7b` | Merge branch 'task/steward-regroup' |
+| `993434f4` | feat(curation): 管家重新归组本地文件 |
+| `d3a8bbe7` | Merge branch 'task/steward-match-external' |
+| `c2b707fb` | feat(curation): 管家点名建立 MusicBrainz 对应 |
+| `27bcd74e` | Merge branch 'fix/ci-curation' |
+
+### Status
+
+[OK] **Completed**
