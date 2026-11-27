@@ -85,7 +85,7 @@ func runMetricSamples(t *testing.T, samples []metricSample) (*integrationTestApp
 	endpoint.setPatrolSamples(samples)
 	immediate := func() *sources.Limiter { return sources.NewLimiter(0, nil, nil) }
 	app := newConfiguredIntegrationTestApplication(t, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})), config.Server{UpstreamMockURL: upstream.URL},
-		WithCurationProgram(true, opts), WithCurationModel(true, model.Options{Now: opts.Now, PollInterval: 10 * time.Millisecond, BatchSize: 1}),
+		WithDirectoryWatchClock(sampleDirectoryWatchClock{now: time.Now()}), WithCurationProgram(true, opts), WithCurationModel(true, model.Options{Now: opts.Now, PollInterval: 10 * time.Millisecond, BatchSize: 1}),
 		WithCurationSources(sources.Options{Limiter: immediate()}, coverartarchive.Options{Limiter: immediate(), ManifestLimiter: immediate()}, sources.Options{Limiter: immediate()}))
 	clock.wait(t)
 	metricObserveClaims(t, app)
@@ -142,7 +142,7 @@ func runMetricSamples(t *testing.T, samples []metricSample) (*integrationTestApp
 		endpoint.setTargets(targets)
 		for _, e := range batch {
 			e.drainIssue = metricDrainResult(t, app, &admin, clock, endpoint, e, true)
-			if scan := e.sample.Expect.Scan; scan != nil && (scan.ArtistRetry != "" || scan.RelaxedTitle != "" || len(scan.ForbiddenQuery) > 0) {
+			if scan := e.sample.Expect.Scan; scan != nil && (scan.RequiredQuery != "" || scan.RelaxedTitle != "" || len(scan.ForbiddenQuery) > 0) {
 				e.queries = metricQueriesSince(t, mock, started)
 			}
 			// 每次增量已完全排空，由新增的操作确定本次样本触发了哪些艺人合并。
@@ -307,7 +307,8 @@ func metricDrainResult(t *testing.T, app *integrationTestApplication, admin *int
 		programDrained := p.State == "idle"
 		recognitionSettled := p.Releases.Total == p.Releases.Processed
 		for _, q := range p.Queues {
-			programDrained = programDrained && q.Ready == 0 && q.State != "running"
+			disabled := q.PauseReason != nil && *q.PauseReason == "source_disabled"
+			programDrained = programDrained && (q.Ready == 0 || disabled) && q.State != "running"
 			if q.ID == "release" && q.PauseReason != nil && *q.PauseReason == "source_disabled" {
 				recognitionSettled = true
 			}

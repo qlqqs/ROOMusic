@@ -180,6 +180,7 @@ func (w *Writer) modelKindItems(ctx context.Context, conversation string, now ti
 	if conversation != "" {
 		query += ` FOR UPDATE OF p SKIP LOCKED
  ), claimed AS (UPDATE curation_pending_items SET status='in_progress',conversation_id=$7,claimed_at=$1,updated_at=now(),next_attempt_at=NULL,
+ claim_source_recovery_at=CASE WHEN next_attempt_at IS NOT NULL THEN NULL ELSE claim_source_recovery_at END,
  item_tool_calls=CASE WHEN reset_item_usage_on_claim THEN 0 ELSE item_tool_calls END,
  item_tokens=CASE WHEN reset_item_usage_on_claim THEN 0 ELSE item_tokens END,
  source_retry_count=CASE WHEN reset_item_usage_on_claim OR $4='select' THEN 0 ELSE source_retry_count END,reset_item_usage_on_claim=false
@@ -204,7 +205,8 @@ func (w *Writer) ReleaseClaimed(ctx context.Context, conversation string, countA
 func (w *Writer) ReleaseModelItems(ctx context.Context, conversation string, ids []string, countAttempt bool, nextAttemptAt *time.Time) error {
 	_, err := w.db.ExecContext(ctx, `UPDATE curation_pending_items SET
  attempts=attempts+$2::boolean::int,status=CASE WHEN $2 AND attempts>=2 THEN 'shelved' WHEN route IN ('lookup','web') THEN 'waiting_route' ELSE 'waiting_model' END,
- source_retry_count=CASE WHEN $2 THEN 0 ELSE source_retry_count END,
+ source_retry_count=CASE WHEN $2 THEN 0 WHEN $3::timestamptz IS NOT NULL AND claim_source_recovery_at IS NOT NULL THEN source_retry_count+1 ELSE source_retry_count END,
+ claim_source_recovery_at=CASE WHEN $3::timestamptz IS NOT NULL THEN NULL ELSE claim_source_recovery_at END,
  shelved_reason=CASE WHEN $2 AND attempts>=2 THEN 'unhandled' END,
  conversation_id=NULL,claimed_at=NULL,review_retries=0,next_attempt_at=$3,updated_at=now()
  WHERE status='in_progress' AND conversation_id=$1 AND ($4::uuid[] IS NULL OR id=ANY($4::uuid[]))`, conversation, countAttempt, nextAttemptAt, ids)

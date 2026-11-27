@@ -47,9 +47,17 @@ func TestPostgreSQL整理无标签文件名直接识别(t *testing.T) {
 	evidence, err := catalog.LoadCurationEvidence(t.Context(), app.database, []string{entry.release})
 	requireCurationOK(t, err)
 	first := evidence[entry.release].Tracks[0]
-	if first.Artist != "灯塔合奏" || first.Title != "旧灯之晨" || first.Authenticity["title"] != metadata.Inferred ||
-		first.TitleObservation.Source != "filename_fallback" || first.ArtistObservation.Source != "filename_fallback" {
-		t.Fatalf("应在模型配置前从文件名解析署名与标题：%+v", first)
+	if !first.ArtistPlaceholder || first.Title != "灯塔合奏 - 旧灯之晨" || first.Authenticity["title"] != metadata.Inferred ||
+		first.TitleObservation.Source != "filename_fallback" || first.ArtistObservation.Source != "display_fallback" {
+		t.Fatalf("无标签扫描应保留原文件名片段和占位艺人：%+v", first)
+	}
+	endpoint.localReply = func(item metricsPending) curation.LocalInput {
+		input := metricLocalAnswer(item, "旧灯", "灯塔合奏")
+		for _, track := range evidence[entry.release].Tracks {
+			name := strings.TrimPrefix(track.Title, "灯塔合奏 - ")
+			input.Texts = append(input.Texts, curation.LocalText{Target: track.ID, Field: "title", Value: name}, curation.LocalText{Target: track.ID, Field: "artist", Value: "灯塔合奏"})
+		}
+		return input
 	}
 	endpoint.configure(t, app, &admin, map[string]metricsModelTarget{entry.release: {SampleID: s.ID}}, upstream)
 	for name, id := range entry.artists {
@@ -58,10 +66,10 @@ func TestPostgreSQL整理无标签文件名直接识别(t *testing.T) {
 	b3Enable(t, app, admin)
 	metricDrain(t, app, &admin, clock, endpoint, entry)
 	usage := endpoint.usage()[s.ID]
-	if usage["local_cleanup"].Calls != 0 || usage["select"].Calls+usage["lookup"].Calls+usage["web"].Calls != 0 {
-		t.Errorf("扫描可解析、时长相符的发行应由程序定案：%v", usage)
+	if usage["local_cleanup"].Calls != 1 || usage["select"].Calls+usage["lookup"].Calls+usage["web"].Calls != 0 {
+		t.Errorf("本地片段还原后应由程序核实发行：%v", usage)
 	}
-	b3RequireCount(t, app, 0, `SELECT count(*) FROM curation_pending_items WHERE kind='local_cleanup' AND target_id=$1`, entry.release)
+	b3RequireCount(t, app, 1, `SELECT count(*) FROM curation_pending_items WHERE kind='local_cleanup' AND target_id=$1 AND resolution='local_cleanup'`, entry.release)
 	b3RequireCount(t, app, 1, `SELECT count(*) FROM release_auto_values WHERE release_id=$1 AND field='label' AND text_value=$2`, entry.release, s.Expect.Fields["label"])
 	b3RequireCount(t, app, len(entry.tracks), `SELECT count(*) FROM external_links WHERE object_type='track' AND object_id=ANY($1::uuid[])`, entry.tracks)
 	b3RequireReleaseResult(t, app, entry.release, "matched", "search", "unavailable", "")

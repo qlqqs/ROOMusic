@@ -207,44 +207,12 @@ func TestPostgreSQLCurationMergeRevert(t *testing.T) {
 }
 
 func TestPostgreSQLCurationExceptionMergeAcceptDecline(t *testing.T) {
-	for _, action := range []string{"accept", "stale", "decline"} {
-		t.Run(action, func(t *testing.T) {
-			f := newSchedulerFixture(t)
-			external, item := startReleaseMergeModel(t, f)
-			reviewer := f.application.createUser(t, "admin")
-			ex := f.proposeException(t, releaseMergeProposalTool, releaseMergeProposal(item.ID))
-			f.pause(t)
-			switch action {
-			case "accept":
-				e := readExceptionDecision(t, f.decide(t, &reviewer, ex.ID, "accept"), "accepted", reviewer.id)
-				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM operations o JOIN release_merges m ON m.operation_id=o.id
-					WHERE o.id=$1 AND o.actor_id=$2 AND o.batch_id IS NULL AND o.operation_type='release_auto_merge'
-					AND o.origin->>'provider_kind'='model' AND o.origin->>'provider'='test-main' AND o.origin->>'review_decision'='human'
-					AND o.origin->>'review_id'=$3 AND m.target_release_id=$4 AND m.source_release_id=$5`, e.OperationIDs[0], reviewer.id, ex.Review.ID, f.a, f.b)
-				modelWaitResolution(t, f, item.ID, "human_accepted")
-			case "stale":
-				before, err := f.writer.PreviewReleaseMerge(t.Context(), item)
-				requireCurationOK(t, err)
-				// 扫描改变来源碟的原位置，触发重算令牌。
-				mustExec(t, f.application, `UPDATE media SET position=position+1 WHERE release_id=$1`, f.b)
-				after, err := f.writer.PreviewReleaseMerge(t.Context(), item)
-				requireCurationOK(t, err)
-				if before.Token == after.Token {
-					t.Fatal("来源碟序变化后预览令牌未改变")
-				}
-				requireAPIError(t, f.decide(t, &reviewer, ex.ID, "accept"), 409, "exception_stale")
-				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_model_exceptions WHERE id=$1 AND status='open' AND decided_by IS NULL`, ex.ID)
-				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_merges`)
-			case "decline":
-				readExceptionDecision(t, f.decide(t, &reviewer, ex.ID, "decline"), "declined", reviewer.id)
-				modelWaitResolution(t, f, item.ID, "suggestion_recorded")
-				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_suppressions WHERE subject='release_merge'
-					AND target_type='release' AND target_id=$1 AND value->>'release_id'=$2 AND created_by=$3`, min(f.a, f.b), max(f.a, f.b), reviewer.id)
-				discoverReleaseMerge(t, f.curationFixture, external)
-				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_pending_items WHERE kind='release_merge'`)
-			}
-		})
-	}
+	f := newSchedulerFixture(t)
+	f.enable(t)
+	_, pending := seedReleaseMergePair(t, f.curationFixture)
+	item := modelClaim(t, f.curationFixture, modelConversation(t, f.curationFixture), pending)
+	assertHistoricalExceptionLocked(t, f, item, releaseMergeProposalTool, releaseMergeProposal(item.ID))
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_merges`)
 }
 
 func recordReleaseMergeCurationSamples(t *testing.T, samples *apiSampleRecorder) {

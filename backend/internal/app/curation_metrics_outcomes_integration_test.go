@@ -191,6 +191,11 @@ func metricNeedsAttribution(s metricDetail) bool {
 	return slices.Contains(s.Accept, "release") || slices.Contains(s.Accept, "release_group")
 }
 
+// 历史曲库清单用 unlisted 标记搜索没有命中的终态，当前程序用 unmatched。
+func metricAcceptsOutcome(accept []string, outcome string) bool {
+	return slices.Contains(accept, outcome) || outcome == "unmatched" && slices.Contains(accept, "unlisted")
+}
+
 func metricEvaluateOutcomes(t *testing.T, app *integrationTestApplication, entries []metricEntry, scores []metricScore) {
 	t.Helper()
 	suggestions := metricSuggestions(t, app)
@@ -222,6 +227,9 @@ func metricEvaluateOutcomes(t *testing.T, app *integrationTestApplication, entri
 		case s.Match.Level == "recording" && len(entry.tracks) == 1 && len(links[metricLinkSubject{"track", entry.tracks[0]}]) > 0:
 			// 散曲的完整识别对象是录音，沿用 accept 中的完整对应档。
 			s.Outcome = "release"
+		case s.Match.Status == "conflict" && s.Match.Method == "tag_id" && slices.Contains(s.Match.Conflicts, "tag_text_mismatch"):
+			// 编号候选与真实标签有硬反证，保留冲突，实际没有可用对应。
+			s.Outcome = "no_usable_candidates"
 		case s.Match.Level == "artist" && s.Match.Rule == "common_credit":
 			s.Outcome = "no_usable_candidates"
 		case slices.ContainsFunc(s.SourceRetries, metricSourceRetry.matching):
@@ -230,6 +238,11 @@ func metricEvaluateOutcomes(t *testing.T, app *integrationTestApplication, entri
 			s.Outcome = "suggestion"
 		case local[entry.release]:
 			s.Outcome = "local_cleanup"
+		case s.Match.Status == "done" && slices.ContainsFunc(s.ModelItems, func(item metricModelItem) bool {
+			return item.Kind == "local_cleanup" && item.Status == "resolved" && item.Resolution == "undetermined"
+		}):
+			// 本地辅助已查过原文且没有可补字段，识别投影没有外部查询依据。
+			s.Outcome = "no_usable_candidates"
 		case s.Match.Status == "no_match" && slices.Contains(s.Match.Conflicts, "insufficient_evidence") &&
 			slices.ContainsFunc(s.ModelItems, func(item metricModelItem) bool {
 				return item.Kind == "local_cleanup" && item.Status == "resolved" && item.Resolution == "local_cleanup"
@@ -246,7 +259,7 @@ func metricEvaluateOutcomes(t *testing.T, app *integrationTestApplication, entri
 		for _, issue := range metricSuggestionIssues(s.ID, []string{entry.release}, want, rows, metricSampleAnswers(entry)) {
 			s.issue(issue)
 		}
-		if s.Outcome != metricWaitingSource && !slices.Contains(s.Accept, s.Outcome) {
+		if s.Outcome != metricWaitingSource && !metricAcceptsOutcome(s.Accept, s.Outcome) {
 			s.Reasons = append(s.Reasons, metricIssue{Kind: "unexpected_outcome", Target: s.ID, Expected: strings.Join(s.Accept, " 或 "), Actual: s.Outcome})
 		}
 		for _, id := range append(slices.Collect(maps.Values(entry.artists)), entry.release) {

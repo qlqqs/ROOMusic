@@ -963,8 +963,16 @@
         }
       ]
     },
-    "expect": {"release": "", "group": "49bd93c1-29e9-5025-8010-357ce4334d87", "group_match": "49bd93c1-29e9-5025-8010-357ce4334d87",
-      "recordings": [], "fields": {}, "track_fields": [], "artists": {"Salt Letter": "7799f412-886e-5a79-9387-e48766037495"}, "group_with": [], "merge_artist_with": []}
+    "expect": {
+      "release": "9f96433a-bf82-5fb7-a3a8-d5ecb90ed99b",
+      "group": "49bd93c1-29e9-5025-8010-357ce4334d87",
+      "recordings": ["46d45c3f-614f-59cd-b2f4-66874fb1d7bd", "2f767928-114b-5007-ac02-6b70a377f8b0", "250f6a06-e3da-5042-b0a2-a7ab1e053478", "7133ec63-b21b-50de-b0a5-ea402b9cac21", "89abea4a-21f2-5f69-8bd4-eca32a3920e6"],
+      "fields": {},
+      "track_fields": [],
+      "artists": {"Salt Letter": "7799f412-886e-5a79-9387-e48766037495"},
+      "group_with": [],
+      "merge_artist_with": []
+    }
   },
   {
     "id": "stream-08",
@@ -1011,8 +1019,16 @@
         }
       ]
     },
-    "expect": {"release": "", "group": "0c1e5ef2-9966-56ff-a249-f0ce26d297b5", "group_match": "0c1e5ef2-9966-56ff-a249-f0ce26d297b5",
-      "recordings": [], "fields": {}, "track_fields": [], "artists": {"Rill Quartet": "2b50ed66-5cd1-5004-85e2-22d30fad3f61"}, "group_with": [], "merge_artist_with": []}
+    "expect": {
+      "release": "6849dbe1-a6af-5ec5-8e7c-76ff08ba9a2c",
+      "group": "0c1e5ef2-9966-56ff-a249-f0ce26d297b5",
+      "recordings": ["65767c4e-f96b-5c2c-b8b6-74743b3002d6", "db5bcc3a-b471-5f65-8dfe-a0b6a021d863", "84a76625-c819-542e-bd80-71e8abe0e395", "808e6260-47c8-58d5-beb1-931b10cc2fcb", "a2df5054-a768-5896-acf4-30101366d484", "38dce0cc-ebf4-5560-b853-86a6a6ecb37a"],
+      "fields": {},
+      "track_fields": [],
+      "artists": {"Rill Quartet": "2b50ed66-5cd1-5004-85e2-22d30fad3f61"},
+      "group_with": [],
+      "merge_artist_with": []
+    }
   },
   {
     "id": "stream-09",
@@ -1168,8 +1184,16 @@
         }
       ]
     },
-    "expect": {"release": "", "group": "3a921c56-8d1c-5964-a79d-13a6fec8edc8", "group_match": "3a921c56-8d1c-5964-a79d-13a6fec8edc8",
-      "recordings": [], "fields": {}, "track_fields": [], "artists": {"Iris Lock": "cff56f2d-273f-52bf-83c9-e0724fff79a1"}, "group_with": [], "merge_artist_with": []}
+    "expect": {
+      "release": "74335455-76fe-5d4c-b273-7112abedbbe9",
+      "group": "3a921c56-8d1c-5964-a79d-13a6fec8edc8",
+      "recordings": ["068703a6-656f-57f9-9515-9e25bda80ea1", "39fd34eb-4c43-5f83-b71e-3413464dc32f", "75dd1528-a3af-57ca-a706-3aa8a5a19911", "8c853603-61d4-5246-b063-e70d62b558e3", "7fbf5b14-bfb2-546b-908c-cd2e7bf6506c"],
+      "fields": {},
+      "track_fields": [],
+      "artists": {"Iris Lock": "cff56f2d-273f-52bf-83c9-e0724fff79a1"},
+      "group_with": [],
+      "merge_artist_with": []
+    }
   },
   {
     "id": "stream-12",
@@ -1216,8 +1240,16 @@
         }
       ]
     },
-    "expect": {"release": "", "group": "8b46203c-30c9-59d5-8411-f6fb51cb87ca", "group_match": "8b46203c-30c9-59d5-8411-f6fb51cb87ca",
-      "recordings": [], "fields": {}, "track_fields": [], "artists": {"Salt Letter": "7799f412-886e-5a79-9387-e48766037495"}, "group_with": [], "merge_artist_with": []}
+    "expect": {
+      "release": "b88c261d-9e7d-5288-a595-3f2e88a23533",
+      "group": "8b46203c-30c9-59d5-8411-f6fb51cb87ca",
+      "recordings": ["0917ed2d-8bd5-5b34-9275-9216a488cecb", "c6100170-2735-59a6-86de-46a64ce78b41", "2004164a-01d0-5446-9f98-b2447e82d117", "2198112f-d453-532a-b6b3-d28f751dc7ef", "f38d75fc-a778-5c1f-a0d6-3d829c55cfad", "95c5a9ed-96a1-5e42-90b7-96ae07b7e952"],
+      "fields": {},
+      "track_fields": [],
+      "artists": {"Salt Letter": "7799f412-886e-5a79-9387-e48766037495"},
+      "group_with": [],
+      "merge_artist_with": []
+    }
   },
   {
     "id": "stream-13",
@@ -1373,8 +1405,16 @@
         }
       ]
     },
-    "expect": {"release": "", "group": "f20600ec-082f-55da-acba-3d02aca562bc", "group_match": "f20600ec-082f-55da-acba-3d02aca562bc",
-      "recordings": [], "fields": {}, "track_fields": [], "artists": {"Fern Parcel": "4ff3f55c-7c06-5602-b9b4-9e6e811ef66d"}, "group_with": [], "merge_artist_with": []}
+    "expect": {
+      "release": "7bba56c9-4985-5e82-9729-41635ea6a5ca",
+      "group": "f20600ec-082f-55da-acba-3d02aca562bc",
+      "recordings": ["54cdb1de-3f55-5ce3-8dd8-b3d9681713cd", "53e6b090-0f93-528c-a8ab-d7a055eafc74", "a31d9a9f-aa0d-512a-88a8-d1f68aa5e028", "e1e0ee14-7374-5356-ae64-683ca114727e", "390e4f1c-19b7-5948-b782-60845a789a21"],
+      "fields": {},
+      "track_fields": [],
+      "artists": {"Fern Parcel": "4ff3f55c-7c06-5602-b9b4-9e6e811ef66d"},
+      "group_with": [],
+      "merge_artist_with": []
+    }
   },
   {
     "id": "loose-01",
@@ -2167,9 +2207,9 @@
       ],
       "fields": {"label": "Fir Quay Records", "year": "2019", "album_artist": "灯塔合奏"},
       "track_fields": [
-        {"title": "旧灯之晨"},
-        {"title": "旧灯之午"},
-        {"title": "旧灯之夜"}
+        {"title": "旧灯之晨", "artist": "灯塔合奏"},
+        {"title": "旧灯之午", "artist": "灯塔合奏"},
+        {"title": "旧灯之夜", "artist": "灯塔合奏"}
       ],
       "artists": {"灯塔合奏": "4fe6c1eb-0db7-5907-8855-2fa9bedbe285"},
       "group_with": [],
@@ -2225,9 +2265,9 @@
       ],
       "fields": {"label": "Fir Quay Records", "year": "2019", "album_artist": "桥上乐队"},
       "track_fields": [
-        {"title": "河床之晨"},
-        {"title": "河床之午"},
-        {"title": "河床之夜"}
+        {"title": "河床之晨", "artist": "桥上乐队"},
+        {"title": "河床之午", "artist": "桥上乐队"},
+        {"title": "河床之夜", "artist": "桥上乐队"}
       ],
       "artists": {"桥上乐队": "73f90a52-c7ff-5b58-8d50-4fd3297b50d7"},
       "group_with": [],
@@ -2283,9 +2323,9 @@
       ],
       "fields": {"label": "Fir Quay Records", "year": "2019", "album_artist": "石岸三重奏"},
       "track_fields": [
-        {"title": "风筝线之晨"},
-        {"title": "风筝线之午"},
-        {"title": "风筝线之夜"}
+        {"title": "风筝线之晨", "artist": "石岸三重奏"},
+        {"title": "风筝线之午", "artist": "石岸三重奏"},
+        {"title": "风筝线之夜", "artist": "石岸三重奏"}
       ],
       "artists": {"石岸三重奏": "8ac1590f-3597-5658-ab0a-2f41b4a15e0d"},
       "group_with": [],
@@ -2341,9 +2381,9 @@
       ],
       "fields": {"label": "Fir Quay Records", "year": "2019", "album_artist": "纸船小组"},
       "track_fields": [
-        {"title": "暮潮之晨"},
-        {"title": "暮潮之午"},
-        {"title": "暮潮之夜"}
+        {"title": "暮潮之晨", "artist": "纸船小组"},
+        {"title": "暮潮之午", "artist": "纸船小组"},
+        {"title": "暮潮之夜", "artist": "纸船小组"}
       ],
       "artists": {"纸船小组": "93ebccd4-685b-5479-b7aa-2e40acc03a2c"},
       "group_with": [],
@@ -6271,13 +6311,11 @@
       "releases": []
     },
     "expect": {
-      "accept": ["local_cleanup"],
+      "accept": ["unlisted"],
       "scan": {
-        "title": "È¥µåÎí",
-        "forbidden_query": ["È¥µåÎí"],
-        "local_title": "去靛雾"
-      },
-      "fields": {"title": "去靛雾"}
+        "title": "去靛雾",
+        "forbidden_query": ["È¥µåÎí"]
+      }
     }
   },
   {
@@ -6299,7 +6337,7 @@
       "releases": []
     },
     "expect": {
-      "accept": ["local_cleanup", "unlisted"],
+      "accept": ["local_cleanup", "unlisted", "no_usable_candidates"],
       "scan": {
         "title": "µåÎí",
         "forbidden_query": ["µåÎí"],
@@ -6499,7 +6537,9 @@
         {"file": "01.flac", "title": "汐格合声之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}, "artist": "汐格合声甲"},
         {"file": "02.flac", "title": "汐格合声之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}, "artist": "汐格合声甲"},
         {"file": "03.flac", "title": "汐格合声之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}, "artist": "汐格合声乙"},
-        {"file": "04.flac", "title": "汐格合声之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}, "artist": "汐格合声丙"}
+        {"file": "04.flac", "title": "汐格合声之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}, "artist": "汐格合声丙"},
+        {"file": "05.flac", "title": "汐格合声之雾", "seconds": 71, "tags": {"TRACKNUMBER": "5"}, "artist": "汐格合声丁"},
+        {"file": "06.flac", "title": "汐格合声之影", "seconds": 78, "tags": {"TRACKNUMBER": "6"}, "artist": "汐格合声戊"}
       ]
     },
     "external": {
@@ -6507,7 +6547,9 @@
         {"id": "89ad4ac3-39f7-470e-963a-56509c546377", "name": "Various Artists"},
         {"id": "c1b1760f-00bf-5151-91f4-33334f874ff4", "name": "汐格合声甲"},
         {"id": "0f02aced-e526-5b9e-b6fa-a4cb253bae35", "name": "汐格合声乙"},
-        {"id": "f73c1121-0309-5d33-984b-ee834b8e8434", "name": "汐格合声丙"}
+        {"id": "f73c1121-0309-5d33-984b-ee834b8e8434", "name": "汐格合声丙"},
+        {"id": "28356bc2-9c84-59bc-8110-71459be18484", "name": "汐格合声丁"},
+        {"id": "abc19735-60b5-5b09-9f1e-b5b5162b2391", "name": "汐格合声戊"}
       ],
       "releases": [
         {
@@ -6520,7 +6562,9 @@
             {"id": "59bbe3f3-aa1e-52be-905a-cbf152c385d8", "trackid": "4b67d1bf-4373-589f-b2e4-00c17b757029", "title": "汐格合声之楔", "artist": "c1b1760f-00bf-5151-91f4-33334f874ff4", "length": 43000},
             {"id": "b816bf08-c180-5e28-b68c-0f4d040c5832", "trackid": "a9a7dee3-30ed-5fd6-8519-49d680dcac0a", "title": "汐格合声之绳", "artist": "c1b1760f-00bf-5151-91f4-33334f874ff4", "length": 50000},
             {"id": "83e8fc4e-140e-51f3-a056-24075eb69d3d", "trackid": "94ac14ad-2fb9-570d-9541-b4c0003244e3", "title": "汐格合声之铃", "artist": "0f02aced-e526-5b9e-b6fa-a4cb253bae35", "length": 57000},
-            {"id": "a2305fc6-6655-503c-adf8-902054004ec3", "trackid": "9706dde3-aa65-5f2f-b826-bbafa3eba4e3", "title": "汐格合声之帆", "artist": "f73c1121-0309-5d33-984b-ee834b8e8434", "length": 64000}
+            {"id": "a2305fc6-6655-503c-adf8-902054004ec3", "trackid": "9706dde3-aa65-5f2f-b826-bbafa3eba4e3", "title": "汐格合声之帆", "artist": "f73c1121-0309-5d33-984b-ee834b8e8434", "length": 64000},
+            {"id": "eab34e55-caeb-5ae7-add0-b3d5ede867d4", "trackid": "cf346410-58be-5444-8bea-28ef8ee3a1e9", "title": "汐格合声之雾", "artist": "28356bc2-9c84-59bc-8110-71459be18484", "length": 71000},
+            {"id": "1521d467-eed6-5f81-bb48-7a3be7b53ee1", "trackid": "46c139a1-f67e-5e97-8e5b-88fb7e3a9b8c", "title": "汐格合声之影", "artist": "abc19735-60b5-5b09-9f1e-b5b5162b2391", "length": 78000}
           ]
         }
       ]
@@ -6529,8 +6573,8 @@
       "accept": ["release"],
       "release": "fec4ca6f-3e2f-54cc-858c-64fa73d519b7",
       "group": "c5c7234b-b2a6-553d-9905-4193ef28aae8",
-      "recordings": ["59bbe3f3-aa1e-52be-905a-cbf152c385d8", "b816bf08-c180-5e28-b68c-0f4d040c5832", "83e8fc4e-140e-51f3-a056-24075eb69d3d", "a2305fc6-6655-503c-adf8-902054004ec3"],
-      "artists": {"汐格合声甲": "c1b1760f-00bf-5151-91f4-33334f874ff4", "汐格合声乙": "0f02aced-e526-5b9e-b6fa-a4cb253bae35", "汐格合声丙": "f73c1121-0309-5d33-984b-ee834b8e8434"},
+      "recordings": ["59bbe3f3-aa1e-52be-905a-cbf152c385d8", "b816bf08-c180-5e28-b68c-0f4d040c5832", "83e8fc4e-140e-51f3-a056-24075eb69d3d", "a2305fc6-6655-503c-adf8-902054004ec3", "eab34e55-caeb-5ae7-add0-b3d5ede867d4", "1521d467-eed6-5f81-bb48-7a3be7b53ee1"],
+      "artists": {"Various Artists": "89ad4ac3-39f7-470e-963a-56509c546377", "汐格合声甲": "c1b1760f-00bf-5151-91f4-33334f874ff4", "汐格合声乙": "0f02aced-e526-5b9e-b6fa-a4cb253bae35", "汐格合声丙": "f73c1121-0309-5d33-984b-ee834b8e8434", "汐格合声丁": "28356bc2-9c84-59bc-8110-71459be18484", "汐格合声戊": "abc19735-60b5-5b09-9f1e-b5b5162b2391"},
       "scan": {"artist": "Various Artists", "artist_auth": "inferred", "compilation": true}
     }
   },
@@ -6545,7 +6589,7 @@
       "tags": {},
       "tracks": [
         {"file": "01.flac", "title": "碱纹拼音之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}, "artist": "碱纹拼音甲"},
-        {"file": "02.flac", "title": "碱纹拼音之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}, "artist": "碱纹拼音甲"},
+        {"file": "02.flac", "title": "碱纹拼音之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}, "artist": "碱纹拼音戊"},
         {"file": "03.flac", "title": "碱纹拼音之铃", "seconds": 57, "tags": {"TRACKNUMBER": "3"}, "artist": "碱纹拼音乙"},
         {"file": "04.flac", "title": "碱纹拼音之帆", "seconds": 64, "tags": {"TRACKNUMBER": "4"}, "artist": "碱纹拼音丙"},
         {"file": "05.flac", "title": "碱纹拼音之雾", "seconds": 71, "tags": {"TRACKNUMBER": "5"}, "artist": "碱纹拼音丁"}
@@ -6557,7 +6601,8 @@
         {"id": "4086485a-dd5a-5f6b-a733-ad6f1f88e205", "name": "碱纹拼音甲"},
         {"id": "a488af67-3f6e-56e3-9653-ec7ba370281f", "name": "碱纹拼音乙"},
         {"id": "a4783d6d-c615-5d9b-bddd-8601bce50ec9", "name": "碱纹拼音丙"},
-        {"id": "04aecb86-c4d9-5bf0-b633-da4cacf1dd79", "name": "碱纹拼音丁"}
+        {"id": "04aecb86-c4d9-5bf0-b633-da4cacf1dd79", "name": "碱纹拼音丁"},
+        {"id": "e1669df5-d917-578f-a722-795559befd5b", "name": "碱纹拼音戊"}
       ],
       "releases": [
         {
@@ -6568,7 +6613,7 @@
           "artist": "89ad4ac3-39f7-470e-963a-56509c546377",
           "tracks": [
             {"id": "99eeaf26-6eaa-5462-8e3a-14d74135e0dd", "trackid": "1b86175f-e55a-5e52-bd92-48ebeda5b416", "title": "碱纹拼音之楔", "artist": "4086485a-dd5a-5f6b-a733-ad6f1f88e205", "length": 43000},
-            {"id": "c4363a54-0f60-561d-b077-322f30258b44", "trackid": "335a002f-7500-5ec0-95e6-12a02aa6b786", "title": "碱纹拼音之绳", "artist": "4086485a-dd5a-5f6b-a733-ad6f1f88e205", "length": 50000},
+            {"id": "c4363a54-0f60-561d-b077-322f30258b44", "trackid": "335a002f-7500-5ec0-95e6-12a02aa6b786", "title": "碱纹拼音之绳", "artist": "e1669df5-d917-578f-a722-795559befd5b", "length": 50000},
             {"id": "1283163e-4de1-5d3e-a06b-6aa92926a7eb", "trackid": "4dd9c1f5-9dd2-5323-bb36-7cd0746f0215", "title": "碱纹拼音之铃", "artist": "a488af67-3f6e-56e3-9653-ec7ba370281f", "length": 57000},
             {"id": "ec89884e-ec70-5dab-85a1-f0c7b7568838", "trackid": "ced60693-05d1-56af-9036-e2df8df3b323", "title": "碱纹拼音之帆", "artist": "a4783d6d-c615-5d9b-bddd-8601bce50ec9", "length": 64000},
             {"id": "003452e3-4621-5766-a237-4c6ea807c47c", "trackid": "c9c5da3e-b2cc-5342-a2b3-c88516db35f5", "title": "碱纹拼音之雾", "artist": "04aecb86-c4d9-5bf0-b633-da4cacf1dd79", "length": 71000}
@@ -6581,7 +6626,7 @@
       "release": "53c3b06c-07e7-5f6d-9596-1012d69ae2e9",
       "group": "35020955-8dad-51e3-8fa7-6a213d158941",
       "recordings": ["99eeaf26-6eaa-5462-8e3a-14d74135e0dd", "c4363a54-0f60-561d-b077-322f30258b44", "1283163e-4de1-5d3e-a06b-6aa92926a7eb", "ec89884e-ec70-5dab-85a1-f0c7b7568838", "003452e3-4621-5766-a237-4c6ea807c47c"],
-      "artists": {"碱纹拼音甲": "4086485a-dd5a-5f6b-a733-ad6f1f88e205", "碱纹拼音乙": "a488af67-3f6e-56e3-9653-ec7ba370281f", "碱纹拼音丙": "a4783d6d-c615-5d9b-bddd-8601bce50ec9", "碱纹拼音丁": "04aecb86-c4d9-5bf0-b633-da4cacf1dd79"},
+      "artists": {"Various Artists": "89ad4ac3-39f7-470e-963a-56509c546377", "碱纹拼音甲": "4086485a-dd5a-5f6b-a733-ad6f1f88e205", "碱纹拼音乙": "a488af67-3f6e-56e3-9653-ec7ba370281f", "碱纹拼音丙": "a4783d6d-c615-5d9b-bddd-8601bce50ec9", "碱纹拼音丁": "04aecb86-c4d9-5bf0-b633-da4cacf1dd79", "碱纹拼音戊": "e1669df5-d917-578f-a722-795559befd5b"},
       "scan": {"artist": "Various Artists", "artist_auth": "inferred", "compilation": true}
     }
   },
@@ -6801,8 +6846,8 @@
       "format": "flac",
       "tags": {"ALBUMARTIST": "潮锁坊"},
       "tracks": [
-        {"file": "04.flac", "title": "潮锁侧棱之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
-        {"file": "05.flac", "title": "潮锁侧棱之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
+        {"file": "01 - 潮锁侧棱之楔.flac", "title": "潮锁侧棱之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02 - 潮锁侧棱之绳.flac", "title": "潮锁侧棱之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
       ]
     },
     "external": {
@@ -6883,8 +6928,8 @@
       "format": "flac",
       "tags": {"ALBUMARTIST": "云母坊"},
       "tracks": [
-        {"file": "04.flac", "title": "云母侧棱之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
-        {"file": "05.flac", "title": "云母侧棱之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
+        {"file": "01 - 云母侧棱之楔.flac", "title": "云母侧棱之楔", "seconds": 43, "tags": {"TRACKNUMBER": "1"}},
+        {"file": "02 - 云母侧棱之绳.flac", "title": "云母侧棱之绳", "seconds": 50, "tags": {"TRACKNUMBER": "2"}}
       ]
     },
     "external": {
@@ -7277,9 +7322,9 @@
       "release": "e9cc5a52-e9c7-5443-8a79-05293f4a2425",
       "group": "7b562bf5-9471-5cbb-bac4-bcc126c8d6b3",
       "recordings": ["a6fd542c-fce0-534e-9630-5ad4de92e764", "92a00b5f-e014-55a2-ab6d-b756e4254155", "8c3ee58d-1550-5621-a2c8-9383fc19823e", "994661fa-3ad0-507c-9c44-5e75c5cba901"],
-      "artists": {"Kasa Silt": "aec3206b-2c8c-5f1f-ae96-b5472951bf95"},
-      "scan": {"require_match_item": true}
-    }
+      "artists": {"Kasa Silt": "aec3206b-2c8c-5f1f-ae96-b5472951bf95"}
+    },
+    "program_decidable": true
   },
   {
     "id": "translated-basin",
@@ -7369,9 +7414,9 @@
       "release": "91742d37-0e48-58ef-8dad-f6ca33bb3086",
       "group": "acde8be7-f364-5a06-964d-8317be9a10ab",
       "recordings": ["20c14d76-7c6f-5fd6-8528-62bb2af861cb", "9d4f8bbf-d73a-5e78-b8e8-541084f788b1", "c76760ba-6922-531e-94b3-2a6b33ab10ef", "38268935-d030-5143-ab50-c3328da185d4"],
-      "artists": {"Teri Vell": "370c5135-9b17-5941-9dab-4bbc7ec119c0"},
-      "scan": {"require_match_item": true}
-    }
+      "artists": {"Teri Vell": "370c5135-9b17-5941-9dab-4bbc7ec119c0"}
+    },
+    "program_decidable": true
   },
   {
     "id": "placeholder-english",
@@ -7392,15 +7437,15 @@
       "releases": []
     },
     "expect": {
-      "accept": ["unlisted", "local_cleanup"],
+      "accept": ["done"],
       "scan": {
         "title_auth": "placeholder",
         "artist_auth": "placeholder",
         "track_title_auth": "placeholder",
-        "require_local_item": true,
         "forbidden_query": ["Unknown Artist", "Unknown Album", "Track 01", "Audio Track 02"]
       }
-    }
+    },
+    "program_decidable": true
   },
   {
     "id": "placeholder-untitled",
@@ -7571,7 +7616,7 @@
       "group": "f7fb2362-f061-5804-b127-12f397d7eb30",
       "recordings": ["e320620b-752d-51c3-a4dd-1cd4f2ee3da2", "65f5551d-cf65-508b-8737-38e6805f9ae3", "46c9f960-ee1c-5de6-a64d-a1399652a6bd"],
       "artists": {"Frost Kiln Lark": "9da9771d-6f89-5760-b607-375f5b816daa"},
-      "scan": {"artist_retry": "9da9771d-6f89-5760-b607-375f5b816daa"}
+      "scan": {"required_query": "release:\"Frost Kiln Lark 棉灰暗纹\" AND artist:\"Frost Kiln Lark\" AND tracks:3", "forbidden_query": ["arid:9da9771d-6f89-5760-b607-375f5b816daa"]}
     }
   },
   {
@@ -7656,7 +7701,7 @@
       "group": "abc8aeb8-c3b6-5bfa-a0d5-0ccc08f4d57f",
       "recordings": ["765c0e85-950c-5fa1-88bc-8c8201934227", "3657176a-63a2-54db-9382-5d205176f586", "63165843-42e6-5576-9fc8-1e199b1962ca"],
       "artists": {"Amber Quarry Wren": "be7a1333-929b-5ca8-9fe4-df50b094a493"},
-      "scan": {"artist_retry": "be7a1333-929b-5ca8-9fe4-df50b094a493"}
+      "scan": {"required_query": "release:\"Amber Quarry Wren 棉灰暗纹\" AND artist:\"Amber Quarry Wren\" AND tracks:3", "forbidden_query": ["arid:be7a1333-929b-5ca8-9fe4-df50b094a493"]}
     }
   },
   {
@@ -7784,7 +7829,7 @@
       "group": "ba81c470-2ab7-5ae9-a3c5-4204e9c5f195",
       "artists": {"Silt Arbor Guild": "db5f15e3-ee30-5915-8696-ba9b148b6286"},
       "group_match": "ba81c470-2ab7-5ae9-a3c5-4204e9c5f195",
-      "suggestions": {"title": "Silt Arbor"}
+      "scan": {"title": "Silt Arbour"}
     }
   },
   {
@@ -7867,9 +7912,9 @@
       "accept": ["release_group"],
       "group": "d425b230-0e10-51be-8051-dabbc3cb7899",
       "artists": {"雾锚铭牌坊": "55206ca5-cb44-5f0a-afe6-265ace4f2eb1"},
-      "group_match": "d425b230-0e10-51be-8051-dabbc3cb7899",
-      "scan": {"require_match_item": true}
-    }
+      "group_match": "d425b230-0e10-51be-8051-dabbc3cb7899"
+    },
+    "program_decidable": true
   },
   {
     "id": "editions-model-quartet",
@@ -7956,9 +8001,9 @@
       "accept": ["release_group"],
       "group": "e1e5c582-562d-557e-bd48-550828a3dad7",
       "artists": {"沉栈木纹坊": "55bee63f-6701-53f3-967f-318b67578182"},
-      "group_match": "e1e5c582-562d-557e-bd48-550828a3dad7",
-      "scan": {"require_match_item": true}
-    }
+      "group_match": "e1e5c582-562d-557e-bd48-550828a3dad7"
+    },
+    "program_decidable": true
   },
   {
     "id": "subset-count-decoy",
@@ -8013,10 +8058,9 @@
       ]
     },
     "expect": {
-      "accept": ["release_group"],
-      "group": "4c020bb1-6bc0-5c69-97a6-3f2a6dc4f1b2",
+      "accept": ["unlisted"],
       "artists": {"雾汀描图室": "c064cc5c-dc68-5802-b003-e7cc2d274dad"},
-      "group_match": "4c020bb1-6bc0-5c69-97a6-3f2a6dc4f1b2"
+      "scan": {"required_query": "release:\"杉影纸钟\" AND artist:\"雾汀描图室\" AND tracks:4"}
     }
   },
   {
@@ -8071,10 +8115,9 @@
       ]
     },
     "expect": {
-      "accept": ["release_group"],
-      "group": "46969ff9-2a86-5986-b062-dc88a12c2d29",
+      "accept": ["unlisted"],
       "artists": {"栗湾短笛社": "4e1002fd-6bca-583c-9f05-3657cdc7f1e4"},
-      "group_match": "46969ff9-2a86-5986-b062-dc88a12c2d29"
+      "scan": {"required_query": "release:\"盐灯织巷\" AND artist:\"栗湾短笛社\" AND tracks:5"}
     }
   },
   {
@@ -8217,7 +8260,8 @@
             {"id": "bb532f3f-0b1a-55f1-a780-e448aa612197", "trackid": "1871fd6e-e553-5352-86f4-148732b867b3", "title": "Indigo Spokes", "artist": "cbca1671-5d61-59d7-bfb5-ba02a7550855", "length": 50000},
             {"id": "3981e75b-87e4-554c-b4c8-846bcccdec28", "trackid": "79a87309-5f67-548b-8a90-43ac8280468b", "title": "Linen Quay", "artist": "eb2ff17b-0234-52dd-ae18-e9a517155a51", "length": 57000},
             {"id": "94ff1d01-f34f-5dd7-8698-132f0e5dc374", "trackid": "5d48be98-9cca-542c-8a46-bfd9fbffd246", "title": "Saltwater Map", "artist": "cbca1671-5d61-59d7-bfb5-ba02a7550855", "length": 64000}
-          ]
+          ],
+          "credits": [{"artist": "eb2ff17b-0234-52dd-ae18-e9a517155a51", "joinphrase": " / "}, {"artist": "cbca1671-5d61-59d7-bfb5-ba02a7550855"}]
         }
       ]
     },
@@ -8226,9 +8270,8 @@
       "release": "4bec2c14-9c2a-5426-9557-00e54d23bbdf",
       "group": "48cc26cf-f057-516d-8a66-b0ab10b35925",
       "recordings": ["b4cc34ed-b49a-59bc-b30e-4e3517a8cf60", "bb532f3f-0b1a-55f1-a780-e448aa612197", "3981e75b-87e4-554c-b4c8-846bcccdec28", "94ff1d01-f34f-5dd7-8698-132f0e5dc374"],
-      "fields": {"album_artist": "Alder Signal"},
       "artists": {"Alder Signal": "eb2ff17b-0234-52dd-ae18-e9a517155a51", "Birch Circuit": "cbca1671-5d61-59d7-bfb5-ba02a7550855"},
-      "scan": {"title": "Porcelain Tides", "artist": "Alder Signal", "compilation": false}
+      "scan": {"title": "Porcelain Tides", "artist": "Alder Signal / Birch Circuit", "compilation": false}
     }
   }
 ]

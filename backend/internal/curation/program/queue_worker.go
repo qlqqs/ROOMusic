@@ -132,6 +132,8 @@ func (w *Worker) drainQueues(parent context.Context, kinds []string) error {
 	results := make(chan queueResult, len(kinds))
 	busy := make(map[string]bool)
 	parked := make(map[string]bool)
+	// 发行回填保留已有匹配结论，同一来源恢复前先处理其他发行。
+	deferredReleases := make(map[string][]string)
 	nextPoll := time.Now().Add(w.opts.PollInterval)
 	poll := time.NewTimer(w.opts.PollInterval)
 	defer poll.Stop()
@@ -143,6 +145,9 @@ func (w *Worker) drainQueues(parent context.Context, kinds []string) error {
 			return err
 		}
 		if ids := w.policy.RecoveredSources(); len(ids) > 0 {
+			for _, id := range ids {
+				delete(deferredReleases, id)
+			}
 			if _, err := w.db.ExecContext(ctx, `UPDATE curation_work_states SET next_attempt_at=$1 WHERE subject='release' AND status='try_later'
                 AND result->'retry'->>'kind'='source' AND result->'retry'->>'source'=ANY($2::text[]) AND next_attempt_at>$1`, w.opts.Now(), ids); err != nil {
 				return err
@@ -155,7 +160,17 @@ func (w *Worker) drainQueues(parent context.Context, kinds []string) error {
 			if subject != "release" && subject != "fingerprint" && w.cooling(subject) {
 				continue
 			}
-			item, found, err := w.nextQueueItem(ctx, subject)
+			var excluded []string
+			if subject == "release" {
+				for source, ids := range deferredReleases {
+					if w.policy.Pause(source) == nil {
+						delete(deferredReleases, source)
+					} else {
+						excluded = append(excluded, ids...)
+					}
+				}
+			}
+			item, found, err := w.nextQueueItem(ctx, subject, excluded...)
 			if err != nil {
 				return err
 			}
@@ -201,6 +216,9 @@ func (w *Worker) drainQueues(parent context.Context, kinds []string) error {
 			var pause *sources.QueuePause
 			switch {
 			case errors.As(err, &pause):
+				if item.Subject == "release" {
+					deferredReleases[pause.Source] = append(deferredReleases[pause.Source], item.TargetID)
+				}
 				w.setQueueState(item.Subject, "paused", pause.Reason, pause)
 			case failureCode(err) == "source_disabled" || failureCode(err) == "not_found":
 				parked[item.Subject] = true

@@ -3,7 +3,6 @@ package app
 import (
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -46,14 +45,11 @@ func TestPostgreSQLCurationUnavailableReviewPreservesWrites(t *testing.T) {
 		}
 	}
 	check()
+	item = modelRouteFixture(t, f, item, "")
 	f.enable(t)
 	f.next(t, false).selectCandidate(t, item.ID, f.remote.ID)
-	f.next(t, true).complete(t)
-	want := f.clock.options().Now().Add(5 * time.Minute)
-	schedulerWait(t, "不可用审查进入退避", func() bool {
-		got := f.item(t, item.ID)
-		return got.ReviewRetries == 1 && got.NextAttemptAt != nil && got.NextAttemptAt.Equal(want)
-	})
+	modelWaitResolution(t, f, item.ID, "judge_submitted")
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM steward_reviews`)
 	check()
 }
 

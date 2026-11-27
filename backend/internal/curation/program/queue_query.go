@@ -58,17 +58,17 @@ func (w *Worker) localConfigured(ctx context.Context, subject string) (bool, err
 	return w.opts.LocalModelConfigured(ctx)
 }
 
-func (w *Worker) nextQueueItem(ctx context.Context, subject string) (queueItem, bool, error) {
+func (w *Worker) nextQueueItem(ctx context.Context, subject string, excluded ...string) (queueItem, bool, error) {
 	item := queueItem{Subject: subject}
 	configured, err := w.localConfigured(ctx, subject)
 	if err != nil {
 		return item, false, err
 	}
 	err = w.db.QueryRowContext(ctx, queueCandidatesSQL+`SELECT target_id,COALESCE(queue_release_id::text,''),
- rank,COALESCE(generation,0),COALESCE(queue_identity,''),manual_requested_at,patrol_revision,CASE WHEN $1 IN ('release','fingerprint') THEN COALESCE(curation_release_file_digest(candidates.queue_release_id),'') ELSE '' END FROM candidates WHERE stable AND due AND local_ready AND dependencies_ready
+ rank,COALESCE(generation,0),COALESCE(queue_identity,''),manual_requested_at,patrol_revision,CASE WHEN $1 IN ('release','fingerprint') THEN COALESCE(curation_release_file_digest(candidates.queue_release_id),'') ELSE '' END FROM candidates WHERE stable AND due AND local_ready AND dependencies_ready AND NOT (target_id=ANY(coalesce($4::uuid[],'{}')))
  ORDER BY rank,CASE WHEN rank=3 THEN queue_gap END DESC,
  CASE WHEN rank=4 THEN queue_artist_unlinked END DESC NULLS LAST,queue_added_at DESC NULLS LAST,target_id LIMIT 1`,
-		subject, w.opts.Now(), configured).Scan(&item.TargetID, &item.ReleaseID, &item.Rank, &item.Generation, &item.InputDigest, &item.ManualRequestedAt, &item.PatrolRevision, &item.Files)
+		subject, w.opts.Now(), configured, excluded).Scan(&item.TargetID, &item.ReleaseID, &item.Rank, &item.Generation, &item.InputDigest, &item.ManualRequestedAt, &item.PatrolRevision, &item.Files)
 	if errors.Is(err, sql.ErrNoRows) {
 		return item, false, nil
 	}

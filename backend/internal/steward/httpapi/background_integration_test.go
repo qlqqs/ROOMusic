@@ -49,7 +49,7 @@ func TestPostgreSQLStewardCurationConversationHiddenAndLocked(t *testing.T) {
 	exec(`INSERT INTO releases(id,group_id,title,artist) VALUES($1,$2,'合成发行','合成艺人')`, release, group)
 	exec(`INSERT INTO curation_pending_items(target_type,target_id,kind,status,rule_version,input_digest,evidence,conversation_id,claimed_at)
 		VALUES('release',$1,'release_match','in_progress',1,repeat('a',64),'{}',$2,now()),
-		('release',$1,'recording_match','waiting_human',1,repeat('b',64),'{}',$2,NULL)`, release, curation.ID)
+		('release',$1,'recording_match','waiting_model',1,repeat('b',64),'{}',$2,NULL)`, release, curation.ID)
 
 	checkPage := func(role, path string, expected runtime.Conversation, counts map[string]int) {
 		t.Helper()
@@ -76,7 +76,7 @@ func TestPostgreSQLStewardCurationConversationHiddenAndLocked(t *testing.T) {
 		}
 	}
 	checkPage("admin", "me/steward/conversations", chat, nil)
-	checkPage("admin", "admin/curation/conversations", curation, map[string]int{"in_progress": 1, "waiting_human": 1})
+	checkPage("admin", "admin/curation/conversations", curation, map[string]int{"in_progress": 1, "waiting_model": 1})
 	checkPage("other", "admin/curation/conversations", otherCuration, map[string]int{})
 	apiStatus(t, f.request("member", "GET", "admin/curation/conversations", nil), 403, "forbidden")
 

@@ -161,7 +161,7 @@ func metricReport(t *testing.T, app *integrationTestApplication, entries []metri
 		t.Errorf("%d 个程序可定样本进入了模型识别", total.DecidableEntered)
 	}
 	peaks := model.checkItemBudgets(t)
-	t.Logf("D16 档位的逐项用量峰值：%+v", peaks)
+	t.Logf("识别及核对的逐项用量峰值：%+v", peaks)
 	if path := os.Getenv("ROOMUSIC_CURATION_METRICS_OUT"); path != "" {
 		data, err := json.MarshalIndent(map[string]any{"model": model.mode, "token_estimate": "请求与 SSE 响应分别按字节数除以 4 向下取整", "acoustid_enabled": false, "samples": details, "by_shape": shapes, "total": total, "item_usage_peaks": peaks}, "", "  ")
 		requireCurationOK(t, err)

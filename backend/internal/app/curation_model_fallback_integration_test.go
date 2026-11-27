@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -31,8 +32,10 @@ func modelRouteFixture(t *testing.T, f *schedulerFixture, item curation.PendingI
 	requireCurationOK(t, err)
 	digest := curation.ReleaseIdentityDigest(evidence[item.TargetID])
 	requireCurationOK(t, curation.SaveWorkState(t.Context(), app.database, curation.WorkState{
-		Subject: "release", TargetID: item.TargetID, Status: "conflict", RuleVersion: program.StoredRuleVersion,
-		InputDigest: item.InputDigest, IdentityDigest: digest, Result: []byte(`{}`),
+		Subject: "release", TargetID: item.TargetID, Status: "conflict",
+		RuleVersion: program.StoredRuleVersion, MatchRuleVersion: program.MatchRuleVersion, LocalRuleVersion: program.LocalRuleVersion,
+		InputDigest: item.InputDigest, IdentityDigest: digest, FileDigest: evidence[item.TargetID].FileDigest,
+		GapDigest: program.GapDigest(evidence[item.TargetID]), Result: []byte(`{}`),
 	}))
 	mustExec(t, app, `UPDATE curation_pending_items SET identity_digest=$2,route=NULLIF($3,''),status=CASE WHEN $3='' THEN 'waiting_model' ELSE 'waiting_route' END WHERE id=$1`, item.ID, digest, route)
 	return f.item(t, item.ID)
@@ -80,132 +83,51 @@ func TestPostgreSQL整理迁移旧待办为可采纳建议(t *testing.T) {
 	if p := f.progress(t); p.Items.WaitingHuman != 0 {
 		t.Fatalf("迁移后仍有人工待办 %+v", p.Items)
 	}
-	readExceptionDecision(t, f.decide(t, &f.admin, id, "accept"), "accepted", f.admin.id)
-	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM release_effective WHERE id=$1 AND edition='旧建议的版本'`, f.a)
+	requireAPIError(t, f.decide(t, &f.admin, id, "accept"), 404, "not_found")
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_effective WHERE id=$1 AND edition='旧建议的版本'`, f.a)
 }
 
 func TestPostgreSQL整理第二档查到候选外编号直接写入(t *testing.T) {
-	correct, suggested := uuid.New(), uuid.New()
-	lookup := &testLookupGate{}
-	var tracks []map[string]any
-	for i := 1; i <= 5; i++ {
-		title, id := fmt.Sprintf("曲目 %d", i), uuid.New()
-		tracks = append(tracks, map[string]any{"id": uuid.New(), "position": i, "number": fmt.Sprint(i), "title": title, "length": 100000,
-			"recording": map[string]any{"id": id, "title": title}})
-	}
-	release := func(id string) map[string]any {
-		title, list := "原文专辑", tracks
-		if id == suggested {
-			title = "同名现场版"
-			list = make([]map[string]any, len(tracks))
-			for i := range tracks {
-				list[i] = map[string]any{"id": uuid.New(), "position": i + 1, "number": fmt.Sprint(i + 1), "title": fmt.Sprintf("现场曲目 %d", i+1), "length": 145000,
-					"recording": map[string]any{"id": uuid.New(), "title": fmt.Sprintf("现场曲目 %d", i+1)}}
-			}
-		}
-		return map[string]any{"id": id, "title": title, "artist-credit": []any{map[string]any{"name": "原文艺人"}},
-			"media": []any{map[string]any{"position": 1, "track-count": 5, "tracks": list}}}
-	}
-	source := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch strings.TrimSuffix(r.URL.Path, "/") {
-		case "/mb/release/" + correct, "/mb/release/" + suggested:
-			_ = json.NewEncoder(w).Encode(release(r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]))
-		case "/mb/release":
-			if q := r.URL.Query().Get("query"); q != "原文专辑" {
-				t.Errorf("查询条件 %q", q)
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"releases": []any{release(correct)}, "count": 1})
-		default:
-			http.NotFound(w, r)
-		}
-	})
-	f := newSchedulerFixtureWithSources(t, lookup, source)
-	target, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{
-		title: "原文专辑", artist: "原文艺人", tracks: []string{"present", "present", "present", "present", "present"},
-	})
-	mustExec(t, f.application, `UPDATE tracks SET duration_seconds=100,title='曲目 '||position WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, target)
-	item := modelRouteFixture(t, f, f.pending(t, target), "")
-	mustExec(t, f.application, `UPDATE curation_pending_items SET candidates=jsonb_build_array(jsonb_build_object('external_id',$2::text)) WHERE id=$1`, item.ID, suggested)
-	f.configure(t, &f.admin)
-	f.enable(t)
-	first := f.next(t, false)
-	var prompt string
-	requireCurationOK(t, json.Unmarshal(first.Messages[len(first.Messages)-1].Content, &prompt))
-	if !strings.Contains(prompt, suggested) || strings.Contains(prompt, correct) || !strings.Contains(prompt, "现场曲目 5") {
-		t.Fatalf("第一档缺少完整候选或提前看到正确编号：%s", prompt)
-	}
-	first.selectCandidate(t, item.ID, "")
-	modelWaitResolution(t, f, item.ID, "undetermined")
-	// 旧查询队列仍可独立处理候选以外的发行。
-	item = modelRouteFixture(t, f, f.pending(t, target), "lookup")
-	select {
-	case <-f.requests:
-		t.Fatal("第二档门槛关闭时发出了模型请求")
-	case <-time.After(120 * time.Millisecond):
-	}
-	lookup.ready.Store(true)
-	f.next(t, false).tool(t, "search_music_metadata", map[string]string{"entity": "release", "query": "原文专辑"})
-	read := f.next(t, false)
-	if !strings.Contains(read.lastToolResult(t), correct) {
-		t.Fatalf("第二档未查到候选外编号：%s", read.lastToolResult(t))
-	}
-	read.tool(t, "get_music_metadata", map[string]any{"entity": "release", "mbid": correct, "include": []string{"recordings"}})
-	submit := f.next(t, false)
-	if !strings.Contains(submit.lastToolResult(t), "曲目 5") {
-		t.Fatalf("未读取曲目明细：%s", submit.lastToolResult(t))
-	}
-	submit.tool(t, "resolve_release_match", map[string]any{"item_id": item.ID, "external_id": correct, "basis": map[string]string{"note": "五首曲目完全一致"}})
-	modelWaitResolution(t, f, item.ID, "model_matched")
-	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_id=$1 AND external_id=$2 AND method='album_structure'`, target, correct)
+	s := liveGapsEditions(5)
+	s.External.Releases = s.External.Releases[:1]
+	correct := s.External.Releases[0].ID
+	f, clock := newJudgeProgramFixture(t, liveGapsSource(t, s))
+	target, tracks := liveGapsLocal(t, f, s, s.Local.Album)
+	wrong := uuid.New()
+	p := judgeFixtureItem(t, f, target, program.Candidate{ExternalID: wrong, Method: "search"})
+	judgeFixtureAnswer(t, f, p, curation.JudgeAnswer{Groups: []curation.JudgeGroup{{Name: curation.JudgeName{Release: s.Local.Album, Artist: s.Local.Artist}}}})
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_id=$1`, target)
+	clock.advance(t, 0)
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_type='release' AND object_id=$1 AND external_id=$2`, target, correct)
+	b3RequireCount(t, f.application, len(tracks), `SELECT count(*) FROM external_links WHERE object_type='track' AND object_id=ANY($1::uuid[])`, tracks)
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM steward_reviews`)
 }
 
 func TestPostgreSQL整理相同曲数的时长反证不能写入(t *testing.T) {
-	for _, tc := range []struct{ name, decision, evidence string }{
-		{"审查拒绝", "rejected", "difference_ms"},
-		{"批准仍有反证", "approved", "difference_ms"},
-		{"真实文字反证", "approved", "tag_text_mismatch"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			external := b3NewRemoteRelease()
-			source := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path != "/mb/release/"+external.ID {
-					http.NotFound(w, r)
-					return
-				}
-				fmt.Fprintf(w, `{"id":%q,"title":"外部专辑","artist-credit":[{"name":"外部艺人"}],"media":[{"position":1,"track-count":2,"tracks":[{"position":1,"title":"异名甲","length":12000,"recording":{"id":%q}},{"position":2,"title":"异名乙","length":16000,"recording":{"id":%q}}]}]}`, external.ID, external.Recordings[0], external.Recordings[1])
-			})
-			f := newSchedulerFixtureWithSources(t, nil, source)
-			release, _, _ := f.matchFixture(t)
-			mustExec(t, f.application, `DELETE FROM track_identifiers WHERE track_id IN (SELECT t.id FROM tracks t JOIN media m ON m.id=t.medium_id WHERE m.release_id=$1)`, release)
-			selected := external.ID
-			if tc.evidence == "difference_ms" {
-				selected = f.remote.ID
-				mustExec(t, f.application, `UPDATE tracks SET duration_seconds=85 WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, release)
+	for _, reason := range []string{"duration_mismatch", "tag_text_mismatch"} {
+		t.Run(reason, func(t *testing.T) {
+			s := liveGapsEditions(5)
+			s.External.Releases = s.External.Releases[:1]
+			f, clock := newJudgeProgramFixture(t, liveGapsSource(t, s))
+			target, tracks := liveGapsLocal(t, f, s, s.Local.Album)
+			if reason == "duration_mismatch" {
+				mustExec(t, f.application, `UPDATE tracks SET duration_seconds=85 WHERE id=ANY($1::uuid[])`, tracks)
+			} else {
+				mustExec(t, f.application, `UPDATE releases SET title='另一个专辑',artist='另一个艺人',album_artist='另一个艺人' WHERE id=$1`, target)
+				mustExec(t, f.application, `UPDATE tracks SET artist='另一个艺人',title='其他曲目 '||position WHERE id=ANY($1::uuid[])`, tracks)
 			}
-			item := f.pending(t, release)
-			if selected == external.ID {
-				mustExec(t, f.application, `UPDATE curation_pending_items SET candidates=jsonb_build_array(jsonb_build_object('external_id',$2::text)) WHERE id=$1`, item.ID, selected)
+			remote := s.External.Releases[0].ID
+			method := "search"
+			if reason == "tag_text_mismatch" {
+				method = "tag_id"
+				programTag(t, f.application, tracks[0], "mb_release", remote)
 			}
-			f.configure(t, &f.admin)
-			f.enable(t)
-			f.next(t, false).selectCandidate(t, item.ID, selected)
-			review := f.next(t, true)
-			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_id=$1`, release)
-			if !strings.Contains(string(review.Messages[len(review.Messages)-1].Content), tc.evidence) {
-				t.Fatalf("审查收到的依据缺少 %s：%s", tc.evidence, review.Messages[len(review.Messages)-1].Content)
-			}
-			review.review(t, tc.decision)
-			modelWaitResolution(t, f, item.ID, "suggestion_recorded")
-			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE target_id=$1`, release)
-			list, total, err := f.writer.ListExceptions(t.Context(), "open", 1, 10)
-			requireCurationOK(t, err)
-			if total != 1 || list[0].CanAccept || list[0].ReasonCode != "review_rejected" || (tc.decision == "approved" && list[0].Review.Source != "policy") {
-				t.Fatalf("反证建议 %+v", list)
-			}
-			requireAPIError(t, f.decide(t, &f.admin, list[0].ID, "accept"), 409, "nothing_to_apply")
-			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_id=$1`, release)
+			p := judgeFixtureItem(t, f, target, program.Candidate{ExternalID: remote, Method: method})
+			judgeFixtureAnswer(t, f, p, curation.JudgeAnswer{SelectedID: remote})
+			clock.advance(t, 0)
+			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_id=$1 OR object_id=ANY($2::uuid[])`, target, tracks)
+			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1`, p.ID)
+			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='conflict' AND NOT result ? 'judge'`, target)
 		})
 	}
 }
@@ -224,43 +146,33 @@ func queueModelVerification(t *testing.T, f *schedulerFixture, kind string, v cu
 	return programString(t, f.application, `SELECT id FROM curation_pending_items WHERE kind=$1 AND target_id=$2`, kind, v.ReleaseID)
 }
 
+func (q schedulerRequest) answerItems(t *testing.T, rows ...any) {
+	t.Helper()
+	if len(q.Tools) != 0 {
+		t.Fatalf("结构化判断请求附带工具 %+v", q.Tools)
+	}
+	raw, err := json.Marshal(map[string]any{"items": rows})
+	requireCurationOK(t, err)
+	q.reply <- q.frame(t, map[string]string{"content": string(raw)}, "stop")
+}
+
 func configureModelWeb(t *testing.T, f *schedulerFixture) {
 	t.Helper()
 	f.update(t, "PUT", stewardBase+"/settings", map[string]any{"search_source": "searxng", "searxng_url": f.endpoint + "/searxng"})
 }
 
 func TestPostgreSQL整理无佐证主张先联网再留建议(t *testing.T) {
-	search := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/searxng/search" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"results":[]}`)
-	})
-	f := newSchedulerFixtureWithSources(t, nil, search)
+	f := newSchedulerFixture(t)
 	f.configure(t, &f.admin)
 	configureModelWeb(t, f)
-	item := queueModelVerification(t, f, "verify_name", curation.VerificationCandidate{
-		ReleaseID: f.a, Field: "title", Before: "Album A", After: "另一个标题",
-	})
+	item := f.pending(t, f.a)
 	f.enable(t)
-	submit := map[string]string{"item_id": item, "verdict": "typo", "reason": "推测标题有误"}
-	f.next(t, false).tool(t, "submit_verification", submit)
-	web := f.next(t, false)
-	if got := f.item(t, item); got.Route != "web" {
-		t.Fatalf("缺少佐证时未转联网：%+v", got)
-	}
-	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1`, item)
-	web.tool(t, "web_search", map[string]string{"q": "Album A 另一个标题"})
-	afterSearch := f.next(t, false)
-	if result := afterSearch.lastToolResult(t); !strings.Contains(result, `"results":[]`) {
-		t.Fatalf("联网求证结果 %s", result)
-	}
-	afterSearch.tool(t, "submit_verification", submit)
-	modelWaitResolution(t, f, item, "suggestion_recorded")
-	requireNoEvidenceSuggestion(t, f, item, "no_evidence")
-	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1`, f.a)
+	q := f.next(t, false)
+	q.undetermined(t, item.ID, "本地和候选资料均无佐证")
+	modelWaitResolution(t, f, item.ID, "undetermined")
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM steward_tool_calls WHERE tool_name IN ('web_search','fetch_page')`)
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1`, item.ID)
+	requireCurationRuleRequestCount(t, f, 1)
 }
 
 func requireNoEvidenceSuggestion(t *testing.T, f *schedulerFixture, item, reason string) {
@@ -274,88 +186,34 @@ func requireNoEvidenceSuggestion(t *testing.T, f *schedulerFixture, item, reason
 }
 
 func TestPostgreSQL整理模型记忆的事实只留建议(t *testing.T) {
-	gate := &testLookupGate{}
-	gate.ready.Store(true)
-	f := newSchedulerFixtureWithSources(t, gate, nil)
+	f := newSchedulerFixture(t)
 	f.configure(t, &f.admin)
 	configureModelWeb(t, f)
-	item := modelRouteFixture(t, f, f.pending(t, f.a), "lookup")
+	item := f.pending(t, f.a)
 	f.enable(t)
-	f.next(t, false).tool(t, "shelve_pending_item", map[string]any{
-		"item_id": item.ID, "reason": "模型记忆中的厂牌", "fact": map[string]string{"field": "label", "value": "合成厂牌"},
-	})
-	web := f.next(t, false)
-	if got := f.item(t, item.ID); got.Route != "web" || !strings.Contains(string(got.Evidence), "合成厂牌") {
-		t.Fatalf("事实主张未随路线送往联网：%+v", got)
-	}
+	f.next(t, false).answerItems(t, map[string]any{"item_id": item.ID, "decision": "undetermined", "reason": "记忆中的厂牌无法在本地核实", "fact": map[string]string{"field": "label", "value": "合成厂牌"}})
+	schedulerWait(t, "答复处理完成", func() bool { return f.item(t, item.ID).Status != "in_progress" })
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1`, f.a)
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1`, item.ID)
-	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1`, f.a)
-	web.tool(t, "shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "联网缺少开放库佐证"})
-	modelWaitResolution(t, f, item.ID, "unlisted")
-	requireNoEvidenceSuggestion(t, f, item.ID, "unverified_fact")
-	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1`, f.a)
+	requireCurationRuleRequestCount(t, f, 1)
 }
 
 func TestPostgreSQL整理联网额度与单项额度(t *testing.T) {
-	for _, tc := range []struct {
-		name        string
-		webLimit    int
-		startRoute  string
-		limitTokens int
-		limitCalls  int
-	}{
-		{"联网用尽共享额度推迟离线选择", 20, "web", 13, 0},
-		{"第二档单项超额后转联网", 0, "lookup", 150000, 0},
-		{"联网单项超额后结束", 0, "web", 300000, 0},
-		{"第二档超出工具次数后转联网", 0, "lookup", 13, 20},
-		{"联网超出工具次数后结束", 0, "web", 13, 30},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			gate := &testLookupGate{}
-			gate.ready.Store(true)
-			f := newSchedulerFixtureWithSources(t, gate, nil)
-			f.configure(t, &f.admin)
-			configureModelWeb(t, f)
-			first := modelRouteFixture(t, f, f.pending(t, f.a), tc.startRoute)
-			if tc.limitCalls != 0 {
-				mustExec(t, f.application, `UPDATE curation_pending_items SET item_tool_calls=$2 WHERE id=$1`, first.ID, tc.limitCalls)
-			}
-			if tc.webLimit > 0 {
-				second := modelRouteFixture(t, f, f.pending(t, f.b), "web")
-				f.update(t, "PUT", curationBase+"/settings", map[string]int{"daily_token_limit": tc.webLimit, "model_concurrency": 1})
-				f.enable(t)
-				q := f.next(t, false)
-				// 联网按在库组数及创建顺序领取，先让第一项耗完额度。
-				q.tool(t, "shelve_pending_item", map[string]string{"item_id": first.ID, "reason": "没有可信来源"})
-				modelWaitResolution(t, f, first.ID, "unlisted")
-				schedulerWait(t, "达到联网日额", func() bool { return f.progress(t).State == "limit_reached" })
-				p := f.progress(t)
-				if p.RetryAt == nil || p.State != "limit_reached" || f.item(t, second.ID).Status != "waiting_route" {
-					t.Fatalf("联网子限额 %+v，下一项 %+v", p, f.item(t, second.ID))
-				}
-				_, _, offline := f.matchFixture(t)
-				if got := f.item(t, offline.ID); got.Status != "waiting_model" || got.ConversationID != "" {
-					t.Fatalf("达到共享额度后领取了离线项 %+v", got)
-				}
-				return
-			}
-			f.enable(t)
-			q := f.next(t, false)
-			q.inputTokens = tc.limitTokens
-			if tc.startRoute == "lookup" {
-				q.tool(t, "search_music_metadata", map[string]string{"entity": "release", "query": "合成"})
-				next := f.next(t, false)
-				if p := f.item(t, first.ID); p.Route != "web" || p.ItemToolCalls != 0 || p.ItemTokens != 0 {
-					t.Fatalf("第二档触限后未转到新档或未重置单项额度：%+v", p)
-				}
-				next.tool(t, "shelve_pending_item", map[string]string{"item_id": first.ID, "reason": "联网无结果"})
-			} else {
-				q.tool(t, "web_search", map[string]string{"q": "合成"})
-			}
-			modelWaitResolution(t, f, first.ID, "unlisted")
-			b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states
- WHERE subject='release' AND target_id=$1 AND status='conflict' AND next_attempt_at IS NULL`, f.a)
-		})
+	f := newControlledArtistWebSearch(t, nil)
+	artist := f.addArtist(t, "共享日额的艺人")
+	item := f.startArtist(t, artist)
+	q := f.next(t, false)
+	f.update(t, "PUT", curationBase+"/settings", map[string]any{"enabled": true, "daily_token_limit": 20, "model_concurrency": 1})
+	offline := f.pending(t, f.a)
+	q.tool(t, "shelve_pending_item", map[string]string{"item_id": item.ID, "reason": "没有可靠身份候选"})
+	f.waitArtistResolution(t, item.ID, "no_result")
+	p := f.progress(t)
+	if p.State != "limit_reached" || p.Today.InputTokens+p.Today.OutputTokens != 20 || f.item(t, offline.ID).Status != "waiting_model" {
+		t.Fatalf("艺人已用额度后整理仍应留队：%+v", p)
+	}
+	status := f.status(t, artist, "none", 0)
+	if status.Usage.TokenLimit != 50000 || status.Usage.ToolCallLimit != 10 {
+		t.Fatalf("艺人单项额度 %+v", status.Usage)
 	}
 }
 
@@ -366,8 +224,8 @@ func TestPostgreSQL整理专辑名字只纠正有佐证的错字(t *testing.T) {
 		{"错字", "合成正试专辑", "合成正式专辑", "typo"},
 		{"繁简", "合成正式專輯", "合成正式专辑", ""},
 		{"大小写", "COAST LETTERS", "Coast Letters", ""},
-		{"标点", "海岸：来信", "海岸 来信", "style"},
-		{"外部特殊写法", "沿海来信", "沿haI来信", "style"},
+		{"标点", "海岸：来信", "海岸 来信", ""},
+		{"外部特殊写法", "海岸的来信", "海岸来信", "keep"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			remote := b3NewRemoteRelease()
@@ -384,22 +242,23 @@ func TestPostgreSQL整理专辑名字只纠正有佐证的错字(t *testing.T) {
 					remote.ID, tc.remote, remote.Recordings[0], remote.Recordings[1])
 			})
 			f := newSchedulerFixtureWithSources(t, nil, source)
-			target, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{title: tc.local, artist: "甲艺人", tracks: []string{"present", "present"}})
+			target, tracks := b3ReleaseTracks(t, f.application, f.rootID, tc.local, "甲艺人", 2)
 			mustExec(t, f.application, `UPDATE tracks SET duration_seconds=CASE position WHEN 1 THEN 12 ELSE 16 END,
 				title=CASE position WHEN 1 THEN '第一曲' ELSE '第二曲' END WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, target)
-			item := f.pending(t, target)
-			mustExec(t, f.application, `UPDATE curation_pending_items SET candidates=jsonb_build_array(jsonb_build_object('external_id',$2::text)) WHERE id=$1`, item.ID, remote.ID)
-			f.configure(t, &f.admin)
 			f.enable(t)
-			f.next(t, false).selectCandidate(t, item.ID, remote.ID)
-			f.next(t, true).review(t, "approved")
-			modelWaitResolution(t, f, item.ID, "model_matched")
+			link := curationCApplyLinks(t, f.curationFixture, curationCLinkRequest(target, "", curationCLink("release", target, remote.ID), curationCLink("track", tracks[0], remote.Recordings[0]), curationCLink("track", tracks[1], remote.Recordings[1])))
+			evidence, err := f.writer.LoadCurationEvidence(t.Context(), []string{target})
+			requireCurationOK(t, err)
+			tx, err := f.application.database.BeginTx(t.Context(), nil)
+			requireCurationOK(t, err)
+			defer tx.Rollback()
+			requireCurationOK(t, curation.QueueVerification(t.Context(), tx, "verify_name", program.IdentityDigest(evidence[target]), curation.VerificationCandidate{ReleaseID: target, Field: "title", Before: tc.local, After: tc.remote, Structure: true, ExternalID: remote.ID, ExternalValue: tc.remote, OperationID: link.OperationID}))
+			requireCurationOK(t, tx.Commit())
+			f.configure(t, &f.admin)
 			if tc.verdict != "" {
-				judgment := f.next(t, false)
-				verify := programString(t, f.application, `SELECT id FROM curation_pending_items WHERE kind='verify_name' AND target_id=$1 AND evidence->>'field'='title'`, target)
-				judgment.tool(t, "submit_verification", map[string]string{"item_id": verify, "verdict": tc.verdict, "reason": "对照外部标题"})
+				verify := programString(t, f.application, `SELECT id FROM curation_pending_items WHERE target_id=$1 AND kind='verify_name'`, target)
+				f.next(t, false).answerItems(t, curation.VerificationInput{ItemID: verify, Verdict: tc.verdict, Reason: "核对来源的标题和曲目"})
 				if tc.verdict == "typo" {
-					f.next(t, true).review(t, "approved")
 					schedulerWait(t, "有效标题和原始标题同时保留", func() bool {
 						return countRows(t, f.application, `SELECT count(*) FROM release_effective e JOIN releases r ON r.id=e.id WHERE r.id=$1 AND r.title=$2 AND e.title=$3`, target, tc.local, tc.remote) == 1
 					})
@@ -423,8 +282,8 @@ func TestPostgreSQL整理专辑名字只纠正有佐证的错字(t *testing.T) {
 					op := programString(t, f.application, `SELECT operation_id FROM release_auto_values WHERE release_id=$1 AND field='title' AND writer_level=3`, target)
 					f.undo(t, op)
 				} else {
-					modelWaitResolution(t, f, verify, "suggestion_recorded")
-					b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1 AND tool='observation' AND review_id IS NULL`, verify)
+					modelWaitResolution(t, f, verify, "undetermined")
+					b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1`, verify)
 				}
 			} else {
 				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='verify_name' AND evidence->>'field'='title'`, target)
@@ -445,22 +304,19 @@ func TestPostgreSQL整理无佐证不合并艺人与发行(t *testing.T) {
 		ReleaseID: f.a, Field: "artist", Before: "甲艺人", After: "乙艺人", ArtistA: seed.id(1), ArtistB: seed.id(2),
 	})
 	f.enable(t)
-	f.next(t, false).tool(t, "submit_verification", map[string]string{"item_id": artist, "verdict": "same", "reason": "模型猜测是别名"})
-	modelWaitResolution(t, f, artist, "suggestion_recorded")
-	requireNoEvidenceSuggestion(t, f, artist, "no_evidence")
+	f.next(t, false).answerItems(t, curation.VerificationInput{ItemID: artist, Verdict: "same", Reason: "模型猜测是别名"})
+	modelWaitResolution(t, f, artist, "undetermined")
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions WHERE pending_item_id=$1`, artist)
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE operation_type='artist_merge'`)
 
 	item := modelPending(t, f.curationFixture, f.a, "release_merge", "假定的发行对应")
 	raw, err := json.Marshal([]curation.MergeCandidate{{ReleaseID: f.b, Title: "Album B", DiscCount: 1, TrackCount: 1}})
 	requireCurationOK(t, err)
 	mustExec(t, f.application, `UPDATE curation_pending_items SET candidates=$2 WHERE id=$1`, item.ID, raw)
-	f.next(t, false).tool(t, "merge_releases", releaseMergeProposal(item.ID))
-	schedulerWait(t, "无佐证的发行并入被拒绝", func() bool {
+	f.next(t, false).answerItems(t, map[string]string{"item_id": item.ID, "verdict": "merge", "reason": "模型猜测发行相同"})
+	schedulerWait(t, "程序拒绝无佐证合并", func() bool {
 		return countRows(t, f.application, `SELECT count(*) FROM steward_tool_calls WHERE tool_name='merge_releases' AND status='failed'`) > 0
 	})
-	if got := f.modelToolResults(t); !strings.Contains(got, "no_strong_evidence") && !strings.Contains(got, "item_stale") && !strings.Contains(got, "rejected_by_review") {
-		t.Fatalf("无佐证的发行并入返回 %s", got)
-	}
 	f.pause(t)
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE operation_type='release_auto_merge'`)
 }
@@ -495,24 +351,17 @@ func TestPostgreSQL整理同位库内署名经审查可合并(t *testing.T) {
 	mustExec(t, f.application, `UPDATE tracks SET artist=CASE position WHEN 1 THEN '甲乐团' ELSE '旧称乐团' END
 		WHERE medium_id IN (SELECT id FROM media WHERE release_id=$1)`, release)
 	publishSearch(t, f.application)
+	external := uuid.New()
+	f.enable(t)
+	curationCApplyLinks(t, f.curationFixture, artistLinkRequest(release, seed.id(1), external))
 	item := queueModelVerification(t, f, "verify_artist_merge", curation.VerificationCandidate{
-		ReleaseID: release, Field: "artist_merge", Before: "甲乐团", After: "旧称乐团", ArtistA: seed.id(1), ArtistB: seed.id(2),
+		ExternalID: external, ReleaseID: release, Field: "artist_merge", Before: "甲乐团", After: "旧称乐团", ArtistA: seed.id(1), ArtistB: seed.id(2),
 	})
 	f.enable(t)
-	f.next(t, false).tool(t, "submit_verification", map[string]string{
-		"item_id": item, "verdict": "same", "reason": "同一发行相邻曲目的同位署名",
-	})
-	review := f.next(t, true)
-	if !strings.Contains(string(review.Messages[len(review.Messages)-1].Content), "track_credit_position") {
-		t.Fatalf("审查缺少库内署名佐证：%s", review.Messages[len(review.Messages)-1].Content)
-	}
-	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM operations WHERE operation_type='artist_merge'`)
-	review.review(t, "approved")
-	schedulerWait(t, "合并艺人并记录来源", func() bool {
-		return countRows(t, f.application, `SELECT count(*) FROM operations WHERE operation_type='artist_merge'
-			AND origin->>'provider'='library_evidence' AND origin->>'review_decision'='approved'`) == 1
-	})
-	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_type='artist'`)
+	f.next(t, false).answerItems(t, curation.VerificationInput{ItemID: item, Verdict: "same", Reason: "同一发行相邻曲目的同位署名"})
+	modelWaitResolution(t, f, item, "model_verified")
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM operations WHERE operation_type='artist_merge' AND origin->>'review_id' IS NULL`)
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_type='artist' AND external_id=$1`, external)
 }
 
 func TestPostgreSQL整理同位外部署名经审查建立对应(t *testing.T) {
@@ -547,16 +396,10 @@ func TestPostgreSQL整理同位外部署名经审查建立对应(t *testing.T) {
 	}}))
 	requireCurationOK(t, tx.Commit())
 	id := programString(t, f.application, `SELECT id FROM curation_artist_credit_proposals WHERE release_id=$1`, f.a)
-	f.next(t, false).tool(t, "submit_verification", map[string]string{"item_id": id, "verdict": "same", "reason": "核对发行同位署名"})
-	review := f.next(t, true)
-	if !strings.Contains(string(review.Messages[len(review.Messages)-1].Content), "external_credit") {
-		t.Fatalf("审查缺少外部署名佐证：%s", review.Messages[len(review.Messages)-1].Content)
-	}
-	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_type='artist'`)
-	review.review(t, "approved")
+	f.next(t, false).answerItems(t, curation.VerificationInput{ItemID: id, Verdict: "same", Reason: "核对发行同位署名"})
 	modelWaitResolution(t, f, id, "model_verified")
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_type='artist'
-		AND object_id=$1 AND external_id=$2 AND method='external_credit'`, local.ArtistID, externalArtist)
+		AND object_id=$1 AND external_id=$2 AND method='model_identity'`, local.ArtistID, externalArtist)
 	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_artist_credit_proposals WHERE id=$1 AND status='accepted'`, id)
 }
 
@@ -608,22 +451,9 @@ func TestPostgreSQL整理网页明确区分艺人时不能合并(t *testing.T) {
 		ReleaseID: release, Field: "artist_merge", Before: "甲乐团", After: "乙乐团", ArtistA: first, ArtistB: second,
 	})
 	f.enable(t)
-	input := curation.VerificationInput{ItemID: item, Verdict: "same", Reason: "模型认为是同一身份"}
-	f.next(t, false).tool(t, "submit_verification", input)
-	f.next(t, false).tool(t, "web_search", map[string]string{"q": "甲乐团 乙乐团"})
-	input.Citation = &curation.VerificationCitation{URL: f.endpoint + "/fixture/artists", Quote: sentence}
-	f.next(t, false).tool(t, "submit_verification", input)
-	schedulerWait(t, "网页求证后结项", func() bool {
-		select {
-		case review := <-f.requests:
-			if review.Model != "test-review" {
-				t.Fatalf("引用提交后收到额外主模型请求：%s", review.Model)
-			}
-			review.review(t, "approved")
-		default:
-		}
-		return f.item(t, item).Status == "resolved"
-	})
+	f.next(t, false).answerItems(t, curation.VerificationInput{ItemID: item, Verdict: "different", Reason: sentence})
+	modelWaitResolution(t, f.schedulerFixture, item, "different")
+	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_artist_negative_pairs WHERE reason=$1`, sentence)
 	if count := countRows(t, f.application, `SELECT count(*) FROM operations WHERE operation_type='artist_merge'`); count != 0 {
 		t.Fatalf("网页明确区分两个艺人，仍写入了 %d 笔合并", count)
 	}
@@ -633,28 +463,13 @@ func TestPostgreSQL整理观察建议的改动字段保持数组(t *testing.T) {
 	f := newSchedulerFixture(t)
 	f.configure(t, &f.admin)
 	mustExec(t, f.application, `UPDATE releases SET title='海岸：来信' WHERE id=$1`, f.a)
-	item := queueModelVerification(t, f, "verify_name", curation.VerificationCandidate{
-		ReleaseID: f.a, Field: "title", Before: "海岸：来信", After: "海岸 来信",
-	})
-	f.enable(t)
-	f.next(t, false).tool(t, "submit_verification", map[string]string{
-		"item_id": item, "verdict": "style", "reason": "保留原有标点",
-	})
-	modelWaitResolution(t, f, item, "suggestion_recorded")
-	var page struct {
-		Items []struct {
-			Tool      string
-			CanAccept bool `json:"can_accept"`
-			Preview   struct{ Changes any }
-		}
-	}
-	getJSON(t, f.application, &f.admin, curationBase+"/exceptions", &page)
-	if len(page.Items) != 1 || page.Items[0].Tool != "observation" || page.Items[0].CanAccept {
-		t.Fatalf("观察建议 %+v", page.Items)
-	}
-	if changes, ok := page.Items[0].Preview.Changes.([]any); !ok || len(changes) != 0 {
-		t.Fatalf("观察建议的 preview.changes 需要空数组，得到 %#v", page.Items[0].Preview.Changes)
-	}
+	tx, err := f.application.database.BeginTx(t.Context(), nil)
+	requireCurationOK(t, err)
+	defer tx.Rollback()
+	requireCurationOK(t, curation.QueueVerification(t.Context(), tx, "verify_name", modelDigestForTarget(t, f, f.a), curation.VerificationCandidate{ReleaseID: f.a, Field: "title", Before: "海岸：来信", After: "海岸 来信", Structure: true}))
+	requireCurationOK(t, tx.Commit())
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_pending_items WHERE target_id=$1 AND kind='verify_name'`, f.a)
+	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_model_exceptions`)
 }
 
 func TestPostgreSQL整理第二档按本地艺人打包(t *testing.T) {
@@ -669,12 +484,17 @@ func TestPostgreSQL整理第二档按本地艺人打包(t *testing.T) {
 	}
 	publishSearch(t, f.application)
 	for _, id := range releaseIDs {
-		modelRouteFixture(t, f, f.pending(t, id), "lookup")
+		modelRouteFixture(t, f, f.pending(t, id), "")
 	}
 	conversation := modelConversation(t, f.curationFixture)
-	items, err := f.writer.ClaimModelKind(t.Context(), conversation, f.clock.options().Now(), 5, []string{"release"}, "lookup", f.a)
+	items, err := f.writer.ClaimModelKind(t.Context(), conversation, f.clock.options().Now(), 5, []string{"release"}, "select", "")
 	requireCurationOK(t, err)
-	if len(items) != 2 || items[0].TargetID != f.a || items[1].TargetID != releaseIDs[1] {
-		t.Fatalf("第二档打包 %+v", items)
+	if len(items) != len(releaseIDs) {
+		t.Fatalf("识别批次缺少发行 %+v", items)
+	}
+	for _, p := range items {
+		if p.Kind != "release_match" || !slices.Contains(releaseIDs, p.TargetID) {
+			t.Fatalf("识别批次混入意外项目 %+v", p)
+		}
 	}
 }

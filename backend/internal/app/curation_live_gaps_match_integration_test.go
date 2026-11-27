@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -8,10 +9,46 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/curation"
 	"github.com/qlqq/roomusic/backend/internal/curation/model"
+	"github.com/qlqq/roomusic/backend/internal/curation/program"
 	"github.com/qlqq/roomusic/backend/internal/curation/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/upstreammock"
 )
+
+// 模型先提交线索，测试推进程序时钟后才开始核对外部目录。
+func newJudgeProgramFixture(t *testing.T, source http.Handler) (*schedulerFixture, *programClock) {
+	t.Helper()
+	clock := newProgramClock()
+	f := newSchedulerFixtureWithSources(t, nil, source, WithCurationProgram(true, clock.options()), func(o *options) { o.music.Now = clock.options().Now })
+	clock.wait(t)
+	mustExec(t, f.application, `UPDATE tracks SET source_status='missing' WHERE medium_id IN (SELECT id FROM media WHERE release_id IN ($1,$2))`, f.a, f.b)
+	setPatrolTestSource(t, f.application, &f.admin, "lrclib", false)
+	setPatrolTestSource(t, f.application, &f.admin, "coverartarchive", false)
+	return f, clock
+}
+
+func judgeFixtureItem(t *testing.T, f *schedulerFixture, target string, candidates ...program.Candidate) curation.PendingItem {
+	t.Helper()
+	p := modelRouteFixture(t, f, f.pending(t, target), "")
+	if candidates == nil {
+		candidates = []program.Candidate{}
+	}
+	raw, err := json.Marshal(candidates)
+	requireCurationOK(t, err)
+	mustExec(t, f.application, `UPDATE curation_pending_items SET candidates=$2,match_rule_version=$3 WHERE id=$1`, p.ID, raw, program.MatchRuleVersion)
+	return p
+}
+
+func judgeFixtureAnswer(t *testing.T, f *schedulerFixture, p curation.PendingItem, answer curation.JudgeAnswer) {
+	t.Helper()
+	f.configure(t, &f.admin)
+	f.enable(t)
+	answer.ItemID, answer.Decision = p.ID, "judge"
+	req := f.next(t, false)
+	requireCurationRuleItems(t, req, p.ID)
+	req.answerItems(t, answer)
+	modelWaitResolution(t, f, p.ID, "judge_submitted")
+}
 
 // 两个版本共享标题、曲序和时长，各自有独立版本和录音编号。
 func liveGapsEditions(tracks int) metricSample {
@@ -104,21 +141,22 @@ func TestPostgreSQLLiveGapsGroupTitle(t *testing.T) {
 			f.enable(t)
 			link := curationCLinkRequest(target, "", curationCLink("release_group_match", target, s.External.Releases[0].Group))
 			link.Method = "search"
-			curationCApplyLinks(t, f.curationFixture, link)
+			applied := curationCApplyLinks(t, f.curationFixture, link)
+			v.ExternalType, v.ExternalID, v.ExternalValue, v.OperationID, v.Structure = "release_group", s.External.Releases[0].Group, v.After, applied.OperationID, true
+			if tc.track {
+				// 只有组级对应，无法为单首曲目的名字建立当前依据。
+				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_type='track' AND object_id=$1`, v.TrackID)
+				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_pending_items WHERE kind='verify_name' AND target_id=$1`, target)
+				return
+			}
 			id := queueModelVerification(t, f, "verify_name", v)
 			f.configure(t, &f.admin)
-			f.next(t, false).tool(t, "submit_verification", map[string]string{"item_id": id, "verdict": "typo", "reason": "核对目录中同组版本的标题"})
-			if tc.editionKeepsOriginal || tc.track {
-				modelWaitResolution(t, f, id, "suggestion_recorded")
+			f.next(t, false).answerItems(t, curation.VerificationInput{ItemID: id, Verdict: "typo", Reason: "核对目录中同组版本的标题"})
+			if tc.editionKeepsOriginal {
+				modelWaitResolution(t, f, id, "undetermined")
 				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1`, target)
 				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM track_auto_values WHERE track_id=ANY($1::uuid[])`, tracks)
 			} else {
-				review := f.next(t, true)
-				b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1 AND field='title'`, target)
-				if !strings.Contains(string(review.Messages[len(review.Messages)-1].Content), s.External.Releases[0].Group) {
-					t.Error("审查材料缺少生效的发行组编号")
-				}
-				review.review(t, "approved")
 				modelWaitResolution(t, f, id, "model_verified")
 				b3RequireCount(t, f.application, 1, `SELECT count(*) FROM release_auto_values a JOIN releases r ON r.id=a.release_id WHERE r.id=$1 AND r.title=$2 AND a.field='title' AND a.text_value=$3 AND a.writer_level=3`, target, original, v.After)
 			}
@@ -140,22 +178,15 @@ func TestPostgreSQLLiveGapsReviewedEditions(t *testing.T) {
 		}
 
 	})
-	t.Run("三首曲目经审查也只能建立组级对应", func(t *testing.T) {
+	t.Run("三首曲目无法区分同组版本", func(t *testing.T) {
 		s := liveGapsEditions(3)
-		gate := &testLookupGate{}
-		gate.ready.Store(true)
-		f := newSchedulerFixtureWithSources(t, gate, liveGapsSource(t, s))
+		f, clock := newJudgeProgramFixture(t, liveGapsSource(t, s))
 		target, tracks := liveGapsLocal(t, f, s, s.Local.Album)
-		p := modelRouteFixture(t, f, f.pending(t, target), "lookup")
-		mustExec(t, f.application, `UPDATE curation_pending_items SET candidates='[]' WHERE id=$1`, p.ID)
-		f.configure(t, &f.admin)
-		f.enable(t)
-		first := s.External.Releases[0]
-		f.next(t, false).tool(t, "resolve_release_match", map[string]any{"item_id": p.ID, "external_id": first.ID, "basis": map[string]string{"note": "两版均有相同的三首歌与时长"}})
-		f.next(t, true).review(t, "approved")
-		modelWaitResolution(t, f, p.ID, "model_matched")
-		b3RequireCount(t, f.application, 1, `SELECT count(*) FROM external_links WHERE object_type='release_group_match' AND object_id=$1 AND external_id=$2`, target, first.Group)
-		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE (object_type='release' AND object_id=$1) OR (object_type='track' AND object_id=ANY($2::uuid[]))`, target, tracks)
+		p := judgeFixtureItem(t, f, target)
+		judgeFixtureAnswer(t, f, p, curation.JudgeAnswer{Groups: []curation.JudgeGroup{{Name: curation.JudgeName{Release: s.Local.Album, Artist: s.Local.Artist}}}})
+		clock.advance(t, 0)
+		b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='conflict'`, target)
+		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM external_links WHERE object_id=$1 OR object_id=ANY($2::uuid[])`, target, tracks)
 		b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1 AND field IN ('barcode','label','catalog_number','year')`, target)
 	})
 }
@@ -172,7 +203,7 @@ func TestPostgreSQLLiveGapsSelection(t *testing.T) {
 		if !strings.Contains(prompt, good.ID) || !strings.Contains(prompt, bad.ID) {
 			t.Fatalf("首批未同时领取两项：%s", prompt)
 		}
-		payload := fmt.Sprintf("{\"items\":[{\"item_id\":%q,\"decision\":\"upgrade\"},{\"item_id\":%q,\"decision\":\"select\",\"external_id\":%q}]}", good.ID, bad.ID, uuid.New())
+		payload := fmt.Sprintf("{\"items\":[{\"item_id\":%q,\"decision\":\"undetermined\",\"reason\":\"无法区分\"},{\"item_id\":%q,\"decision\":\"select\",\"external_id\":%q}]}", good.ID, bad.ID, uuid.New())
 		q.reply <- q.frame(t, map[string]string{"content": "```json\n" + payload + "\n```"}, "stop")
 		schedulerWait(t, "缺答项排定重试", func() bool { return f.item(t, bad.ID).NextAttemptAt != nil })
 		f.clock.now.Store(f.item(t, bad.ID).NextAttemptAt.UnixNano())

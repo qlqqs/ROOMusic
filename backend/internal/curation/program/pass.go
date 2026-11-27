@@ -422,7 +422,10 @@ func (w *Worker) saveConclusionOnce(ctx context.Context, e *catalog.CurationEvid
 		previous := states.releases[e.ID]
 		err := tx.QueryRowContext(ctx, `SELECT generation,status,patrol_revision FROM curation_work_states
  WHERE subject='release' AND target_id=$1 FOR UPDATE`, e.ID).Scan(&generation, &status, &patrolRevision)
-		if errors.Is(err, sql.ErrNoRows) || err == nil && (generation != previous.Generation || status != previous.Status || (out.status != "matched" && patrolRevision != previous.PatrolRevision)) {
+		// 外部写入接替本地推断后，媒体队列的投影可将同代 pending 标为 done。
+		// 上方已逐项复核本次写入的后态；真实执行结论会推进 generation。
+		projectedDone := out.status == "matched" && previous.Status == "pending" && status == "done" && patrolRevision == previous.PatrolRevision
+		if errors.Is(err, sql.ErrNoRows) || err == nil && (generation != previous.Generation || status != previous.Status && !projectedDone || (out.status != "matched" && patrolRevision != previous.PatrolRevision)) {
 			return errReleaseChanged
 		}
 		if err != nil {

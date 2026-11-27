@@ -82,7 +82,7 @@ func TestPostgreSQLCurationModelConcurrentProviderBackoff(t *testing.T) {
 			title: title, artist: fmt.Sprintf("核对艺人 %d", i+1), tracks: []string{"present"},
 		})
 		queueModelVerification(t, f, "verify_name", curation.VerificationCandidate{
-			ReleaseID: release, Field: "title", Before: title, After: "候选标题",
+			ReleaseID: release, Field: "title", Before: title, After: title + "甲", Structure: true,
 		})
 	}
 	f.update(t, http.MethodPut, curationBase+"/settings", map[string]any{"enabled": true, "model_concurrency": concurrency})

@@ -44,7 +44,7 @@ func TestPostgreSQL整理第一档禁用字段修改且对话可审查(t *testin
 		t.Fatalf("第一档附带工具 %+v", q.Tools)
 	}
 	q.tool(t, "correct_release", schedulerCorrection(f.a, revision, "edition", setChange("模型版本")))
-	schedulerWait(t, "无效工具答复释放项目", func() bool { return f.item(t, item.ID).Attempts > 0 })
+	schedulerWait(t, "无效工具答复释放项目", func() bool { return f.item(t, item.ID).EmptyCount == 1 })
 	f.pause(t)
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM release_auto_values WHERE release_id=$1 AND field='edition'`, f.a)
 	b3RequireCount(t, f.application, 0, `SELECT count(*) FROM steward_reviews`)

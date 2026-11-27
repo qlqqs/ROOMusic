@@ -386,35 +386,19 @@ func TestPostgreSQLCurationModelUnhandledThreeTimes(t *testing.T) {
 	if got.Attempts != 0 || got.EmptyCount != 3 || got.ShelvedReason == nil || *got.ShelvedReason != "模型没给出结果" {
 		t.Fatalf("空答计次或结案原因错误：%+v", got)
 	}
-	// 单独准备过渡期的旧档位，继续验证其原有放弃规则。
-	item = modelRouteFixture(t, f, f.pending(t, f.b), "lookup")
-	gate.ready.Store(true)
 	for _, route := range []string{"lookup", "web"} {
-		for attempt := 0; attempt < 3; attempt++ {
+		t.Run(route, func(t *testing.T) {
+			f.pause(t)
+			target, _ := insertGroupedRelease(t, f.application, f.rootID, groupedRelease{title: "历史路线 " + route, artist: "合成艺人", tracks: []string{"present"}})
+			item := modelRouteFixture(t, f, f.pending(t, target), route)
+			f.update(t, "PUT", curationBase+"/settings", map[string]bool{"paused": false})
 			q := f.next(t, false)
-			got := f.item(t, item.ID)
-			if got.Route != route || int(got.Attempts) != attempt || got.ShelvedReason != nil {
-				t.Fatalf("期望 %s 第 %d 次领取，实际 %+v", route, attempt+1, got)
-			}
-			q.complete(t)
-		}
+			requireCurationRuleItems(t, q, item.ID)
+			q.undetermined(t, item.ID, "旧路线按当前识别协议完成")
+			modelWaitResolution(t, f, item.ID, "undetermined")
+			b3RequireCount(t, f.application, 0, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='unmatched'`, target)
+		})
 	}
-	modelWaitResolution(t, f, item.ID, "unlisted")
-	b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='conflict' AND next_attempt_at IS NULL`, f.b)
-
-	t.Run("第二档无联网来源", func(t *testing.T) {
-		gate := &testLookupGate{}
-		gate.ready.Store(true)
-		f := newSchedulerFixtureWithSources(t, gate, nil)
-		f.configure(t, &f.admin)
-		item := modelRouteFixture(t, f, f.pending(t, f.a), "lookup")
-		f.enable(t)
-		for range 3 {
-			f.next(t, false).complete(t)
-		}
-		modelWaitResolution(t, f, item.ID, "unlisted")
-		b3RequireCount(t, f.application, 1, `SELECT count(*) FROM curation_work_states WHERE target_id=$1 AND status='conflict' AND next_attempt_at IS NULL`, f.a)
-	})
 }
 
 func TestPostgreSQLCurationModelConcurrency(t *testing.T) {

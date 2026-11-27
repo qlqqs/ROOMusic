@@ -75,8 +75,8 @@ func TestPostgreSQLCurationLocalRuleUpgradeQuiet(t *testing.T) {
 	metricDrain(t, app, &admin, clock, endpoint, entry)
 	before := b3WorkState(t, app, "release", entry.release)
 	sourceCalls, modelCalls := metricCounters(t, mock), endpoint.usage()
-	if before.Status != "matched" || len(sourceCalls) == 0 || len(modelCalls) == 0 {
-		t.Fatalf("应先完成发行匹配并实际调用来源和模型，状态 %+v，来源 %v，模型 %v", before, sourceCalls, modelCalls)
+	if before.Status != "matched" || len(sourceCalls) == 0 || len(modelCalls) != 0 {
+		t.Fatalf("程序应独立完成发行匹配，状态 %+v，来源 %v，模型 %v", before, sourceCalls, modelCalls)
 	}
 
 	mustExec(t, app, `UPDATE curation_work_states SET local_rule_version=$2 WHERE target_id=$1 AND subject='release'`, entry.release, program.LocalRuleVersion-1)

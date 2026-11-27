@@ -31,7 +31,7 @@ type metricScanExpect struct {
 	RequireMatchItem  bool     `json:"require_match_item"`
 	RequireLocalItem  bool     `json:"require_local_item"`
 	RelaxedTitle      string   `json:"relaxed_title"`
-	ArtistRetry       string   `json:"artist_retry"`
+	RequiredQuery     string   `json:"required_query"`
 	ForbiddenQuery    []string `json:"forbidden_query"`
 }
 
@@ -149,21 +149,11 @@ func metricFixtureIssues(t *testing.T, app *integrationTestApplication, e metric
 		}
 		check("relaxed_title", "true", fmt.Sprint(clean))
 	}
-	if want.ArtistRetry != "" {
-		byID, byName := false, false
-		for _, request := range e.queries {
-			q := request.value
-			if request.service != "musicbrainz" || !strings.Contains(q, e.sample.Local.Album) {
-				continue
-			}
-			if strings.Contains(q, "arid:") && strings.Contains(q, want.ArtistRetry) {
-				byID = true
-			}
-			if byID && strings.Contains(q, "artist:") && strings.Contains(q, e.sample.Local.Artist) {
-				byName = true
-			}
-		}
-		check("arid_then_name", "true", fmt.Sprint(byName))
+	if want.RequiredQuery != "" {
+		found := slices.ContainsFunc(e.queries, func(request metricSourceQuery) bool {
+			return request.service == "musicbrainz" && strings.Contains(request.value, want.RequiredQuery)
+		})
+		check("required_query", "true", fmt.Sprint(found))
 	}
 	for _, value := range want.ForbiddenQuery {
 		seen := map[string]bool{}
@@ -185,7 +175,7 @@ func TestCurationLiveGapSampleCoverage(t *testing.T) {
 		"live_duration_conflict", "vinyl_sides", "hidden_track", "translated_album",
 		"english_placeholder", "spoken_audio", "external_namesake", "group_title_typo", "model_ambiguous_editions",
 	}
-	outcomes := []string{"release", "release_group", "unlisted", "no_usable_candidates", "suggestion", "local_cleanup"}
+	outcomes := []string{"done", "release", "release_group", "unlisted", "no_usable_candidates", "suggestion", "local_cleanup"}
 	counts, ids := map[string]int{}, map[string]bool{}
 	for _, sample := range loadMetricSamples(t) {
 		if ids[sample.ID] {
