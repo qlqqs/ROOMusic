@@ -66,6 +66,14 @@ func (m *ModelMatcher) checkModelEditions(ctx context.Context, e catalog.Curatio
 		var c comparison
 		c.compareRelease(e, "model", *r)
 		c.compareTracks(e, "model", *r)
+		if match.Method == "search" {
+			// 管家点名的版本与同组版本须通过相同的程序核对，短专辑也按标题、艺人和时长比较。
+			other := decideAlbum(e, match.Method, []sources.Release{*r}, MatchSnapshot{})
+			if other.Level == "release" && !other.Candidates[0].Verification.Contradicted && !slices.Contains(c.conflicts, "position_conflict") && !slices.ContainsFunc(c.pairs, func(p TrackPair) bool { return p.RecordingID == "" }) {
+				passed = append(passed, verifiedEdition{r, c})
+			}
+			return nil
+		}
 		proof, err := m.verifyAlbum(ctx, e, *r, c)
 		if err != nil {
 			return err

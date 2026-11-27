@@ -35,7 +35,7 @@ func (w *Writer) JoinGroup(ctx context.Context, request JoinRequest) (governance
 	if err != nil {
 		return governance.GroupChangeResult{}, err
 	}
-	result, err := operations.Run(ctx, w.db, spec, func(ctx context.Context, tx *sql.Tx, operationID string) (operations.Outcome, error) {
+	result, err := w.runMatchOperation(ctx, spec, func(ctx context.Context, tx *sql.Tx, operationID string) (operations.Outcome, error) {
 		release, err := governance.LockAutoRelease(ctx, tx, id)
 		if err != nil {
 			return operations.Outcome{}, err

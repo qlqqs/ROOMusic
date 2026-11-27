@@ -9,6 +9,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/curation"
+	"github.com/qlqq/roomusic/backend/internal/sources"
 )
 
 type releaseDigests struct {
@@ -84,6 +85,10 @@ func (w *Worker) backfillCachedCredits(ctx context.Context, tx *sql.Tx, e catalo
 	if err != nil || r == nil {
 		return e, err
 	}
+	return w.backfillFieldCredits(ctx, tx, e, r)
+}
+
+func (w *Worker) backfillFieldCredits(ctx context.Context, tx *sql.Tx, e catalog.CurationEvidence, r *sources.Release) (catalog.CurationEvidence, error) {
 	byRecording := releaseTrackCredits(r)
 	byRecording[""] = &curation.ReleaseArtistCredit{ReleaseID: r.ID, Artists: r.Artists}
 	if err := curation.BackfillFieldArtistLinks(ctx, tx, e.ID, r.ID, byRecording); err != nil {

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
@@ -25,7 +27,7 @@ func (m *ModelMatcher) SelectMatch(ctx context.Context, id, actor, key string, i
 		return out, err
 	}
 	defer serial.Rollback()
-	if _, err = serial.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,1))`, id); err != nil {
+	if err := lockMatchSelection(ctx, serial, id); err != nil {
 		return out, err
 	}
 	var raw, candidates []byte
@@ -96,7 +98,15 @@ func (m *ModelMatcher) SelectMatch(ctx context.Context, id, actor, key string, i
 		if err = json.Unmarshal(state, &stored); err != nil {
 			return out, err
 		}
-		plan, err = m.prepareSelected(ctx, id, in, selected, stored.Snapshot)
+		e, err := m.evidence(ctx, m.db, id)
+		if err != nil {
+			return out, err
+		}
+		selected.Source = in.Source
+		plan, err = m.prepareSelected(ctx, e, selected, stored.Snapshot, false)
+		if err != nil {
+			return out, err
+		}
 	}
 	if err != nil {
 		return out, err
@@ -142,33 +152,71 @@ func (m *ModelMatcher) SelectMatch(ctx context.Context, id, actor, key string, i
 	return readResult()
 }
 
-func (m *ModelMatcher) prepareSelected(ctx context.Context, id string, in curation.MatchChoice, selected Candidate, snapshot MatchSnapshot) (MatchPlan, error) {
-	e, err := m.evidence(ctx, m.db, id)
-	if err != nil {
-		return MatchPlan{}, err
-	}
-	f, ok := m.sources.ReleaseFinder(in.Source)
-	if !ok {
+func lockMatchSelection(ctx context.Context, tx *sql.Tx, id string) error {
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,1))`, id)
+	return err
+}
+
+func (m *ModelMatcher) prepareSelected(ctx context.Context, e catalog.CurationEvidence, selected Candidate, snapshot MatchSnapshot, external bool) (MatchPlan, error) {
+	f, ok := m.sources.ReleaseFinder(selected.Source)
+	if !ok && selected.Entity != "recording" {
 		return MatchPlan{}, sources.ErrUnavailable
 	}
-	rf, _ := m.sources.RecordingFinder(in.Source)
+	rf, _ := m.sources.RecordingFinder(selected.Source)
 	mode := "album"
 	if selected.Entity == "recording" {
 		mode = "single"
 	}
-	// 使用最新详情重新进行程序核对。
 	selected.Release = nil
-	match, err := checkHintCandidates(ctx, e, mode, []Candidate{selected}, selected.Method, curation.JudgeGroup{}, snapshot, f, rf)
+	match, err := checkHintCandidate(ctx, e, mode, &selected, selected.Method, curation.JudgeGroup{}, snapshot, f, rf, false, true)
 	if err != nil {
 		return MatchPlan{}, err
 	}
-	if match.Status != "matched" || match.Level == "release_group" || match.Level == "artist" {
-		return MatchPlan{}, matchConflict("insufficient_corroboration")
+	if match.Status != "matched" || match.Level == "artist" || !external && match.Level == "release_group" {
+		if !external {
+			return MatchPlan{}, matchConflict("insufficient_corroboration")
+		}
+		if slices.Contains(match.Conflicts, "suppressed") {
+			return MatchPlan{}, externalSuppressed()
+		}
+		codes := match.Conflicts
+		if len(codes) == 0 {
+			codes = []string{"external_id_mismatch"}
+		}
+		return MatchPlan{}, insufficientCorroboration(codes)
+	}
+	item := curation.PendingItem{TargetID: e.ID, InputDigest: ReleaseDigest(e)}
+	if external && match.Release != nil {
+		var positions comparison
+		positions.compareTracks(e, "model", *match.Release)
+		if slices.Contains(positions.conflicts, "position_conflict") || slices.ContainsFunc(match.Pairs, func(p TrackPair) bool { return p.RecordingID == "" }) {
+			return MatchPlan{}, insufficientCorroboration([]string{"position_conflict"})
+		}
+		match.Verification = match.Candidates[0].Verification
+		if match.Verification.Contradicted {
+			return MatchPlan{}, insufficientCorroboration(match.Verification.Conflicts)
+		}
+		checked, err := m.checkModelEditions(ctx, e, item, match)
+		if err != nil {
+			return MatchPlan{}, err
+		}
+		match = checked
+	}
+	if external && match.Level == "release_group" && match.GroupFirstReleaseDate == "" && e.Year == 0 && !e.Corrected["year"] && !e.Automatic["year"] {
+		date, err := m.sources.GroupFirstReleaseDate(ctx, selected.Source, match.GroupID)
+		if err != nil {
+			return MatchPlan{}, err
+		}
+		match.GroupFirstReleaseDate = date
 	}
 	p, err := planMatch(ctx, m.db, e, match)
 	if err != nil {
 		return MatchPlan{}, err
 	}
 	p.links.RequireAll = true
-	return MatchPlan{write: p, match: match, item: curation.PendingItem{TargetID: id, InputDigest: ReleaseDigest(e)}}, nil
+	return MatchPlan{write: p, match: match, item: item, Target: e.Title}, nil
+}
+
+func insufficientCorroboration(codes []string) error {
+	return operations.Conflict("insufficient_corroboration", "外部资料未通过核对（"+strings.Join(codes, "、")+"）")
 }

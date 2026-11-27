@@ -97,6 +97,20 @@ func (s *Sources) lookup(id string) (SourceRegistration, bool) {
 
 func unknownSource() error { return operations.NotFound("not_found", "外部源不存在") }
 
+type manualSourceActorKey struct{}
+
+// WithManualSourceActor 允许管理员点名单项查询，来源自身的设置与扫描闸门仍由 Check 核对。
+func WithManualSourceActor(ctx context.Context, actor string) context.Context {
+	return context.WithValue(ctx, manualSourceActorKey{}, actor)
+}
+
+func manualSourceActor(ctx context.Context) string {
+	if actor, _ := ctx.Value(manualSourceActorKey{}).(string); actor != "" {
+		return actor
+	}
+	return ArtistWebActor(ctx)
+}
+
 func (s *Sources) sourceState(ctx context.Context, tx *sql.Tx, r SourceRegistration, overall Settings) (SourceSettings, error) {
 	d := r.Declaration
 	item := SourceSettings{Upstreams: d.Upstreams, ID: d.ID, Name: d.Name, Capabilities: d.Capabilities, Enabled: d.DefaultEnabled}
@@ -109,7 +123,7 @@ func (s *Sources) sourceState(ctx context.Context, tx *sql.Tx, r SourceRegistrat
 		return SourceSettings{}, err
 	}
 	enabler := ""
-	manualActor := ArtistWebActor(ctx)
+	manualActor := manualSourceActor(ctx)
 	if manualActor != "" {
 		enabler = manualActor
 	} else if overall.EnabledBy != nil {
@@ -245,13 +259,13 @@ func (s *Sources) Check(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if ArtistWebActor(ctx) == "" && !settings.Enabled {
+	if manualSourceActor(ctx) == "" && !settings.Enabled {
 		return operations.Conflict("curation_disabled", "自动整理开关已关闭")
 	}
-	if ArtistWebActor(ctx) == "" && !settings.Active {
+	if manualSourceActor(ctx) == "" && !settings.Active {
 		return operations.Conflict("curation_disabled", "自动整理开启者已不是启用状态的管理员")
 	}
-	if ArtistWebActor(ctx) == "" && settings.Paused {
+	if manualSourceActor(ctx) == "" && settings.Paused {
 		return operations.Conflict("curation_paused", "自动整理已暂停")
 	}
 	item, err := s.sourceState(ctx, tx, r, settings)
